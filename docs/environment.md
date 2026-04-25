@@ -19,10 +19,30 @@
 - 通过 `npm install --package-lock-only` 验证 npm 项目配置可被 npm 解析。
 - 通过 `npm run check` 汇总检查基础工具链状态。
 
+## Browser Policy
+
+本项目在 WSL 中运行开发服务器，但不要求在 WSL 内安装 Linux 版 Google Chrome。
+
+推荐方式：
+
+- 前端开发服务器运行在 WSL，例如 `http://localhost:5173/`。
+- 人工预览使用 Windows 11 已安装的 Google Chrome 打开 WSL 暴露的 localhost 地址。
+- 自动截图和界面检查使用 npm 管理的 Playwright Chromium。
+
+如果 WSL 中已经安装 `google-chrome-stable`，可以删除。删除 WSL 的 Google Chrome 不会影响 Windows 11 里的 Chrome，也不应该删除 Playwright 浏览器缓存。
+
+卸载命令：
+
+```bash
+sudo apt purge -y google-chrome-stable
+sudo apt autoremove -y
+rm -rf ~/.config/google-chrome ~/.cache/google-chrome
+```
+
 ## Acceptance
 
 - `uv lock` 可以成功生成或更新 `uv.lock`。
 - `npm install --package-lock-only` 可以成功生成或更新 `package-lock.json`。
 - `npm run check` 可以成功执行。
 - 仓库中没有新增业务代码文件。
-
+- WSL 中不依赖 Linux 版 Google Chrome 完成 ORF Flow 的本地预览和截图验证。
