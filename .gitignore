@@ -12,4 +12,4 @@ coverage/
 !.env.example
 
 .DS_Store
-
+.artifacts/

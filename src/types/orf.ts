@@ -1,0 +1,179 @@
+export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
+export type FeedbackStatus = "New" | "Reviewing" | "Action Created" | "Result Updated" | "Closed";
+export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
+export type Priority = "Low" | "Medium" | "High" | "Critical";
+export type Impact = "Low" | "Medium" | "High" | "Critical";
+export type MetricDirection = "increase" | "decrease";
+export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
+export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
+
+export interface TrendPoint {
+  date: string;
+  value: number;
+}
+
+export interface ActivityItem {
+  id: string;
+  actor: string;
+  action: string;
+  at: string;
+}
+
+export interface Objective {
+  id: string;
+  title: string;
+  description: string;
+  whyItMatters: string;
+  owner: string;
+  cycle: string;
+  status: WorkStatus;
+  confidence: number;
+  progress: number;
+  boundary: string;
+  successDefinition: string;
+  resultIds: string[];
+  feedbackIds: string[];
+  taskIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Result {
+  id: string;
+  objectiveId: string;
+  title: string;
+  description: string;
+  metricName: string;
+  baseline: number;
+  current: number;
+  target: number;
+  unit: string;
+  direction: MetricDirection;
+  status: WorkStatus;
+  confidence: number;
+  owner: string;
+  evidenceIds: string[];
+  taskIds: string[];
+  feedbackIds: string[];
+  trend: TrendPoint[];
+  reviewCadence: string;
+}
+
+export interface Feedback {
+  id: string;
+  phenomenon: string;
+  evidenceIds: string[];
+  causeCategories: string[];
+  impact: Impact;
+  linkedObjectiveId: string;
+  linkedResultId: string;
+  suggestedAdjustment: string;
+  source: FeedbackSource;
+  status: FeedbackStatus;
+  owner: string;
+  createdAt: string;
+  updatedAt: string;
+  activity: ActivityItem[];
+}
+
+export interface TaskChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: Priority;
+  assignee: string;
+  linkedObjectiveId: string;
+  linkedResultId: string;
+  feedbackOriginId?: string;
+  dueDate: string;
+  tags: string[];
+  checklist: TaskChecklistItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Evidence {
+  id: string;
+  type: EvidenceType;
+  title: string;
+  summary: string;
+  source: string;
+  date: string;
+  owner: string;
+  linkedResultId: string;
+  linkedFeedbackId?: string;
+}
+
+export interface Decision {
+  id: string;
+  title: string;
+  reason: string;
+  evidence: string;
+  owner: string;
+  date: string;
+  linkedObjectiveId: string;
+  linkedResultId?: string;
+  linkedFeedbackId?: string;
+}
+
+export interface EvalRun {
+  id: string;
+  scenario: string;
+  dataset: string;
+  model: string;
+  promptVersion: string;
+  ragVersion: string;
+  accuracy: number;
+  hallucination: number;
+  latency: number;
+  cost: number;
+  status: WorkStatus;
+  linkedResultId: string;
+}
+
+export interface Scenario {
+  id: string;
+  title: string;
+  qualityScore: number;
+  lastRun: string;
+  topFailureCause: string;
+  linkedObjectiveId: string;
+  openFeedbackCount: number;
+}
+
+export interface FailureSample {
+  id: string;
+  question: string;
+  modelAnswer: string;
+  expectedAnswer: string;
+  reason: string;
+  linkedResultId: string;
+}
+
+export interface OrfRules {
+  requireResultForTask: boolean;
+  requireEvidenceForFeedback: boolean;
+  weeklyFeedbackCadence: boolean;
+  autoCreateReviewSummary: boolean;
+}
+
+export interface OrfState {
+  objectives: Objective[];
+  results: Result[];
+  feedback: Feedback[];
+  tasks: Task[];
+  evidence: Evidence[];
+  decisions: Decision[];
+  evalRuns: EvalRun[];
+  scenarios: Scenario[];
+  failureSamples: FailureSample[];
+  causeCategories: string[];
+  rules: OrfRules;
+}
