@@ -1,0 +1,11 @@
+[project]
+name = "orf"
+version = "0.1.0"
+description = "ORF project management tool built from ORF documentation."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.uv]
+package = false
+
