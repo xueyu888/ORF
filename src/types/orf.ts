@@ -4,6 +4,7 @@ export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Don
 export type Priority = "Low" | "Medium" | "High" | "Critical";
 export type Impact = "Low" | "Medium" | "High" | "Critical";
 export type MetricDirection = "increase" | "decrease";
+export type DeliveryRating = "普通" | "复杂" | "攻坚" | "挑战";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 
@@ -44,6 +45,12 @@ export interface Result {
   title: string;
   description: string;
   metricName: string;
+  metricRequirement?: string;
+  statisticalObject?: string;
+  completionStandard?: string;
+  sampleSet?: string;
+  measurementScope?: string;
+  deliveryRating?: DeliveryRating;
   baseline: number;
   current: number;
   target: number;

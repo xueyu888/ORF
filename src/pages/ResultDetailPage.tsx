@@ -20,6 +20,12 @@ export function ResultDetailPage() {
   const evidence = state.evidence.filter((item) => result.evidenceIds.includes(item.id));
   const tasks = state.tasks.filter((task) => result.taskIds.includes(task.id));
   const feedback = state.feedback.filter((item) => result.feedbackIds.includes(item.id));
+  const metricRequirement = result.metricRequirement ?? `${result.metricName}：${result.description}`;
+  const statisticalObject = result.statisticalObject ?? "当前 Result 关联的标准评估集、线上日志样本和结构化反馈";
+  const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有证据记录支持`;
+  const sampleSet = result.sampleSet ?? "负责人提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
+  const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";
+  const deliveryRating = result.deliveryRating ?? "复杂";
 
   return (
     <PageScaffold
@@ -71,18 +77,21 @@ export function ResultDetailPage() {
         </div>
         <aside className="grid content-start gap-4">
           <Card className="p-4">
-            <div className="text-sm font-semibold orf-text-primary">结果定义</div>
+            <div className="text-sm font-semibold orf-text-primary">指标口径</div>
             <div className="mt-3 grid gap-3 text-sm orf-text-secondary">
-              <p><span className="orf-text-primary">改变什么：</span>{result.metricName}</p>
-              <p><span className="orf-text-primary">如何度量：</span>{metricValue(result.current, result.unit)} → {metricValue(result.target, result.unit)}</p>
-              <p><span className="orf-text-primary">失败边界：</span>任何回退到基线以上的问题都必须触发反馈评审。</p>
+              <p><span className="orf-text-primary">指标要求：</span>{metricRequirement}</p>
+              <p><span className="orf-text-primary">统计对象：</span>{statisticalObject}</p>
+              <p><span className="orf-text-primary">完成标准：</span>{completionStandard}</p>
+              <p><span className="orf-text-primary">标准样本集：</span>{sampleSet}</p>
+              <p><span className="orf-text-primary">测量范围：</span>{measurementScope}</p>
+              <p><span className="orf-text-primary">评级：</span><span className="orf-badge-accent ml-1 inline-flex rounded-full border px-2 py-0.5 text-xs">{deliveryRating}</span></p>
               <p><span className="orf-text-primary">复盘节奏：</span>{result.reviewCadence === "Weekly" ? "每周" : "每两周"}</p>
             </div>
           </Card>
           <Card className="p-4">
             <div className="text-sm font-semibold orf-text-primary">ORF 质量检查</div>
             <div className="mt-3 grid gap-2 text-xs">
-              {["可度量", "有证据", "已关联目标", "反馈已更新", "有任务支撑"].map((item) => <div key={item} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item}</span><span className="orf-success-text">通过</span></div>)}
+              {["可度量", "有证据", "已关联目标", "反馈已更新", "有任务支撑", "口径清楚", "无模糊词"].map((item) => <div key={item} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item}</span><span className="orf-success-text">通过</span></div>)}
             </div>
           </Card>
           <Card className="p-4">
