@@ -29,7 +29,7 @@ export function ObjectivesPage() {
       subtitle="管理 ORF 的 O 层。目标定义团队想要改变的状态。"
       action={<Button onClick={() => openModal({ type: "newObjective" })}><Plus className="h-4 w-4" />新建目标</Button>}
     >
-      <Card className="flex flex-wrap items-center gap-3 p-3">
+      <Card className="flex flex-wrap items-center gap-3 orf-card-padding">
         <input className="orf-input h-9 max-w-xs px-3 text-sm" placeholder="搜索目标..." value={query} onChange={(event) => setQuery(event.target.value)} />
         <select className="orf-input h-9 max-w-40 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as "All" | WorkStatus)}>
           {["All", "On Track", "At Risk", "Blocked", "Draft"].map((item) => <option key={item} value={item}>{item === "All" ? "全部状态" : item === "On Track" ? "正常" : item === "At Risk" ? "有风险" : item === "Blocked" ? "阻塞" : "草稿"}</option>)}

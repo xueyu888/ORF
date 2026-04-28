@@ -47,9 +47,9 @@ const THEME_STORAGE_KEY = "orf-flow-theme";
 function loadTheme(): ThemeMode {
   try {
     const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return raw === "light" ? "light" : "dark";
+    return raw === "dark" ? "dark" : "light";
   } catch {
-    return "dark";
+    return "light";
   }
 }
 

@@ -1,8 +1,8 @@
-import { Bell, Moon, Plus, Search, Sun } from "lucide-react";
+import { Lock, Play, Plus, Search } from "lucide-react";
 import { Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
-import { Button, IconButton } from "./ui";
+import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
 import { Toasts } from "./Toasts";
@@ -31,7 +31,7 @@ function breadcrumb(pathname: string) {
 
 export function AppShell() {
   const location = useLocation();
-  const { openModal, theme, toggleTheme } = useOrf();
+  const { openModal } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
 
   useEffect(() => {
@@ -50,13 +50,13 @@ export function AppShell() {
     <div className="orf-app-shell flex min-h-screen">
       <Sidebar onCommand={() => setCommandOpen(true)} />
       <div className="min-w-0 flex-1">
-        <header className="orf-topbar sticky top-0 z-30 flex h-16 items-center gap-4 border-b orf-border px-6 backdrop-blur-xl">
-          <div className="orf-text-secondary min-w-[220px] text-sm">{breadcrumb(location.pathname)}</div>
+        <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-5 border-b orf-border">
+          <div className="orf-text-primary min-w-[260px] text-2xl font-semibold tracking-tight">{breadcrumb(location.pathname)}</div>
           <div className="relative max-w-xl flex-1">
             <Search className="orf-text-muted pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
             <button
               onClick={() => setCommandOpen(true)}
-              className="orf-input orf-text-muted h-9 rounded-md pl-9 pr-3 text-left text-sm"
+              className="orf-search-trigger h-10 w-full pl-9 pr-3 text-left text-sm transition"
             >
               搜索目标、结果、任务、反馈...
             </button>
@@ -69,11 +69,15 @@ export function AppShell() {
             <Plus className="h-4 w-4" />
             新建目标
           </Button>
-          <IconButton icon={Bell} label="通知" />
-          <IconButton icon={theme === "dark" ? Sun : Moon} label={theme === "dark" ? "切换亮色主题" : "切换暗色主题"} onClick={toggleTheme} />
-          <div className="orf-accent-soft orf-accent-border flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold">AC</div>
+          <button className="orf-muted-icon-button inline-flex h-10 w-10 items-center justify-center transition" type="button" aria-label="权限">
+            <Lock className="h-5 w-5" />
+          </button>
+          <button className="orf-solid-icon-button inline-flex h-10 w-10 items-center justify-center transition" type="button" aria-label="演示">
+            <Play className="h-5 w-5 fill-current" />
+          </button>
+          <div className="orf-user-avatar flex h-10 w-10 items-center justify-center orf-status-tag border-2 text-xs font-bold">AC</div>
         </header>
-        <main className="px-6 py-6">
+        <main className="orf-main-content">
           <Outlet />
         </main>
       </div>

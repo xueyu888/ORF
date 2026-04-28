@@ -32,7 +32,7 @@ export function DashboardPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <Card className="p-4">
+        <Card className="orf-card-padding">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold orf-text-primary">目标健康看板</div>
@@ -52,7 +52,7 @@ export function DashboardPage() {
           </div>
         </Card>
 
-        <Card className="p-4">
+        <Card className="orf-card-padding">
           <div className="mb-3 text-sm font-semibold orf-text-primary">待处理反馈</div>
           <div className="grid gap-3">
             {feedbackDue.slice(0, 4).map((feedback) => (
@@ -63,7 +63,7 @@ export function DashboardPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <Card className="p-4">
+        <Card className="orf-card-padding">
           <div className="mb-4 text-sm font-semibold orf-text-primary">风险雷达</div>
           <ChartFrame className="h-72 min-w-0">
             {({ width, height }) => (
@@ -80,7 +80,7 @@ export function DashboardPage() {
         <DecisionLog decisions={state.decisions.slice(0, 3)} />
       </section>
 
-      <Card className="p-4">
+      <Card className="orf-card-padding">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold orf-text-primary"><CheckSquare className="h-4 w-4 orf-accent-text" /> 我的 ORF 待办</div>
         <div className="grid gap-3 md:grid-cols-4">
           {["更新 2 个结果", "评审 3 条反馈", "关闭 4 个任务", "准备周度更新"].map((todo) => (

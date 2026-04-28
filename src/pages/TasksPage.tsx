@@ -2,28 +2,40 @@ import { clsx } from "clsx";
 import {
   CalendarDays,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock3,
+  Filter,
   Gauge,
+  SlidersHorizontal,
   Target,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { designTokens } from "../config/designTokens";
 import { useOrf } from "../state/OrfProvider";
-import type { Objective, Result, Task, TaskChecklistItem, TaskStatus, WorkStatus } from "../types/orf";
+import type { Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../types/orf";
 import { initials, resultProgress } from "../utils/format";
-import { taskStatusLabel, workStatusLabel } from "../utils/labels";
+import { taskStatusLabel } from "../utils/labels";
 
-const avatarColors = ["#54b7aa", "#a56be2", "#f4a261", "#45a8bf", "#eb6f92", "#6d7bdd"];
+const avatarColors = designTokens.palette.avatar;
 const currentMember = "Alex Chen";
+
 type TaskScope = "team" | "personal";
+type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen" | "supervisorConfirm";
+
+const flowStages: { value: FlowStage; label: string; state: string }[] = [
+  { value: "goalSetting", label: "目标设定", state: "已完成" },
+  { value: "resultClaiming", label: "指标领取", state: "已完成" },
+  { value: "orfReestimate", label: "ORF 重估", state: "进行中" },
+  { value: "goalFrozen", label: "目标冻结", state: "待确认" },
+  { value: "supervisorConfirm", label: "主管确认", state: "待确认" },
+];
 
 export function TasksPage() {
   const { state, updateTaskStatus } = useOrf();
   const [scope, setScope] = useState<TaskScope>("team");
+  const [flowStage, setFlowStage] = useState<FlowStage>("orfReestimate");
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
 
@@ -65,20 +77,46 @@ export function TasksPage() {
 
   const completedResults = state.results.filter((result) => resultProgress(result) >= 100).length;
   const totalResults = state.results.length;
+  const waitingResults = Math.max(0, totalResults - completedResults);
+  const flowStageIndex = flowStages.findIndex((stage) => stage.value === flowStage);
+  const isGoalFrozen = flowStage === "goalFrozen" || flowStage === "supervisorConfirm";
+  const canEditTasks = flowStage === "orfReestimate";
 
   const toggleResult = (resultId: string) => setCollapsedResultIds((items) => toggleSetItem(items, resultId));
   const toggleTask = (taskId: string) => setCollapsedTaskIds((items) => toggleSetItem(items, taskId));
 
   return (
-    <div className="min-h-[calc(100vh-7rem)] rounded-lg bg-white p-5 text-[#1f1f1f]">
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-black">任务管理</h1>
+    <div className="grid gap-4">
+      <section className="rounded-xl border border-[#e7e9ee] bg-white p-5 shadow-[0_8px_28px_rgba(22,31,46,0.06)]">
+        <h1 className="mb-4 text-xl font-bold tracking-tight text-[#111827]">任务管理</h1>
+        <FlowStageControl value={flowStage} activeIndex={flowStageIndex} onChange={setFlowStage} />
+      </section>
+
+      {scope === "team" && (
+        <TeamDashboard
+          completedResults={completedResults}
+          totalResults={totalResults}
+          waitingResults={waitingResults}
+          activeTaskCount={state.tasks.filter((task) => task.status === "In Progress" || task.status === "In Review").length}
+        />
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <ScopeTabs value={scope} onChange={setScope} />
+        <div className="flex items-center gap-2">
+          <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#e4e7ec] bg-white px-3 text-sm font-semibold text-[#344054] shadow-sm">
+            <CalendarDays className="h-4 w-4 text-[#667085]" />
+            全部周期
+            <ChevronDown className="h-4 w-4 text-[#667085]" />
+          </button>
+          <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#e4e7ec] bg-white px-3 text-sm font-semibold text-[#344054] shadow-sm">
+            <Filter className="h-4 w-4 text-[#667085]" />
+            筛选
+          </button>
+        </div>
       </div>
 
-      <ScopeTabs value={scope} onChange={setScope} />
-      {scope === "team" && <TeamDashboard completedResults={completedResults} totalResults={totalResults} />}
-
-      <div className="mt-5 grid gap-5">
+      <div className="grid gap-3">
         {groups.map((group) => (
           <ObjectivePanel
             key={group.objective.id}
@@ -87,9 +125,11 @@ export function TasksPage() {
             taskOwners={group.taskOwners}
             objectiveDue={group.objectiveDue}
             reviewDue={group.reviewDue}
-            onStatusChange={updateTaskStatus}
             collapsedResultIds={collapsedResultIds}
             collapsedTaskIds={collapsedTaskIds}
+            canEditTasks={canEditTasks}
+            isGoalFrozen={isGoalFrozen}
+            onStatusChange={updateTaskStatus}
             onToggleResult={toggleResult}
             onToggleTask={toggleTask}
           />
@@ -99,9 +139,114 @@ export function TasksPage() {
   );
 }
 
+function FlowStageControl({
+  value,
+  activeIndex,
+  onChange,
+}: {
+  value: FlowStage;
+  activeIndex: number;
+  onChange: (stage: FlowStage) => void;
+}) {
+  return (
+    <div className="grid gap-3 xl:grid-cols-[1fr_24px_1fr_24px_1fr_24px_1fr_24px_1fr]">
+      {flowStages.map((stage, index) => {
+        const active = value === stage.value;
+        const complete = index < activeIndex;
+
+        return (
+          <div key={stage.value} className="contents">
+            <button
+              type="button"
+              onClick={() => onChange(stage.value)}
+              className={clsx(
+                "flex min-h-[74px] items-center gap-3 rounded-xl border px-4 text-left transition",
+                active && "border-[#09927f] bg-[#f4fffc] shadow-[0_0_0_1px_rgba(9,146,127,0.12)]",
+                complete && !active && "border-[#e4e7ec] bg-[#fcfcfd]",
+                !complete && !active && "border-[#e4e7ec] bg-[#f9fafb] text-[#667085]",
+              )}
+            >
+              <span
+                className={clsx(
+                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                  active && "bg-[#0b8f7f] text-white",
+                  complete && !active && "bg-[#0b8f7f] text-white",
+                  !complete && !active && "bg-[#eaecf0] text-[#475467]",
+                )}
+              >
+                {complete ? <Check className="h-5 w-5" /> : index + 1}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-base font-bold text-[#1d2939]">{stage.label}</span>
+                <span className={clsx("mt-0.5 block truncate text-sm font-medium", active ? "text-[#0b8f7f]" : "text-[#98a2b3]")}>{stage.state}</span>
+              </span>
+            </button>
+            {index < flowStages.length - 1 && (
+              <div className="hidden items-center justify-center text-[#344054] xl:flex">
+                <ChevronRight className="h-5 w-5" />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TeamDashboard({
+  completedResults,
+  totalResults,
+  waitingResults,
+  activeTaskCount,
+}: {
+  completedResults: number;
+  totalResults: number;
+  waitingResults: number;
+  activeTaskCount: number;
+}) {
+  const progress = Math.round((completedResults / Math.max(1, totalResults)) * 100);
+
+  return (
+    <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <DashboardMetric icon={Target} value={`${completedResults} / ${totalResults}`} label="指标完成" color="#0b8f7f" progress={progress} />
+      <DashboardMetric icon={Clock3} value={`${waitingResults}`} label="待定 指标" color="#e78a16" progress={42} />
+      <DashboardMetric icon={SlidersHorizontal} value="1" label="待定 指标" color="#7a3ff2" progress={26} />
+      <DashboardMetric icon={Gauge} value={`${activeTaskCount}`} label="待定 指标" color="#1f8fff" progress={68} />
+    </section>
+  );
+}
+
+function DashboardMetric({
+  icon: Icon,
+  value,
+  label,
+  color,
+  progress,
+}: {
+  icon: LucideIcon;
+  value: string;
+  label: string;
+  color: string;
+  progress: number;
+}) {
+  return (
+    <div className="flex min-h-[96px] items-center gap-4 rounded-xl border border-[#e7e9ee] bg-white px-6 shadow-[0_8px_24px_rgba(22,31,46,0.05)]">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `conic-gradient(${color} 0 ${progress}%, #eef1f5 ${progress}% 100%)` }}>
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white">
+          <Icon className="h-6 w-6" style={{ color }} />
+        </div>
+      </div>
+      <div>
+        <div className="text-2xl font-bold leading-none text-[#111827]">{value}</div>
+        <div className="mt-1 text-sm font-medium text-[#667085]">{label}</div>
+      </div>
+    </div>
+  );
+}
+
 function ScopeTabs({ value, onChange }: { value: TaskScope; onChange: (scope: TaskScope) => void }) {
   return (
-    <div className="mb-5 flex items-end gap-6 border-b border-[#d7d7d7] text-sm font-semibold">
+    <div className="flex items-end gap-8 border-b border-[#e4e7ec] text-base font-semibold">
       {[
         { value: "team" as const, label: "团队" },
         { value: "personal" as const, label: "个人" },
@@ -109,52 +254,11 @@ function ScopeTabs({ value, onChange }: { value: TaskScope; onChange: (scope: Ta
         <button
           key={item.value}
           onClick={() => onChange(item.value)}
-          className={clsx("border-b-2 px-0 pb-3", value === item.value ? "border-black text-black" : "border-transparent text-[#777]")}
+          className={clsx("border-b-2 pb-3 transition", value === item.value ? "border-[#0b8f7f] text-[#0b8f7f]" : "border-transparent text-[#667085] hover:text-[#344054]")}
         >
           {item.label}
         </button>
       ))}
-    </div>
-  );
-}
-
-function TeamDashboard({ completedResults, totalResults }: { completedResults: number; totalResults: number }) {
-  const progress = Math.round((completedResults / Math.max(1, totalResults)) * 100);
-
-  return (
-    <section className="overflow-hidden rounded-lg border border-[#cfcfcf] bg-white">
-      <div className="border-b border-[#d5d5d5] px-4 py-3 text-xs font-bold uppercase tracking-[0.12em] text-black">Overview</div>
-      <div className="grid divide-y divide-[#d2d2d2] md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
-        <OverviewMetric icon={Target} value={`${completedResults}/${totalResults}`} progress={progress} color="#3452de" />
-        <OverviewMetric icon={Clock3} value="待定" progress={0} color="#3452de" />
-        <OverviewMetric icon={CheckCircle2} value="待定" progress={0} color="#3452de" />
-        <OverviewMetric icon={Gauge} value="待定" progress={0} color="#3452de" />
-      </div>
-    </section>
-  );
-}
-
-function OverviewMetric({
-  icon: Icon,
-  value,
-  progress,
-  color,
-  accentColor,
-}: {
-  icon: LucideIcon;
-  value: string;
-  progress: number;
-  color: string;
-  accentColor?: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-4">
-      <Ring value={progress} color={color} accentColor={accentColor}>
-        <Icon className="h-5 w-5 text-[#7b7b7b]" />
-      </Ring>
-      <div>
-        <div className="text-lg font-bold leading-none text-black">{value}</div>
-      </div>
     </div>
   );
 }
@@ -165,9 +269,11 @@ function ObjectivePanel({
   taskOwners,
   objectiveDue,
   reviewDue,
-  onStatusChange,
   collapsedResultIds,
   collapsedTaskIds,
+  canEditTasks,
+  isGoalFrozen,
+  onStatusChange,
   onToggleResult,
   onToggleTask,
 }: {
@@ -176,50 +282,48 @@ function ObjectivePanel({
   taskOwners: string[];
   objectiveDue: string;
   reviewDue: string;
-  onStatusChange: (taskId: string, status: TaskStatus) => void;
   collapsedResultIds: Set<string>;
   collapsedTaskIds: Set<string>;
+  canEditTasks: boolean;
+  isGoalFrozen: boolean;
+  onStatusChange: (taskId: string, status: TaskStatus) => void;
   onToggleResult: (resultId: string) => void;
   onToggleTask: (taskId: string) => void;
 }) {
-  const complete = objective.progress >= 100 || (results.length > 0 && results.every(({ result }) => resultProgress(result) >= 100));
+  const progress = objective.progress;
 
   return (
-    <section className="overflow-hidden rounded-lg border border-[#cfcfcf] bg-white">
-      <div className="grid items-center gap-4 border-b border-[#d5d5d5] px-4 py-3 xl:grid-cols-[minmax(280px,1fr)_105px_132px_118px_132px]">
-        <Link to={`/objectives/${objective.id}`} className="flex min-w-0 items-center gap-3">
-          <FlagBox done={complete} />
+    <section className={clsx("overflow-hidden rounded-xl border border-[#e7e9ee] shadow-[0_8px_24px_rgba(22,31,46,0.05)]", isGoalFrozen ? "bg-white" : "bg-[#fcfcfb]")}>
+      <div className="grid min-h-[58px] items-center gap-4 border-b border-[#edf0f2] bg-white px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]">
+        <div className="flex min-w-0 items-center gap-3">
+          <ChevronDown className="h-5 w-5 shrink-0 text-[#344054]" />
+          <GoalIcon done={progress >= 100} />
           <div className="min-w-0">
-            <div className="truncate text-lg font-semibold leading-tight text-black">{objective.title}</div>
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="truncate text-lg font-bold text-[#111827]">{objective.title}</div>
+              <StatusChip tone={objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>{objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}</StatusChip>
+            </div>
           </div>
-        </Link>
-        <FieldBlock label="目标状态">
-          <ObjectiveStatusPill status={objective.status} />
-        </FieldBlock>
-        <FieldBlock label="负责任务成员头像">
-          <AvatarStack names={taskOwners} />
-        </FieldBlock>
-        <FieldBlock label="目标截止日期">
-          <DatePill date={objectiveDue} />
-        </FieldBlock>
-        <FieldBlock label="评估窗口截止日期">
-          <DatePill date={reviewDue} />
-        </FieldBlock>
+        </div>
+        <AvatarStack names={taskOwners} />
+        <DateValue date={objectiveDue || reviewDue} />
+        <ProgressValue value={progress} tone={progress >= 80 ? "success" : "neutral"} />
+        <ChevronDown className="ml-auto h-5 w-5 rotate-180 text-[#344054]" />
       </div>
 
-      <div className="divide-y divide-[#d9d9d9]">
-        {results.map(({ result, tasks, updatedAt }, resultIndex) => (
-          <ResultBranch
+      <div className="divide-y divide-[#edf0f2]">
+        {results.map(({ result, tasks, updatedAt }) => (
+          <ResultBlock
             key={result.id}
             result={result}
             tasks={tasks}
             updatedAt={updatedAt}
-            resultIndex={resultIndex}
             collapsed={collapsedResultIds.has(result.id)}
             collapsedTaskIds={collapsedTaskIds}
+            canEditTasks={canEditTasks}
+            onStatusChange={onStatusChange}
             onToggleResult={onToggleResult}
             onToggleTask={onToggleTask}
-            onStatusChange={onStatusChange}
           />
         ))}
       </div>
@@ -227,115 +331,61 @@ function ObjectivePanel({
   );
 }
 
-function ResultBranch({
+function ResultBlock({
   result,
   tasks,
   updatedAt,
-  resultIndex,
   collapsed,
   collapsedTaskIds,
+  canEditTasks,
+  onStatusChange,
   onToggleResult,
   onToggleTask,
-  onStatusChange,
 }: {
   result: Result;
   tasks: Task[];
   updatedAt: string;
-  resultIndex: number;
   collapsed: boolean;
   collapsedTaskIds: Set<string>;
+  canEditTasks: boolean;
+  onStatusChange: (taskId: string, status: TaskStatus) => void;
   onToggleResult: (resultId: string) => void;
   onToggleTask: (taskId: string) => void;
-  onStatusChange: (taskId: string, status: TaskStatus) => void;
 }) {
   const progress = resultProgress(result);
+  const open = !collapsed;
   const complete = progress >= 100;
-  const open = !collapsed;
 
   return (
-    <div className="relative px-4 py-3">
-      <div className="grid grid-cols-[24px_minmax(0,1fr)] gap-3">
-        <TreeControl open={open} label={`${open ? "折叠" : "展开"}指标`} onClick={() => onToggleResult(result.id)} />
-        <div className="min-w-0">
-          <div className="grid items-center gap-3 xl:grid-cols-[minmax(260px,1fr)_160px_116px]">
-            <Link to={`/objectives/${result.objectiveId}/results/${result.id}`} className="flex min-w-0 items-center gap-3">
-              <SquareMarker color={resultIndex % 2 === 0 ? "#3f987e" : "#f04a3a"} done={complete} />
-              <div className="min-w-0">
-                <div className="truncate text-base font-medium text-black">{result.title}</div>
-              </div>
-            </Link>
-            <FieldBlock label="完成状态">
-              <CompletionValue complete={complete} value={progress} />
-            </FieldBlock>
-            <FieldBlock label="更新时间">
-              <InlineDate date={updatedAt} />
-            </FieldBlock>
-          </div>
-
-          {open && tasks.length > 0 && (
-            <div className="ml-3 mt-3 border-l border-[#d6d6d6]">
-              {tasks.map((task) => (
-                <TaskBranch
-                  key={task.id}
-                  task={task}
-                  collapsed={collapsedTaskIds.has(task.id)}
-                  onToggleTask={onToggleTask}
-                  onStatusChange={onStatusChange}
-                />
-              ))}
-            </div>
-          )}
+    <div>
+      <div className="grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_260px]">
+        <div className="flex min-w-0 items-center gap-3">
+          <button type="button" className="text-[#475467]" onClick={() => onToggleResult(result.id)} aria-label={open ? "折叠指标" : "展开指标"}>
+            {open ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+          </button>
+          <StatusDot done={complete} active={!complete && progress > 0} />
+          <div className="truncate text-base font-semibold text-[#1d2939]">{result.title}</div>
+        </div>
+        <PersonValue name={result.owner} />
+        <CompletionChip complete={complete} active={!complete && progress > 0} />
+        <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+          <DateValue date={updatedAt} />
+          <ProgressValue value={progress} tone={complete ? "success" : "accent"} />
         </div>
       </div>
-    </div>
-  );
-}
 
-function TaskBranch({
-  task,
-  collapsed,
-  onToggleTask,
-  onStatusChange,
-}: {
-  task: Task;
-  collapsed: boolean;
-  onToggleTask: (taskId: string) => void;
-  onStatusChange: (taskId: string, status: TaskStatus) => void;
-}) {
-  const complete = task.status === "Done";
-  const open = !collapsed;
-  const hasSubtasks = task.checklist.length > 0;
-
-  return (
-    <div className="relative py-2.5 pl-6">
-      <div className="absolute left-0 top-6 h-0 w-5 border-t border-[#d6d6d6]" />
-      <div className="grid items-center gap-3 xl:grid-cols-[minmax(260px,1fr)_96px_112px_112px]">
-        <div className="flex min-w-0 items-center gap-2">
-          {hasSubtasks ? (
-            <TreeControl compact open={open} label={`${open ? "折叠" : "展开"}任务`} onClick={() => onToggleTask(task.id)} />
-          ) : (
-            <span className="h-5 w-5 shrink-0" />
-          )}
-          <CircleMarker done={complete} />
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-black">{task.title}</div>
-          </div>
-        </div>
-        <FieldBlock label="完成状态">
-          <DonePill done={complete} />
-        </FieldBlock>
-        <FieldBlock label="任务状态">
-          <TaskStatusSelect value={task.status} onChange={(status) => onStatusChange(task.id, status)} />
-        </FieldBlock>
-        <FieldBlock label="更新时间">
-          <InlineDate date={task.updatedAt} />
-        </FieldBlock>
-      </div>
-
-      {open && hasSubtasks && (
-        <div className="ml-3 mt-2 border-l border-[#d6d6d6]">
-          {task.checklist.map((item) => (
-            <SubtaskRow key={item.id} item={item} />
+      {open && tasks.length > 0 && (
+        <div className="pb-2">
+          {tasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              level={1}
+              collapsed={collapsedTaskIds.has(task.id)}
+              canEditTasks={canEditTasks}
+              onToggleTask={onToggleTask}
+              onStatusChange={onStatusChange}
+            />
           ))}
         </div>
       )}
@@ -343,114 +393,202 @@ function TaskBranch({
   );
 }
 
-function SubtaskRow({ item }: { item: TaskChecklistItem }) {
+function TaskRow({
+  task,
+  level,
+  collapsed,
+  canEditTasks,
+  onToggleTask,
+  onStatusChange,
+}: {
+  task: Task;
+  level: number;
+  collapsed: boolean;
+  canEditTasks: boolean;
+  onToggleTask: (taskId: string) => void;
+  onStatusChange: (taskId: string, status: TaskStatus) => void;
+}) {
+  const complete = task.status === "Done";
+  const active = task.status === "In Progress" || task.status === "In Review";
+  const open = !collapsed;
+  const hasSubtasks = task.checklist.length > 0;
+  const progress = taskProgress(task.status);
+
   return (
-    <div className="relative py-1.5 pl-6">
-      <div className="absolute left-0 top-4 h-0 w-5 border-t border-[#d6d6d6]" />
-      <div className="grid items-center gap-3 xl:grid-cols-[minmax(260px,1fr)_96px_112px_112px]">
-        <div className="flex min-w-0 items-center gap-2">
-          <CircleMarker done={item.done} small />
-          <div className="min-w-0">
-            <div className={clsx("truncate text-sm font-medium", item.done ? "text-[#666]" : "text-black")}>{item.label}</div>
-          </div>
+    <div>
+      <div
+        className={clsx(
+          "mx-4 grid min-h-[42px] items-center gap-4 rounded-lg px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_260px]",
+          complete && "bg-[#f4fffc] ring-1 ring-[#b7e7df]",
+        )}
+      >
+        <div className="relative flex min-w-0 items-center gap-3" style={{ paddingLeft: `${level * 28}px` }}>
+          {level > 0 && <span className="absolute left-0 top-1/2 h-px w-5 bg-[#d0d5dd]" />}
+          {hasSubtasks ? (
+            <button type="button" className="text-[#667085]" onClick={() => onToggleTask(task.id)} aria-label={open ? "折叠任务" : "展开任务"}>
+              {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+          ) : (
+            <span className="h-4 w-4 shrink-0" />
+          )}
+          <StatusDot done={complete} active={active} />
+          <div className="truncate text-base font-medium text-[#1d2939]">{task.title}</div>
         </div>
-        <FieldBlock label="完成状态">
-          <DonePill done={item.done} />
-        </FieldBlock>
-        <FieldBlock label="任务状态">
-          <span className={clsx("inline-flex rounded-md px-2 py-1 text-xs font-semibold", item.done ? "bg-[#efefef] text-[#777]" : "bg-[#e8edff] text-[#3864dd]")}>
-            {item.done ? "Done" : "Ready"}
-          </span>
-        </FieldBlock>
-        <FieldBlock label="更新时间">
-          <span className="text-xs font-medium text-[#8a8a8a]">-</span>
-        </FieldBlock>
+        <PersonValue name={task.assignee} />
+        <TaskStatusSelect value={task.status} disabled={!canEditTasks} onChange={(status) => onStatusChange(task.id, status)} />
+        <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+          <DateValue date={task.updatedAt} />
+          <ProgressValue value={progress} tone={complete ? "success" : active ? "accent" : "neutral"} />
+        </div>
+      </div>
+
+      {open &&
+        hasSubtasks &&
+        task.checklist.map((item) => (
+          <SubtaskRow key={item.id} item={item} level={level + 1} />
+        ))}
+    </div>
+  );
+}
+
+function SubtaskRow({ item, level }: { item: TaskChecklistItem; level: number }) {
+  return (
+    <div className="mx-4 grid min-h-[36px] items-center gap-4 px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_260px]">
+      <div className="relative flex min-w-0 items-center gap-3" style={{ paddingLeft: `${level * 28}px` }}>
+        <span className="absolute left-0 top-1/2 h-px w-5 bg-[#d0d5dd]" />
+        <span className="h-4 w-4 shrink-0" />
+        <StatusDot done={item.done} active={false} />
+        <div className="truncate text-sm font-medium text-[#344054]">{item.label}</div>
+      </div>
+      <span className="text-sm text-[#98a2b3]">-</span>
+      <CompletionChip complete={item.done} active={false} />
+      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
+        <span className="text-sm text-[#98a2b3]">-</span>
+        <ProgressValue value={item.done ? 100 : 0} tone={item.done ? "success" : "neutral"} />
       </div>
     </div>
   );
 }
 
-function FieldBlock({ children }: { label: string; children: React.ReactNode }) {
-  return <div className="min-w-0">{children}</div>;
-}
-
-function FlagBox({ done }: { done: boolean }) {
+function GoalIcon({ done }: { done: boolean }) {
   return (
-    <div className={clsx("flex h-8 w-8 shrink-0 items-center justify-center rounded-md", done ? "bg-[#d9f2e9]" : "bg-[#dff5f8]")}>
-      {done ? <Check className="h-5 w-5 text-[#36997d]" /> : <Target className="h-5 w-5 text-[#79cdda]" />}
+    <div className={clsx("flex h-7 w-7 shrink-0 items-center justify-center rounded-full", done ? "bg-[#0b8f7f]" : "bg-[#e4fbf6] ring-1 ring-[#a4ded4]")}>
+      {done ? <Check className="h-4 w-4 text-white" /> : <Target className="h-4 w-4 text-[#0b8f7f]" />}
     </div>
   );
 }
 
-function TreeControl({ open, label, onClick, compact }: { open: boolean; label: string; onClick: () => void; compact?: boolean }) {
+function StatusDot({ done, active }: { done: boolean; active: boolean }) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      className={clsx("shrink-0 text-[#777] transition hover:text-black", compact ? "h-5 w-5" : "mt-1 h-6 w-6")}
-    >
-      {open ? <ChevronDown className={compact ? "h-5 w-5" : "h-6 w-6"} /> : <ChevronRight className={compact ? "h-5 w-5" : "h-6 w-6"} />}
-    </button>
-  );
-}
-
-function SquareMarker({ color, done }: { color: string; done: boolean }) {
-  return (
-    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: done ? "#bdbdbd" : color }}>
-      {done && <Check className="h-4 w-4 text-white" />}
-    </div>
-  );
-}
-
-function CircleMarker({ done, small }: { done: boolean; small?: boolean }) {
-  return (
-    <div
+    <span
       className={clsx(
-        "flex shrink-0 items-center justify-center rounded-full border-[3px]",
-        small ? "h-5 w-5 border-2" : "h-7 w-7 border-2",
-        done ? "border-[#bcbcbc] bg-[#bcbcbc]" : "border-[#bcbcbc] bg-white",
+        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+        done && "border-[#0b8f7f] bg-[#0b8f7f]",
+        active && !done && "border-[#1f8fff] bg-white",
+        !done && !active && "border-[#98a2b3] bg-white",
       )}
     >
-      {done && <Check className={small ? "h-3 w-3 text-white" : "h-4 w-4 text-white"} />}
-    </div>
-  );
-}
-
-function CompletionValue({ complete, value }: { complete: boolean; value: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={clsx("whitespace-nowrap text-xs font-bold", complete ? "text-[#39987d]" : "text-[#b28a16]")}>{complete ? "已完成" : "未完成"}</span>
-      <div className="h-1.5 w-14 overflow-hidden rounded-full bg-[#e4e4e4]">
-        <div className="h-full rounded-full bg-[#3f987e]" style={{ width: `${value}%` }} />
-      </div>
-      <span className="text-xs font-semibold text-[#777]">{value}%</span>
-    </div>
-  );
-}
-
-function DonePill({ done }: { done: boolean }) {
-  return (
-    <span className={clsx("inline-flex whitespace-nowrap rounded-md px-2 py-1 text-xs font-semibold", done ? "bg-[#efefef] text-[#777]" : "bg-[#f3f3f3] text-[#777]")}>
-      {done ? "已完成" : "未完成"}
+      {done && <Check className="h-3.5 w-3.5 text-white" />}
+      {active && !done && <span className="h-2 w-2 rounded-full bg-[#1f8fff]" />}
     </span>
   );
 }
 
-function TaskStatusSelect({ value, onChange }: { value: TaskStatus; onChange: (status: TaskStatus) => void }) {
+function AvatarStack({ names }: { names: string[] }) {
+  if (names.length === 0) {
+    return <span className="text-sm font-medium text-[#98a2b3]">未分配</span>;
+  }
+
+  return (
+    <div className="flex items-center">
+      {names.slice(0, 4).map((name, index) => (
+        <PersonAvatar key={name} name={name} index={index} overlap={index > 0} />
+      ))}
+      {names.length > 4 && <span className="ml-1 rounded-full bg-[#f2f4f7] px-2 py-1 text-xs font-semibold text-[#475467]">+{names.length - 4}</span>}
+    </div>
+  );
+}
+
+function PersonAvatar({ name, index = 0, overlap }: { name: string; index?: number; overlap?: boolean }) {
+  return (
+    <div
+      title={name}
+      className={clsx("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow-sm", overlap && "-ml-2")}
+      style={{ backgroundColor: avatarColors[index % avatarColors.length] }}
+    >
+      {initials(name)}
+    </div>
+  );
+}
+
+function PersonValue({ name }: { name: string }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#e4fbf6] text-xs font-bold text-[#0b8f7f]">{initials(name)}</div>
+      <span className="truncate text-sm font-medium text-[#667085]">{name}</span>
+    </div>
+  );
+}
+
+function DateValue({ date }: { date: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium text-[#667085]">
+      <CalendarDays className="h-4 w-4 text-[#98a2b3]" />
+      {date || "未设置"}
+    </span>
+  );
+}
+
+function ProgressValue({ value, tone }: { value: number; tone: "success" | "accent" | "neutral" }) {
+  const color = tone === "success" ? "#0b8f7f" : tone === "accent" ? "#0d7df2" : "#e4e7ec";
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#eaecf0]">
+        <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, value))}%`, backgroundColor: color }} />
+      </div>
+      <span className="w-10 text-right text-sm font-bold text-[#344054]">{value}%</span>
+    </div>
+  );
+}
+
+function CompletionChip({ complete, active }: { complete: boolean; active: boolean }) {
+  if (complete) {
+    return <StatusChip tone="success">已完成</StatusChip>;
+  }
+
+  return <StatusChip tone={active ? "accent" : "neutral"}>{active ? "进行中" : "待办"}</StatusChip>;
+}
+
+function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent" | "neutral"; children: React.ReactNode }) {
+  return (
+    <span
+      className={clsx(
+        "inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold",
+        tone === "success" && "bg-[#e4fbf6] text-[#0b8f7f]",
+        tone === "warning" && "bg-[#fff4e5] text-[#b54708]",
+        tone === "accent" && "bg-[#e8f2ff] text-[#0d7df2]",
+        tone === "neutral" && "bg-[#f2f4f7] text-[#667085]",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function TaskStatusSelect({ value, disabled = false, onChange }: { value: TaskStatus; disabled?: boolean; onChange: (status: TaskStatus) => void }) {
   return (
     <div className="relative inline-flex">
       <select
         className={clsx(
-          "h-8 appearance-none rounded-md border-0 py-1 pl-2 pr-7 text-xs font-semibold outline-none",
-          value === "Done" && "bg-[#efefef] text-[#777]",
-          value === "In Progress" && "bg-[#e8edff] text-[#3864dd]",
-          value === "In Review" && "bg-[#eee8ff] text-[#7655d9]",
-          value === "Todo" && "bg-[#e8f7f9] text-[#397982]",
-          value === "Backlog" && "bg-[#f1f1f1] text-[#777]",
+          "h-8 appearance-none rounded-full border-0 py-1 pl-3 pr-7 text-xs font-bold outline-none",
+          disabled && "cursor-not-allowed opacity-80",
+          value === "Done" && "bg-[#e4fbf6] text-[#0b8f7f]",
+          (value === "In Progress" || value === "In Review") && "bg-[#e8f2ff] text-[#0d7df2]",
+          (value === "Todo" || value === "Backlog") && "bg-[#f2f4f7] text-[#667085]",
         )}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value as TaskStatus)}
       >
         {(["Backlog", "Todo", "In Progress", "In Review", "Done"] as TaskStatus[]).map((status) => (
@@ -460,94 +598,6 @@ function TaskStatusSelect({ value, onChange }: { value: TaskStatus; onChange: (s
         ))}
       </select>
       <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-current" />
-    </div>
-  );
-}
-
-function ObjectiveStatusPill({ status }: { status: WorkStatus }) {
-  return (
-    <span
-      className={clsx(
-        "inline-flex rounded-full px-2 py-0.5 text-xs font-bold",
-        status === "On Track" && "bg-[#e0f4eb] text-[#338b73]",
-        status === "At Risk" && "bg-[#fff0c9] text-[#a77a0b]",
-        status === "Blocked" && "bg-[#ffe1de] text-[#c64538]",
-        status === "Draft" && "bg-[#eeeeee] text-[#777]",
-      )}
-    >
-      {workStatusLabel[status]}
-    </span>
-  );
-}
-
-function AvatarStack({ names }: { names: string[] }) {
-  if (names.length === 0) {
-    return <span className="text-xs font-medium text-[#888]">未分配</span>;
-  }
-
-  return (
-    <div className="flex items-center">
-      {names.slice(0, 5).map((name, index) => (
-        <PersonAvatar key={name} name={name} index={index} overlap={index > 0} />
-      ))}
-      {names.length > 5 && <span className="ml-2 text-xs font-semibold text-[#777]">+{names.length - 5}</span>}
-    </div>
-  );
-}
-
-function PersonAvatar({ name, index = 0, size = "md", overlap }: { name: string; index?: number; size?: "md" | "lg"; overlap?: boolean }) {
-  return (
-    <div
-      title={name}
-      className={clsx(
-        "flex shrink-0 items-center justify-center rounded-full border-2 border-white text-xs font-bold text-white shadow-sm",
-        size === "lg" ? "h-8 w-8" : "h-6 w-6 text-[10px]",
-        overlap && "-ml-2",
-      )}
-      style={{ backgroundColor: avatarColors[index % avatarColors.length] }}
-    >
-      {initials(name)}
-    </div>
-  );
-}
-
-function DatePill({ date }: { date: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-md bg-[#f2f2f2] px-2 py-1 text-xs font-semibold text-[#777]">
-      <CalendarDays className="h-3.5 w-3.5 text-[#777]" />
-      {formatMonthDay(date)}
-    </span>
-  );
-}
-
-function InlineDate({ date }: { date: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#777]">
-      <Clock3 className="h-3.5 w-3.5 text-[#888]" />
-      {date || "未设置"}
-    </span>
-  );
-}
-
-function Ring({
-  value,
-  color,
-  accentColor,
-  children,
-}: {
-  value: number;
-  color: string;
-  accentColor?: string;
-  children: React.ReactNode;
-}) {
-  const clipped = Math.max(0, Math.min(100, value));
-  const background = accentColor
-    ? `conic-gradient(${accentColor} 0 26%, #f7b928 26% 34%, ${color} 34% ${clipped}%, #d6d6d6 ${clipped}% 100%)`
-    : `conic-gradient(${color} 0 ${clipped}%, #d6d6d6 ${clipped}% 100%)`;
-
-  return (
-    <div className="flex h-12 w-12 items-center justify-center rounded-full" style={{ background }}>
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white">{children}</div>
     </div>
   );
 }
@@ -587,15 +637,8 @@ function addDays(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function formatMonthDay(value: string) {
-  if (!value) {
-    return "未设置";
-  }
-
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+function taskProgress(status: TaskStatus) {
+  if (status === "Done") return 100;
+  if (status === "In Progress" || status === "In Review") return 50;
+  return 0;
 }

@@ -8,7 +8,7 @@ import { taskStatusLabel } from "../utils/labels";
 
 export function MetricCard({ title, value, delta, icon: Icon }: { title: string; value: string; delta: string; icon: ElementType }) {
   return (
-    <Card interactive className="p-4">
+    <Card interactive className="orf-card-padding">
       <div className="flex items-center justify-between">
         <div className="text-sm orf-text-secondary">{title}</div>
         <div className="rounded-md orf-surface-muted p-2 orf-accent-text"><Icon className="h-4 w-4" /></div>
@@ -26,7 +26,7 @@ export function ObjectiveCard({ objective, results, feedback }: { objective: Obj
 
   return (
     <Link to={`/objectives/${objective.id}`}>
-      <Card interactive className="h-full p-4">
+      <Card interactive className="h-full orf-card-padding">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-sm font-semibold orf-text-primary">{objective.title}</div>
@@ -55,7 +55,7 @@ export function ObjectiveCard({ objective, results, feedback }: { objective: Obj
 export function ResultCard({ result }: { result: Result }) {
   return (
     <Link to={`/objectives/${result.objectiveId}/results/${result.id}`}>
-      <Card interactive className="p-4">
+      <Card interactive className="orf-card-padding">
         <div className="flex items-start justify-between gap-3">
           <div className="text-sm font-semibold orf-text-primary">{result.title}</div>
           <StatusBadge status={result.status} />
@@ -80,13 +80,13 @@ export function ResultCard({ result }: { result: Result }) {
 export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; resultTitle?: string }) {
   return (
     <Link to={`/feedback/${feedback.id}`}>
-      <Card interactive className="p-4">
+      <Card interactive className="orf-card-padding">
         <div className="flex items-start justify-between gap-3">
           <div className="text-sm font-medium orf-text-primary">{feedback.phenomenon}</div>
           <StatusBadge status={feedback.status} />
         </div>
         <div className="mt-3 flex flex-wrap gap-1">
-          {feedback.causeCategories.map((cause) => <span key={cause} className="rounded-full border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
+          {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
         </div>
         <div className="mt-3 text-xs orf-text-muted">关联结果：<span className="orf-text-secondary">{resultTitle}</span></div>
         <div className="mt-3 text-xs orf-text-secondary">{feedback.suggestedAdjustment}</div>
@@ -122,7 +122,7 @@ export function IntegrityCheck({ hasFeedback, hasTasks, resultRiskCount }: { has
   ];
 
   return (
-    <Card className="p-4">
+    <Card className="orf-card-padding">
       <div className="text-sm font-semibold orf-text-primary">ORF 完整性检查</div>
       <div className="mt-3 grid gap-2">
         {items.map((item) => (
@@ -138,7 +138,7 @@ export function IntegrityCheck({ hasFeedback, hasTasks, resultRiskCount }: { has
 
 export function DecisionLog({ decisions }: { decisions: { title: string; owner: string; date: string; reason?: string }[] }) {
   return (
-    <Card className="p-4">
+    <Card className="orf-card-padding">
       <div className="mb-3 text-sm font-semibold orf-text-primary">决策记录</div>
       <div className="grid gap-3">
         {decisions.map((decision) => (

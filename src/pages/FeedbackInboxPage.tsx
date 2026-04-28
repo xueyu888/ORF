@@ -36,7 +36,7 @@ export function FeedbackInboxPage() {
       subtitle="收集信号、归类原因，并反向更新结果。"
       action={<Button onClick={() => openModal({ type: "newFeedback" })}><Plus className="h-4 w-4" />新建反馈</Button>}
     >
-      <Card className="flex flex-wrap items-center gap-3 p-3">
+      <Card className="flex flex-wrap items-center gap-3 orf-card-padding">
         <select className="orf-input h-9 max-w-48 px-3 text-sm" value={cause} onChange={(event) => setCause(event.target.value)}><option value="All">全部原因</option>{state.causeCategories.map((item) => <option key={item}>{item}</option>)}</select>
         <select className="orf-input h-9 max-w-48 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as "All" | FeedbackStatus)}><option value="All">全部状态</option>{["New", "Reviewing", "Action Created", "Result Updated", "Closed"].map((item) => <option key={item} value={item}>{item === "New" ? "新反馈" : item === "Reviewing" ? "评审中" : item === "Action Created" ? "已建动作" : item === "Result Updated" ? "已更新结果" : "已关闭"}</option>)}</select>
         <select className="orf-input h-9 max-w-48 px-3 text-sm" value={impact} onChange={(event) => setImpact(event.target.value as "All" | Impact)}><option value="All">全部影响</option>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "严重"}</option>)}</select>
@@ -45,7 +45,7 @@ export function FeedbackInboxPage() {
         <div className="grid gap-3">
           {feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={state.results.find((result) => result.id === item.linkedResultId)?.title} />)}
         </div>
-        <Card className="p-4">
+        <Card className="orf-card-padding">
           <div className="text-sm font-semibold orf-text-primary">洞察面板</div>
           <ChartFrame className="mt-4 h-56 min-w-0">
             {({ width, height }) => (

@@ -14,7 +14,7 @@ export function StrategyMapPage() {
   return (
     <PageScaffold title="策略地图" subtitle="把日常执行追溯到可度量的结果。">
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
-        <Card className="overflow-hidden p-5">
+        <Card className="overflow-hidden orf-card-padding">
           <div>
             <StrategyRow nodes={[{ type: "北极星目标", title: "建立可靠的 AI 应用交付能力", progress: 62, owner: "AI 应用团队" }]} onSelect={setSelected} />
             <Connector />
@@ -27,7 +27,7 @@ export function StrategyMapPage() {
             <StrategyRow nodes={state.tasks.slice(0, 4).map((task) => ({ type: "任务", title: task.title, status: task.status, progress: task.status === "Done" ? 100 : 45, owner: task.assignee, path: "/tasks" }))} onSelect={setSelected} />
           </div>
         </Card>
-        <Card className="p-4">
+        <Card className="orf-card-padding">
           <div className="text-xs uppercase tracking-wide orf-text-muted">{selected.type}</div>
           <div className="mt-2 text-lg font-semibold orf-text-primary">{selected.title}</div>
           <div className="mt-4 grid gap-3 text-sm">

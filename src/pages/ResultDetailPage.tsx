@@ -35,7 +35,7 @@ export function ResultDetailPage() {
     >
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="grid gap-4">
-          <Card className="p-5">
+          <Card className="orf-card-padding">
             <div className="flex flex-wrap items-center gap-3"><StatusBadge status={result.status} /><ConfidenceBadge value={result.confidence} /><span className="text-sm orf-text-secondary">{result.owner}</span></div>
             <p className="mt-4 text-sm orf-text-secondary">{result.description}</p>
             <div className="mt-5 grid gap-4 lg:grid-cols-[280px_1fr]">
@@ -58,7 +58,7 @@ export function ResultDetailPage() {
             </div>
           </Card>
 
-          <Card className="p-4">
+          <Card className="orf-card-padding">
             <div className="mb-3 text-sm font-semibold orf-text-primary">证据</div>
             <div className="grid gap-3">
               {evidence.map((item) => <div key={item.id} className="rounded-lg border orf-border orf-surface-muted p-4"><div className="flex items-center justify-between"><span className="text-sm font-medium orf-text-primary">{item.title}</span><span className="text-xs orf-text-muted">{evidenceTypeLabel[item.type]}</span></div><p className="mt-2 text-sm orf-text-secondary">{item.summary}</p><div className="mt-3 text-xs orf-text-muted">{item.date} · {item.owner} · {item.source}</div></div>)}
@@ -70,13 +70,13 @@ export function ResultDetailPage() {
             {tasks.map((task) => <TaskRow key={task.id} task={task} resultTitle={result.title} onStatusChange={(status: TaskStatus) => updateTaskStatus(task.id, status)} />)}
           </Card>
 
-          <Card className="p-4">
+          <Card className="orf-card-padding">
             <div className="mb-3 text-sm font-semibold orf-text-primary">反馈历史</div>
             <div className="grid gap-3">{feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={result.title} />)}</div>
           </Card>
         </div>
         <aside className="grid content-start gap-4">
-          <Card className="p-4">
+          <Card className="orf-card-padding">
             <div className="text-sm font-semibold orf-text-primary">指标口径</div>
             <div className="mt-3 grid gap-3 text-sm orf-text-secondary">
               <p><span className="orf-text-primary">指标要求：</span>{metricRequirement}</p>
@@ -84,17 +84,17 @@ export function ResultDetailPage() {
               <p><span className="orf-text-primary">完成标准：</span>{completionStandard}</p>
               <p><span className="orf-text-primary">标准样本集：</span>{sampleSet}</p>
               <p><span className="orf-text-primary">测量范围：</span>{measurementScope}</p>
-              <p><span className="orf-text-primary">评级：</span><span className="orf-badge-accent ml-1 inline-flex rounded-full border px-2 py-0.5 text-xs">{deliveryRating}</span></p>
+              <p><span className="orf-text-primary">评级：</span><span className="orf-badge-accent ml-1 inline-flex orf-status-tag border px-2 py-0.5 text-xs">{deliveryRating}</span></p>
               <p><span className="orf-text-primary">复盘节奏：</span>{result.reviewCadence === "Weekly" ? "每周" : "每两周"}</p>
             </div>
           </Card>
-          <Card className="p-4">
+          <Card className="orf-card-padding">
             <div className="text-sm font-semibold orf-text-primary">ORF 质量检查</div>
             <div className="mt-3 grid gap-2 text-xs">
               {["可度量", "有证据", "已关联目标", "反馈已更新", "有任务支撑", "口径清楚", "无模糊词"].map((item) => <div key={item} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item}</span><span className="orf-success-text">通过</span></div>)}
             </div>
           </Card>
-          <Card className="p-4">
+          <Card className="orf-card-padding">
             <div className="text-sm font-semibold orf-text-primary">信心</div>
             <input className="mt-4 w-full" type="range" min="0" max="100" value={result.confidence} onChange={(event) => updateResultConfidence(result.id, Number(event.target.value))} />
             <div className="mt-2 text-sm orf-text-secondary">{result.confidence}%</div>

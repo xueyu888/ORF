@@ -13,10 +13,10 @@ export function SettingsPage() {
   return (
     <PageScaffold title="设置" subtitle="配置周期、团队、反馈分类和 ORF 规则。">
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="p-4"><div className="text-sm font-semibold orf-text-primary">周期</div><div className="mt-3 grid gap-2">{["2026 Q2", "2026 Q3 草稿"].map((item) => <div key={item} className="rounded-md orf-surface-muted p-3 text-sm orf-text-secondary">{item}</div>)}</div></Card>
-        <Card className="p-4"><div className="text-sm font-semibold orf-text-primary">团队</div><div className="mt-3 grid gap-2">{["AI 应用团队", "平台工程", "评估团队"].map((item) => <div key={item} className="rounded-md orf-surface-muted p-3 text-sm orf-text-secondary">{item}</div>)}</div></Card>
+        <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">周期</div><div className="mt-3 grid gap-2">{["2026 Q2", "2026 Q3 草稿"].map((item) => <div key={item} className="rounded-md orf-surface-muted p-3 text-sm orf-text-secondary">{item}</div>)}</div></Card>
+        <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">团队</div><div className="mt-3 grid gap-2">{["AI 应用团队", "平台工程", "评估团队"].map((item) => <div key={item} className="rounded-md orf-surface-muted p-3 text-sm orf-text-secondary">{item}</div>)}</div></Card>
       </div>
-      <Card className="p-4">
+      <Card className="orf-card-padding">
         <div className="text-sm font-semibold orf-text-primary">界面主题</div>
         <div className="mt-1 text-sm orf-text-muted">主题使用 ORF 语义 token，新增页面必须复用这些 token，不直接写品牌色或一次性颜色。</div>
         <div className="mt-4 grid max-w-xl gap-3 sm:grid-cols-2">
@@ -30,18 +30,18 @@ export function SettingsPage() {
           </button>
         </div>
       </Card>
-      <Card className="p-4">
+      <Card className="orf-card-padding">
         <div className="text-sm font-semibold orf-text-primary">反馈分类</div>
-        <div className="mt-3 flex flex-wrap gap-2">{categories.map((item) => <span key={item} className="rounded-full border orf-border orf-surface-muted px-3 py-1 text-sm orf-text-secondary">{item}</span>)}</div>
+        <div className="mt-3 flex flex-wrap gap-2">{categories.map((item) => <span key={item} className="orf-status-tag border orf-border orf-surface-muted px-3 py-1 text-sm orf-text-secondary">{item}</span>)}</div>
         <div className="mt-4 flex max-w-md gap-2"><input className="orf-input px-3 py-2 text-sm" value={newCategory} onChange={(event) => setNewCategory(event.target.value)} placeholder="新增分类" /><Button variant="secondary" onClick={() => { if (newCategory.trim()) { setCategories((items) => [...items, newCategory.trim()]); setNewCategory(""); notify("反馈分类已添加"); } }}>添加</Button></div>
       </Card>
-      <Card className="p-4">
+      <Card className="orf-card-padding">
         <div className="text-sm font-semibold orf-text-primary">ORF 规则</div>
         <div className="mt-3 grid gap-3">
           {Object.entries(rules).map(([key, value]) => <label key={key} className="flex items-center justify-between rounded-md orf-surface-muted p-3 text-sm orf-text-secondary"><span>{key === "requireResultForTask" ? "任务必须关联结果" : key === "requireEvidenceForFeedback" ? "反馈必须有证据" : key === "weeklyFeedbackCadence" ? "启用每周反馈节奏" : "自动生成复盘摘要"}</span><input type="checkbox" checked={value} onChange={(event) => setRules((current) => ({ ...current, [key]: event.target.checked }))} /></label>)}
         </div>
       </Card>
-      <Card className="flex items-center justify-between p-4"><div><div className="text-sm font-semibold orf-text-primary">原型数据</div><div className="mt-1 text-sm orf-text-muted">将 localStorage 中的 mock 状态重置为初始 ORF Flow 数据。</div></div><Button variant="danger" onClick={resetState}>重置 Mock 数据</Button></Card>
+      <Card className="flex items-center justify-between orf-card-padding"><div><div className="text-sm font-semibold orf-text-primary">原型数据</div><div className="mt-1 text-sm orf-text-muted">将 localStorage 中的 mock 状态重置为初始 ORF Flow 数据。</div></div><Button variant="danger" onClick={resetState}>重置 Mock 数据</Button></Card>
     </PageScaffold>
   );
 }

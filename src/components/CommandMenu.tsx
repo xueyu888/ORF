@@ -47,7 +47,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
               className="orf-hover-muted flex w-full items-center justify-between rounded-md px-3 py-2 text-left"
             >
               <span className="orf-text-primary truncate text-sm">{item.label}</span>
-              <span className="orf-text-muted ml-4 rounded-full border orf-border px-2 py-0.5 text-xs">{commandTypeLabel[item.type]}</span>
+              <span className="orf-text-muted ml-4 orf-status-tag border orf-border px-2 py-0.5 text-xs">{commandTypeLabel[item.type]}</span>
             </button>
           ))}
           {items.length === 0 && <div className="orf-text-muted px-3 py-8 text-center text-sm">没有匹配的页面或 ORF 对象。</div>}

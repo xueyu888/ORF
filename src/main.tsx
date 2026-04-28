@@ -2,8 +2,11 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { App } from "./App";
+import { applyDesignTokens } from "./config/designTokens";
 import { OrfProvider } from "./state/OrfProvider";
 import "./styles.css";
+
+applyDesignTokens();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
