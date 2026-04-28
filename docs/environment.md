@@ -11,6 +11,32 @@
 - 根目录提供 `.gitignore`，避免提交本地虚拟环境、依赖目录、构建产物和敏感环境变量。
 - 当前阶段不生成任何业务代码，只准备环境和文档驱动规则。
 
+## Current Local Environment
+
+当前开发环境在 Windows 11 + WSL2 中运行：
+
+- WSL 发行版：Ubuntu 22.04.5 LTS。
+- WSL 内核标识：`microsoft-standard-WSL2`。
+- 当前仓库路径：`/home/xue/code/ORF`。
+- Windows 侧 Google Chrome 路径：`/mnt/c/Program Files/Google/Chrome/Application/chrome.exe`。
+- Node.js：`v22.17.1`。
+- npm：`10.9.2`。
+- uv：`0.7.21`。
+
+以后需要打开本地前端页面时，先识别当前是否在 WSL：
+
+```bash
+uname -a
+```
+
+如果输出包含 `microsoft-standard-WSL2`，直接调用 Windows 11 的 Google Chrome：
+
+```bash
+powershell.exe -NoProfile -Command "Start-Process 'C:\Program Files\Google\Chrome\Application\chrome.exe' 'http://localhost:5173/tasks'"
+```
+
+不要优先使用 WSL 内的 `xdg-open`、Linux Chrome 或 Linux Firefox 打开人工预览页面。
+
 ## Feedback
 
 - 通过 `uv --version` 验证 uv 可用。
@@ -28,6 +54,7 @@
 - 前端开发服务器运行在 WSL，例如 `http://localhost:5173/`。
 - 人工预览使用 Windows 11 已安装的 Google Chrome 打开 WSL 暴露的 localhost 地址。
 - 自动截图和界面检查使用 npm 管理的 Playwright Chromium。
+- 从 WSL 打开人工预览页面时，优先使用 `powershell.exe -NoProfile -Command "Start-Process 'C:\Program Files\Google\Chrome\Application\chrome.exe' '<url>'"`。
 
 如果 WSL 中已经安装 `google-chrome-stable`，可以删除。删除 WSL 的 Google Chrome 不会影响 Windows 11 里的 Chrome，也不应该删除 Playwright 浏览器缓存。
 
