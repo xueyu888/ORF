@@ -8,7 +8,6 @@ const focusItem = navItemByLabel.get("仪表盘");
 const sidebarGroups = [
   { title: "WORK", labels: ["目标", "任务", "策略地图", "周复盘"] },
   { title: "REPORTS", labels: ["反馈", "AI 评估", "汇报"] },
-  { title: "ORG", labels: ["设置"] },
 ].map((group) => ({
   ...group,
   items: group.labels.map((label) => navItemByLabel.get(label)).filter((item) => item !== undefined),
@@ -71,7 +70,6 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           <Avatar name="Alex Chen" />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-white">Alex Chen</div>
-            <div className="orf-sidebar-muted-text truncate text-xs">AI 产品经理</div>
           </div>
         </div>
       </div>

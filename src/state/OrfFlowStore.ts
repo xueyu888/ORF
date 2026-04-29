@@ -169,6 +169,48 @@ export class OrfFlowStore {
     };
   }
 
+  setTaskCompletion(state: OrfState, taskId: string, done: boolean): OrfState {
+    const now = new Date().toISOString().slice(0, 10);
+
+    return {
+      ...state,
+      tasks: state.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status: done ? "Done" : "Todo",
+              checklist: task.checklist.map((item) => ({ ...item, done })),
+              updatedAt: now,
+            }
+          : task,
+      ),
+    };
+  }
+
+  updateTaskChecklistItem(state: OrfState, taskId: string, itemId: string, done: boolean): OrfState {
+    const now = new Date().toISOString().slice(0, 10);
+
+    return {
+      ...state,
+      tasks: state.tasks.map((task) => {
+        if (task.id !== taskId) {
+          return task;
+        }
+
+        const checklist = task.checklist.map((item) => (item.id === itemId ? { ...item, done } : item));
+        const completedCount = checklist.filter((item) => item.done).length;
+        const status: TaskStatus = completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
+
+        return {
+          ...task,
+          status,
+          checklist,
+          updatedAt: now,
+        };
+      }),
+    };
+  }
+
   updateFeedbackStatus(state: OrfState, feedbackId: string, status: FeedbackStatus): OrfState {
     const now = new Date().toISOString().slice(0, 10);
     return {

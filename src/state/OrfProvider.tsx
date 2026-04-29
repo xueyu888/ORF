@@ -34,6 +34,8 @@ interface OrfContextValue {
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
+  setTaskCompletion: (taskId: string, done: boolean) => void;
+  updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
   updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => void;
   updateResultConfidence: (resultId: string, confidence: number) => void;
   proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => void;
@@ -97,6 +99,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       createFeedback: (input) => commit(store.createFeedback(state, input), "反馈已捕获"),
       createTask: (input) => commit(store.createTask(state, input), "任务已创建"),
       updateTaskStatus: (taskId, status) => commit(store.updateTaskStatus(state, taskId, status), `任务状态已更新`),
+      setTaskCompletion: (taskId, done) => commit(store.setTaskCompletion(state, taskId, done), `任务完成状态已更新`),
+      updateTaskChecklistItem: (taskId, itemId, done) => commit(store.updateTaskChecklistItem(state, taskId, itemId, done), `子任务完成状态已更新`),
       updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
       updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "结果信心已更新"),
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>

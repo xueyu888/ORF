@@ -13,16 +13,19 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { designTokens } from "../config/designTokens";
+import { HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
+import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
 import { useOrf } from "../state/OrfProvider";
 import type { Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../types/orf";
 import { initials, resultProgress } from "../utils/format";
-import { taskStatusLabel } from "../utils/labels";
 
 const avatarColors = designTokens.palette.avatar;
 const currentMember = "Alex Chen";
 
 type TaskScope = "team" | "personal";
 type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen" | "supervisorConfirm";
+type SimpleStatus = "todo" | "active" | "done";
+type IndicatorStatus = "todo" | "active" | "review" | "done";
 
 const flowStages: { value: FlowStage; label: string; state: string }[] = [
   { value: "goalSetting", label: "目标设定", state: "已完成" },
@@ -33,7 +36,7 @@ const flowStages: { value: FlowStage; label: string; state: string }[] = [
 ];
 
 export function TasksPage() {
-  const { state, updateTaskStatus } = useOrf();
+  const { state, updateTaskStatus, setTaskCompletion, updateTaskChecklistItem } = useOrf();
   const [scope, setScope] = useState<TaskScope>("team");
   const [flowStage, setFlowStage] = useState<FlowStage>("orfReestimate");
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
@@ -75,7 +78,11 @@ export function TasksPage() {
     [scope, state.evidence, state.feedback, state.objectives, state.results, state.tasks],
   );
 
-  const completedResults = state.results.filter((result) => resultProgress(result) >= 100).length;
+  const resultTaskMap = useMemo(
+    () => new Map(state.results.map((result) => [result.id, state.tasks.filter((task) => task.linkedResultId === result.id)])),
+    [state.results, state.tasks],
+  );
+  const completedResults = state.results.filter((result) => indicatorStatus(result, resultTaskMap.get(result.id) ?? []) === "done").length;
   const totalResults = state.results.length;
   const waitingResults = Math.max(0, totalResults - completedResults);
   const flowStageIndex = flowStages.findIndex((stage) => stage.value === flowStage);
@@ -130,6 +137,8 @@ export function TasksPage() {
             canEditTasks={canEditTasks}
             isGoalFrozen={isGoalFrozen}
             onStatusChange={updateTaskStatus}
+            onTaskCompletionChange={setTaskCompletion}
+            onChecklistItemChange={updateTaskChecklistItem}
             onToggleResult={toggleResult}
             onToggleTask={toggleTask}
           />
@@ -274,6 +283,8 @@ function ObjectivePanel({
   canEditTasks,
   isGoalFrozen,
   onStatusChange,
+  onTaskCompletionChange,
+  onChecklistItemChange,
   onToggleResult,
   onToggleTask,
 }: {
@@ -287,41 +298,48 @@ function ObjectivePanel({
   canEditTasks: boolean;
   isGoalFrozen: boolean;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
+  onTaskCompletionChange: (taskId: string, done: boolean) => void;
+  onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onToggleResult: (resultId: string) => void;
   onToggleTask: (taskId: string) => void;
 }) {
-  const progress = objective.progress;
+  const progress = objectiveProgress(results);
+  const complete = progress >= 100;
 
   return (
     <section className={clsx("overflow-hidden rounded-xl border border-[#e7e9ee] shadow-[0_8px_24px_rgba(22,31,46,0.05)]", isGoalFrozen ? "bg-white" : "bg-[#fcfcfb]")}>
       <div className="grid min-h-[58px] items-center gap-4 border-b border-[#edf0f2] bg-white px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]">
         <div className="flex min-w-0 items-center gap-3">
-          <ChevronDown className="h-5 w-5 shrink-0 text-[#344054]" />
-          <GoalIcon done={progress >= 100} />
+          <ObjectiveFlagIcon />
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="truncate text-lg font-bold text-[#111827]">{objective.title}</div>
-              <StatusChip tone={objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>{objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}</StatusChip>
+              <div className={clsx("truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
+              <StatusChip tone={complete ? "success" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
+                {complete ? "已完成" : objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}
+              </StatusChip>
             </div>
           </div>
         </div>
         <AvatarStack names={taskOwners} />
         <DateValue date={objectiveDue || reviewDue} />
         <ProgressValue value={progress} tone={progress >= 80 ? "success" : "neutral"} />
-        <ChevronDown className="ml-auto h-5 w-5 rotate-180 text-[#344054]" />
+        <span aria-hidden="true" />
       </div>
 
       <div className="divide-y divide-[#edf0f2]">
-        {results.map(({ result, tasks, updatedAt }) => (
+        {results.map(({ result, tasks, updatedAt }, index) => (
           <ResultBlock
             key={result.id}
             result={result}
             tasks={tasks}
             updatedAt={updatedAt}
+            isLast={index === results.length - 1}
             collapsed={collapsedResultIds.has(result.id)}
             collapsedTaskIds={collapsedTaskIds}
             canEditTasks={canEditTasks}
             onStatusChange={onStatusChange}
+            onTaskCompletionChange={onTaskCompletionChange}
+            onChecklistItemChange={onChecklistItemChange}
             onToggleResult={onToggleResult}
             onToggleTask={onToggleTask}
           />
@@ -335,56 +353,68 @@ function ResultBlock({
   result,
   tasks,
   updatedAt,
+  isLast,
   collapsed,
   collapsedTaskIds,
   canEditTasks,
   onStatusChange,
+  onTaskCompletionChange,
+  onChecklistItemChange,
   onToggleResult,
   onToggleTask,
 }: {
   result: Result;
   tasks: Task[];
   updatedAt: string;
+  isLast: boolean;
   collapsed: boolean;
   collapsedTaskIds: Set<string>;
   canEditTasks: boolean;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
+  onTaskCompletionChange: (taskId: string, done: boolean) => void;
+  onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onToggleResult: (resultId: string) => void;
   onToggleTask: (taskId: string) => void;
 }) {
-  const progress = resultProgress(result);
+  const status = indicatorStatus(result, tasks);
   const open = !collapsed;
-  const complete = progress >= 100;
+  const complete = status === "done";
+  const [resultElement, setResultElement] = useState<HTMLDivElement | null>(null);
+  const resultAnchorId = `metric:${result.id}`;
 
   return (
-    <div>
-      <div className="grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_260px]">
-        <div className="flex min-w-0 items-center gap-3">
+    <div ref={setResultElement} className="relative">
+      <HierarchyTreeOverlay container={resultElement} />
+      <div className={clsx("grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_130px]", complete && "bg-[#f6f7f9]")}>
+        <HierarchyCell depth={1} isLast={isLast && (!open || tasks.length === 0)}>
           <button type="button" className="text-[#475467]" onClick={() => onToggleResult(result.id)} aria-label={open ? "折叠指标" : "展开指标"}>
             {open ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
           </button>
-          <StatusDot done={complete} active={!complete && progress > 0} />
-          <div className="truncate text-base font-semibold text-[#1d2939]">{result.title}</div>
-        </div>
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center" data-hierarchy-anchor={resultAnchorId}>
+            <MetricSquareIcon tone={status} />
+          </span>
+          <div className={clsx("truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{result.title}</div>
+        </HierarchyCell>
         <PersonValue name={result.owner} />
-        <CompletionChip complete={complete} active={!complete && progress > 0} />
-        <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-          <DateValue date={updatedAt} />
-          <ProgressValue value={progress} tone={complete ? "success" : "accent"} />
-        </div>
+        <IndicatorStatusChip status={status} />
+        <DateValue date={updatedAt} />
       </div>
 
       {open && tasks.length > 0 && (
         <div className="pb-2">
-          {tasks.map((task) => (
+          {tasks.map((task, index) => (
             <TaskRow
               key={task.id}
               task={task}
-              level={1}
+              depth={2}
+              isLast={index === tasks.length - 1}
+              parentAnchorId={resultAnchorId}
               collapsed={collapsedTaskIds.has(task.id)}
               canEditTasks={canEditTasks}
               onToggleTask={onToggleTask}
               onStatusChange={onStatusChange}
+              onTaskCompletionChange={onTaskCompletionChange}
+              onChecklistItemChange={onChecklistItemChange}
             />
           ))}
         </div>
@@ -395,102 +425,158 @@ function ResultBlock({
 
 function TaskRow({
   task,
-  level,
+  depth,
+  isLast,
+  parentAnchorId,
   collapsed,
   canEditTasks,
   onToggleTask,
   onStatusChange,
+  onTaskCompletionChange,
+  onChecklistItemChange,
 }: {
   task: Task;
-  level: number;
+  depth: 2;
+  isLast: boolean;
+  parentAnchorId: string;
   collapsed: boolean;
   canEditTasks: boolean;
   onToggleTask: (taskId: string) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
+  onTaskCompletionChange: (taskId: string, done: boolean) => void;
+  onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
 }) {
-  const complete = task.status === "Done";
-  const active = task.status === "In Progress" || task.status === "In Review";
+  const status = taskDisplayStatus(task);
+  const complete = status === "done";
   const open = !collapsed;
   const hasSubtasks = task.checklist.length > 0;
-  const progress = taskProgress(task.status);
+  const taskAnchorId = `task:${task.id}`;
+
+  const handleStatusChange = (nextStatus: TaskStatus) => {
+    if (nextStatus === "Done") {
+      onTaskCompletionChange(task.id, true);
+      return;
+    }
+
+    if (nextStatus === "Todo") {
+      onTaskCompletionChange(task.id, false);
+      return;
+    }
+
+    onStatusChange(task.id, nextStatus);
+  };
 
   return (
-    <div>
+    <div className="relative">
       <div
         className={clsx(
-          "mx-4 grid min-h-[42px] items-center gap-4 rounded-lg px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_260px]",
-          complete && "bg-[#f4fffc] ring-1 ring-[#b7e7df]",
+          "mx-4 grid min-h-[42px] items-center gap-4 rounded-lg px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_130px]",
+          complete && "bg-[#f6f7f9] ring-1 ring-[#e4e7ec]",
         )}
       >
-        <div className="relative flex min-w-0 items-center gap-3" style={{ paddingLeft: `${level * 28}px` }}>
-          {level > 0 && <span className="absolute left-0 top-1/2 h-px w-5 bg-[#d0d5dd]" />}
+        <HierarchyCell depth={depth} isLast={isLast && !hasSubtasks}>
           {hasSubtasks ? (
-            <button type="button" className="text-[#667085]" onClick={() => onToggleTask(task.id)} aria-label={open ? "折叠任务" : "展开任务"}>
+            <button
+              type="button"
+              className="flex h-4 w-4 shrink-0 items-center justify-center text-[#667085]"
+              data-hierarchy-branch-target={taskAnchorId}
+              onClick={() => onToggleTask(task.id)}
+              aria-label={open ? "折叠任务" : "展开任务"}
+            >
               {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           ) : (
-            <span className="h-4 w-4 shrink-0" />
+            <span className="h-4 w-4 shrink-0" data-hierarchy-branch-target={taskAnchorId} aria-hidden="true" />
           )}
-          <StatusDot done={complete} active={active} />
-          <div className="truncate text-base font-medium text-[#1d2939]">{task.title}</div>
-        </div>
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-hierarchy-anchor={taskAnchorId} data-hierarchy-parent={parentAnchorId}>
+            <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onTaskCompletionChange(task.id, checked)} />
+          </span>
+          <div className={clsx("truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
+        </HierarchyCell>
         <PersonValue name={task.assignee} />
-        <TaskStatusSelect value={task.status} disabled={!canEditTasks} onChange={(status) => onStatusChange(task.id, status)} />
-        <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-          <DateValue date={task.updatedAt} />
-          <ProgressValue value={progress} tone={complete ? "success" : active ? "accent" : "neutral"} />
-        </div>
+        <TaskStatusSelect value={task.status} disabled={!canEditTasks} onChange={handleStatusChange} />
+        <DateValue date={task.updatedAt} />
       </div>
 
       {open &&
         hasSubtasks &&
-        task.checklist.map((item) => (
-          <SubtaskRow key={item.id} item={item} level={level + 1} />
+        task.checklist.map((item, index) => (
+          <SubtaskRow
+            key={item.id}
+            item={item}
+            task={task}
+            itemIndex={index}
+            depth={3}
+            isLast={index === task.checklist.length - 1}
+            parentAnchorId={taskAnchorId}
+            canEditTasks={canEditTasks}
+            onChecklistItemChange={onChecklistItemChange}
+          />
         ))}
     </div>
   );
 }
 
-function SubtaskRow({ item, level }: { item: TaskChecklistItem; level: number }) {
+function SubtaskRow({
+  item,
+  task,
+  itemIndex,
+  depth,
+  isLast,
+  parentAnchorId,
+  canEditTasks,
+  onChecklistItemChange,
+}: {
+  item: TaskChecklistItem;
+  task: Task;
+  itemIndex: number;
+  depth: 3;
+  isLast: boolean;
+  parentAnchorId: string;
+  canEditTasks: boolean;
+  onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
+}) {
+  const status = subtaskDisplayStatus(task, item, itemIndex);
+  const complete = status === "done";
+
   return (
-    <div className="mx-4 grid min-h-[36px] items-center gap-4 px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_260px]">
-      <div className="relative flex min-w-0 items-center gap-3" style={{ paddingLeft: `${level * 28}px` }}>
-        <span className="absolute left-0 top-1/2 h-px w-5 bg-[#d0d5dd]" />
-        <span className="h-4 w-4 shrink-0" />
-        <StatusDot done={item.done} active={false} />
-        <div className="truncate text-sm font-medium text-[#344054]">{item.label}</div>
-      </div>
+    <div className={clsx("mx-4 grid min-h-[36px] items-center gap-4 px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_130px]", complete && "bg-[#f6f7f9]")}>
+      <HierarchyCell depth={depth} isLast={isLast}>
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-hierarchy-anchor={`subtask:${task.id}:${item.id}`} data-hierarchy-parent={parentAnchorId}>
+          <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
+        </span>
+        <div className={clsx("truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
+      </HierarchyCell>
       <span className="text-sm text-[#98a2b3]">-</span>
-      <CompletionChip complete={item.done} active={false} />
-      <div className="grid grid-cols-[120px_1fr] items-center gap-4">
-        <span className="text-sm text-[#98a2b3]">-</span>
-        <ProgressValue value={item.done ? 100 : 0} tone={item.done ? "success" : "neutral"} />
-      </div>
+      <TaskStateChip status={status} />
+      <span className="text-sm text-[#98a2b3]">-</span>
     </div>
   );
 }
 
-function GoalIcon({ done }: { done: boolean }) {
+function CompletionCheckbox({
+  checked,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
   return (
-    <div className={clsx("flex h-7 w-7 shrink-0 items-center justify-center rounded-full", done ? "bg-[#0b8f7f]" : "bg-[#e4fbf6] ring-1 ring-[#a4ded4]")}>
-      {done ? <Check className="h-4 w-4 text-white" /> : <Target className="h-4 w-4 text-[#0b8f7f]" />}
-    </div>
-  );
-}
-
-function StatusDot({ done, active }: { done: boolean; active: boolean }) {
-  return (
-    <span
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
       className={clsx(
-        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
-        done && "border-[#0b8f7f] bg-[#0b8f7f]",
-        active && !done && "border-[#1f8fff] bg-white",
-        !done && !active && "border-[#98a2b3] bg-white",
+        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition hover:[&>span]:border-[#0b8f7f]",
+        disabled && "cursor-not-allowed opacity-60",
       )}
+      aria-pressed={checked}
+      aria-label={checked ? "取消完成" : "标记完成"}
     >
-      {done && <Check className="h-3.5 w-3.5 text-white" />}
-      {active && !done && <span className="h-2 w-2 rounded-full bg-[#1f8fff]" />}
-    </span>
+      <CompletionCircleIcon checked={checked} />
+    </button>
   );
 }
 
@@ -552,15 +638,28 @@ function ProgressValue({ value, tone }: { value: number; tone: "success" | "acce
   );
 }
 
-function CompletionChip({ complete, active }: { complete: boolean; active: boolean }) {
-  if (complete) {
-    return <StatusChip tone="success">已完成</StatusChip>;
-  }
+const simpleStatusLabel: Record<SimpleStatus, string> = {
+  todo: "待办",
+  active: "进行中",
+  done: "已完成",
+};
 
-  return <StatusChip tone={active ? "accent" : "neutral"}>{active ? "进行中" : "待办"}</StatusChip>;
+const indicatorStatusLabel: Record<IndicatorStatus, string> = {
+  todo: "待办",
+  active: "进行中",
+  review: "待验收",
+  done: "已完成",
+};
+
+function TaskStateChip({ status }: { status: SimpleStatus }) {
+  return <StatusChip tone={statusTone(status)}>{simpleStatusLabel[status]}</StatusChip>;
 }
 
-function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent" | "neutral"; children: React.ReactNode }) {
+function IndicatorStatusChip({ status }: { status: IndicatorStatus }) {
+  return <StatusChip tone={status === "review" ? "review" : statusTone(status)}>{indicatorStatusLabel[status]}</StatusChip>;
+}
+
+function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent" | "neutral" | "review"; children: React.ReactNode }) {
   return (
     <span
       className={clsx(
@@ -568,6 +667,7 @@ function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent"
         tone === "success" && "bg-[#e4fbf6] text-[#0b8f7f]",
         tone === "warning" && "bg-[#fff4e5] text-[#b54708]",
         tone === "accent" && "bg-[#e8f2ff] text-[#0d7df2]",
+        tone === "review" && "bg-[#fff7e8] text-[#d56b00]",
         tone === "neutral" && "bg-[#f2f4f7] text-[#667085]",
       )}
     >
@@ -577,23 +677,25 @@ function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent"
 }
 
 function TaskStatusSelect({ value, disabled = false, onChange }: { value: TaskStatus; disabled?: boolean; onChange: (status: TaskStatus) => void }) {
+  const displayStatus = taskStatusToOption(value);
+
   return (
     <div className="relative inline-flex">
       <select
         className={clsx(
           "h-8 appearance-none rounded-full border-0 py-1 pl-3 pr-7 text-xs font-bold outline-none",
           disabled && "cursor-not-allowed opacity-80",
-          value === "Done" && "bg-[#e4fbf6] text-[#0b8f7f]",
-          (value === "In Progress" || value === "In Review") && "bg-[#e8f2ff] text-[#0d7df2]",
-          (value === "Todo" || value === "Backlog") && "bg-[#f2f4f7] text-[#667085]",
+          displayStatus === "Done" && "bg-[#e4fbf6] text-[#0b8f7f]",
+          displayStatus === "In Progress" && "bg-[#e8f2ff] text-[#0d7df2]",
+          displayStatus === "Todo" && "bg-[#f2f4f7] text-[#667085]",
         )}
-        value={value}
+        value={displayStatus}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value as TaskStatus)}
       >
-        {(["Backlog", "Todo", "In Progress", "In Review", "Done"] as TaskStatus[]).map((status) => (
+        {(["Todo", "In Progress", "Done"] as TaskStatus[]).map((status) => (
           <option key={status} value={status}>
-            {taskStatusLabel[status]}
+            {simpleStatusLabel[taskStatusToSimpleStatus(status)]}
           </option>
         ))}
       </select>
@@ -637,8 +739,91 @@ function addDays(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function taskProgress(status: TaskStatus) {
-  if (status === "Done") return 100;
-  if (status === "In Progress" || status === "In Review") return 50;
+function average(values: number[]) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function statusTone(status: SimpleStatus): "success" | "accent" | "neutral" {
+  if (status === "done") return "success";
+  if (status === "active") return "accent";
+  return "neutral";
+}
+
+function taskStatusToSimpleStatus(status: TaskStatus): SimpleStatus {
+  if (status === "Done") return "done";
+  if (status === "In Progress" || status === "In Review") return "active";
+  return "todo";
+}
+
+function taskStatusToOption(status: TaskStatus): Extract<TaskStatus, "Todo" | "In Progress" | "Done"> {
+  if (status === "Done") return "Done";
+  if (status === "In Progress" || status === "In Review") return "In Progress";
+  return "Todo";
+}
+
+function statusProgress(status: SimpleStatus) {
+  if (status === "done") return 1;
+  if (status === "active") return 0.5;
   return 0;
+}
+
+function taskDisplayStatus(task: Task): SimpleStatus {
+  if (task.checklist.length > 0) {
+    const completedCount = task.checklist.filter((item) => item.done).length;
+
+    if (completedCount === task.checklist.length) return "done";
+    if (completedCount > 0 || taskStatusToSimpleStatus(task.status) === "active") return "active";
+    return "todo";
+  }
+
+  return taskStatusToSimpleStatus(task.status);
+}
+
+function firstIncompleteChecklistIndex(task: Task) {
+  return task.checklist.findIndex((item) => !item.done);
+}
+
+function subtaskDisplayStatus(task: Task, item: TaskChecklistItem, itemIndex: number): SimpleStatus {
+  if (item.done) return "done";
+  if (taskStatusToSimpleStatus(task.status) === "active" && firstIncompleteChecklistIndex(task) === itemIndex) return "active";
+  return "todo";
+}
+
+function subtaskProgress(task: Task, item: TaskChecklistItem, itemIndex: number) {
+  return statusProgress(subtaskDisplayStatus(task, item, itemIndex));
+}
+
+function taskWorkProgress(task: Task) {
+  if (task.checklist.length > 0) {
+    return average(task.checklist.map((item, index) => subtaskProgress(task, item, index)));
+  }
+
+  return statusProgress(taskStatusToSimpleStatus(task.status));
+}
+
+function indicatorWorkProgress(result: Result, tasks: Task[]) {
+  if (tasks.length > 0) {
+    return average(tasks.map((task) => taskWorkProgress(task)));
+  }
+
+  return resultProgress(result) / 100;
+}
+
+function indicatorStatus(result: Result, tasks: Task[]): IndicatorStatus {
+  const workProgress = indicatorWorkProgress(result, tasks);
+
+  if (workProgress >= 1) {
+    return resultProgress(result) >= 100 ? "done" : "review";
+  }
+
+  if (workProgress > 0) return "active";
+  return "todo";
+}
+
+function objectiveProgress(results: { result: Result; tasks: Task[] }[]) {
+  return Math.round(average(results.map(({ result, tasks }) => indicatorWorkProgress(result, tasks))) * 100);
 }

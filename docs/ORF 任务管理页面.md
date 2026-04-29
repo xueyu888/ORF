@@ -1,124 +1,155 @@
 # ORF 任务管理页面
 
-本文档只解决三件事：
+本文档只记录两件事：
 
-1. 页面上每一块应该叫什么名字。
-2. 这些名字对应到哪个代码组件。
-3. 每个组件负责什么交互。
+1. 页面字段怎么排，图标也算字段。
+2. 状态和进度怎么算。
 
-不在本文档里重复描述页面长什么样。页面布局以浏览器实际页面为准。
+不写页面长相，不写普通点击交互，不写浏览器里能直接看出来的内容。
 
-## 1. 组件层次
+## 1. 字段排列
+
+ORF 任务管理页固定四层结构：
 
 ```text
-任务管理页面
-├─ 左侧侧边栏
-│  └─ 侧边栏链接项[]
-└─ 任务管理主体
-   ├─ ORF 流程条
-   ├─ 团队指标概览
-   │  └─ 指标卡片[]
-   ├─ 视图切换标签
-   └─ 目标面板[]
-      └─ 结果/指标块[]
-         └─ 任务行[]
-            └─ 子任务行[]
+目标
+└─ 指标
+   └─ 任务
+      └─ 子任务
 ```
 
-说明：
+目标框内的树形线条是固定样式，使用 `<HierarchyCell>` 复用。所有层次化线条都必须使用这套样式。
 
-- 这张图只写组件名，不写数据字段。
-- `[]` 表示同级有多个。
-- 顶部操作栏暂时不纳入本文档。
-- 页面细节直接看浏览器页面，不在文档里画页面布局。
+树线样式规则：
 
-## 2. 组件命名表
+- 竖线必须连续，不按单行切成断裂短线。
+- 当前节点用圆角弯线连接到内容字段。
+- 线条颜色固定为 `#d0d5dd`。
+- 缩进步长固定为 `28px`。
+- 目标行不画树线，指标行开始画树线。
 
-| 中文组件名 | 代码名 | 代码位置 | 说明 |
+| 层级 | 对象 | 树形深度 | 说明 |
+| --- | --- | ---: | --- |
+| 1 | 目标 | 0 | 目标行不画树形线，是树根。 |
+| 2 | 指标 | 1 | 指标行开始画树形线。 |
+| 3 | 任务 | 2 | 任务行向指标缩进一层。 |
+| 4 | 子任务 | 3 | 子任务行向任务缩进一层。 |
+
+实现约束：
+
+- `<HierarchyCell depth={1}>` 只负责字段对齐，不画线。
+- `<HierarchyCell depth={2}>` 开始画第一条分支线。
+- `<HierarchyCell depth={3}>` 画祖先竖线和当前圆角分支。
+
+### 目标行 `<ObjectivePanel>`
+
+| 顺序 | 字段 | 数据 / 组件 | 说明 |
 | --- | --- | --- | --- |
-| 左侧侧边栏 | `Sidebar` | `src/components/Sidebar.tsx` | 左侧全局导航区域。 |
-| 侧边栏链接项 | `SidebarLink` | `src/components/Sidebar.tsx` | 侧边栏里的单个导航入口。 |
-| 任务管理主体 | `TasksPage` | `src/pages/TasksPage.tsx` | `/tasks` 页面主体。 |
-| ORF 流程条 | `FlowStageControl` | `src/pages/TasksPage.tsx` | 目标设定、指标领取、重估、冻结、确认。 |
-| 团队指标概览 | `TeamDashboard` | `src/pages/TasksPage.tsx` | 团队视图下的统计概览区。 |
-| 指标卡片 | `DashboardMetric` | `src/pages/TasksPage.tsx` | 团队指标概览里的单张统计卡。 |
-| 视图切换标签 | `ScopeTabs` | `src/pages/TasksPage.tsx` | 团队 / 个人切换。 |
-| 目标面板 | `ObjectivePanel` | `src/pages/TasksPage.tsx` | 单个目标及其下属结果和任务。 |
-| 结果/指标块 | `ResultBlock` | `src/pages/TasksPage.tsx` | 单个结果/指标及其下属任务。 |
-| 任务行 | `TaskRow` | `src/pages/TasksPage.tsx` | 单个任务。 |
-| 子任务行 | `SubtaskRow` | `src/pages/TasksPage.tsx` | 任务 checklist 中的单个子项。 |
-| 任务状态选择器 | `TaskStatusSelect` | `src/pages/TasksPage.tsx` | 修改任务状态的下拉选择器。 |
+| 1 | 目标图标 | `<ObjectiveFlagIcon>` | 旗子图标，只表示这是目标，不表达状态。素材：`src/assets/orf-icons/objective-flag.svg`。 |
+| 2 | 目标标题 | `objective.title` | 已完成时划线变灰。 |
+| 3 | 目标风险标签 | `objective.status` | 显示正常 / 有风险。 |
+| 4 | 负责人头像组 | `taskOwners` / `<AvatarStack>` | 来自目标下可见任务负责人。 |
+| 5 | 日期 | `objectiveDue` 或 `reviewDue` | 优先显示任务截止日期。 |
+| 6 | 目标进度条 | `objectiveProgress(...)` | 目标唯一的进度表达。 |
 
-## 3. 辅助组件
+目标行左右两侧都不显示展开图标。
 
-这些也是代码里的组件，但主要用于展示，不建议作为页面沟通里的主名称。
+### 指标行 `<ResultBlock>`
 
-| 中文组件名 | 代码名 | 用途 |
-| --- | --- | --- |
-| 目标图标 | `GoalIcon` | 目标行左侧的完成 / 目标图标。 |
-| 状态圆点 | `StatusDot` | 结果、任务、子任务左侧的完成状态圆点。 |
-| 头像组 | `AvatarStack` | 目标面板里的多人头像组。 |
-| 人员头像 | `PersonAvatar` | 单个人员头像。 |
-| 人员信息 | `PersonValue` | 头像 + 人名。 |
-| 日期显示 | `DateValue` | 日期字段展示。 |
-| 进度显示 | `ProgressValue` | 短进度条 + 百分比。 |
-| 完成状态标签 | `CompletionChip` | 已完成 / 进行中 / 待办标签。 |
-| 状态标签 | `StatusChip` | 通用状态标签。 |
-
-## 4. 当前不是独立组件的区域
-
-这些区域页面上能看到，但当前代码里没有单独抽成组件。沟通时可以用中文叫法，但改代码时要定位到父组件。
-
-| 中文叫法 | 当前所在组件 | 说明 |
-| --- | --- | --- |
-| 品牌区 | `Sidebar` | 显示产品图标、产品名、设置图标。 |
-| 工作区入口 | `Sidebar` | 显示团队、周期和切换图标。 |
-| 我的焦点 | `Sidebar` + `SidebarLink` | 实际指向仪表盘。 |
-| 导航分组 | `Sidebar` | `WORK`、`REPORTS`、`ORG`。 |
-| 搜索入口 | `Sidebar` | 打开命令搜索菜单。 |
-| 用户信息 | `Sidebar` | 显示当前用户和角色。 |
-| 任务工具栏 | `TasksPage` | 包含 `ScopeTabs`、全部周期按钮、筛选按钮。 |
-| 全部周期按钮 | `TasksPage` | 目前只有按钮外观，没有下拉。 |
-| 筛选按钮 | `TasksPage` | 目前只有按钮外观，没有筛选面板。 |
-| 目标摘要行 | `ObjectivePanel` | 目标面板顶部那一行。 |
-| 结果/指标信息行 | `ResultBlock` | 结果/指标块顶部那一行。 |
-| 任务信息行 | `TaskRow` | 任务行主体。 |
-
-## 5. 交互规则
-
-| 交互 | 触发组件 | 影响组件 / 状态 | 当前行为 |
+| 顺序 | 字段 | 数据 / 组件 | 说明 |
 | --- | --- | --- | --- |
-| 切换团队 / 个人 | 视图切换标签 | `scope` | 团队视图显示全部任务；个人视图只显示 `Alex Chen` 相关任务。 |
-| 切换流程阶段 | ORF 流程条 | `flowStage` | 点击任意阶段即可切换，没有顺序限制。 |
-| 显示 / 隐藏团队指标概览 | 视图切换标签 | 团队指标概览 | 团队视图显示，个人视图隐藏。 |
-| 展开 / 折叠结果 | 结果/指标块 | `collapsedResultIds` | 点击结果/指标行左侧图标，显示或隐藏下属任务。 |
-| 展开 / 折叠任务 | 任务行 | `collapsedTaskIds` | 有子任务时可点击任务行左侧图标，显示或隐藏子任务。 |
-| 修改任务状态 | 任务状态选择器 | `Task.status` | 只有 `flowStage === "orfReestimate"` 时可编辑。 |
-| 打开命令搜索 | 搜索入口 | 命令搜索菜单 | 点击 `⌘K 搜索` 打开。 |
-| 点击全部周期 | 全部周期按钮 | 暂无 | 目前没有下拉逻辑。 |
-| 点击筛选 | 筛选按钮 | 暂无 | 目前没有筛选面板。 |
+| 1 | 树形线条 | `<HierarchyCell depth={1}>` | 表示指标属于上方目标。 |
+| 2 | 展开图标 | `<ChevronDown>` / `<ChevronRight>` | 只表示指标下方任务展开 / 折叠。 |
+| 3 | 指标图标 | `<MetricSquareIcon>` | 正方形颜色块，颜色表达指标状态。素材：`src/assets/orf-icons/metric-square.svg`。 |
+| 4 | 指标标题 | `result.title` | 已完成时划线变灰。 |
+| 5 | 负责人 | `result.owner` / `<PersonValue>` | 指标负责人。 |
+| 6 | 指标状态 | `indicatorStatus(result, tasks)` | 待办 / 进行中 / 待验收 / 已完成。 |
+| 7 | 日期 | `updatedAt` | 指标相关任务、证据、反馈里的最近更新时间。 |
 
-## 6. 数据字段归类
+指标不显示进度条。
 
-| 数据类别 | 主要字段 | 主要使用组件 |
+### 任务行 `<TaskRow>`
+
+| 顺序 | 字段 | 数据 / 组件 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 树形线条 | `<HierarchyCell depth={2}>` | 表示任务属于上方指标。 |
+| 2 | 展开图标 | `<ChevronDown>` / `<ChevronRight>` | 只有存在子任务时显示；图标在任务勾选框左侧。 |
+| 3 | 勾选框 | `<CompletionCheckbox>` / `<CompletionCircleIcon>` | 圆形勾选框，勾上后任务进入已完成。素材：`src/assets/orf-icons/completion-circle-*.svg`。 |
+| 4 | 任务标题 | `task.title` | 已完成时划线变灰。 |
+| 5 | 执行人 | `task.assignee` / `<PersonValue>` | 任务负责人。 |
+| 6 | 任务状态 | `task.status` / `<TaskStatusSelect>` | 只显示待办 / 进行中 / 已完成。 |
+| 7 | 日期 | `task.updatedAt` | 任务最近更新时间。 |
+
+任务不显示进度条。任务可以折叠子任务。任务行树形横线只连接到展开图标左侧，展开图标和任务勾选框之间留空，不画横线。
+
+### 子任务行 `<SubtaskRow>`
+
+| 顺序 | 字段 | 数据 / 组件 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 树形线条 | `<HierarchyCell depth={3}>` | 表示子任务属于上方任务。 |
+| 2 | 勾选框 | `<CompletionCheckbox>` / `<CompletionCircleIcon>` | 圆形勾选框，勾上后子任务进入已完成。素材：`src/assets/orf-icons/completion-circle-*.svg`。 |
+| 3 | 子任务标题 | `item.label` | 已完成时划线变灰。 |
+| 4 | 执行人 | 无 | 当前显示 `-`。 |
+| 5 | 子任务状态 | `subtaskDisplayStatus(...)` | 待办 / 进行中 / 已完成。 |
+| 6 | 日期 | 无 | 当前显示 `-`。 |
+
+子任务不显示进度条。
+
+## 2. 状态规则
+
+| 对象 | 状态 | 状态来源 |
 | --- | --- | --- |
-| 页面状态 | `scope`、`flowStage`、`collapsedResultIds`、`collapsedTaskIds` | 任务管理主体 |
-| 目标数据 | `objective.title`、`objective.status`、`objective.progress`、`objective.resultIds` | 目标面板 |
-| 结果/指标数据 | `result.title`、`result.owner`、`result.status`、`result.current`、`result.target` | 结果/指标块 |
-| 任务数据 | `task.title`、`task.assignee`、`task.status`、`task.updatedAt`、`task.checklist` | 任务行 |
-| 子任务数据 | `item.label`、`item.done` | 子任务行 |
-| 团队统计数据 | `completedResults`、`totalResults`、`waitingResults`、`activeTaskCount` | 团队指标概览、指标卡片 |
-| 侧边栏数据 | `navItems`、`sidebarGroups`、当前工作区、当前用户 | 左侧侧边栏 |
+| 目标 | 无独立状态图标 | 只通过目标进度条表达完成情况。 |
+| 指标 | 待办 / 进行中 / 待验收 / 已完成 | `indicatorStatus(result, tasks)`。 |
+| 任务 | 待办 / 进行中 / 已完成 | `task.status` 归一化后显示。 |
+| 子任务 | 待办 / 进行中 / 已完成 | `item.done` 和所在任务状态共同决定。 |
 
-## 7. 当前实现限制
+状态视觉规则：
 
-| 项目 | 当前状态 |
+- 已完成：标题划线并变灰。
+- 目标：保留旗子图标，但图标不表达状态。
+- 指标：保留正方形颜色块，颜色表达状态。
+- 任务、子任务：保留圆形勾选框，勾选框表达完成。
+- 只有目标显示进度条；指标、任务、子任务不显示进度条。
+
+## 3. 目标进度
+
+目标进度由指标平均得到；指标下有任务时，指标进度由任务平均得到；任务下有子任务时，任务进度由子任务平均得到。
+
+```text
+s(待办) = 0
+s(进行中) = 0.5
+s(已完成) = 1
+
+p(子任务) = s(子任务状态)
+
+p(任务) =
+  平均值(p(子任务[]))，如果任务下有子任务
+  s(任务状态)，如果任务下没有子任务
+
+p(指标) =
+  平均值(p(任务[]))，如果指标下有任务
+  指标自身完成率，如果指标下没有任务
+
+p(目标) = 平均值(p(指标[]))
+
+目标进度条 = round(p(目标) × 100%)
+```
+
+指标自身完成率由 `resultProgress(result)` 计算。
+
+## 4. 代码定位
+
+| 区域 | 组件 |
 | --- | --- |
-| 当前成员 | 个人视图硬编码为 `Alex Chen`。 |
-| 权限系统 | 没有真实主管 / 成员权限。 |
-| 流程推进 | 可以任意点击阶段，没有顺序限制。 |
-| 周期筛选 | `全部周期` 只有按钮，没有下拉。 |
-| 筛选面板 | `筛选` 只有按钮，没有面板。 |
-| 侧边栏折叠 | 没有窄侧栏模式。 |
-| 目标折叠 | 目标面板不支持折叠。 |
-| 子任务编辑 | 子任务不支持独立编辑。 |
+| 页面主体 | `<TasksPage>` @`src/pages/TasksPage.tsx` |
+| 目标行 | `<ObjectivePanel>` |
+| 指标行 | `<ResultBlock>` |
+| 任务行 | `<TaskRow>` |
+| 子任务行 | `<SubtaskRow>` |
+| 树形线条 | `<HierarchyCell>` @`src/components/OrfHierarchyTree.tsx` |
+| 图标组件 | `src/components/OrfIconAssets.tsx` |
+| 图标素材 | `src/assets/orf-icons/` |
+| 目标旗子图标 | `<ObjectiveFlagIcon>` |
+| 指标正方形色块 | `<MetricSquareIcon>` |
+| 勾选框 | `<CompletionCheckbox>` |
