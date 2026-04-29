@@ -324,7 +324,7 @@ function ObjectivePanel({
           </div>
         </div>
         <AvatarStack names={taskOwners} />
-        <DateValue date={objectiveDue || reviewDue} />
+        <ObjectiveTimeValue deadline={objectiveDue || reviewDue} updatedAt={objective.updatedAt} />
         <ProgressValue value={progress} tone={progress >= 80 ? "success" : "neutral"} />
         <span aria-hidden="true" />
       </div>
@@ -385,7 +385,7 @@ function ResultBlock({
   return (
     <div ref={setResultElement} className="relative">
       <HierarchyTreeOverlay container={resultElement} />
-      <div className={clsx("grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_170px_120px_130px]", complete && "bg-[#f6f7f9]")}>
+      <div className={clsx("grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]", complete && "bg-[#f6f7f9]")}>
         <HierarchyCell depth={1} isLast={isLast && (!open || tasks.length === 0)}>
           <button type="button" className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]" onClick={() => onToggleResult(result.id)} aria-label={open ? "折叠指标" : "展开指标"}>
             {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -397,7 +397,7 @@ function ResultBlock({
         </HierarchyCell>
         <PersonValue name={result.owner} />
         <IndicatorStatusChip status={status} />
-        <DateValue date={updatedAt} />
+        <UpdatedTimeValue date={updatedAt} />
       </div>
 
       {open && tasks.length > 0 && (
@@ -453,7 +453,7 @@ function TaskRow({
     <div className="relative">
       <div
         className={clsx(
-          "grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_170px_120px_130px]",
+          "grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
           complete && "bg-[#f6f7f9]",
         )}
       >
@@ -478,7 +478,7 @@ function TaskRow({
         </HierarchyCell>
         <PersonValue name={task.assignee} />
         <EmptySlot />
-        <DateValue date={task.updatedAt} />
+        <UpdatedTimeValue date={task.updatedAt} />
       </div>
 
       {open &&
@@ -523,16 +523,16 @@ function SubtaskRow({
   const complete = status === "done";
 
   return (
-    <div className={clsx("grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_170px_120px_130px]", complete && "bg-[#f6f7f9]")}>
+    <div className={clsx("grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]", complete && "bg-[#f6f7f9]")}>
       <HierarchyCell depth={depth} isLast={isLast}>
         <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-hierarchy-anchor={`subtask:${task.id}:${item.id}`} data-hierarchy-parent={parentAnchorId}>
           <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
         </span>
         <div className={clsx("truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
       </HierarchyCell>
-      <EmptyValue />
       <EmptySlot />
-      <EmptyValue />
+      <EmptySlot />
+      <EmptySlot />
     </div>
   );
 }
@@ -601,17 +601,28 @@ function PersonValue({ name }: { name: string }) {
   );
 }
 
-function DateValue({ date }: { date: string }) {
+function ObjectiveTimeValue({ deadline, updatedAt }: { deadline: string; updatedAt: string }) {
   return (
-    <span className="inline-flex h-7 items-center gap-2 whitespace-nowrap text-sm font-medium text-[#667085]">
-      <CalendarDays className="h-4 w-4 text-[#98a2b3]" />
-      {date || "未设置"}
-    </span>
+    <div className="grid gap-1 text-sm font-medium">
+      <span className="inline-flex h-5 items-center gap-2 whitespace-nowrap text-[#344054]" title="截止时间" aria-label={`截止时间 ${deadline || "未设置"}`}>
+        <CalendarDays className="h-4 w-4 text-[#667085]" />
+        {deadline || "未设置"}
+      </span>
+      <span className="inline-flex h-5 items-center gap-2 whitespace-nowrap text-[#667085]" title="更新时间" aria-label={`更新时间 ${updatedAt || "未设置"}`}>
+        <Clock3 className="h-4 w-4 text-[#98a2b3]" />
+        {updatedAt || "未设置"}
+      </span>
+    </div>
   );
 }
 
-function EmptyValue() {
-  return <span className="inline-flex h-7 items-center text-sm text-[#98a2b3]">-</span>;
+function UpdatedTimeValue({ date }: { date: string }) {
+  return (
+    <span className="inline-flex h-7 items-center gap-2 whitespace-nowrap text-sm font-medium text-[#667085]" title="更新时间" aria-label={`更新时间 ${date || "未设置"}`}>
+      <Clock3 className="h-4 w-4 text-[#98a2b3]" />
+      {date || "未设置"}
+    </span>
+  );
 }
 
 function EmptySlot() {
