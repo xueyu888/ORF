@@ -76,12 +76,16 @@ export function IconButton({ icon: Icon, label, className, ...props }: ButtonHTM
 }
 
 export function StatusBadge({ status }: { status: WorkStatus | FeedbackStatus | TaskStatus | Priority }) {
-  return <span className={clsx("orf-status-tag inline-flex items-center border px-2 py-0.5 text-xs font-medium", statusClasses[status])}>{statusLabel(status)}</span>;
+  return (
+    <span className={clsx("orf-status-tag inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-bold leading-none", statusClasses[status])}>
+      {statusLabel(status)}
+    </span>
+  );
 }
 
 export function ConfidenceBadge({ value }: { value: number }) {
   const color = value >= 75 ? "orf-badge-success" : value >= 60 ? "orf-badge-warning" : "orf-badge-danger";
-  return <span className={clsx("orf-status-tag inline-flex items-center border px-2 py-0.5 text-xs font-medium", color)}>信心 {value}%</span>;
+  return <span className={clsx("orf-status-tag inline-flex h-7 min-w-[66px] items-center justify-center px-3 text-xs font-bold leading-none", color)}>信心 {value}%</span>;
 }
 
 export function ProgressBar({ value, className }: { value: number; className?: string }) {

@@ -23,10 +23,11 @@ const currentMember = "Alex Chen";
 
 type TaskScope = "team" | "personal";
 type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen" | "supervisorConfirm";
+type FlowStageState = "已完成" | "进行中" | "待确认";
 type SimpleStatus = "todo" | "active" | "done";
 type IndicatorStatus = "todo" | "active" | "review" | "done";
 
-const flowStages: { value: FlowStage; label: string; state: string }[] = [
+const flowStages: { value: FlowStage; label: string; state: FlowStageState }[] = [
   { value: "goalSetting", label: "目标设定", state: "已完成" },
   { value: "resultClaiming", label: "指标领取", state: "已完成" },
   { value: "orfReestimate", label: "ORF 重估", state: "进行中" },
@@ -35,7 +36,7 @@ const flowStages: { value: FlowStage; label: string; state: string }[] = [
 ];
 
 export function TasksPage() {
-  const { state, updateTaskStatus, setTaskCompletion, updateTaskChecklistItem } = useOrf();
+  const { state, setTaskCompletion, updateTaskChecklistItem } = useOrf();
   const [scope, setScope] = useState<TaskScope>("team");
   const [flowStage, setFlowStage] = useState<FlowStage>("orfReestimate");
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
@@ -135,7 +136,6 @@ export function TasksPage() {
             collapsedTaskIds={collapsedTaskIds}
             canEditTasks={canEditTasks}
             isGoalFrozen={isGoalFrozen}
-            onStatusChange={updateTaskStatus}
             onTaskCompletionChange={setTaskCompletion}
             onChecklistItemChange={updateTaskChecklistItem}
             onToggleResult={toggleResult}
@@ -186,7 +186,9 @@ function FlowStageControl({
               </span>
               <span className="min-w-0">
                 <span className="block truncate text-base font-bold text-[#1d2939]">{stage.label}</span>
-                <span className={clsx("mt-0.5 block truncate text-sm font-medium", active ? "text-[#0b8f7f]" : "text-[#98a2b3]")}>{stage.state}</span>
+                <span className="mt-2 block">
+                  <FlowStageStatusChip state={stage.state} />
+                </span>
               </span>
             </button>
             {index < flowStages.length - 1 && (
@@ -199,6 +201,10 @@ function FlowStageControl({
       })}
     </div>
   );
+}
+
+function FlowStageStatusChip({ state }: { state: FlowStageState }) {
+  return <StatusChip tone={state === "已完成" ? "success" : state === "进行中" ? "accent" : "neutral"}>{state}</StatusChip>;
 }
 
 function TeamDashboard({
@@ -281,7 +287,6 @@ function ObjectivePanel({
   collapsedTaskIds,
   canEditTasks,
   isGoalFrozen,
-  onStatusChange,
   onTaskCompletionChange,
   onChecklistItemChange,
   onToggleResult,
@@ -296,7 +301,6 @@ function ObjectivePanel({
   collapsedTaskIds: Set<string>;
   canEditTasks: boolean;
   isGoalFrozen: boolean;
-  onStatusChange: (taskId: string, status: TaskStatus) => void;
   onTaskCompletionChange: (taskId: string, done: boolean) => void;
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onToggleResult: (resultId: string) => void;
@@ -336,7 +340,6 @@ function ObjectivePanel({
             collapsed={collapsedResultIds.has(result.id)}
             collapsedTaskIds={collapsedTaskIds}
             canEditTasks={canEditTasks}
-            onStatusChange={onStatusChange}
             onTaskCompletionChange={onTaskCompletionChange}
             onChecklistItemChange={onChecklistItemChange}
             onToggleResult={onToggleResult}
@@ -356,7 +359,6 @@ function ResultBlock({
   collapsed,
   collapsedTaskIds,
   canEditTasks,
-  onStatusChange,
   onTaskCompletionChange,
   onChecklistItemChange,
   onToggleResult,
@@ -369,7 +371,6 @@ function ResultBlock({
   collapsed: boolean;
   collapsedTaskIds: Set<string>;
   canEditTasks: boolean;
-  onStatusChange: (taskId: string, status: TaskStatus) => void;
   onTaskCompletionChange: (taskId: string, done: boolean) => void;
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onToggleResult: (resultId: string) => void;
@@ -384,10 +385,10 @@ function ResultBlock({
   return (
     <div ref={setResultElement} className="relative">
       <HierarchyTreeOverlay container={resultElement} />
-      <div className={clsx("grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_130px]", complete && "bg-[#f6f7f9]")}>
+      <div className={clsx("grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_170px_120px_130px]", complete && "bg-[#f6f7f9]")}>
         <HierarchyCell depth={1} isLast={isLast && (!open || tasks.length === 0)}>
-          <button type="button" className="text-[#475467]" onClick={() => onToggleResult(result.id)} aria-label={open ? "折叠指标" : "展开指标"}>
-            {open ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+          <button type="button" className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]" onClick={() => onToggleResult(result.id)} aria-label={open ? "折叠指标" : "展开指标"}>
+            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </button>
           <span className="flex h-7 w-7 shrink-0 items-center justify-center" data-hierarchy-anchor={resultAnchorId}>
             <MetricSquareIcon tone={status} />
@@ -411,7 +412,6 @@ function ResultBlock({
               collapsed={collapsedTaskIds.has(task.id)}
               canEditTasks={canEditTasks}
               onToggleTask={onToggleTask}
-              onStatusChange={onStatusChange}
               onTaskCompletionChange={onTaskCompletionChange}
               onChecklistItemChange={onChecklistItemChange}
             />
@@ -430,7 +430,6 @@ function TaskRow({
   collapsed,
   canEditTasks,
   onToggleTask,
-  onStatusChange,
   onTaskCompletionChange,
   onChecklistItemChange,
 }: {
@@ -441,7 +440,6 @@ function TaskRow({
   collapsed: boolean;
   canEditTasks: boolean;
   onToggleTask: (taskId: string) => void;
-  onStatusChange: (taskId: string, status: TaskStatus) => void;
   onTaskCompletionChange: (taskId: string, done: boolean) => void;
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
 }) {
@@ -451,25 +449,11 @@ function TaskRow({
   const hasSubtasks = task.checklist.length > 0;
   const taskAnchorId = `task:${task.id}`;
 
-  const handleStatusChange = (nextStatus: TaskStatus) => {
-    if (nextStatus === "Done") {
-      onTaskCompletionChange(task.id, true);
-      return;
-    }
-
-    if (nextStatus === "Todo") {
-      onTaskCompletionChange(task.id, false);
-      return;
-    }
-
-    onStatusChange(task.id, nextStatus);
-  };
-
   return (
     <div className="relative">
       <div
         className={clsx(
-          "mx-4 grid min-h-[42px] items-center gap-4 rounded-lg px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_130px]",
+          "grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_170px_120px_130px]",
           complete && "bg-[#f6f7f9]",
         )}
       >
@@ -477,7 +461,7 @@ function TaskRow({
           {hasSubtasks ? (
             <button
               type="button"
-              className="flex h-4 w-4 shrink-0 items-center justify-center text-[#667085]"
+              className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]"
               data-hierarchy-branch-target={taskAnchorId}
               onClick={() => onToggleTask(task.id)}
               aria-label={open ? "折叠任务" : "展开任务"}
@@ -485,7 +469,7 @@ function TaskRow({
               {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </button>
           ) : (
-            <span className="h-4 w-4 shrink-0" data-hierarchy-branch-target={taskAnchorId} aria-hidden="true" />
+            <span className="h-5 w-5 shrink-0" data-hierarchy-branch-target={taskAnchorId} aria-hidden="true" />
           )}
           <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-hierarchy-anchor={taskAnchorId} data-hierarchy-parent={parentAnchorId}>
             <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onTaskCompletionChange(task.id, checked)} />
@@ -493,7 +477,7 @@ function TaskRow({
           <div className={clsx("truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
         </HierarchyCell>
         <PersonValue name={task.assignee} />
-        <TaskStatusSelect value={task.status} disabled={!canEditTasks} onChange={handleStatusChange} />
+        <EmptySlot />
         <DateValue date={task.updatedAt} />
       </div>
 
@@ -539,16 +523,16 @@ function SubtaskRow({
   const complete = status === "done";
 
   return (
-    <div className={clsx("mx-4 grid min-h-[36px] items-center gap-4 px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_130px]", complete && "bg-[#f6f7f9]")}>
+    <div className={clsx("grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(360px,1fr)_170px_120px_130px]", complete && "bg-[#f6f7f9]")}>
       <HierarchyCell depth={depth} isLast={isLast}>
         <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-hierarchy-anchor={`subtask:${task.id}:${item.id}`} data-hierarchy-parent={parentAnchorId}>
           <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
         </span>
         <div className={clsx("truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
       </HierarchyCell>
-      <span className="text-sm text-[#98a2b3]">-</span>
-      <TaskStateChip status={status} />
-      <span className="text-sm text-[#98a2b3]">-</span>
+      <EmptyValue />
+      <EmptySlot />
+      <EmptyValue />
     </div>
   );
 }
@@ -619,11 +603,19 @@ function PersonValue({ name }: { name: string }) {
 
 function DateValue({ date }: { date: string }) {
   return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium text-[#667085]">
+    <span className="inline-flex h-7 items-center gap-2 whitespace-nowrap text-sm font-medium text-[#667085]">
       <CalendarDays className="h-4 w-4 text-[#98a2b3]" />
       {date || "未设置"}
     </span>
   );
+}
+
+function EmptyValue() {
+  return <span className="inline-flex h-7 items-center text-sm text-[#98a2b3]">-</span>;
+}
+
+function EmptySlot() {
+  return <span className="inline-flex h-7" aria-hidden="true" />;
 }
 
 function ProgressValue({ value, tone }: { value: number; tone: "success" | "accent" | "neutral" }) {
@@ -639,22 +631,12 @@ function ProgressValue({ value, tone }: { value: number; tone: "success" | "acce
   );
 }
 
-const simpleStatusLabel: Record<SimpleStatus, string> = {
-  todo: "待办",
-  active: "进行中",
-  done: "已完成",
-};
-
 const indicatorStatusLabel: Record<IndicatorStatus, string> = {
   todo: "待办",
   active: "进行中",
   review: "待验收",
   done: "已完成",
 };
-
-function TaskStateChip({ status }: { status: SimpleStatus }) {
-  return <StatusChip tone={statusTone(status)}>{simpleStatusLabel[status]}</StatusChip>;
-}
 
 function IndicatorStatusChip({ status }: { status: IndicatorStatus }) {
   return <StatusChip tone={status === "review" ? "review" : statusTone(status)}>{indicatorStatusLabel[status]}</StatusChip>;
@@ -664,7 +646,7 @@ function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent"
   return (
     <span
       className={clsx(
-        "inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold",
+        "inline-flex h-7 w-fit min-w-[66px] justify-self-start items-center justify-center rounded-full px-3 text-xs font-bold leading-none",
         tone === "success" && "bg-[#e4fbf6] text-[#0b8f7f]",
         tone === "warning" && "bg-[#fff4e5] text-[#b54708]",
         tone === "accent" && "bg-[#e8f2ff] text-[#0d7df2]",
@@ -674,33 +656,6 @@ function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent"
     >
       {children}
     </span>
-  );
-}
-
-function TaskStatusSelect({ value, disabled = false, onChange }: { value: TaskStatus; disabled?: boolean; onChange: (status: TaskStatus) => void }) {
-  const displayStatus = taskStatusToOption(value);
-
-  return (
-    <div className="relative inline-flex">
-      <select
-        className={clsx(
-          "h-8 appearance-none rounded-full border-0 px-3 py-1 text-xs font-bold outline-none",
-          disabled && "cursor-not-allowed opacity-80",
-          displayStatus === "Done" && "bg-[#e4fbf6] text-[#0b8f7f]",
-          displayStatus === "In Progress" && "bg-[#e8f2ff] text-[#0d7df2]",
-          displayStatus === "Todo" && "bg-[#f2f4f7] text-[#667085]",
-        )}
-        value={displayStatus}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value as TaskStatus)}
-      >
-        {(["Todo", "In Progress", "Done"] as TaskStatus[]).map((status) => (
-          <option key={status} value={status}>
-            {simpleStatusLabel[taskStatusToSimpleStatus(status)]}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }
 
@@ -757,12 +712,6 @@ function taskStatusToSimpleStatus(status: TaskStatus): SimpleStatus {
   if (status === "Done") return "done";
   if (status === "In Progress" || status === "In Review") return "active";
   return "todo";
-}
-
-function taskStatusToOption(status: TaskStatus): Extract<TaskStatus, "Todo" | "In Progress" | "Done"> {
-  if (status === "Done") return "Done";
-  if (status === "In Progress" || status === "In Review") return "In Progress";
-  return "Todo";
 }
 
 function statusProgress(status: SimpleStatus) {
