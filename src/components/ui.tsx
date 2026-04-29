@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { FeedbackStatus, Priority, TaskStatus, WorkStatus } from "../types/orf";
+import { avatarStyleForName } from "../utils/avatar";
 import { initials } from "../utils/format";
 import { statusLabel } from "../utils/labels";
 
@@ -95,11 +96,13 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md"
   return (
     <div
       className={clsx(
-        "orf-accent-soft orf-accent-border inline-flex shrink-0 items-center justify-center orf-status-tag border font-semibold",
+        "inline-flex shrink-0 items-center justify-center rounded-full border-2 border-white font-bold shadow-sm",
         size === "sm" && "h-6 w-6 text-[10px]",
         size === "md" && "h-8 w-8 text-xs",
         size === "lg" && "h-10 w-10 text-sm",
       )}
+      style={avatarStyleForName(name)}
+      title={name}
     >
       {initials(name)}
     </div>

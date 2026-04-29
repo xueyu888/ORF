@@ -12,14 +12,13 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
-import { designTokens } from "../config/designTokens";
 import { HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
 import { useOrf } from "../state/OrfProvider";
 import type { Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../types/orf";
+import { avatarStyleForName } from "../utils/avatar";
 import { initials, resultProgress } from "../utils/format";
 
-const avatarColors = designTokens.palette.avatar;
 const currentMember = "Alex Chen";
 
 type TaskScope = "team" | "personal";
@@ -471,7 +470,7 @@ function TaskRow({
       <div
         className={clsx(
           "mx-4 grid min-h-[42px] items-center gap-4 rounded-lg px-2 text-sm xl:grid-cols-[minmax(360px,1fr)_160px_130px_130px]",
-          complete && "bg-[#f6f7f9] ring-1 ring-[#e4e7ec]",
+          complete && "bg-[#f6f7f9]",
         )}
       >
         <HierarchyCell depth={depth} isLast={isLast && !hasSubtasks}>
@@ -588,19 +587,19 @@ function AvatarStack({ names }: { names: string[] }) {
   return (
     <div className="flex items-center">
       {names.slice(0, 4).map((name, index) => (
-        <PersonAvatar key={name} name={name} index={index} overlap={index > 0} />
+        <PersonAvatar key={name} name={name} overlap={index > 0} />
       ))}
       {names.length > 4 && <span className="ml-1 rounded-full bg-[#f2f4f7] px-2 py-1 text-xs font-semibold text-[#475467]">+{names.length - 4}</span>}
     </div>
   );
 }
 
-function PersonAvatar({ name, index = 0, overlap }: { name: string; index?: number; overlap?: boolean }) {
+function PersonAvatar({ name, overlap }: { name: string; overlap?: boolean }) {
   return (
     <div
       title={name}
       className={clsx("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow-sm", overlap && "-ml-2")}
-      style={{ backgroundColor: avatarColors[index % avatarColors.length] }}
+      style={avatarStyleForName(name)}
     >
       {initials(name)}
     </div>
@@ -610,7 +609,9 @@ function PersonAvatar({ name, index = 0, overlap }: { name: string; index?: numb
 function PersonValue({ name }: { name: string }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#e4fbf6] text-xs font-bold text-[#0b8f7f]">{initials(name)}</div>
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-xs font-bold shadow-sm" style={avatarStyleForName(name)} title={name}>
+        {initials(name)}
+      </div>
       <span className="truncate text-sm font-medium text-[#667085]">{name}</span>
     </div>
   );
@@ -683,7 +684,7 @@ function TaskStatusSelect({ value, disabled = false, onChange }: { value: TaskSt
     <div className="relative inline-flex">
       <select
         className={clsx(
-          "h-8 appearance-none rounded-full border-0 py-1 pl-3 pr-7 text-xs font-bold outline-none",
+          "h-8 appearance-none rounded-full border-0 px-3 py-1 text-xs font-bold outline-none",
           disabled && "cursor-not-allowed opacity-80",
           displayStatus === "Done" && "bg-[#e4fbf6] text-[#0b8f7f]",
           displayStatus === "In Progress" && "bg-[#e8f2ff] text-[#0d7df2]",
@@ -699,7 +700,6 @@ function TaskStatusSelect({ value, disabled = false, onChange }: { value: TaskSt
           </option>
         ))}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-current" />
     </div>
   );
 }
