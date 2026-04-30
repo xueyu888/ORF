@@ -16,8 +16,12 @@ const sidebarGroups = [
 
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
+  const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
   const sidebarStyle = {
-    "--orf-sidebar-bg-image": toCssImageUrl(orfAssetLibrary.sidebar.energyBackground.src),
+    "--orf-sidebar-bg-image": toCssImageUrl(sidebarBackground.src),
+    "--orf-sidebar-bg-position": sidebarBackground.position,
+    "--orf-sidebar-bg-filter": sidebarBackground.filter,
+    "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
   } as CSSProperties;
 
   return (

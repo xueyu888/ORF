@@ -9,5 +9,6 @@ Canonical icons and visual assets for ORF hierarchy rows and app surfaces. Runti
 | `completion-circle-empty.svg` | Task / subtask incomplete checkbox. |
 | `completion-circle-done.svg` | Task / subtask complete checkbox. |
 | `sidebar-energy-bg.png` | Sidebar atmospheric background. |
+| `sidebar-character-guide-bg.png` | Sidebar character guide background. |
 
 Use these assets as the source shape for future page icons. Status rules live in `docs/ORF 任务管理页面.md`.
