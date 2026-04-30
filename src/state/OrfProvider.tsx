@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { OrfFlowStore } from "./OrfFlowStore";
-import type { Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
+import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
 
 type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | null;
 export type ThemeMode = "dark" | "light";
@@ -36,8 +36,11 @@ interface OrfContextValue {
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
+  createTaskChecklistItem: (taskId: string, afterItemId?: string) => void;
   updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => void;
   updateResultConfidence: (resultId: string, confidence: number) => void;
+  addComment: (input: { targetType: CommentTargetType; targetId: string; targetTitle: string; body: string; author?: string }) => void;
+  updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => void;
 }
 
@@ -101,8 +104,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       updateTaskStatus: (taskId, status) => commit(store.updateTaskStatus(state, taskId, status), `任务状态已更新`),
       setTaskCompletion: (taskId, done) => commit(store.setTaskCompletion(state, taskId, done), `任务完成状态已更新`),
       updateTaskChecklistItem: (taskId, itemId, done) => commit(store.updateTaskChecklistItem(state, taskId, itemId, done), `子任务完成状态已更新`),
+      createTaskChecklistItem: (taskId, afterItemId) => commit(store.createTaskChecklistItem(state, taskId, afterItemId), "子任务已添加"),
       updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
       updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "结果信心已更新"),
+      addComment: (input) => commit(store.addComment(state, input), "评论已添加"),
+      updateCommentThreadStatus: (threadId, status) => commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开"),
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "结果更新已记录"),
     }),

@@ -861,6 +861,7 @@ export const initialOrfState: OrfState = {
       linkedResultId: "res-tool-success",
     },
   ],
+  comments: [],
   rules: {
     requireResultForTask: true,
     requireEvidenceForFeedback: true,

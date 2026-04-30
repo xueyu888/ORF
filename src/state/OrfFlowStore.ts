@@ -1,11 +1,18 @@
 import { initialOrfState } from "../data/mockData";
-import type { Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
+import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
 
 const STORAGE_KEY = "orf-flow-state-v3";
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
-const withChecklistDates = (state: OrfState): OrfState => ({
+const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+const currentTime = () => new Date().toISOString();
+const currentDate = () => currentTime().slice(0, 10);
+const normalizeState = (state: OrfState): OrfState => ({
   ...state,
+  comments: (state.comments ?? []).map((thread) => ({
+    ...thread,
+    messages: thread.messages ?? [],
+  })),
   tasks: state.tasks.map((task) => ({
     ...task,
     checklist: task.checklist.map((item) => ({ ...item, updatedAt: item.updatedAt ?? task.updatedAt })),
@@ -19,21 +26,21 @@ export class OrfFlowStore {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        return withChecklistDates(fallback);
+        return normalizeState(fallback);
       }
 
-      return withChecklistDates({ ...fallback, ...(JSON.parse(raw) as Partial<OrfState>) });
+      return normalizeState({ ...fallback, ...(JSON.parse(raw) as Partial<OrfState>) });
     } catch {
-      return withChecklistDates(fallback);
+      return normalizeState(fallback);
     }
   }
 
   save(state: OrfState): void {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(withChecklistDates(state)));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeState(state)));
   }
 
   reset(): OrfState {
-    const state = withChecklistDates(cloneState(initialOrfState));
+    const state = normalizeState(cloneState(initialOrfState));
     this.save(state);
     return state;
   }
@@ -218,8 +225,39 @@ export class OrfFlowStore {
     };
   }
 
+  createTaskChecklistItem(state: OrfState, taskId: string, afterItemId?: string): OrfState {
+    const now = currentDate();
+
+    return {
+      ...state,
+      tasks: state.tasks.map((task) => {
+        if (task.id !== taskId) {
+          return task;
+        }
+
+        const item = {
+          id: `ck-${Date.now()}`,
+          label: "新子任务",
+          done: false,
+          updatedAt: now,
+        };
+        const afterIndex = afterItemId ? task.checklist.findIndex((current) => current.id === afterItemId) : -1;
+        const insertIndex = afterIndex >= 0 ? afterIndex + 1 : task.checklist.length;
+        const checklist = [...task.checklist];
+        checklist.splice(Math.max(0, insertIndex), 0, item);
+
+        return {
+          ...task,
+          status: task.status === "Done" ? "In Progress" : task.status,
+          checklist,
+          updatedAt: now,
+        };
+      }),
+    };
+  }
+
   updateFeedbackStatus(state: OrfState, feedbackId: string, status: FeedbackStatus): OrfState {
-    const now = new Date().toISOString().slice(0, 10);
+    const now = currentDate();
     return {
       ...state,
       feedback: state.feedback.map((item) =>
@@ -239,6 +277,77 @@ export class OrfFlowStore {
     return {
       ...state,
       results: state.results.map((result) => (result.id === resultId ? { ...result, confidence } : result)),
+    };
+  }
+
+  addComment(
+    state: OrfState,
+    input: {
+      targetType: CommentTargetType;
+      targetId: string;
+      targetTitle: string;
+      body: string;
+      author?: string;
+    },
+  ): OrfState {
+    const body = input.body.trim();
+    if (!body) {
+      return state;
+    }
+
+    const now = currentTime();
+    const author = input.author ?? "Alex Chen";
+    const message = {
+      id: makeId("cmsg"),
+      author,
+      body,
+      createdAt: now,
+    };
+    const existingThread = state.comments.find(
+      (thread) => thread.targetType === input.targetType && thread.targetId === input.targetId && thread.status === "open",
+    );
+
+    if (existingThread) {
+      return {
+        ...state,
+        comments: state.comments.map((thread) =>
+          thread.id === existingThread.id
+            ? {
+                ...thread,
+                targetTitle: input.targetTitle,
+                updatedAt: now,
+                messages: [...thread.messages, message],
+              }
+            : thread,
+        ),
+      };
+    }
+
+    return {
+      ...state,
+      comments: [
+        {
+          id: makeId("cthread"),
+          targetType: input.targetType,
+          targetId: input.targetId,
+          targetTitle: input.targetTitle,
+          status: "open",
+          createdBy: author,
+          createdAt: now,
+          updatedAt: now,
+          messages: [message],
+        },
+        ...state.comments,
+      ],
+    };
+  }
+
+  updateCommentThreadStatus(state: OrfState, threadId: string, status: CommentStatus): OrfState {
+    const now = currentTime();
+
+    return {
+      ...state,
+      comments: state.comments.map((thread) => (thread.id === threadId ? { ...thread, status, updatedAt: now } : thread)),
     };
   }
 

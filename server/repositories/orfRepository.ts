@@ -160,6 +160,7 @@ export async function getOrfStateSnapshot(): Promise<OrfState> {
     evalRuns: [],
     scenarios: [],
     failureSamples: [],
+    comments: [],
     causeCategories: Array.from(new Set(data.feedback.flatMap((item) => item.causeCategories))),
     rules: {
       requireResultForTask: true,

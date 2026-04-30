@@ -172,6 +172,28 @@ export interface OrfRules {
   autoCreateReviewSummary: boolean;
 }
 
+export type CommentTargetType = "objective" | "result" | "task" | "subtask";
+export type CommentStatus = "open" | "resolved";
+
+export interface CommentMessage {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface CommentThread {
+  id: string;
+  targetType: CommentTargetType;
+  targetId: string;
+  targetTitle: string;
+  status: CommentStatus;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: CommentMessage[];
+}
+
 export interface OrfState {
   objectives: Objective[];
   results: Result[];
@@ -182,6 +204,7 @@ export interface OrfState {
   evalRuns: EvalRun[];
   scenarios: Scenario[];
   failureSamples: FailureSample[];
+  comments: CommentThread[];
   causeCategories: string[];
   rules: OrfRules;
 }
