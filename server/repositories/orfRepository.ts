@@ -35,7 +35,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
   const checklistByTask = new Map<string, Task["checklist"]>();
   for (const item of checklistRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
     const list = checklistByTask.get(item.taskId) ?? [];
-    list.push({ id: item.id, label: item.label, done: item.done });
+    list.push({ id: item.id, label: item.label, done: item.done, updatedAt: item.updatedAt });
     checklistByTask.set(item.taskId, list);
   }
 
@@ -183,7 +183,7 @@ export async function setTaskCompletion(taskId: string, done: boolean): Promise<
       return false;
     }
 
-    await tx.update(taskChecklistItems).set({ done }).where(eq(taskChecklistItems.taskId, taskId));
+    await tx.update(taskChecklistItems).set({ done, updatedAt: today() }).where(eq(taskChecklistItems.taskId, taskId));
     return true;
   });
 }
@@ -192,7 +192,7 @@ export async function updateChecklistItem(taskId: string, itemId: string, done: 
   return db.transaction(async (tx) => {
     const updated = await tx
       .update(taskChecklistItems)
-      .set({ done })
+      .set({ done, updatedAt: today() })
       .where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)))
       .returning({ id: taskChecklistItems.id });
 

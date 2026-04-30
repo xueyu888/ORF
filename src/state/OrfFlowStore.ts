@@ -4,6 +4,13 @@ import type { Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } fro
 const STORAGE_KEY = "orf-flow-state-v3";
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
+const withChecklistDates = (state: OrfState): OrfState => ({
+  ...state,
+  tasks: state.tasks.map((task) => ({
+    ...task,
+    checklist: task.checklist.map((item) => ({ ...item, updatedAt: item.updatedAt ?? task.updatedAt })),
+  })),
+});
 
 export class OrfFlowStore {
   load(): OrfState {
@@ -12,21 +19,21 @@ export class OrfFlowStore {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        return fallback;
+        return withChecklistDates(fallback);
       }
 
-      return { ...fallback, ...(JSON.parse(raw) as Partial<OrfState>) };
+      return withChecklistDates({ ...fallback, ...(JSON.parse(raw) as Partial<OrfState>) });
     } catch {
-      return fallback;
+      return withChecklistDates(fallback);
     }
   }
 
   save(state: OrfState): void {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(withChecklistDates(state)));
   }
 
   reset(): OrfState {
-    const state = cloneState(initialOrfState);
+    const state = withChecklistDates(cloneState(initialOrfState));
     this.save(state);
     return state;
   }
@@ -143,7 +150,7 @@ export class OrfFlowStore {
       feedbackOriginId: input.feedbackOriginId,
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
-      checklist: input.checklist ?? [],
+      checklist: (input.checklist ?? []).map((item) => ({ ...item, updatedAt: item.updatedAt ?? now })),
       createdAt: now,
       updatedAt: now,
     };
@@ -179,7 +186,7 @@ export class OrfFlowStore {
           ? {
               ...task,
               status: done ? "Done" : "Todo",
-              checklist: task.checklist.map((item) => ({ ...item, done })),
+              checklist: task.checklist.map((item) => ({ ...item, done, updatedAt: now })),
               updatedAt: now,
             }
           : task,
@@ -197,7 +204,7 @@ export class OrfFlowStore {
           return task;
         }
 
-        const checklist = task.checklist.map((item) => (item.id === itemId ? { ...item, done } : item));
+        const checklist = task.checklist.map((item) => (item.id === itemId ? { ...item, done, updatedAt: now } : item));
         const completedCount = checklist.filter((item) => item.done).length;
         const status: TaskStatus = completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 

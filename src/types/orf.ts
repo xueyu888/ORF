@@ -87,6 +87,7 @@ export interface TaskChecklistItem {
   id: string;
   label: string;
   done: boolean;
+  updatedAt: string;
 }
 
 export interface Task {

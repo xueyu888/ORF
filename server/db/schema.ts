@@ -134,6 +134,7 @@ export const taskChecklistItems = pgTable("task_checklist_items", {
   label: text("label").notNull(),
   done: boolean("done").notNull(),
   sortOrder: integer("sort_order").notNull(),
+  updatedAt: date("updated_at", { mode: "string" }).notNull(),
 });
 
 export const feedback = pgTable("feedback", {

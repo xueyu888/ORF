@@ -58,6 +58,7 @@ export function TasksPage() {
                 tasks: resultTasks,
                 updatedAt: latestDate([
                   ...resultTasks.map((task) => task.updatedAt),
+                  ...resultTasks.flatMap((task) => task.checklist.map((item) => item.updatedAt)),
                   ...state.evidence.filter((item) => item.linkedResultId === result.id).map((item) => item.date),
                   ...state.feedback.filter((item) => item.linkedResultId === result.id).map((item) => item.updatedAt),
                 ]),
@@ -543,7 +544,7 @@ function SubtaskRow({
       </HierarchyCell>
       <EmptySlot />
       <EmptySlot />
-      <EmptySlot />
+      <UpdatedTimeValue date={item.updatedAt ?? task.updatedAt} />
     </div>
   );
 }

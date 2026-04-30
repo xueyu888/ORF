@@ -196,6 +196,7 @@ type MetricDirection = "increase" | "decrease";
 | `id` | `string` | 子任务唯一标识。 |
 | `label` | `string` | 子任务标题。 |
 | `done` | `boolean` | 子任务完成状态。 |
+| `updatedAt` | `string` | 子任务最近更新时间。 |
 
 ### `Evidence`
 

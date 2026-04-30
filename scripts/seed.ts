@@ -153,6 +153,7 @@ async function seed() {
         label: item.label,
         done: item.done,
         sortOrder: index,
+        updatedAt: item.updatedAt ?? task.updatedAt,
       })),
     );
     if (checklistRows.length > 0) {
