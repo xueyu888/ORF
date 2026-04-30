@@ -73,6 +73,7 @@ export const designTokens = {
     treeIndent: "28px",
     topbarHeight: "76px",
     sidebarWidth: "280px",
+    sidebarCollapsedWidth: "88px",
     sidebarHeaderHeight: "108px",
   },
   border: {
@@ -157,6 +158,7 @@ export const designCssVariables = {
   "--orf-tree-indent": designTokens.size.treeIndent,
   "--orf-topbar-height": designTokens.size.topbarHeight,
   "--orf-sidebar-width": designTokens.size.sidebarWidth,
+  "--orf-sidebar-collapsed-width": designTokens.size.sidebarCollapsedWidth,
   "--orf-sidebar-header-height": designTokens.size.sidebarHeaderHeight,
   "--orf-border-width": designTokens.border.width,
   "--orf-shadow-card": designTokens.shadow.card,

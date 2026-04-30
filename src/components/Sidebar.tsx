@@ -1,54 +1,51 @@
-import { ChevronsUpDown, Command, Settings } from "lucide-react";
+import { Command, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { navItems } from "../config/navigation";
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
-const focusItem = navItemByLabel.get("仪表盘");
 const sidebarGroups = [
-  { title: "WORK", labels: ["目标", "任务", "策略地图", "周复盘"] },
-  { title: "REPORTS", labels: ["反馈", "AI 评估", "汇报"] },
+  { title: "work", labels: ["计划", "周复盘"] },
+  { title: "report", labels: ["反馈", "统计"] },
 ].map((group) => ({
   ...group,
   items: group.labels.map((label) => navItemByLabel.get(label)).filter((item) => item !== undefined),
 }));
 
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
-    <aside className="orf-sidebar sticky top-0 flex h-screen shrink-0 flex-col border-r">
-      <div className="orf-sidebar-brand flex items-center justify-between border-b px-7">
-        <div className="flex items-center gap-3">
-          <div className="orf-sidebar-logo flex h-12 w-12 items-center justify-center shadow-sm">
-            <Command className="h-6 w-6" />
+    <aside
+      className={[
+        "orf-sidebar sticky top-0 flex h-screen shrink-0 flex-col border-r",
+        collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded",
+      ].join(" ")}
+      aria-label="主导航"
+    >
+      <div className="orf-sidebar-brand flex items-center justify-between border-b px-5">
+        <div className="orf-sidebar-brand-main flex items-center gap-3">
+          <div className="orf-sidebar-logo flex h-11 w-11 items-center justify-center shadow-sm">
+            <Command className="h-5 w-5" />
           </div>
-          <div className="text-2xl font-bold tracking-tight">ORF Flow</div>
+          <div className="orf-sidebar-label whitespace-nowrap text-[22px] font-bold leading-6 tracking-tight">ORF Flow</div>
         </div>
-        <button className="orf-sidebar-icon transition hover:text-white" type="button" aria-label="设置">
-          <Settings className="h-7 w-7" />
+        <button
+          className="orf-sidebar-icon transition hover:text-white"
+          type="button"
+          aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+          title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+          onClick={() => setCollapsed((current) => !current)}
+        >
+          {collapsed ? <PanelLeftOpen className="h-6 w-6" /> : <PanelLeftClose className="h-6 w-6" />}
         </button>
       </div>
 
-      <div className="orf-sidebar-workspace flex items-center justify-between border-b px-7">
-        <div className="flex items-center gap-4">
-          <div className="orf-sidebar-workspace-logo flex h-14 w-14 items-center justify-center text-xl font-black">O</div>
-          <div>
-            <div className="text-xl font-bold tracking-tight">AI 应用团队</div>
-            <div className="orf-sidebar-period mt-1 inline-flex px-2 py-0.5 text-xs font-semibold">2026 Q2</div>
-          </div>
-        </div>
-        <ChevronsUpDown className="orf-sidebar-icon h-6 w-6" />
-      </div>
-
       <nav className="flex-1 overflow-y-auto">
-        {focusItem && (
-          <div className="orf-sidebar-section border-b py-4">
-            <SidebarLink item={focusItem} label="我的焦点" />
-          </div>
-        )}
-
         {sidebarGroups.map((group) => (
           <div key={group.title} className="orf-sidebar-section border-b py-5">
-            <div className="px-7 pb-3 text-sm font-black uppercase tracking-[0.16em]">{group.title}</div>
+            <div className="orf-sidebar-group-title px-7 pb-3 text-sm font-black uppercase tracking-[0.16em]">{group.title}</div>
             <div className="space-y-1">
               {group.items.map((item) => (
                 <SidebarLink key={item.path} item={item} />
@@ -62,13 +59,23 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         <button
           onClick={onCommand}
           className="orf-sidebar-command flex w-full items-center gap-2 border px-3 py-2 text-left text-xs font-medium transition"
+          title="搜索"
         >
           <Command className="h-4 w-4" />
-          <span className="flex-1">⌘K 搜索</span>
+          <span className="orf-sidebar-label flex-1">搜索</span>
         </button>
-        <div className="flex items-center gap-3">
+        <NavLink
+          to="/settings"
+          className="orf-sidebar-command flex w-full items-center gap-2 border px-3 py-2 text-left text-xs font-medium transition"
+          aria-label="设置"
+          title="设置"
+        >
+          <Settings className="h-4 w-4" />
+          <span className="orf-sidebar-label flex-1">设置</span>
+        </NavLink>
+        <div className="orf-sidebar-user flex items-center gap-3" title="Alex Chen">
           <Avatar name="Alex Chen" />
-          <div className="min-w-0">
+          <div className="orf-sidebar-label min-w-0">
             <div className="truncate text-sm font-semibold text-white">Alex Chen</div>
           </div>
         </div>
@@ -87,6 +94,8 @@ function SidebarLink({
   return (
     <NavLink
       to={item.path}
+      title={label}
+      aria-label={label}
       className={({ isActive }) =>
         [
           "orf-sidebar-link flex items-center gap-4 px-7 text-lg font-medium transition",
@@ -95,7 +104,7 @@ function SidebarLink({
       }
     >
       <item.icon className="orf-sidebar-icon h-6 w-6 shrink-0" />
-      <span className="truncate">{label}</span>
+      <span className="orf-sidebar-label truncate">{label}</span>
     </NavLink>
   );
 }

@@ -29,7 +29,7 @@ export function App() {
         <Route path="ai-evaluation" element={<AIEvaluationPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/tasks" replace />} />
       </Route>
     </Routes>
   );

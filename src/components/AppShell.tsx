@@ -11,12 +11,12 @@ import { useOrf } from "../state/OrfProvider";
 const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
   objectives: "目标",
-  tasks: "任务",
+  tasks: "计划",
   feedback: "反馈",
   review: "周复盘",
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",
-  reports: "汇报",
+  reports: "统计",
   settings: "设置",
 };
 
