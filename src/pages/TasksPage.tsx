@@ -1,46 +1,79 @@
 import { clsx } from "clsx";
 import {
   CalendarDays,
-  Check,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Clock3,
+  Copy,
   Filter,
   Gauge,
+  GripVertical,
+  MessageSquare,
+  Move,
+  Plus,
+  Repeat2,
+  Send,
   SlidersHorizontal,
+  Sparkles,
   Target,
+  Trash2,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
 import { useOrf } from "../state/OrfProvider";
-import type { Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../types/orf";
+import type { CommentThread, Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../types/orf";
 import { avatarStyleForName } from "../utils/avatar";
 import { initials, resultProgress } from "../utils/format";
 
 const currentMember = "Alex Chen";
 
 type TaskScope = "team" | "personal";
-type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen" | "supervisorConfirm";
-type FlowStageState = "已完成" | "进行中" | "待确认";
+type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
 type SimpleStatus = "todo" | "active" | "done";
 type IndicatorStatus = "todo" | "active" | "review" | "done";
+type BlockAction = "convert" | "move" | "copyLink" | "comment" | "askAi" | "delete";
+type BlockTarget =
+  | { type: "objective"; id: string; title: string }
+  | { type: "result"; id: string; title: string; objectiveId: string }
+  | { type: "task"; id: string; title: string; resultId: string; objectiveId: string; hasSubtasks: boolean }
+  | { type: "subtask"; id: string; title: string; taskId: string; resultId: string; objectiveId: string };
 
-const flowStages: { value: FlowStage; label: string; state: FlowStageState }[] = [
-  { value: "goalSetting", label: "目标设定", state: "已完成" },
-  { value: "resultClaiming", label: "指标领取", state: "已完成" },
-  { value: "orfReestimate", label: "ORF 重估", state: "进行中" },
-  { value: "goalFrozen", label: "目标冻结", state: "待确认" },
-  { value: "supervisorConfirm", label: "主管确认", state: "待确认" },
+const flowStages: { value: FlowStage; label: string }[] = [
+  { value: "goalSetting", label: "目标设定" },
+  { value: "resultClaiming", label: "指标领取" },
+  { value: "orfReestimate", label: "ORF 重估" },
+  { value: "goalFrozen", label: "目标冻结" },
 ];
 
+const flowStageTheme: Record<FlowStage, { bg: string; border: string; color: string; soft: string }> = {
+  goalSetting: { bg: "#eefaf7", border: "#9fd8cf", color: "#2f9c89", soft: "#dff4ef" },
+  resultClaiming: { bg: "#eff6ff", border: "#a7c7f4", color: "#2563eb", soft: "#dbeafe" },
+  orfReestimate: { bg: "#fff7e8", border: "#f4c27a", color: "#d97706", soft: "#fde7bd" },
+  goalFrozen: { bg: "#f5f3ff", border: "#c4b5fd", color: "#7c3aed", soft: "#e9d5ff" },
+};
+
 export function TasksPage() {
-  const { state, setTaskCompletion, updateTaskChecklistItem } = useOrf();
+  const {
+    state,
+    openModal,
+    notify,
+    createTaskChecklistItem,
+    setTaskCompletion,
+    updateTaskChecklistItem,
+    addComment,
+    updateCommentThreadStatus,
+  } = useOrf();
   const [scope, setScope] = useState<TaskScope>("team");
   const [flowStage, setFlowStage] = useState<FlowStage>("orfReestimate");
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
+  const [commentTarget, setCommentTarget] = useState<BlockTarget | null>(null);
+  const [activeBlockActionId, setActiveBlockActionId] = useState<string | null>(null);
+  const [openBlockActionId, setOpenBlockActionId] = useState<string | null>(null);
 
   const groups = useMemo(
     () =>
@@ -85,39 +118,87 @@ export function TasksPage() {
   );
   const completedResults = state.results.filter((result) => indicatorStatus(result, resultTaskMap.get(result.id) ?? []) === "done").length;
   const totalResults = state.results.length;
-  const waitingResults = Math.max(0, totalResults - completedResults);
+  const overallObjectiveProgress = Math.round(average(groups.map((group) => objectiveProgress(group.results))));
   const flowStageIndex = flowStages.findIndex((stage) => stage.value === flowStage);
-  const isGoalFrozen = flowStage === "goalFrozen" || flowStage === "supervisorConfirm";
-  const canEditTasks = flowStage === "orfReestimate";
+  const isGoalFrozen = flowStage === "goalFrozen";
+  const canEditTasks = true;
 
   const toggleResult = (resultId: string) => setCollapsedResultIds((items) => toggleSetItem(items, resultId));
   const toggleTask = (taskId: string) => setCollapsedTaskIds((items) => toggleSetItem(items, taskId));
+  const handleAddResult = (objectiveId: string) => openModal({ type: "newResult", objectiveId });
+  const handleAddTask = (result: Result) => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id });
+  const handleAddSubtask = (taskId: string, afterItemId?: string) => {
+    createTaskChecklistItem(taskId, afterItemId);
+    setCollapsedTaskIds((items) => {
+      const next = new Set(items);
+      next.delete(taskId);
+      return next;
+    });
+  };
+  const handleBlockAction = (action: BlockAction, target: BlockTarget) => {
+    setOpenBlockActionId(null);
+
+    if (action === "copyLink") {
+      const link = blockLinkForTarget(target);
+      const write = navigator.clipboard?.writeText(link);
+      if (!write) {
+        notify("当前浏览器不支持复制链接");
+        return;
+      }
+
+      void write.then(() => notify("链接已复制")).catch(() => notify("复制链接失败"));
+      return;
+    }
+
+    if (action === "move") {
+      notify(target.type === "objective" || target.type === "result" ? "目标和指标不支持移动" : "移动选择器待实现");
+      return;
+    }
+
+    if (action === "convert") {
+      if (target.type === "task" && target.hasSubtasks) {
+        notify("有子任务的任务不能转为子任务");
+        return;
+      }
+
+      notify(target.type === "objective" || target.type === "result" ? "目标和指标暂不支持转换" : "转换功能待实现");
+      return;
+    }
+
+    if (action === "comment") {
+      setCommentTarget(target);
+      return;
+    }
+
+    if (action === "askAi") {
+      notify("问 AI 功能待实现");
+      return;
+    }
+
+    notify("删除确认待实现");
+  };
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-xl border orf-border bg-[var(--orf-bg-card)] p-5 shadow-[0_8px_28px_rgba(22,31,46,0.06)]">
-        <h1 className="mb-4 text-xl font-bold tracking-tight text-[#111827]">任务管理</h1>
-        <FlowStageControl value={flowStage} activeIndex={flowStageIndex} onChange={setFlowStage} />
-      </section>
-
       {scope === "team" && (
         <TeamDashboard
           completedResults={completedResults}
           totalResults={totalResults}
-          waitingResults={waitingResults}
+          overallObjectiveProgress={overallObjectiveProgress}
           activeTaskCount={state.tasks.filter((task) => task.status === "In Progress" || task.status === "In Review").length}
         />
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ScopeTabs value={scope} onChange={setScope} />
-        <div className="flex items-center gap-2">
-          <button className="inline-flex h-10 items-center gap-2 rounded-lg border orf-border bg-[var(--orf-bg-elevated)] px-3 text-sm font-semibold text-[#344054] shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <PlanModeControl value={flowStage} activeIndex={flowStageIndex} onChange={setFlowStage} />
+          <button className="orf-floating-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
             <CalendarDays className="h-4 w-4 text-[#667085]" />
             全部周期
             <ChevronDown className="h-4 w-4 text-[#667085]" />
           </button>
-          <button className="inline-flex h-10 items-center gap-2 rounded-lg border orf-border bg-[var(--orf-bg-elevated)] px-3 text-sm font-semibold text-[#344054] shadow-sm">
+          <button className="orf-floating-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
             <Filter className="h-4 w-4 text-[#667085]" />
             筛选
           </button>
@@ -141,14 +222,41 @@ export function TasksPage() {
             onChecklistItemChange={updateTaskChecklistItem}
             onToggleResult={toggleResult}
             onToggleTask={toggleTask}
+            onAddResult={handleAddResult}
+            onAddTask={handleAddTask}
+            onAddSubtask={handleAddSubtask}
+            onBlockAction={handleBlockAction}
+            activeBlockActionId={activeBlockActionId}
+            openBlockActionId={openBlockActionId}
+            onActiveBlockActionChange={setActiveBlockActionId}
+            onOpenBlockActionChange={setOpenBlockActionId}
           />
         ))}
       </div>
+
+      {commentTarget && (
+        <CommentPanel
+          key={`${commentTarget.type}:${commentTarget.id}`}
+          target={commentTarget}
+          threads={state.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}
+          onClose={() => setCommentTarget(null)}
+          onAddComment={(body) =>
+            addComment({
+              targetType: commentTarget.type,
+              targetId: commentTarget.id,
+              targetTitle: commentTarget.title,
+              body,
+              author: currentMember,
+            })
+          }
+          onThreadStatusChange={updateCommentThreadStatus}
+        />
+      )}
     </div>
   );
 }
 
-function FlowStageControl({
+function PlanModeControl({
   value,
   activeIndex,
   onChange,
@@ -157,66 +265,82 @@ function FlowStageControl({
   activeIndex: number;
   onChange: (stage: FlowStage) => void;
 }) {
-  return (
-    <div className="grid gap-3 xl:grid-cols-[1fr_24px_1fr_24px_1fr_24px_1fr_24px_1fr]">
-      {flowStages.map((stage, index) => {
-        const active = value === stage.value;
-        const complete = index < activeIndex;
+  const [open, setOpen] = useState(false);
+  const activeStage = flowStages.find((stage) => stage.value === value) ?? flowStages[0];
 
-        return (
-          <div key={stage.value} className="contents">
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="orf-floating-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <StageProgressDot index={activeIndex} stage={activeStage.value} />
+        <span>{activeStage.label}</span>
+        <ChevronDown className="h-4 w-4 text-[#667085]" />
+      </button>
+
+      {open && (
+        <div className="orf-popover absolute right-0 z-40 mt-2 w-72 p-2" role="menu">
+          {flowStages.map((stage, index) => {
+            const active = value === stage.value;
+            const theme = flowStageTheme[stage.value];
+
+            return (
             <button
+              key={stage.value}
               type="button"
-              onClick={() => onChange(stage.value)}
+              role="menuitemradio"
+              aria-checked={active}
+              onClick={() => {
+                onChange(stage.value);
+                setOpen(false);
+              }}
               className={clsx(
-                "flex min-h-[74px] items-center gap-3 rounded-xl border px-4 text-left transition",
-                active && "border-[#09927f] bg-[#e6f5f1] shadow-[0_0_0_1px_rgba(9,146,127,0.12)]",
-                complete && !active && "orf-border bg-transparent",
-                !complete && !active && "orf-border bg-[var(--orf-bg-elevated)] text-[#667085]",
+                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition",
+                active ? "text-[#1d2939]" : "text-[#667085] hover:bg-[var(--orf-bg-muted)]",
               )}
+              style={active ? { backgroundColor: "var(--orf-bg-muted)" } : undefined}
             >
-              <span
-                className={clsx(
-                  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold",
-                  active && "bg-[#0b8f7f] text-white",
-                  complete && !active && "bg-[#0b8f7f] text-white",
-                  !complete && !active && "bg-[#eaecf0] text-[#475467]",
-                )}
-              >
-                {complete ? <Check className="h-5 w-5" /> : index + 1}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-base font-bold text-[#1d2939]">{stage.label}</span>
-                <span className="mt-2 block">
-                  <FlowStageStatusChip state={stage.state} />
-                </span>
+              <StageProgressDot index={index} stage={stage.value} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{stage.label}</span>
               </span>
             </button>
-            {index < flowStages.length - 1 && (
-              <div className="hidden items-center justify-center text-[#344054] xl:flex">
-                <ChevronRight className="h-5 w-5" />
-              </div>
-            )}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function FlowStageStatusChip({ state }: { state: FlowStageState }) {
-  return <StatusChip tone={state === "已完成" ? "done" : state === "进行中" ? "accent" : "neutral"}>{state}</StatusChip>;
+function StageProgressDot({ index, stage }: { index: number; stage: FlowStage }) {
+  const theme = flowStageTheme[stage];
+  const progress = ((Math.max(0, index) + 1) / flowStages.length) * 100;
+
+  return (
+    <span
+      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full"
+      style={{ background: `conic-gradient(${theme.color} 0 ${progress}%, #e5e7eb ${progress}% 100%)` }}
+      aria-hidden="true"
+    >
+      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: theme.bg, boxShadow: `inset 0 0 0 1px ${theme.border}` }} />
+    </span>
+  );
 }
 
 function TeamDashboard({
   completedResults,
   totalResults,
-  waitingResults,
+  overallObjectiveProgress,
   activeTaskCount,
 }: {
   completedResults: number;
   totalResults: number;
-  waitingResults: number;
+  overallObjectiveProgress: number;
   activeTaskCount: number;
 }) {
   const progress = Math.round((completedResults / Math.max(1, totalResults)) * 100);
@@ -224,7 +348,7 @@ function TeamDashboard({
   return (
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <DashboardMetric icon={Target} value={`${completedResults} / ${totalResults}`} label="指标完成" color="#0b8f7f" progress={progress} />
-      <DashboardMetric icon={Clock3} value={`${waitingResults}`} label="待定 指标" color="#e78a16" progress={42} />
+      <DashboardMetric icon={Clock3} value={`${overallObjectiveProgress}%`} label="目标总体进度" color="#e78a16" progress={overallObjectiveProgress} />
       <DashboardMetric icon={SlidersHorizontal} value="1" label="待定 指标" color="#7a3ff2" progress={26} />
       <DashboardMetric icon={Gauge} value={`${activeTaskCount}`} label="待定 指标" color="#1f8fff" progress={68} />
     </section>
@@ -245,7 +369,7 @@ function DashboardMetric({
   progress: number;
 }) {
   return (
-    <div className="flex min-h-[96px] items-center gap-4 rounded-xl border orf-border bg-[var(--orf-bg-card)] px-6 shadow-[0_8px_24px_rgba(22,31,46,0.05)]">
+    <div className="orf-dashboard-metric flex min-h-[96px] items-center gap-4 px-6">
       <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `conic-gradient(${color} 0 ${progress}%, #ececea ${progress}% 100%)` }}>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--orf-bg-card)]">
           <Icon className="h-6 w-6" style={{ color }} />
@@ -261,7 +385,7 @@ function DashboardMetric({
 
 function ScopeTabs({ value, onChange }: { value: TaskScope; onChange: (scope: TaskScope) => void }) {
   return (
-    <div className="flex items-end gap-8 border-b border-[#e4e7ec] text-base font-semibold">
+    <div className="orf-scope-tabs flex items-center gap-1 text-sm font-semibold">
       {[
         { value: "team" as const, label: "团队" },
         { value: "personal" as const, label: "个人" },
@@ -269,7 +393,7 @@ function ScopeTabs({ value, onChange }: { value: TaskScope; onChange: (scope: Ta
         <button
           key={item.value}
           onClick={() => onChange(item.value)}
-          className={clsx("border-b-2 pb-3 transition", value === item.value ? "border-[#0b8f7f] text-[#0b8f7f]" : "border-transparent text-[#667085] hover:text-[#344054]")}
+          className={clsx("orf-scope-tab transition", value === item.value ? "orf-scope-tab-active" : "orf-scope-tab-inactive")}
         >
           {item.label}
         </button>
@@ -292,6 +416,14 @@ function ObjectivePanel({
   onChecklistItemChange,
   onToggleResult,
   onToggleTask,
+  onAddResult,
+  onAddTask,
+  onAddSubtask,
+  onBlockAction,
+  activeBlockActionId,
+  openBlockActionId,
+  onActiveBlockActionChange,
+  onOpenBlockActionChange,
 }: {
   objective: Objective;
   results: { result: Result; tasks: Task[]; updatedAt: string }[];
@@ -306,15 +438,55 @@ function ObjectivePanel({
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onToggleResult: (resultId: string) => void;
   onToggleTask: (taskId: string) => void;
+  onAddResult: (objectiveId: string) => void;
+  onAddTask: (result: Result) => void;
+  onAddSubtask: (taskId: string, afterItemId?: string) => void;
+  onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  activeBlockActionId: string | null;
+  openBlockActionId: string | null;
+  onActiveBlockActionChange: (id: string | null) => void;
+  onOpenBlockActionChange: (id: string | null) => void;
 }) {
   const progress = objectiveProgress(results);
   const complete = progress >= 100;
+  const objectiveActionId = `objective:${objective.id}`;
+  const objectiveAnchorId = `objective:${objective.id}`;
+  const [objectiveElement, setObjectiveElement] = useState<HTMLElement | null>(null);
+  const objectiveRowActive = activeBlockActionId === objectiveActionId || openBlockActionId === objectiveActionId;
 
   return (
-    <section className={clsx("overflow-hidden rounded-xl border orf-border shadow-[0_8px_24px_rgba(22,31,46,0.05)]", isGoalFrozen ? "bg-[var(--orf-bg-card)]" : "bg-[var(--orf-bg-workflow-body)]")}>
-      <div className="grid min-h-[58px] items-center gap-4 border-b orf-border bg-[var(--orf-bg-card)] px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]">
-        <div className="flex min-w-0 items-center gap-3">
-          <ObjectiveFlagIcon complete={complete} />
+    <section
+      ref={setObjectiveElement}
+      className={clsx("orf-objective-panel relative", isGoalFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable")}
+    >
+      <HierarchyTreeOverlay container={objectiveElement} />
+      <div
+        className={clsx(
+          "orf-objective-header group relative grid min-h-[58px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]",
+          objectiveRowActive && "orf-row-active",
+        )}
+        onPointerEnter={() => onActiveBlockActionChange(objectiveActionId)}
+        onPointerLeave={() => {
+          if (activeBlockActionId === objectiveActionId) {
+            onActiveBlockActionChange(null);
+          }
+        }}
+      >
+        <BlockActions
+          actionId={objectiveActionId}
+          addLabel="添加指标"
+          left={blockActionLeft.objective}
+          activeActionId={activeBlockActionId}
+          openActionId={openBlockActionId}
+          onActiveActionChange={onActiveBlockActionChange}
+          onOpenActionChange={onOpenBlockActionChange}
+          onAdd={() => onAddResult(objective.id)}
+          onAction={(action) => onBlockAction(action, { type: "objective", id: objective.id, title: objective.title })}
+        />
+        <div className="relative z-30 flex min-w-0 items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center" data-hierarchy-anchor={objectiveAnchorId}>
+            <ObjectiveFlagIcon complete={complete} />
+          </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-3">
               <div className={clsx("truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
@@ -330,7 +502,7 @@ function ObjectivePanel({
         <span aria-hidden="true" />
       </div>
 
-      <div className="divide-y divide-[color:var(--orf-border)]">
+      <div>
         {results.map(({ result, tasks, updatedAt }, index) => (
           <ResultBlock
             key={result.id}
@@ -339,12 +511,20 @@ function ObjectivePanel({
             updatedAt={updatedAt}
             isLast={index === results.length - 1}
             collapsed={collapsedResultIds.has(result.id)}
+            parentAnchorId={objectiveAnchorId}
             collapsedTaskIds={collapsedTaskIds}
             canEditTasks={canEditTasks}
             onTaskCompletionChange={onTaskCompletionChange}
             onChecklistItemChange={onChecklistItemChange}
             onToggleResult={onToggleResult}
             onToggleTask={onToggleTask}
+            onAddTask={onAddTask}
+            onAddSubtask={onAddSubtask}
+            onBlockAction={onBlockAction}
+            activeBlockActionId={activeBlockActionId}
+            openBlockActionId={openBlockActionId}
+            onActiveBlockActionChange={onActiveBlockActionChange}
+            onOpenBlockActionChange={onOpenBlockActionChange}
           />
         ))}
       </div>
@@ -358,40 +538,94 @@ function ResultBlock({
   updatedAt,
   isLast,
   collapsed,
+  parentAnchorId,
   collapsedTaskIds,
   canEditTasks,
   onTaskCompletionChange,
   onChecklistItemChange,
   onToggleResult,
   onToggleTask,
+  onAddTask,
+  onAddSubtask,
+  onBlockAction,
+  activeBlockActionId,
+  openBlockActionId,
+  onActiveBlockActionChange,
+  onOpenBlockActionChange,
 }: {
   result: Result;
   tasks: Task[];
   updatedAt: string;
   isLast: boolean;
   collapsed: boolean;
+  parentAnchorId: string;
   collapsedTaskIds: Set<string>;
   canEditTasks: boolean;
   onTaskCompletionChange: (taskId: string, done: boolean) => void;
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onToggleResult: (resultId: string) => void;
   onToggleTask: (taskId: string) => void;
+  onAddTask: (result: Result) => void;
+  onAddSubtask: (taskId: string, afterItemId?: string) => void;
+  onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  activeBlockActionId: string | null;
+  openBlockActionId: string | null;
+  onActiveBlockActionChange: (id: string | null) => void;
+  onOpenBlockActionChange: (id: string | null) => void;
 }) {
   const status = indicatorStatus(result, tasks);
   const open = !collapsed;
   const complete = status === "done";
-  const [resultElement, setResultElement] = useState<HTMLDivElement | null>(null);
   const resultAnchorId = `metric:${result.id}`;
+  const resultActionId = `result:${result.id}`;
+  const resultRowActive = activeBlockActionId === resultActionId || openBlockActionId === resultActionId;
 
   return (
-    <div ref={setResultElement} className="relative">
-      <HierarchyTreeOverlay container={resultElement} />
-      <div className="grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]">
+    <div className="relative">
+      <div
+        className={clsx(
+          "orf-result-row group relative grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
+          resultRowActive && "orf-row-active",
+        )}
+        onPointerEnter={() => onActiveBlockActionChange(resultActionId)}
+        onPointerLeave={() => {
+          if (activeBlockActionId === resultActionId) {
+            onActiveBlockActionChange(null);
+          }
+        }}
+      >
+        <BlockActions
+          actionId={resultActionId}
+          addLabel="添加任务"
+          left={blockActionLeft.result}
+          activeActionId={activeBlockActionId}
+          openActionId={openBlockActionId}
+          onActiveActionChange={onActiveBlockActionChange}
+          onOpenActionChange={onOpenBlockActionChange}
+          onAdd={() => onAddTask(result)}
+          onAction={(action) => onBlockAction(action, { type: "result", id: result.id, title: result.title, objectiveId: result.objectiveId })}
+        />
+        {tasks.length > 0 && (
+          <DisclosureAction
+            actionId={resultActionId}
+            expanded={open}
+            label={open ? "折叠指标" : "展开指标"}
+            activeActionId={activeBlockActionId}
+            openActionId={openBlockActionId}
+            onActiveActionChange={onActiveBlockActionChange}
+            onOpenActionChange={onOpenBlockActionChange}
+            onToggle={() => onToggleResult(result.id)}
+            className="absolute left-9 top-1/2 -translate-y-1/2"
+          />
+        )}
         <HierarchyCell depth={1} isLast={isLast && (!open || tasks.length === 0)}>
-          <button type="button" className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]" onClick={() => onToggleResult(result.id)} aria-label={open ? "折叠指标" : "展开指标"}>
-            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </button>
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center" data-hierarchy-anchor={resultAnchorId}>
+          <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center"
+            data-hierarchy-anchor={resultAnchorId}
+            data-hierarchy-branch-end-offset="0"
+            data-hierarchy-branch-target={resultAnchorId}
+            data-hierarchy-parent={parentAnchorId}
+          >
             <MetricSquareIcon tone={status} />
           </span>
           <div className={clsx("truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{result.title}</div>
@@ -415,6 +649,12 @@ function ResultBlock({
               onToggleTask={onToggleTask}
               onTaskCompletionChange={onTaskCompletionChange}
               onChecklistItemChange={onChecklistItemChange}
+              onAddSubtask={onAddSubtask}
+              onBlockAction={onBlockAction}
+              activeBlockActionId={activeBlockActionId}
+              openBlockActionId={openBlockActionId}
+              onActiveBlockActionChange={onActiveBlockActionChange}
+              onOpenBlockActionChange={onOpenBlockActionChange}
             />
           ))}
         </div>
@@ -433,6 +673,12 @@ function TaskRow({
   onToggleTask,
   onTaskCompletionChange,
   onChecklistItemChange,
+  onAddSubtask,
+  onBlockAction,
+  activeBlockActionId,
+  openBlockActionId,
+  onActiveBlockActionChange,
+  onOpenBlockActionChange,
 }: {
   task: Task;
   depth: 2;
@@ -443,38 +689,76 @@ function TaskRow({
   onToggleTask: (taskId: string) => void;
   onTaskCompletionChange: (taskId: string, done: boolean) => void;
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
+  onAddSubtask: (taskId: string, afterItemId?: string) => void;
+  onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  activeBlockActionId: string | null;
+  openBlockActionId: string | null;
+  onActiveBlockActionChange: (id: string | null) => void;
+  onOpenBlockActionChange: (id: string | null) => void;
 }) {
   const status = taskDisplayStatus(task);
   const complete = status === "done";
   const open = !collapsed;
   const hasSubtasks = task.checklist.length > 0;
   const taskAnchorId = `task:${task.id}`;
+  const taskActionId = `task:${task.id}`;
+  const taskRowActive = activeBlockActionId === taskActionId || openBlockActionId === taskActionId;
 
   return (
     <div className="relative">
       <div
-        className="grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]"
+        className={clsx(
+          "orf-task-row group relative grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
+          taskRowActive && "orf-row-active",
+        )}
+        onPointerEnter={() => onActiveBlockActionChange(taskActionId)}
+        onPointerLeave={() => {
+          if (activeBlockActionId === taskActionId) {
+            onActiveBlockActionChange(null);
+          }
+        }}
       >
+        <BlockActions
+          actionId={taskActionId}
+          addLabel="添加子任务"
+          left={blockActionLeft.task}
+          activeActionId={activeBlockActionId}
+          openActionId={openBlockActionId}
+          onActiveActionChange={onActiveBlockActionChange}
+          onOpenActionChange={onOpenBlockActionChange}
+          onAdd={() => onAddSubtask(task.id)}
+          onAction={(action) =>
+            onBlockAction(action, {
+              type: "task",
+              id: task.id,
+              title: task.title,
+              resultId: task.linkedResultId,
+              objectiveId: task.linkedObjectiveId,
+              hasSubtasks,
+            })
+          }
+        />
         <HierarchyCell depth={depth} isLast={isLast && !hasSubtasks}>
           <span className="flex shrink-0 items-center gap-2">
             {hasSubtasks ? (
-              <button
-                type="button"
-                className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]"
-                data-hierarchy-branch-target={taskAnchorId}
-                onClick={() => onToggleTask(task.id)}
-                aria-label={open ? "折叠任务" : "展开任务"}
-              >
-                {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </button>
+              <DisclosureAction
+                actionId={taskActionId}
+                expanded={open}
+                label={open ? "折叠任务" : "展开任务"}
+                activeActionId={activeBlockActionId}
+                openActionId={openBlockActionId}
+                onActiveActionChange={onActiveBlockActionChange}
+                onOpenActionChange={onOpenBlockActionChange}
+                onToggle={() => onToggleTask(task.id)}
+              />
             ) : (
               <span className="h-5 w-5 shrink-0" aria-hidden="true" />
             )}
             <span
               className="flex h-5 w-5 shrink-0 items-center justify-center"
               data-hierarchy-anchor={taskAnchorId}
-              data-hierarchy-branch-end-offset={!hasSubtasks ? "0" : undefined}
-              data-hierarchy-branch-target={!hasSubtasks ? taskAnchorId : undefined}
+              data-hierarchy-branch-end-offset="0"
+              data-hierarchy-branch-target={taskAnchorId}
               data-hierarchy-parent={parentAnchorId}
             >
               <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onTaskCompletionChange(task.id, checked)} />
@@ -500,6 +784,12 @@ function TaskRow({
             parentAnchorId={taskAnchorId}
             canEditTasks={canEditTasks}
             onChecklistItemChange={onChecklistItemChange}
+            onAddSubtask={onAddSubtask}
+            onBlockAction={onBlockAction}
+            activeBlockActionId={activeBlockActionId}
+            openBlockActionId={openBlockActionId}
+            onActiveBlockActionChange={onActiveBlockActionChange}
+            onOpenBlockActionChange={onOpenBlockActionChange}
           />
         ))}
     </div>
@@ -515,6 +805,12 @@ function SubtaskRow({
   parentAnchorId,
   canEditTasks,
   onChecklistItemChange,
+  onAddSubtask,
+  onBlockAction,
+  activeBlockActionId,
+  openBlockActionId,
+  onActiveBlockActionChange,
+  onOpenBlockActionChange,
 }: {
   item: TaskChecklistItem;
   task: Task;
@@ -524,12 +820,51 @@ function SubtaskRow({
   parentAnchorId: string;
   canEditTasks: boolean;
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
+  onAddSubtask: (taskId: string, afterItemId?: string) => void;
+  onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  activeBlockActionId: string | null;
+  openBlockActionId: string | null;
+  onActiveBlockActionChange: (id: string | null) => void;
+  onOpenBlockActionChange: (id: string | null) => void;
 }) {
   const status = subtaskDisplayStatus(task, item, itemIndex);
   const complete = status === "done";
+  const subtaskActionId = `subtask:${task.id}:${item.id}`;
+  const subtaskRowActive = activeBlockActionId === subtaskActionId || openBlockActionId === subtaskActionId;
 
   return (
-    <div className="grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]">
+    <div
+      className={clsx(
+        "orf-subtask-row group relative grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
+        subtaskRowActive && "orf-row-active",
+      )}
+      onPointerEnter={() => onActiveBlockActionChange(subtaskActionId)}
+      onPointerLeave={() => {
+        if (activeBlockActionId === subtaskActionId) {
+          onActiveBlockActionChange(null);
+        }
+      }}
+    >
+      <BlockActions
+        actionId={subtaskActionId}
+        addLabel="添加同级子任务"
+        left={blockActionLeft.subtask}
+        activeActionId={activeBlockActionId}
+        openActionId={openBlockActionId}
+        onActiveActionChange={onActiveBlockActionChange}
+        onOpenActionChange={onOpenBlockActionChange}
+        onAdd={() => onAddSubtask(task.id, item.id)}
+        onAction={(action) =>
+          onBlockAction(action, {
+            type: "subtask",
+            id: item.id,
+            title: item.label,
+            taskId: task.id,
+            resultId: task.linkedResultId,
+            objectiveId: task.linkedObjectiveId,
+          })
+        }
+      />
       <HierarchyCell depth={depth} isLast={isLast}>
         <span
           className="flex h-5 w-5 shrink-0 items-center justify-center"
@@ -546,6 +881,352 @@ function SubtaskRow({
       <EmptySlot />
       <UpdatedTimeValue date={item.updatedAt ?? task.updatedAt} />
     </div>
+  );
+}
+
+const blockMenuItems: { action: BlockAction; label: string; icon: LucideIcon }[] = [
+  { action: "convert", label: "转换", icon: Repeat2 },
+  { action: "move", label: "移动", icon: Move },
+  { action: "copyLink", label: "复制链接", icon: Copy },
+  { action: "comment", label: "评论", icon: MessageSquare },
+  { action: "askAi", label: "问 AI", icon: Sparkles },
+  { action: "delete", label: "删除", icon: Trash2 },
+];
+
+const blockActionLeft = {
+  objective: 16,
+  result: 28,
+  task: 54,
+  subtask: 112,
+} as const;
+
+function BlockActions({
+  actionId,
+  addLabel,
+  left,
+  activeActionId,
+  openActionId,
+  onActiveActionChange,
+  onOpenActionChange,
+  onAdd,
+  onAction,
+}: {
+  actionId: string;
+  addLabel: string;
+  left: number;
+  activeActionId: string | null;
+  openActionId: string | null;
+  onActiveActionChange: (id: string | null) => void;
+  onOpenActionChange: (id: string | null) => void;
+  onAdd: () => void;
+  onAction: (action: BlockAction) => void;
+}) {
+  const open = openActionId === actionId;
+  const visible = open || (!openActionId && activeActionId === actionId);
+
+  return (
+    <div
+      data-open={open ? "true" : undefined}
+      data-visible={visible ? "true" : undefined}
+      className="orf-block-actions pointer-events-none absolute top-1/2 z-40 flex -translate-x-full -translate-y-1/2 items-center gap-px p-0.5 transition"
+      style={{ left, zIndex: open ? 100 : 40 }}
+      onPointerEnter={() => onActiveActionChange(actionId)}
+    >
+      <button
+        type="button"
+        className="pointer-events-auto flex h-6 w-6 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
+        aria-label={addLabel}
+        title={addLabel}
+        onClick={onAdd}
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+      <div className="relative">
+        <button
+          type="button"
+          className="pointer-events-auto flex h-6 w-6 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
+          aria-label="打开块菜单"
+          title="块菜单"
+          onClick={() => {
+            onActiveActionChange(actionId);
+            onOpenActionChange(open ? null : actionId);
+          }}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        {open && (
+          <div className="orf-popover pointer-events-auto absolute left-0 top-8 z-50 w-36 p-1">
+            {blockMenuItems.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <button
+                  key={item.action}
+                  type="button"
+                  className={clsx(
+                    "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition hover:bg-[var(--orf-bg-muted)]",
+                    item.action === "delete" ? "text-[#d92d20]" : "text-[#344054]",
+                  )}
+                  onClick={() => {
+                    onAction(item.action);
+                    onOpenActionChange(null);
+                  }}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DisclosureAction({
+  actionId,
+  expanded,
+  label,
+  activeActionId,
+  openActionId,
+  onActiveActionChange,
+  onOpenActionChange,
+  onToggle,
+  className,
+}: {
+  actionId: string;
+  expanded: boolean;
+  label: string;
+  activeActionId: string | null;
+  openActionId: string | null;
+  onActiveActionChange: (id: string | null) => void;
+  onOpenActionChange: (id: string | null) => void;
+  onToggle: () => void;
+  className?: string;
+}) {
+  const open = openActionId === actionId;
+  const visible = open || (!openActionId && activeActionId === actionId);
+
+  return (
+    <button
+      type="button"
+      data-visible={visible ? "true" : undefined}
+      className={clsx("orf-disclosure-action flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#344054] transition hover:bg-[var(--orf-bg-card)]", className)}
+      aria-label={label}
+      title={label}
+      onPointerEnter={() => onActiveActionChange(actionId)}
+      onClick={() => {
+        onActiveActionChange(actionId);
+        onOpenActionChange(null);
+        onToggle();
+      }}
+    >
+      {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+    </button>
+  );
+}
+
+const blockTargetTypeLabel: Record<BlockTarget["type"], string> = {
+  objective: "目标",
+  result: "指标",
+  task: "任务",
+  subtask: "子任务",
+};
+
+type CommentView = "open" | "resolved";
+
+function CommentPanel({
+  target,
+  threads,
+  onClose,
+  onAddComment,
+  onThreadStatusChange,
+}: {
+  target: BlockTarget;
+  threads: CommentThread[];
+  onClose: () => void;
+  onAddComment: (body: string) => void;
+  onThreadStatusChange: (threadId: string, status: "open" | "resolved") => void;
+}) {
+  const [body, setBody] = useState("");
+  const [view, setView] = useState<CommentView>("open");
+  const openCount = threads.filter((thread) => thread.status === "open").length;
+  const resolvedCount = threads.filter((thread) => thread.status === "resolved").length;
+  const visibleThreads = [...threads]
+    .filter((thread) => thread.status === view)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    const value = body.trim();
+    if (!value) {
+      return;
+    }
+
+    onAddComment(value);
+    setBody("");
+    setView("open");
+  };
+
+  return (
+    <aside
+      data-comment-panel="true"
+      className="orf-comment-panel fixed bottom-4 right-4 top-[88px] z-[90] flex w-[360px] max-w-[calc(100vw-32px)] flex-col overflow-hidden"
+    >
+      <div className="flex h-12 shrink-0 items-center justify-between border-b orf-border px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <MessageSquare className="h-4 w-4 shrink-0 text-[#667085]" />
+          <span className="text-sm font-semibold text-[#111827]">评论</span>
+          <span className="rounded-full bg-[var(--orf-bg-muted)] px-1.5 py-0.5 text-[11px] font-semibold text-[#667085]">{openCount}</span>
+        </div>
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#344054]"
+          aria-label="关闭评论面板"
+          title="关闭"
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="shrink-0 border-b orf-border px-3 py-2">
+        <div className="mb-2 flex min-w-0 items-center gap-2">
+          <span className="shrink-0 rounded-full bg-[var(--orf-bg-muted)] px-2 py-0.5 text-[11px] font-semibold text-[#667085]">
+            {blockTargetTypeLabel[target.type]}
+          </span>
+          <span className="truncate text-sm font-semibold text-[#344054]">{target.title}</span>
+        </div>
+        <div className="inline-flex rounded-md bg-[var(--orf-bg-muted)] p-0.5">
+          <CommentViewButton active={view === "open"} count={openCount} label="打开" onClick={() => setView("open")} />
+          <CommentViewButton active={view === "resolved"} count={resolvedCount} label="已解决" onClick={() => setView("resolved")} />
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {visibleThreads.length === 0 ? (
+          <div className="flex min-h-[180px] flex-col items-center justify-center px-8 text-center">
+            <MessageSquare className="mb-2 h-4 w-4 text-[#98a2b3]" />
+            <div className="text-sm font-semibold text-[#344054]">{view === "open" ? "暂无评论" : "暂无已解决评论"}</div>
+            <div className="mt-1 text-xs leading-5 text-[#98a2b3]">
+              {view === "open" ? "在下方输入评论，讨论会绑定到当前块。" : "解决后的讨论会保留在这里，方便回看决策。"}
+            </div>
+          </div>
+        ) : (
+          <div className="divide-y divide-[color:var(--orf-border)]">
+            {visibleThreads.map((thread) => (
+              <CommentThreadCard key={thread.id} thread={thread} onThreadStatusChange={onThreadStatusChange} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <form className="shrink-0 border-t orf-border bg-[var(--orf-bg-card)] p-3" onSubmit={handleSubmit}>
+        <div className="rounded-md border orf-border bg-[var(--orf-bg-elevated)] p-2 transition focus-within:border-[#9fd8cf] focus-within:bg-[var(--orf-bg-card)]">
+          <div className="mb-1.5 flex items-center gap-2">
+            <PersonAvatar name={currentMember} />
+            <div className="text-xs font-semibold text-[#344054]">{currentMember}</div>
+          </div>
+          <textarea
+            value={body}
+            onChange={(event) => setBody(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            rows={3}
+            className="block max-h-32 min-h-20 w-full resize-none border-0 bg-transparent text-sm leading-6 text-[#111827] outline-none placeholder:text-[#98a2b3]"
+            placeholder="添加评论..."
+          />
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-[#98a2b3]">Ctrl / Cmd + Enter 发送</span>
+            <button
+              type="submit"
+              disabled={!body.trim()}
+              className="inline-flex h-7 items-center gap-1 rounded px-2.5 text-xs font-semibold text-[#0b8f7f] transition hover:bg-[#eefaf7] disabled:text-[#98a2b3] disabled:hover:bg-transparent"
+            >
+              <Send className="h-3.5 w-3.5" />
+              发送
+            </button>
+          </div>
+        </div>
+      </form>
+    </aside>
+  );
+}
+
+function CommentViewButton({
+  active,
+  count,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  count: number;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={clsx(
+        "inline-flex h-7 items-center gap-1 rounded px-2.5 text-xs font-semibold transition",
+        active ? "bg-[var(--orf-bg-card)] text-[#111827] shadow-sm" : "text-[#667085] hover:text-[#111827]",
+      )}
+      onClick={onClick}
+    >
+      {label}
+      <span className={clsx("text-[11px]", active ? "text-[#667085]" : "text-[#98a2b3]")}>{count}</span>
+    </button>
+  );
+}
+
+function CommentThreadCard({
+  thread,
+  onThreadStatusChange,
+}: {
+  thread: CommentThread;
+  onThreadStatusChange: (threadId: string, status: "open" | "resolved") => void;
+}) {
+  const resolved = thread.status === "resolved";
+
+  return (
+    <article className={clsx("px-3 py-3", resolved && "bg-[var(--orf-bg-muted)] opacity-80")}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="min-w-0 text-xs font-medium text-[#98a2b3]">
+          {thread.messages.length} 条评论 · 更新于 {formatCommentTime(thread.updatedAt)}
+        </div>
+        <button
+          type="button"
+          className={clsx(
+            "inline-flex h-6 shrink-0 items-center gap-1 rounded px-1.5 text-xs font-semibold transition",
+            resolved ? "text-[#667085] hover:bg-[var(--orf-bg-muted-strong)] hover:text-[#111827]" : "text-[#667085] hover:bg-[#eefaf7] hover:text-[#0b8f7f]",
+          )}
+          onClick={() => onThreadStatusChange(thread.id, resolved ? "open" : "resolved")}
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {resolved ? "重新打开" : "解决"}
+        </button>
+      </div>
+
+      <div className="grid gap-3">
+        {thread.messages.map((message) => (
+          <div key={message.id} className="grid grid-cols-[28px_1fr] gap-2">
+            <PersonAvatar name={message.author} />
+            <div className="min-w-0">
+              <div className="mb-1 flex items-baseline gap-2">
+                <span className="truncate text-sm font-semibold text-[#344054]">{message.author}</span>
+                <span className="shrink-0 text-xs text-[#98a2b3]">{formatCommentTime(message.createdAt)}</span>
+              </div>
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-[#344054]">{message.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 
@@ -642,11 +1323,11 @@ function EmptySlot() {
 }
 
 function ProgressValue({ value, tone }: { value: number; tone: "success" | "accent" | "neutral" }) {
-  const color = tone === "success" ? "#0b8f7f" : tone === "accent" ? "#0d7df2" : "#e4e7ec";
+  const color = tone === "success" ? "#0b8f7f" : tone === "accent" ? "#0d7df2" : "#7f8da3";
 
   return (
     <div className="flex items-center gap-3">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#eaecf0]">
+      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#dfe4eb]">
         <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, value))}%`, backgroundColor: color }} />
       </div>
       <span className="w-10 text-right text-sm font-bold text-[#344054]">{value}%</span>
@@ -699,6 +1380,24 @@ function toggleSetItem<T>(items: Set<T>, item: T) {
   }
 
   return next;
+}
+
+function blockLinkForTarget(target: BlockTarget) {
+  return `${window.location.origin}${window.location.pathname}#${target.type}:${target.id}`;
+}
+
+function formatCommentTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function latestDate(values: string[]) {

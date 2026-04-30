@@ -2,14 +2,14 @@ import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { useLayoutEffect, useState } from "react";
 
-const TREE_STEP = 28;
-const TREE_LINE_COLOR = "#d0d5dd";
+const TREE_LINE_COLOR = "#c8d1dc";
 const TREE_LINE_WIDTH = 1.6;
 const TREE_RADIUS = 10;
 
-const contentLeftByDepth: Record<2 | 3, number> = {
-  2: 70,
-  3: 98 + TREE_STEP,
+const contentLeftByDepth: Record<1 | 2 | 3, number> = {
+  1: 36,
+  2: 42,
+  3: 100,
 };
 
 type AnchorGeometry = {
@@ -42,10 +42,6 @@ export function HierarchyCell({
   children: ReactNode;
   className?: string;
 }) {
-  if (depth === 1) {
-    return <div className={clsx("flex min-w-0 items-center gap-3", className)}>{children}</div>;
-  }
-
   return (
     <div className={clsx("relative flex min-w-0 items-center", className)} style={{ paddingLeft: `${contentLeftByDepth[depth]}px` }}>
       <div className="relative z-30 flex min-w-0 items-center gap-3">{children}</div>
