@@ -29,10 +29,10 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           <div className="orf-sidebar-logo flex h-11 w-11 items-center justify-center shadow-sm">
             <Command className="h-5 w-5" />
           </div>
-          <div className="orf-sidebar-label whitespace-nowrap text-[22px] font-bold leading-6 tracking-tight">ORF Flow</div>
+          <div className="orf-sidebar-label orf-sidebar-brand-title whitespace-nowrap">ORF Flow</div>
         </div>
         <button
-          className="orf-sidebar-icon transition hover:text-white"
+          className="orf-sidebar-toggle orf-sidebar-icon inline-flex items-center justify-center transition hover:text-white"
           type="button"
           aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
           title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
@@ -42,10 +42,10 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto">
+      <nav className="flex-1 overflow-y-auto py-2">
         {sidebarGroups.map((group) => (
-          <div key={group.title} className="orf-sidebar-section border-b py-5">
-            <div className="orf-sidebar-group-title px-7 pb-3 text-sm font-black uppercase tracking-[0.16em]">{group.title}</div>
+          <div key={group.title} className="orf-sidebar-section border-b py-4">
+            <div className="orf-sidebar-group-title px-7 pb-2 uppercase">{group.title}</div>
             <div className="space-y-1">
               {group.items.map((item) => (
                 <SidebarLink key={item.path} item={item} />
@@ -55,28 +55,29 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         ))}
       </nav>
 
-      <div className="orf-sidebar-footer orf-card-padding space-y-4 border-t">
+      <div className="orf-sidebar-footer space-y-3 border-t p-4">
         <button
           onClick={onCommand}
-          className="orf-sidebar-command flex w-full items-center gap-2 border px-3 py-2 text-left text-xs font-medium transition"
+          className="orf-sidebar-command flex w-full items-center border text-left transition"
+          aria-label="搜索"
           title="搜索"
         >
-          <Command className="h-4 w-4" />
+          <Command className="orf-sidebar-icon h-5 w-5 shrink-0" />
           <span className="orf-sidebar-label flex-1">搜索</span>
         </button>
         <NavLink
           to="/settings"
-          className="orf-sidebar-command flex w-full items-center gap-2 border px-3 py-2 text-left text-xs font-medium transition"
+          className="orf-sidebar-command flex w-full items-center border text-left transition"
           aria-label="设置"
           title="设置"
         >
-          <Settings className="h-4 w-4" />
+          <Settings className="orf-sidebar-icon h-5 w-5 shrink-0" />
           <span className="orf-sidebar-label flex-1">设置</span>
         </NavLink>
-        <div className="orf-sidebar-user flex items-center gap-3" title="Alex Chen">
+        <div className="orf-sidebar-user flex items-center gap-3 px-2" title="Alex Chen">
           <Avatar name="Alex Chen" />
           <div className="orf-sidebar-label min-w-0">
-            <div className="truncate text-sm font-semibold text-white">Alex Chen</div>
+            <div className="orf-sidebar-user-name truncate">Alex Chen</div>
           </div>
         </div>
       </div>
@@ -98,12 +99,12 @@ function SidebarLink({
       aria-label={label}
       className={({ isActive }) =>
         [
-          "orf-sidebar-link flex items-center gap-4 px-7 text-lg font-medium transition",
+          "orf-sidebar-link flex items-center transition",
           isActive ? "orf-sidebar-link-active" : "orf-sidebar-link-inactive",
         ].join(" ")
       }
     >
-      <item.icon className="orf-sidebar-icon h-6 w-6 shrink-0" />
+      <item.icon className="orf-sidebar-icon h-5 w-5 shrink-0" />
       <span className="orf-sidebar-label truncate">{label}</span>
     </NavLink>
   );
