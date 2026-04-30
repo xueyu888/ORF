@@ -2,9 +2,9 @@ import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { useLayoutEffect, useState } from "react";
 
-const TREE_LINE_COLOR = "#c8d1dc";
-const TREE_LINE_WIDTH = 1.6;
-const TREE_RADIUS = 10;
+const TREE_LINE_COLOR = "var(--orf-tree-line)";
+const TREE_LINE_WIDTH = 1.8;
+const TREE_RADIUS = 12;
 
 const contentLeftByDepth: Record<1 | 2 | 3, number> = {
   1: 36,
@@ -100,7 +100,7 @@ export function HierarchyTreeOverlay({
   return (
     <svg
       aria-hidden="true"
-      className="pointer-events-none absolute left-0 top-0 z-20"
+      className="orf-hierarchy-overlay pointer-events-none absolute left-0 top-0 z-20"
       data-hierarchy-tree-overlay="true"
       height={geometry.height}
       width={geometry.width}
@@ -111,6 +111,7 @@ export function HierarchyTreeOverlay({
           key={`${index}-${path}`}
           d={path}
           fill="none"
+          className="orf-hierarchy-path"
           stroke={TREE_LINE_COLOR}
           strokeLinecap="round"
           strokeLinejoin="round"

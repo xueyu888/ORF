@@ -189,16 +189,16 @@ export function TasksPage() {
         />
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="orf-task-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ScopeTabs value={scope} onChange={setScope} />
         <div className="flex flex-wrap items-center gap-2">
           <PlanModeControl value={flowStage} activeIndex={flowStageIndex} onChange={setFlowStage} />
-          <button className="orf-floating-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
+          <button className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
             <CalendarDays className="h-4 w-4 text-[#667085]" />
             全部周期
             <ChevronDown className="h-4 w-4 text-[#667085]" />
           </button>
-          <button className="orf-floating-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
+          <button className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
             <Filter className="h-4 w-4 text-[#667085]" />
             筛选
           </button>
@@ -272,7 +272,7 @@ function PlanModeControl({
     <div className="relative">
       <button
         type="button"
-        className="orf-floating-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold"
+        className="orf-floating-control orf-plan-mode-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold"
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((current) => !current)}
@@ -283,7 +283,7 @@ function PlanModeControl({
       </button>
 
       {open && (
-        <div className="orf-popover absolute right-0 z-40 mt-2 w-72 p-2" role="menu">
+        <div className="orf-popover orf-plan-popover absolute right-0 z-40 mt-2 w-72 p-2" role="menu">
           {flowStages.map((stage, index) => {
             const active = value === stage.value;
             const theme = flowStageTheme[stage.value];
@@ -299,7 +299,7 @@ function PlanModeControl({
                 setOpen(false);
               }}
               className={clsx(
-                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition",
+                "orf-plan-stage-option flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition",
                 active ? "text-[#1d2939]" : "text-[#667085] hover:bg-[var(--orf-bg-muted)]",
               )}
               style={active ? { backgroundColor: "var(--orf-bg-muted)" } : undefined}
@@ -375,7 +375,7 @@ function DashboardMetric({
           <Icon className="h-6 w-6" style={{ color }} />
         </div>
       </div>
-      <div>
+      <div className="orf-objective-body">
         <div className="text-2xl font-bold leading-none text-[#111827]">{value}</div>
         <div className="mt-1 text-sm font-medium text-[#667085]">{label}</div>
       </div>
@@ -489,7 +489,7 @@ function ObjectivePanel({
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-3">
-              <div className={clsx("truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
+              <div className={clsx("orf-objective-title truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
               <StatusChip tone={complete ? "done" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
                 {complete ? "已完成" : objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}
               </StatusChip>
@@ -584,7 +584,7 @@ function ResultBlock({
     <div className="relative">
       <div
         className={clsx(
-          "orf-result-row group relative grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
+          "orf-result-row orf-row-depth-1 group relative grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
           resultRowActive && "orf-row-active",
         )}
         onPointerEnter={() => onActiveBlockActionChange(resultActionId)}
@@ -628,7 +628,7 @@ function ResultBlock({
           >
             <MetricSquareIcon tone={status} />
           </span>
-          <div className={clsx("truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{result.title}</div>
+          <div className={clsx("orf-result-title truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{result.title}</div>
         </HierarchyCell>
         <PersonValue name={result.owner} />
         <IndicatorStatusChip status={status} />
@@ -708,7 +708,7 @@ function TaskRow({
     <div className="relative">
       <div
         className={clsx(
-          "orf-task-row group relative grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
+          "orf-task-row orf-row-depth-2 group relative grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
           taskRowActive && "orf-row-active",
         )}
         onPointerEnter={() => onActiveBlockActionChange(taskActionId)}
@@ -764,7 +764,7 @@ function TaskRow({
               <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onTaskCompletionChange(task.id, checked)} />
             </span>
           </span>
-          <div className={clsx("truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
+          <div className={clsx("orf-task-title truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
         </HierarchyCell>
         <EmptySlot />
         <EmptySlot />
@@ -835,7 +835,7 @@ function SubtaskRow({
   return (
     <div
       className={clsx(
-        "orf-subtask-row group relative grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
+        "orf-subtask-row orf-row-depth-3 group relative grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
         subtaskRowActive && "orf-row-active",
       )}
       onPointerEnter={() => onActiveBlockActionChange(subtaskActionId)}
@@ -875,7 +875,7 @@ function SubtaskRow({
         >
           <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
         </span>
-        <div className={clsx("truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
+        <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
       </HierarchyCell>
       <EmptySlot />
       <EmptySlot />
@@ -894,10 +894,10 @@ const blockMenuItems: { action: BlockAction; label: string; icon: LucideIcon }[]
 ];
 
 const blockActionLeft = {
-  objective: 16,
-  result: 28,
-  task: 54,
-  subtask: 112,
+  objective: 22,
+  result: 34,
+  task: 64,
+  subtask: 122,
 } as const;
 
 function BlockActions({
@@ -934,7 +934,7 @@ function BlockActions({
     >
       <button
         type="button"
-        className="pointer-events-auto flex h-6 w-6 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
+        className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
         aria-label={addLabel}
         title={addLabel}
         onClick={onAdd}
@@ -944,7 +944,7 @@ function BlockActions({
       <div className="relative">
         <button
           type="button"
-          className="pointer-events-auto flex h-6 w-6 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
+          className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
           aria-label="打开块菜单"
           title="块菜单"
           onClick={() => {
@@ -955,7 +955,7 @@ function BlockActions({
           <GripVertical className="h-4 w-4" />
         </button>
         {open && (
-          <div className="orf-popover pointer-events-auto absolute left-0 top-8 z-50 w-36 p-1">
+          <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-9 z-50 w-40 p-1">
             {blockMenuItems.map((item) => {
               const Icon = item.icon;
 
@@ -964,7 +964,7 @@ function BlockActions({
                   key={item.action}
                   type="button"
                   className={clsx(
-                    "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition hover:bg-[var(--orf-bg-muted)]",
+                    "orf-block-menu-item flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition hover:bg-[var(--orf-bg-muted)]",
                     item.action === "delete" ? "text-[#d92d20]" : "text-[#344054]",
                   )}
                   onClick={() => {
@@ -1012,7 +1012,7 @@ function DisclosureAction({
     <button
       type="button"
       data-visible={visible ? "true" : undefined}
-      className={clsx("orf-disclosure-action flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#344054] transition hover:bg-[var(--orf-bg-card)]", className)}
+      className={clsx("orf-disclosure-action flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#344054] transition hover:bg-[var(--orf-bg-card)]", className)}
       aria-label={label}
       title={label}
       onPointerEnter={() => onActiveActionChange(actionId)}
@@ -1285,7 +1285,7 @@ function PersonAvatar({ name, overlap }: { name: string; overlap?: boolean }) {
 
 function PersonValue({ name }: { name: string }) {
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="orf-person-value flex min-w-0 items-center gap-2">
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-xs font-bold shadow-sm" style={avatarStyleForName(name)} title={name}>
         {initials(name)}
       </div>
@@ -1311,7 +1311,7 @@ function ObjectiveTimeValue({ deadline, updatedAt }: { deadline: string; updated
 
 function UpdatedTimeValue({ date }: { date: string }) {
   return (
-    <span className="inline-flex h-7 items-center gap-2 whitespace-nowrap text-sm font-medium text-[#667085]" title="更新时间" aria-label={`更新时间 ${date || "未设置"}`}>
+    <span className="orf-time-value inline-flex h-7 items-center gap-2 whitespace-nowrap text-sm font-medium text-[#667085]" title="更新时间" aria-label={`更新时间 ${date || "未设置"}`}>
       <Clock3 className="h-4 w-4 text-[#98a2b3]" />
       {date || "未设置"}
     </span>
@@ -1326,8 +1326,8 @@ function ProgressValue({ value, tone }: { value: number; tone: "success" | "acce
   const color = tone === "success" ? "#0b8f7f" : tone === "accent" ? "#0d7df2" : "#7f8da3";
 
   return (
-    <div className="flex items-center gap-3">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-[#dfe4eb]">
+    <div className={clsx("orf-progress-value flex items-center gap-3", `orf-progress-value-${tone}`)}>
+      <div className="orf-progress-track h-1.5 w-20 overflow-hidden rounded-full bg-[#dfe4eb]">
         <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, value))}%`, backgroundColor: color }} />
       </div>
       <span className="w-10 text-right text-sm font-bold text-[#344054]">{value}%</span>
@@ -1352,15 +1352,11 @@ function StatusChip({ tone, children }: { tone: StatusTone; children: React.Reac
   return (
     <span
       className={clsx(
-        "inline-flex h-7 w-fit min-w-[62px] justify-self-start items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-bold leading-none",
-        tone === "success" && "border border-[#a9ded0] bg-[#e5f8f3] text-[#067a6e]",
-        tone === "warning" && "border border-[#ffd7a3] bg-[#fff4e5] text-[#a44304]",
-        tone === "accent" && "border border-[#b9dbff] bg-[#eaf4ff] text-[#006fd6]",
-        tone === "review" && "border border-[#ffc783] bg-[#fff4df] text-[#b65300]",
-        tone === "neutral" && "border border-[#d7dce3] bg-[#f5f6f8] text-[#5b6675]",
-        tone === "done" && "min-w-[52px] bg-transparent text-[#98a2b3]",
+        "orf-status-chip inline-flex h-7 w-fit min-w-[62px] justify-self-start items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-bold leading-none",
+        `orf-status-chip-${tone}`,
       )}
     >
+      <span className="orf-status-chip-dot" aria-hidden="true" />
       {children}
     </span>
   );
