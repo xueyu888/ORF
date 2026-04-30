@@ -47,29 +47,29 @@ export function TasksPage() {
       state.objectives
         .map((objective) => {
           const objectiveTasks = state.tasks.filter((task) => task.linkedObjectiveId === objective.id);
-          const visibleObjectiveTasks = objectiveTasks.filter((task) => scope === "team" || task.assignee === currentMember);
           const results = state.results
             .filter((result) => objective.resultIds.includes(result.id))
+            .filter((result) => scope === "team" || result.owner === currentMember)
             .map((result) => {
               const resultTasks = objectiveTasks.filter((task) => task.linkedResultId === result.id);
-              const visibleTasks = resultTasks.filter((task) => scope === "team" || task.assignee === currentMember);
 
               return {
                 result,
-                tasks: visibleTasks,
+                tasks: resultTasks,
                 updatedAt: latestDate([
-                  ...visibleTasks.map((task) => task.updatedAt),
+                  ...resultTasks.map((task) => task.updatedAt),
                   ...state.evidence.filter((item) => item.linkedResultId === result.id).map((item) => item.date),
                   ...state.feedback.filter((item) => item.linkedResultId === result.id).map((item) => item.updatedAt),
                 ]),
               };
             })
-            .filter((group) => scope === "team" || group.tasks.length > 0);
+            .filter((group) => scope === "team" || group.result.owner === currentMember);
+          const visibleObjectiveTasks = results.flatMap((group) => group.tasks);
 
           return {
             objective,
             results,
-            taskOwners: unique(visibleObjectiveTasks.map((task) => task.assignee)),
+            resultOwners: unique(results.map((group) => group.result.owner)),
             objectiveDue: latestDate(visibleObjectiveTasks.map((task) => task.dueDate)),
             reviewDue: addDays(latestDate([objective.updatedAt, ...visibleObjectiveTasks.map((task) => task.updatedAt)]), 7),
           };
@@ -94,7 +94,7 @@ export function TasksPage() {
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-xl border border-[#e7e9ee] bg-white p-5 shadow-[0_8px_28px_rgba(22,31,46,0.06)]">
+      <section className="rounded-xl border orf-border bg-[var(--orf-bg-card)] p-5 shadow-[0_8px_28px_rgba(22,31,46,0.06)]">
         <h1 className="mb-4 text-xl font-bold tracking-tight text-[#111827]">任务管理</h1>
         <FlowStageControl value={flowStage} activeIndex={flowStageIndex} onChange={setFlowStage} />
       </section>
@@ -111,12 +111,12 @@ export function TasksPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ScopeTabs value={scope} onChange={setScope} />
         <div className="flex items-center gap-2">
-          <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#e4e7ec] bg-white px-3 text-sm font-semibold text-[#344054] shadow-sm">
+          <button className="inline-flex h-10 items-center gap-2 rounded-lg border orf-border bg-[var(--orf-bg-elevated)] px-3 text-sm font-semibold text-[#344054] shadow-sm">
             <CalendarDays className="h-4 w-4 text-[#667085]" />
             全部周期
             <ChevronDown className="h-4 w-4 text-[#667085]" />
           </button>
-          <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#e4e7ec] bg-white px-3 text-sm font-semibold text-[#344054] shadow-sm">
+          <button className="inline-flex h-10 items-center gap-2 rounded-lg border orf-border bg-[var(--orf-bg-elevated)] px-3 text-sm font-semibold text-[#344054] shadow-sm">
             <Filter className="h-4 w-4 text-[#667085]" />
             筛选
           </button>
@@ -129,7 +129,7 @@ export function TasksPage() {
             key={group.objective.id}
             objective={group.objective}
             results={group.results}
-            taskOwners={group.taskOwners}
+            resultOwners={group.resultOwners}
             objectiveDue={group.objectiveDue}
             reviewDue={group.reviewDue}
             collapsedResultIds={collapsedResultIds}
@@ -169,9 +169,9 @@ function FlowStageControl({
               onClick={() => onChange(stage.value)}
               className={clsx(
                 "flex min-h-[74px] items-center gap-3 rounded-xl border px-4 text-left transition",
-                active && "border-[#09927f] bg-[#f4fffc] shadow-[0_0_0_1px_rgba(9,146,127,0.12)]",
-                complete && !active && "border-[#e4e7ec] bg-[#fcfcfd]",
-                !complete && !active && "border-[#e4e7ec] bg-[#f9fafb] text-[#667085]",
+                active && "border-[#09927f] bg-[#e6f5f1] shadow-[0_0_0_1px_rgba(9,146,127,0.12)]",
+                complete && !active && "orf-border bg-transparent",
+                !complete && !active && "orf-border bg-[var(--orf-bg-elevated)] text-[#667085]",
               )}
             >
               <span
@@ -204,7 +204,7 @@ function FlowStageControl({
 }
 
 function FlowStageStatusChip({ state }: { state: FlowStageState }) {
-  return <StatusChip tone={state === "已完成" ? "success" : state === "进行中" ? "accent" : "neutral"}>{state}</StatusChip>;
+  return <StatusChip tone={state === "已完成" ? "done" : state === "进行中" ? "accent" : "neutral"}>{state}</StatusChip>;
 }
 
 function TeamDashboard({
@@ -244,9 +244,9 @@ function DashboardMetric({
   progress: number;
 }) {
   return (
-    <div className="flex min-h-[96px] items-center gap-4 rounded-xl border border-[#e7e9ee] bg-white px-6 shadow-[0_8px_24px_rgba(22,31,46,0.05)]">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `conic-gradient(${color} 0 ${progress}%, #eef1f5 ${progress}% 100%)` }}>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white">
+    <div className="flex min-h-[96px] items-center gap-4 rounded-xl border orf-border bg-[var(--orf-bg-card)] px-6 shadow-[0_8px_24px_rgba(22,31,46,0.05)]">
+      <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `conic-gradient(${color} 0 ${progress}%, #ececea ${progress}% 100%)` }}>
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--orf-bg-card)]">
           <Icon className="h-6 w-6" style={{ color }} />
         </div>
       </div>
@@ -280,7 +280,7 @@ function ScopeTabs({ value, onChange }: { value: TaskScope; onChange: (scope: Ta
 function ObjectivePanel({
   objective,
   results,
-  taskOwners,
+  resultOwners,
   objectiveDue,
   reviewDue,
   collapsedResultIds,
@@ -294,7 +294,7 @@ function ObjectivePanel({
 }: {
   objective: Objective;
   results: { result: Result; tasks: Task[]; updatedAt: string }[];
-  taskOwners: string[];
+  resultOwners: string[];
   objectiveDue: string;
   reviewDue: string;
   collapsedResultIds: Set<string>;
@@ -310,26 +310,26 @@ function ObjectivePanel({
   const complete = progress >= 100;
 
   return (
-    <section className={clsx("overflow-hidden rounded-xl border border-[#e7e9ee] shadow-[0_8px_24px_rgba(22,31,46,0.05)]", isGoalFrozen ? "bg-white" : "bg-[#fcfcfb]")}>
-      <div className="grid min-h-[58px] items-center gap-4 border-b border-[#edf0f2] bg-white px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]">
+    <section className={clsx("overflow-hidden rounded-xl border orf-border shadow-[0_8px_24px_rgba(22,31,46,0.05)]", isGoalFrozen ? "bg-[var(--orf-bg-card)]" : "bg-[var(--orf-bg-workflow-body)]")}>
+      <div className="grid min-h-[58px] items-center gap-4 border-b orf-border bg-[var(--orf-bg-card)] px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]">
         <div className="flex min-w-0 items-center gap-3">
-          <ObjectiveFlagIcon />
+          <ObjectiveFlagIcon complete={complete} />
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-3">
               <div className={clsx("truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
-              <StatusChip tone={complete ? "success" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
+              <StatusChip tone={complete ? "done" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
                 {complete ? "已完成" : objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}
               </StatusChip>
             </div>
           </div>
         </div>
-        <AvatarStack names={taskOwners} />
+        <AvatarStack names={resultOwners} />
         <ObjectiveTimeValue deadline={objectiveDue || reviewDue} updatedAt={objective.updatedAt} />
         <ProgressValue value={progress} tone={progress >= 80 ? "success" : "neutral"} />
         <span aria-hidden="true" />
       </div>
 
-      <div className="divide-y divide-[#edf0f2]">
+      <div className="divide-y divide-[color:var(--orf-border)]">
         {results.map(({ result, tasks, updatedAt }, index) => (
           <ResultBlock
             key={result.id}
@@ -385,7 +385,7 @@ function ResultBlock({
   return (
     <div ref={setResultElement} className="relative">
       <HierarchyTreeOverlay container={resultElement} />
-      <div className={clsx("grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]", complete && "bg-[#f6f7f9]")}>
+      <div className="grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]">
         <HierarchyCell depth={1} isLast={isLast && (!open || tasks.length === 0)}>
           <button type="button" className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]" onClick={() => onToggleResult(result.id)} aria-label={open ? "折叠指标" : "展开指标"}>
             {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -452,31 +452,36 @@ function TaskRow({
   return (
     <div className="relative">
       <div
-        className={clsx(
-          "grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
-          complete && "bg-[#f6f7f9]",
-        )}
+        className="grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]"
       >
         <HierarchyCell depth={depth} isLast={isLast && !hasSubtasks}>
-          {hasSubtasks ? (
-            <button
-              type="button"
-              className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]"
-              data-hierarchy-branch-target={taskAnchorId}
-              onClick={() => onToggleTask(task.id)}
-              aria-label={open ? "折叠任务" : "展开任务"}
+          <span className="flex shrink-0 items-center gap-2">
+            {hasSubtasks ? (
+              <button
+                type="button"
+                className="flex h-5 w-5 shrink-0 items-center justify-center text-[#667085]"
+                data-hierarchy-branch-target={taskAnchorId}
+                onClick={() => onToggleTask(task.id)}
+                aria-label={open ? "折叠任务" : "展开任务"}
+              >
+                {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+            ) : (
+              <span className="h-5 w-5 shrink-0" aria-hidden="true" />
+            )}
+            <span
+              className="flex h-5 w-5 shrink-0 items-center justify-center"
+              data-hierarchy-anchor={taskAnchorId}
+              data-hierarchy-branch-end-offset={!hasSubtasks ? "0" : undefined}
+              data-hierarchy-branch-target={!hasSubtasks ? taskAnchorId : undefined}
+              data-hierarchy-parent={parentAnchorId}
             >
-              {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
-          ) : (
-            <span className="h-5 w-5 shrink-0" data-hierarchy-branch-target={taskAnchorId} aria-hidden="true" />
-          )}
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-hierarchy-anchor={taskAnchorId} data-hierarchy-parent={parentAnchorId}>
-            <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onTaskCompletionChange(task.id, checked)} />
+              <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onTaskCompletionChange(task.id, checked)} />
+            </span>
           </span>
           <div className={clsx("truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
         </HierarchyCell>
-        <PersonValue name={task.assignee} />
+        <EmptySlot />
         <EmptySlot />
         <UpdatedTimeValue date={task.updatedAt} />
       </div>
@@ -523,9 +528,15 @@ function SubtaskRow({
   const complete = status === "done";
 
   return (
-    <div className={clsx("grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]", complete && "bg-[#f6f7f9]")}>
+    <div className="grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]">
       <HierarchyCell depth={depth} isLast={isLast}>
-        <span className="flex h-5 w-5 shrink-0 items-center justify-center" data-hierarchy-anchor={`subtask:${task.id}:${item.id}`} data-hierarchy-parent={parentAnchorId}>
+        <span
+          className="flex h-5 w-5 shrink-0 items-center justify-center"
+          data-hierarchy-anchor={`subtask:${task.id}:${item.id}`}
+          data-hierarchy-branch-end-offset="0"
+          data-hierarchy-branch-target={`subtask:${task.id}:${item.id}`}
+          data-hierarchy-parent={parentAnchorId}
+        >
           <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
         </span>
         <div className={clsx("truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
@@ -653,16 +664,19 @@ function IndicatorStatusChip({ status }: { status: IndicatorStatus }) {
   return <StatusChip tone={status === "review" ? "review" : statusTone(status)}>{indicatorStatusLabel[status]}</StatusChip>;
 }
 
-function StatusChip({ tone, children }: { tone: "success" | "warning" | "accent" | "neutral" | "review"; children: React.ReactNode }) {
+type StatusTone = "success" | "warning" | "accent" | "neutral" | "review" | "done";
+
+function StatusChip({ tone, children }: { tone: StatusTone; children: React.ReactNode }) {
   return (
     <span
       className={clsx(
-        "inline-flex h-7 w-fit min-w-[66px] justify-self-start items-center justify-center rounded-full px-3 text-xs font-bold leading-none",
-        tone === "success" && "bg-[#e4fbf6] text-[#0b8f7f]",
-        tone === "warning" && "bg-[#fff4e5] text-[#b54708]",
-        tone === "accent" && "bg-[#e8f2ff] text-[#0d7df2]",
-        tone === "review" && "bg-[#fff7e8] text-[#d56b00]",
-        tone === "neutral" && "bg-[#f2f4f7] text-[#667085]",
+        "inline-flex h-7 w-fit min-w-[62px] justify-self-start items-center justify-center whitespace-nowrap rounded-full px-2 text-xs font-bold leading-none",
+        tone === "success" && "border border-[#a9ded0] bg-[#e5f8f3] text-[#067a6e]",
+        tone === "warning" && "border border-[#ffd7a3] bg-[#fff4e5] text-[#a44304]",
+        tone === "accent" && "border border-[#b9dbff] bg-[#eaf4ff] text-[#006fd6]",
+        tone === "review" && "border border-[#ffc783] bg-[#fff4df] text-[#b65300]",
+        tone === "neutral" && "border border-[#d7dce3] bg-[#f5f6f8] text-[#5b6675]",
+        tone === "done" && "min-w-[52px] bg-transparent text-[#98a2b3]",
       )}
     >
       {children}
@@ -713,8 +727,8 @@ function average(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-function statusTone(status: SimpleStatus): "success" | "accent" | "neutral" {
-  if (status === "done") return "success";
+function statusTone(status: SimpleStatus): StatusTone {
+  if (status === "done") return "done";
   if (status === "active") return "accent";
   return "neutral";
 }

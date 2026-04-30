@@ -21,6 +21,11 @@ type AnchorGeometry = {
   parentId?: string;
 };
 
+type BranchTargetGeometry = {
+  endOffset: number;
+  rect: DOMRect;
+};
+
 type TreeGeometry = {
   height: number;
   paths: string[];
@@ -123,7 +128,7 @@ export function HierarchyTreeOverlay({
 
 function getTreeGeometry(container: HTMLElement): TreeGeometry {
   const containerRect = container.getBoundingClientRect();
-  const branchTargets = new Map<string, DOMRect>();
+  const branchTargets = new Map<string, BranchTargetGeometry>();
   const anchors = new Map<string, AnchorGeometry>();
   const childGroups = new Map<string, AnchorGeometry[]>();
 
@@ -131,7 +136,10 @@ function getTreeGeometry(container: HTMLElement): TreeGeometry {
     const id = element.dataset.hierarchyBranchTarget;
 
     if (id) {
-      branchTargets.set(id, element.getBoundingClientRect());
+      branchTargets.set(id, {
+        endOffset: Number(element.dataset.hierarchyBranchEndOffset ?? -6),
+        rect: element.getBoundingClientRect(),
+      });
     }
   });
 
@@ -145,7 +153,7 @@ function getTreeGeometry(container: HTMLElement): TreeGeometry {
     const rect = element.getBoundingClientRect();
     const branchTarget = branchTargets.get(id);
     const geometry: AnchorGeometry = {
-      branchEndX: branchTarget ? branchTarget.left - containerRect.left - 6 : undefined,
+      branchEndX: branchTarget ? branchTarget.rect.left - containerRect.left + branchTarget.endOffset : undefined,
       bottom: rect.bottom - containerRect.top,
       centerX: rect.left - containerRect.left + rect.width / 2,
       centerY: rect.top - containerRect.top + rect.height / 2,
