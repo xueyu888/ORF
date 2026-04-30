@@ -50,9 +50,9 @@ export function AppShell() {
     <div className="orf-app-shell flex min-h-screen">
       <Sidebar onCommand={() => setCommandOpen(true)} />
       <div className="min-w-0 flex-1">
-        <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-5 border-b orf-border">
-          <div className="orf-text-primary min-w-[260px] text-2xl font-semibold tracking-tight">{breadcrumb(location.pathname)}</div>
-          <div className="relative max-w-xl flex-1">
+        <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-3 border-b orf-border">
+          <div className="orf-text-primary min-w-[180px] text-2xl font-semibold tracking-tight">{breadcrumb(location.pathname)}</div>
+          <div className="relative min-w-[180px] max-w-xl flex-1">
             <Search className="orf-text-muted pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
             <button
               onClick={() => setCommandOpen(true)}

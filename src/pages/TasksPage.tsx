@@ -21,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type FormEvent, useMemo, useState } from "react";
+import { type CSSProperties, type FormEvent, useMemo, useState } from "react";
 import { HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
 import { useOrf } from "../state/OrfProvider";
@@ -368,16 +368,20 @@ function DashboardMetric({
   color: string;
   progress: number;
 }) {
+  const progressWidth = `${Math.max(0, Math.min(100, progress))}%`;
+  const metricStyle = { "--orf-dashboard-color": color } as CSSProperties;
+
   return (
-    <div className="orf-dashboard-metric flex min-h-[96px] items-center gap-4 px-6">
-      <div className="flex h-14 w-14 items-center justify-center rounded-full" style={{ background: `conic-gradient(${color} 0 ${progress}%, #ececea ${progress}% 100%)` }}>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--orf-bg-card)]">
-          <Icon className="h-6 w-6" style={{ color }} />
-        </div>
+    <div className="orf-dashboard-metric flex min-h-[126px] flex-col items-center justify-center gap-2 px-5 py-4 text-center" style={metricStyle}>
+      <div className="orf-dashboard-emblem flex h-12 w-12 items-center justify-center">
+        <Icon className="h-6 w-6" />
       </div>
-      <div className="orf-objective-body">
-        <div className="text-2xl font-bold leading-none text-[#111827]">{value}</div>
-        <div className="mt-1 text-sm font-medium text-[#667085]">{label}</div>
+      <div className="min-w-0">
+        <div className="text-3xl font-semibold leading-none text-[#1f2f45]">{value}</div>
+        <div className="mt-1 text-xs font-semibold text-[#7b6a50]">{label}</div>
+      </div>
+      <div className="orf-dashboard-progress h-1.5 w-full max-w-[150px] overflow-hidden" aria-hidden="true">
+        <span style={{ width: progressWidth }} />
       </div>
     </div>
   );
@@ -502,7 +506,7 @@ function ObjectivePanel({
         <span aria-hidden="true" />
       </div>
 
-      <div>
+      <div className="orf-objective-body">
         {results.map(({ result, tasks, updatedAt }, index) => (
           <ResultBlock
             key={result.id}
