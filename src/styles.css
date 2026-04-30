@@ -42,13 +42,13 @@
   --orf-neutral-text: #667085;
   --orf-neutral-bg: rgba(102, 112, 133, 0.1);
   --orf-neutral-border: rgba(102, 112, 133, 0.16);
-  --orf-sidebar-header-bg: rgba(2, 13, 29, 0.68);
-  --orf-sidebar-workspace-bg: rgba(10, 37, 70, 0.34);
-  --orf-sidebar-selected-bg: rgba(32, 127, 210, 0.2);
-  --orf-sidebar-hover-bg: rgba(79, 178, 255, 0.13);
-  --orf-sidebar-control-bg: rgba(10, 45, 82, 0.5);
-  --orf-sidebar-control-hover-bg: rgba(29, 95, 152, 0.58);
-  --orf-sidebar-divider: rgba(125, 211, 252, 0.12);
+  --orf-sidebar-header-bg: rgba(2, 10, 24, 0.48);
+  --orf-sidebar-workspace-bg: rgba(7, 24, 52, 0.36);
+  --orf-sidebar-selected-bg: rgba(14, 165, 233, 0.22);
+  --orf-sidebar-hover-bg: rgba(125, 211, 252, 0.14);
+  --orf-sidebar-control-bg: rgba(2, 12, 28, 0.44);
+  --orf-sidebar-control-hover-bg: rgba(14, 74, 124, 0.58);
+  --orf-sidebar-divider: rgba(125, 211, 252, 0.1);
   --orf-sidebar-icon: #83e9ff;
   --orf-sidebar-text: #f3fbff;
   --orf-sidebar-text-muted: #9dc9df;
@@ -57,6 +57,7 @@
   --orf-sidebar-logo-bg: #15191b;
   --orf-sidebar-workspace-logo-bg: #eef7f7;
   --orf-sidebar-workspace-logo-text: #09a36f;
+  --orf-sidebar-bg-image: none;
   --orf-avatar-border: #ff745d;
   --orf-avatar-bg: #f2f2f2;
   --orf-avatar-text: #255f5d;
@@ -199,12 +200,7 @@ button:disabled {
   overflow: hidden;
   width: var(--orf-sidebar-width);
   height: 100vh;
-  background:
-    radial-gradient(circle at 78% 18%, rgba(66, 165, 255, 0.36) 0 4%, transparent 23%),
-    radial-gradient(circle at 24% 52%, rgba(103, 232, 249, 0.2) 0 10%, transparent 38%),
-    linear-gradient(132deg, transparent 0 40%, rgba(36, 147, 255, 0.2) 44%, rgba(99, 210, 255, 0.1) 48%, transparent 55%),
-    linear-gradient(154deg, transparent 0 56%, rgba(238, 185, 72, 0.28) 58%, rgba(238, 185, 72, 0.04) 61%, transparent 66%),
-    linear-gradient(180deg, #020814 0%, #07182b 42%, #05111e 100%);
+  background: #020814;
   color: var(--orf-sidebar-text);
   border-color: rgba(125, 211, 252, 0.12);
   font-size: 14px;
@@ -218,35 +214,27 @@ button:disabled {
 .orf-sidebar::before {
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   content: "";
-  background:
-    radial-gradient(ellipse at 64% 38%, rgba(128, 220, 255, 0.16) 0 10%, rgba(29, 78, 216, 0.08) 22%, transparent 48%),
-    linear-gradient(180deg, rgba(2, 8, 23, 0.28) 0%, rgba(2, 8, 23, 0.68) 100%),
-    repeating-linear-gradient(118deg, rgba(125, 211, 252, 0.035) 0 1px, transparent 1px 16px);
+  background-image: var(--orf-sidebar-bg-image);
+  background-position: center;
+  background-size: cover;
+  filter: saturate(1.2) brightness(0.84) contrast(1.06);
+  opacity: 0.82;
+  transform: scale(1.03);
 }
 
 .orf-sidebar::after {
   position: absolute;
-  top: 76px;
-  left: -164px;
-  z-index: -1;
-  width: 410px;
-  height: 410px;
-  border: 22px solid rgba(96, 205, 255, 0.34);
-  border-right-color: rgba(124, 228, 255, 0.68);
-  border-bottom-color: rgba(24, 116, 255, 0.18);
-  border-left-color: rgba(10, 37, 70, 0.02);
-  border-radius: 50%;
+  inset: 0;
+  z-index: 0;
   content: "";
-  box-shadow:
-    0 0 34px rgba(56, 189, 248, 0.38),
-    inset 0 0 40px rgba(96, 205, 255, 0.18),
-    120px 118px 0 -116px rgba(250, 204, 21, 0.82),
-    174px 48px 0 -118px rgba(14, 165, 233, 0.7);
-  filter: blur(0.4px);
-  opacity: 0.88;
-  transform: rotate(-24deg);
+  background:
+    linear-gradient(90deg, rgba(2, 8, 20, 0.9) 0%, rgba(2, 8, 20, 0.64) 48%, rgba(2, 8, 20, 0.36) 100%),
+    linear-gradient(180deg, rgba(2, 8, 20, 0.14) 0%, rgba(2, 8, 20, 0.54) 100%),
+    radial-gradient(circle at 78% 18%, rgba(103, 232, 249, 0.22) 0 8%, transparent 30%),
+    radial-gradient(circle at 88% 78%, rgba(250, 204, 21, 0.12) 0 4%, transparent 28%);
+  pointer-events: none;
 }
 
 .orf-sidebar > * {
@@ -533,7 +521,7 @@ button:disabled {
 
 .orf-sidebar-brand,
 .orf-sidebar-footer {
-  background: linear-gradient(180deg, rgba(8, 26, 48, 0.72) 0%, rgba(4, 18, 35, 0.5) 100%);
+  background: linear-gradient(180deg, rgba(2, 10, 24, 0.7) 0%, rgba(2, 10, 24, 0.42) 100%);
   backdrop-filter: blur(18px);
 }
 
@@ -679,12 +667,12 @@ button:disabled {
 
 .orf-sidebar-link-active {
   background:
-    linear-gradient(90deg, rgba(56, 189, 248, 0.22) 0%, rgba(15, 23, 42, 0.06) 100%),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.24) 0%, rgba(15, 23, 42, 0.1) 100%),
     var(--orf-sidebar-selected-bg);
   color: #ffffff;
   box-shadow:
     inset 0 1px 0 rgba(125, 211, 252, 0.18),
-    0 12px 24px rgba(3, 105, 161, 0.18);
+    0 14px 28px rgba(3, 105, 161, 0.2);
 }
 
 .orf-sidebar-link-active::before {

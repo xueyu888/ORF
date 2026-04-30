@@ -1,6 +1,7 @@
 import { Command, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { useState } from "react";
+import { type CSSProperties, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { navItems } from "../config/navigation";
 import { Avatar } from "./ui";
 
@@ -15,6 +16,9 @@ const sidebarGroups = [
 
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
+  const sidebarStyle = {
+    "--orf-sidebar-bg-image": toCssImageUrl(orfAssetLibrary.sidebar.energyBackground.src),
+  } as CSSProperties;
 
   return (
     <aside
@@ -22,6 +26,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         "orf-sidebar sticky top-0 flex h-screen shrink-0 flex-col border-r",
         collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded",
       ].join(" ")}
+      style={sidebarStyle}
       aria-label="主导航"
     >
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-5">

@@ -1,6 +1,6 @@
 # ORF Icon Assets
 
-Canonical icons for ORF hierarchy rows.
+Canonical icons and visual assets for ORF hierarchy rows and app surfaces. Runtime code should reference registered assets through `src/config/assetLibrary.ts` instead of hard-coding file paths in components or CSS.
 
 | Asset | Meaning |
 | --- | --- |
@@ -8,5 +8,6 @@ Canonical icons for ORF hierarchy rows.
 | `metric-square.svg` | Result / metric object icon. Use color to express metric status. |
 | `completion-circle-empty.svg` | Task / subtask incomplete checkbox. |
 | `completion-circle-done.svg` | Task / subtask complete checkbox. |
+| `sidebar-energy-bg.png` | Sidebar atmospheric background. |
 
 Use these assets as the source shape for future page icons. Status rules live in `docs/ORF 任务管理页面.md`.
