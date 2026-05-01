@@ -12,6 +12,7 @@ const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
   objectives: "目标",
   tasks: "计划",
+  "fantasy-ui": "Fantasy UI",
   feedback: "反馈",
   review: "周复盘",
   "strategy-map": "策略地图",

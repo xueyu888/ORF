@@ -1,0 +1,44 @@
+:root {
+  --gi-bg-page: #f6efe3;
+  --gi-bg-panel: #fff8ec;
+  --gi-bg-panel-dark: #18324a;
+  --gi-bg-panel-dark-2: #102439;
+
+  --gi-blue: #2f638d;
+  --gi-blue-dark: #1f405f;
+  --gi-blue-light: #7ea8c6;
+  --gi-teal: #4e9b93;
+  --gi-teal-dark: #347c73;
+  --gi-gold: #c8a15a;
+  --gi-gold-dark: #9d7838;
+  --gi-gold-light: #ead7a1;
+
+  --gi-success: #4e9b72;
+  --gi-danger: #b95a4f;
+  --gi-warning: #d89a3d;
+  --gi-disabled: #b8b2a7;
+
+  --gi-text-main: #3f3325;
+  --gi-text-heading: #263142;
+  --gi-text-muted: #8b7d6b;
+  --gi-text-light: #fff8ec;
+
+  --gi-border-gold: 1px solid rgba(200, 161, 90, 0.75);
+  --gi-border-gold-soft: 1px solid rgba(200, 161, 90, 0.38);
+  --gi-border-blue: 1px solid rgba(47, 99, 141, 0.75);
+
+  --gi-radius-sm: 6px;
+  --gi-radius-md: 10px;
+  --gi-radius-lg: 16px;
+  --gi-radius-pill: 999px;
+
+  --gi-shadow-soft: 0 4px 12px rgba(70, 45, 20, 0.12);
+  --gi-shadow-panel: 0 8px 24px rgba(70, 45, 20, 0.16);
+  --gi-shadow-hover: 0 12px 28px rgba(70, 45, 20, 0.2);
+
+  --gi-transition-fast: 120ms ease-out;
+  --gi-transition-normal: 180ms ease-out;
+
+  --gi-cut-sm: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
+  --gi-cut-md: polygon(12px 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 12px 100%, 0 50%);
+}

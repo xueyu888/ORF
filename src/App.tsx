@@ -4,6 +4,7 @@ import { AIEvaluationPage } from "./pages/AIEvaluationPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
+import { FantasyUiPreviewPage } from "./pages/FantasyUiPreviewPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
 import { ObjectivesPage } from "./pages/ObjectivesPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -22,6 +23,7 @@ export function App() {
         <Route path="objectives/:objectiveId" element={<ObjectiveDetailPage />} />
         <Route path="objectives/:objectiveId/results/:resultId" element={<ResultDetailPage />} />
         <Route path="tasks" element={<TasksPage />} />
+        <Route path="fantasy-ui" element={<FantasyUiPreviewPage />} />
         <Route path="feedback" element={<FeedbackInboxPage />} />
         <Route path="feedback/:feedbackId" element={<FeedbackDetailPage />} />
         <Route path="review" element={<WeeklyReviewPage />} />

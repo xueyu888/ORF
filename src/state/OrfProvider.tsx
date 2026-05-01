@@ -41,6 +41,8 @@ interface OrfContextValue {
   updateResultConfidence: (resultId: string, confidence: number) => void;
   addComment: (input: { targetType: CommentTargetType; targetId: string; targetTitle: string; body: string; author?: string }) => void;
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
+  updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
+  deleteCommentMessage: (threadId: string, messageId: string) => void;
   proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => void;
 }
 
@@ -109,6 +111,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "结果信心已更新"),
       addComment: (input) => commit(store.addComment(state, input), "评论已添加"),
       updateCommentThreadStatus: (threadId, status) => commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开"),
+      updateCommentMessage: (threadId, messageId, body) => commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新"),
+      deleteCommentMessage: (threadId, messageId) => commit(store.deleteCommentMessage(state, threadId, messageId), "评论已删除"),
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "结果更新已记录"),
     }),

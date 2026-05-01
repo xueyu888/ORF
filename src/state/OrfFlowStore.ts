@@ -351,6 +351,47 @@ export class OrfFlowStore {
     };
   }
 
+  updateCommentMessage(state: OrfState, threadId: string, messageId: string, body: string): OrfState {
+    const value = body.trim();
+    if (!value) {
+      return state;
+    }
+
+    const now = currentTime();
+    return {
+      ...state,
+      comments: state.comments.map((thread) =>
+        thread.id === threadId
+          ? {
+              ...thread,
+              updatedAt: now,
+              messages: thread.messages.map((message) => (message.id === messageId ? { ...message, body: value } : message)),
+            }
+          : thread,
+      ),
+    };
+  }
+
+  deleteCommentMessage(state: OrfState, threadId: string, messageId: string): OrfState {
+    const now = currentTime();
+
+    return {
+      ...state,
+      comments: state.comments.flatMap((thread) => {
+        if (thread.id !== threadId) {
+          return [thread];
+        }
+
+        const messages = thread.messages.filter((message) => message.id !== messageId);
+        if (messages.length === 0) {
+          return [];
+        }
+
+        return [{ ...thread, updatedAt: now, messages }];
+      }),
+    };
+  }
+
   proposeResultUpdate(state: OrfState, resultId: string, title: string, reason: string, feedbackId?: string): OrfState {
     const result = state.results.find((item) => item.id === resultId);
     if (!result) {
