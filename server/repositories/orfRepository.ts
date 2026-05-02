@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/mockData";
-import type { Evidence, Feedback, OrfState, Result, Task, TaskStatus } from "../../src/types/orf";
+import type { Evidence, Feedback, MetricDirection, OrfState, Priority, Result, Task, TaskStatus } from "../../src/types/orf";
 import { db } from "../db/client";
 import {
   evidence,
@@ -16,9 +16,30 @@ import {
 export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback">;
 
 const today = () => new Date().toISOString().slice(0, 10);
+const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
+}
+
+function statusFromChecklist(rows: readonly { done: boolean }[], fallback: TaskStatus = "Todo"): TaskStatus {
+  if (rows.length === 0) {
+    return fallback === "Done" ? "Todo" : fallback;
+  }
+
+  const completedCount = rows.filter((row) => row.done).length;
+  return completedCount === rows.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
+}
+
+function reorderIds(ids: string[], movingId: string, referenceId: string, placement: "before" | "after"): string[] {
+  const withoutMoving = ids.filter((id) => id !== movingId);
+  const referenceIndex = withoutMoving.indexOf(referenceId);
+  if (referenceIndex < 0) {
+    return [...withoutMoving, movingId];
+  }
+
+  const insertIndex = placement === "before" ? referenceIndex : referenceIndex + 1;
+  return [...withoutMoving.slice(0, insertIndex), movingId, ...withoutMoving.slice(insertIndex)];
 }
 
 export async function getTaskManagementData(): Promise<TaskManagementData> {
@@ -54,7 +75,10 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     causeCategoriesByFeedback.set(item.feedbackId, list);
   }
 
-  const taskItems: Task[] = taskRows.map((task) => ({
+  const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
+  const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
+
+  const taskItems: Task[] = orderedTaskRows.map((task) => ({
     id: task.id,
     title: task.title,
     description: task.description,
@@ -100,7 +124,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     activity: [],
   }));
 
-  const resultItems: Result[] = resultRows.map((result) => ({
+  const resultItems: Result[] = orderedResultRows.map((result) => ({
     id: result.id,
     objectiveId: result.objectiveId,
     title: result.title,
@@ -173,6 +197,297 @@ export async function getOrfStateSnapshot(): Promise<OrfState> {
       autoCreateReviewSummary: false,
     },
   };
+}
+
+export interface CreateResultInput {
+  objectiveId: string;
+  title: string;
+  metricName: string;
+  description?: string;
+  baseline?: number;
+  current?: number;
+  target?: number;
+  unit?: string;
+  direction?: MetricDirection;
+  owner?: string;
+}
+
+export interface CreateTaskInput {
+  title: string;
+  description?: string;
+  assignee?: string;
+  priority?: Priority;
+  linkedObjectiveId?: string;
+  linkedResultId: string;
+  dueDate?: string;
+}
+
+export interface CreateChecklistItemInput {
+  label?: string;
+  afterItemId?: string;
+}
+
+export async function createResult(input: CreateResultInput): Promise<Result | null> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1);
+  if (!objective) {
+    return null;
+  }
+
+  const siblingRows = await db.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, input.objectiveId));
+  const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+  const id = makeId("res");
+
+  await db.insert(results).values({
+    id,
+    teamId: objective.teamId,
+    objectiveId: objective.id,
+    title: input.title,
+    description: input.description ?? "由 ORF Flow 规划创建的指标。",
+    metricName: input.metricName,
+    metricRequirement: `${input.metricName}：写清统计对象和完成标准后进入执行。`,
+    statisticalObject: null,
+    completionStandard: null,
+    sampleSet: null,
+    measurementScope: null,
+    deliveryRating: null,
+    baseline: input.baseline ?? 0,
+    current: input.current ?? 0,
+    target: input.target ?? 100,
+    unit: input.unit ?? "%",
+    direction: input.direction ?? "increase",
+    status: "Draft",
+    confidence: 50,
+    owner: input.owner || "User",
+    reviewCadence: "Weekly",
+    sortOrder,
+  });
+
+  const data = await getTaskManagementData();
+  return data.results.find((result) => result.id === id) ?? null;
+}
+
+export async function createTask(input: CreateTaskInput): Promise<Task | null> {
+  const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
+  if (!result) {
+    return null;
+  }
+
+  const siblingRows = await db.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedResultId, result.id));
+  const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+  const id = `ORF-${Date.now()}`;
+  const now = today();
+
+  await db.insert(tasks).values({
+    id,
+    teamId: result.teamId,
+    title: input.title,
+    description: input.description ?? "执行支撑关联指标的下一步动作。",
+    status: "Todo",
+    priority: input.priority ?? "Medium",
+    assignee: input.assignee || "User",
+    linkedObjectiveId: result.objectiveId,
+    linkedResultId: result.id,
+    feedbackOriginId: null,
+    dueDate: input.dueDate ?? now,
+    tags: ["ORF"],
+    createdAt: now,
+    updatedAt: now,
+    sortOrder,
+  });
+
+  const data = await getTaskManagementData();
+  return data.tasks.find((task) => task.id === id) ?? null;
+}
+
+export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (!task) {
+      return false;
+    }
+
+    const rows = await tx
+      .select({ id: taskChecklistItems.id })
+      .from(taskChecklistItems)
+      .where(eq(taskChecklistItems.taskId, taskId))
+      .orderBy(taskChecklistItems.sortOrder);
+    const id = makeId("ck");
+    const afterIndex = input.afterItemId ? rows.findIndex((row) => row.id === input.afterItemId) : -1;
+    const insertIndex = afterIndex >= 0 ? afterIndex + 1 : rows.length;
+    const orderedIds = [...rows.map((row) => row.id)];
+    orderedIds.splice(insertIndex, 0, id);
+
+    await tx.insert(taskChecklistItems).values({
+      id,
+      taskId,
+      label: input.label ?? "新子任务",
+      done: false,
+      sortOrder: insertIndex,
+      updatedAt: today(),
+    });
+
+    await Promise.all(
+      orderedIds.map((itemId, index) =>
+        tx.update(taskChecklistItems).set({ sortOrder: index }).where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId))),
+      ),
+    );
+    await tx.update(tasks).set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt: today() }).where(eq(tasks.id, taskId));
+
+    return true;
+  });
+}
+
+export async function deleteObjective(objectiveId: string): Promise<boolean> {
+  const deleted = await db.delete(objectives).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
+  return deleted.length > 0;
+}
+
+export async function deleteResult(resultId: string): Promise<boolean> {
+  const deleted = await db.delete(results).where(eq(results.id, resultId)).returning({ id: results.id });
+  return deleted.length > 0;
+}
+
+export async function deleteTask(taskId: string): Promise<boolean> {
+  const deleted = await db.delete(tasks).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
+  return deleted.length > 0;
+}
+
+export async function deleteChecklistItem(taskId: string, itemId: string): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (!task) {
+      return false;
+    }
+
+    const deleted = await tx
+      .delete(taskChecklistItems)
+      .where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)))
+      .returning({ id: taskChecklistItems.id });
+    if (deleted.length === 0) {
+      return false;
+    }
+
+    const rows = await tx
+      .select({ id: taskChecklistItems.id, done: taskChecklistItems.done })
+      .from(taskChecklistItems)
+      .where(eq(taskChecklistItems.taskId, taskId))
+      .orderBy(taskChecklistItems.sortOrder);
+    await Promise.all(
+      rows.map((row, index) => tx.update(taskChecklistItems).set({ sortOrder: index }).where(eq(taskChecklistItems.id, row.id))),
+    );
+    await tx.update(tasks).set({ status: statusFromChecklist(rows, task.status), updatedAt: today() }).where(eq(tasks.id, taskId));
+    return true;
+  });
+}
+
+export async function moveResult(resultId: string, referenceResultId: string, placement: "before" | "after"): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [moving] = await tx.select().from(results).where(eq(results.id, resultId)).limit(1);
+    const [reference] = await tx.select().from(results).where(eq(results.id, referenceResultId)).limit(1);
+    if (!moving || !reference || moving.objectiveId !== reference.objectiveId || moving.id === reference.id) {
+      return false;
+    }
+
+    const rows = await tx
+      .select({ id: results.id })
+      .from(results)
+      .where(eq(results.objectiveId, moving.objectiveId))
+      .orderBy(results.sortOrder);
+    const orderedIds = reorderIds(rows.map((row) => row.id), resultId, referenceResultId, placement);
+    await Promise.all(orderedIds.map((id, index) => tx.update(results).set({ sortOrder: index }).where(eq(results.id, id))));
+    await tx.update(objectives).set({ updatedAt: today() }).where(eq(objectives.id, moving.objectiveId));
+    return true;
+  });
+}
+
+export async function moveTask(taskId: string, input: { toResultId: string; referenceTaskId?: string; placement?: "before" | "after" }): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    const [targetResult] = await tx.select().from(results).where(eq(results.id, input.toResultId)).limit(1);
+    if (!task || !targetResult) {
+      return false;
+    }
+    if (input.referenceTaskId) {
+      const [referenceTask] = await tx.select().from(tasks).where(eq(tasks.id, input.referenceTaskId)).limit(1);
+      if (!referenceTask || referenceTask.linkedResultId !== targetResult.id || referenceTask.id === task.id) {
+        return false;
+      }
+    }
+
+    await tx
+      .update(tasks)
+      .set({ linkedResultId: targetResult.id, linkedObjectiveId: targetResult.objectiveId, updatedAt: today() })
+      .where(eq(tasks.id, taskId));
+
+    const affectedResultIds = Array.from(new Set([task.linkedResultId, targetResult.id]));
+    for (const resultId of affectedResultIds) {
+      const rows = await tx
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.linkedResultId, resultId))
+        .orderBy(tasks.sortOrder);
+      const ids = rows.map((row) => row.id);
+      const orderedIds =
+        resultId === targetResult.id && input.referenceTaskId
+          ? reorderIds(ids, taskId, input.referenceTaskId, input.placement ?? "after")
+          : resultId === targetResult.id
+            ? ids.filter((id) => id !== taskId).concat(taskId)
+            : ids.filter((id) => id !== taskId);
+
+      await Promise.all(orderedIds.map((id, index) => tx.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id))));
+    }
+
+    return true;
+  });
+}
+
+export async function moveChecklistItem(
+  taskId: string,
+  itemId: string,
+  input: { toTaskId: string; referenceItemId?: string; placement?: "before" | "after" },
+): Promise<boolean> {
+  return db.transaction(async (tx) => {
+    const [item] = await tx
+      .select()
+      .from(taskChecklistItems)
+      .where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)))
+      .limit(1);
+    const [targetTask] = await tx.select().from(tasks).where(eq(tasks.id, input.toTaskId)).limit(1);
+    const [sourceTask] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (!item || !targetTask || !sourceTask) {
+      return false;
+    }
+    if (input.referenceItemId) {
+      const [referenceItem] = await tx.select().from(taskChecklistItems).where(eq(taskChecklistItems.id, input.referenceItemId)).limit(1);
+      if (!referenceItem || referenceItem.taskId !== input.toTaskId || referenceItem.id === itemId) {
+        return false;
+      }
+    }
+
+    await tx.update(taskChecklistItems).set({ taskId: input.toTaskId, updatedAt: today() }).where(eq(taskChecklistItems.id, itemId));
+
+    const affectedTaskIds = Array.from(new Set([taskId, input.toTaskId]));
+    for (const currentTaskId of affectedTaskIds) {
+      const rows = await tx
+        .select({ id: taskChecklistItems.id, done: taskChecklistItems.done })
+        .from(taskChecklistItems)
+        .where(eq(taskChecklistItems.taskId, currentTaskId))
+        .orderBy(taskChecklistItems.sortOrder);
+      const ids = rows.map((row) => row.id);
+      const orderedIds =
+        currentTaskId === input.toTaskId && input.referenceItemId
+          ? reorderIds(ids, itemId, input.referenceItemId, input.placement ?? "after")
+          : currentTaskId === input.toTaskId
+            ? ids.filter((id) => id !== itemId).concat(itemId)
+          : ids;
+
+      await Promise.all(orderedIds.map((id, index) => tx.update(taskChecklistItems).set({ sortOrder: index }).where(eq(taskChecklistItems.id, id))));
+      const fallback = currentTaskId === sourceTask.id ? sourceTask.status : targetTask.status;
+      await tx.update(tasks).set({ status: statusFromChecklist(rows, fallback), updatedAt: today() }).where(eq(tasks.id, currentTaskId));
+    }
+
+    return true;
+  });
 }
 
 export async function updateTaskStatus(taskId: string, status: TaskStatus): Promise<boolean> {

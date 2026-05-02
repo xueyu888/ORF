@@ -87,6 +87,7 @@ export const results = pgTable("results", {
   confidence: integer("confidence").notNull(),
   owner: text("owner").notNull(),
   reviewCadence: text("review_cadence").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdBy: text("created_by").references(() => users.id),
   updatedBy: text("updated_by").references(() => users.id),
 });
@@ -122,6 +123,7 @@ export const tasks = pgTable("tasks", {
   tags: jsonb("tags").$type<string[]>().notNull(),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdBy: text("created_by").references(() => users.id),
   updatedBy: text("updated_by").references(() => users.id),
 });

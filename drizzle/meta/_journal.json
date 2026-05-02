@@ -15,6 +15,13 @@
       "when": 1777523171074,
       "tag": "0001_wide_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777710950441,
+      "tag": "0002_opposite_groot",
+      "breakpoints": true
     }
   ]
 }
