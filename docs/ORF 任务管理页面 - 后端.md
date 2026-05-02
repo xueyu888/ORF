@@ -24,7 +24,7 @@
 - 主要业务表从一开始预留 `team_id`、`created_by`、`updated_by`。
 - 目标、指标、任务等对象后续可扩展 `owner_user_id`、`visibility` 或对象级权限表。
 - 查询层必须保留统一注入权限条件的空间，不能把权限判断散落在页面逻辑里。
-- 移动按编辑处理：对象 `id` 不变，只修改父对象或同级顺序。
+- 拖拽调整位置或父对象按编辑处理：对象 `id` 不变。
 - 删除需要独立权限；删除有下级的对象时，后端必须校验对象关系。
 
 权限管理建议分阶段实现：
@@ -65,9 +65,19 @@ CORS_ORIGIN=http://localhost:5173
 | `GET` | `/health` | 服务健康检查。 |
 | `GET` | `/api/tasks-page` | 返回任务管理页需要的 `objectives`、`results`、`tasks`、`evidence`、`feedback`。 |
 | `GET` | `/api/orf-state` | 返回兼容当前前端 mock 结构的 ORF 状态快照。 |
+| `POST` | `/api/results` | 创建指标。 |
+| `POST` | `/api/tasks` | 创建任务。 |
+| `POST` | `/api/tasks/:taskId/checklist` | 创建子任务。 |
 | `PATCH` | `/api/tasks/:taskId/status` | 更新任务原始状态，body: `{ "status": "Todo" }`。 |
 | `PATCH` | `/api/tasks/:taskId/completion` | 设置任务完成状态，body: `{ "done": true }`。 |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId` | 设置子任务完成状态，body: `{ "done": true }`。 |
+| `PATCH` | `/api/results/:resultId/order` | 调整同一目标下的指标顺序。 |
+| `PATCH` | `/api/tasks/:taskId/move` | 调整任务所属指标或同级顺序。 |
+| `PATCH` | `/api/tasks/:taskId/checklist/:itemId/move` | 调整子任务所属任务或同级顺序。 |
+| `DELETE` | `/api/objectives/:objectiveId` | 删除目标及其下级对象。 |
+| `DELETE` | `/api/results/:resultId` | 删除指标及其下级对象。 |
+| `DELETE` | `/api/tasks/:taskId` | 删除任务及其子任务。 |
+| `DELETE` | `/api/tasks/:taskId/checklist/:itemId` | 删除子任务。 |
 
 ## 1. 返回集合
 
