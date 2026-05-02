@@ -2369,11 +2369,22 @@ body[data-dragging-floating="true"] {
   pointer-events: auto;
 }
 
+.orf-comment-panel-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 45px;
+  padding: 8px 10px 8px 14px;
+  border-bottom: 1px solid rgba(218, 224, 232, 0.76);
+}
+
 .orf-comment-context-title {
+  min-width: 0;
+  flex: 1;
   flex-shrink: 0;
   overflow: hidden;
-  padding: 13px 14px 12px;
-  border-bottom: 1px solid rgba(218, 224, 232, 0.76);
   color: #344054;
   font-size: 13px;
   font-weight: 850;

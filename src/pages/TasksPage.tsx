@@ -171,7 +171,7 @@ export function TasksPage() {
     }
 
     if (action === "comment") {
-      setCommentTarget((current) => (current?.type === target.type && current.id === target.id ? null : target));
+      setCommentTarget(target);
       return;
     }
 
