@@ -10,6 +10,8 @@ const envSchema = z.object({
   SERVER_HOST: z.string().default("0.0.0.0"),
   SERVER_PORT: z.coerce.number().int().positive().default(8787),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+  ORF_APP_URL: z.string().url().default("http://127.0.0.1:5173"),
+  ORY_PUBLIC_URL: z.string().url().default("http://127.0.0.1:4433"),
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 

@@ -34,6 +34,7 @@ interface ToastMessage {
 interface OrfContextValue {
   state: OrfState;
   currentUser: OrfUser | null;
+  authReady: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
   modal: ModalState;
@@ -66,6 +67,9 @@ interface OrfContextValue {
   createUser: (input: { name: string; email: string; role: UserRole }) => void;
   registerUser: (input: { name: string; email: string }) => void;
   loginUser: (email: string) => void;
+  loginWithPassword: (email: string, password: string) => Promise<boolean>;
+  registerWithPassword: (input: { name: string; email: string; password: string }) => Promise<boolean>;
+  logout: () => void;
   updateUserRole: (userId: string, role: UserRole) => void;
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => void;
   deleteUser: (userId: string) => void;
@@ -90,8 +94,8 @@ const OrfContext = createContext<OrfContextValue | null>(null);
 
 const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
-const AUTH_STORAGE_KEY = "orf-flow-auth-user-id";
 type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback">;
+type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return {
@@ -113,6 +117,7 @@ async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
     headers,
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -126,30 +131,17 @@ async function apiRequest(path: string, init?: RequestInit): Promise<void> {
   await apiJson<unknown>(path, init);
 }
 
-function loadAuthUserId() {
-  try {
-    return window.localStorage.getItem(AUTH_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function saveAuthUserId(userId: string | null) {
-  try {
-    if (userId) {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, userId);
-    } else {
-      window.localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
-  } catch {
-    // localStorage can be unavailable in restricted browser contexts.
-  }
-}
-
 function loadInitialState() {
-  const loaded = store.load();
-  const authUserId = loadAuthUserId();
-  return authUserId && loaded.users.some((user) => user.id === authUserId) ? { ...loaded, currentUserId: authUserId } : loaded;
+  return store.load();
+}
+
+function mergeAuthenticatedUser(state: OrfState, user: OrfUser): OrfState {
+  const users = state.users.filter((item) => item.id !== user.id && item.email.toLowerCase() !== user.email.toLowerCase());
+  return {
+    ...state,
+    users: [...users, user],
+    currentUserId: user.id,
+  };
 }
 
 function loadTheme(): ThemeMode {
@@ -163,13 +155,34 @@ function loadTheme(): ThemeMode {
 
 export function OrfProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(loadInitialState);
-  const [authUserId, setAuthUserId] = useState<string | null>(() => loadAuthUserId());
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme());
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
   const isAuthenticated = currentUser !== null;
   const isAdmin = currentUser?.role === "admin";
+  const refreshAuthSession = useCallback(async () => {
+    try {
+      const session = await apiJson<AuthSession>("/api/auth/session");
+      if (!session.authenticated) {
+        setAuthUserId(null);
+        return;
+      }
+
+      setAuthUserId(session.user.id);
+      setState((current) => {
+        const next = mergeAuthenticatedUser(current, session.user);
+        store.save(next);
+        return next;
+      });
+    } catch {
+      setAuthUserId(null);
+    } finally {
+      setAuthReady(true);
+    }
+  }, []);
   const applyTaskManagementData = useCallback((data: TaskManagementData) => {
     setState((current) => {
       const next = mergeTaskManagementData(current, data);
@@ -197,13 +210,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   }, [theme]);
 
   useEffect(() => {
-    if (authUserId && !state.users.some((user) => user.id === authUserId)) {
-      setAuthUserId(null);
-      saveAuthUserId(null);
-    }
-  }, [authUserId, state.users]);
+    void refreshAuthSession();
+  }, [refreshAuthSession]);
 
   useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      return;
+    }
+
     let cancelled = false;
 
     void apiJson<TaskManagementData>("/api/tasks-page")
@@ -217,7 +231,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyTaskManagementData]);
+  }, [applyTaskManagementData, authReady, isAuthenticated]);
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);
@@ -235,13 +249,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
 
   const rememberAuth = (userId: string | null) => {
     setAuthUserId(userId);
-    saveAuthUserId(userId);
   };
 
   const value = useMemo<OrfContextValue>(
     () => ({
       state,
       currentUser,
+      authReady,
       isAuthenticated,
       isAdmin,
       modal,
@@ -376,6 +390,54 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         rememberAuth(user.id);
         commit(next, "已登录");
       },
+      loginWithPassword: async (email, password) => {
+        try {
+          const session = await apiJson<AuthSession>("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify({ email, password }),
+          });
+          if (!session.authenticated) {
+            return false;
+          }
+
+          rememberAuth(session.user.id);
+          setState((current) => {
+            const next = mergeAuthenticatedUser(current, session.user);
+            store.save(next);
+            return next;
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      registerWithPassword: async (input) => {
+        try {
+          const session = await apiJson<AuthSession>("/api/auth/registration", {
+            method: "POST",
+            body: JSON.stringify(input),
+          });
+          if (!session.authenticated) {
+            return false;
+          }
+
+          rememberAuth(session.user.id);
+          setState((current) => {
+            const next = mergeAuthenticatedUser(current, session.user);
+            store.save(next);
+            return next;
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      logout: () => {
+        rememberAuth(null);
+        void apiRequest("/api/auth/logout", { method: "POST" }).finally(() => {
+          window.location.assign("/auth");
+        });
+      },
       updateUserRole: (userId, role) => commit(store.updateUserRole(state, userId, role), "角色已更新"),
       updateUser: (userId, input) => commit(store.updateUser(state, userId, input), "用户已更新"),
       deleteUser: (userId) => {
@@ -393,7 +455,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "结果更新已记录"),
     }),
-    [authUserId, currentUser, isAdmin, isAuthenticated, modal, state, syncTaskMutation, theme, toasts],
+    [authReady, authUserId, currentUser, isAdmin, isAuthenticated, modal, state, syncTaskMutation, theme, toasts],
   );
 
   return <OrfContext.Provider value={value}>{children}</OrfContext.Provider>;

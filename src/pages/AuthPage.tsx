@@ -1,6 +1,6 @@
 import { Eye, EyeOff, LockKeyhole, Mail, Sparkles, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import authHero from "../assets/auth/orf-login-sky-adventure.png";
 import { useOrf } from "../state/OrfProvider";
@@ -9,34 +9,45 @@ type AuthMode = "login" | "register";
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const { state, loginUser, registerUser, notify } = useOrf();
+  const { authReady, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
   const [mode, setMode] = useState<AuthMode>("login");
-  const [email, setEmail] = useState(state.users[0]?.email ?? "");
+  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-
-    if (mode === "login") {
-      if (!state.users.some((user) => user.email.toLowerCase() === email.trim().toLowerCase())) {
-        notify("账号不存在");
-        return;
-      }
-
-      loginUser(email);
+  useEffect(() => {
+    if (authReady && isAuthenticated) {
       navigate("/tasks");
+    }
+  }, [authReady, isAuthenticated, navigate]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!authReady || submitting) {
       return;
     }
 
-    registerUser({ name, email });
+    setSubmitting(true);
+    const ok =
+      mode === "login"
+        ? await loginWithPassword(email, password)
+        : await registerWithPassword({ name, email, password });
+    setSubmitting(false);
+
+    if (!ok) {
+      notify(mode === "login" ? "账号或密码不正确" : "注册失败");
+      return;
+    }
+
     navigate("/tasks");
   };
 
   const title = mode === "login" ? "Sign in" : "Register";
   const primaryLabel = mode === "login" ? "Sign In" : "Create Account";
   const switchLabel = mode === "login" ? "Register" : "Sign In";
+  const busyLabel = mode === "login" ? "Signing In" : "Creating";
 
   return (
     <main className="orf-auth-page">
@@ -110,9 +121,9 @@ export function AuthPage() {
             </button>
           </AuthPill>
 
-          <button className="orf-auth-submit" type="submit">
+          <button className="orf-auth-submit" type="submit" disabled={!authReady || submitting}>
             <Sparkles className="h-5 w-5" />
-            <span>{primaryLabel}</span>
+            <span>{submitting ? busyLabel : primaryLabel}</span>
             <Sparkles className="h-5 w-5" />
           </button>
         </form>
@@ -126,6 +137,7 @@ export function AuthPage() {
         <button
           className="orf-auth-secondary"
           type="button"
+          disabled={!authReady || submitting}
           onClick={() => setMode((value) => (value === "login" ? "register" : "login"))}
         >
           {switchLabel}

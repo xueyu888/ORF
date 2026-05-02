@@ -1,4 +1,4 @@
-import { Command, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { Command, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { type CSSProperties, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
@@ -17,7 +17,7 @@ const sidebarGroups = [
 }));
 
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
-  const { currentUser, isAdmin } = useOrf();
+  const { currentUser, isAdmin, logout } = useOrf();
   const [collapsed, setCollapsed] = useState(false);
   const visibleGroups = sidebarGroups
     .map((group) => (group.title === "admin" && !isAdmin ? { ...group, items: [] } : group))
@@ -89,6 +89,15 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           <Settings className="orf-sidebar-icon h-5 w-5 shrink-0" />
           <span className="orf-sidebar-label flex-1">设置</span>
         </NavLink>
+        <button
+          onClick={logout}
+          className="orf-sidebar-command flex w-full items-center border text-left transition"
+          aria-label="退出登录"
+          title="退出登录"
+        >
+          <LogOut className="orf-sidebar-icon h-5 w-5 shrink-0" />
+          <span className="orf-sidebar-label flex-1">退出</span>
+        </button>
         <div className="orf-sidebar-user flex items-center gap-3 px-2" title={currentUser?.name}>
           <Avatar name={currentUser?.name ?? "User"} />
           <div className="orf-sidebar-label min-w-0">

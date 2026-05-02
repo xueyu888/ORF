@@ -1,0 +1,34 @@
+services:
+  kratos-migrate:
+    image: oryd/kratos:v26.2.0
+    env_file:
+      - ./ory/.runtime/ory.env
+    volumes:
+      - ./ory/kratos:/etc/config/kratos:ro
+      - ./ory/.runtime/certs:/etc/ory/certs:ro
+    command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
+    restart: on-failure
+    networks:
+      - ory
+
+  kratos:
+    image: oryd/kratos:v26.2.0
+    depends_on:
+      - kratos-migrate
+    env_file:
+      - ./ory/.runtime/ory.env
+    environment:
+      LOG_LEVEL: info
+    ports:
+      - "4433:4433"
+      - "4434:4434"
+    volumes:
+      - ./ory/kratos:/etc/config/kratos:ro
+      - ./ory/.runtime/certs:/etc/ory/certs:ro
+    command: serve -c /etc/config/kratos/kratos.yml --dev
+    restart: unless-stopped
+    networks:
+      - ory
+
+networks:
+  ory:

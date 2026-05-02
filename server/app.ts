@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import { z, ZodError } from "zod";
+import { ORF_SESSION_COOKIE, getAuthenticatedOrfUser, loginWithPassword, registerWithPassword, revokeApiSession } from "./auth/ory";
 import { env } from "./env";
 import {
   createChecklistItem,
@@ -25,6 +26,13 @@ const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const completionBodySchema = z.object({ done: z.boolean() });
+const loginBodySchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+const registrationBodySchema = loginBodySchema.extend({
+  name: z.string().min(1),
+});
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
@@ -78,11 +86,22 @@ function corsOrigin() {
   return env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
 }
 
+function sessionCookie(sessionToken: string) {
+  const secure = env.ORF_APP_URL.startsWith("https://") ? "; Secure" : "";
+  return `${ORF_SESSION_COOKIE}=${encodeURIComponent(sessionToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800${secure}`;
+}
+
+function clearSessionCookie() {
+  const secure = env.ORF_APP_URL.startsWith("https://") ? "; Secure" : "";
+  return `${ORF_SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
+}
+
 export async function buildServer() {
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
     origin: corsOrigin(),
+    credentials: true,
   });
 
   app.setErrorHandler((error, _request, reply) => {
@@ -102,10 +121,71 @@ export async function buildServer() {
     return reply.code(500).send({ error: "Internal Server Error" });
   });
 
+  app.addHook("preHandler", async (request, reply) => {
+    const pathname = new URL(request.url, "http://orf.local").pathname;
+    if (!pathname.startsWith("/api/") || pathname.startsWith("/api/auth/")) {
+      return;
+    }
+
+    const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
+      request.log.warn(error, "Ory session check failed");
+      return null;
+    });
+    if (!user) {
+      return reply.code(401).send({ error: "Unauthorized" });
+    }
+  });
+
   app.get("/health", async () => ({
     ok: true,
     service: "orf-api",
   }));
+
+  app.get("/api/auth/session", async (request) => {
+    const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
+      request.log.warn(error, "Ory session check failed");
+      return null;
+    });
+    return user ? { authenticated: true, user } : { authenticated: false, user: null };
+  });
+
+  app.post("/api/auth/login", async (request, reply) => {
+    const body = loginBodySchema.parse(request.body);
+
+    const auth = await loginWithPassword(body.email, body.password).catch((error) => {
+      request.log.warn(error, "Ory password login failed");
+      return null;
+    });
+
+    if (!auth) {
+      return reply.code(401).send({ error: "Invalid email or password" });
+    }
+
+    reply.header("Set-Cookie", sessionCookie(auth.sessionToken));
+    return { authenticated: true, user: auth.user };
+  });
+
+  app.post("/api/auth/registration", async (request, reply) => {
+    const body = registrationBodySchema.parse(request.body);
+
+    const auth = await registerWithPassword(body).catch((error) => {
+      request.log.warn(error, "Ory password registration failed");
+      return null;
+    });
+
+    if (!auth) {
+      return reply.code(400).send({ error: "Registration failed" });
+    }
+
+    reply.header("Set-Cookie", sessionCookie(auth.sessionToken));
+    return { authenticated: true, user: auth.user };
+  });
+
+  app.post("/api/auth/logout", async (request, reply) => {
+    await revokeApiSession(request.headers.cookie);
+    reply.header("Set-Cookie", clearSessionCookie());
+    return { ok: true };
+  });
 
   app.get("/api/tasks-page", async () => getTaskManagementData());
   app.get("/api/orf-state", async () => getOrfStateSnapshot());
