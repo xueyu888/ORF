@@ -12,12 +12,24 @@ import {
   teams,
   users,
 } from "../server/db/schema";
-import { initialOrfState } from "../src/data/mockData";
+import { initialOrfState } from "../src/data/initialOrfState";
 
 const team = {
   id: "team-ai-app",
   name: "AI 应用团队",
   createdAt: "2026-04-01",
+};
+const bootstrapAdmin = {
+  id: "user-xueyu",
+  name: "xueyu",
+  email: "xueyu@qq.com",
+  createdAt: "2026-04-01",
+};
+type SeedUser = {
+  id: string;
+  name: string;
+  email: string | null;
+  createdAt: string;
 };
 
 function userIdForName(name: string) {
@@ -52,16 +64,17 @@ async function seed() {
 
     await tx.insert(teams).values(team);
 
-    const userRows = collectUserNames().map((name) => ({
+    const userRows: SeedUser[] = collectUserNames().map((name) => ({
       id: userIdForName(name),
       name,
       email: null,
       createdAt: "2026-04-01",
     }));
+    userRows.push(bootstrapAdmin);
 
     if (userRows.length > 0) {
       await tx.insert(users).values(userRows);
-      await tx.insert(teamMembers).values(userRows.map((user) => ({ teamId: team.id, userId: user.id, role: "member" as const })));
+      await tx.insert(teamMembers).values(userRows.map((user) => ({ teamId: team.id, userId: user.id, role: user.id === bootstrapAdmin.id ? ("admin" as const) : ("member" as const) })));
     }
 
     await tx.insert(objectives).values(

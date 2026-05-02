@@ -1,6 +1,23 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: orf
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "54322:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orf"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - orf-postgres-data:/var/lib/postgresql/data
+
   kratos-migrate:
     image: oryd/kratos:v26.2.0
+    network_mode: host
     env_file:
       - ./ory/.runtime/ory.env
     volumes:
@@ -8,27 +25,22 @@ services:
       - ./ory/.runtime/certs:/etc/ory/certs:ro
     command: -c /etc/config/kratos/kratos.yml migrate sql -e --yes
     restart: on-failure
-    networks:
-      - ory
 
   kratos:
     image: oryd/kratos:v26.2.0
     depends_on:
-      - kratos-migrate
+      kratos-migrate:
+        condition: service_completed_successfully
+    network_mode: host
     env_file:
       - ./ory/.runtime/ory.env
     environment:
       LOG_LEVEL: info
-    ports:
-      - "4433:4433"
-      - "4434:4434"
     volumes:
       - ./ory/kratos:/etc/config/kratos:ro
       - ./ory/.runtime/certs:/etc/ory/certs:ro
     command: serve -c /etc/config/kratos/kratos.yml --dev
     restart: unless-stopped
-    networks:
-      - ory
 
-networks:
-  ory:
+volumes:
+  orf-postgres-data:

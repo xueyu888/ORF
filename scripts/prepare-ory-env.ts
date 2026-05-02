@@ -13,13 +13,14 @@ const certParams = [
   ["sslrootcert", "ca.crt"],
 ] as const;
 
-const databaseUrl = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
+function databaseUrlFromEnv() {
+  const databaseUrl = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error("DATABASE_URL or REMOTE_DATABASE_URL is required for Ory");
+  }
 
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL or REMOTE_DATABASE_URL is required for Ory");
+  return databaseUrl;
 }
-
-const oryDatabaseUrl = databaseUrl;
 
 async function assertOryMigrationPermission(connectionString: string) {
   const pool = new Pool(createPgPoolConfig(connectionString));
@@ -49,9 +50,10 @@ async function assertOryMigrationPermission(connectionString: string) {
 }
 
 async function main() {
-  const url = new URL(oryDatabaseUrl);
+  const databaseUrl = databaseUrlFromEnv();
+  const url = new URL(databaseUrl);
 
-  await assertOryMigrationPermission(oryDatabaseUrl);
+  await assertOryMigrationPermission(databaseUrl);
 
   fs.mkdirSync(certDir, { recursive: true });
 

@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { initialOrfState } from "../../src/data/mockData";
+import { initialOrfState } from "../../src/data/initialOrfState";
 import type { Evidence, Feedback, MetricDirection, OrfState, Priority, Result, Task, TaskStatus } from "../../src/types/orf";
 import { db } from "../db/client";
 import {

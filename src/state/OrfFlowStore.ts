@@ -1,4 +1,4 @@
-import { initialOrfState } from "../data/mockData";
+import { initialOrfState } from "../data/initialOrfState";
 import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, PermissionAction, PermissionResource, Result, Task, TaskStatus, UserRole, OrfStage } from "../types/orf";
 
 const STORAGE_KEY = "orf-flow-state-v3";
@@ -678,38 +678,6 @@ export class OrfFlowStore {
         },
       ],
     };
-  }
-
-  registerUser(state: OrfState, input: { name: string; email: string }): OrfState {
-    const email = input.email.trim().toLowerCase();
-    const name = input.name.trim();
-    if (!email || !name) {
-      return state;
-    }
-
-    const existing = state.users.find((user) => user.email.toLowerCase() === email);
-    if (existing) {
-      return { ...state, currentUserId: existing.id };
-    }
-
-    const user = {
-      id: makeId("user"),
-      name,
-      email,
-      role: "member" as const,
-    };
-
-    return {
-      ...state,
-      users: [...state.users, user],
-      currentUserId: user.id,
-    };
-  }
-
-  loginUser(state: OrfState, email: string): OrfState {
-    const value = email.trim().toLowerCase();
-    const user = state.users.find((item) => item.email.toLowerCase() === value);
-    return user ? { ...state, currentUserId: user.id } : state;
   }
 
   updateUserRole(state: OrfState, userId: string, role: UserRole): OrfState {

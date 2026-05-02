@@ -16,6 +16,7 @@ export function AuthPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [authError, setAuthError] = useState("");
 
   useEffect(() => {
     if (authReady && isAuthenticated) {
@@ -23,21 +24,27 @@ export function AuthPage() {
     }
   }, [authReady, isAuthenticated, navigate]);
 
+  useEffect(() => {
+    setAuthError("");
+  }, [email, mode, name, password]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!authReady || submitting) {
       return;
     }
 
+    setAuthError("");
     setSubmitting(true);
-    const ok =
+    const result =
       mode === "login"
         ? await loginWithPassword(email, password)
         : await registerWithPassword({ name, email, password });
     setSubmitting(false);
 
-    if (!ok) {
-      notify(mode === "login" ? "账号或密码不正确" : "注册失败");
+    if (!result.ok) {
+      setAuthError(result.message);
+      notify(result.message);
       return;
     }
 
@@ -120,6 +127,12 @@ export function AuthPage() {
               {showPassword ? <EyeOff className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
             </button>
           </AuthPill>
+
+          {authError && (
+            <p className="orf-auth-error" role="alert">
+              {authError}
+            </p>
+          )}
 
           <button className="orf-auth-submit" type="submit" disabled={!authReady || submitting}>
             <Sparkles className="h-5 w-5" />

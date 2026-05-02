@@ -39,20 +39,22 @@
 本地 `.env` 需要包含：
 
 ```text
-DATABASE_URL=postgresql://postgres:postgre@127.0.0.1:5432/mydb
-BACKTEST_DB_URL=postgresql://postgres:postgre@127.0.0.1:5432/stock_backtest
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/orf
+# REMOTE_DATABASE_URL=postgresql://postgres:postgres@db.example.com:5432/orf
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8787
-CORS_ORIGIN=http://localhost:5173
+CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
 ```
 
 常用命令：
 
 | 命令 | 作用 |
 | --- | --- |
+| `npm run db:local` | 启动本地 Docker PostgreSQL，监听 `127.0.0.1:54322`。 |
 | `npm run db:generate` | 根据 Drizzle schema 生成 SQL migration。 |
 | `npm run db:migrate` | 将 migration 应用到 `DATABASE_URL`。 |
-| `npm run db:seed` | 将当前 mock ORF 数据写入数据库。 |
+| `npm run db:seed` | 将初始 ORF 数据写入数据库。 |
+| `npm run ory:dev` | 启动 Ory Kratos，数据库连接只读取 `.env`。 |
 | `npm run server:dev` | 以 watch 模式启动后端。 |
 | `npm run server:start` | 启动后端服务。 |
 
@@ -64,7 +66,7 @@ CORS_ORIGIN=http://localhost:5173
 | --- | --- | --- |
 | `GET` | `/health` | 服务健康检查。 |
 | `GET` | `/api/tasks-page` | 返回任务管理页需要的 `objectives`、`results`、`tasks`、`evidence`、`feedback`。 |
-| `GET` | `/api/orf-state` | 返回兼容当前前端 mock 结构的 ORF 状态快照。 |
+| `GET` | `/api/orf-state` | 返回 ORF 状态快照。 |
 | `POST` | `/api/results` | 创建指标。 |
 | `POST` | `/api/tasks` | 创建任务。 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务。 |

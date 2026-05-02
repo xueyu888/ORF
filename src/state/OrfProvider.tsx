@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { ApiError, apiJson, apiRequest, type AuthSession, type TaskManagementData } from "./apiClient";
 import { OrfFlowStore } from "./OrfFlowStore";
 import type {
   CommentStatus,
@@ -18,6 +19,7 @@ import type {
 
 type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | null;
 export type ThemeMode = "dark" | "light";
+type AuthResult = { ok: true } | { ok: false; message: string };
 
 interface ModalState {
   type: ModalType;
@@ -65,10 +67,8 @@ interface OrfContextValue {
   updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => void;
   updateResultConfidence: (resultId: string, confidence: number) => void;
   createUser: (input: { name: string; email: string; role: UserRole }) => void;
-  registerUser: (input: { name: string; email: string }) => void;
-  loginUser: (email: string) => void;
-  loginWithPassword: (email: string, password: string) => Promise<boolean>;
-  registerWithPassword: (input: { name: string; email: string; password: string }) => Promise<boolean>;
+  loginWithPassword: (email: string, password: string) => Promise<AuthResult>;
+  registerWithPassword: (input: { name: string; email: string; password: string }) => Promise<AuthResult>;
   logout: () => void;
   updateUserRole: (userId: string, role: UserRole) => void;
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => void;
@@ -94,8 +94,6 @@ const OrfContext = createContext<OrfContextValue | null>(null);
 
 const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
-type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback">;
-type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return {
@@ -106,29 +104,6 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     evidence: data.evidence,
     feedback: data.feedback,
   };
-}
-
-async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = new Headers(init?.headers);
-  if (init?.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const response = await fetch(path, {
-    ...init,
-    headers,
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    throw new Error(`API ${response.status}: ${path}`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
-async function apiRequest(path: string, init?: RequestInit): Promise<void> {
-  await apiJson<unknown>(path, init);
 }
 
 function loadInitialState() {
@@ -142,6 +117,32 @@ function mergeAuthenticatedUser(state: OrfState, user: OrfUser): OrfState {
     users: [...users, user],
     currentUserId: user.id,
   };
+}
+
+function persistAuthenticatedUser(user: OrfUser, setState: (update: (current: OrfState) => OrfState) => void) {
+  setState((current) => {
+    const next = mergeAuthenticatedUser(current, user);
+    store.save(next);
+    return next;
+  });
+}
+
+function authFailureMessage(error: unknown, action: "login" | "registration") {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "账号或密码不正确";
+    }
+
+    if (error.status === 400) {
+      return action === "registration" ? "注册失败，请检查邮箱和密码" : "账号或密码不正确";
+    }
+
+    if (error.status === 502 || error.status === 503 || error.status === 504) {
+      return "认证服务暂时不可用，请确认后端、Ory 和数据库已启动";
+    }
+  }
+
+  return "无法连接后端服务，请确认服务已启动";
 }
 
 function loadTheme(): ThemeMode {
@@ -172,11 +173,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       }
 
       setAuthUserId(session.user.id);
-      setState((current) => {
-        const next = mergeAuthenticatedUser(current, session.user);
-        store.save(next);
-        return next;
-      });
+      persistAuthenticatedUser(session.user, setState);
     } catch {
       setAuthUserId(null);
     } finally {
@@ -247,9 +244,30 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3600);
   };
 
-  const rememberAuth = (userId: string | null) => {
-    setAuthUserId(userId);
-  };
+  const applyAuthSession = useCallback((session: AuthSession) => {
+    if (!session.authenticated) {
+      return { ok: false, message: "认证服务没有返回登录会话" } satisfies AuthResult;
+    }
+
+    setAuthUserId(session.user.id);
+    persistAuthenticatedUser(session.user, setState);
+    return { ok: true } satisfies AuthResult;
+  }, []);
+  const authenticateWithPassword = useCallback(
+    async (path: "/api/auth/login" | "/api/auth/registration", body: unknown): Promise<AuthResult> => {
+      try {
+        return applyAuthSession(
+          await apiJson<AuthSession>(path, {
+            method: "POST",
+            body: JSON.stringify(body),
+          }),
+        );
+      } catch (error) {
+        return { ok: false, message: authFailureMessage(error, path === "/api/auth/login" ? "login" : "registration") };
+      }
+    },
+    [applyAuthSession],
+  );
 
   const value = useMemo<OrfContextValue>(
     () => ({
@@ -267,7 +285,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       closeModal: () => setModal({ type: null }),
       notify,
       removeToast: (id: string) => setToasts((items) => items.filter((item) => item.id !== id)),
-      resetState: () => commit(store.reset(), "Mock 工作区已重置"),
+      resetState: () => commit(store.reset(), "本地缓存已重置"),
       createObjective: (input) => commit(store.createObjective(state, input), "目标已创建"),
       createResult: (input) => {
         commit(store.createResult(state, input), "结果已创建");
@@ -370,70 +388,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
       updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "结果信心已更新"),
       createUser: (input) => commit(store.createUser(state, input), "用户已添加"),
-      registerUser: (input) => {
-        const next = store.registerUser(state, input);
-        const user = next.users.find((item) => item.email.toLowerCase() === input.email.trim().toLowerCase());
-        if (!user) {
-          return;
-        }
-
-        rememberAuth(user.id);
-        commit({ ...next, currentUserId: user.id }, "账号已创建");
-      },
-      loginUser: (email) => {
-        const user = state.users.find((item) => item.email.toLowerCase() === email.trim().toLowerCase());
-        if (!user) {
-          return;
-        }
-
-        const next = store.loginUser(state, email);
-        rememberAuth(user.id);
-        commit(next, "已登录");
-      },
-      loginWithPassword: async (email, password) => {
-        try {
-          const session = await apiJson<AuthSession>("/api/auth/login", {
-            method: "POST",
-            body: JSON.stringify({ email, password }),
-          });
-          if (!session.authenticated) {
-            return false;
-          }
-
-          rememberAuth(session.user.id);
-          setState((current) => {
-            const next = mergeAuthenticatedUser(current, session.user);
-            store.save(next);
-            return next;
-          });
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      registerWithPassword: async (input) => {
-        try {
-          const session = await apiJson<AuthSession>("/api/auth/registration", {
-            method: "POST",
-            body: JSON.stringify(input),
-          });
-          if (!session.authenticated) {
-            return false;
-          }
-
-          rememberAuth(session.user.id);
-          setState((current) => {
-            const next = mergeAuthenticatedUser(current, session.user);
-            store.save(next);
-            return next;
-          });
-          return true;
-        } catch {
-          return false;
-        }
-      },
+      loginWithPassword: (email, password) => authenticateWithPassword("/api/auth/login", { email, password }),
+      registerWithPassword: (input) => authenticateWithPassword("/api/auth/registration", input),
       logout: () => {
-        rememberAuth(null);
+        setAuthUserId(null);
         void apiRequest("/api/auth/logout", { method: "POST" }).finally(() => {
           window.location.assign("/auth");
         });
@@ -443,7 +401,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       deleteUser: (userId) => {
         const next = store.deleteUser(state, userId);
         if (authUserId === userId && next.currentUserId !== userId) {
-          rememberAuth(next.currentUserId);
+          setAuthUserId(next.currentUserId);
         }
         commit(next, "用户已删除");
       },
@@ -455,7 +413,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "结果更新已记录"),
     }),
-    [authReady, authUserId, currentUser, isAdmin, isAuthenticated, modal, state, syncTaskMutation, theme, toasts],
+    [authReady, authUserId, authenticateWithPassword, currentUser, isAdmin, isAuthenticated, modal, state, syncTaskMutation, theme, toasts],
   );
 
   return <OrfContext.Provider value={value}>{children}</OrfContext.Provider>;

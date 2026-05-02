@@ -1110,6 +1110,21 @@ button:disabled {
   opacity: 1;
 }
 
+.orf-auth-error {
+  margin: -8px 8px -2px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 24px rgba(21, 95, 166, 0.14);
+  color: #b42318;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.45;
+  padding: 10px 14px;
+  text-align: left;
+  text-shadow: none;
+}
+
 .orf-auth-eye {
   display: inline-flex;
   width: 42px;
