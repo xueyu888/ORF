@@ -497,7 +497,10 @@ function ObjectivePanel({
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-3">
               <div className={clsx("orf-objective-title truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
-              <CommentCountBadge count={commentCountFor(commentCounts, "objective", objective.id)} />
+              <CommentCountBadge
+                count={commentCountFor(commentCounts, "objective", objective.id)}
+                onClick={() => onBlockAction("comment", { type: "objective", id: objective.id, title: objective.title })}
+              />
               <StatusChip tone={complete ? "done" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
                 {complete ? "已完成" : objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}
               </StatusChip>
@@ -640,7 +643,10 @@ function ResultBlock({
             <MetricSquareIcon tone={status} />
           </span>
           <div className={clsx("orf-result-title truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{result.title}</div>
-          <CommentCountBadge count={commentCountFor(commentCounts, "result", result.id)} />
+          <CommentCountBadge
+            count={commentCountFor(commentCounts, "result", result.id)}
+            onClick={() => onBlockAction("comment", { type: "result", id: result.id, title: result.title, objectiveId: result.objectiveId })}
+          />
         </HierarchyCell>
         <PersonValue name={result.owner} />
         <IndicatorStatusChip status={status} />
@@ -780,7 +786,19 @@ function TaskRow({
             </span>
           </span>
           <div className={clsx("orf-task-title truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
-          <CommentCountBadge count={commentCountFor(commentCounts, "task", task.id)} />
+          <CommentCountBadge
+            count={commentCountFor(commentCounts, "task", task.id)}
+            onClick={() =>
+              onBlockAction("comment", {
+                type: "task",
+                id: task.id,
+                title: task.title,
+                resultId: task.linkedResultId,
+                objectiveId: task.linkedObjectiveId,
+                hasSubtasks,
+              })
+            }
+          />
         </HierarchyCell>
         <EmptySlot />
         <EmptySlot />
@@ -895,7 +913,19 @@ function SubtaskRow({
           <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
         </span>
         <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
-        <CommentCountBadge count={commentCountFor(commentCounts, "subtask", item.id)} />
+        <CommentCountBadge
+          count={commentCountFor(commentCounts, "subtask", item.id)}
+          onClick={() =>
+            onBlockAction("comment", {
+              type: "subtask",
+              id: item.id,
+              title: item.label,
+              taskId: task.id,
+              resultId: task.linkedResultId,
+              objectiveId: task.linkedObjectiveId,
+            })
+          }
+        />
       </HierarchyCell>
       <EmptySlot />
       <EmptySlot />
@@ -1047,16 +1077,25 @@ function DisclosureAction({
   );
 }
 
-function CommentCountBadge({ count }: { count: number }) {
+function CommentCountBadge({ count, onClick }: { count: number; onClick: () => void }) {
   if (count <= 0) {
     return null;
   }
 
   return (
-    <span className="orf-comment-count-badge" title={`${count} 条评论`} aria-label={`${count} 条评论`}>
+    <button
+      type="button"
+      className="orf-comment-count-badge"
+      title={`打开 ${count} 条评论`}
+      aria-label={`打开 ${count} 条评论`}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+    >
       <MessageSquare className="h-3.5 w-3.5" />
       <span>{count}</span>
-    </span>
+    </button>
   );
 }
 
@@ -1113,22 +1152,26 @@ function CommentPanel({
       data-comment-panel="true"
       className="orf-comment-panel fixed bottom-4 right-4 z-[90] w-[382px] max-w-[calc(100vw-24px)]"
     >
-      <div className="orf-comment-panel-stack">
-        {commentEntries.map((entry) => (
-          <CommentDisplayCard
-            key={`${entry.threadId}:${entry.message.id}`}
-            entry={entry}
-            onEdit={handleEdit}
-            onDelete={onDeleteComment}
-          />
-        ))}
-        <CommentComposerCard body={body} onBodyChange={setBody} onSubmit={handleSubmit} />
+      <div className="orf-comment-box">
+        {commentEntries.length > 0 && (
+          <div className="orf-comment-message-list">
+            {commentEntries.map((entry) => (
+              <CommentMessageRow
+                key={`${entry.threadId}:${entry.message.id}`}
+                entry={entry}
+                onEdit={handleEdit}
+                onDelete={onDeleteComment}
+              />
+            ))}
+          </div>
+        )}
+        <CommentComposer body={body} editing={Boolean(editingComment)} onBodyChange={setBody} onSubmit={handleSubmit} />
       </div>
     </aside>
   );
 }
 
-function CommentDisplayCard({
+function CommentMessageRow({
   entry,
   onEdit,
   onDelete,
@@ -1148,46 +1191,43 @@ function CommentDisplayCard({
   };
 
   return (
-    <article className="orf-comment-card">
-      <div className="orf-comment-card-header">
-        <div className="orf-comment-author">
-          <PersonAvatar name={message.author} />
-          <span>{message.author}</span>
+    <article className="orf-comment-message-row">
+      <PersonAvatar name={message.author} />
+      <div className="orf-comment-message-main">
+        <div className="orf-comment-message-header">
+          <span className="orf-comment-author-name">{message.author}</span>
+          <div className="orf-comment-meta">
+            <button type="button" className="orf-comment-icon-button orf-comment-icon-button-danger" aria-label="删除评论" title="删除" onClick={deleteMessage}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+            <time>{formatCommentTime(message.createdAt)}</time>
+            <button type="button" className="orf-comment-icon-button" aria-label="编辑评论" title="编辑" onClick={() => onEdit(threadId, message)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
-        <div className="orf-comment-meta">
-          <button type="button" className="orf-comment-icon-button orf-comment-icon-button-danger" aria-label="删除评论" title="删除" onClick={deleteMessage}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-          <time>{formatCommentTime(message.createdAt)}</time>
-        </div>
-      </div>
-      <p className="orf-comment-body">{message.body}</p>
-      <div className="orf-comment-card-footer">
-        <span />
-        <button type="button" className="orf-comment-icon-button" aria-label="编辑评论" title="编辑" onClick={() => onEdit(threadId, message)}>
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
+        <p className="orf-comment-body" onDoubleClick={() => onEdit(threadId, message)}>{message.body}</p>
       </div>
     </article>
   );
 }
 
-function CommentComposerCard({
+function CommentComposer({
   body,
+  editing,
   onBodyChange,
   onSubmit,
 }: {
   body: string;
+  editing: boolean;
   onBodyChange: (body: string) => void;
   onSubmit: (event: FormEvent) => void;
 }) {
   return (
-    <form className="orf-comment-card orf-comment-card-compose" onSubmit={onSubmit}>
-      <div className="orf-comment-card-header">
-        <div className="orf-comment-author">
-          <PersonAvatar name={currentMember} />
-          <span>{currentMember}</span>
-        </div>
+    <form className="orf-comment-composer" onSubmit={onSubmit}>
+      <PersonAvatar name={currentMember} />
+      <div className="orf-comment-composer-main">
+        <span className="orf-comment-author-name">{currentMember}</span>
       </div>
       <textarea
         value={body}
@@ -1200,11 +1240,11 @@ function CommentComposerCard({
         }}
         rows={3}
         className="orf-comment-compose-field"
-        placeholder="添加评论..."
+        placeholder={editing ? "编辑评论..." : "添加评论..."}
       />
-      <div className="orf-comment-card-footer">
+      <div className="orf-comment-composer-footer">
         <span className="orf-comment-hint">Ctrl / Cmd + Enter 发送</span>
-        <button type="submit" className="orf-comment-send-button" disabled={!body.trim()} aria-label="发送评论" title="发送">
+        <button type="submit" className="orf-comment-send-button" disabled={!body.trim()} aria-label={editing ? "保存评论" : "发送评论"} title={editing ? "保存" : "发送"}>
           <Send className="h-4 w-4" />
         </button>
       </div>

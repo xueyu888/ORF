@@ -1,0 +1,2535 @@
+:root {
+  --ft-font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
+  --ft-text-primary: #fff0c3;
+  --ft-text-dark: #263a57;
+  --ft-text-deep: #433221;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 14% 15%, rgb(255 255 255 / 0.7), transparent 22%),
+    radial-gradient(circle at 84% 8%, rgb(255 255 255 / 0.4), transparent 16%),
+    linear-gradient(180deg, #efe3ca, #ddcfb3);
+  color: #2d2a26;
+}
+
+.ft-button {
+  --ft-height: 68px;
+  --ft-min-width: 236px;
+  --ft-font-size: 21px;
+  --ft-side-padding: 38px;
+  --ft-gap: 12px;
+  --ft-icon-size: 28px;
+  --ft-icon-shell-size: 36px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ft-min-width);
+  height: var(--ft-height);
+  padding: 0 var(--ft-side-padding);
+  border: 0;
+  margin: 0;
+  background: transparent;
+  color: var(--ft-text-primary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-family: var(--ft-font-family);
+  font-size: var(--ft-font-size);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.028em;
+  isolation: isolate;
+  transform: translateY(0);
+  transition:
+    transform 180ms ease,
+    filter 180ms ease,
+    opacity 180ms ease,
+    box-shadow 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ft-button--block {
+  width: 100%;
+}
+
+.ft-button--sm {
+  --ft-height: 54px;
+  --ft-min-width: 176px;
+  --ft-font-size: 17px;
+  --ft-side-padding: 28px;
+  --ft-gap: 10px;
+  --ft-icon-size: 22px;
+  --ft-icon-shell-size: 28px;
+}
+
+.ft-button--lg {
+  --ft-height: 80px;
+  --ft-min-width: 290px;
+  --ft-font-size: 27px;
+  --ft-side-padding: 50px;
+  --ft-gap: 14px;
+  --ft-icon-size: 34px;
+  --ft-icon-shell-size: 42px;
+}
+
+.ft-button__chrome {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -5;
+  pointer-events: none;
+}
+
+.ft-button__shine {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 11px;
+  height: 16px;
+  z-index: -2;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0));
+  mix-blend-mode: screen;
+  opacity: 0.84;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.ft-button__glint {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: -28%;
+  width: 22%;
+  z-index: -1;
+  background: linear-gradient(100deg, transparent 0%, rgb(255 255 255 / 0.06) 20%, rgb(255 255 255 / 0.38) 50%, rgb(255 255 255 / 0.06) 80%, transparent 100%);
+  transform: skewX(-20deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ft-button__content {
+  position: relative;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ft-gap);
+}
+
+.ft-button__content::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  right: -16px;
+  top: 50%;
+  height: 62%;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 50%, rgb(255 246 214 / 0.13), rgb(255 255 255 / 0));
+  z-index: -1;
+  pointer-events: none;
+}
+
+.ft-button__icon-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ft-icon-shell-size);
+  height: var(--ft-icon-shell-size);
+  border-radius: 999px;
+  position: relative;
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.18), transparent 45%), linear-gradient(180deg, rgb(255 241 199 / 0.16), rgb(255 241 199 / 0.04));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.28), inset 0 -1px 0 rgb(0 0 0 / 0.12);
+}
+
+.ft-button__icon-shell::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  border: 1px solid rgb(255 233 177 / 0.35);
+}
+
+.ft-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ft-icon-size);
+  height: var(--ft-icon-size);
+  color: currentColor;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 1px 0 rgb(116 73 20 / 0.72)) drop-shadow(0 2px 5px rgb(0 0 0 / 0.22));
+}
+
+.ft-button__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ft-button__label {
+  position: relative;
+  top: -0.03em;
+  text-shadow:
+    0 1px 0 rgb(121 77 24 / 0.62),
+    0 2px 0 rgb(86 51 13 / 0.16),
+    0 3px 9px rgb(0 0 0 / 0.24),
+    0 0 12px rgb(255 223 145 / 0.12);
+}
+
+.ft-button--secondary,
+.ft-button--ghost,
+.ft-button--subtle {
+  color: var(--ft-text-dark);
+}
+
+.ft-button--secondary .ft-button__label,
+.ft-button--ghost .ft-button__label,
+.ft-button--subtle .ft-button__label {
+  text-shadow: 0 1px 0 rgb(255 255 255 / 0.74), 0 2px 6px rgb(76 51 17 / 0.10);
+}
+
+.ft-button--secondary .ft-button__icon,
+.ft-button--ghost .ft-button__icon,
+.ft-button--subtle .ft-button__icon {
+  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.58)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.05));
+}
+
+.ft-button--secondary .ft-button__icon-shell,
+.ft-button--ghost .ft-button__icon-shell,
+.ft-button--subtle .ft-button__icon-shell {
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.22), transparent 45%), linear-gradient(180deg, rgb(214 182 119 / 0.08), rgb(255 255 255 / 0.06));
+}
+
+.ft-button--subtle {
+  color: var(--ft-text-deep);
+}
+
+.ft-button--danger,
+.ft-button--success,
+.ft-button--primary {
+  color: var(--ft-text-primary);
+}
+
+.ft-button:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.006);
+  filter: brightness(1.07) saturate(1.04);
+}
+
+.ft-button:hover:not(:disabled) .ft-button__shine {
+  opacity: 0.98;
+}
+
+.ft-button:hover:not(:disabled) .ft-button__glint {
+  opacity: 1;
+  animation: ft-glint 900ms cubic-bezier(.2,.5,.2,1) 1;
+}
+
+.ft-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.996);
+  filter: brightness(0.96) saturate(0.98);
+}
+
+.ft-button:focus-visible {
+  outline: 3px solid rgb(121 188 255 / 0.92);
+  outline-offset: 4px;
+  border-radius: 20px;
+}
+
+.ft-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  filter: grayscale(0.36) saturate(0.7);
+}
+
+.ft-button__spinner {
+  width: 1.08em;
+  height: 1.08em;
+  border-radius: 999px;
+  border: 2.2px solid rgb(255 255 255 / 0.34);
+  border-top-color: currentColor;
+  box-shadow: 0 0 10px rgb(255 243 205 / 0.16);
+  animation: ft-spin 0.8s linear infinite;
+}
+
+@keyframes ft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes ft-glint {
+  0% {
+    left: -28%;
+    opacity: 0;
+  }
+  16% {
+    opacity: 0.2;
+  }
+  45% {
+    opacity: 0.9;
+  }
+  100% {
+    left: 108%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-button {
+    transition: none;
+  }
+
+  .ft-button__spinner,
+  .ft-button:hover:not(:disabled) .ft-button__glint {
+    animation: none;
+  }
+}
+
+.ft-icon-button {
+  --ft-ib-size: 54px;
+  position: relative;
+  width: var(--ft-ib-size);
+  height: var(--ft-ib-size);
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease, opacity 180ms ease;
+}
+
+.ft-icon-button--sm { --ft-ib-size: 44px; }
+.ft-icon-button--md { --ft-ib-size: 54px; }
+.ft-icon-button--lg { --ft-ib-size: 66px; }
+
+.ft-icon-button__frame,
+.ft-icon-button__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ft-icon-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b8, #d4a140 46%, #7a4d19) border-box,
+    linear-gradient(180deg, rgba(255,255,255,0.72), rgba(255,255,255,0.08)) padding-box;
+  border: 2px solid transparent;
+  box-shadow:
+    0 8px 16px rgba(46, 27, 8, 0.16),
+    inset 0 1px 0 rgba(255,255,255,0.48),
+    inset 0 -2px 0 rgba(0,0,0,0.14);
+}
+
+.ft-icon-button--primary .ft-icon-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b8, #d4a140 46%, #7a4d19) border-box,
+    linear-gradient(180deg, #699fe7, #1d62b1 50%, #0a2752) padding-box;
+}
+
+.ft-icon-button--secondary .ft-icon-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b8, #d4a140 46%, #7a4d19) border-box,
+    linear-gradient(180deg, #fff9ee, #f2e5cb 50%, #e4d3af) padding-box;
+}
+
+.ft-icon-button--ghost .ft-icon-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b8, #d4a140 46%, #7a4d19) border-box,
+    linear-gradient(180deg, #fffdfc, #f6eee2 50%, #ebe2d7) padding-box;
+}
+
+.ft-icon-button--danger .ft-icon-button__frame {
+  background:
+    linear-gradient(180deg, #fdebae, #d3a039 46%, #7f4a18) border-box,
+    linear-gradient(180deg, #ed8168, #b73b35 50%, #6c211d) padding-box;
+}
+
+.ft-icon-button--success .ft-icon-button__frame {
+  background:
+    linear-gradient(180deg, #fdebae, #d3a039 46%, #7f4a18) border-box,
+    linear-gradient(180deg, #78dace, #2d9e98 50%, #185854) padding-box;
+}
+
+.ft-icon-button__frame::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 244, 214, 0.5);
+}
+
+.ft-icon-button__shine {
+  top: 5px;
+  left: 12%;
+  right: 12%;
+  height: 14px;
+  inset-inline: 12%;
+  inset-block-start: 5px;
+  inset-block-end: auto;
+  background: linear-gradient(180deg, rgba(255,255,255,0.32), rgba(255,255,255,0));
+}
+
+.ft-icon-button__glyph {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: #fff0c4;
+  filter: drop-shadow(0 1px 0 rgba(104, 66, 20, 0.6)) drop-shadow(0 2px 5px rgba(0,0,0,0.22));
+}
+
+.ft-icon-button--secondary .ft-icon-button__glyph,
+.ft-icon-button--ghost .ft-icon-button__glyph {
+  color: #2c4162;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,0.56));
+}
+
+.ft-icon-button__glyph svg { width: 52%; height: 52%; }
+.ft-icon-button:hover:not(:disabled) { transform: translateY(-1px) scale(1.02); filter: brightness(1.05); }
+.ft-icon-button:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
+.ft-icon-button.is-active { filter: brightness(1.06) saturate(1.06); }
+.ft-icon-button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.ft-toolbar-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 16px;
+  font-family: var(--ft-font-family);
+  font-size: 15px;
+  font-weight: 700;
+  color: #334766;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-toolbar-button__frame,
+.ft-toolbar-button__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ft-toolbar-button__frame {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, #fff0b6, #d6a241 46%, #82551e) border-box,
+    linear-gradient(180deg, #fffdfb, #f6eee2 52%, #ede3d2) padding-box;
+  box-shadow: 0 6px 14px rgba(62,40,12,0.12), inset 0 1px 0 rgba(255,255,255,0.54);
+}
+
+.ft-toolbar-button--secondary .ft-toolbar-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b6, #d6a241 46%, #82551e) border-box,
+    linear-gradient(180deg, #fff9ed, #f2e5ca 52%, #e5d4b1) padding-box;
+}
+
+.ft-toolbar-button--subtle .ft-toolbar-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b6, #d6a241 46%, #82551e) border-box,
+    linear-gradient(180deg, #fff8f1, #f1e6d1 52%, #e9dcc1) padding-box;
+}
+
+.ft-toolbar-button__shine {
+  top: 4px;
+  left: 10%;
+  right: 10%;
+  height: 10px;
+  inset-inline: 10%;
+  inset-block-start: 4px;
+  inset-block-end: auto;
+  background: linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0));
+}
+
+.ft-toolbar-button__content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ft-toolbar-button__icon { width: 18px; height: 18px; display: inline-flex; }
+.ft-toolbar-button__icon svg { width: 100%; height: 100%; }
+.ft-toolbar-button__label { text-shadow: 0 1px 0 rgba(255,255,255,0.65); }
+.ft-toolbar-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
+.ft-toolbar-button:active:not(:disabled) { transform: translateY(1px); }
+.ft-toolbar-button.is-active { filter: brightness(1.05); }
+
+.ft-segmented {
+  --ft-seg-height: 54px;
+  position: relative;
+  display: inline-flex;
+  padding: 6px;
+  border-radius: 20px;
+  isolation: isolate;
+  gap: 6px;
+}
+
+.ft-segmented--sm { --ft-seg-height: 46px; }
+.ft-segmented__frame {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, #fff0b6, #d7a441 46%, #82541d) border-box,
+    linear-gradient(180deg, #fff9ee, #f2e7ce 52%, #e7d7b9) padding-box;
+  box-shadow: 0 8px 18px rgba(58,36,11,0.12), inset 0 1px 0 rgba(255,255,255,0.56);
+}
+
+.ft-segmented__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 112px;
+  height: calc(var(--ft-seg-height) - 12px);
+  padding: 0 18px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: #40516d;
+  font-family: var(--ft-font-family);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 1;
+  transition: transform 180ms ease, filter 180ms ease, color 180ms ease;
+}
+
+.ft-segmented__item-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255,255,255,0.42), rgba(255,255,255,0.08));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.34);
+  opacity: 0.76;
+}
+
+.ft-segmented__item.is-active .ft-segmented__item-bg {
+  background:
+    linear-gradient(180deg, #699fe7, #1d62b1 52%, #0a2752);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.42),
+    0 4px 10px rgba(39, 66, 118, 0.24);
+}
+
+.ft-segmented__item.is-active {
+  color: #fff0c4;
+}
+
+.ft-segmented__label,
+.ft-segmented__icon { position: relative; z-index: 1; }
+.ft-segmented__icon { width: 16px; height: 16px; display: inline-flex; }
+.ft-segmented__icon svg { width: 100%; height: 100%; }
+.ft-segmented__item:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.03); }
+.ft-segmented__item:active:not(:disabled) { transform: translateY(1px); }
+.ft-segmented__item:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Pro Plus: richer icon rendering */
+.ft-button__icon svg,
+.ft-icon-button__glyph svg,
+.ft-toolbar-button__icon svg,
+.ft-segmented__icon svg,
+.ft-split-button__icon svg,
+.ft-split-button__menu-icon svg,
+.ft-fab__icon svg,
+.ft-tab-button__icon svg,
+.ft-toggle-button__icon svg {
+  overflow: visible;
+  shape-rendering: geometricPrecision;
+}
+
+.ft-button__icon-shell {
+  overflow: visible;
+}
+
+.ft-button__icon svg {
+  width: 112%;
+  height: 112%;
+}
+
+.ft-icon-button__glyph svg {
+  width: 76%;
+  height: 76%;
+}
+
+.ft-toolbar-button__icon svg,
+.ft-segmented__icon svg,
+.ft-tab-button__icon svg,
+.ft-toggle-button__icon svg {
+  width: 150%;
+  height: 150%;
+  margin: -25%;
+}
+
+/* Button Family Pro Plus: SplitButton */
+.ft-split-button {
+  --ft-split-height: 68px;
+  --ft-split-font: 21px;
+  --ft-split-main-width: 212px;
+  --ft-split-menu-width: 64px;
+  position: relative;
+  display: inline-flex;
+  height: var(--ft-split-height);
+  min-width: calc(var(--ft-split-main-width) + var(--ft-split-menu-width));
+  border-radius: 21px;
+  isolation: isolate;
+  overflow: visible;
+  color: var(--ft-text-primary);
+  font-family: var(--ft-font-family);
+}
+
+.ft-split-button--sm { --ft-split-height: 54px; --ft-split-font: 17px; --ft-split-main-width: 158px; --ft-split-menu-width: 54px; }
+.ft-split-button--lg { --ft-split-height: 80px; --ft-split-font: 27px; --ft-split-main-width: 260px; --ft-split-menu-width: 76px; }
+
+.ft-split-button__frame,
+.ft-split-button__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ft-split-button__frame {
+  border: 3px solid transparent;
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 48%, #6c4214) border-box,
+    linear-gradient(180deg, #679deb, #2164b3 48%, #0a2854) padding-box;
+  box-shadow:
+    0 12px 24px rgba(34, 18, 6, 0.24),
+    inset 0 1px 0 rgba(255,255,255,0.5),
+    inset 0 -3px 0 rgba(0,0,0,0.18);
+}
+
+.ft-split-button--secondary .ft-split-button__frame {
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 48%, #6c4214) border-box,
+    linear-gradient(180deg, #fff9ed, #f4e7cb 48%, #e4d3ae) padding-box;
+}
+
+.ft-split-button--danger .ft-split-button__frame {
+  background:
+    linear-gradient(180deg, #fdedb4, #d8a13b 48%, #7e4818) border-box,
+    linear-gradient(180deg, #ee856b, #b83a34 48%, #6b1f1c) padding-box;
+}
+
+.ft-split-button--success .ft-split-button__frame {
+  background:
+    linear-gradient(180deg, #fdecb3, #d6a43f 48%, #83561f) border-box,
+    linear-gradient(180deg, #79dacf, #2e9f99 48%, #195754) padding-box;
+}
+
+.ft-split-button__frame::before {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 244, 210, 0.48);
+  box-shadow: inset 0 12px 18px rgba(255,255,255,0.12), inset 0 -9px 18px rgba(0,0,0,0.16);
+}
+
+.ft-split-button__shine {
+  inset: 8px 18px auto 18px;
+  height: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.3), rgba(255,255,255,0));
+  mix-blend-mode: screen;
+}
+
+.ft-split-button__action,
+.ft-split-button__menu {
+  position: relative;
+  z-index: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  height: 100%;
+}
+
+.ft-split-button__action {
+  width: var(--ft-split-main-width);
+  padding-inline: 26px 18px;
+}
+
+.ft-split-button__menu {
+  width: var(--ft-split-menu-width);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ft-split-button__content {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  font-size: var(--ft-split-font);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-shadow: 0 1px 0 rgba(112, 72, 22, 0.65), 0 3px 8px rgba(0,0,0,0.22);
+}
+
+.ft-split-button--secondary .ft-split-button__content,
+.ft-split-button--secondary .ft-split-button__menu {
+  color: #263a57;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.72), 0 2px 6px rgba(76,51,17,0.1);
+}
+
+.ft-split-button__icon,
+.ft-split-button__menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+}
+
+.ft-split-button__menu-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ft-split-button__divider {
+  position: relative;
+  z-index: 2;
+  width: 1px;
+  margin-block: 13px;
+  background: linear-gradient(180deg, transparent, rgba(255,239,189,0.75), rgba(86,45,9,0.32), transparent);
+}
+
+.ft-split-button:hover:not(:has(button:disabled)) { filter: brightness(1.06) saturate(1.04); transform: translateY(-1px); }
+.ft-split-button button:active:not(:disabled) { transform: translateY(1px); }
+.ft-split-button button:disabled { cursor: not-allowed; opacity: 0.58; }
+.ft-split-button__spinner { width: 1em; height: 1em; border: 2px solid rgba(255,255,255,.35); border-top-color: currentColor; border-radius: 50%; animation: ft-spin .8s linear infinite; }
+
+/* Button Family Pro Plus: FloatingActionButton */
+.ft-fab {
+  --ft-fab-size: 70px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: var(--ft-fab-size);
+  height: var(--ft-fab-size);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ft-text-primary);
+  cursor: pointer;
+  isolation: isolate;
+  font-family: var(--ft-font-family);
+  font-weight: 800;
+  letter-spacing: .03em;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-fab--lg { --ft-fab-size: 84px; }
+.ft-fab--extended { width: auto; min-width: 176px; padding-inline: 24px 30px; border-radius: 24px; }
+
+.ft-fab__frame,
+.ft-fab__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ft-fab__frame {
+  border: 3px solid transparent;
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 48%, #6c4214) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.28), transparent 32%),
+    linear-gradient(180deg, #679deb, #2164b3 48%, #0a2854) padding-box;
+  box-shadow: 0 14px 30px rgba(33,18,6,.25), inset 0 1px 0 rgba(255,255,255,.5), inset 0 -5px 12px rgba(0,0,0,.18);
+}
+
+.ft-fab--success .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fdecb3, #d6a43f 48%, #83561f) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.28), transparent 32%),
+    linear-gradient(180deg, #79dacf, #2e9f99 48%, #195754) padding-box;
+}
+
+.ft-fab--danger .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fdedb4, #d8a13b 48%, #7e4818) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.28), transparent 32%),
+    linear-gradient(180deg, #ee856b, #b83a34 48%, #6b1f1c) padding-box;
+}
+
+.ft-fab--secondary .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 48%, #6c4214) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.36), transparent 32%),
+    linear-gradient(180deg, #fff9ed, #f4e7cb 48%, #e4d3ae) padding-box;
+}
+
+.ft-fab__frame::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: inherit;
+  border: 1px solid rgba(255,245,213,.48);
+}
+
+.ft-fab__shine { inset: 8px 20% auto; height: 18px; background: linear-gradient(180deg, rgba(255,255,255,.34), transparent); }
+.ft-fab__icon { position: relative; z-index: 1; display: inline-flex; width: 42px; height: 42px; }
+.ft-fab__icon svg { width: 100%; height: 100%; }
+.ft-fab__label { position: relative; z-index: 1; font-size: 19px; text-shadow: 0 1px 0 rgba(112,72,22,.65), 0 3px 8px rgba(0,0,0,.22); }
+.ft-fab--secondary { color: #263a57; }
+.ft-fab--secondary .ft-fab__label { text-shadow: 0 1px 0 rgba(255,255,255,.72), 0 2px 6px rgba(76,51,17,.1); }
+.ft-fab:hover:not(:disabled) { transform: translateY(-2px) scale(1.02); filter: brightness(1.07) saturate(1.04); }
+.ft-fab:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.ft-fab:disabled { opacity: .58; cursor: not-allowed; }
+
+/* Button Family Pro Plus: TabButton and ToggleButton */
+.ft-tab-button,
+.ft-toggle-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 17px;
+  background: transparent;
+  color: #334766;
+  cursor: pointer;
+  isolation: isolate;
+  font-family: var(--ft-font-family);
+  font-weight: 800;
+  letter-spacing: .02em;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-tab-button__frame,
+.ft-toggle-button__frame {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, #fff0b6, #d6a241 46%, #82551e) border-box,
+    linear-gradient(180deg, #fffdfb, #f6eee2 52%, #ede3d2) padding-box;
+  box-shadow: 0 6px 14px rgba(62,40,12,.12), inset 0 1px 0 rgba(255,255,255,.54);
+}
+
+.ft-tab-button.is-active .ft-tab-button__frame,
+.ft-toggle-button.is-pressed .ft-toggle-button__frame,
+.ft-toggle-button--primary.is-pressed .ft-toggle-button__frame {
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 48%, #6c4214) border-box,
+    linear-gradient(180deg, #679deb, #2164b3 48%, #0a2854) padding-box;
+  box-shadow: 0 8px 18px rgba(35,48,102,.2), inset 0 1px 0 rgba(255,255,255,.46);
+}
+
+.ft-toggle-button--success.is-pressed .ft-toggle-button__frame {
+  background:
+    linear-gradient(180deg, #fdecb3, #d6a43f 48%, #83561f) border-box,
+    linear-gradient(180deg, #79dacf, #2e9f99 48%, #195754) padding-box;
+}
+
+.ft-tab-button__content,
+.ft-toggle-button__content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ft-tab-button__icon,
+.ft-toggle-button__icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+}
+
+.ft-tab-button.is-active,
+.ft-toggle-button.is-pressed { color: var(--ft-text-primary); }
+.ft-tab-button__badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(180deg, #fff0b6, #c98a29); color: #51320f; font-size: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
+.ft-tab-button:hover:not(:disabled), .ft-toggle-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
+.ft-tab-button:active:not(:disabled), .ft-toggle-button:active:not(:disabled) { transform: translateY(1px); }
+.ft-tab-button:disabled, .ft-toggle-button:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Pro Plus illustrated icon system */
+.ft-ornate-icon {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 1px 0 rgba(116, 72, 18, 0.45)) drop-shadow(0 2px 4px rgba(0, 0, 0, 0.18));
+}
+
+.ft-button__icon .ft-ornate-icon,
+.ft-icon-button__glyph .ft-ornate-icon,
+.ft-toolbar-button__icon .ft-ornate-icon,
+.ft-segmented__icon .ft-ornate-icon,
+.ft-split-button__icon .ft-ornate-icon,
+.ft-toggle-button__icon .ft-ornate-icon,
+.ft-tab-button__icon .ft-ornate-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.ft-button__icon-shell:has(.ft-ornate-icon),
+.ft-icon-button:has(.ft-ornate-icon) .ft-icon-button__frame {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.34),
+    inset 0 -2px 0 rgb(0 0 0 / 0.16),
+    0 0 14px rgb(255 222 140 / 0.12);
+}
+
+/* Button Family Pro Plus */
+.ft-split-button {
+  --split-bg-top: #679deb;
+  --split-bg-mid: #2164b3;
+  --split-bg-bottom: #0a2854;
+  --split-fg: #fff0c3;
+  --split-height: 64px;
+  position: relative;
+  display: inline-flex;
+  height: var(--split-height);
+  isolation: isolate;
+  filter: drop-shadow(0 8px 16px rgba(52, 31, 9, 0.16));
+}
+
+.ft-split-button--secondary {
+  --split-bg-top: #fff9ed;
+  --split-bg-mid: #f4e7cb;
+  --split-bg-bottom: #e4d3ae;
+  --split-fg: #263a57;
+}
+
+.ft-split-button--danger {
+  --split-bg-top: #ee856b;
+  --split-bg-mid: #b83a34;
+  --split-bg-bottom: #6b1f1c;
+  --split-fg: #fff0c3;
+}
+
+.ft-split-button--success {
+  --split-bg-top: #79dacf;
+  --split-bg-mid: #2e9f99;
+  --split-bg-bottom: #195754;
+  --split-fg: #fff0c3;
+}
+
+.ft-split-button__main,
+.ft-split-button__menu {
+  position: relative;
+  border: 0;
+  height: 100%;
+  padding: 0;
+  color: var(--split-fg);
+  background: transparent;
+  font-family: var(--ft-font-family);
+  font-weight: 700;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-split-button__main {
+  min-width: 210px;
+  padding-inline: 32px 22px;
+  border-radius: 20px 6px 6px 20px;
+}
+
+.ft-split-button__menu {
+  width: 66px;
+  margin-left: -2px;
+  border-radius: 6px 20px 20px 6px;
+}
+
+.ft-split-button__frame {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 3px solid transparent;
+  border-radius: inherit;
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 52%, #6c4214) border-box,
+    radial-gradient(circle at 50% 18%, rgba(255,255,255,0.32), transparent 42%) padding-box,
+    linear-gradient(180deg, var(--split-bg-top), var(--split-bg-mid) 48%, var(--split-bg-bottom)) padding-box;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -7px 12px rgba(0,0,0,0.18);
+}
+
+.ft-split-button__frame::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 242, 195, 0.58);
+}
+
+.ft-split-button__content,
+.ft-split-button__menu-icon {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.ft-split-button__icon {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+}
+
+.ft-split-button__menu-icon {
+  width: 30px;
+  height: 30px;
+  transform: rotate(90deg);
+}
+
+.ft-split-button__main:hover,
+.ft-split-button__menu:hover {
+  filter: brightness(1.06) saturate(1.05);
+}
+
+.ft-split-button__main:active,
+.ft-split-button__menu:active {
+  transform: translateY(1px);
+}
+
+.ft-fab {
+  --fab-size: 72px;
+  --fab-bg-top: #679deb;
+  --fab-bg-mid: #2164b3;
+  --fab-bg-bottom: #0a2854;
+  position: relative;
+  width: var(--fab-size);
+  height: var(--fab-size);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-fab--md { --fab-size: 62px; }
+.ft-fab--lg { --fab-size: 76px; }
+.ft-fab--secondary { --fab-bg-top: #fff9ed; --fab-bg-mid: #f4e7cb; --fab-bg-bottom: #e4d3ae; }
+.ft-fab--danger { --fab-bg-top: #ee856b; --fab-bg-mid: #b83a34; --fab-bg-bottom: #6b1f1c; }
+.ft-fab--success { --fab-bg-top: #79dacf; --fab-bg-mid: #2e9f99; --fab-bg-bottom: #195754; }
+
+.ft-fab__aura,
+.ft-fab__frame,
+.ft-fab__ornament {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ft-fab__aura {
+  inset: -8px;
+  background: radial-gradient(circle, rgba(255, 224, 139, 0.28), transparent 68%);
+  opacity: 0.72;
+}
+
+.ft-fab__frame {
+  border: 4px solid transparent;
+  background:
+    linear-gradient(180deg, #fff7d7, #d6a241 50%, #764814) border-box,
+    radial-gradient(circle at 50% 18%, rgba(255,255,255,0.42), transparent 44%) padding-box,
+    linear-gradient(180deg, var(--fab-bg-top), var(--fab-bg-mid) 50%, var(--fab-bg-bottom)) padding-box;
+  box-shadow:
+    0 12px 22px rgba(44, 28, 8, 0.20),
+    inset 0 1px 0 rgba(255,255,255,0.52),
+    inset 0 -8px 14px rgba(0,0,0,0.18);
+}
+
+.ft-fab__ornament {
+  inset: 9px;
+  border: 1px solid rgba(255, 241, 190, 0.56);
+}
+
+.ft-fab__ornament::before,
+.ft-fab__ornament::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  border: 2px solid #f2c86c;
+  background: rgba(255,255,255,0.18);
+}
+
+.ft-fab__ornament::before { top: -6px; }
+.ft-fab__ornament::after { bottom: -6px; }
+
+.ft-fab__icon {
+  position: relative;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: auto;
+}
+
+.ft-fab__icon .ft-ornate-icon { width: 100%; height: 100%; }
+.ft-fab:hover:not(:disabled) { transform: translateY(-2px) scale(1.035); filter: brightness(1.07); }
+.ft-fab:active:not(:disabled) { transform: translateY(1px) scale(0.99); }
+
+.ft-toggle-button,
+.ft-tab-button {
+  position: relative;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 17px;
+  background: transparent;
+  color: #314765;
+  font-family: var(--ft-font-family);
+  font-weight: 700;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease, color 180ms ease;
+}
+
+.ft-toggle-button__frame,
+.ft-tab-button__frame {
+  position: absolute;
+  inset: 0;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, #fff2ba, #d5a03c 48%, #87581e) border-box,
+    linear-gradient(180deg, #fffdfb, #f5ecdf 52%, #eadcc6) padding-box;
+  box-shadow: 0 6px 14px rgba(58, 35, 10, 0.12), inset 0 1px 0 rgba(255,255,255,0.55);
+}
+
+.ft-toggle-button.is-pressed,
+.ft-tab-button.is-active {
+  color: #fff0c3;
+}
+
+.ft-toggle-button.is-pressed .ft-toggle-button__frame,
+.ft-tab-button.is-active .ft-tab-button__frame {
+  background:
+    linear-gradient(180deg, #fff2ba, #d5a03c 48%, #87581e) border-box,
+    linear-gradient(180deg, #679deb, #2164b3 52%, #0a2854) padding-box;
+  box-shadow: 0 7px 16px rgba(39, 66, 118, 0.22), inset 0 1px 0 rgba(255,255,255,0.46);
+}
+
+.ft-toggle-button__content,
+.ft-tab-button__content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.ft-toggle-button__icon,
+.ft-tab-button__icon {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+}
+
+.ft-toggle-button:hover:not(:disabled),
+.ft-tab-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+
+.ft-toggle-button:active:not(:disabled),
+.ft-tab-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Pro Plus art pass: illustrated icons and additional button family */
+.ft-rich-icon,
+.ft-ornate-icon {
+  overflow: visible;
+  display: block;
+  shape-rendering: geometricPrecision;
+}
+
+.ft-button__icon .ft-rich-icon,
+.ft-button__icon .ft-ornate-icon,
+.ft-toolbar-button__icon .ft-rich-icon,
+.ft-toolbar-button__icon .ft-ornate-icon,
+.ft-segmented__icon .ft-rich-icon,
+.ft-segmented__icon .ft-ornate-icon,
+.ft-split-button__icon .ft-rich-icon,
+.ft-toggle-button__icon .ft-rich-icon,
+.ft-tab-button__icon .ft-rich-icon,
+.ft-fab__icon .ft-rich-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.ft-button__icon-shell {
+  width: calc(var(--ft-icon-shell-size) * 1.12);
+  height: calc(var(--ft-icon-shell-size) * 1.12);
+  background:
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,0.34), transparent 38%),
+    radial-gradient(circle at 50% 70%, rgba(255,217,111,0.18), transparent 54%),
+    linear-gradient(180deg, rgba(255,241,194,0.22), rgba(107,62,15,0.13));
+  box-shadow:
+    0 2px 7px rgba(38, 22, 5, 0.2),
+    inset 0 1px 0 rgba(255,255,255,0.38),
+    inset 0 -2px 0 rgba(73,40,11,0.18);
+}
+
+.ft-button__icon-shell::before {
+  inset: 1px;
+  border: 1px solid rgba(255, 235, 178, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(112, 72, 24, 0.22);
+}
+
+.ft-button__icon {
+  width: calc(var(--ft-icon-size) * 1.18);
+  height: calc(var(--ft-icon-size) * 1.18);
+}
+
+.ft-icon-button__glyph .ft-rich-icon,
+.ft-icon-button__glyph .ft-ornate-icon {
+  width: 76%;
+  height: 76%;
+}
+
+.ft-toolbar-button__icon,
+.ft-segmented__icon {
+  width: 22px;
+  height: 22px;
+}
+
+.ft-tab-button,
+.ft-toggle-button,
+.ft-split-button,
+.ft-fab {
+  font-family: var(--ft-font-family);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* SplitButton */
+.ft-split-button {
+  --split-h: 64px;
+  --split-min: 248px;
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  min-width: var(--split-min);
+  height: var(--split-h);
+  border-radius: 20px;
+  isolation: isolate;
+  color: #fff0c3;
+}
+.ft-split-button--sm { --split-h: 52px; --split-min: 196px; }
+.ft-split-button--lg { --split-h: 76px; --split-min: 292px; }
+.ft-split-button__frame,
+.ft-split-button__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.ft-split-button__frame {
+  border: 2.5px solid transparent;
+  background:
+    linear-gradient(180deg, #fff4bd, #d6a241 48%, #784816) border-box,
+    linear-gradient(180deg, #6299e7, #1d61b0 48%, #0a2752) padding-box;
+  box-shadow: 0 12px 22px rgba(39, 29, 12, 0.18), inset 0 1px 0 rgba(255,255,255,0.42), inset 0 -2px 0 rgba(0,0,0,0.18);
+}
+.ft-split-button--secondary .ft-split-button__frame {
+  background:
+    linear-gradient(180deg, #fff4bd, #d6a241 48%, #784816) border-box,
+    linear-gradient(180deg, #fff9ed, #f1e3c7 50%, #e3d1ac) padding-box;
+}
+.ft-split-button--danger .ft-split-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b3, #d19d38 48%, #784816) border-box,
+    linear-gradient(180deg, #ed8068, #b63b35 50%, #6d211d) padding-box;
+}
+.ft-split-button--success .ft-split-button__frame {
+  background:
+    linear-gradient(180deg, #fff0b3, #d19d38 48%, #784816) border-box,
+    linear-gradient(180deg, #78dace, #2d9e98 50%, #185854) padding-box;
+}
+.ft-split-button--secondary { color: #2e405b; }
+.ft-split-button__shine {
+  top: 8px;
+  left: 9%;
+  right: 9%;
+  height: 18px;
+  inset-block-end: auto;
+  background: linear-gradient(180deg, rgba(255,255,255,0.32), transparent);
+}
+.ft-split-button__action,
+.ft-split-button__menu {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+.ft-split-button__action {
+  flex: 1;
+  padding: 0 22px 0 26px;
+  border-radius: 18px 0 0 18px;
+}
+.ft-split-button__menu {
+  width: 58px;
+  border-radius: 0 18px 18px 0;
+}
+.ft-split-button__content,
+.ft-split-button__menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: .03em;
+  text-shadow: 0 1px 0 rgba(111,70,22,.62), 0 2px 6px rgba(0,0,0,.22);
+}
+.ft-split-button--secondary .ft-split-button__content,
+.ft-split-button--secondary .ft-split-button__menu-icon { text-shadow: 0 1px 0 rgba(255,255,255,.72); }
+.ft-split-button__icon,
+.ft-split-button__menu-icon { width: 32px; height: 32px; }
+.ft-split-button__menu-icon svg { width: 100%; height: 100%; }
+.ft-split-button__divider {
+  width: 2px;
+  height: 62%;
+  align-self: center;
+  background: linear-gradient(180deg, transparent, rgba(255,240,184,.52), rgba(82,44,10,.22), transparent);
+  position: relative;
+  z-index: 2;
+}
+.ft-split-button:hover:not(:has(button:disabled)) { transform: translateY(-1px); filter: brightness(1.05); }
+.ft-split-button__action:disabled,
+.ft-split-button__menu:disabled { opacity: .56; cursor: not-allowed; }
+.ft-split-button__spinner { width: 1.05em; height: 1.05em; border: 2px solid rgba(255,255,255,.34); border-top-color: currentColor; border-radius: 999px; animation: ft-spin .8s linear infinite; }
+
+/* Floating Action Button */
+.ft-fab {
+  --fab-size: 64px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-width: var(--fab-size);
+  height: var(--fab-size);
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff0c3;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+.ft-fab--lg { --fab-size: 76px; }
+.ft-fab--extended { padding: 0 26px; min-width: 172px; border-radius: 24px; }
+.ft-fab__frame,
+.ft-fab__shine { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.ft-fab__frame {
+  border: 3px solid transparent;
+  background:
+    radial-gradient(circle at 35% 18%, rgba(255,255,255,.36), transparent 28%) padding-box,
+    linear-gradient(180deg, #fff2bb, #d5a23f 48%, #7b4b18) border-box,
+    linear-gradient(180deg, #5f99e7, #1f62b0 50%, #0b2854) padding-box;
+  background-clip: padding-box, border-box, padding-box;
+  box-shadow: 0 15px 24px rgba(44, 32, 12, .2), inset 0 1px 0 rgba(255,255,255,.46), inset 0 -3px 0 rgba(0,0,0,.2);
+}
+.ft-fab--secondary .ft-fab__frame { background: linear-gradient(180deg, #fff2bb, #d5a23f 48%, #7b4b18) border-box, linear-gradient(180deg, #fff9ed, #efe1c6 52%, #e3d1ad) padding-box; }
+.ft-fab--success .ft-fab__frame { background: linear-gradient(180deg, #fff2bb, #d5a23f 48%, #7b4b18) border-box, linear-gradient(180deg, #78dace, #2d9e98 52%, #185854) padding-box; }
+.ft-fab--danger .ft-fab__frame { background: linear-gradient(180deg, #fff2bb, #d5a23f 48%, #7b4b18) border-box, linear-gradient(180deg, #ee8068, #b63b35 52%, #6d211d) padding-box; }
+.ft-fab__shine { inset: 8px 18% auto; height: 18px; background: linear-gradient(180deg, rgba(255,255,255,.36), transparent); }
+.ft-fab__icon { position: relative; z-index: 1; display: inline-flex; width: 38px; height: 38px; }
+.ft-fab__icon svg { width: 100%; height: 100%; }
+.ft-fab__label { position: relative; z-index: 1; font-weight: 700; font-size: 20px; text-shadow: 0 1px 0 rgba(111,70,22,.62), 0 2px 6px rgba(0,0,0,.22); }
+.ft-fab--secondary { color: #2e405b; }
+.ft-fab:hover:not(:disabled) { transform: translateY(-2px) scale(1.02); filter: brightness(1.06); }
+.ft-fab:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.ft-fab:disabled { opacity: .6; cursor: not-allowed; }
+
+/* Toggle + Tab buttons */
+.ft-toggle-button,
+.ft-tab-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: #314766;
+  cursor: pointer;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+.ft-toggle-button__frame,
+.ft-tab-button__frame { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; border: 2px solid transparent; background: linear-gradient(180deg, #fff0b6, #d7a441 48%, #82541d) border-box, linear-gradient(180deg, #fffdfb, #f6eee2 52%, #ede3d2) padding-box; box-shadow: 0 6px 14px rgba(62,40,12,.12), inset 0 1px 0 rgba(255,255,255,.54); }
+.ft-toggle-button.is-pressed .ft-toggle-button__frame,
+.ft-tab-button.is-active .ft-tab-button__frame { background: linear-gradient(180deg, #fff0b6, #d7a441 48%, #82541d) border-box, linear-gradient(180deg, #699fe7, #1d62b1 52%, #0a2752) padding-box; box-shadow: 0 8px 18px rgba(39,66,118,.2), inset 0 1px 0 rgba(255,255,255,.42); }
+.ft-toggle-button.is-pressed,
+.ft-tab-button.is-active { color: #fff0c4; }
+.ft-toggle-button__content,
+.ft-tab-button__content { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; }
+.ft-toggle-button__icon,
+.ft-tab-button__icon { width: 22px; height: 22px; display: inline-flex; }
+.ft-toggle-button__icon svg,
+.ft-tab-button__icon svg { width: 100%; height: 100%; }
+.ft-tab-button__badge { min-width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; padding: 0 7px; border-radius: 999px; background: rgba(255,241,190,.28); border: 1px solid rgba(255,235,178,.42); font-size: 12px; }
+.ft-toggle-button:hover:not(:disabled), .ft-tab-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
+.ft-toggle-button:active:not(:disabled), .ft-tab-button:active:not(:disabled) { transform: translateY(1px); }
+
+/* Button Family Pro Plus · ornate icon upgrade */
+.ft-button {
+  --ft-icon-size: 32px;
+  --ft-icon-shell-size: 44px;
+}
+
+.ft-button--sm {
+  --ft-icon-size: 25px;
+  --ft-icon-shell-size: 34px;
+}
+
+.ft-button--lg {
+  --ft-icon-size: 40px;
+  --ft-icon-shell-size: 54px;
+}
+
+.ft-button__icon-shell {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, #fff5c6, #e1ad47 48%, #7d4f1b) border-box,
+    radial-gradient(circle at 33% 24%, rgba(255,255,255,.78), rgba(255,255,255,0) 36%) padding-box,
+    radial-gradient(circle at 70% 72%, rgba(31,98,178,.32), rgba(8,27,58,.1) 52%) padding-box,
+    linear-gradient(180deg, rgba(39,108,190,.55), rgba(10,38,82,.36)) padding-box;
+  box-shadow:
+    0 3px 8px rgba(35, 19, 4, 0.2),
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -2px 0 rgba(48,25,5,0.2),
+    0 0 0 1px rgba(255,239,189,0.18);
+}
+
+.ft-button__icon-shell::before {
+  inset: 3px;
+  border: 1px solid rgba(255, 245, 205, 0.55);
+  box-shadow: inset 0 0 8px rgba(255, 229, 158, 0.12);
+}
+
+.ft-button__icon-shell::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: 3px;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  border-radius: 2px;
+  border: 1px solid rgba(116, 72, 20, 0.45);
+  background: linear-gradient(135deg, #fff, #f3c963 40%, #9f6b20);
+  box-shadow: 0 1px 2px rgba(45, 22, 4, 0.28);
+}
+
+.ft-button--secondary .ft-button__icon-shell,
+.ft-button--ghost .ft-button__icon-shell,
+.ft-button--subtle .ft-button__icon-shell {
+  background:
+    linear-gradient(180deg, #fff4bf, #d8a444 48%, #86591e) border-box,
+    radial-gradient(circle at 33% 24%, rgba(255,255,255,.84), rgba(255,255,255,0) 36%) padding-box,
+    linear-gradient(180deg, rgba(255,250,238,.82), rgba(238,216,177,.48)) padding-box;
+}
+
+.ft-button__icon {
+  filter: drop-shadow(0 1px 0 rgba(105, 64, 17, 0.62)) drop-shadow(0 2px 5px rgba(0,0,0,0.26));
+}
+
+.ft-button__icon svg {
+  transform: scale(1.22);
+}
+
+.ft-icon-button__glyph svg {
+  width: 70%;
+  height: 70%;
+}
+
+.ft-icon-button__frame::after {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  border-radius: 13px;
+  border: 1px solid rgba(255,239,191,0.42);
+  box-shadow: inset 0 0 12px rgba(255,225,150,0.12);
+}
+
+.ft-toolbar-button__icon,
+.ft-segmented__icon {
+  width: 24px;
+  height: 24px;
+}
+
+.ft-toolbar-button__icon svg,
+.ft-segmented__icon svg {
+  transform: scale(1.18);
+}
+
+.ft-split-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  isolation: isolate;
+}
+
+.ft-split-button__main {
+  min-width: 210px;
+}
+
+.ft-split-button__menu {
+  --ft-split-menu-size: 64px;
+  position: relative;
+  width: var(--ft-split-menu-size);
+  height: var(--ft-split-menu-size);
+  margin-left: -18px;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 18px;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-split-button--sm .ft-split-button__menu { --ft-split-menu-size: 52px; }
+.ft-split-button--lg .ft-split-button__menu { --ft-split-menu-size: 76px; }
+
+.ft-split-button__menu-frame {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, #fff4bc, #d6a13e 48%, #744916) border-box,
+    radial-gradient(circle at 38% 20%, rgba(255,255,255,0.6), transparent 38%) padding-box,
+    linear-gradient(180deg, #2b69b4, #0b2d60) padding-box;
+  box-shadow: 0 7px 16px rgba(45,25,7,0.18), inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+.ft-split-button__menu-icon {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: #fff0c4;
+}
+
+.ft-split-button__menu-icon svg { width: 42px; height: 42px; }
+.ft-split-button__menu:hover { transform: translateY(-1px); filter: brightness(1.06); }
+.ft-split-button__menu:active { transform: translateY(1px); }
+
+.ft-toggle-button,
+.ft-tab-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: #344760;
+  cursor: pointer;
+  font-family: var(--ft-font-family);
+  font-size: 15px;
+  font-weight: 700;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease, color 180ms ease;
+}
+
+.ft-toggle-button__frame,
+.ft-tab-button__frame,
+.ft-fab__frame,
+.ft-fab__shine,
+.ft-toggle-button__shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ft-toggle-button__frame,
+.ft-tab-button__frame {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, #fff2b8, #d7a544 50%, #86551e) border-box,
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.62), transparent 40%) padding-box,
+    linear-gradient(180deg, #fffaf0, #e9dbc2) padding-box;
+  box-shadow: 0 6px 14px rgba(58,36,11,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+.ft-toggle-button.is-pressed,
+.ft-tab-button.is-active {
+  color: #fff0c4;
+}
+
+.ft-toggle-button.is-pressed .ft-toggle-button__frame,
+.ft-tab-button.is-active .ft-tab-button__frame {
+  background:
+    linear-gradient(180deg, #fff2b8, #d7a544 50%, #86551e) border-box,
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.32), transparent 40%) padding-box,
+    linear-gradient(180deg, #5f96df, #1e5fa9 52%, #0c2c5c) padding-box;
+}
+
+.ft-toggle-button__shine {
+  inset: 5px 12px auto 12px;
+  height: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,0));
+}
+
+.ft-toggle-button__icon,
+.ft-tab-button__icon {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+}
+
+.ft-toggle-button__icon svg,
+.ft-tab-button__icon svg { width: 100%; height: 100%; transform: scale(1.15); }
+.ft-toggle-button__label,
+.ft-tab-button__label { position: relative; z-index: 1; }
+.ft-toggle-button:hover:not(:disabled), .ft-tab-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
+.ft-toggle-button:active:not(:disabled), .ft-tab-button:active:not(:disabled) { transform: translateY(1px); }
+
+.ft-fab {
+  --ft-fab-size: 76px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ft-fab-size);
+  height: var(--ft-fab-size);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  color: #fff0c4;
+  isolation: isolate;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-fab--md { --ft-fab-size: 64px; }
+.ft-fab--lg { --ft-fab-size: 84px; }
+
+.ft-fab__frame {
+  border: 3px solid transparent;
+  background:
+    linear-gradient(180deg, #fff4bc, #d5a13f 48%, #744916) border-box,
+    radial-gradient(circle at 35% 22%, rgba(255,255,255,0.65), transparent 34%) padding-box,
+    radial-gradient(circle at 50% 58%, #2b72c7, #0b2d60 75%) padding-box;
+  box-shadow: 0 14px 28px rgba(35,19,6,0.22), inset 0 1px 0 rgba(255,255,255,0.48), inset 0 -3px 0 rgba(0,0,0,0.18);
+}
+
+.ft-fab__shine {
+  inset: 8px 16px auto 16px;
+  height: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.38), rgba(255,255,255,0));
+}
+
+.ft-fab__icon {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 62%;
+  height: 62%;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,0.24));
+}
+
+.ft-fab__icon svg { width: 100%; height: 100%; transform: scale(1.1); }
+.ft-fab:hover { transform: translateY(-2px) scale(1.02); filter: brightness(1.07); }
+.ft-fab:active { transform: translateY(1px) scale(.99); }
+
+/* Final Pro Plus overrides: lock current component markup and richer illustrated icons */
+.ft-ornate-icon {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 1px 0 rgba(116,72,18,.45)) drop-shadow(0 2px 4px rgba(0,0,0,.18));
+}
+
+.ft-button__icon .ft-ornate-icon,
+.ft-icon-button__glyph .ft-ornate-icon,
+.ft-toolbar-button__icon .ft-ornate-icon,
+.ft-segmented__icon .ft-ornate-icon,
+.ft-split-button__icon .ft-ornate-icon,
+.ft-split-button__menu-icon .ft-ornate-icon,
+.ft-fab__icon .ft-ornate-icon,
+.ft-tab-button__icon .ft-ornate-icon,
+.ft-toggle-button__icon .ft-ornate-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.ft-icon-button__glyph .ft-ornate-icon {
+  width: 82%;
+  height: 82%;
+}
+
+.ft-button__icon .ft-ornate-icon {
+  width: 118%;
+  height: 118%;
+  margin: -9%;
+}
+
+.ft-toolbar-button__icon .ft-ornate-icon,
+.ft-segmented__icon .ft-ornate-icon,
+.ft-tab-button__icon .ft-ornate-icon,
+.ft-toggle-button__icon .ft-ornate-icon {
+  width: 155%;
+  height: 155%;
+  margin: -27.5%;
+}
+
+.ft-fab {
+  --ft-fab-size: 70px;
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  width: var(--ft-fab-size) !important;
+  height: var(--ft-fab-size) !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  color: var(--ft-text-primary) !important;
+}
+
+.ft-fab--lg { --ft-fab-size: 84px; }
+.ft-fab--extended {
+  width: auto !important;
+  min-width: 176px !important;
+  padding-inline: 24px 30px !important;
+  border-radius: 24px !important;
+}
+
+.ft-fab__frame {
+  position: absolute !important;
+  inset: 0 !important;
+  border-radius: inherit !important;
+  border: 3px solid transparent !important;
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 48%, #6c4214) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.28), transparent 32%),
+    linear-gradient(180deg, #679deb, #2164b3 48%, #0a2854) padding-box !important;
+  box-shadow: 0 14px 30px rgba(33,18,6,.25), inset 0 1px 0 rgba(255,255,255,.5), inset 0 -5px 12px rgba(0,0,0,.18) !important;
+}
+
+.ft-fab--success .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fdecb3, #d6a43f 48%, #83561f) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.28), transparent 32%),
+    linear-gradient(180deg, #79dacf, #2e9f99 48%, #195754) padding-box !important;
+}
+
+.ft-fab--danger .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fdedb4, #d8a13b 48%, #7e4818) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.28), transparent 32%),
+    linear-gradient(180deg, #ee856b, #b83a34 48%, #6b1f1c) padding-box !important;
+}
+
+.ft-fab--secondary .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fff3bc, #d8a442 48%, #6c4214) border-box,
+    radial-gradient(circle at 35% 24%, rgba(255,255,255,.36), transparent 32%),
+    linear-gradient(180deg, #fff9ed, #f4e7cb 48%, #e4d3ae) padding-box !important;
+}
+
+.ft-fab__shine {
+  position: absolute !important;
+  inset: 8px 20% auto !important;
+  height: 18px !important;
+  border-radius: inherit !important;
+  background: linear-gradient(180deg, rgba(255,255,255,.34), transparent) !important;
+}
+
+.ft-fab__icon {
+  position: relative !important;
+  z-index: 1 !important;
+  display: inline-flex !important;
+  width: 44px !important;
+  height: 44px !important;
+  margin: 0 !important;
+}
+
+.ft-fab__label {
+  position: relative !important;
+  z-index: 1 !important;
+  display: inline-flex !important;
+  font-size: 19px !important;
+  text-shadow: 0 1px 0 rgba(112,72,22,.65), 0 3px 8px rgba(0,0,0,.22) !important;
+}
+
+.ft-fab--secondary { color: #263a57 !important; }
+.ft-fab--secondary .ft-fab__label { text-shadow: 0 1px 0 rgba(255,255,255,.72), 0 2px 6px rgba(76,51,17,.1) !important; }
+
+.ft-split-button {
+  --ft-split-height: 68px;
+  --ft-split-font: 21px;
+  --ft-split-main-width: 212px;
+  --ft-split-menu-width: 64px;
+  position: relative !important;
+  display: inline-flex !important;
+  height: var(--ft-split-height) !important;
+  min-width: calc(var(--ft-split-main-width) + var(--ft-split-menu-width)) !important;
+  border-radius: 21px !important;
+  overflow: visible !important;
+  color: var(--ft-text-primary) !important;
+}
+
+.ft-split-button--sm { --ft-split-height: 54px; --ft-split-font: 17px; --ft-split-main-width: 158px; --ft-split-menu-width: 54px; }
+.ft-split-button--lg { --ft-split-height: 80px; --ft-split-font: 27px; --ft-split-main-width: 260px; --ft-split-menu-width: 76px; }
+
+.ft-split-button__action,
+.ft-split-button__menu {
+  position: relative !important;
+  z-index: 2 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  cursor: pointer !important;
+  font: inherit !important;
+  height: 100% !important;
+}
+
+.ft-split-button__action {
+  width: var(--ft-split-main-width) !important;
+  padding-inline: 26px 18px !important;
+}
+
+.ft-split-button__menu {
+  width: var(--ft-split-menu-width) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.ft-split-button__menu-icon {
+  transform: none !important;
+}
+
+.ft-split-button__content {
+  font-size: var(--ft-split-font) !important;
+}
+
+/* Button Family Pro Plus — art-icon pass refinements */
+.ft-ornate-icon {
+  overflow: visible;
+  shape-rendering: geometricPrecision;
+}
+
+.ft-button__icon-shell .ft-ornate-icon,
+.ft-icon-button__glyph .ft-ornate-icon,
+.ft-toolbar-button__icon .ft-ornate-icon,
+.ft-segmented__icon .ft-ornate-icon,
+.ft-toggle-button__icon .ft-ornate-icon,
+.ft-tab-button__icon .ft-ornate-icon,
+.ft-fab__icon .ft-ornate-icon,
+.ft-split-button__menu-icon .ft-ornate-icon {
+  filter: drop-shadow(0 1px 0 rgba(107, 66, 18, .45)) drop-shadow(0 2px 4px rgba(0, 0, 0, .24));
+}
+
+.ft-button__icon svg.ft-ornate-icon {
+  transform: scale(1.34);
+}
+
+.ft-icon-button__glyph svg.ft-ornate-icon {
+  width: 82%;
+  height: 82%;
+}
+
+.ft-toolbar-button__icon svg.ft-ornate-icon,
+.ft-segmented__icon svg.ft-ornate-icon {
+  width: 28px;
+  height: 28px;
+  transform: scale(1.18);
+}
+
+.ft-toggle-button__content,
+.ft-tab-button__content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.ft-toggle-button__content::before,
+.ft-tab-button__content::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  right: -12px;
+  top: 50%;
+  height: 65%;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 50%, rgba(255,245,205,.18), rgba(255,255,255,0));
+  z-index: -1;
+}
+
+.ft-toggle-button__icon,
+.ft-tab-button__icon {
+  width: 32px;
+  height: 32px;
+}
+
+.ft-toggle-button__icon svg.ft-ornate-icon,
+.ft-tab-button__icon svg.ft-ornate-icon {
+  width: 32px;
+  height: 32px;
+  transform: scale(1.16);
+}
+
+.ft-toggle-button--danger.is-pressed .ft-toggle-button__frame {
+  background:
+    linear-gradient(180deg, #fff2b8, #d7a544 50%, #86551e) border-box,
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.32), transparent 40%) padding-box,
+    linear-gradient(180deg, #e46e56, #b53a33 52%, #6c201d) padding-box;
+}
+
+.ft-toggle-button--success.is-pressed .ft-toggle-button__frame {
+  background:
+    linear-gradient(180deg, #fff2b8, #d7a544 50%, #86551e) border-box,
+    radial-gradient(circle at 30% 20%, rgba(255,255,255,0.32), transparent 40%) padding-box,
+    linear-gradient(180deg, #71d5cb, #2e9e98 52%, #195854) padding-box;
+}
+
+.ft-split-button__menu-shine {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 7px;
+  height: 12px;
+  z-index: 1;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,255,255,.36), rgba(255,255,255,0));
+  pointer-events: none;
+}
+
+.ft-split-button--secondary .ft-split-button__menu-frame,
+.ft-split-button--ghost .ft-split-button__menu-frame,
+.ft-split-button--subtle .ft-split-button__menu-frame {
+  background:
+    linear-gradient(180deg, #fff4bc, #d6a13e 48%, #744916) border-box,
+    radial-gradient(circle at 38% 20%, rgba(255,255,255,0.68), transparent 38%) padding-box,
+    linear-gradient(180deg, #fffaf0, #ead9bc) padding-box;
+}
+
+.ft-split-button--secondary .ft-split-button__menu-icon,
+.ft-split-button--ghost .ft-split-button__menu-icon,
+.ft-split-button--subtle .ft-split-button__menu-icon {
+  color: #314766;
+}
+
+.ft-split-button--danger .ft-split-button__menu-frame {
+  background:
+    linear-gradient(180deg, #fff4bc, #d6a13e 48%, #744916) border-box,
+    radial-gradient(circle at 38% 20%, rgba(255,255,255,0.48), transparent 38%) padding-box,
+    linear-gradient(180deg, #e46e56, #b53a33 52%, #6c201d) padding-box;
+}
+
+.ft-split-button--success .ft-split-button__menu-frame {
+  background:
+    linear-gradient(180deg, #fff4bc, #d6a13e 48%, #744916) border-box,
+    radial-gradient(circle at 38% 20%, rgba(255,255,255,0.48), transparent 38%) padding-box,
+    linear-gradient(180deg, #71d5cb, #2e9e98 52%, #195854) padding-box;
+}
+
+.ft-split-button__menu:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  filter: grayscale(.35);
+}
+
+.ft-fab__runes {
+  position: absolute;
+  inset: 12px;
+  z-index: -1;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1px solid rgba(255,238,184,.38);
+  box-shadow: inset 0 0 18px rgba(255,220,130,.14);
+}
+
+.ft-fab__runes::before,
+.ft-fab__runes::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  transform: translateX(-50%) rotate(45deg);
+  border: 1px solid rgba(119,72,18,.45);
+  background: linear-gradient(135deg, #fff, #f4ce6e 45%, #9a661f);
+  border-radius: 2px;
+}
+
+.ft-fab__runes::after {
+  top: auto;
+  bottom: -4px;
+}
+
+.ft-fab--secondary {
+  color: #304865;
+}
+
+.ft-fab--secondary .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fff4bc, #d5a13f 48%, #744916) border-box,
+    radial-gradient(circle at 35% 22%, rgba(255,255,255,0.75), transparent 34%) padding-box,
+    radial-gradient(circle at 50% 58%, #fffaf0, #ead9bd 75%) padding-box;
+}
+
+.ft-fab--danger .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fff4bc, #d5a13f 48%, #744916) border-box,
+    radial-gradient(circle at 35% 22%, rgba(255,255,255,0.42), transparent 34%) padding-box,
+    radial-gradient(circle at 50% 58%, #e46e56, #6c201d 75%) padding-box;
+}
+
+.ft-fab--success .ft-fab__frame {
+  background:
+    linear-gradient(180deg, #fff4bc, #d5a13f 48%, #744916) border-box,
+    radial-gradient(circle at 35% 22%, rgba(255,255,255,0.46), transparent 34%) padding-box,
+    radial-gradient(circle at 50% 58%, #71d5cb, #195854 75%) padding-box;
+}
+
+.ft-fab__icon svg.ft-ornate-icon {
+  width: 100%;
+  height: 100%;
+  transform: scale(1.22);
+}
+
+.ft-fab:disabled {
+  opacity: .58;
+  filter: grayscale(.35);
+  cursor: not-allowed;
+}
+
+/* ReferenceFantasyButton: high-fidelity single-button component based on the supplied reference image. */
+.ft-reference-button {
+  --ref-width: 760px;
+  --ref-height: 146px;
+  --ref-font-size: 48px;
+  --ref-icon-size: 78px;
+  --ref-gap: 32px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ref-width);
+  height: var(--ref-height);
+  border: 0;
+  padding: 0 86px;
+  background: transparent;
+  cursor: pointer;
+  isolation: isolate;
+  font-family: var(--ft-font-family);
+  white-space: nowrap;
+  user-select: none;
+  transition: transform 180ms ease, filter 180ms ease;
+}
+
+.ft-reference-button--md {
+  --ref-width: 560px;
+  --ref-height: 112px;
+  --ref-font-size: 36px;
+  --ref-icon-size: 60px;
+  --ref-gap: 24px;
+}
+
+.ft-reference-button--lg {
+  --ref-width: 760px;
+  --ref-height: 146px;
+  --ref-font-size: 48px;
+  --ref-icon-size: 78px;
+  --ref-gap: 32px;
+}
+
+.ft-reference-button--xl {
+  --ref-width: 980px;
+  --ref-height: 188px;
+  --ref-font-size: 62px;
+  --ref-icon-size: 100px;
+  --ref-gap: 42px;
+}
+
+.ft-reference-button--block {
+  width: 100%;
+}
+
+.ft-reference-button__art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -3;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.ft-reference-button__content {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ref-gap);
+  transform: translateY(-1px);
+}
+
+.ft-reference-button__icon,
+.ft-reference-button__trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ref-icon-size);
+  height: var(--ref-icon-size);
+  filter:
+    drop-shadow(0 1px 0 rgba(255,255,255,.5))
+    drop-shadow(0 4px 5px rgba(0,0,0,.34));
+}
+
+.ft-reference-button__icon svg,
+.ft-reference-button__trailing svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ft-reference-button__label {
+  position: relative;
+  display: inline-block;
+  font-size: var(--ref-font-size);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1;
+  color: #fff2ca;
+  background: linear-gradient(180deg, #fff9df 0%, #fff0bc 28%, #e9ba62 64%, #8b581e 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  -webkit-text-stroke: 1px rgba(92, 55, 17, 0.62);
+  text-shadow:
+    0 1px 0 rgba(255,255,255,.45),
+    0 2px 0 rgba(126,75,20,.72),
+    0 5px 6px rgba(0,0,0,.38),
+    0 0 18px rgba(255,224,144,.18);
+}
+
+.ft-reference-button__label::after {
+  content: attr(data-shine);
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 42%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  pointer-events: none;
+}
+
+.ft-reference-button__glint {
+  position: absolute;
+  top: 24%;
+  bottom: 24%;
+  left: -20%;
+  width: 13%;
+  z-index: 3;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.52), transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ft-reference-button:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.003);
+  filter: brightness(1.06) saturate(1.04);
+}
+
+.ft-reference-button:hover:not(:disabled) .ft-reference-button__glint {
+  animation: ref-button-glint 1050ms cubic-bezier(.2,.55,.22,1) 1;
+}
+
+.ft-reference-button:active:not(:disabled) {
+  transform: translateY(1px) scale(.997);
+  filter: brightness(.96) saturate(.98);
+}
+
+.ft-reference-button:focus-visible {
+  outline: 3px solid rgba(120,188,255,.92);
+  outline-offset: 5px;
+  border-radius: 28px;
+}
+
+.ft-reference-button:disabled,
+.ft-reference-button.is-disabled {
+  opacity: .68;
+  cursor: not-allowed;
+  filter: grayscale(.38) saturate(.76);
+}
+
+@keyframes ref-button-glint {
+  0% { left: -20%; opacity: 0; }
+  12% { opacity: .18; }
+  48% { opacity: .82; }
+  100% { left: 108%; opacity: 0; }
+}
+
+/* ReferenceHeroButton: a pixel-exact asset mode plus a scalable vector recreation mode. */
+.ft-reference-hero {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 2048 / 682;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  isolation: isolate;
+  transform: translateY(0);
+  transition: transform 160ms ease, filter 160ms ease, opacity 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ft-reference-hero__asset,
+.ft-reference-hero__vector {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+}
+
+.ft-reference-hero__label {
+  position: relative;
+  z-index: 1;
+  margin-left: 14%;
+  transform: translateY(-1%);
+  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
+  font-weight: 800;
+  font-size: clamp(42px, 9.2vw, 132px);
+  letter-spacing: 0.055em;
+  line-height: 1;
+  color: #fff0c3;
+  background: linear-gradient(180deg, #fffaf1 0%, #ffe9ad 34%, #e9b968 58%, #9f6126 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter:
+    drop-shadow(0 2px 0 rgba(76, 41, 12, .78))
+    drop-shadow(0 5px 7px rgba(0, 0, 0, .34));
+  text-shadow:
+    0 0 8px rgba(255, 242, 198, .28),
+    0 2px 0 rgba(98, 55, 17, .62);
+  pointer-events: none;
+}
+
+.ft-reference-hero__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ft-reference-hero:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.003);
+  filter: brightness(1.045) saturate(1.03);
+}
+
+.ft-reference-hero:active:not(:disabled) {
+  transform: translateY(1px) scale(.998);
+  filter: brightness(.97) saturate(.98);
+}
+
+.ft-reference-hero:focus-visible {
+  outline: 3px solid rgba(113, 184, 255, .95);
+  outline-offset: 6px;
+  border-radius: 28px;
+}
+
+.ft-reference-hero:disabled {
+  cursor: not-allowed;
+  filter: grayscale(.45) saturate(.6) brightness(.9);
+  opacity: .72;
+}
+
+/* Pixel-perfect painted component for the provided reference button.
+   It keeps real button semantics while using the supplied artwork as the visual skin. */
+.ft-exact-art-button {
+  position: relative;
+  display: inline-block;
+  width: min(var(--ft-art-width), 100%);
+  aspect-ratio: var(--ft-art-ratio);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background-color: transparent;
+  background-image: var(--ft-art-src);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  user-select: none;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  transform: translateY(0);
+  transform-origin: center;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease,
+    opacity 180ms ease;
+}
+
+.ft-exact-art-button--native {
+  width: var(--ft-art-width);
+}
+
+.ft-exact-art-button--xl {
+  width: min(1280px, 100%);
+}
+
+.ft-exact-art-button--lg {
+  width: min(920px, 100%);
+}
+
+.ft-exact-art-button--md {
+  width: min(620px, 100%);
+}
+
+.ft-exact-art-button--sm {
+  width: min(360px, 100%);
+}
+
+.ft-exact-art-button:hover:not(:disabled):not(.is-static-visual) {
+  transform: translateY(-1px) scale(1.004);
+  filter: brightness(1.04) saturate(1.03);
+}
+
+.ft-exact-art-button:active:not(:disabled):not(.is-static-visual) {
+  transform: translateY(1px) scale(0.997);
+  filter: brightness(0.96) saturate(0.96);
+}
+
+.ft-exact-art-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  filter: grayscale(0.5) saturate(0.72);
+}
+
+.ft-exact-art-button:focus-visible {
+  outline: 3px solid rgba(107, 179, 255, 0.95);
+  outline-offset: 6px;
+  border-radius: 18px;
+}
+
+.ft-exact-art-button__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* Pixel-matched hero button built from the supplied art skin.
+   This mode is for exact visual matching of the provided “新建任务” artwork. */
+.ft-exact-hero-button {
+  --ft-exact-hero-width: 520px;
+  position: relative;
+  display: inline-block;
+  width: var(--ft-exact-hero-width);
+  aspect-ratio: 1916 / 573;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  isolation: isolate;
+  transform: translateY(0);
+  transition: transform 160ms ease, filter 160ms ease, opacity 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ft-exact-hero-button--sm { --ft-exact-hero-width: 360px; }
+.ft-exact-hero-button--md { --ft-exact-hero-width: 520px; }
+.ft-exact-hero-button--lg { --ft-exact-hero-width: 720px; }
+.ft-exact-hero-button--native { --ft-exact-hero-width: 958px; }
+.ft-exact-hero-button--block { width: 100%; }
+
+.ft-exact-hero-button__skin {
+  position: absolute;
+  inset: 0;
+  background-image: var(--ft-exact-hero-art);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+}
+
+.ft-exact-hero-button__hit-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.ft-exact-hero-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.035) saturate(1.02);
+}
+
+.ft-exact-hero-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.997);
+  filter: brightness(0.97) saturate(0.98);
+}
+
+.ft-exact-hero-button:focus-visible {
+  outline: 3px solid rgb(121 188 255 / 0.92);
+  outline-offset: 4px;
+  border-radius: 22px;
+}
+
+.ft-exact-hero-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  filter: grayscale(0.4) saturate(0.74);
+}
+
+.ft-exact-reference-button {
+  position: relative;
+  display: inline-block;
+  width: var(--ft-exact-button-width, 964px);
+  aspect-ratio: 1928 / 588;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  isolation: isolate;
+  transform: translateY(0);
+  transition: transform 140ms ease, filter 140ms ease, opacity 140ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ft-exact-reference-button__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ft-exact-reference-button:hover:not(:disabled) {
+  filter: brightness(1.018) saturate(1.01);
+}
+
+.ft-exact-reference-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.998);
+  filter: brightness(0.985);
+}
+
+.ft-exact-reference-button:focus-visible {
+  outline: 3px solid rgb(116 185 255 / 0.95);
+  outline-offset: 6px;
+  border-radius: 36px;
+}
+
+.ft-exact-reference-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  filter: grayscale(0.45) saturate(0.7);
+}
+
+.ft-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
