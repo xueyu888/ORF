@@ -26,6 +26,7 @@ import type { LucideIcon } from "lucide-react";
 import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from "react";
 import { HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
+import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import type { CommentMessage, CommentTargetType, CommentThread, Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../types/orf";
 import { avatarStyleForName } from "../utils/avatar";
@@ -256,6 +257,7 @@ export function TasksPage() {
           }
           onUpdateComment={updateCommentMessage}
           onDeleteComment={deleteCommentMessage}
+          onClose={() => setCommentTarget(null)}
         />
       )}
     </div>
@@ -273,6 +275,7 @@ function PlanModeControl({
 }) {
   const [open, setOpen] = useState(false);
   const activeStage = flowStages.find((stage) => stage.value === value) ?? flowStages[0];
+  const popoverDrag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? activeStage.value : "closed" });
 
   return (
     <div className="relative">
@@ -289,7 +292,10 @@ function PlanModeControl({
       </button>
 
       {open && (
-        <div className="orf-popover orf-plan-popover absolute right-0 z-40 mt-2 w-72 p-2" role="menu">
+        <div ref={popoverDrag.ref} style={popoverDrag.style} className="orf-popover orf-plan-popover orf-draggable-floating absolute right-0 z-40 mt-2 w-72 p-2" role="menu">
+          <div className="orf-popover-drag-bar orf-drag-handle" aria-label="拖拽浮窗" {...popoverDrag.handleProps}>
+            <GripVertical className="h-3.5 w-3.5" />
+          </div>
           {flowStages.map((stage, index) => {
             const active = value === stage.value;
             const theme = flowStageTheme[stage.value];
@@ -978,6 +984,7 @@ function BlockActions({
 }) {
   const open = openActionId === actionId;
   const visible = open || (!openActionId && activeActionId === actionId);
+  const menuDrag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? actionId : "closed" });
 
   return (
     <div
@@ -1010,7 +1017,10 @@ function BlockActions({
           <GripVertical className="h-4 w-4" />
         </button>
         {open && (
-          <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-9 z-50 w-40 p-1">
+          <div ref={menuDrag.ref} style={menuDrag.style} className="orf-popover orf-block-menu orf-draggable-floating pointer-events-auto absolute left-0 top-9 z-50 w-40 p-1">
+            <div className="orf-popover-drag-bar orf-drag-handle" aria-label="拖拽浮窗" {...menuDrag.handleProps}>
+              <GripVertical className="h-3.5 w-3.5" />
+            </div>
             {blockMenuItems.map((item) => {
               const Icon = item.icon;
 
@@ -1127,17 +1137,20 @@ function CommentPanel({
   onAddComment,
   onUpdateComment,
   onDeleteComment,
+  onClose,
 }: {
   targetTitle: string;
   threads: CommentThread[];
   onAddComment: (body: string, replyInput?: CommentReplyInput) => void;
   onUpdateComment: (threadId: string, messageId: string, body: string) => void;
   onDeleteComment: (threadId: string, messageId: string) => void;
+  onClose: () => void;
 }) {
   const [body, setBody] = useState("");
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
   const [activeRootMessageId, setActiveRootMessageId] = useState<string | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: targetTitle });
   const commentEntries = useMemo<CommentEntry[]>(() => {
     const entries = threads.flatMap((thread) => thread.messages.map((message) => ({ threadId: thread.id, message })));
     const replyCounts = new Map<string, number>();
@@ -1267,12 +1280,19 @@ function CommentPanel({
 
   return (
     <aside
+      ref={panelDrag.ref}
+      style={panelDrag.style}
       data-comment-panel="true"
-      className="orf-comment-panel fixed bottom-4 right-4 z-[90] w-[382px] max-w-[calc(100vw-24px)]"
+      className="orf-comment-panel orf-draggable-floating fixed bottom-4 right-4 z-[90] w-[382px] max-w-[calc(100vw-24px)]"
     >
       <div className="orf-comment-box">
-        <div className="orf-comment-context-title" title={targetTitle}>
-          {targetTitle}
+        <div className="orf-comment-panel-header orf-drag-handle" {...panelDrag.handleProps}>
+          <div className="orf-comment-context-title" title={targetTitle}>
+            {targetTitle}
+          </div>
+          <button type="button" className="orf-comment-icon-button" aria-label="关闭评论窗口" title="关闭" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </button>
         </div>
         <div className="orf-comment-view">
           {activeRootEntry ? (

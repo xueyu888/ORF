@@ -1,17 +1,19 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackSource, Impact, Priority } from "../types/orf";
 import { Button, Field } from "./ui";
 
 function ModalFrame({ title, children }: { title: string; children: ReactNode }) {
   const { closeModal } = useOrf();
+  const drag = useDraggableFloating<HTMLDivElement>({ resetKey: title });
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[9vh]" onMouseDown={closeModal}>
-      <div className="orf-card w-full max-w-xl rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-between border-b orf-border px-5 py-4">
+      <div ref={drag.ref} style={drag.style} className="orf-card orf-draggable-floating w-full max-w-xl rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="orf-drag-handle flex items-center justify-between border-b orf-border px-5 py-4" {...drag.handleProps}>
           <div className="orf-text-primary text-sm font-semibold">{title}</div>
           <button onClick={closeModal} className="orf-text-muted orf-hover-text">
             <X className="h-4 w-4" />

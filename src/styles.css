@@ -1791,6 +1791,38 @@ button:disabled {
   backdrop-filter: blur(18px);
 }
 
+.orf-draggable-floating {
+  will-change: transform;
+}
+
+.orf-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.orf-drag-handle:active {
+  cursor: grabbing;
+}
+
+body[data-dragging-floating="true"] {
+  user-select: none;
+}
+
+.orf-popover-drag-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  margin: -2px -2px 2px;
+  border-radius: 6px;
+  color: #98a2b3;
+}
+
+.orf-popover-drag-bar:hover {
+  background: rgba(47, 156, 137, 0.08);
+  color: #0b8f7f;
+}
+
 .orf-task-toolbar {
   position: sticky;
   top: 92px;

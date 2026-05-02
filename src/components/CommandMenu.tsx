@@ -2,6 +2,7 @@ import { Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { quickPages } from "../config/navigation";
+import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import { commandTypeLabel } from "../utils/labels";
 
@@ -9,6 +10,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
   const navigate = useNavigate();
   const { state } = useOrf();
   const [query, setQuery] = useState("");
+  const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
 
   const items = useMemo(() => {
     const pageItems = quickPages.map((item) => ({ label: item.label, path: item.path, type: "Page" }));
@@ -28,8 +30,8 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[12vh]" onMouseDown={onClose}>
-      <div className="orf-card w-full max-w-2xl overflow-hidden rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-center gap-3 border-b orf-border px-4 py-3">
+      <div ref={drag.ref} style={drag.style} className="orf-card orf-draggable-floating w-full max-w-2xl overflow-hidden rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="orf-drag-handle flex items-center gap-3 border-b orf-border px-4 py-3" {...drag.handleProps}>
           <Search className="orf-text-muted h-4 w-4" />
           <input value={query} onChange={(event) => setQuery(event.target.value)} autoFocus className="orf-text-primary flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--orf-text-faint)]" placeholder="搜索页面、目标、结果、任务、反馈..." />
           <button onClick={onClose} className="orf-text-muted orf-hover-text">
