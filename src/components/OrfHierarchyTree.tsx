@@ -9,7 +9,7 @@ const TREE_RADIUS = 12;
 const contentLeftByDepth: Record<1 | 2 | 3, number> = {
   1: 36,
   2: 42,
-  3: 100,
+  3: 68,
 };
 
 type AnchorGeometry = {

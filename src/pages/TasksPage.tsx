@@ -502,8 +502,11 @@ function ObjectivePanel({
           onAction={(action) => onBlockAction(action, { type: "objective", id: objective.id, title: objective.title })}
         />
         <div className="relative z-30 flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center" data-hierarchy-anchor={objectiveAnchorId}>
-            <ObjectiveFlagIcon complete={complete} />
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="h-6 w-6 shrink-0" aria-hidden="true" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center" data-hierarchy-anchor={objectiveAnchorId}>
+              <ObjectiveFlagIcon complete={complete} />
+            </span>
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-3">
@@ -640,7 +643,7 @@ function ResultBlock({
             onActiveActionChange={onActiveBlockActionChange}
             onOpenActionChange={onOpenBlockActionChange}
             onToggle={() => onToggleResult(result.id)}
-            className="absolute left-9 top-1/2 -translate-y-1/2"
+            className="absolute left-6 top-1/2 -translate-y-1/2"
           />
         )}
         <HierarchyCell depth={1} isLast={isLast && (!open || tasks.length === 0)}>
@@ -784,7 +787,7 @@ function TaskRow({
                 onToggle={() => onToggleTask(task.id)}
               />
             ) : (
-              <span className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className="h-6 w-6 shrink-0" aria-hidden="true" />
             )}
             <span
               className="flex h-5 w-5 shrink-0 items-center justify-center"
@@ -914,14 +917,17 @@ function SubtaskRow({
         }
       />
       <HierarchyCell depth={depth} isLast={isLast}>
-        <span
-          className="flex h-5 w-5 shrink-0 items-center justify-center"
-          data-hierarchy-anchor={`subtask:${task.id}:${item.id}`}
-          data-hierarchy-branch-end-offset="0"
-          data-hierarchy-branch-target={`subtask:${task.id}:${item.id}`}
-          data-hierarchy-parent={parentAnchorId}
-        >
-          <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="h-6 w-6 shrink-0" aria-hidden="true" />
+          <span
+            className="flex h-5 w-5 shrink-0 items-center justify-center"
+            data-hierarchy-anchor={`subtask:${task.id}:${item.id}`}
+            data-hierarchy-branch-end-offset="0"
+            data-hierarchy-branch-target={`subtask:${task.id}:${item.id}`}
+            data-hierarchy-parent={parentAnchorId}
+          >
+            <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
+          </span>
         </span>
         <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
         <CommentCountBadge
@@ -955,10 +961,10 @@ const blockMenuItems: { action: BlockAction; label: string; icon: LucideIcon }[]
 ];
 
 const blockActionLeft = {
-  objective: 22,
-  result: 34,
-  task: 64,
-  subtask: 122,
+  objective: 20,
+  result: 24,
+  task: 62,
+  subtask: 88,
 } as const;
 
 function BlockActions({
