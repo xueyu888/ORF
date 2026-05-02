@@ -9,7 +9,7 @@ export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboar
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
-export type PermissionAction = "view" | "edit" | "create";
+export type PermissionAction = "view" | "create" | "edit" | "delete";
 export type PermissionResource = "objective" | "result" | "task" | "subtask";
 
 export interface OrfUser {

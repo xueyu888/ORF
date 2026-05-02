@@ -10,40 +10,67 @@ import {
   Gauge,
   GripVertical,
   MessageSquare,
-  Move,
   Pencil,
   Plus,
-  Repeat2,
   Reply,
   Send,
   SlidersHorizontal,
-  Sparkles,
   Target,
   Trash2,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from "react";
-import { HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
+import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
-import type { CommentMessage, CommentTargetType, CommentThread, Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../types/orf";
+import type {
+  CommentMessage,
+  CommentTargetType,
+  CommentThread,
+  Objective,
+  OrfState,
+  PermissionAction,
+  PermissionResource,
+  Result,
+  Task,
+  TaskChecklistItem,
+  TaskStatus,
+} from "../types/orf";
 import { avatarStyleForName } from "../utils/avatar";
 import { initials, resultProgress } from "../utils/format";
-
-const currentMember = "Alex Chen";
+import type { DragEvent } from "react";
 
 type TaskScope = "team" | "personal";
 type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
 type SimpleStatus = "todo" | "active" | "done";
 type IndicatorStatus = "todo" | "active" | "review" | "done";
-type BlockAction = "convert" | "move" | "copyLink" | "comment" | "askAi" | "delete";
+type BlockAction = "reorder" | "copyLink" | "comment" | "delete";
 type BlockTarget =
   | { type: "objective"; id: string; title: string }
   | { type: "result"; id: string; title: string; objectiveId: string }
   | { type: "task"; id: string; title: string; resultId: string; objectiveId: string; hasSubtasks: boolean }
   | { type: "subtask"; id: string; title: string; taskId: string; resultId: string; objectiveId: string };
+type DragBlock =
+  | { type: "result"; id: string; objectiveId: string }
+  | { type: "task"; id: string; resultId: string; objectiveId: string }
+  | { type: "subtask"; id: string; taskId: string };
+type DropPlacement = "before" | "after";
+type DropTarget =
+  | { type: "result"; resultId: string; objectiveId: string; placement: DropPlacement }
+  | { type: "resultTasks"; resultId: string; objectiveId: string }
+  | { type: "task"; taskId: string; resultId: string; objectiveId: string; placement: DropPlacement }
+  | { type: "taskSubtasks"; taskId: string }
+  | { type: "subtask"; taskId: string; itemId: string; placement: DropPlacement };
+type DragDropController = {
+  dragBlock: DragBlock | null;
+  dropTarget: DropTarget | null;
+  onDragStart: (block: DragBlock) => void;
+  onDragEnd: () => void;
+  onDropTargetChange: (target: DropTarget | null) => void;
+  onDrop: (target: DropTarget) => void;
+};
 
 const flowStages: { value: FlowStage; label: string }[] = [
   { value: "goalSetting", label: "目标设定" },
@@ -65,12 +92,21 @@ export function TasksPage() {
     openModal,
     notify,
     createTaskChecklistItem,
+    moveResult,
+    moveTask,
+    moveTaskChecklistItem,
+    deleteObjective,
+    deleteResult,
+    deleteTask,
+    deleteTaskChecklistItem,
     setTaskCompletion,
     updateTaskChecklistItem,
     addComment,
     updateCommentMessage,
     deleteCommentMessage,
+    currentUser,
   } = useOrf();
+  const currentMember = currentUser?.name ?? "User";
   const [scope, setScope] = useState<TaskScope>("team");
   const [flowStage, setFlowStage] = useState<FlowStage>("orfReestimate");
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
@@ -78,6 +114,8 @@ export function TasksPage() {
   const [commentTarget, setCommentTarget] = useState<BlockTarget | null>(null);
   const [activeBlockActionId, setActiveBlockActionId] = useState<string | null>(null);
   const [openBlockActionId, setOpenBlockActionId] = useState<string | null>(null);
+  const [dragBlock, setDragBlock] = useState<DragBlock | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 
   const groups = useMemo(
     () =>
@@ -113,7 +151,7 @@ export function TasksPage() {
           };
         })
         .filter((group) => scope === "team" || group.results.length > 0),
-    [scope, state.evidence, state.feedback, state.objectives, state.results, state.tasks],
+    [currentMember, scope, state.evidence, state.feedback, state.objectives, state.results, state.tasks],
   );
 
   const resultTaskMap = useMemo(
@@ -126,19 +164,126 @@ export function TasksPage() {
   const overallObjectiveProgress = Math.round(average(groups.map((group) => objectiveProgress(group.results))));
   const flowStageIndex = flowStages.findIndex((stage) => stage.value === flowStage);
   const isGoalFrozen = flowStage === "goalFrozen";
-  const canEditTasks = true;
+  const can = (action: PermissionAction, resource: PermissionResource) => canAccess(state, currentUser?.role, flowStage, action, resource);
+  const canEditTasks = can("edit", "task");
 
   const toggleResult = (resultId: string) => setCollapsedResultIds((items) => toggleSetItem(items, resultId));
   const toggleTask = (taskId: string) => setCollapsedTaskIds((items) => toggleSetItem(items, taskId));
-  const handleAddResult = (objectiveId: string) => openModal({ type: "newResult", objectiveId });
-  const handleAddTask = (result: Result) => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id });
+  const handleAddResult = (objectiveId: string) => {
+    if (!can("create", "result")) {
+      notify("没有创建指标权限");
+      return;
+    }
+
+    openModal({ type: "newResult", objectiveId });
+  };
+  const handleAddTask = (result: Result) => {
+    if (!can("create", "task")) {
+      notify("没有创建任务权限");
+      return;
+    }
+
+    openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id });
+  };
   const handleAddSubtask = (taskId: string, afterItemId?: string) => {
+    if (!can("create", "subtask")) {
+      notify("没有创建子任务权限");
+      return;
+    }
+
     createTaskChecklistItem(taskId, afterItemId);
     setCollapsedTaskIds((items) => {
       const next = new Set(items);
       next.delete(taskId);
       return next;
     });
+  };
+  const handleDeleteTarget = (target: BlockTarget) => {
+    if (!can("delete", resourceForBlockTarget(target))) {
+      notify("没有删除权限");
+      return;
+    }
+
+    const message = deletionConfirmMessage(target, state);
+    if (!window.confirm(message)) {
+      return;
+    }
+
+    if (target.type === "objective") {
+      deleteObjective(target.id);
+      return;
+    }
+
+    if (target.type === "result") {
+      deleteResult(target.id);
+      return;
+    }
+
+    if (target.type === "task") {
+      deleteTask(target.id);
+      return;
+    }
+
+    deleteTaskChecklistItem(target.taskId, target.id);
+  };
+  const dragDrop: DragDropController = {
+    dragBlock,
+    dropTarget,
+    onDragStart: (block) => {
+      setDragBlock(block);
+      setDropTarget(null);
+      setOpenBlockActionId(null);
+    },
+    onDragEnd: () => {
+      setDragBlock(null);
+      setDropTarget(null);
+    },
+    onDropTargetChange: setDropTarget,
+    onDrop: (target) => {
+      if (!dragBlock || !canDropBlock(dragBlock, target)) {
+        return;
+      }
+
+      if (!can("edit", resourceForDragBlock(dragBlock))) {
+        notify("没有编辑权限");
+        setDragBlock(null);
+        setDropTarget(null);
+        return;
+      }
+
+      if (dragBlock.type === "result" && target.type === "result") {
+        moveResult({ resultId: dragBlock.id, objectiveId: target.objectiveId, referenceResultId: target.resultId, placement: target.placement });
+      }
+
+      if (dragBlock.type === "task") {
+        if (target.type === "resultTasks") {
+          moveTask({ taskId: dragBlock.id, toResultId: target.resultId });
+        }
+
+        if (target.type === "task") {
+          moveTask({ taskId: dragBlock.id, toResultId: target.resultId, referenceTaskId: target.taskId, placement: target.placement });
+        }
+      }
+
+      if (dragBlock.type === "subtask") {
+        if (target.type === "taskSubtasks") {
+          moveTaskChecklistItem({ itemId: dragBlock.id, fromTaskId: dragBlock.taskId, toTaskId: target.taskId });
+        }
+
+        if (target.type === "subtask") {
+          moveTaskChecklistItem({
+            itemId: dragBlock.id,
+            fromTaskId: dragBlock.taskId,
+            toTaskId: target.taskId,
+            referenceItemId: target.itemId,
+            placement: target.placement,
+          });
+        }
+      }
+
+      setDragBlock(null);
+      setDropTarget(null);
+    },
   };
   const handleBlockAction = (action: BlockAction, target: BlockTarget) => {
     setOpenBlockActionId(null);
@@ -155,18 +300,8 @@ export function TasksPage() {
       return;
     }
 
-    if (action === "move") {
-      notify(target.type === "objective" || target.type === "result" ? "目标和指标不支持移动" : "移动选择器待实现");
-      return;
-    }
-
-    if (action === "convert") {
-      if (target.type === "task" && target.hasSubtasks) {
-        notify("有子任务的任务不能转为子任务");
-        return;
-      }
-
-      notify(target.type === "objective" || target.type === "result" ? "目标和指标暂不支持转换" : "转换功能待实现");
+    if (action === "reorder") {
+      notify(target.type === "objective" ? "目标不支持拖拽" : "按住块手柄拖拽到合法位置");
       return;
     }
 
@@ -175,12 +310,7 @@ export function TasksPage() {
       return;
     }
 
-    if (action === "askAi") {
-      notify("问 AI 功能待实现");
-      return;
-    }
-
-    notify("删除确认待实现");
+    handleDeleteTarget(target);
   };
 
   return (
@@ -236,6 +366,7 @@ export function TasksPage() {
             openBlockActionId={openBlockActionId}
             onActiveBlockActionChange={setActiveBlockActionId}
             onOpenBlockActionChange={setOpenBlockActionId}
+            dragDrop={dragDrop}
           />
         ))}
       </div>
@@ -244,6 +375,7 @@ export function TasksPage() {
         <CommentPanel
           key={`${commentTarget.type}:${commentTarget.id}`}
           targetTitle={commentTarget.title}
+          currentMember={currentMember}
           threads={state.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}
           onAddComment={(body, replyInput) =>
             addComment({
@@ -441,6 +573,7 @@ function ObjectivePanel({
   openBlockActionId,
   onActiveBlockActionChange,
   onOpenBlockActionChange,
+  dragDrop,
 }: {
   objective: Objective;
   results: { result: Result; tasks: Task[]; updatedAt: string }[];
@@ -464,6 +597,7 @@ function ObjectivePanel({
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
   onOpenBlockActionChange: (id: string | null) => void;
+  dragDrop: DragDropController;
 }) {
   const progress = objectiveProgress(results);
   const complete = progress >= 100;
@@ -471,13 +605,24 @@ function ObjectivePanel({
   const objectiveAnchorId = `objective:${objective.id}`;
   const [objectiveElement, setObjectiveElement] = useState<HTMLElement | null>(null);
   const objectiveRowActive = activeBlockActionId === objectiveActionId || openBlockActionId === objectiveActionId;
+  const hierarchyLayoutKey = results
+    .map(({ result, tasks }) => {
+      if (collapsedResultIds.has(result.id)) {
+        return `${result.id}:closed`;
+      }
+
+      return `${result.id}:${tasks
+        .map((task) => (collapsedTaskIds.has(task.id) ? `${task.id}:closed` : `${task.id}:${task.checklist.map((item) => item.id).join(",")}`))
+        .join("|")}`;
+    })
+    .join(";");
 
   return (
     <section
       ref={setObjectiveElement}
       className={clsx("orf-objective-panel relative", isGoalFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable")}
     >
-      <HierarchyTreeOverlay container={objectiveElement} />
+      <HierarchyTreeOverlay container={objectiveElement} layoutKey={hierarchyLayoutKey} />
       <div
         className={clsx(
           "orf-objective-header group relative grid min-h-[58px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]",
@@ -551,6 +696,7 @@ function ObjectivePanel({
             openBlockActionId={openBlockActionId}
             onActiveBlockActionChange={onActiveBlockActionChange}
             onOpenBlockActionChange={onOpenBlockActionChange}
+            dragDrop={dragDrop}
           />
         ))}
       </div>
@@ -579,6 +725,7 @@ function ResultBlock({
   openBlockActionId,
   onActiveBlockActionChange,
   onOpenBlockActionChange,
+  dragDrop,
 }: {
   result: Result;
   tasks: Task[];
@@ -600,6 +747,7 @@ function ResultBlock({
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
   onOpenBlockActionChange: (id: string | null) => void;
+  dragDrop: DragDropController;
 }) {
   const status = indicatorStatus(result, tasks);
   const open = !collapsed;
@@ -607,6 +755,10 @@ function ResultBlock({
   const resultAnchorId = `metric:${result.id}`;
   const resultActionId = `result:${result.id}`;
   const resultRowActive = activeBlockActionId === resultActionId || openBlockActionId === resultActionId;
+  const resultDropClass = dropTargetClass(dragDrop.dropTarget, [
+    { type: "result", resultId: result.id },
+    { type: "resultTasks", resultId: result.id },
+  ]);
 
   return (
     <div className="relative">
@@ -614,7 +766,12 @@ function ResultBlock({
         className={clsx(
           "orf-result-row orf-row-depth-1 group relative grid min-h-[50px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
           resultRowActive && "orf-row-active",
+          dragDrop.dragBlock?.type === "result" && dragDrop.dragBlock.id === result.id && "orf-row-dragging",
+          resultDropClass,
         )}
+        onDragOver={(event) => handleRowDragOver(event, dragDrop, resultDropTargetForEvent(dragDrop.dragBlock, result, event))}
+        onDragLeave={(event) => handleRowDragLeave(event, dragDrop)}
+        onDrop={(event) => handleRowDrop(event, dragDrop, resultDropTargetForEvent(dragDrop.dragBlock, result, event))}
         onPointerEnter={() => onActiveBlockActionChange(resultActionId)}
         onPointerLeave={() => {
           if (activeBlockActionId === resultActionId) {
@@ -632,6 +789,9 @@ function ResultBlock({
           onOpenActionChange={onOpenBlockActionChange}
           onAdd={() => onAddTask(result)}
           onAction={(action) => onBlockAction(action, { type: "result", id: result.id, title: result.title, objectiveId: result.objectiveId })}
+          dragBlock={{ type: "result", id: result.id, objectiveId: result.objectiveId }}
+          onDragStart={dragDrop.onDragStart}
+          onDragEnd={dragDrop.onDragEnd}
         />
         {tasks.length > 0 && (
           <DisclosureAction
@@ -688,6 +848,7 @@ function ResultBlock({
               openBlockActionId={openBlockActionId}
               onActiveBlockActionChange={onActiveBlockActionChange}
               onOpenBlockActionChange={onOpenBlockActionChange}
+              dragDrop={dragDrop}
             />
           ))}
         </div>
@@ -713,6 +874,7 @@ function TaskRow({
   openBlockActionId,
   onActiveBlockActionChange,
   onOpenBlockActionChange,
+  dragDrop,
 }: {
   task: Task;
   depth: 2;
@@ -730,6 +892,7 @@ function TaskRow({
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
   onOpenBlockActionChange: (id: string | null) => void;
+  dragDrop: DragDropController;
 }) {
   const status = taskDisplayStatus(task);
   const complete = status === "done";
@@ -738,6 +901,10 @@ function TaskRow({
   const taskAnchorId = `task:${task.id}`;
   const taskActionId = `task:${task.id}`;
   const taskRowActive = activeBlockActionId === taskActionId || openBlockActionId === taskActionId;
+  const taskDropClass = dropTargetClass(dragDrop.dropTarget, [
+    { type: "task", taskId: task.id },
+    { type: "taskSubtasks", taskId: task.id },
+  ]);
 
   return (
     <div className="relative">
@@ -745,7 +912,12 @@ function TaskRow({
         className={clsx(
           "orf-task-row orf-row-depth-2 group relative grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
           taskRowActive && "orf-row-active",
+          dragDrop.dragBlock?.type === "task" && dragDrop.dragBlock.id === task.id && "orf-row-dragging",
+          taskDropClass,
         )}
+        onDragOver={(event) => handleRowDragOver(event, dragDrop, taskDropTargetForEvent(dragDrop.dragBlock, task, event))}
+        onDragLeave={(event) => handleRowDragLeave(event, dragDrop)}
+        onDrop={(event) => handleRowDrop(event, dragDrop, taskDropTargetForEvent(dragDrop.dragBlock, task, event))}
         onPointerEnter={() => onActiveBlockActionChange(taskActionId)}
         onPointerLeave={() => {
           if (activeBlockActionId === taskActionId) {
@@ -772,6 +944,9 @@ function TaskRow({
               hasSubtasks,
             })
           }
+          dragBlock={{ type: "task", id: task.id, resultId: task.linkedResultId, objectiveId: task.linkedObjectiveId }}
+          onDragStart={dragDrop.onDragStart}
+          onDragEnd={dragDrop.onDragEnd}
         />
         <HierarchyCell depth={depth} isLast={isLast && !hasSubtasks}>
           <span className="flex shrink-0 items-center gap-2">
@@ -839,6 +1014,7 @@ function TaskRow({
             openBlockActionId={openBlockActionId}
             onActiveBlockActionChange={onActiveBlockActionChange}
             onOpenBlockActionChange={onOpenBlockActionChange}
+            dragDrop={dragDrop}
           />
         ))}
     </div>
@@ -861,6 +1037,7 @@ function SubtaskRow({
   openBlockActionId,
   onActiveBlockActionChange,
   onOpenBlockActionChange,
+  dragDrop,
 }: {
   item: TaskChecklistItem;
   task: Task;
@@ -877,18 +1054,25 @@ function SubtaskRow({
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
   onOpenBlockActionChange: (id: string | null) => void;
+  dragDrop: DragDropController;
 }) {
   const status = subtaskDisplayStatus(task, item, itemIndex);
   const complete = status === "done";
   const subtaskActionId = `subtask:${task.id}:${item.id}`;
   const subtaskRowActive = activeBlockActionId === subtaskActionId || openBlockActionId === subtaskActionId;
+  const subtaskDropClass = dropTargetClass(dragDrop.dropTarget, [{ type: "subtask", taskId: task.id, itemId: item.id }]);
 
   return (
     <div
       className={clsx(
         "orf-subtask-row orf-row-depth-3 group relative grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(340px,1fr)_170px_120px_150px]",
         subtaskRowActive && "orf-row-active",
+        dragDrop.dragBlock?.type === "subtask" && dragDrop.dragBlock.id === item.id && "orf-row-dragging",
+        subtaskDropClass,
       )}
+      onDragOver={(event) => handleRowDragOver(event, dragDrop, subtaskDropTargetForEvent(dragDrop.dragBlock, task, item, event))}
+      onDragLeave={(event) => handleRowDragLeave(event, dragDrop)}
+      onDrop={(event) => handleRowDrop(event, dragDrop, subtaskDropTargetForEvent(dragDrop.dragBlock, task, item, event))}
       onPointerEnter={() => onActiveBlockActionChange(subtaskActionId)}
       onPointerLeave={() => {
         if (activeBlockActionId === subtaskActionId) {
@@ -915,6 +1099,9 @@ function SubtaskRow({
             objectiveId: task.linkedObjectiveId,
           })
         }
+        dragBlock={{ type: "subtask", id: item.id, taskId: task.id }}
+        onDragStart={dragDrop.onDragStart}
+        onDragEnd={dragDrop.onDragEnd}
       />
       <HierarchyCell depth={depth} isLast={isLast}>
         <span className="flex shrink-0 items-center gap-2">
@@ -951,20 +1138,222 @@ function SubtaskRow({
   );
 }
 
+type DropTargetMatch =
+  | { type: "result"; resultId: string }
+  | { type: "resultTasks"; resultId: string }
+  | { type: "task"; taskId: string }
+  | { type: "taskSubtasks"; taskId: string }
+  | { type: "subtask"; taskId: string; itemId: string };
+
+function dropPlacementFromEvent(event: DragEvent<HTMLElement>): DropPlacement {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+}
+
+function resultDropTargetForEvent(dragBlock: DragBlock | null, result: Result, event: DragEvent<HTMLElement>): DropTarget | null {
+  if (!dragBlock) {
+    return null;
+  }
+
+  if (dragBlock.type === "result") {
+    return { type: "result", resultId: result.id, objectiveId: result.objectiveId, placement: dropPlacementFromEvent(event) };
+  }
+
+  if (dragBlock.type === "task") {
+    return { type: "resultTasks", resultId: result.id, objectiveId: result.objectiveId };
+  }
+
+  return null;
+}
+
+function taskDropTargetForEvent(dragBlock: DragBlock | null, task: Task, event: DragEvent<HTMLElement>): DropTarget | null {
+  if (!dragBlock) {
+    return null;
+  }
+
+  if (dragBlock.type === "task") {
+    return {
+      type: "task",
+      taskId: task.id,
+      resultId: task.linkedResultId,
+      objectiveId: task.linkedObjectiveId,
+      placement: dropPlacementFromEvent(event),
+    };
+  }
+
+  if (dragBlock.type === "subtask") {
+    return { type: "taskSubtasks", taskId: task.id };
+  }
+
+  return null;
+}
+
+function subtaskDropTargetForEvent(dragBlock: DragBlock | null, task: Task, item: TaskChecklistItem, event: DragEvent<HTMLElement>): DropTarget | null {
+  if (dragBlock?.type !== "subtask") {
+    return null;
+  }
+
+  return { type: "subtask", taskId: task.id, itemId: item.id, placement: dropPlacementFromEvent(event) };
+}
+
+function canDropBlock(dragBlock: DragBlock, target: DropTarget): boolean {
+  if (dragBlock.type === "result") {
+    return target.type === "result" && target.objectiveId === dragBlock.objectiveId && target.resultId !== dragBlock.id;
+  }
+
+  if (dragBlock.type === "task") {
+    if (target.type === "resultTasks") {
+      return true;
+    }
+
+    return target.type === "task" && target.taskId !== dragBlock.id;
+  }
+
+  if (target.type === "taskSubtasks") {
+    return true;
+  }
+
+  return target.type === "subtask" && target.itemId !== dragBlock.id;
+}
+
+function canAccess(
+  state: OrfState,
+  role: OrfState["users"][number]["role"] | undefined,
+  stage: FlowStage,
+  action: PermissionAction,
+  resource: PermissionResource,
+): boolean {
+  if (role === "admin") {
+    return true;
+  }
+
+  return state.permissionRules.some((rule) => rule.role === role && rule.stage === stage && rule.resource === resource && rule.actions.includes(action));
+}
+
+function resourceForBlockTarget(target: BlockTarget): PermissionResource {
+  if (target.type === "objective") {
+    return "objective";
+  }
+
+  if (target.type === "result") {
+    return "result";
+  }
+
+  if (target.type === "task") {
+    return "task";
+  }
+
+  return "subtask";
+}
+
+function resourceForDragBlock(block: DragBlock): PermissionResource {
+  if (block.type === "result") {
+    return "result";
+  }
+
+  if (block.type === "task") {
+    return "task";
+  }
+
+  return "subtask";
+}
+
+function handleRowDragOver(event: DragEvent<HTMLElement>, dragDrop: DragDropController, target: DropTarget | null) {
+  if (!dragDrop.dragBlock || !target || !canDropBlock(dragDrop.dragBlock, target)) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.dataTransfer.dropEffect = "move";
+  dragDrop.onDropTargetChange(target);
+}
+
+function handleRowDrop(event: DragEvent<HTMLElement>, dragDrop: DragDropController, target: DropTarget | null) {
+  if (!dragDrop.dragBlock || !target || !canDropBlock(dragDrop.dragBlock, target)) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  dragDrop.onDrop(target);
+}
+
+function handleRowDragLeave(event: DragEvent<HTMLElement>, dragDrop: DragDropController) {
+  if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) {
+    return;
+  }
+
+  dragDrop.onDropTargetChange(null);
+}
+
+function dropTargetClass(target: DropTarget | null, matches: DropTargetMatch[]) {
+  if (!target) {
+    return undefined;
+  }
+
+  for (const match of matches) {
+    if (target.type === "result" && match.type === "result" && target.resultId === match.resultId) {
+      return target.placement === "before" ? "orf-drop-target-before" : "orf-drop-target-after";
+    }
+
+    if (target.type === "resultTasks" && match.type === "resultTasks" && target.resultId === match.resultId) {
+      return "orf-drop-target-inside";
+    }
+
+    if (target.type === "task" && match.type === "task" && target.taskId === match.taskId) {
+      return target.placement === "before" ? "orf-drop-target-before" : "orf-drop-target-after";
+    }
+
+    if (target.type === "taskSubtasks" && match.type === "taskSubtasks" && target.taskId === match.taskId) {
+      return "orf-drop-target-inside";
+    }
+
+    if (target.type === "subtask" && match.type === "subtask" && target.taskId === match.taskId && target.itemId === match.itemId) {
+      return target.placement === "before" ? "orf-drop-target-before" : "orf-drop-target-after";
+    }
+  }
+
+  return undefined;
+}
+
+function deletionConfirmMessage(target: BlockTarget, state: OrfState) {
+  if (target.type === "objective") {
+    const resultCount = state.results.filter((result) => result.objectiveId === target.id).length;
+    const tasks = state.tasks.filter((task) => task.linkedObjectiveId === target.id);
+    const subtaskCount = tasks.reduce((count, task) => count + task.checklist.length, 0);
+    return `删除目标「${target.title}」会同时删除 ${resultCount} 个指标、${tasks.length} 个任务和 ${subtaskCount} 个子任务。是否确认？`;
+  }
+
+  if (target.type === "result") {
+    const tasks = state.tasks.filter((task) => task.linkedResultId === target.id);
+    const subtaskCount = tasks.reduce((count, task) => count + task.checklist.length, 0);
+    return `删除指标「${target.title}」会同时删除 ${tasks.length} 个任务和 ${subtaskCount} 个子任务。是否确认？`;
+  }
+
+  if (target.type === "task") {
+    const task = state.tasks.find((item) => item.id === target.id);
+    const subtaskCount = task?.checklist.length ?? 0;
+    return subtaskCount > 0
+      ? `删除任务「${target.title}」会同时删除 ${subtaskCount} 个子任务。是否确认？`
+      : `删除任务「${target.title}」？`;
+  }
+
+  return `删除子任务「${target.title}」？`;
+}
+
 const blockMenuItems: { action: BlockAction; label: string; icon: LucideIcon }[] = [
-  { action: "convert", label: "转换", icon: Repeat2 },
-  { action: "move", label: "移动", icon: Move },
+  { action: "reorder", label: "拖拽排序", icon: GripVertical },
   { action: "copyLink", label: "复制链接", icon: Copy },
   { action: "comment", label: "评论", icon: MessageSquare },
-  { action: "askAi", label: "问 AI", icon: Sparkles },
   { action: "delete", label: "删除", icon: Trash2 },
 ];
 
 const blockActionLeft = {
   objective: 20,
-  result: 24,
-  task: 62,
-  subtask: 88,
+  result: HIERARCHY_TREE_METRICS.anchorLeftByDepth[1] - HIERARCHY_TREE_METRICS.preIconSlot,
+  task: HIERARCHY_TREE_METRICS.anchorLeftByDepth[2] - HIERARCHY_TREE_METRICS.preIconSlot,
+  subtask: HIERARCHY_TREE_METRICS.anchorLeftByDepth[3] - HIERARCHY_TREE_METRICS.preIconSlot,
 } as const;
 
 function BlockActions({
@@ -977,6 +1366,9 @@ function BlockActions({
   onOpenActionChange,
   onAdd,
   onAction,
+  dragBlock,
+  onDragStart,
+  onDragEnd,
 }: {
   actionId: string;
   addLabel: string;
@@ -987,6 +1379,9 @@ function BlockActions({
   onOpenActionChange: (id: string | null) => void;
   onAdd: () => void;
   onAction: (action: BlockAction) => void;
+  dragBlock?: DragBlock;
+  onDragStart?: (block: DragBlock) => void;
+  onDragEnd?: () => void;
 }) {
   const open = openActionId === actionId;
   const visible = open || (!openActionId && activeActionId === actionId);
@@ -1012,9 +1407,23 @@ function BlockActions({
       <div className="relative">
         <button
           type="button"
-          className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
-          aria-label="打开块菜单"
-          title="块菜单"
+          className={clsx(
+            "orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]",
+            dragBlock && "orf-block-drag-handle",
+          )}
+          aria-label={dragBlock ? "拖拽排序或打开块菜单" : "打开块菜单"}
+          title={dragBlock ? "拖拽排序 / 块菜单" : "块菜单"}
+          draggable={Boolean(dragBlock)}
+          onDragStart={(event) => {
+            if (!dragBlock) {
+              return;
+            }
+
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("application/x-orf-block", `${dragBlock.type}:${dragBlock.id}`);
+            onDragStart?.(dragBlock);
+          }}
+          onDragEnd={onDragEnd}
           onClick={() => {
             onActiveActionChange(actionId);
             onOpenActionChange(open ? null : actionId);
@@ -1139,6 +1548,7 @@ type CommentReplyInput = {
 
 function CommentPanel({
   targetTitle,
+  currentMember,
   threads,
   onAddComment,
   onUpdateComment,
@@ -1146,6 +1556,7 @@ function CommentPanel({
   onClose,
 }: {
   targetTitle: string;
+  currentMember: string;
   threads: CommentThread[];
   onAddComment: (body: string, replyInput?: CommentReplyInput) => void;
   onUpdateComment: (threadId: string, messageId: string, body: string) => void;
@@ -1359,6 +1770,7 @@ function CommentPanel({
         </div>
         <CommentComposer
           body={body}
+          currentMember={currentMember}
           mode={draftMode}
           defaultReplyAuthor={activeRootEntry?.message.author}
           onBodyChange={setBody}
@@ -1475,6 +1887,7 @@ function CommentMessageRow({
 
 function CommentComposer({
   body,
+  currentMember,
   mode,
   defaultReplyAuthor,
   onBodyChange,
@@ -1482,6 +1895,7 @@ function CommentComposer({
   onSubmit,
 }: {
   body: string;
+  currentMember: string;
   mode: CommentDraftMode;
   defaultReplyAuthor?: string;
   onBodyChange: (body: string) => void;

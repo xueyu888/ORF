@@ -37,10 +37,11 @@ export function GlobalModals() {
 }
 
 function NewObjectiveModal() {
-  const { createObjective, closeModal } = useOrf();
+  const { createObjective, closeModal, currentUser, state } = useOrf();
+  const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
   const [title, setTitle] = useState("降低权限策略问答中的幻觉率");
   const [whyItMatters, setWhyItMatters] = useState("权限策略回答错误会导致客户配置错误和支持升级。");
-  const [owner, setOwner] = useState("Alex Chen");
+  const [owner, setOwner] = useState(defaultOwner);
   const [cycle, setCycle] = useState("2026 Q2");
   const [boundary, setBoundary] = useState("只关注 AI 应用回答行为，不扩展到身份系统内部实现。");
 
@@ -93,14 +94,17 @@ function NewResultModal({ objectiveId }: { objectiveId?: string }) {
 }
 
 function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; resultId?: string }) {
-  const { state, createFeedback, closeModal } = useOrf();
-  const [linkedResultId, setLinkedResultId] = useState(resultId ?? state.results[0]?.id ?? "");
-  const selectedResult = state.results.find((result) => result.id === linkedResultId);
+  const { state, createFeedback, closeModal, currentUser } = useOrf();
+  const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
+  const resultOptions = objectiveId ? state.results.filter((result) => result.objectiveId === objectiveId) : state.results;
+  const initialResultId = resultId && resultOptions.some((result) => result.id === resultId) ? resultId : resultOptions[0]?.id ?? state.results[0]?.id ?? "";
+  const [linkedResultId, setLinkedResultId] = useState(initialResultId);
+  const selectedResult = resultOptions.find((result) => result.id === linkedResultId) ?? (!objectiveId ? state.results.find((result) => result.id === linkedResultId) : undefined);
   const [phenomenon, setPhenomenon] = useState("线上回答引用了过期的权限策略文档。");
   const [cause, setCause] = useState("知识缺口");
   const [impact, setImpact] = useState<Impact>("High");
   const [source, setSource] = useState<FeedbackSource>("Log");
-  const [owner, setOwner] = useState("Alex Chen");
+  const [owner, setOwner] = useState(defaultOwner);
   const [suggestedAdjustment, setSuggestedAdjustment] = useState("增加版本感知检索过滤，并补充回归用例。");
 
   return (
@@ -109,11 +113,15 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (!selectedResult) {
+            return;
+          }
+
           createFeedback({
             phenomenon,
             causeCategories: [cause],
             impact,
-            linkedObjectiveId: objectiveId ?? selectedResult?.objectiveId ?? state.objectives[0].id,
+            linkedObjectiveId: selectedResult.objectiveId,
             linkedResultId,
             suggestedAdjustment,
             source,
@@ -123,7 +131,7 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
         }}
       >
         <Field label="现象"><textarea className="orf-input min-h-24 px-3 py-2" value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} /></Field>
-        <Field label="关联结果"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{state.results.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
+        <Field label="关联结果"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="原因分类"><select className="orf-input px-3 py-2" value={cause} onChange={(event) => setCause(event.target.value)}>{state.causeCategories.map((item) => <option key={item}>{item}</option>)}</select></Field>
           <Field label="影响"><select className="orf-input px-3 py-2" value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "严重"}</option>)}</select></Field>
@@ -140,13 +148,17 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
 }
 
 function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: string; resultId?: string; feedbackId?: string }) {
-  const { state, createTask, closeModal } = useOrf();
+  const { state, createTask, closeModal, currentUser } = useOrf();
+  const defaultAssignee = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
   const linkedFeedback = state.feedback.find((item) => item.id === feedbackId);
-  const [linkedResultId, setLinkedResultId] = useState(resultId ?? linkedFeedback?.linkedResultId ?? state.results[0]?.id ?? "");
-  const selectedResult = state.results.find((result) => result.id === linkedResultId);
+  const resultOptions = objectiveId ? state.results.filter((result) => result.objectiveId === objectiveId) : state.results;
+  const requestedResultId = resultId ?? linkedFeedback?.linkedResultId;
+  const initialResultId = requestedResultId && resultOptions.some((result) => result.id === requestedResultId) ? requestedResultId : resultOptions[0]?.id ?? state.results[0]?.id ?? "";
+  const [linkedResultId, setLinkedResultId] = useState(initialResultId);
+  const selectedResult = resultOptions.find((result) => result.id === linkedResultId) ?? (!objectiveId ? state.results.find((result) => result.id === linkedResultId) : undefined);
   const [title, setTitle] = useState(linkedFeedback ? `处理反馈：${linkedFeedback.causeCategories.join(" + ")}` : "为 RAG 检索增加版本感知过滤");
   const [description, setDescription] = useState(linkedFeedback?.suggestedAdjustment ?? "执行支撑关联结果的下一步动作。");
-  const [assignee, setAssignee] = useState("Alex Chen");
+  const [assignee, setAssignee] = useState(defaultAssignee);
   const [priority, setPriority] = useState<Priority>("High");
 
   return (
@@ -155,12 +167,16 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (!selectedResult) {
+            return;
+          }
+
           createTask({
             title,
             description,
             assignee,
             priority,
-            linkedObjectiveId: objectiveId ?? selectedResult?.objectiveId ?? state.objectives[0].id,
+            linkedObjectiveId: selectedResult.objectiveId,
             linkedResultId,
             feedbackOriginId: feedbackId,
           });
@@ -169,7 +185,7 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
       >
         <Field label="任务标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="说明"><textarea className="orf-input min-h-24 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-        <Field label="关联结果"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{state.results.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
+        <Field label="关联结果"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="执行人"><input className="orf-input px-3 py-2" value={assignee} onChange={(event) => setAssignee(event.target.value)} /></Field>
           <Field label="优先级"><select className="orf-input px-3 py-2" value={priority} onChange={(event) => setPriority(event.target.value as Priority)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "紧急"}</option>)}</select></Field>

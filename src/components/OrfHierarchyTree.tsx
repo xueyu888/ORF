@@ -5,11 +5,32 @@ import { useLayoutEffect, useState } from "react";
 const TREE_LINE_COLOR = "var(--orf-tree-line)";
 const TREE_LINE_WIDTH = 1.8;
 const TREE_RADIUS = 12;
+const TREE_INDENT_STEP = 28;
+const TREE_BRANCH_LENGTH = 20;
+const TREE_ROW_PADDING_X = 20;
+const TREE_PRE_ICON_SLOT = 32;
+const TREE_FIRST_ANCHOR_LEFT = 56;
 
-const contentLeftByDepth: Record<1 | 2 | 3, number> = {
-  1: 36,
-  2: 42,
-  3: 68,
+type HierarchyDepth = 1 | 2 | 3;
+
+const anchorLeftByDepth: Record<HierarchyDepth, number> = {
+  1: TREE_FIRST_ANCHOR_LEFT,
+  2: TREE_FIRST_ANCHOR_LEFT + TREE_INDENT_STEP,
+  3: TREE_FIRST_ANCHOR_LEFT + TREE_INDENT_STEP * 2,
+};
+
+export const HIERARCHY_TREE_METRICS = {
+  anchorLeftByDepth,
+  branchLength: TREE_BRANCH_LENGTH,
+  indentStep: TREE_INDENT_STEP,
+  preIconSlot: TREE_PRE_ICON_SLOT,
+} as const;
+
+// Depth 2/3 rows reserve a 24px disclosure slot plus an 8px gap before the main icon.
+const contentLeftByDepth: Record<HierarchyDepth, number> = {
+  1: anchorLeftByDepth[1] - TREE_ROW_PADDING_X,
+  2: anchorLeftByDepth[2] - TREE_ROW_PADDING_X - TREE_PRE_ICON_SLOT,
+  3: anchorLeftByDepth[3] - TREE_ROW_PADDING_X - TREE_PRE_ICON_SLOT,
 };
 
 type AnchorGeometry = {
@@ -37,7 +58,7 @@ export function HierarchyCell({
   children,
   className,
 }: {
-  depth: 1 | 2 | 3;
+  depth: HierarchyDepth;
   isLast?: boolean;
   children: ReactNode;
   className?: string;
@@ -51,8 +72,10 @@ export function HierarchyCell({
 
 export function HierarchyTreeOverlay({
   container,
+  layoutKey,
 }: {
   container: HTMLElement | null;
+  layoutKey?: string;
 }) {
   const [geometry, setGeometry] = useState<TreeGeometry>({ width: 0, height: 0, paths: [] });
 
@@ -81,6 +104,13 @@ export function HierarchyTreeOverlay({
 
     const observer = new ResizeObserver(scheduleMeasure);
     observer.observe(container);
+    const mutationObserver = new MutationObserver(scheduleMeasure);
+    mutationObserver.observe(container, {
+      attributes: true,
+      attributeFilter: ["data-hierarchy-parent", "data-hierarchy-anchor", "data-hierarchy-branch-target", "data-hierarchy-branch-end-offset"],
+      childList: true,
+      subtree: true,
+    });
     window.addEventListener("resize", scheduleMeasure);
 
     return () => {
@@ -89,9 +119,10 @@ export function HierarchyTreeOverlay({
       }
 
       observer.disconnect();
+      mutationObserver.disconnect();
       window.removeEventListener("resize", scheduleMeasure);
     };
-  }, [container]);
+  }, [container, layoutKey]);
 
   if (geometry.paths.length === 0) {
     return null;
@@ -178,7 +209,8 @@ function getTreeGeometry(container: HTMLElement): TreeGeometry {
 
     const sortedChildren = children.sort((left, right) => left.centerY - right.centerY);
     const lastChild = sortedChildren[sortedChildren.length - 1];
-    const x = round(parent.centerX);
+    const minChildBranchEndX = Math.min(...sortedChildren.map((child) => child.branchEndX ?? child.left));
+    const x = round(Math.min(parent.centerX, minChildBranchEndX - TREE_BRANCH_LENGTH));
     const startY = round(parent.bottom);
     const endY = round(Math.max(startY, lastChild.centerY - TREE_RADIUS));
 

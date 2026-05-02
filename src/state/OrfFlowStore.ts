@@ -2,12 +2,172 @@ import { initialOrfState } from "../data/mockData";
 import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, PermissionAction, PermissionResource, Result, Task, TaskStatus, UserRole, OrfStage } from "../types/orf";
 
 const STORAGE_KEY = "orf-flow-state-v3";
+type Placement = "before" | "after";
+type MoveResultInput = { resultId: string; objectiveId: string; referenceResultId: string; placement: Placement };
+type MoveTaskInput = { taskId: string; toResultId: string; referenceTaskId?: string; placement?: Placement };
+type MoveSubtaskInput = { itemId: string; fromTaskId: string; toTaskId: string; referenceItemId?: string; placement?: Placement };
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
 const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const currentTime = () => new Date().toISOString();
 const currentDate = () => currentTime().slice(0, 10);
+const adminCount = (users: OrfState["users"]) => users.filter((user) => user.role === "admin").length;
+const currentUserName = (state: OrfState) => state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
+const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStatus): TaskStatus => {
+  if (checklist.length === 0) {
+    return fallback === "Done" ? "Todo" : fallback;
+  }
+
+  const completedCount = checklist.filter((item) => item.done).length;
+  return completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
+};
+const moveByReference = <T extends { id: string }>(items: T[], movingId: string, referenceId: string, placement: Placement): T[] => {
+  const moving = items.find((item) => item.id === movingId);
+  if (!moving || movingId === referenceId) {
+    return items;
+  }
+
+  const withoutMoving = items.filter((item) => item.id !== movingId);
+  const referenceIndex = withoutMoving.findIndex((item) => item.id === referenceId);
+  if (referenceIndex < 0) {
+    return items;
+  }
+
+  const insertIndex = placement === "before" ? referenceIndex : referenceIndex + 1;
+  return [...withoutMoving.slice(0, insertIndex), moving, ...withoutMoving.slice(insertIndex)];
+};
+const insertTaskByReference = (tasks: Task[], movingTask: Task, referenceTaskId?: string, placement: Placement = "after"): Task[] => {
+  const withoutMoving = tasks.filter((task) => task.id !== movingTask.id);
+  const task = { ...movingTask };
+
+  if (referenceTaskId) {
+    const referenceIndex = withoutMoving.findIndex((item) => item.id === referenceTaskId);
+    if (referenceIndex >= 0) {
+      const insertIndex = placement === "before" ? referenceIndex : referenceIndex + 1;
+      return [...withoutMoving.slice(0, insertIndex), task, ...withoutMoving.slice(insertIndex)];
+    }
+  }
+
+  const lastTargetIndex = withoutMoving.reduce((lastIndex, item, index) => (item.linkedResultId === task.linkedResultId ? index : lastIndex), -1);
+  const insertIndex = lastTargetIndex >= 0 ? lastTargetIndex + 1 : withoutMoving.length;
+  return [...withoutMoving.slice(0, insertIndex), task, ...withoutMoving.slice(insertIndex)];
+};
+const removeCommentsForTargets = (
+  comments: OrfState["comments"],
+  targets: {
+    objectiveIds?: Set<string>;
+    resultIds?: Set<string>;
+    taskIds?: Set<string>;
+    subtaskIds?: Set<string>;
+  },
+) =>
+  comments.filter((thread) => {
+    if (thread.targetType === "objective") {
+      return !targets.objectiveIds?.has(thread.targetId);
+    }
+
+    if (thread.targetType === "result") {
+      return !targets.resultIds?.has(thread.targetId);
+    }
+
+    if (thread.targetType === "task") {
+      return !targets.taskIds?.has(thread.targetId);
+    }
+
+    return !targets.subtaskIds?.has(thread.targetId);
+  });
+
+type CascadeTargets = {
+  objectiveIds: Set<string>;
+  resultIds: Set<string>;
+  taskIds: Set<string>;
+  subtaskIds: Set<string>;
+  feedbackIds: Set<string>;
+  evidenceIds: Set<string>;
+};
+
+const collectCascadeTargets = (
+  state: OrfState,
+  input: { objectiveIds?: Iterable<string>; resultIds?: Iterable<string>; taskIds?: Iterable<string>; feedbackIds?: Iterable<string> },
+): CascadeTargets => {
+  const objectiveIds = new Set(input.objectiveIds ?? []);
+  const resultIds = new Set(input.resultIds ?? []);
+  const taskIds = new Set(input.taskIds ?? []);
+  const feedbackIds = new Set(input.feedbackIds ?? []);
+  const evidenceIds = new Set<string>();
+
+  for (const result of state.results) {
+    if (objectiveIds.has(result.objectiveId)) {
+      resultIds.add(result.id);
+    }
+  }
+
+  for (const task of state.tasks) {
+    if (objectiveIds.has(task.linkedObjectiveId) || resultIds.has(task.linkedResultId)) {
+      taskIds.add(task.id);
+    }
+  }
+
+  for (const item of state.feedback) {
+    if (objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)) {
+      feedbackIds.add(item.id);
+    }
+  }
+
+  for (const item of state.evidence) {
+    if (resultIds.has(item.linkedResultId) || (item.linkedFeedbackId && feedbackIds.has(item.linkedFeedbackId))) {
+      evidenceIds.add(item.id);
+    }
+  }
+
+  const subtaskIds = new Set(
+    state.tasks
+      .filter((task) => taskIds.has(task.id))
+      .flatMap((task) => task.checklist.map((item) => item.id)),
+  );
+
+  return { objectiveIds, resultIds, taskIds, subtaskIds, feedbackIds, evidenceIds };
+};
+
+const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState => ({
+  ...state,
+  objectives: state.objectives
+    .filter((objective) => !targets.objectiveIds.has(objective.id))
+    .map((objective) => ({
+      ...objective,
+      resultIds: objective.resultIds.filter((id) => !targets.resultIds.has(id)),
+      taskIds: objective.taskIds.filter((id) => !targets.taskIds.has(id)),
+      feedbackIds: objective.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
+    })),
+  results: state.results
+    .filter((result) => !targets.resultIds.has(result.id))
+    .map((result) => ({
+      ...result,
+      taskIds: result.taskIds.filter((id) => !targets.taskIds.has(id)),
+      feedbackIds: result.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
+      evidenceIds: result.evidenceIds.filter((id) => !targets.evidenceIds.has(id)),
+    })),
+  tasks: state.tasks.filter((task) => !targets.taskIds.has(task.id)),
+  feedback: state.feedback.filter((item) => !targets.feedbackIds.has(item.id)),
+  evidence: state.evidence.filter((item) => !targets.evidenceIds.has(item.id)),
+  decisions: state.decisions.filter(
+    (item) =>
+      !targets.objectiveIds.has(item.linkedObjectiveId) &&
+      !(item.linkedResultId && targets.resultIds.has(item.linkedResultId)) &&
+      !(item.linkedFeedbackId && targets.feedbackIds.has(item.linkedFeedbackId)),
+  ),
+  evalRuns: state.evalRuns.filter((item) => !targets.resultIds.has(item.linkedResultId)),
+  scenarios: state.scenarios.filter((item) => !targets.objectiveIds.has(item.linkedObjectiveId)),
+  failureSamples: state.failureSamples.filter((item) => !targets.resultIds.has(item.linkedResultId)),
+  comments: removeCommentsForTargets(state.comments, {
+    objectiveIds: targets.objectiveIds,
+    resultIds: targets.resultIds,
+    taskIds: targets.taskIds,
+    subtaskIds: targets.subtaskIds,
+  }),
+});
+
 const normalizeState = (state: OrfState): OrfState => ({
   ...state,
   users: state.users ?? cloneValue(initialOrfState.users),
@@ -57,7 +217,7 @@ export class OrfFlowStore {
       title: input.title,
       description: input.whyItMatters,
       whyItMatters: input.whyItMatters,
-      owner: input.owner,
+      owner: input.owner || currentUserName(state),
       cycle: input.cycle,
       status: "Draft" as const,
       confidence: 50,
@@ -95,7 +255,7 @@ export class OrfFlowStore {
       direction: input.direction ?? "increase",
       status: input.status ?? "Draft",
       confidence: input.confidence ?? 50,
-      owner: input.owner ?? "Alex Chen",
+      owner: input.owner || currentUserName(state),
       evidenceIds: [],
       taskIds: [],
       feedbackIds: [],
@@ -115,23 +275,29 @@ export class OrfFlowStore {
   }
 
   createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">): OrfState {
+    const result = state.results.find((item) => item.id === input.linkedResultId);
+    if (!result) {
+      return state;
+    }
+
     const id = `fb-${Date.now()}`;
     const now = new Date().toISOString().slice(0, 10);
+    const owner = input.owner || currentUserName(state);
     const feedback: Feedback = {
       id,
       phenomenon: input.phenomenon,
       evidenceIds: [],
       causeCategories: input.causeCategories,
       impact: input.impact,
-      linkedObjectiveId: input.linkedObjectiveId,
+      linkedObjectiveId: result.objectiveId,
       linkedResultId: input.linkedResultId,
       suggestedAdjustment: input.suggestedAdjustment,
       source: input.source,
       status: "New",
-      owner: input.owner,
+      owner,
       createdAt: now,
       updatedAt: now,
-      activity: [{ id: `act-${Date.now()}`, actor: input.owner, action: "创建了结构化反馈", at: now }],
+      activity: [{ id: `act-${Date.now()}`, actor: owner, action: "创建了结构化反馈", at: now }],
     };
 
     return {
@@ -147,6 +313,11 @@ export class OrfFlowStore {
   }
 
   createTask(state: OrfState, input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>): OrfState {
+    const result = state.results.find((item) => item.id === input.linkedResultId);
+    if (!result) {
+      return state;
+    }
+
     const nextNumber = 128 + state.tasks.length + 1;
     const now = new Date().toISOString().slice(0, 10);
     const task: Task = {
@@ -155,8 +326,8 @@ export class OrfFlowStore {
       description: input.description,
       status: input.status ?? "Todo",
       priority: input.priority,
-      assignee: input.assignee,
-      linkedObjectiveId: input.linkedObjectiveId,
+      assignee: input.assignee || currentUserName(state),
+      linkedObjectiveId: result.objectiveId,
       linkedResultId: input.linkedResultId,
       feedbackOriginId: input.feedbackOriginId,
       dueDate: input.dueDate ?? now,
@@ -215,13 +386,15 @@ export class OrfFlowStore {
           return task;
         }
 
+        if (!task.checklist.some((item) => item.id === itemId)) {
+          return task;
+        }
+
         const checklist = task.checklist.map((item) => (item.id === itemId ? { ...item, done, updatedAt: now } : item));
-        const completedCount = checklist.filter((item) => item.done).length;
-        const status: TaskStatus = completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 
         return {
           ...task,
-          status,
+          status: taskStatusForChecklist(checklist, task.status),
           checklist,
           updatedAt: now,
         };
@@ -260,6 +433,193 @@ export class OrfFlowStore {
     };
   }
 
+  moveResult(state: OrfState, input: MoveResultInput): OrfState {
+    const result = state.results.find((item) => item.id === input.resultId);
+    const reference = state.results.find((item) => item.id === input.referenceResultId);
+    if (!result || !reference || result.objectiveId !== input.objectiveId || reference.objectiveId !== input.objectiveId) {
+      return state;
+    }
+
+    return {
+      ...state,
+      results: moveByReference(state.results, input.resultId, input.referenceResultId, input.placement),
+      objectives: state.objectives.map((objective) =>
+        objective.id === input.objectiveId
+          ? {
+              ...objective,
+              resultIds: moveByReference(
+                objective.resultIds.map((id) => ({ id })),
+                input.resultId,
+                input.referenceResultId,
+                input.placement,
+              ).map((item) => item.id),
+              updatedAt: currentDate(),
+            }
+          : objective,
+      ),
+    };
+  }
+
+  moveTask(state: OrfState, input: MoveTaskInput): OrfState {
+    const task = state.tasks.find((item) => item.id === input.taskId);
+    const targetResult = state.results.find((item) => item.id === input.toResultId);
+    if (!task || !targetResult) {
+      return state;
+    }
+
+    if (input.referenceTaskId === input.taskId && task.linkedResultId === input.toResultId) {
+      return state;
+    }
+
+    if (input.referenceTaskId) {
+      const referenceTask = state.tasks.find((item) => item.id === input.referenceTaskId);
+      if (!referenceTask || referenceTask.linkedResultId !== targetResult.id || referenceTask.id === task.id) {
+        return state;
+      }
+    }
+
+    const now = currentDate();
+    const previousResultId = task.linkedResultId;
+    const previousObjectiveId = task.linkedObjectiveId;
+    const movedTask: Task = {
+      ...task,
+      linkedObjectiveId: targetResult.objectiveId,
+      linkedResultId: targetResult.id,
+      updatedAt: now,
+    };
+    const nextTasks = insertTaskByReference(state.tasks, movedTask, input.referenceTaskId, input.placement);
+
+    return {
+      ...state,
+      tasks: nextTasks,
+      objectives: state.objectives.map((objective) => {
+        if (objective.id !== previousObjectiveId && objective.id !== targetResult.objectiveId) {
+          return objective;
+        }
+
+        const taskIds = objective.id === targetResult.objectiveId
+          ? nextTasks.filter((item) => item.linkedObjectiveId === objective.id).map((item) => item.id)
+          : objective.taskIds.filter((id) => id !== task.id);
+
+        return { ...objective, taskIds, updatedAt: now };
+      }),
+      results: state.results.map((result) => {
+        if (result.id !== previousResultId && result.id !== targetResult.id) {
+          return result;
+        }
+
+        return {
+          ...result,
+          taskIds: nextTasks.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
+        };
+      }),
+    };
+  }
+
+  moveTaskChecklistItem(state: OrfState, input: MoveSubtaskInput): OrfState {
+    const fromTask = state.tasks.find((task) => task.id === input.fromTaskId);
+    const toTask = state.tasks.find((task) => task.id === input.toTaskId);
+    const item = fromTask?.checklist.find((current) => current.id === input.itemId);
+    if (!fromTask || !toTask || !item) {
+      return state;
+    }
+
+    if (input.referenceItemId === input.itemId && input.fromTaskId === input.toTaskId) {
+      return state;
+    }
+
+    if (input.referenceItemId && !toTask.checklist.some((current) => current.id === input.referenceItemId && current.id !== input.itemId)) {
+      return state;
+    }
+
+    const now = currentDate();
+    const movedItem = { ...item, updatedAt: now };
+
+    return {
+      ...state,
+      tasks: state.tasks.map((task) => {
+        if (task.id !== input.fromTaskId && task.id !== input.toTaskId) {
+          return task;
+        }
+
+        const checklistWithoutItem = task.checklist.filter((current) => current.id !== input.itemId);
+        const isTargetTask = task.id === input.toTaskId;
+        const checklist = isTargetTask
+          ? (() => {
+              if (!input.referenceItemId) {
+                return [...checklistWithoutItem, movedItem];
+              }
+
+              const referenceIndex = checklistWithoutItem.findIndex((current) => current.id === input.referenceItemId);
+              if (referenceIndex < 0) {
+                return [...checklistWithoutItem, movedItem];
+              }
+
+              const insertIndex = input.placement === "before" ? referenceIndex : referenceIndex + 1;
+              return [...checklistWithoutItem.slice(0, insertIndex), movedItem, ...checklistWithoutItem.slice(insertIndex)];
+            })()
+          : checklistWithoutItem;
+
+        return {
+          ...task,
+          checklist,
+          status: taskStatusForChecklist(checklist, task.status),
+          updatedAt: now,
+        };
+      }),
+    };
+  }
+
+  deleteObjective(state: OrfState, objectiveId: string): OrfState {
+    return pruneCascadeTargets(state, collectCascadeTargets(state, { objectiveIds: [objectiveId] }));
+  }
+
+  deleteResult(state: OrfState, resultId: string): OrfState {
+    return pruneCascadeTargets(state, collectCascadeTargets(state, { resultIds: [resultId] }));
+  }
+
+  deleteTask(state: OrfState, taskId: string): OrfState {
+    const task = state.tasks.find((item) => item.id === taskId);
+    const deletedSubtaskIds = new Set(task?.checklist.map((item) => item.id) ?? []);
+
+    return {
+      ...state,
+      objectives: state.objectives.map((objective) => ({ ...objective, taskIds: objective.taskIds.filter((id) => id !== taskId) })),
+      results: state.results.map((result) => ({ ...result, taskIds: result.taskIds.filter((id) => id !== taskId) })),
+      tasks: state.tasks.filter((item) => item.id !== taskId),
+      comments: removeCommentsForTargets(state.comments, {
+        taskIds: new Set([taskId]),
+        subtaskIds: deletedSubtaskIds,
+      }),
+    };
+  }
+
+  deleteTaskChecklistItem(state: OrfState, taskId: string, itemId: string): OrfState {
+    const now = currentDate();
+    const targetTask = state.tasks.find((task) => task.id === taskId);
+    if (!targetTask?.checklist.some((item) => item.id === itemId)) {
+      return state;
+    }
+
+    return {
+      ...state,
+      tasks: state.tasks.map((task) => {
+        if (task.id !== taskId) {
+          return task;
+        }
+
+        const checklist = task.checklist.filter((item) => item.id !== itemId);
+        return {
+          ...task,
+          checklist,
+          status: taskStatusForChecklist(checklist, task.status),
+          updatedAt: now,
+        };
+      }),
+      comments: removeCommentsForTargets(state.comments, { subtaskIds: new Set([itemId]) }),
+    };
+  }
+
   updateFeedbackStatus(state: OrfState, feedbackId: string, status: FeedbackStatus): OrfState {
     const now = currentDate();
     return {
@@ -270,7 +630,7 @@ export class OrfFlowStore {
               ...item,
               status,
               updatedAt: now,
-              activity: [...item.activity, { id: `act-${Date.now()}`, actor: "Alex Chen", action: `更新反馈状态`, at: now }],
+              activity: [...item.activity, { id: `act-${Date.now()}`, actor: currentUserName(state), action: `更新反馈状态`, at: now }],
             }
           : item,
       ),
@@ -281,6 +641,42 @@ export class OrfFlowStore {
     return {
       ...state,
       results: state.results.map((result) => (result.id === resultId ? { ...result, confidence } : result)),
+    };
+  }
+
+  createUser(state: OrfState, input: { name: string; email: string; role: UserRole }): OrfState {
+    const email = input.email.trim().toLowerCase();
+    const name = input.name.trim();
+    if (!email || !name) {
+      return state;
+    }
+
+    const existing = state.users.find((user) => user.email.toLowerCase() === email);
+    if (existing) {
+      if (existing.role === "admin" && input.role !== "admin" && adminCount(state.users) <= 1) {
+        return {
+          ...state,
+          users: state.users.map((user) => (user.id === existing.id ? { ...user, name } : user)),
+        };
+      }
+
+      return {
+        ...state,
+        users: state.users.map((user) => (user.id === existing.id ? { ...user, name, role: input.role } : user)),
+      };
+    }
+
+    return {
+      ...state,
+      users: [
+        ...state.users,
+        {
+          id: makeId("user"),
+          name,
+          email,
+          role: input.role,
+        },
+      ],
     };
   }
 
@@ -317,9 +713,49 @@ export class OrfFlowStore {
   }
 
   updateUserRole(state: OrfState, userId: string, role: UserRole): OrfState {
+    const user = state.users.find((item) => item.id === userId);
+    if (user?.role === "admin" && role !== "admin" && adminCount(state.users) <= 1) {
+      return state;
+    }
+
     return {
       ...state,
       users: state.users.map((user) => (user.id === userId ? { ...user, role } : user)),
+    };
+  }
+
+  updateUser(state: OrfState, userId: string, input: { name: string; email: string; role: UserRole }): OrfState {
+    const email = input.email.trim().toLowerCase();
+    const name = input.name.trim();
+    if (!email || !name) {
+      return state;
+    }
+
+    const user = state.users.find((item) => item.id === userId);
+    const emailOwner = state.users.find((item) => item.email.toLowerCase() === email && item.id !== userId);
+    if (emailOwner || (user?.role === "admin" && input.role !== "admin" && adminCount(state.users) <= 1)) {
+      return state;
+    }
+
+    return {
+      ...state,
+      users: state.users.map((user) => (user.id === userId ? { ...user, name, email, role: input.role } : user)),
+    };
+  }
+
+  deleteUser(state: OrfState, userId: string): OrfState {
+    const user = state.users.find((item) => item.id === userId);
+    if (state.users.length <= 1 || (user?.role === "admin" && adminCount(state.users) <= 1)) {
+      return state;
+    }
+
+    const users = state.users.filter((user) => user.id !== userId);
+    const currentUserId = state.currentUserId === userId ? users.find((user) => user.role === "admin")?.id ?? users[0]?.id ?? state.currentUserId : state.currentUserId;
+
+    return {
+      ...state,
+      users,
+      currentUserId,
     };
   }
 
@@ -377,7 +813,7 @@ export class OrfFlowStore {
     }
 
     const now = currentTime();
-    const author = input.author ?? "Alex Chen";
+    const author = input.author ?? currentUserName(state);
     const message = {
       id: makeId("cmsg"),
       author,
@@ -492,7 +928,7 @@ export class OrfFlowStore {
           title: `更新结果：${title}`,
           reason,
           evidence: feedbackId ? `关联反馈 ${feedbackId}` : "手动 ORF 复盘",
-          owner: "Alex Chen",
+          owner: currentUserName(state),
           date: now,
           linkedObjectiveId: result.objectiveId,
           linkedResultId: resultId,
