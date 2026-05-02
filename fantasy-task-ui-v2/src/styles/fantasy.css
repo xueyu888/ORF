@@ -1,0 +1,228 @@
+:root {
+  --ft-font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
+  --ft-text-primary: #fff1c6;
+  --ft-text-dark: #243755;
+  --ft-text-deep: #423322;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.ft-button {
+  --ft-height: 68px;
+  --ft-min-width: 230px;
+  --ft-font-size: 21px;
+  --ft-side-padding: 36px;
+  --ft-gap: 12px;
+  --ft-icon-size: 28px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ft-min-width);
+  height: var(--ft-height);
+  padding: 0 var(--ft-side-padding);
+  margin: 0;
+
+  border: 0;
+  background: transparent;
+  color: var(--ft-text-primary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-family: var(--ft-font-family);
+  font-size: var(--ft-font-size);
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  line-height: 1;
+  isolation: isolate;
+  transform: translateY(0);
+  transition:
+    transform 180ms ease,
+    filter 180ms ease,
+    opacity 180ms ease,
+    box-shadow 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ft-button--block {
+  width: 100%;
+}
+
+.ft-button--sm {
+  --ft-height: 54px;
+  --ft-min-width: 170px;
+  --ft-font-size: 17px;
+  --ft-side-padding: 28px;
+  --ft-gap: 10px;
+  --ft-icon-size: 22px;
+}
+
+.ft-button--lg {
+  --ft-height: 80px;
+  --ft-min-width: 280px;
+  --ft-font-size: 27px;
+  --ft-side-padding: 46px;
+  --ft-gap: 15px;
+  --ft-icon-size: 34px;
+}
+
+.ft-button__chrome {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -4;
+  pointer-events: none;
+}
+
+.ft-button__shine {
+  position: absolute;
+  left: 9%;
+  right: 9%;
+  top: 11px;
+  height: 16px;
+  z-index: -1;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.28), rgb(255 255 255 / 0));
+  mix-blend-mode: screen;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.ft-button__content {
+  position: relative;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ft-gap);
+}
+
+.ft-button__content::before {
+  content: "";
+  position: absolute;
+  left: -18px;
+  right: -18px;
+  top: 50%;
+  height: 62%;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: radial-gradient(circle at 50% 50%, rgb(255 244 204 / 0.14), rgb(255 255 255 / 0));
+  z-index: -1;
+  pointer-events: none;
+}
+
+.ft-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ft-icon-size);
+  height: var(--ft-icon-size);
+  color: currentColor;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 1px 0 rgb(114 72 21 / 0.72)) drop-shadow(0 2px 5px rgb(0 0 0 / 0.24));
+}
+
+.ft-button__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ft-button__label {
+  position: relative;
+  top: -0.03em;
+  text-shadow:
+    0 1px 0 rgb(116 76 27 / 0.64),
+    0 2px 0 rgb(79 47 14 / 0.22),
+    0 3px 8px rgb(0 0 0 / 0.24),
+    0 0 15px rgb(255 228 156 / 0.12);
+}
+
+.ft-button--secondary,
+.ft-button--ghost,
+.ft-button--subtle {
+  color: var(--ft-text-dark);
+}
+
+.ft-button--secondary .ft-button__label,
+.ft-button--ghost .ft-button__label,
+.ft-button--subtle .ft-button__label {
+  text-shadow:
+    0 1px 0 rgb(255 255 255 / 0.72),
+    0 2px 6px rgb(80 54 20 / 0.10);
+}
+
+.ft-button--secondary .ft-button__icon,
+.ft-button--ghost .ft-button__icon,
+.ft-button--subtle .ft-button__icon {
+  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.58)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.05));
+}
+
+.ft-button--subtle {
+  color: var(--ft-text-deep);
+}
+
+.ft-button:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.005);
+  filter: brightness(1.065) saturate(1.05);
+}
+
+.ft-button:hover:not(:disabled) .ft-button__shine {
+  opacity: 0.96;
+}
+
+.ft-button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.997);
+  filter: brightness(0.96) saturate(0.98);
+}
+
+.ft-button:focus-visible {
+  outline: 3px solid rgb(126 190 255 / 0.92);
+  outline-offset: 4px;
+  border-radius: 20px;
+}
+
+.ft-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+  filter: grayscale(0.34) saturate(0.68);
+}
+
+.ft-button__spinner {
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 999px;
+  border: 2.2px solid rgb(255 255 255 / 0.35);
+  border-top-color: currentColor;
+  box-shadow: 0 0 10px rgb(255 243 205 / 0.16);
+  animation: ft-spin 0.8s linear infinite;
+}
+
+@keyframes ft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-button {
+    transition: none;
+  }
+
+  .ft-button__spinner {
+    animation: none;
+  }
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgb(255 255 255 / 0.75), transparent 24%),
+    radial-gradient(circle at 80% 10%, rgb(255 255 255 / 0.55), transparent 18%),
+    linear-gradient(180deg, #efe4d0, #ddcfb6);
+  color: #2b2a28;
+}

@@ -1,0 +1,208 @@
+:root {
+  --ft-font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
+  --ft-text-primary: #fff1c9;
+  --ft-text-dark: #253247;
+  --ft-text-gold-dark: #4c3724;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.ft-button {
+  --ft-height: 64px;
+  --ft-min-width: 220px;
+  --ft-font-size: 20px;
+  --ft-side-padding: 36px;
+  --ft-gap: 12px;
+  --ft-icon-size: 28px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--ft-min-width);
+  height: var(--ft-height);
+  padding: 0 var(--ft-side-padding);
+  margin: 0;
+
+  border: 0;
+  background: transparent;
+  color: var(--ft-text-primary);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  font-family: var(--ft-font-family);
+  font-size: var(--ft-font-size);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  isolation: isolate;
+  transform: translateY(0);
+  transition:
+    transform 160ms ease,
+    filter 160ms ease,
+    opacity 160ms ease;
+}
+
+.ft-button--block {
+  width: 100%;
+}
+
+.ft-button--sm {
+  --ft-height: 50px;
+  --ft-min-width: 160px;
+  --ft-font-size: 16px;
+  --ft-side-padding: 26px;
+  --ft-gap: 10px;
+  --ft-icon-size: 22px;
+}
+
+.ft-button--lg {
+  --ft-height: 74px;
+  --ft-min-width: 260px;
+  --ft-font-size: 24px;
+  --ft-side-padding: 42px;
+  --ft-gap: 14px;
+  --ft-icon-size: 32px;
+}
+
+.ft-button__chrome {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -3;
+  pointer-events: none;
+}
+
+.ft-button__shine {
+  position: absolute;
+  left: 7%;
+  right: 7%;
+  top: 8px;
+  height: 18px;
+  z-index: -1;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.35), rgb(255 255 255 / 0));
+  mix-blend-mode: screen;
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.ft-button__content {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ft-gap);
+}
+
+.ft-button__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--ft-icon-size);
+  height: var(--ft-icon-size);
+  color: currentColor;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 1px 0 rgb(108 70 23 / 0.62)) drop-shadow(0 2px 4px rgb(0 0 0 / 0.25));
+}
+
+.ft-button__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.ft-button__label {
+  position: relative;
+  top: -0.03em;
+  text-shadow:
+    0 1px 0 rgb(109 70 23 / 0.58),
+    0 2px 6px rgb(0 0 0 / 0.28),
+    0 0 12px rgb(255 220 129 / 0.18);
+}
+
+.ft-button--secondary,
+.ft-button--ghost,
+.ft-button--subtle {
+  color: var(--ft-text-dark);
+}
+
+.ft-button--secondary .ft-button__label,
+.ft-button--ghost .ft-button__label,
+.ft-button--subtle .ft-button__label {
+  text-shadow:
+    0 1px 0 rgb(255 255 255 / 0.65),
+    0 1px 4px rgb(0 0 0 / 0.08);
+}
+
+.ft-button--secondary .ft-button__icon,
+.ft-button--ghost .ft-button__icon,
+.ft-button--subtle .ft-button__icon {
+  filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.55));
+}
+
+.ft-button--primary,
+.ft-button--danger,
+.ft-button--success {
+  color: var(--ft-text-primary);
+}
+
+.ft-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.06) saturate(1.04);
+}
+
+.ft-button:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.95);
+}
+
+.ft-button:focus-visible {
+  outline: 3px solid rgb(123 189 255 / 0.95);
+  outline-offset: 3px;
+  border-radius: 20px;
+}
+
+.ft-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+  filter: grayscale(0.38) saturate(0.7);
+}
+
+.ft-button__spinner {
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 999px;
+  border: 2.2px solid rgb(255 255 255 / 0.35);
+  border-top-color: currentColor;
+  animation: ft-spin 0.8s linear infinite;
+}
+
+@keyframes ft-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ft-button {
+    transition: none;
+  }
+
+  .ft-button__spinner {
+    animation: none;
+  }
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgb(255 255 255 / 0.75), transparent 24%),
+    radial-gradient(circle at 80% 10%, rgb(255 255 255 / 0.55), transparent 18%),
+    linear-gradient(180deg, #efe4d0, #ddcfb6);
+  color: #2b2a28;
+}
