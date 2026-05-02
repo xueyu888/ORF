@@ -945,6 +945,60 @@ button:disabled {
     0 0 0 4px var(--orf-accent-soft);
 }
 
+.orf-auth-page {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(82, 215, 246, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(255, 248, 232, 0.92), rgba(235, 249, 255, 0.82));
+}
+
+.orf-auth-aside {
+  border-right: var(--orf-border-width) solid rgba(183, 139, 72, 0.22);
+  background:
+    linear-gradient(180deg, rgba(255, 248, 232, 0.78), rgba(255, 255, 255, 0.48));
+}
+
+.orf-permission-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.orf-permission-table th,
+.orf-permission-table td {
+  border-bottom: var(--orf-border-width) solid var(--orf-border);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.orf-permission-table th {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orf-permission-table td {
+  color: var(--orf-text-secondary);
+}
+
+.orf-permission-toggle {
+  display: inline-flex;
+  min-width: 48px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--orf-radius-status-tag);
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orf-permission-toggle-on {
+  background: rgba(47, 156, 137, 0.12);
+  color: #0b8f7f;
+  box-shadow: inset 0 0 0 1px rgba(47, 156, 137, 0.22);
+}
+
 .orf-table-row {
   min-height: var(--orf-row-height);
   border-bottom: var(--orf-border-width) solid transparent;

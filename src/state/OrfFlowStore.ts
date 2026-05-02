@@ -1,14 +1,18 @@
 import { initialOrfState } from "../data/mockData";
-import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
+import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, PermissionAction, PermissionResource, Result, Task, TaskStatus, UserRole, OrfStage } from "../types/orf";
 
 const STORAGE_KEY = "orf-flow-state-v3";
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
+const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const currentTime = () => new Date().toISOString();
 const currentDate = () => currentTime().slice(0, 10);
 const normalizeState = (state: OrfState): OrfState => ({
   ...state,
+  users: state.users ?? cloneValue(initialOrfState.users),
+  currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
+  permissionRules: state.permissionRules ?? cloneValue(initialOrfState.permissionRules),
   comments: (state.comments ?? []).map((thread) => ({
     ...thread,
     messages: thread.messages ?? [],
@@ -277,6 +281,80 @@ export class OrfFlowStore {
     return {
       ...state,
       results: state.results.map((result) => (result.id === resultId ? { ...result, confidence } : result)),
+    };
+  }
+
+  registerUser(state: OrfState, input: { name: string; email: string }): OrfState {
+    const email = input.email.trim().toLowerCase();
+    const name = input.name.trim();
+    if (!email || !name) {
+      return state;
+    }
+
+    const existing = state.users.find((user) => user.email.toLowerCase() === email);
+    if (existing) {
+      return { ...state, currentUserId: existing.id };
+    }
+
+    const user = {
+      id: makeId("user"),
+      name,
+      email,
+      role: "member" as const,
+    };
+
+    return {
+      ...state,
+      users: [...state.users, user],
+      currentUserId: user.id,
+    };
+  }
+
+  loginUser(state: OrfState, email: string): OrfState {
+    const value = email.trim().toLowerCase();
+    const user = state.users.find((item) => item.email.toLowerCase() === value);
+    return user ? { ...state, currentUserId: user.id } : state;
+  }
+
+  updateUserRole(state: OrfState, userId: string, role: UserRole): OrfState {
+    return {
+      ...state,
+      users: state.users.map((user) => (user.id === userId ? { ...user, role } : user)),
+    };
+  }
+
+  updatePermissionRule(
+    state: OrfState,
+    input: { role: UserRole; stage: OrfStage; resource: PermissionResource; action: PermissionAction; allowed: boolean },
+  ): OrfState {
+    const rules = state.permissionRules.map((rule) => {
+      if (rule.role !== input.role || rule.stage !== input.stage || rule.resource !== input.resource) {
+        return rule;
+      }
+
+      const actions = input.allowed
+        ? Array.from(new Set([...rule.actions, input.action]))
+        : rule.actions.filter((action) => action !== input.action);
+
+      return { ...rule, actions };
+    });
+    const exists = state.permissionRules.some((rule) => rule.role === input.role && rule.stage === input.stage && rule.resource === input.resource);
+
+    if (exists) {
+      return { ...state, permissionRules: rules };
+    }
+
+    return {
+      ...state,
+      permissionRules: [
+        ...state.permissionRules,
+        {
+          role: input.role,
+          stage: input.stage,
+          resource: input.resource,
+          actions: input.allowed ? [input.action] : [],
+        },
+      ],
     };
   }
 

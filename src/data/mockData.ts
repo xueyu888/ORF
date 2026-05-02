@@ -1,5 +1,24 @@
 import type { OrfState } from "../types/orf";
 
+const defaultPermissionRules: OrfState["permissionRules"] = [
+  { role: "member", stage: "goalSetting", resource: "objective", actions: ["view"] },
+  { role: "member", stage: "goalSetting", resource: "result", actions: ["view"] },
+  { role: "member", stage: "goalSetting", resource: "task", actions: [] },
+  { role: "member", stage: "goalSetting", resource: "subtask", actions: [] },
+  { role: "member", stage: "resultClaiming", resource: "objective", actions: ["view"] },
+  { role: "member", stage: "resultClaiming", resource: "result", actions: ["view"] },
+  { role: "member", stage: "resultClaiming", resource: "task", actions: [] },
+  { role: "member", stage: "resultClaiming", resource: "subtask", actions: [] },
+  { role: "member", stage: "orfReestimate", resource: "objective", actions: ["view", "edit"] },
+  { role: "member", stage: "orfReestimate", resource: "result", actions: ["view", "edit"] },
+  { role: "member", stage: "orfReestimate", resource: "task", actions: ["view", "edit", "create"] },
+  { role: "member", stage: "orfReestimate", resource: "subtask", actions: ["view", "edit", "create"] },
+  { role: "member", stage: "goalFrozen", resource: "objective", actions: ["view"] },
+  { role: "member", stage: "goalFrozen", resource: "result", actions: ["view"] },
+  { role: "member", stage: "goalFrozen", resource: "task", actions: ["view", "edit", "create"] },
+  { role: "member", stage: "goalFrozen", resource: "subtask", actions: ["view", "edit", "create"] },
+];
+
 const confidenceTrend = [
   { date: "Apr 01", value: 61 },
   { date: "Apr 08", value: 66 },
@@ -8,6 +27,13 @@ const confidenceTrend = [
 ];
 
 export const initialOrfState: OrfState = {
+  users: [
+    { id: "user-alex", name: "Alex Chen", email: "alex@orf.local", role: "admin" },
+    { id: "user-mia", name: "Mia Zhang", email: "mia@orf.local", role: "member" },
+    { id: "user-ethan", name: "Ethan Liu", email: "ethan@orf.local", role: "member" },
+  ],
+  currentUserId: "user-alex",
+  permissionRules: defaultPermissionRules,
   causeCategories: [
     "需求缺口",
     "Prompt 问题",

@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { initialOrfState } from "../../src/data/mockData";
 import type { Evidence, Feedback, OrfState, Result, Task, TaskStatus } from "../../src/types/orf";
 import { db } from "../db/client";
 import {
@@ -156,6 +157,9 @@ export async function getOrfStateSnapshot(): Promise<OrfState> {
   const data = await getTaskManagementData();
   return {
     ...data,
+    users: initialOrfState.users,
+    currentUserId: initialOrfState.currentUserId,
+    permissionRules: initialOrfState.permissionRules,
     decisions: [],
     evalRuns: [],
     scenarios: [],

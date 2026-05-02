@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { OrfFlowStore } from "./OrfFlowStore";
-import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
+import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, PermissionAction, PermissionResource, Result, Task, TaskStatus, UserRole, OrfStage } from "../types/orf";
 
 type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | null;
 export type ThemeMode = "dark" | "light";
@@ -39,6 +39,10 @@ interface OrfContextValue {
   createTaskChecklistItem: (taskId: string, afterItemId?: string) => void;
   updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => void;
   updateResultConfidence: (resultId: string, confidence: number) => void;
+  registerUser: (input: { name: string; email: string }) => void;
+  loginUser: (email: string) => void;
+  updateUserRole: (userId: string, role: UserRole) => void;
+  updatePermissionRule: (input: { role: UserRole; stage: OrfStage; resource: PermissionResource; action: PermissionAction; allowed: boolean }) => void;
   addComment: (input: {
     targetType: CommentTargetType;
     targetId: string;
@@ -118,6 +122,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       createTaskChecklistItem: (taskId, afterItemId) => commit(store.createTaskChecklistItem(state, taskId, afterItemId), "子任务已添加"),
       updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
       updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "结果信心已更新"),
+      registerUser: (input) => commit(store.registerUser(state, input), "账号已创建"),
+      loginUser: (email) => commit(store.loginUser(state, email), "已登录"),
+      updateUserRole: (userId, role) => commit(store.updateUserRole(state, userId, role), "角色已更新"),
+      updatePermissionRule: (input) => commit(store.updatePermissionRule(state, input), "权限已更新"),
       addComment: (input) => commit(store.addComment(state, input), "评论已添加"),
       updateCommentThreadStatus: (threadId, status) => commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开"),
       updateCommentMessage: (threadId, messageId, body) => commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新"),

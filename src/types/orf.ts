@@ -7,6 +7,24 @@ export type MetricDirection = "increase" | "decrease";
 export type DeliveryRating = "普通" | "复杂" | "攻坚" | "挑战";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
+export type UserRole = "admin" | "member";
+export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
+export type PermissionAction = "view" | "edit" | "create";
+export type PermissionResource = "objective" | "result" | "task" | "subtask";
+
+export interface OrfUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+}
+
+export interface PermissionRule {
+  role: UserRole;
+  stage: OrfStage;
+  resource: PermissionResource;
+  actions: PermissionAction[];
+}
 
 export interface TrendPoint {
   date: string;
@@ -198,6 +216,9 @@ export interface CommentThread {
 }
 
 export interface OrfState {
+  users: OrfUser[];
+  currentUserId: string;
+  permissionRules: PermissionRule[];
   objectives: Objective[];
   results: Result[];
   feedback: Feedback[];

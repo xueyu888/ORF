@@ -1,12 +1,14 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AIEvaluationPage } from "./pages/AIEvaluationPage";
+import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
 import { FantasyUiPreviewPage } from "./pages/FantasyUiPreviewPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
 import { ObjectivesPage } from "./pages/ObjectivesPage";
+import { PermissionsPage } from "./pages/PermissionsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ResultDetailPage } from "./pages/ResultDetailPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -17,6 +19,7 @@ import { WeeklyReviewPage } from "./pages/WeeklyReviewPage";
 export function App() {
   return (
     <Routes>
+      <Route path="auth" element={<AuthPage />} />
       <Route element={<AppShell />}>
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="objectives" element={<ObjectivesPage />} />
@@ -30,6 +33,7 @@ export function App() {
         <Route path="strategy-map" element={<StrategyMapPage />} />
         <Route path="ai-evaluation" element={<AIEvaluationPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="permissions" element={<PermissionsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/tasks" replace />} />
       </Route>

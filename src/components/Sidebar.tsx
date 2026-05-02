@@ -3,19 +3,23 @@ import { type CSSProperties, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { navItems } from "../config/navigation";
+import { useOrf } from "../state/OrfProvider";
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
 const sidebarGroups = [
   { title: "work", labels: ["计划", "周复盘"] },
   { title: "report", labels: ["反馈", "统计"] },
+  { title: "admin", labels: ["权限"] },
 ].map((group) => ({
   ...group,
   items: group.labels.map((label) => navItemByLabel.get(label)).filter((item) => item !== undefined),
 }));
 
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
+  const { state } = useOrf();
   const [collapsed, setCollapsed] = useState(false);
+  const currentUser = state.users.find((user) => user.id === state.currentUserId) ?? state.users[0];
   const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
   const sidebarStyle = {
     "--orf-sidebar-bg-image": toCssImageUrl(sidebarBackground.src),
@@ -83,10 +87,10 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           <Settings className="orf-sidebar-icon h-5 w-5 shrink-0" />
           <span className="orf-sidebar-label flex-1">设置</span>
         </NavLink>
-        <div className="orf-sidebar-user flex items-center gap-3 px-2" title="Alex Chen">
-          <Avatar name="Alex Chen" />
+        <div className="orf-sidebar-user flex items-center gap-3 px-2" title={currentUser?.name}>
+          <Avatar name={currentUser?.name ?? "User"} />
           <div className="orf-sidebar-label min-w-0">
-            <div className="orf-sidebar-user-name truncate">Alex Chen</div>
+            <div className="orf-sidebar-user-name truncate">{currentUser?.name ?? "User"}</div>
           </div>
         </div>
       </div>
