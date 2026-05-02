@@ -288,6 +288,9 @@ export class OrfFlowStore {
       targetTitle: string;
       body: string;
       author?: string;
+      parentMessageId?: string;
+      replyToMessageId?: string;
+      replyToAuthor?: string;
     },
   ): OrfState {
     const body = input.body.trim();
@@ -302,6 +305,9 @@ export class OrfFlowStore {
       author,
       body,
       createdAt: now,
+      parentMessageId: input.parentMessageId,
+      replyToMessageId: input.replyToMessageId,
+      replyToAuthor: input.replyToAuthor,
     };
     const existingThread = state.comments.find(
       (thread) => thread.targetType === input.targetType && thread.targetId === input.targetId && thread.status === "open",
@@ -382,7 +388,7 @@ export class OrfFlowStore {
           return [thread];
         }
 
-        const messages = thread.messages.filter((message) => message.id !== messageId);
+        const messages = thread.messages.filter((message) => message.id !== messageId && message.parentMessageId !== messageId);
         if (messages.length === 0) {
           return [];
         }

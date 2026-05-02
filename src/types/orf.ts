@@ -180,6 +180,9 @@ export interface CommentMessage {
   author: string;
   body: string;
   createdAt: string;
+  parentMessageId?: string;
+  replyToMessageId?: string;
+  replyToAuthor?: string;
 }
 
 export interface CommentThread {

@@ -39,7 +39,16 @@ interface OrfContextValue {
   createTaskChecklistItem: (taskId: string, afterItemId?: string) => void;
   updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => void;
   updateResultConfidence: (resultId: string, confidence: number) => void;
-  addComment: (input: { targetType: CommentTargetType; targetId: string; targetTitle: string; body: string; author?: string }) => void;
+  addComment: (input: {
+    targetType: CommentTargetType;
+    targetId: string;
+    targetTitle: string;
+    body: string;
+    author?: string;
+    parentMessageId?: string;
+    replyToMessageId?: string;
+    replyToAuthor?: string;
+  }) => void;
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
