@@ -34,9 +34,8 @@ function breadcrumb(pathname: string) {
 
 export function AppShell() {
   const location = useLocation();
-  const { state, openModal } = useOrf();
+  const { currentUser, isAdmin, openModal } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
-  const currentUser = state.users.find((user) => user.id === state.currentUserId) ?? state.users[0];
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -73,9 +72,11 @@ export function AppShell() {
             <Plus className="h-4 w-4" />
             新建目标
           </Button>
-          <Link to="/permissions" className="orf-muted-icon-button inline-flex h-10 w-10 items-center justify-center transition" aria-label="权限" title="权限">
-            <Lock className="h-5 w-5" />
-          </Link>
+          {isAdmin && (
+            <Link to="/permissions" className="orf-muted-icon-button inline-flex h-10 w-10 items-center justify-center transition" aria-label="权限" title="权限">
+              <Lock className="h-5 w-5" />
+            </Link>
+          )}
           <button className="orf-solid-icon-button inline-flex h-10 w-10 items-center justify-center transition" type="button" aria-label="演示">
             <Play className="h-5 w-5 fill-current" />
           </button>

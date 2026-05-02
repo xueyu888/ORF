@@ -17,9 +17,11 @@ const sidebarGroups = [
 }));
 
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
-  const { state } = useOrf();
+  const { currentUser, isAdmin } = useOrf();
   const [collapsed, setCollapsed] = useState(false);
-  const currentUser = state.users.find((user) => user.id === state.currentUserId) ?? state.users[0];
+  const visibleGroups = sidebarGroups
+    .map((group) => (group.title === "admin" && !isAdmin ? { ...group, items: [] } : group))
+    .filter((group) => group.items.length > 0);
   const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
   const sidebarStyle = {
     "--orf-sidebar-bg-image": toCssImageUrl(sidebarBackground.src),
@@ -56,7 +58,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2">
-        {sidebarGroups.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.title} className="orf-sidebar-section border-b py-4">
             <div className="orf-sidebar-group-title px-7 pb-2 uppercase">{group.title}</div>
             <div className="space-y-1">

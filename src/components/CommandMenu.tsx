@@ -8,12 +8,14 @@ import { commandTypeLabel } from "../utils/labels";
 
 export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
-  const { state } = useOrf();
+  const { isAdmin, state } = useOrf();
   const [query, setQuery] = useState("");
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
 
   const items = useMemo(() => {
-    const pageItems = quickPages.map((item) => ({ label: item.label, path: item.path, type: "Page" }));
+    const pageItems = quickPages
+      .filter((item) => isAdmin || item.path !== "/permissions")
+      .map((item) => ({ label: item.label, path: item.path, type: "Page" }));
     const objectiveItems = state.objectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
     const resultItems = state.results.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));
     const taskItems = state.tasks.map((item) => ({ label: `${item.id} ${item.title}`, path: "/tasks", type: "Task" }));
@@ -22,7 +24,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
     return [...pageItems, ...objectiveItems, ...resultItems, ...taskItems, ...feedbackItems].filter((item) =>
       `${item.label} ${item.type}`.toLowerCase().includes(query.toLowerCase()),
     );
-  }, [query, state]);
+  }, [isAdmin, query, state]);
 
   if (!open) {
     return null;

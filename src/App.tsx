@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AIEvaluationPage } from "./pages/AIEvaluationPage";
@@ -15,12 +16,13 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { StrategyMapPage } from "./pages/StrategyMapPage";
 import { TasksPage } from "./pages/TasksPage";
 import { WeeklyReviewPage } from "./pages/WeeklyReviewPage";
+import { useOrf } from "./state/OrfProvider";
 
 export function App() {
   return (
     <Routes>
-      <Route path="auth" element={<AuthPage />} />
-      <Route element={<AppShell />}>
+      <Route path="auth" element={<AuthRoute />} />
+      <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="objectives" element={<ObjectivesPage />} />
         <Route path="objectives/:objectiveId" element={<ObjectiveDetailPage />} />
@@ -33,10 +35,32 @@ export function App() {
         <Route path="strategy-map" element={<StrategyMapPage />} />
         <Route path="ai-evaluation" element={<AIEvaluationPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="permissions" element={<PermissionsPage />} />
+        <Route
+          path="permissions"
+          element={
+            <RequireAdmin>
+              <PermissionsPage />
+            </RequireAdmin>
+          }
+        />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="*" element={<Navigate to="/tasks" replace />} />
       </Route>
     </Routes>
   );
+}
+
+function AuthRoute() {
+  const { isAuthenticated } = useOrf();
+  return isAuthenticated ? <Navigate to="/tasks" replace /> : <AuthPage />;
+}
+
+function RequireAuth() {
+  const { isAuthenticated } = useOrf();
+  return isAuthenticated ? <AppShell /> : <Navigate to="/auth" replace />;
+}
+
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { isAdmin } = useOrf();
+  return isAdmin ? children : <Navigate to="/tasks" replace />;
 }
