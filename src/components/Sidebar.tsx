@@ -10,7 +10,7 @@ const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
 const sidebarGroups = [
   { title: "work", labels: ["计划", "周复盘"] },
   { title: "report", labels: ["反馈", "统计"] },
-  { title: "admin", labels: ["权限"] },
+  { title: "admin", labels: ["权限管理"] },
 ].map((group) => ({
   ...group,
   items: group.labels.map((label) => navItemByLabel.get(label)).filter((item) => item !== undefined),
