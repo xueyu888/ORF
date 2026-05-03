@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { ChevronDown, Edit3, Plus, Search, Trash2, X } from "lucide-react";
+import { Ban, ChevronDown, Edit3, Eye, Plus, Search, Trash2, UserCog, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfStage, OrfUser, PermissionAction, PermissionResource, PermissionRule, UserRole } from "../types/orf";
@@ -122,6 +122,7 @@ export function PermissionsPage() {
   const currentUserId = state.currentUserId;
   const adminCount = state.users.filter((user) => user.role === "admin").length;
   const selectedRoleUserCount = state.users.filter((user) => user.role === selectedRole).length;
+  const activePermissionCount = state.permissionRules.reduce((total, rule) => total + rule.actions.length, 0);
   const selectedUser = selectedUserId ? state.users.find((user) => user.id === selectedUserId) ?? null : null;
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
   const isLastAdmin = (user: OrfUser) => user.role === "admin" && adminCount <= 1;
@@ -221,7 +222,21 @@ export function PermissionsPage() {
   return (
     <div className="orf-user-management-page">
       <header className="orf-user-management-hero">
-        <h1>权限管理</h1>
+        <div className="orf-permission-title-block">
+          <span className="orf-permission-kicker">ADMIN CONTROL</span>
+          <h1>权限管理</h1>
+        </div>
+        <div className="orf-permission-metrics" aria-label="权限概览">
+          <span>
+            <strong>{state.users.length}</strong>用户
+          </span>
+          <span>
+            <strong>{roles.length}</strong>角色
+          </span>
+          <span>
+            <strong>{activePermissionCount}</strong>权限
+          </span>
+        </div>
         <div className="orf-permission-view-tabs" aria-label="权限管理视图">
           <button type="button" className={clsx(view === "users" && "orf-permission-view-tab-active")} onClick={() => setView("users")}>
             用户管理
@@ -302,12 +317,15 @@ export function PermissionsPage() {
                       <td>
                         <div className="orf-user-actions orf-user-actions-text">
                           <button type="button" onClick={() => setSelectedUserId(user.id)}>
+                            <Eye className="h-4 w-4" />
                             查看详情
                           </button>
                           <button type="button" onClick={() => openEditDialog(user)}>
+                            <UserCog className="h-4 w-4" />
                             编辑角色
                           </button>
                           <button type="button" disabled>
+                            <Ban className="h-4 w-4" />
                             禁用用户
                           </button>
                           <button type="button" className="orf-user-delete-action" disabled={isLastAdmin(user)} title={isLastAdmin(user) ? "至少保留一个管理员" : "删除"} onClick={() => handleDelete(user)}>
