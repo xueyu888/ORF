@@ -1,5 +1,5 @@
-import { Lock, Play, Plus, Search } from "lucide-react";
-import { Link, Outlet, useLocation } from "react-router-dom";
+import { Plus, Search } from "lucide-react";
+import { Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Button } from "./ui";
@@ -7,7 +7,6 @@ import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
 import { Toasts } from "./Toasts";
 import { useOrf } from "../state/OrfProvider";
-import { initials } from "../utils/format";
 
 const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
@@ -34,7 +33,7 @@ function breadcrumb(pathname: string) {
 
 export function AppShell() {
   const location = useLocation();
-  const { currentUser, isAdmin, openModal } = useOrf();
+  const { openModal } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
 
   useEffect(() => {
@@ -72,17 +71,6 @@ export function AppShell() {
             <Plus className="h-4 w-4" />
             新建目标
           </Button>
-          {isAdmin && (
-            <Link to="/permissions" className="orf-muted-icon-button inline-flex h-10 w-10 items-center justify-center transition" aria-label="权限" title="权限">
-              <Lock className="h-5 w-5" />
-            </Link>
-          )}
-          <button className="orf-solid-icon-button inline-flex h-10 w-10 items-center justify-center transition" type="button" aria-label="演示">
-            <Play className="h-5 w-5 fill-current" />
-          </button>
-          <div className="orf-user-avatar flex h-10 w-10 items-center justify-center orf-status-tag border-2 text-xs font-bold" title={currentUser?.name}>
-            {initials(currentUser?.name ?? "User")}
-          </div>
         </header>
         <main className="orf-main-content">
           <Outlet />

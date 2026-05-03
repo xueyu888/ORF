@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from "react";
-import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
+import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
@@ -46,7 +46,7 @@ type TaskScope = "team" | "personal";
 type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
 type SimpleStatus = "todo" | "active" | "done";
 type IndicatorStatus = "todo" | "active" | "review" | "done";
-type BlockAction = "reorder" | "copyLink" | "comment" | "delete";
+type BlockAction = "copyLink" | "comment" | "delete";
 type BlockTarget =
   | { type: "objective"; id: string; title: string }
   | { type: "result"; id: string; title: string; objectiveId: string }
@@ -108,7 +108,7 @@ export function TasksPage() {
   } = useOrf();
   const currentMember = currentUser?.name ?? "User";
   const [scope, setScope] = useState<TaskScope>("team");
-  const [flowStage, setFlowStage] = useState<FlowStage>("orfReestimate");
+  const [objectiveStages, setObjectiveStages] = useState<Record<string, FlowStage>>({});
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<BlockTarget | null>(null);
@@ -162,15 +162,28 @@ export function TasksPage() {
   const completedResults = state.results.filter((result) => indicatorStatus(result, resultTaskMap.get(result.id) ?? []) === "done").length;
   const totalResults = state.results.length;
   const overallObjectiveProgress = Math.round(average(groups.map((group) => objectiveProgress(group.results))));
-  const flowStageIndex = flowStages.findIndex((stage) => stage.value === flowStage);
-  const isGoalFrozen = flowStage === "goalFrozen";
-  const can = (action: PermissionAction, resource: PermissionResource) => canAccess(state, currentUser?.role, flowStage, action, resource);
-  const canEditTasks = can("edit", "task");
+  const objectiveStage = (objectiveId: string) => objectiveStages[objectiveId] ?? "orfReestimate";
+  const canAtStage = (stage: FlowStage, action: PermissionAction, resource: PermissionResource) => canAccess(state, currentUser?.role, stage, action, resource);
+  const updateObjectiveStage = (objectiveId: string, stage: FlowStage) => {
+    setObjectiveStages((current) => ({ ...current, [objectiveId]: stage }));
+  };
+  const stageForTask = (taskId: string) => {
+    const task = state.tasks.find((item) => item.id === taskId);
+    return objectiveStage(task?.linkedObjectiveId ?? "");
+  };
+  const stageForTarget = (target: BlockTarget) => objectiveStage(target.type === "objective" ? target.id : target.objectiveId);
+  const stageForDragBlock = (block: DragBlock) => {
+    if (block.type === "subtask") {
+      return stageForTask(block.taskId);
+    }
+
+    return objectiveStage(block.objectiveId);
+  };
 
   const toggleResult = (resultId: string) => setCollapsedResultIds((items) => toggleSetItem(items, resultId));
   const toggleTask = (taskId: string) => setCollapsedTaskIds((items) => toggleSetItem(items, taskId));
   const handleAddResult = (objectiveId: string) => {
-    if (!can("create", "result")) {
+    if (!canAtStage(objectiveStage(objectiveId), "create", "result")) {
       notify("没有创建指标权限");
       return;
     }
@@ -178,7 +191,7 @@ export function TasksPage() {
     openModal({ type: "newResult", objectiveId });
   };
   const handleAddTask = (result: Result) => {
-    if (!can("create", "task")) {
+    if (!canAtStage(objectiveStage(result.objectiveId), "create", "task")) {
       notify("没有创建任务权限");
       return;
     }
@@ -186,7 +199,7 @@ export function TasksPage() {
     openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id });
   };
   const handleAddSubtask = (taskId: string, afterItemId?: string) => {
-    if (!can("create", "subtask")) {
+    if (!canAtStage(stageForTask(taskId), "create", "subtask")) {
       notify("没有创建子任务权限");
       return;
     }
@@ -199,7 +212,7 @@ export function TasksPage() {
     });
   };
   const handleDeleteTarget = (target: BlockTarget) => {
-    if (!can("delete", resourceForBlockTarget(target))) {
+    if (!canAtStage(stageForTarget(target), "delete", resourceForBlockTarget(target))) {
       notify("没有删除权限");
       return;
     }
@@ -244,7 +257,7 @@ export function TasksPage() {
         return;
       }
 
-      if (!can("edit", resourceForDragBlock(dragBlock))) {
+      if (!canAtStage(stageForDragBlock(dragBlock), "edit", resourceForDragBlock(dragBlock))) {
         notify("没有编辑权限");
         setDragBlock(null);
         setDropTarget(null);
@@ -300,11 +313,6 @@ export function TasksPage() {
       return;
     }
 
-    if (action === "reorder") {
-      notify(target.type === "objective" ? "目标不支持拖拽" : "按住块手柄拖拽到合法位置");
-      return;
-    }
-
     if (action === "comment") {
       setCommentTarget(target);
       return;
@@ -327,7 +335,6 @@ export function TasksPage() {
       <div className="orf-task-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <ScopeTabs value={scope} onChange={setScope} />
         <div className="flex flex-wrap items-center gap-2">
-          <PlanModeControl value={flowStage} activeIndex={flowStageIndex} onChange={setFlowStage} />
           <button className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
             <CalendarDays className="h-4 w-4 text-[#667085]" />
             全部周期
@@ -341,34 +348,42 @@ export function TasksPage() {
       </div>
 
       <div className="grid gap-3">
-        {groups.map((group) => (
-          <ObjectivePanel
-            key={group.objective.id}
-            objective={group.objective}
-            results={group.results}
-            resultOwners={group.resultOwners}
-            objectiveDue={group.objectiveDue}
-            reviewDue={group.reviewDue}
-            collapsedResultIds={collapsedResultIds}
-            collapsedTaskIds={collapsedTaskIds}
-            commentCounts={commentCounts}
-            canEditTasks={canEditTasks}
-            isGoalFrozen={isGoalFrozen}
-            onTaskCompletionChange={setTaskCompletion}
-            onChecklistItemChange={updateTaskChecklistItem}
-            onToggleResult={toggleResult}
-            onToggleTask={toggleTask}
-            onAddResult={handleAddResult}
-            onAddTask={handleAddTask}
-            onAddSubtask={handleAddSubtask}
-            onBlockAction={handleBlockAction}
-            activeBlockActionId={activeBlockActionId}
-            openBlockActionId={openBlockActionId}
-            onActiveBlockActionChange={setActiveBlockActionId}
-            onOpenBlockActionChange={setOpenBlockActionId}
-            dragDrop={dragDrop}
-          />
-        ))}
+        {groups.map((group) => {
+          const stage = objectiveStage(group.objective.id);
+          const stageIndex = flowStages.findIndex((item) => item.value === stage);
+
+          return (
+            <ObjectivePanel
+              key={group.objective.id}
+              objective={group.objective}
+              results={group.results}
+              resultOwners={group.resultOwners}
+              objectiveDue={group.objectiveDue}
+              reviewDue={group.reviewDue}
+              flowStage={stage}
+              flowStageIndex={stageIndex}
+              collapsedResultIds={collapsedResultIds}
+              collapsedTaskIds={collapsedTaskIds}
+              commentCounts={commentCounts}
+              canEditTasks={canAtStage(stage, "edit", "task")}
+              isGoalFrozen={stage === "goalFrozen"}
+              onFlowStageChange={(nextStage) => updateObjectiveStage(group.objective.id, nextStage)}
+              onTaskCompletionChange={setTaskCompletion}
+              onChecklistItemChange={updateTaskChecklistItem}
+              onToggleResult={toggleResult}
+              onToggleTask={toggleTask}
+              onAddResult={handleAddResult}
+              onAddTask={handleAddTask}
+              onAddSubtask={handleAddSubtask}
+              onBlockAction={handleBlockAction}
+              activeBlockActionId={activeBlockActionId}
+              openBlockActionId={openBlockActionId}
+              onActiveBlockActionChange={setActiveBlockActionId}
+              onOpenBlockActionChange={setOpenBlockActionId}
+              dragDrop={dragDrop}
+            />
+          );
+        })}
       </div>
 
       {commentTarget && (
@@ -407,13 +422,12 @@ function PlanModeControl({
 }) {
   const [open, setOpen] = useState(false);
   const activeStage = flowStages.find((stage) => stage.value === value) ?? flowStages[0];
-  const popoverDrag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? activeStage.value : "closed" });
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       <button
         type="button"
-        className="orf-floating-control orf-plan-mode-control inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold"
+        className="orf-floating-control orf-plan-mode-control inline-flex h-10 items-center gap-2 whitespace-nowrap px-3 text-sm font-semibold"
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={() => setOpen((current) => !current)}
@@ -424,35 +438,31 @@ function PlanModeControl({
       </button>
 
       {open && (
-        <div ref={popoverDrag.ref} style={popoverDrag.style} className="orf-popover orf-plan-popover orf-draggable-floating absolute right-0 z-40 mt-2 w-72 p-2" role="menu">
-          <div className="orf-popover-drag-bar orf-drag-handle" aria-label="拖拽浮窗" {...popoverDrag.handleProps}>
-            <GripVertical className="h-3.5 w-3.5" />
-          </div>
+        <div className="orf-popover orf-plan-popover absolute right-0 z-40 mt-2 w-72 p-2" role="menu">
           {flowStages.map((stage, index) => {
             const active = value === stage.value;
-            const theme = flowStageTheme[stage.value];
 
             return (
-            <button
-              key={stage.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={active}
-              onClick={() => {
-                onChange(stage.value);
-                setOpen(false);
-              }}
-              className={clsx(
-                "orf-plan-stage-option flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition",
-                active ? "text-[#1d2939]" : "text-[#667085] hover:bg-[var(--orf-bg-muted)]",
-              )}
-              style={active ? { backgroundColor: "var(--orf-bg-muted)" } : undefined}
-            >
-              <StageProgressDot index={index} stage={stage.value} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">{stage.label}</span>
-              </span>
-            </button>
+              <button
+                key={stage.value}
+                type="button"
+                role="menuitemradio"
+                aria-checked={active}
+                onClick={() => {
+                  onChange(stage.value);
+                  setOpen(false);
+                }}
+                className={clsx(
+                  "orf-plan-stage-option flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition",
+                  active ? "text-[#1d2939]" : "text-[#667085] hover:bg-[var(--orf-bg-muted)]",
+                )}
+                style={active ? { backgroundColor: "var(--orf-bg-muted)" } : undefined}
+              >
+                <StageProgressDot index={index} stage={stage.value} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{stage.label}</span>
+                </span>
+              </button>
             );
           })}
         </div>
@@ -556,11 +566,14 @@ function ObjectivePanel({
   resultOwners,
   objectiveDue,
   reviewDue,
+  flowStage,
+  flowStageIndex,
   collapsedResultIds,
   collapsedTaskIds,
   commentCounts,
   canEditTasks,
   isGoalFrozen,
+  onFlowStageChange,
   onTaskCompletionChange,
   onChecklistItemChange,
   onToggleResult,
@@ -580,11 +593,14 @@ function ObjectivePanel({
   resultOwners: string[];
   objectiveDue: string;
   reviewDue: string;
+  flowStage: FlowStage;
+  flowStageIndex: number;
   collapsedResultIds: Set<string>;
   collapsedTaskIds: Set<string>;
   commentCounts: Map<string, number>;
   canEditTasks: boolean;
   isGoalFrozen: boolean;
+  onFlowStageChange: (stage: FlowStage) => void;
   onTaskCompletionChange: (taskId: string, done: boolean) => void;
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onToggleResult: (resultId: string) => void;
@@ -625,7 +641,7 @@ function ObjectivePanel({
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={hierarchyLayoutKey} />
       <div
         className={clsx(
-          "orf-objective-header group relative grid min-h-[58px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_150px_150px_150px_28px]",
+          "orf-objective-header group relative grid min-h-[58px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(320px,1fr)_92px_144px_120px_150px_150px_28px]",
           objectiveRowActive && "orf-row-active",
         )}
         onPointerEnter={() => onActiveBlockActionChange(objectiveActionId)}
@@ -646,26 +662,17 @@ function ObjectivePanel({
           onAdd={() => onAddResult(objective.id)}
           onAction={(action) => onBlockAction(action, { type: "objective", id: objective.id, title: objective.title })}
         />
-        <div className="relative z-30 flex min-w-0 items-center gap-3">
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="h-6 w-6 shrink-0" aria-hidden="true" />
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center" data-hierarchy-anchor={objectiveAnchorId}>
-              <ObjectiveFlagIcon complete={complete} />
-            </span>
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className={clsx("orf-objective-title truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
-              <CommentCountBadge
-                count={commentCountFor(commentCounts, "objective", objective.id)}
-                onClick={() => onBlockAction("comment", { type: "objective", id: objective.id, title: objective.title })}
-              />
-              <StatusChip tone={complete ? "done" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
-                {complete ? "已完成" : objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}
-              </StatusChip>
-            </div>
-          </div>
-        </div>
+        <HierarchyRootCell anchor={<ObjectiveFlagIcon complete={complete} />} anchorId={objectiveAnchorId}>
+          <div className={clsx("orf-objective-title min-w-0 flex-1 truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
+          <CommentCountBadge
+            count={commentCountFor(commentCounts, "objective", objective.id)}
+            onClick={() => onBlockAction("comment", { type: "objective", id: objective.id, title: objective.title })}
+          />
+        </HierarchyRootCell>
+        <StatusChip tone={complete ? "done" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
+          {complete ? "已完成" : objective.status === "At Risk" || objective.status === "Blocked" ? "有风险" : "正常"}
+        </StatusChip>
+        <PlanModeControl value={flowStage} activeIndex={flowStageIndex} onChange={onFlowStageChange} />
         <AvatarStack names={resultOwners} />
         <ObjectiveTimeValue deadline={objectiveDue || reviewDue} updatedAt={objective.updatedAt} />
         <ProgressValue value={progress} tone={progress >= 80 ? "success" : "neutral"} />
@@ -1343,7 +1350,6 @@ function deletionConfirmMessage(target: BlockTarget, state: OrfState) {
 }
 
 const blockMenuItems: { action: BlockAction; label: string; icon: LucideIcon }[] = [
-  { action: "reorder", label: "拖拽排序", icon: GripVertical },
   { action: "copyLink", label: "复制链接", icon: Copy },
   { action: "comment", label: "评论", icon: MessageSquare },
   { action: "delete", label: "删除", icon: Trash2 },
@@ -1385,7 +1391,6 @@ function BlockActions({
 }) {
   const open = openActionId === actionId;
   const visible = open || (!openActionId && activeActionId === actionId);
-  const menuDrag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? actionId : "closed" });
 
   return (
     <div
@@ -1411,8 +1416,8 @@ function BlockActions({
             "orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#98a2b3] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]",
             dragBlock && "orf-block-drag-handle",
           )}
-          aria-label={dragBlock ? "拖拽排序或打开块菜单" : "打开块菜单"}
-          title={dragBlock ? "拖拽排序 / 块菜单" : "块菜单"}
+          aria-label={dragBlock ? "按住拖拽，点击打开块菜单" : "打开块菜单"}
+          title={dragBlock ? "按住拖拽 / 点击菜单" : "块菜单"}
           draggable={Boolean(dragBlock)}
           onDragStart={(event) => {
             if (!dragBlock) {
@@ -1432,10 +1437,7 @@ function BlockActions({
           <GripVertical className="h-4 w-4" />
         </button>
         {open && (
-          <div ref={menuDrag.ref} style={menuDrag.style} className="orf-popover orf-block-menu orf-draggable-floating pointer-events-auto absolute left-0 top-9 z-50 w-40 p-1">
-            <div className="orf-popover-drag-bar orf-drag-handle" aria-label="拖拽浮窗" {...menuDrag.handleProps}>
-              <GripVertical className="h-3.5 w-3.5" />
-            </div>
+          <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-9 z-50 w-40 p-1">
             {blockMenuItems.map((item) => {
               const Icon = item.icon;
 
