@@ -1329,11 +1329,15 @@ button:disabled {
 
 .orf-user-management-page {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   color: #31465f;
 }
 
 .orf-user-management-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding: 0;
 }
 
@@ -1346,12 +1350,35 @@ button:disabled {
   line-height: 1;
 }
 
-.orf-user-management-hero p {
-  margin: 6px 0 0;
-  max-width: 1040px;
-  color: #31465f;
+.orf-permission-view-tabs {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid rgba(174, 189, 204, 0.72);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+}
+
+.orf-permission-view-tabs button {
+  height: 36px;
+  border: 0;
+  background: transparent;
+  padding: 0 16px;
+  color: #2f435c;
   font-size: 14px;
-  line-height: 1.35;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.orf-permission-view-tab-active {
+  background: #2f435c !important;
+  color: #ffffff !important;
+}
+
+.orf-user-management-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  gap: 16px;
+  align-items: start;
 }
 
 .orf-user-table-shell {
@@ -1440,7 +1467,7 @@ button:disabled {
 
 .orf-user-table {
   width: 100%;
-  min-width: 1220px;
+  min-width: 680px;
   border-collapse: collapse;
   color: #35526f;
   font-size: 14px;
@@ -1471,8 +1498,8 @@ button:disabled {
   background: rgba(248, 250, 253, 0.9);
 }
 
-.orf-user-table tbody tr.orf-user-row-start > td {
-  border-top: 2px solid rgba(47, 67, 92, 0.22);
+.orf-user-row-selected {
+  box-shadow: inset 3px 0 0 #2f435c;
 }
 
 .orf-user-name-cell {
@@ -1563,6 +1590,28 @@ button:disabled {
   cursor: pointer;
 }
 
+.orf-user-actions-text {
+  max-width: 156px;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.orf-user-actions-text button {
+  width: auto;
+  min-width: 0;
+  height: 24px;
+  border-radius: 12px;
+  padding: 0 6px;
+  color: #2f435c;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.orf-user-table td:last-child {
+  white-space: normal;
+}
+
 .orf-user-role-select:has(select:disabled),
 .orf-user-actions button:disabled {
   cursor: not-allowed;
@@ -1573,22 +1622,16 @@ button:disabled {
   color: #ff3552 !important;
 }
 
-.orf-user-stage-name {
-  width: 86px;
-  color: #2f435c;
-  font-size: 13px;
+.orf-user-status {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(40, 168, 74, 0.12);
+  padding: 0 8px;
+  color: #16843a;
+  font-size: 12px;
   font-weight: 800;
-}
-
-.orf-resource-permission-cell {
-  min-width: 150px;
-  white-space: normal !important;
-}
-
-.orf-action-switches {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 4px;
 }
 
 .orf-user-empty {
@@ -1618,6 +1661,225 @@ button:disabled {
   border-radius: 14px;
   background: #ffffff;
   font-weight: 500;
+}
+
+.orf-user-drawer,
+.orf-role-permissions-shell {
+  overflow: hidden;
+  background: rgba(248, 250, 253, 0.92);
+  box-shadow: 0 18px 46px rgba(40, 62, 86, 0.08);
+}
+
+.orf-user-drawer {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+}
+
+.orf-user-drawer-empty {
+  min-height: 180px;
+  place-items: center;
+  color: #667085;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.orf-user-drawer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgba(166, 203, 232, 0.42);
+  padding-bottom: 14px;
+}
+
+.orf-user-drawer-header h2 {
+  margin: 0;
+  color: #2f435c;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.orf-user-drawer-header p,
+.orf-user-drawer-section p {
+  margin: 4px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
+
+.orf-user-drawer-header button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(47, 67, 92, 0.18);
+  border-radius: 15px;
+  background: #ffffff;
+  padding: 0 10px;
+  color: #2f435c;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.orf-user-drawer-section {
+  display: grid;
+  gap: 8px;
+}
+
+.orf-user-drawer-section h3 {
+  margin: 0;
+  color: #2f435c;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.orf-effective-permission-list {
+  display: grid;
+  gap: 10px;
+}
+
+.orf-effective-stage {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(166, 203, 232, 0.42);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.74);
+  padding: 10px;
+}
+
+.orf-effective-stage strong {
+  color: #2f435c;
+  font-size: 13px;
+}
+
+.orf-effective-stage div {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 8px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.orf-effective-stage em {
+  color: #35526f;
+  font-style: normal;
+}
+
+.orf-role-permissions-shell {
+  display: grid;
+}
+
+.orf-role-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  border-bottom: 1px solid rgba(48, 68, 91, 0.22);
+  padding: 14px 16px;
+}
+
+.orf-role-tabs button {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(174, 189, 204, 0.72);
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 0 14px;
+  color: #2f435c;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.orf-role-tabs button span:last-child {
+  color: #667085;
+  font-size: 12px;
+}
+
+.orf-role-tab-active {
+  border-color: rgba(47, 67, 92, 0.4) !important;
+  background: #2f435c !important;
+  color: #ffffff !important;
+}
+
+.orf-role-tab-active span:last-child {
+  color: rgba(255, 255, 255, 0.74) !important;
+}
+
+.orf-role-permission-table-wrap {
+  overflow-x: auto;
+}
+
+.orf-role-permission-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  color: #35526f;
+  font-size: 14px;
+}
+
+.orf-role-permission-table th,
+.orf-role-permission-table td {
+  border-bottom: 1px solid rgba(166, 203, 232, 0.42);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.orf-role-permission-table thead th {
+  height: 34px;
+  background: #2f465f;
+  color: #f8fbff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orf-role-permission-table tbody tr:nth-child(even) {
+  background: rgba(232, 240, 249, 0.72);
+}
+
+.orf-role-permission-table tbody tr:nth-child(odd) {
+  background: rgba(248, 250, 253, 0.9);
+}
+
+.orf-role-stage-cell,
+.orf-role-resource-cell {
+  color: #2f435c;
+  font-weight: 800;
+}
+
+.orf-role-permission-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid rgba(166, 203, 232, 0.42);
+  padding: 12px 16px;
+  color: #667085;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orf-role-permission-save-button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f435c;
+  color: #ffffff;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.orf-role-permission-save-button:disabled {
+  background: rgba(141, 153, 163, 0.24);
+  color: #8d99a3;
+  cursor: not-allowed;
 }
 
 .orf-user-dialog-backdrop {
@@ -1742,6 +2004,8 @@ button:disabled {
   }
 
   .orf-user-management-hero {
+    align-items: flex-start;
+    flex-direction: column;
     padding-top: 8px;
   }
 
@@ -1780,6 +2044,14 @@ button:disabled {
     font-size: 14px;
   }
 
+  .orf-user-management-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .orf-role-permission-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1792,7 +2064,7 @@ button:disabled {
   }
 
   .orf-user-table {
-    min-width: 1220px;
+    min-width: 680px;
   }
 
   .orf-user-table th,

@@ -8,13 +8,10 @@ import type {
   FeedbackStatus,
   OrfState,
   OrfUser,
-  PermissionAction,
-  PermissionResource,
   Result,
   Task,
   TaskStatus,
   UserRole,
-  OrfStage,
 } from "../types/orf";
 
 type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | null;
@@ -73,7 +70,7 @@ interface OrfContextValue {
   updateUserRole: (userId: string, role: UserRole) => void;
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => void;
   deleteUser: (userId: string) => void;
-  updatePermissionRule: (input: { role: UserRole; stage: OrfStage; resource: PermissionResource; action: PermissionAction; allowed: boolean }) => void;
+  updateRolePermissionRules: (role: UserRole, rules: OrfState["permissionRules"]) => void;
   addComment: (input: {
     targetType: CommentTargetType;
     targetId: string;
@@ -405,7 +402,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
         commit(next, "用户已删除");
       },
-      updatePermissionRule: (input) => commit(store.updatePermissionRule(state, input), "权限已更新"),
+      updateRolePermissionRules: (role, rules) => commit(store.updateRolePermissionRules(state, role, rules), "角色权限已保存"),
       addComment: (input) => commit(store.addComment(state, input), "评论已添加"),
       updateCommentThreadStatus: (threadId, status) => commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开"),
       updateCommentMessage: (threadId, messageId, body) => commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新"),

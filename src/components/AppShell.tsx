@@ -19,7 +19,7 @@ const titleMap: Record<string, string> = {
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",
   reports: "统计",
-  permissions: "用户权限",
+  permissions: "权限管理",
   settings: "设置",
 };
 

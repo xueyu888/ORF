@@ -1,5 +1,5 @@
 import { initialOrfState } from "../data/initialOrfState";
-import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, PermissionAction, PermissionResource, Result, Task, TaskStatus, UserRole, OrfStage } from "../types/orf";
+import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus, UserRole } from "../types/orf";
 
 const STORAGE_KEY = "orf-flow-state-v3";
 type Placement = "before" | "after";
@@ -727,38 +727,16 @@ export class OrfFlowStore {
     };
   }
 
-  updatePermissionRule(
-    state: OrfState,
-    input: { role: UserRole; stage: OrfStage; resource: PermissionResource; action: PermissionAction; allowed: boolean },
-  ): OrfState {
-    const rules = state.permissionRules.map((rule) => {
-      if (rule.role !== input.role || rule.stage !== input.stage || rule.resource !== input.resource) {
-        return rule;
-      }
-
-      const actions = input.allowed
-        ? Array.from(new Set([...rule.actions, input.action]))
-        : rule.actions.filter((action) => action !== input.action);
-
-      return { ...rule, actions };
-    });
-    const exists = state.permissionRules.some((rule) => rule.role === input.role && rule.stage === input.stage && rule.resource === input.resource);
-
-    if (exists) {
-      return { ...state, permissionRules: rules };
+  updateRolePermissionRules(state: OrfState, role: UserRole, rules: OrfState["permissionRules"]): OrfState {
+    if (role === "admin") {
+      return state;
     }
+
+    const roleRules = rules.filter((rule) => rule.role === role);
 
     return {
       ...state,
-      permissionRules: [
-        ...state.permissionRules,
-        {
-          role: input.role,
-          stage: input.stage,
-          resource: input.resource,
-          actions: input.allowed ? [input.action] : [],
-        },
-      ],
+      permissionRules: [...state.permissionRules.filter((rule) => rule.role !== role), ...roleRules],
     };
   }
 
