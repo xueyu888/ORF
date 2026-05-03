@@ -151,6 +151,24 @@ type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
 type MetricDirection = "increase" | "decrease";
 ```
 
+### `UncertaintyLevel`
+
+用于指标的不确定性等级，也是积分计算的不确定性分来源。系统直接使用五档等级，不保留旧的“普通 / 复杂 / 攻坚 / 挑战”，也不提供自动映射。
+
+```ts
+type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
+```
+
+对应基础分：
+
+| 等级 | 不确定性分 |
+| --- | ---: |
+| 入门 | 1 |
+| 进阶 | 3 |
+| 破局 | 9 |
+| 渡劫 | 27 |
+| 飞升 | 81 |
+
 ## 4. 字段契约
 
 ### `Objective`
@@ -178,6 +196,7 @@ type MetricDirection = "increase" | "decrease";
 | `title` | `string` | 指标标题。 |
 | `owner` | `string` | 指标负责人；一个指标只允许一个负责人。 |
 | `status` | `WorkStatus` | 后端原始状态。 |
+| `uncertaintyLevel` | `UncertaintyLevel` | 指标不确定性等级，积分计算的不确定性分来源。 |
 | `baseline` | `number` | 指标进度计算。 |
 | `current` | `number` | 指标进度计算。 |
 | `target` | `number` | 指标进度计算。 |
@@ -185,6 +204,8 @@ type MetricDirection = "increase" | "decrease";
 | `direction` | `MetricDirection` | 指标进度计算方向。 |
 
 `Result.owner` 是任务管理页负责人展示和个人视图过滤的来源。
+
+`Result.uncertaintyLevel` 是新增后的唯一评级字段。后续实现时应移除或重命名旧的 `deliveryRating` 字段，不再返回 `普通`、`复杂`、`攻坚`、`挑战`。
 
 ### `Task`
 
