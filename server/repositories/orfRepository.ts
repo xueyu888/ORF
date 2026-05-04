@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
-import type { Evidence, Feedback, MetricDirection, OrfState, Priority, Result, Task, TaskStatus } from "../../src/types/orf";
+import type { Evidence, Feedback, MetricDirection, OrfState, Priority, Result, Task, TaskStatus, UncertaintyLevel } from "../../src/types/orf";
 import { db } from "../db/client";
 import {
   evidence,
@@ -135,7 +135,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     completionStandard: optional(result.completionStandard),
     sampleSet: optional(result.sampleSet),
     measurementScope: optional(result.measurementScope),
-    deliveryRating: optional(result.deliveryRating),
+    uncertaintyLevel: optional(result.uncertaintyLevel),
     baseline: result.baseline,
     current: result.current,
     target: result.target,
@@ -209,6 +209,7 @@ export interface CreateResultInput {
   target?: number;
   unit?: string;
   direction?: MetricDirection;
+  uncertaintyLevel?: UncertaintyLevel;
   owner?: string;
 }
 
@@ -249,7 +250,7 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     completionStandard: null,
     sampleSet: null,
     measurementScope: null,
-    deliveryRating: null,
+    uncertaintyLevel: input.uncertaintyLevel ?? null,
     baseline: input.baseline ?? 0,
     current: input.current ?? 0,
     target: input.target ?? 100,

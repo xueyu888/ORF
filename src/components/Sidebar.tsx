@@ -1,6 +1,7 @@
 import { Command, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { type CSSProperties, useState } from "react";
 import { NavLink } from "react-router-dom";
+import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
@@ -42,7 +43,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-5">
         <div className="orf-sidebar-brand-main flex items-center gap-3">
           <div className="orf-sidebar-logo flex h-11 w-11 items-center justify-center shadow-sm">
-            <Command className="h-5 w-5" />
+            <img className="orf-sidebar-logo-image" src={brandLogo} alt="" aria-hidden="true" />
           </div>
           <div className="orf-sidebar-label orf-sidebar-brand-title whitespace-nowrap">ORF Flow</div>
         </div>

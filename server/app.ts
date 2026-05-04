@@ -24,6 +24,7 @@ import {
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
 const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
+const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "飞升"]);
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const completionBodySchema = z.object({ done: z.boolean() });
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
@@ -41,6 +42,7 @@ const createResultBodySchema = z.object({
   target: z.number().optional(),
   unit: z.string().optional(),
   direction: metricDirectionSchema.optional(),
+  uncertaintyLevel: uncertaintyLevelSchema.optional(),
   owner: z.string().optional(),
 });
 const createTaskBodySchema = z.object({

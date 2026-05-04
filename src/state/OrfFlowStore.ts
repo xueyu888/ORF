@@ -247,7 +247,7 @@ export class OrfFlowStore {
       completionStandard: input.completionStandard ?? "达到目标值并有证据支撑",
       sampleSet: input.sampleSet ?? "负责人确认的标准样本集",
       measurementScope: input.measurementScope ?? "固定测试环境下统计系统侧链路表现",
-      deliveryRating: input.deliveryRating ?? "复杂",
+      uncertaintyLevel: input.uncertaintyLevel ?? "进阶",
       baseline: input.baseline ?? 0,
       current: input.current ?? 0,
       target: input.target ?? 100,

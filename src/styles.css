@@ -996,39 +996,17 @@ button:disabled {
 }
 
 .orf-auth-logo {
-  display: grid;
-  justify-items: center;
-  color: #ffffff;
-  line-height: 1;
-  text-transform: uppercase;
-  text-shadow: 0 8px 28px rgba(12, 68, 138, 0.32), 0 1px 0 rgba(28, 92, 167, 0.24);
+  display: flex;
+  justify-content: center;
 }
 
-.orf-auth-logo-main {
-  position: relative;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 76px;
-  font-weight: 800;
-}
-
-.orf-auth-logo-main::after {
-  position: absolute;
-  top: -4px;
-  right: -22px;
-  width: 24px;
-  height: 24px;
-  background:
-    linear-gradient(45deg, transparent 42%, #ffffff 43% 57%, transparent 58%),
-    linear-gradient(-45deg, transparent 42%, #ffffff 43% 57%, transparent 58%);
-  content: "";
-  filter: drop-shadow(0 4px 10px rgba(255, 255, 255, 0.35));
-}
-
-.orf-auth-logo-sub {
-  margin-top: 4px;
-  color: rgba(255, 255, 255, 0.94);
-  font-size: 24px;
-  font-weight: 800;
+.orf-auth-logo-image {
+  display: block;
+  width: auto;
+  height: 190px;
+  max-width: min(260px, 62vw);
+  object-fit: contain;
+  filter: drop-shadow(0 18px 24px rgba(12, 68, 138, 0.18));
 }
 
 .orf-auth-title-row {
@@ -1285,12 +1263,9 @@ button:disabled {
     padding: 28px 18px;
   }
 
-  .orf-auth-logo-main {
-    font-size: 56px;
-  }
-
-  .orf-auth-logo-sub {
-    font-size: 18px;
+  .orf-auth-logo-image {
+    height: 160px;
+    max-width: min(220px, 58vw);
   }
 
   .orf-auth-title-row {
@@ -2809,13 +2784,16 @@ button:disabled {
 }
 
 .orf-sidebar-logo {
-  border-radius: 12px;
-  background:
-    radial-gradient(circle at 34% 28%, rgba(255, 255, 255, 0.72), transparent 16%),
-    linear-gradient(145deg, rgba(125, 211, 252, 0.25) 0%, rgba(255, 255, 255, 0.04) 100%),
-    conic-gradient(from 210deg, #0f172a, #0b63ce, #22d3ee, #facc15, #0b63ce, #0f172a);
-  color: #ffffff;
-  box-shadow: 0 14px 28px rgba(3, 105, 161, 0.26), inset 0 0 0 1px rgba(125, 211, 252, 0.24);
+  overflow: visible;
+  background: transparent;
+}
+
+.orf-sidebar-logo-image {
+  display: block;
+  width: auto;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 12px rgba(3, 105, 161, 0.28));
 }
 
 .orf-sidebar-workspace-logo {

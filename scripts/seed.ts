@@ -111,7 +111,7 @@ async function seed() {
         completionStandard: result.completionStandard ?? null,
         sampleSet: result.sampleSet ?? null,
         measurementScope: result.measurementScope ?? null,
-        deliveryRating: result.deliveryRating ?? null,
+        uncertaintyLevel: result.uncertaintyLevel ?? null,
         baseline: result.baseline,
         current: result.current,
         target: result.target,

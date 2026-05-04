@@ -16,4 +16,7 @@ coverage/
 
 .DS_Store
 .artifacts/
+.playwright-mcp/
+playwright-report/
+test-results/
 ory/.runtime/

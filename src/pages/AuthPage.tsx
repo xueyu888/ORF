@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import authHero from "../assets/auth/orf-login-sky-adventure.png";
+import brandLogo from "../assets/brand/orf-logo.png";
 import { useOrf } from "../state/OrfProvider";
 
 type AuthMode = "login" | "register";
@@ -64,9 +65,8 @@ export function AuthPage() {
       <span className="orf-auth-shape orf-auth-shape-three" aria-hidden="true" />
 
       <section className="orf-auth-panel" aria-labelledby="auth-title">
-        <div className="orf-auth-logo" aria-label="ORF Flow">
-          <span className="orf-auth-logo-main">ORF</span>
-          <span className="orf-auth-logo-sub">FLOW</span>
+        <div className="orf-auth-logo">
+          <img className="orf-auth-logo-image" src={brandLogo} alt="ORF Flow" />
         </div>
 
         <div className="orf-auth-title-row">

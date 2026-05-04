@@ -153,7 +153,7 @@ type MetricDirection = "increase" | "decrease";
 
 ### `UncertaintyLevel`
 
-用于指标的不确定性等级，也是积分计算的不确定性分来源。系统直接使用五档等级，不保留旧的“普通 / 复杂 / 攻坚 / 挑战”，也不提供自动映射。
+用于指标的不确定性等级，也是积分计算的不确定性分来源。
 
 ```ts
 type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
@@ -205,7 +205,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 
 `Result.owner` 是任务管理页负责人展示和个人视图过滤的来源。
 
-`Result.uncertaintyLevel` 是新增后的唯一评级字段。后续实现时应移除或重命名旧的 `deliveryRating` 字段，不再返回 `普通`、`复杂`、`攻坚`、`挑战`。
+`Result.uncertaintyLevel` 是唯一评级字段。
 
 ### `Task`
 

@@ -5,7 +5,7 @@ export const taskStatusEnum = pgEnum("task_status", ["Backlog", "Todo", "In Prog
 export const priorityEnum = pgEnum("priority", ["Low", "Medium", "High", "Critical"]);
 export const impactEnum = pgEnum("impact", ["Low", "Medium", "High", "Critical"]);
 export const metricDirectionEnum = pgEnum("metric_direction", ["increase", "decrease"]);
-export const deliveryRatingEnum = pgEnum("delivery_rating", ["普通", "复杂", "攻坚", "挑战"]);
+export const uncertaintyLevelEnum = pgEnum("uncertainty_level", ["入门", "进阶", "破局", "渡劫", "飞升"]);
 export const evidenceTypeEnum = pgEnum("evidence_type", ["Eval run", "Log sample", "User report", "Dashboard snapshot", "Incident report"]);
 export const feedbackSourceEnum = pgEnum("feedback_source", ["User report", "Eval run", "Log", "Incident", "Team review"]);
 export const feedbackStatusEnum = pgEnum("feedback_status", ["New", "Reviewing", "Action Created", "Result Updated", "Closed"]);
@@ -77,7 +77,7 @@ export const results = pgTable("results", {
   completionStandard: text("completion_standard"),
   sampleSet: text("sample_set"),
   measurementScope: text("measurement_scope"),
-  deliveryRating: deliveryRatingEnum("delivery_rating"),
+  uncertaintyLevel: uncertaintyLevelEnum("uncertainty_level"),
   baseline: real("baseline").notNull(),
   current: real("current").notNull(),
   target: real("target").notNull(),

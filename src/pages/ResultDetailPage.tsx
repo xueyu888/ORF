@@ -25,7 +25,7 @@ export function ResultDetailPage() {
   const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有证据记录支持`;
   const sampleSet = result.sampleSet ?? "负责人提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
   const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";
-  const deliveryRating = result.deliveryRating ?? "复杂";
+  const uncertaintyLevel = result.uncertaintyLevel ?? "进阶";
 
   return (
     <PageScaffold
@@ -84,7 +84,7 @@ export function ResultDetailPage() {
               <p><span className="orf-text-primary">完成标准：</span>{completionStandard}</p>
               <p><span className="orf-text-primary">标准样本集：</span>{sampleSet}</p>
               <p><span className="orf-text-primary">测量范围：</span>{measurementScope}</p>
-              <p><span className="orf-text-primary">评级：</span><span className="orf-badge-accent ml-1 inline-flex orf-status-tag border px-2 py-0.5 text-xs">{deliveryRating}</span></p>
+              <p><span className="orf-text-primary">不确定性等级：</span><span className="orf-badge-accent ml-1 inline-flex orf-status-tag border px-2 py-0.5 text-xs">{uncertaintyLevel}</span></p>
               <p><span className="orf-text-primary">复盘节奏：</span>{result.reviewCadence === "Weekly" ? "每周" : "每两周"}</p>
             </div>
           </Card>
