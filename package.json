@@ -11,6 +11,7 @@
     "dev:web": "vite --host 0.0.0.0",
     "server:dev": "tsx watch server/index.ts",
     "server:start": "tsx server/index.ts",
+    "test": "tsx --test tests/*.test.ts",
     "ory:dev": "tsx scripts/prepare-ory-env.ts && sg docker -c 'docker compose -f docker-compose.ory.yml up -d kratos'",
     "ory:down": "sg docker -c 'docker compose -f docker-compose.ory.yml down'",
     "db:local": "sg docker -c 'docker compose -f docker-compose.ory.yml up -d --wait postgres'",
