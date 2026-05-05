@@ -48,9 +48,9 @@ export function MembersPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const currentUserId = currentUser?.id ?? state.currentUserId;
-  const adminCount = state.users.filter((user) => user.role === "admin").length;
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
-  const isLastAdmin = (user: OrfUser) => user.role === "admin" && adminCount <= 1;
+  const isCurrentUser = (user: OrfUser) => user.id === currentUserId;
+  const isEditingCurrentAdmin = editingUser?.id === currentUserId && editingUser.role === "admin";
 
   const users = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -71,6 +71,10 @@ export function MembersPage() {
       return;
     }
 
+    if (dialog.mode === "edit" && dialog.userId === currentUserId && dialog.role !== "admin") {
+      return;
+    }
+
     setSubmitting(true);
     const input = { name: dialog.name, email: dialog.email, role: dialog.role };
     const ok = dialog.mode === "edit" && dialog.userId ? await updateUser(dialog.userId, input) : await createUser(input);
@@ -82,7 +86,7 @@ export function MembersPage() {
   };
 
   const handleDelete = async (user: OrfUser) => {
-    if (isLastAdmin(user) || deletingUserId) {
+    if (isCurrentUser(user) || deletingUserId) {
       return;
     }
 
@@ -185,8 +189,8 @@ export function MembersPage() {
                         <button
                           type="button"
                           className="orf-user-delete-action"
-                          disabled={isLastAdmin(user) || deletingUserId === user.id}
-                          title={isLastAdmin(user) ? "至少保留一个管理员" : "删除"}
+                          disabled={isCurrentUser(user) || deletingUserId === user.id}
+                          title={isCurrentUser(user) ? "不能删除自己" : "删除"}
                           onClick={() => void handleDelete(user)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -223,7 +227,7 @@ export function MembersPage() {
             </label>
             <label>
               <span>角色</span>
-              <select value={dialog.role} disabled={editingUser ? isLastAdmin(editingUser) : false} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
+              <select value={dialog.role} disabled={isEditingCurrentAdmin} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
                 <option value="admin">管理员</option>
                 <option value="member">成员</option>
               </select>
