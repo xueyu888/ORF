@@ -30,6 +30,7 @@ import type {
   CommentTargetType,
   CommentThread,
   Objective,
+  OrfStage,
   OrfState,
   PermissionAction,
   PermissionResource,
@@ -39,13 +40,15 @@ import type {
   TaskStatus,
 } from "../types/orf";
 import { avatarStyleForName } from "../utils/avatar";
-import { initials, resultProgress } from "../utils/format";
+import { buildAutomaticCompletionSnapshot, calculateAutomaticCompletion, type AutomaticCompletionResult } from "../utils/automaticCompletion";
+import { initials } from "../utils/format";
 import type { DragEvent } from "react";
 
 type TaskScope = "team" | "personal";
-type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
+type FlowStage = OrfStage;
 type SimpleStatus = "todo" | "active" | "done";
 type IndicatorStatus = "todo" | "active" | "review" | "done";
+type ResultGroup = { result: Result; tasks: Task[]; updatedAt: string };
 type BlockAction = "copyLink" | "edit" | "comment" | "delete";
 type BlockTarget =
   | { type: "objective"; id: string; title: string }
@@ -127,8 +130,10 @@ export function TasksPage() {
       state.objectives
         .map((objective) => {
           const objectiveTasks = state.tasks.filter((task) => task.linkedObjectiveId === objective.id);
+          const resultOrder = new Map(objective.resultIds.map((id, index) => [id, index]));
           const results = state.results
-            .filter((result) => objective.resultIds.includes(result.id))
+            .filter((result) => result.objectiveId === objective.id)
+            .sort((left, right) => (resultOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (resultOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER))
             .filter((result) => scope === "team" || result.owner === currentMember)
             .map((result) => {
               const resultTasks = objectiveTasks.filter((task) => task.linkedResultId === result.id);
@@ -159,15 +164,29 @@ export function TasksPage() {
     [currentMember, scope, state.evidence, state.feedback, state.objectives, state.results, state.tasks],
   );
 
-  const resultTaskMap = useMemo(
-    () => new Map(state.results.map((result) => [result.id, state.tasks.filter((task) => task.linkedResultId === result.id)])),
-    [state.results, state.tasks],
-  );
   const commentCounts = useMemo(() => getCommentCounts(state.comments), [state.comments]);
-  const completedResults = state.results.filter((result) => indicatorStatus(result, resultTaskMap.get(result.id) ?? []) === "done").length;
-  const totalResults = state.results.length;
-  const overallObjectiveProgress = Math.round(average(groups.map((group) => objectiveProgress(group.results))));
   const objectiveStage = (objectiveId: string) => objectiveStages[objectiveId] ?? "orfReestimate";
+  const automaticCompletions = useMemo(() => {
+    const completions = new Map<string, AutomaticCompletionResult>();
+
+    for (const objective of state.objectives) {
+      if (objectiveStage(objective.id) !== "goalFrozen") {
+        continue;
+      }
+
+      const snapshot = buildAutomaticCompletionSnapshot(state, objective.id);
+      if (snapshot) {
+        completions.set(objective.id, calculateAutomaticCompletion(snapshot));
+      }
+    }
+
+    return completions;
+  }, [objectiveStages, state.objectives, state.results, state.tasks]);
+  const completedResults = state.results.filter((result) => automaticCompletions.get(result.objectiveId)?.rets[result.id] === 1).length;
+  const totalResults = state.results.length;
+  const overallObjectiveProgress = Math.round(
+    average(groups.map((group) => objectiveProgress(group.objective, group.results, automaticCompletions.get(group.objective.id)))),
+  );
   const canAtStage = (stage: FlowStage, action: PermissionAction, resource: PermissionResource) => canAccess(state, currentUser?.role, stage, action, resource);
   const updateObjectiveStage = (objectiveId: string, stage: FlowStage) => {
     setObjectiveStages((current) => ({ ...current, [objectiveId]: stage }));
@@ -396,6 +415,7 @@ export function TasksPage() {
               key={group.objective.id}
               objective={group.objective}
               results={group.results}
+              automaticCompletion={automaticCompletions.get(group.objective.id)}
               resultOwners={group.resultOwners}
               objectiveDue={group.objectiveDue}
               reviewDue={group.reviewDue}
@@ -606,6 +626,7 @@ function ScopeTabs({ value, onChange }: { value: TaskScope; onChange: (scope: Ta
 function ObjectivePanel({
   objective,
   results,
+  automaticCompletion,
   resultOwners,
   objectiveDue,
   reviewDue,
@@ -636,7 +657,8 @@ function ObjectivePanel({
   dragDrop,
 }: {
   objective: Objective;
-  results: { result: Result; tasks: Task[]; updatedAt: string }[];
+  results: ResultGroup[];
+  automaticCompletion?: AutomaticCompletionResult;
   resultOwners: string[];
   objectiveDue: string;
   reviewDue: string;
@@ -666,8 +688,8 @@ function ObjectivePanel({
   onOpenBlockActionChange: (id: string | null) => void;
   dragDrop: DragDropController;
 }) {
-  const progress = objectiveProgress(results);
-  const complete = progress >= 100;
+  const progress = objectiveProgress(objective, results, automaticCompletion);
+  const complete = automaticCompletion?.goal === 1;
   const objectiveActionId = `objective:${objective.id}`;
   const objectiveAnchorId = `objective:${objective.id}`;
   const objectiveTarget: BlockTarget = { type: "objective", id: objective.id, title: objective.title };
@@ -748,6 +770,7 @@ function ObjectivePanel({
             key={result.id}
             result={result}
             tasks={tasks}
+            automaticCompletion={automaticCompletion}
             updatedAt={updatedAt}
             isLast={index === results.length - 1}
             collapsed={collapsedResultIds.has(result.id)}
@@ -781,6 +804,7 @@ function ObjectivePanel({
 function ResultBlock({
   result,
   tasks,
+  automaticCompletion,
   updatedAt,
   isLast,
   collapsed,
@@ -807,6 +831,7 @@ function ResultBlock({
 }: {
   result: Result;
   tasks: Task[];
+  automaticCompletion?: AutomaticCompletionResult;
   updatedAt: string;
   isLast: boolean;
   collapsed: boolean;
@@ -831,7 +856,7 @@ function ResultBlock({
   onOpenBlockActionChange: (id: string | null) => void;
   dragDrop: DragDropController;
 }) {
-  const status = indicatorStatus(result, tasks);
+  const status = indicatorStatus(result, automaticCompletion);
   const open = !collapsed;
   const complete = status === "done";
   const resultAnchorId = `metric:${result.id}`;
@@ -927,6 +952,7 @@ function ResultBlock({
             <TaskRow
               key={task.id}
               task={task}
+              automaticCompletion={automaticCompletion}
               depth={2}
               isLast={index === tasks.length - 1}
               parentAnchorId={resultAnchorId}
@@ -957,6 +983,7 @@ function ResultBlock({
 
 function TaskRow({
   task,
+  automaticCompletion,
   depth,
   isLast,
   parentAnchorId,
@@ -979,6 +1006,7 @@ function TaskRow({
   dragDrop,
 }: {
   task: Task;
+  automaticCompletion?: AutomaticCompletionResult;
   depth: 2;
   isLast: boolean;
   parentAnchorId: string;
@@ -1000,7 +1028,7 @@ function TaskRow({
   onOpenBlockActionChange: (id: string | null) => void;
   dragDrop: DragDropController;
 }) {
-  const status = taskDisplayStatus(task);
+  const status = taskDisplayStatus(task, automaticCompletion);
   const complete = status === "done";
   const open = !collapsed;
   const hasSubtasks = task.checklist.length > 0;
@@ -2371,19 +2399,10 @@ function taskStatusToSimpleStatus(status: TaskStatus): SimpleStatus {
   return "todo";
 }
 
-function statusProgress(status: SimpleStatus) {
-  if (status === "done") return 1;
-  if (status === "active") return 0.5;
-  return 0;
-}
-
-function taskDisplayStatus(task: Task): SimpleStatus {
-  if (task.checklist.length > 0) {
-    const completedCount = task.checklist.filter((item) => item.done).length;
-
-    if (completedCount === task.checklist.length) return "done";
-    if (completedCount > 0 || taskStatusToSimpleStatus(task.status) === "active") return "active";
-    return "todo";
+function taskDisplayStatus(task: Task, automaticCompletion?: AutomaticCompletionResult): SimpleStatus {
+  const automaticTaskCompletion = automaticCompletion?.tasks[task.id];
+  if (automaticTaskCompletion !== undefined) {
+    return automaticTaskCompletion === 1 ? "done" : "todo";
   }
 
   return taskStatusToSimpleStatus(task.status);
@@ -2399,37 +2418,18 @@ function subtaskDisplayStatus(task: Task, item: TaskChecklistItem, itemIndex: nu
   return "todo";
 }
 
-function subtaskProgress(task: Task, item: TaskChecklistItem, itemIndex: number) {
-  return statusProgress(subtaskDisplayStatus(task, item, itemIndex));
-}
-
-function taskWorkProgress(task: Task) {
-  if (task.checklist.length > 0) {
-    return average(task.checklist.map((item, index) => subtaskProgress(task, item, index)));
+function indicatorStatus(result: Result, automaticCompletion?: AutomaticCompletionResult): IndicatorStatus {
+  if (automaticCompletion) {
+    return automaticCompletion.rets[result.id] === 1 ? "done" : "todo";
   }
 
-  return statusProgress(taskStatusToSimpleStatus(task.status));
+  return result.status === "Draft" ? "todo" : "active";
 }
 
-function indicatorWorkProgress(result: Result, tasks: Task[]) {
-  if (tasks.length > 0) {
-    return average(tasks.map((task) => taskWorkProgress(task)));
+function objectiveProgress(objective: Objective, results: ResultGroup[], automaticCompletion?: AutomaticCompletionResult) {
+  if (!automaticCompletion) {
+    return Math.max(0, Math.min(100, Math.round(objective.progress)));
   }
 
-  return resultProgress(result) / 100;
-}
-
-function indicatorStatus(result: Result, tasks: Task[]): IndicatorStatus {
-  const workProgress = indicatorWorkProgress(result, tasks);
-
-  if (workProgress >= 1) {
-    return resultProgress(result) >= 100 ? "done" : "review";
-  }
-
-  if (workProgress > 0) return "active";
-  return "todo";
-}
-
-function objectiveProgress(results: { result: Result; tasks: Task[] }[]) {
-  return Math.round(average(results.map(({ result, tasks }) => indicatorWorkProgress(result, tasks))) * 100);
+  return Math.round(average(results.map(({ result }) => automaticCompletion.rets[result.id] ?? 0)) * 100);
 }
