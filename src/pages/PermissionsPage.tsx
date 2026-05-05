@@ -110,9 +110,9 @@ const permissionRuleSignature = (permissionRules: PermissionRule[], role: UserRo
     .join("|");
 };
 
-export function PermissionsPage() {
+export function PermissionsPage({ initialView = "users" }: { initialView?: PermissionView }) {
   const { state, createUser, updateUser, updateUserRole, deleteUser, updateRolePermissionRules } = useOrf();
-  const [view, setView] = useState<PermissionView>("users");
+  const [view, setView] = useState<PermissionView>(initialView);
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [selectedRole, setSelectedRole] = useState<UserRole>("member");
@@ -126,6 +126,10 @@ export function PermissionsPage() {
   const selectedUser = selectedUserId ? state.users.find((user) => user.id === selectedUserId) ?? null : null;
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
   const isLastAdmin = (user: OrfUser) => user.role === "admin" && adminCount <= 1;
+
+  useEffect(() => {
+    setView(initialView);
+  }, [initialView]);
 
   useEffect(() => {
     setDraftPermissionRules(state.permissionRules);
@@ -224,26 +228,23 @@ export function PermissionsPage() {
       <header className="orf-user-management-hero">
         <div className="orf-permission-title-block">
           <span className="orf-permission-kicker">ADMIN CONTROL</span>
-          <h1>权限管理</h1>
+          <h1>{view === "users" ? "成员管理" : "权限管理"}</h1>
         </div>
         <div className="orf-permission-metrics" aria-label="权限概览">
-          <span>
-            <strong>{state.users.length}</strong>用户
-          </span>
-          <span>
-            <strong>{roles.length}</strong>角色
-          </span>
-          <span>
-            <strong>{activePermissionCount}</strong>权限
-          </span>
-        </div>
-        <div className="orf-permission-view-tabs" aria-label="权限管理视图">
-          <button type="button" className={clsx(view === "users" && "orf-permission-view-tab-active")} onClick={() => setView("users")}>
-            用户管理
-          </button>
-          <button type="button" className={clsx(view === "roles" && "orf-permission-view-tab-active")} onClick={() => setView("roles")}>
-            角色权限
-          </button>
+          {view === "users" ? (
+            <>
+              <span>
+                <strong>{state.users.length}</strong>用户
+              </span>
+              <span>
+                <strong>{roles.length}</strong>角色
+              </span>
+            </>
+          ) : (
+            <span>
+              <strong>{activePermissionCount}</strong>权限
+            </span>
+          )}
         </div>
       </header>
 

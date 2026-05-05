@@ -36,10 +36,18 @@ export function App() {
         <Route path="ai-evaluation" element={<AIEvaluationPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route
+          path="members"
+          element={
+            <RequireAdmin>
+              <PermissionsPage initialView="users" />
+            </RequireAdmin>
+          }
+        />
+        <Route
           path="permissions"
           element={
             <RequireAdmin>
-              <PermissionsPage />
+              <PermissionsPage initialView="roles" />
             </RequireAdmin>
           }
         />

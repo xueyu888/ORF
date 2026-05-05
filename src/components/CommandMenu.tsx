@@ -6,6 +6,8 @@ import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import { commandTypeLabel } from "../utils/labels";
 
+const adminOnlyPaths = new Set(["/members", "/permissions"]);
+
 export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const { isAdmin, state } = useOrf();
@@ -14,7 +16,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
 
   const items = useMemo(() => {
     const pageItems = quickPages
-      .filter((item) => isAdmin || item.path !== "/permissions")
+      .filter((item) => isAdmin || !adminOnlyPaths.has(item.path))
       .map((item) => ({ label: item.label, path: item.path, type: "Page" }));
     const objectiveItems = state.objectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
     const resultItems = state.results.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));

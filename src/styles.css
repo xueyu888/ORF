@@ -1400,7 +1400,7 @@ button:disabled {
 .orf-user-management-hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto;
+  grid-template-columns: minmax(180px, 1fr) auto;
   align-items: center;
   gap: 14px;
   overflow: hidden;
@@ -1459,6 +1459,7 @@ button:disabled {
 .orf-permission-metrics {
   flex-wrap: wrap;
   justify-content: flex-end;
+  justify-self: end;
 }
 
 .orf-permission-metrics span {
@@ -1488,8 +1489,11 @@ button:disabled {
   clip-path: var(--orf-control-cut);
 }
 
-.orf-permission-view-tabs button {
+.orf-permission-view-tabs button,
+.orf-permission-view-tabs a {
+  display: inline-flex;
   height: 36px;
+  align-items: center;
   border: 0;
   background: transparent;
   padding: 0 16px;
@@ -1497,6 +1501,7 @@ button:disabled {
   font-size: 14px;
   font-weight: 900;
   cursor: pointer;
+  text-decoration: none;
 }
 
 .orf-permission-view-tab-active {
@@ -2185,7 +2190,8 @@ button:disabled {
 
   .orf-permission-metrics,
   .orf-permission-view-tabs {
-    justify-content: flex-start;
+    justify-content: flex-end;
+    justify-self: end;
   }
 
   .orf-user-toolbar {
