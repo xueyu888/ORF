@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { calculateAutomaticCompletion, shouldCallAutomaticCompletion } from "../src/utils/automaticCompletion";
+import type { AutomaticCompletionSnapshot } from "../src/utils/automaticCompletion";
+import type { Objective, Result, Task } from "../src/types/orf";
 
 type Bit = 0 | 1;
 
@@ -42,21 +45,12 @@ function taskCompletion(taskCase: TaskCase): Bit {
 }
 
 function calculateCompletion(goalCase: GoalCase): CompletionCaseResult {
-  const tasks: Record<string, Bit> = {};
-  const rets: Record<string, Bit> = {};
-
-  for (const retCase of goalCase.rets) {
-    for (const taskCase of retCase.tasks) {
-      tasks[taskCase.id] = taskCompletion(taskCase);
-    }
-
-    rets[retCase.id] = allDone(retCase.tasks.map((taskCase) => tasks[taskCase.id]));
-  }
+  const actual = calculateAutomaticCompletion(goalCaseToSnapshot(goalCase));
 
   return {
-    goal: allDone(goalCase.rets.map((retCase) => rets[retCase.id])),
-    rets,
-    tasks,
+    goal: actual.goal,
+    rets: actual.rets,
+    tasks: actual.tasks,
   };
 }
 
@@ -133,6 +127,25 @@ test("fixed acceptance case matches the referenced document", () => {
     goal: 0,
   });
   assertRule(goalCase);
+});
+
+test("stage gate only allows calculation for documented triggers", () => {
+  assert.equal(shouldCallAutomaticCompletion({ previousStage: "orfReestimate", currentStage: "goalFrozen", snapshotChanged: false }), true);
+  assert.equal(shouldCallAutomaticCompletion({ previousStage: "goalFrozen", currentStage: "goalFrozen", snapshotChanged: true }), true);
+  assert.equal(shouldCallAutomaticCompletion({ previousStage: "goalFrozen", currentStage: "goalFrozen", snapshotChanged: false }), false);
+  assert.equal(shouldCallAutomaticCompletion({ previousStage: "orfReestimate", currentStage: "orfReestimate", snapshotChanged: true }), false);
+  assert.equal(shouldCallAutomaticCompletion({ previousStage: "goalFrozen", currentStage: "orfReestimate", snapshotChanged: true }), false);
+});
+
+test("goalFrozen ret with no tasks is illegal and cannot complete", () => {
+  const snapshot = goalCaseToSnapshot({ id: "g-empty-ret", rets: [{ id: "r-empty", tasks: [] }] });
+  const actual = calculateAutomaticCompletion(snapshot);
+
+  assert.equal(actual.legal, false);
+  assert.equal(actual.goal, 0);
+  assert.equal(actual.rets["r-empty"], 0);
+  assert.deepEqual(actual.tasks, {});
+  assert.deepEqual(actual.errors, ["ret r-empty must contain at least one task"]);
 });
 
 test("exhaustively covers small legal combinations", () => {
@@ -245,6 +258,83 @@ function taskVariants(retIndex: number, taskIndex: number): TaskCase[] {
   }
 
   return variants;
+}
+
+function goalCaseToSnapshot(goalCase: GoalCase): AutomaticCompletionSnapshot {
+  const objective = makeObjective(goalCase.id, goalCase.rets.map((retCase) => retCase.id));
+  const results = goalCase.rets.map((retCase) => makeResult(retCase.id, goalCase.id));
+  const tasks = goalCase.rets.flatMap((retCase) =>
+    retCase.tasks.map((taskCase) => makeTask(taskCase, goalCase.id, retCase.id)),
+  );
+
+  return { objective, results, tasks };
+}
+
+function makeObjective(id: string, resultIds: string[]): Objective {
+  return {
+    id,
+    title: id,
+    description: id,
+    whyItMatters: id,
+    owner: "User",
+    cycle: "Test",
+    status: "On Track",
+    confidence: 100,
+    progress: 0,
+    boundary: "Test",
+    successDefinition: "Test",
+    resultIds,
+    feedbackIds: [],
+    taskIds: [],
+    createdAt: "2026-05-05",
+    updatedAt: "2026-05-05",
+  };
+}
+
+function makeResult(id: string, objectiveId: string): Result {
+  return {
+    id,
+    objectiveId,
+    title: id,
+    description: id,
+    metricName: id,
+    baseline: 0,
+    current: 0,
+    target: 1,
+    unit: "",
+    direction: "increase",
+    status: "On Track",
+    confidence: 100,
+    owner: "User",
+    evidenceIds: [],
+    taskIds: [],
+    feedbackIds: [],
+    trend: [],
+    reviewCadence: "Weekly",
+  };
+}
+
+function makeTask(taskCase: TaskCase, linkedObjectiveId: string, linkedResultId: string): Task {
+  return {
+    id: taskCase.id,
+    title: taskCase.id,
+    description: taskCase.id,
+    status: taskCase.done === 1 ? "Done" : "Todo",
+    priority: "Medium",
+    assignee: "User",
+    linkedObjectiveId,
+    linkedResultId,
+    dueDate: "2026-05-05",
+    tags: [],
+    checklist: taskCase.subtasks.map((subtask) => ({
+      id: subtask.id,
+      label: subtask.id,
+      done: subtask.done === 1,
+      updatedAt: "2026-05-05",
+    })),
+    createdAt: "2026-05-05",
+    updatedAt: "2026-05-05",
+  };
 }
 
 function product<T>(groups: T[][]): T[][] {

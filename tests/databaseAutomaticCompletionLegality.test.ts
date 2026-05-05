@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { closeDb, db } from "../server/db/client";
 import { objectives, results, taskChecklistItems, tasks } from "../server/db/schema";
-import type { TaskStatus } from "../src/types/orf";
-
-type Bit = 0 | 1;
+import { calculateAutomaticCompletion, shouldCallAutomaticCompletion } from "../src/utils/automaticCompletion";
+import type { AutomaticCompletionSnapshot } from "../src/utils/automaticCompletion";
+import type { Objective, Result, Task, TaskStatus } from "../src/types/orf";
 
 interface ObjectiveRow {
   id: string;
@@ -31,12 +31,30 @@ after(async () => {
   await closeDb();
 });
 
-test("database hierarchy is legal under automatic completion rules", async () => {
+test("database rows do not call automatic completion outside goalFrozen", async () => {
   const data = await loadAutomaticCompletionRows();
-  const legality = validateDatabaseLegality(data);
 
-  assert.deepEqual(legality.errors, []);
-  assert.ok(Object.keys(legality.goalCompletion).length > 0);
+  assert.ok(data.objectives.length > 0);
+  assert.equal(shouldCallAutomaticCompletion({ previousStage: "orfReestimate", currentStage: "orfReestimate", snapshotChanged: true }), false);
+});
+
+test("database hierarchy cannot complete illegal frozen inputs", async () => {
+  const data = await loadAutomaticCompletionRows();
+  const snapshots = databaseSnapshots(data);
+
+  assert.ok(snapshots.length > 0);
+
+  for (const snapshot of snapshots) {
+    const actual = calculateAutomaticCompletion(snapshot);
+
+    if (!actual.legal) {
+      assert.equal(actual.goal, 0, snapshot.objective.id);
+      assert.ok(actual.errors.length > 0, snapshot.objective.id);
+      continue;
+    }
+
+    assert.deepEqual(actual.errors, []);
+  }
 });
 
 async function loadAutomaticCompletionRows() {
@@ -67,60 +85,88 @@ async function loadAutomaticCompletionRows() {
   };
 }
 
-function validateDatabaseLegality(data: Awaited<ReturnType<typeof loadAutomaticCompletionRows>>) {
-  const errors: string[] = [];
-  const goalCompletion: Record<string, Bit> = {};
-  const resultCompletion: Record<string, Bit> = {};
-  const taskCompletion: Record<string, Bit> = {};
-
-  for (const objective of data.objectives) {
+function databaseSnapshots(data: Awaited<ReturnType<typeof loadAutomaticCompletionRows>>): AutomaticCompletionSnapshot[] {
+  return data.objectives.map((objective) => {
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
+    const resultIds = new Set(objectiveResults.map((result) => result.id));
+    const objectiveTasks = data.tasks.filter((task) => task.linkedObjectiveId === objective.id || resultIds.has(task.linkedResultId));
+    const checklistByTask = new Map<string, ChecklistRow[]>();
 
-    if (objectiveResults.length === 0) {
-      errors.push(`goal ${objective.id} must contain at least one ret`);
-      continue;
+    for (const item of data.checklistItems) {
+      checklistByTask.set(item.taskId, [...(checklistByTask.get(item.taskId) ?? []), item]);
     }
 
-    for (const result of objectiveResults) {
-      const resultTasks = data.tasks.filter((task) => task.linkedResultId === result.id);
+    return {
+      objective: makeObjective(objective.id, objectiveResults.map((result) => result.id), objectiveTasks.map((task) => task.id)),
+      results: objectiveResults.map((result) => makeResult(result.id, objective.id, objectiveTasks.filter((task) => task.linkedResultId === result.id).map((task) => task.id))),
+      tasks: objectiveTasks.map((task) => makeTask(task, checklistByTask.get(task.id) ?? [])),
+    };
+  });
+}
 
-      if (resultTasks.length === 0) {
-        errors.push(`ret ${result.id} must contain at least one task`);
-        continue;
-      }
-
-      for (const task of resultTasks) {
-        if (task.linkedObjectiveId !== objective.id) {
-          errors.push(`task ${task.id} linkedObjectiveId must equal goal ${objective.id}`);
-        }
-
-        taskCompletion[task.id] = calculateTaskCompletion(task, data.checklistItems.filter((item) => item.taskId === task.id));
-      }
-
-      resultCompletion[result.id] = allDone(resultTasks.map((task) => taskCompletion[task.id]));
-    }
-
-    if (objectiveResults.every((result) => result.id in resultCompletion)) {
-      goalCompletion[objective.id] = allDone(objectiveResults.map((result) => resultCompletion[result.id]));
-    }
-  }
-
+function makeObjective(id: string, resultIds: string[], taskIds: string[]): Objective {
   return {
-    errors,
-    goalCompletion,
-    resultCompletion,
-    taskCompletion,
+    id,
+    title: id,
+    description: id,
+    whyItMatters: id,
+    owner: "User",
+    cycle: "Database",
+    status: "On Track",
+    confidence: 100,
+    progress: 0,
+    boundary: "Database",
+    successDefinition: "Database",
+    resultIds,
+    feedbackIds: [],
+    taskIds,
+    createdAt: "2026-05-05",
+    updatedAt: "2026-05-05",
   };
 }
 
-function calculateTaskCompletion(task: TaskRow, checklist: ChecklistRow[]): Bit {
-  return checklist.length === 0 ? taskStatusDone(task.status) : allDone(checklist.map((item) => (item.done ? 1 : 0)));
+function makeResult(id: string, objectiveId: string, taskIds: string[]): Result {
+  return {
+    id,
+    objectiveId,
+    title: id,
+    description: id,
+    metricName: id,
+    baseline: 0,
+    current: 0,
+    target: 1,
+    unit: "",
+    direction: "increase",
+    status: "On Track",
+    confidence: 100,
+    owner: "User",
+    evidenceIds: [],
+    taskIds,
+    feedbackIds: [],
+    trend: [],
+    reviewCadence: "Weekly",
+  };
 }
 
-function taskStatusDone(status: TaskStatus): Bit {
-  return status === "Done" ? 1 : 0;
-}
-
-function allDone(values: Bit[]): Bit {
-  return values.every((value) => value === 1) ? 1 : 0;
+function makeTask(task: TaskRow, checklist: ChecklistRow[]): Task {
+  return {
+    id: task.id,
+    title: task.id,
+    description: task.id,
+    status: task.status,
+    priority: "Medium",
+    assignee: "User",
+    linkedObjectiveId: task.linkedObjectiveId,
+    linkedResultId: task.linkedResultId,
+    dueDate: "2026-05-05",
+    tags: [],
+    checklist: checklist.map((item, index) => ({
+      id: `${task.id}-ck-${index}`,
+      label: `${task.id}-ck-${index}`,
+      done: item.done,
+      updatedAt: "2026-05-05",
+    })),
+    createdAt: "2026-05-05",
+    updatedAt: "2026-05-05",
+  };
 }
