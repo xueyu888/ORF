@@ -169,7 +169,20 @@ export async function updateTeamUser(teamId: string, userId: string, input: User
 }
 
 export async function deleteTeamUser(teamId: string, userId: string): Promise<OrfUser[]> {
-  await assertCanChangeRole(teamId, userId, "member");
+  const [membership] = await db
+    .select({ role: teamMembers.role })
+    .from(teamMembers)
+    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+    .limit(1);
+
+  if (!membership) {
+    return getTeamUsers(teamId);
+  }
+
+  if (membership.role === "admin" && (await adminCount(teamId)) <= 1) {
+    throw Object.assign(new Error("At least one admin is required"), { statusCode: 409 });
+  }
+
   await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
   return getTeamUsers(teamId);
 }

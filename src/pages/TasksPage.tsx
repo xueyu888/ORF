@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type CSSProperties, type FormEvent, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../components/OrfIconAssets";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
@@ -46,7 +46,7 @@ type TaskScope = "team" | "personal";
 type FlowStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
 type SimpleStatus = "todo" | "active" | "done";
 type IndicatorStatus = "todo" | "active" | "review" | "done";
-type BlockAction = "copyLink" | "comment" | "delete";
+type BlockAction = "copyLink" | "edit" | "comment" | "delete";
 type BlockTarget =
   | { type: "objective"; id: string; title: string }
   | { type: "result"; id: string; title: string; objectiveId: string }
@@ -101,6 +101,10 @@ export function TasksPage() {
     deleteTaskChecklistItem,
     setTaskCompletion,
     updateTaskChecklistItem,
+    updateObjectiveTitle,
+    updateResultTitle,
+    updateTaskTitle,
+    updateTaskChecklistItemLabel,
     addComment,
     updateCommentMessage,
     deleteCommentMessage,
@@ -112,6 +116,7 @@ export function TasksPage() {
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<BlockTarget | null>(null);
+  const [editingTarget, setEditingTarget] = useState<BlockTarget | null>(null);
   const [activeBlockActionId, setActiveBlockActionId] = useState<string | null>(null);
   const [openBlockActionId, setOpenBlockActionId] = useState<string | null>(null);
   const [dragBlock, setDragBlock] = useState<DragBlock | null>(null);
@@ -178,6 +183,35 @@ export function TasksPage() {
     }
 
     return objectiveStage(block.objectiveId);
+  };
+  const canEditTarget = (target: BlockTarget) => canAtStage(stageForTarget(target), "edit", resourceForBlockTarget(target));
+  const beginEditTarget = (target: BlockTarget) => {
+    if (!canEditTarget(target)) {
+      notify("没有编辑权限");
+      return;
+    }
+
+    setEditingTarget(target);
+    setOpenBlockActionId(null);
+  };
+  const saveEditedTargetTitle = (target: BlockTarget, title: string) => {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      notify("标题不能为空");
+      return;
+    }
+
+    if (target.type === "objective") {
+      updateObjectiveTitle(target.id, nextTitle);
+    } else if (target.type === "result") {
+      updateResultTitle(target.id, nextTitle);
+    } else if (target.type === "task") {
+      updateTaskTitle(target.id, nextTitle);
+    } else {
+      updateTaskChecklistItemLabel(target.taskId, target.id, nextTitle);
+    }
+
+    setEditingTarget(null);
   };
 
   const toggleResult = (resultId: string) => setCollapsedResultIds((items) => toggleSetItem(items, resultId));
@@ -318,6 +352,11 @@ export function TasksPage() {
       return;
     }
 
+    if (action === "edit") {
+      beginEditTarget(target);
+      return;
+    }
+
     handleDeleteTarget(target);
   };
 
@@ -376,6 +415,10 @@ export function TasksPage() {
               onAddTask={handleAddTask}
               onAddSubtask={handleAddSubtask}
               onBlockAction={handleBlockAction}
+              editingTarget={editingTarget}
+              onEditTarget={beginEditTarget}
+              onSaveEditedTitle={saveEditedTargetTitle}
+              onCancelEdit={() => setEditingTarget(null)}
               activeBlockActionId={activeBlockActionId}
               openBlockActionId={openBlockActionId}
               onActiveBlockActionChange={setActiveBlockActionId}
@@ -582,6 +625,10 @@ function ObjectivePanel({
   onAddTask,
   onAddSubtask,
   onBlockAction,
+  editingTarget,
+  onEditTarget,
+  onSaveEditedTitle,
+  onCancelEdit,
   activeBlockActionId,
   openBlockActionId,
   onActiveBlockActionChange,
@@ -609,6 +656,10 @@ function ObjectivePanel({
   onAddTask: (result: Result) => void;
   onAddSubtask: (taskId: string, afterItemId?: string) => void;
   onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  editingTarget: BlockTarget | null;
+  onEditTarget: (target: BlockTarget) => void;
+  onSaveEditedTitle: (target: BlockTarget, title: string) => void;
+  onCancelEdit: () => void;
   activeBlockActionId: string | null;
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
@@ -619,6 +670,7 @@ function ObjectivePanel({
   const complete = progress >= 100;
   const objectiveActionId = `objective:${objective.id}`;
   const objectiveAnchorId = `objective:${objective.id}`;
+  const objectiveTarget: BlockTarget = { type: "objective", id: objective.id, title: objective.title };
   const [objectiveElement, setObjectiveElement] = useState<HTMLElement | null>(null);
   const objectiveRowActive = activeBlockActionId === objectiveActionId || openBlockActionId === objectiveActionId;
   const hierarchyLayoutKey = results
@@ -650,6 +702,7 @@ function ObjectivePanel({
             onActiveBlockActionChange(null);
           }
         }}
+        onDoubleClick={(event) => handleRowDoubleClick(event, objectiveTarget, onEditTarget)}
       >
         <BlockActions
           actionId={objectiveActionId}
@@ -660,13 +713,23 @@ function ObjectivePanel({
           onActiveActionChange={onActiveBlockActionChange}
           onOpenActionChange={onOpenBlockActionChange}
           onAdd={() => onAddResult(objective.id)}
-          onAction={(action) => onBlockAction(action, { type: "objective", id: objective.id, title: objective.title })}
+          onAction={(action) => onBlockAction(action, objectiveTarget)}
         />
         <HierarchyRootCell anchor={<ObjectiveFlagIcon complete={complete} />} anchorId={objectiveAnchorId}>
-          <div className={clsx("orf-objective-title min-w-0 flex-1 truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
+          {isSameBlockTarget(editingTarget, objectiveTarget) ? (
+            <InlineTitleEditor
+              value={objective.title}
+              className="orf-objective-title text-lg font-bold"
+              ariaLabel="编辑目标标题"
+              onSubmit={(title) => onSaveEditedTitle(objectiveTarget, title)}
+              onCancel={onCancelEdit}
+            />
+          ) : (
+            <div className={clsx("orf-objective-title min-w-0 flex-1 truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{objective.title}</div>
+          )}
           <CommentCountBadge
             count={commentCountFor(commentCounts, "objective", objective.id)}
-            onClick={() => onBlockAction("comment", { type: "objective", id: objective.id, title: objective.title })}
+            onClick={() => onBlockAction("comment", objectiveTarget)}
           />
         </HierarchyRootCell>
         <StatusChip tone={complete ? "done" : objective.status === "At Risk" || objective.status === "Blocked" ? "warning" : "success"}>
@@ -699,6 +762,10 @@ function ObjectivePanel({
             onAddTask={onAddTask}
             onAddSubtask={onAddSubtask}
             onBlockAction={onBlockAction}
+            editingTarget={editingTarget}
+            onEditTarget={onEditTarget}
+            onSaveEditedTitle={onSaveEditedTitle}
+            onCancelEdit={onCancelEdit}
             activeBlockActionId={activeBlockActionId}
             openBlockActionId={openBlockActionId}
             onActiveBlockActionChange={onActiveBlockActionChange}
@@ -728,6 +795,10 @@ function ResultBlock({
   onAddTask,
   onAddSubtask,
   onBlockAction,
+  editingTarget,
+  onEditTarget,
+  onSaveEditedTitle,
+  onCancelEdit,
   activeBlockActionId,
   openBlockActionId,
   onActiveBlockActionChange,
@@ -750,6 +821,10 @@ function ResultBlock({
   onAddTask: (result: Result) => void;
   onAddSubtask: (taskId: string, afterItemId?: string) => void;
   onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  editingTarget: BlockTarget | null;
+  onEditTarget: (target: BlockTarget) => void;
+  onSaveEditedTitle: (target: BlockTarget, title: string) => void;
+  onCancelEdit: () => void;
   activeBlockActionId: string | null;
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
@@ -761,6 +836,7 @@ function ResultBlock({
   const complete = status === "done";
   const resultAnchorId = `metric:${result.id}`;
   const resultActionId = `result:${result.id}`;
+  const resultTarget: BlockTarget = { type: "result", id: result.id, title: result.title, objectiveId: result.objectiveId };
   const resultRowActive = activeBlockActionId === resultActionId || openBlockActionId === resultActionId;
   const resultDropClass = dropTargetClass(dragDrop.dropTarget, [
     { type: "result", resultId: result.id },
@@ -785,6 +861,7 @@ function ResultBlock({
             onActiveBlockActionChange(null);
           }
         }}
+        onDoubleClick={(event) => handleRowDoubleClick(event, resultTarget, onEditTarget)}
       >
         <BlockActions
           actionId={resultActionId}
@@ -795,7 +872,7 @@ function ResultBlock({
           onActiveActionChange={onActiveBlockActionChange}
           onOpenActionChange={onOpenBlockActionChange}
           onAdd={() => onAddTask(result)}
-          onAction={(action) => onBlockAction(action, { type: "result", id: result.id, title: result.title, objectiveId: result.objectiveId })}
+          onAction={(action) => onBlockAction(action, resultTarget)}
           dragBlock={{ type: "result", id: result.id, objectiveId: result.objectiveId }}
           onDragStart={dragDrop.onDragStart}
           onDragEnd={dragDrop.onDragEnd}
@@ -823,10 +900,20 @@ function ResultBlock({
           >
             <MetricSquareIcon tone={status} />
           </span>
-          <div className={clsx("orf-result-title truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{result.title}</div>
+          {isSameBlockTarget(editingTarget, resultTarget) ? (
+            <InlineTitleEditor
+              value={result.title}
+              className="orf-result-title text-base font-semibold"
+              ariaLabel="编辑指标标题"
+              onSubmit={(title) => onSaveEditedTitle(resultTarget, title)}
+              onCancel={onCancelEdit}
+            />
+          ) : (
+            <div className={clsx("orf-result-title truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{result.title}</div>
+          )}
           <CommentCountBadge
             count={commentCountFor(commentCounts, "result", result.id)}
-            onClick={() => onBlockAction("comment", { type: "result", id: result.id, title: result.title, objectiveId: result.objectiveId })}
+            onClick={() => onBlockAction("comment", resultTarget)}
           />
         </HierarchyCell>
         <PersonValue name={result.owner} />
@@ -851,6 +938,10 @@ function ResultBlock({
               onChecklistItemChange={onChecklistItemChange}
               onAddSubtask={onAddSubtask}
               onBlockAction={onBlockAction}
+              editingTarget={editingTarget}
+              onEditTarget={onEditTarget}
+              onSaveEditedTitle={onSaveEditedTitle}
+              onCancelEdit={onCancelEdit}
               activeBlockActionId={activeBlockActionId}
               openBlockActionId={openBlockActionId}
               onActiveBlockActionChange={onActiveBlockActionChange}
@@ -877,6 +968,10 @@ function TaskRow({
   onChecklistItemChange,
   onAddSubtask,
   onBlockAction,
+  editingTarget,
+  onEditTarget,
+  onSaveEditedTitle,
+  onCancelEdit,
   activeBlockActionId,
   openBlockActionId,
   onActiveBlockActionChange,
@@ -895,6 +990,10 @@ function TaskRow({
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onAddSubtask: (taskId: string, afterItemId?: string) => void;
   onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  editingTarget: BlockTarget | null;
+  onEditTarget: (target: BlockTarget) => void;
+  onSaveEditedTitle: (target: BlockTarget, title: string) => void;
+  onCancelEdit: () => void;
   activeBlockActionId: string | null;
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
@@ -907,6 +1006,14 @@ function TaskRow({
   const hasSubtasks = task.checklist.length > 0;
   const taskAnchorId = `task:${task.id}`;
   const taskActionId = `task:${task.id}`;
+  const taskTarget: BlockTarget = {
+    type: "task",
+    id: task.id,
+    title: task.title,
+    resultId: task.linkedResultId,
+    objectiveId: task.linkedObjectiveId,
+    hasSubtasks,
+  };
   const taskRowActive = activeBlockActionId === taskActionId || openBlockActionId === taskActionId;
   const taskDropClass = dropTargetClass(dragDrop.dropTarget, [
     { type: "task", taskId: task.id },
@@ -931,6 +1038,7 @@ function TaskRow({
             onActiveBlockActionChange(null);
           }
         }}
+        onDoubleClick={(event) => handleRowDoubleClick(event, taskTarget, onEditTarget)}
       >
         <BlockActions
           actionId={taskActionId}
@@ -941,16 +1049,7 @@ function TaskRow({
           onActiveActionChange={onActiveBlockActionChange}
           onOpenActionChange={onOpenBlockActionChange}
           onAdd={() => onAddSubtask(task.id)}
-          onAction={(action) =>
-            onBlockAction(action, {
-              type: "task",
-              id: task.id,
-              title: task.title,
-              resultId: task.linkedResultId,
-              objectiveId: task.linkedObjectiveId,
-              hasSubtasks,
-            })
-          }
+          onAction={(action) => onBlockAction(action, taskTarget)}
           dragBlock={{ type: "task", id: task.id, resultId: task.linkedResultId, objectiveId: task.linkedObjectiveId }}
           onDragStart={dragDrop.onDragStart}
           onDragEnd={dragDrop.onDragEnd}
@@ -981,19 +1080,20 @@ function TaskRow({
               <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onTaskCompletionChange(task.id, checked)} />
             </span>
           </span>
-          <div className={clsx("orf-task-title truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
+          {isSameBlockTarget(editingTarget, taskTarget) ? (
+            <InlineTitleEditor
+              value={task.title}
+              className="orf-task-title text-base font-medium"
+              ariaLabel="编辑任务标题"
+              onSubmit={(title) => onSaveEditedTitle(taskTarget, title)}
+              onCancel={onCancelEdit}
+            />
+          ) : (
+            <div className={clsx("orf-task-title truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{task.title}</div>
+          )}
           <CommentCountBadge
             count={commentCountFor(commentCounts, "task", task.id)}
-            onClick={() =>
-              onBlockAction("comment", {
-                type: "task",
-                id: task.id,
-                title: task.title,
-                resultId: task.linkedResultId,
-                objectiveId: task.linkedObjectiveId,
-                hasSubtasks,
-              })
-            }
+            onClick={() => onBlockAction("comment", taskTarget)}
           />
         </HierarchyCell>
         <EmptySlot />
@@ -1017,6 +1117,10 @@ function TaskRow({
             onChecklistItemChange={onChecklistItemChange}
             onAddSubtask={onAddSubtask}
             onBlockAction={onBlockAction}
+            editingTarget={editingTarget}
+            onEditTarget={onEditTarget}
+            onSaveEditedTitle={onSaveEditedTitle}
+            onCancelEdit={onCancelEdit}
             activeBlockActionId={activeBlockActionId}
             openBlockActionId={openBlockActionId}
             onActiveBlockActionChange={onActiveBlockActionChange}
@@ -1040,6 +1144,10 @@ function SubtaskRow({
   onChecklistItemChange,
   onAddSubtask,
   onBlockAction,
+  editingTarget,
+  onEditTarget,
+  onSaveEditedTitle,
+  onCancelEdit,
   activeBlockActionId,
   openBlockActionId,
   onActiveBlockActionChange,
@@ -1057,6 +1165,10 @@ function SubtaskRow({
   onChecklistItemChange: (taskId: string, itemId: string, done: boolean) => void;
   onAddSubtask: (taskId: string, afterItemId?: string) => void;
   onBlockAction: (action: BlockAction, target: BlockTarget) => void;
+  editingTarget: BlockTarget | null;
+  onEditTarget: (target: BlockTarget) => void;
+  onSaveEditedTitle: (target: BlockTarget, title: string) => void;
+  onCancelEdit: () => void;
   activeBlockActionId: string | null;
   openBlockActionId: string | null;
   onActiveBlockActionChange: (id: string | null) => void;
@@ -1066,6 +1178,14 @@ function SubtaskRow({
   const status = subtaskDisplayStatus(task, item, itemIndex);
   const complete = status === "done";
   const subtaskActionId = `subtask:${task.id}:${item.id}`;
+  const subtaskTarget: BlockTarget = {
+    type: "subtask",
+    id: item.id,
+    title: item.label,
+    taskId: task.id,
+    resultId: task.linkedResultId,
+    objectiveId: task.linkedObjectiveId,
+  };
   const subtaskRowActive = activeBlockActionId === subtaskActionId || openBlockActionId === subtaskActionId;
   const subtaskDropClass = dropTargetClass(dragDrop.dropTarget, [{ type: "subtask", taskId: task.id, itemId: item.id }]);
 
@@ -1086,6 +1206,7 @@ function SubtaskRow({
           onActiveBlockActionChange(null);
         }
       }}
+      onDoubleClick={(event) => handleRowDoubleClick(event, subtaskTarget, onEditTarget)}
     >
       <BlockActions
         actionId={subtaskActionId}
@@ -1096,16 +1217,7 @@ function SubtaskRow({
         onActiveActionChange={onActiveBlockActionChange}
         onOpenActionChange={onOpenBlockActionChange}
         onAdd={() => onAddSubtask(task.id, item.id)}
-        onAction={(action) =>
-          onBlockAction(action, {
-            type: "subtask",
-            id: item.id,
-            title: item.label,
-            taskId: task.id,
-            resultId: task.linkedResultId,
-            objectiveId: task.linkedObjectiveId,
-          })
-        }
+        onAction={(action) => onBlockAction(action, subtaskTarget)}
         dragBlock={{ type: "subtask", id: item.id, taskId: task.id }}
         onDragStart={dragDrop.onDragStart}
         onDragEnd={dragDrop.onDragEnd}
@@ -1123,19 +1235,20 @@ function SubtaskRow({
             <CompletionCheckbox checked={complete} disabled={!canEditTasks} onChange={(checked) => onChecklistItemChange(task.id, item.id, checked)} />
           </span>
         </span>
-        <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
+        {isSameBlockTarget(editingTarget, subtaskTarget) ? (
+          <InlineTitleEditor
+            value={item.label}
+            className="orf-subtask-title text-sm font-medium"
+            ariaLabel="编辑子任务标题"
+            onSubmit={(title) => onSaveEditedTitle(subtaskTarget, title)}
+            onCancel={onCancelEdit}
+          />
+        ) : (
+          <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : "text-[#344054]")}>{item.label}</div>
+        )}
         <CommentCountBadge
           count={commentCountFor(commentCounts, "subtask", item.id)}
-          onClick={() =>
-            onBlockAction("comment", {
-              type: "subtask",
-              id: item.id,
-              title: item.label,
-              taskId: task.id,
-              resultId: task.linkedResultId,
-              objectiveId: task.linkedObjectiveId,
-            })
-          }
+          onClick={() => onBlockAction("comment", subtaskTarget)}
         />
       </HierarchyCell>
       <EmptySlot />
@@ -1351,6 +1464,7 @@ function deletionConfirmMessage(target: BlockTarget, state: OrfState) {
 
 const blockMenuItems: { action: BlockAction; label: string; icon: LucideIcon }[] = [
   { action: "copyLink", label: "复制链接", icon: Copy },
+  { action: "edit", label: "编辑", icon: Pencil },
   { action: "comment", label: "评论", icon: MessageSquare },
   { action: "delete", label: "删除", icon: Trash2 },
 ];
@@ -1494,7 +1608,7 @@ function DisclosureAction({
     <button
       type="button"
       data-visible={visible ? "true" : undefined}
-      className={clsx("orf-disclosure-action flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#344054] transition hover:bg-[var(--orf-bg-card)]", className)}
+      className={clsx("orf-disclosure-action z-[70] flex h-6 w-6 shrink-0 items-center justify-center rounded text-[#344054] transition hover:bg-[var(--orf-bg-card)]", className)}
       aria-label={label}
       title={label}
       onPointerEnter={() => onActiveActionChange(actionId)}
@@ -1507,6 +1621,92 @@ function DisclosureAction({
       {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
     </button>
   );
+}
+
+function InlineTitleEditor({
+  value,
+  className,
+  ariaLabel,
+  onSubmit,
+  onCancel,
+}: {
+  value: string;
+  className: string;
+  ariaLabel: string;
+  onSubmit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const finishedRef = useRef(false);
+
+  useEffect(() => {
+    setDraft(value);
+    finishedRef.current = false;
+  }, [value]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const commit = () => {
+    if (finishedRef.current) {
+      return;
+    }
+
+    finishedRef.current = true;
+    onSubmit(draft);
+  };
+
+  return (
+    <form
+      className={clsx("orf-inline-title-editor min-w-0 flex-1", className)}
+      onSubmit={(event) => {
+        event.preventDefault();
+        commit();
+      }}
+      data-no-row-edit="true"
+    >
+      <input
+        ref={inputRef}
+        className="orf-inline-title-input"
+        value={draft}
+        aria-label={ariaLabel}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            finishedRef.current = true;
+            onCancel();
+          }
+        }}
+      />
+    </form>
+  );
+}
+
+function isSameBlockTarget(left: BlockTarget | null, right: BlockTarget): boolean {
+  if (!left || left.type !== right.type || left.id !== right.id) {
+    return false;
+  }
+
+  return left.type !== "subtask" || right.type !== "subtask" || left.taskId === right.taskId;
+}
+
+function handleRowDoubleClick(event: MouseEvent<HTMLElement>, target: BlockTarget, onEdit: (target: BlockTarget) => void) {
+  const element = event.target;
+  if (!(element instanceof HTMLElement)) {
+    return;
+  }
+
+  if (element.closest("button,a,input,textarea,select,[role='button'],[data-no-row-edit='true']")) {
+    return;
+  }
+
+  event.stopPropagation();
+  onEdit(target);
 }
 
 function CommentCountBadge({ count, onClick }: { count: number; onClick: () => void }) {

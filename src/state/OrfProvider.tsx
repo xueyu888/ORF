@@ -53,6 +53,10 @@ interface OrfContextValue {
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
+  updateObjectiveTitle: (objectiveId: string, title: string) => void;
+  updateResultTitle: (resultId: string, title: string) => void;
+  updateTaskTitle: (taskId: string, title: string) => void;
+  updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => void;
   createTaskChecklistItem: (taskId: string, afterItemId?: string) => void;
   moveResult: OrfFlowStore["moveResult"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
@@ -155,6 +159,30 @@ function authFailureMessage(error: unknown, action: "login" | "registration") {
   }
 
   return "无法连接后端服务，请确认服务已启动";
+}
+
+function userMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return "只有管理员可以操作成员";
+    }
+
+    if (error.status === 409) {
+      return error.message === "At least one admin is required" ? "至少保留一个管理员" : error.message;
+    }
+
+    if (error.status === 404) {
+      return "用户不存在，已刷新成员列表";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
 }
 
 function loadTheme(): ThemeMode {
@@ -385,6 +413,42 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           }),
         );
       },
+      updateObjectiveTitle: (objectiveId, title) => {
+        commit(store.updateObjectiveTitle(state, objectiveId, title), "目标已更新");
+        syncTaskMutation(() =>
+          apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ title }),
+          }),
+        );
+      },
+      updateResultTitle: (resultId, title) => {
+        commit(store.updateResultTitle(state, resultId, title), "指标已更新");
+        syncTaskMutation(() =>
+          apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ title }),
+          }),
+        );
+      },
+      updateTaskTitle: (taskId, title) => {
+        commit(store.updateTaskTitle(state, taskId, title), "任务已更新");
+        syncTaskMutation(() =>
+          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ title }),
+          }),
+        );
+      },
+      updateTaskChecklistItemLabel: (taskId, itemId, label) => {
+        commit(store.updateTaskChecklistItemLabel(state, taskId, itemId, label), "子任务已更新");
+        syncTaskMutation(() =>
+          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}/label`, {
+            method: "PATCH",
+            body: JSON.stringify({ label }),
+          }),
+        );
+      },
       createTaskChecklistItem: (taskId, afterItemId) => {
         commit(store.createTaskChecklistItem(state, taskId, afterItemId), "子任务已添加");
         syncTaskMutation(() =>
@@ -447,8 +511,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           });
           commit(mergeUsers(state, data), "用户已添加");
           return true;
-        } catch {
-          notify("用户添加失败");
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "用户添加失败"));
           void refreshUsers().catch(() => undefined);
           return false;
         }
@@ -469,8 +533,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           });
           commit(mergeUsers(state, data), "用户已更新");
           return true;
-        } catch {
-          notify("用户更新失败");
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "用户更新失败"));
           void refreshUsers().catch(() => undefined);
           return false;
         }
@@ -483,8 +547,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             setAuthUserId(null);
           }
           return true;
-        } catch {
-          notify("用户删除失败");
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "用户删除失败"));
           void refreshUsers().catch(() => undefined);
           return false;
         }

@@ -556,7 +556,7 @@ export const initialOrfState: OrfState = {
       createdAt: "2026-04-20",
       updatedAt: "2026-04-20",
       activity: [
-        { id: "act-5", actor: "Nora Patel", action: "从周复盘中捕获", at: "2026-04-20 17:20" },
+        { id: "act-5", actor: "Nora Patel", action: "从反馈整理中捕获", at: "2026-04-20 17:20" },
       ],
     },
   ],

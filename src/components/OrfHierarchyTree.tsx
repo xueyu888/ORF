@@ -65,7 +65,7 @@ export function HierarchyCell({
 }) {
   return (
     <div className={clsx("relative flex min-w-0 items-center", className)} style={{ paddingLeft: `${contentLeftByDepth[depth]}px` }}>
-      <div className="relative z-30 flex min-w-0 items-center gap-3">{children}</div>
+      <div className="relative z-30 flex w-full min-w-0 items-center gap-3">{children}</div>
     </div>
   );
 }
@@ -84,7 +84,7 @@ export function HierarchyRootCell({
   // The root icon center is the first branch rail; child rows reserve their own pre-icon slots.
   return (
     <div className={clsx("relative flex min-w-0 items-center", className)}>
-      <div className="relative z-30 flex min-w-0 items-center gap-3">
+      <div className="relative z-30 flex w-full min-w-0 items-center gap-3">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center" data-hierarchy-anchor={anchorId}>
           {anchor}
         </span>

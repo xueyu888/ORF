@@ -171,7 +171,6 @@ const normalizeState = (state: OrfState): OrfState => ({
   ...state,
   users: state.users ?? cloneValue(initialOrfState.users),
   currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
-  permissionRules: state.permissionRules ?? cloneValue(initialOrfState.permissionRules),
   comments: (state.comments ?? []).map((thread) => ({
     ...thread,
     messages: thread.messages ?? [],
@@ -429,6 +428,79 @@ export class OrfFlowStore {
           updatedAt: now,
         };
       }),
+    };
+  }
+
+  updateObjectiveTitle(state: OrfState, objectiveId: string, title: string): OrfState {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      return state;
+    }
+
+    const now = currentDate();
+    return {
+      ...state,
+      objectives: state.objectives.map((objective) => (objective.id === objectiveId ? { ...objective, title: nextTitle, updatedAt: now } : objective)),
+      comments: state.comments.map((thread) =>
+        thread.targetType === "objective" && thread.targetId === objectiveId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
+      ),
+    };
+  }
+
+  updateResultTitle(state: OrfState, resultId: string, title: string): OrfState {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      return state;
+    }
+
+    return {
+      ...state,
+      results: state.results.map((result) => (result.id === resultId ? { ...result, title: nextTitle } : result)),
+      comments: state.comments.map((thread) =>
+        thread.targetType === "result" && thread.targetId === resultId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
+      ),
+    };
+  }
+
+  updateTaskTitle(state: OrfState, taskId: string, title: string): OrfState {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      return state;
+    }
+
+    const now = currentDate();
+    return {
+      ...state,
+      tasks: state.tasks.map((task) => (task.id === taskId ? { ...task, title: nextTitle, updatedAt: now } : task)),
+      comments: state.comments.map((thread) =>
+        thread.targetType === "task" && thread.targetId === taskId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
+      ),
+    };
+  }
+
+  updateTaskChecklistItemLabel(state: OrfState, taskId: string, itemId: string, label: string): OrfState {
+    const nextLabel = label.trim();
+    if (!nextLabel) {
+      return state;
+    }
+
+    const now = currentDate();
+    return {
+      ...state,
+      tasks: state.tasks.map((task) => {
+        if (task.id !== taskId || !task.checklist.some((item) => item.id === itemId)) {
+          return task;
+        }
+
+        return {
+          ...task,
+          checklist: task.checklist.map((item) => (item.id === itemId ? { ...item, label: nextLabel, updatedAt: now } : item)),
+          updatedAt: now,
+        };
+      }),
+      comments: state.comments.map((thread) =>
+        thread.targetType === "subtask" && thread.targetId === itemId ? { ...thread, targetTitle: nextLabel, updatedAt: currentTime() } : thread,
+      ),
     };
   }
 
