@@ -1,7 +1,9 @@
 import type { OrfState, OrfUser } from "../types/orf";
 
-export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback">;
+export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "permissionRules">;
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
+export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
+export type UsersResponse = Pick<OrfState, "users">;
 
 export class ApiError extends Error {
   status: number;

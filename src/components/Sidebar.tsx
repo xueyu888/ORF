@@ -99,10 +99,12 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           <LogOut className="orf-sidebar-icon h-5 w-5 shrink-0" />
           <span className="orf-sidebar-label flex-1">退出</span>
         </button>
-        <div className="orf-sidebar-user flex items-center gap-3 px-2" title={currentUser?.name}>
-          <Avatar name={currentUser?.name ?? "User"} />
-          <div className="orf-sidebar-label min-w-0">
-            <div className="orf-sidebar-user-name truncate">{currentUser?.name ?? "User"}</div>
+        <div className="orf-sidebar-user-wrap relative">
+          <div className="orf-sidebar-user flex w-full items-center gap-3 px-2 text-left" title={currentUser?.name ?? "User"} aria-label="当前用户">
+            <Avatar name={currentUser?.name ?? "User"} />
+            <div className="orf-sidebar-label min-w-0">
+              <div className="orf-sidebar-user-name truncate">{currentUser?.name ?? "User"}</div>
+            </div>
           </div>
         </div>
       </div>

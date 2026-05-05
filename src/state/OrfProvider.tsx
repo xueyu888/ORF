@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { ApiError, apiJson, apiRequest, type AuthSession, type TaskManagementData } from "./apiClient";
+import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { OrfFlowStore } from "./OrfFlowStore";
 import type {
   CommentStatus,
@@ -63,14 +63,13 @@ interface OrfContextValue {
   deleteTaskChecklistItem: (taskId: string, itemId: string) => void;
   updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => void;
   updateResultConfidence: (resultId: string, confidence: number) => void;
-  createUser: (input: { name: string; email: string; role: UserRole }) => void;
+  createUser: (input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   loginWithPassword: (email: string, password: string) => Promise<AuthResult>;
   registerWithPassword: (input: { name: string; email: string; password: string }) => Promise<AuthResult>;
   logout: () => void;
-  updateUserRole: (userId: string, role: UserRole) => void;
-  updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => void;
-  deleteUser: (userId: string) => void;
-  updateRolePermissionRules: (role: UserRole, rules: OrfState["permissionRules"]) => void;
+  updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
+  deleteUser: (userId: string) => Promise<boolean>;
+  updateRolePermissionRules: (role: UserRole, rules: OrfState["permissionRules"]) => Promise<boolean>;
   addComment: (input: {
     targetType: CommentTargetType;
     targetId: string;
@@ -100,6 +99,22 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     tasks: data.tasks,
     evidence: data.evidence,
     feedback: data.feedback,
+    permissionRules: data.permissionRules,
+  };
+}
+
+function mergePermissionRules(state: OrfState, data: PermissionRulesResponse): OrfState {
+  return {
+    ...state,
+    permissionRules: data.permissionRules,
+  };
+}
+
+function mergeUsers(state: OrfState, data: UsersResponse): OrfState {
+  return {
+    ...state,
+    users: data.users,
+    currentUserId: data.users.some((user) => user.id === state.currentUserId) ? state.currentUserId : data.users[0]?.id ?? state.currentUserId,
   };
 }
 
@@ -188,6 +203,28 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     const data = await apiJson<TaskManagementData>("/api/tasks-page");
     applyTaskManagementData(data);
   }, [applyTaskManagementData]);
+  const applyPermissionRules = useCallback((data: PermissionRulesResponse) => {
+    setState((current) => {
+      const next = mergePermissionRules(current, data);
+      store.save(next);
+      return next;
+    });
+  }, []);
+  const refreshPermissionRules = useCallback(async () => {
+    const data = await apiJson<PermissionRulesResponse>("/api/permissions");
+    applyPermissionRules(data);
+  }, [applyPermissionRules]);
+  const applyUsers = useCallback((data: UsersResponse) => {
+    setState((current) => {
+      const next = mergeUsers(current, data);
+      store.save(next);
+      return next;
+    });
+  }, []);
+  const refreshUsers = useCallback(async () => {
+    const data = await apiJson<UsersResponse>("/api/users");
+    applyUsers(data);
+  }, [applyUsers]);
   const syncTaskMutation = useCallback(
     (request: () => Promise<void>) => {
       void request()
@@ -222,10 +259,28 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => undefined);
 
+    void apiJson<PermissionRulesResponse>("/api/permissions")
+      .then((data) => {
+        if (!cancelled) {
+          applyPermissionRules(data);
+        }
+      })
+      .catch(() => undefined);
+
+    if (isAdmin) {
+      void apiJson<UsersResponse>("/api/users")
+        .then((data) => {
+          if (!cancelled) {
+            applyUsers(data);
+          }
+        })
+        .catch(() => undefined);
+    }
+
     return () => {
       cancelled = true;
     };
-  }, [applyTaskManagementData, authReady, isAuthenticated]);
+  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, isAdmin, isAuthenticated]);
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);
@@ -384,7 +439,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
       updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "结果信心已更新"),
-      createUser: (input) => commit(store.createUser(state, input), "用户已添加"),
+      createUser: async (input) => {
+        try {
+          const data = await apiJson<UsersResponse>("/api/users", {
+            method: "POST",
+            body: JSON.stringify(input),
+          });
+          commit(mergeUsers(state, data), "用户已添加");
+          return true;
+        } catch {
+          notify("用户添加失败");
+          void refreshUsers().catch(() => undefined);
+          return false;
+        }
+      },
       loginWithPassword: (email, password) => authenticateWithPassword("/api/auth/login", { email, password }),
       registerWithPassword: (input) => authenticateWithPassword("/api/auth/registration", input),
       logout: () => {
@@ -393,16 +461,48 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           window.location.assign("/auth");
         });
       },
-      updateUserRole: (userId, role) => commit(store.updateUserRole(state, userId, role), "角色已更新"),
-      updateUser: (userId, input) => commit(store.updateUser(state, userId, input), "用户已更新"),
-      deleteUser: (userId) => {
-        const next = store.deleteUser(state, userId);
-        if (authUserId === userId && next.currentUserId !== userId) {
-          setAuthUserId(next.currentUserId);
+      updateUser: async (userId, input) => {
+        try {
+          const data = await apiJson<UsersResponse>(`/api/users/${encodeURIComponent(userId)}`, {
+            method: "PATCH",
+            body: JSON.stringify(input),
+          });
+          commit(mergeUsers(state, data), "用户已更新");
+          return true;
+        } catch {
+          notify("用户更新失败");
+          void refreshUsers().catch(() => undefined);
+          return false;
         }
-        commit(next, "用户已删除");
       },
-      updateRolePermissionRules: (role, rules) => commit(store.updateRolePermissionRules(state, role, rules), "角色权限已保存"),
+      deleteUser: async (userId) => {
+        try {
+          const data = await apiJson<UsersResponse>(`/api/users/${encodeURIComponent(userId)}`, { method: "DELETE" });
+          commit(mergeUsers(state, data), "用户已删除");
+          if (authUserId === userId) {
+            setAuthUserId(null);
+          }
+          return true;
+        } catch {
+          notify("用户删除失败");
+          void refreshUsers().catch(() => undefined);
+          return false;
+        }
+      },
+      updateRolePermissionRules: async (role, rules) => {
+        try {
+          const data = await apiJson<PermissionRulesResponse>(`/api/permissions/${encodeURIComponent(role)}`, {
+            method: "PUT",
+            body: JSON.stringify({ permissionRules: rules }),
+          });
+          commit(mergePermissionRules(state, data), "角色权限已保存");
+          return true;
+        } catch {
+          notify("角色权限保存失败");
+          void refreshPermissionRules().catch(() => undefined);
+          return false;
+        }
+      },
       addComment: (input) => commit(store.addComment(state, input), "评论已添加"),
       updateCommentThreadStatus: (threadId, status) => commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开"),
       updateCommentMessage: (threadId, messageId, body) => commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新"),
@@ -410,7 +510,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "结果更新已记录"),
     }),
-    [authReady, authUserId, authenticateWithPassword, currentUser, isAdmin, isAuthenticated, modal, state, syncTaskMutation, theme, toasts],
+    [authReady, authUserId, authenticateWithPassword, currentUser, isAdmin, isAuthenticated, modal, refreshPermissionRules, refreshUsers, state, syncTaskMutation, theme, toasts],
   );
 
   return <OrfContext.Provider value={value}>{children}</OrfContext.Provider>;

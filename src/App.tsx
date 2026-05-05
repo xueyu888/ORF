@@ -7,6 +7,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
 import { FantasyUiPreviewPage } from "./pages/FantasyUiPreviewPage";
+import { MembersPage } from "./pages/MembersPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
 import { ObjectivesPage } from "./pages/ObjectivesPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
@@ -39,7 +40,7 @@ export function App() {
           path="members"
           element={
             <RequireAdmin>
-              <PermissionsPage initialView="users" />
+              <MembersPage />
             </RequireAdmin>
           }
         />
@@ -47,7 +48,7 @@ export function App() {
           path="permissions"
           element={
             <RequireAdmin>
-              <PermissionsPage initialView="roles" />
+              <PermissionsPage />
             </RequireAdmin>
           }
         />

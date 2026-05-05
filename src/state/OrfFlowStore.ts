@@ -1,5 +1,5 @@
 import { initialOrfState } from "../data/initialOrfState";
-import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus, UserRole } from "../types/orf";
+import type { CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
 
 const STORAGE_KEY = "orf-flow-state-v3";
 type Placement = "before" | "after";
@@ -12,7 +12,6 @@ const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const currentTime = () => new Date().toISOString();
 const currentDate = () => currentTime().slice(0, 10);
-const adminCount = (users: OrfState["users"]) => users.filter((user) => user.role === "admin").length;
 const currentUserName = (state: OrfState) => state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
 const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStatus): TaskStatus => {
   if (checklist.length === 0) {
@@ -641,102 +640,6 @@ export class OrfFlowStore {
     return {
       ...state,
       results: state.results.map((result) => (result.id === resultId ? { ...result, confidence } : result)),
-    };
-  }
-
-  createUser(state: OrfState, input: { name: string; email: string; role: UserRole }): OrfState {
-    const email = input.email.trim().toLowerCase();
-    const name = input.name.trim();
-    if (!email || !name) {
-      return state;
-    }
-
-    const existing = state.users.find((user) => user.email.toLowerCase() === email);
-    if (existing) {
-      if (existing.role === "admin" && input.role !== "admin" && adminCount(state.users) <= 1) {
-        return {
-          ...state,
-          users: state.users.map((user) => (user.id === existing.id ? { ...user, name } : user)),
-        };
-      }
-
-      return {
-        ...state,
-        users: state.users.map((user) => (user.id === existing.id ? { ...user, name, role: input.role } : user)),
-      };
-    }
-
-    return {
-      ...state,
-      users: [
-        ...state.users,
-        {
-          id: makeId("user"),
-          name,
-          email,
-          role: input.role,
-        },
-      ],
-    };
-  }
-
-  updateUserRole(state: OrfState, userId: string, role: UserRole): OrfState {
-    const user = state.users.find((item) => item.id === userId);
-    if (user?.role === "admin" && role !== "admin" && adminCount(state.users) <= 1) {
-      return state;
-    }
-
-    return {
-      ...state,
-      users: state.users.map((user) => (user.id === userId ? { ...user, role } : user)),
-    };
-  }
-
-  updateUser(state: OrfState, userId: string, input: { name: string; email: string; role: UserRole }): OrfState {
-    const email = input.email.trim().toLowerCase();
-    const name = input.name.trim();
-    if (!email || !name) {
-      return state;
-    }
-
-    const user = state.users.find((item) => item.id === userId);
-    const emailOwner = state.users.find((item) => item.email.toLowerCase() === email && item.id !== userId);
-    if (emailOwner || (user?.role === "admin" && input.role !== "admin" && adminCount(state.users) <= 1)) {
-      return state;
-    }
-
-    return {
-      ...state,
-      users: state.users.map((user) => (user.id === userId ? { ...user, name, email, role: input.role } : user)),
-    };
-  }
-
-  deleteUser(state: OrfState, userId: string): OrfState {
-    const user = state.users.find((item) => item.id === userId);
-    if (state.users.length <= 1 || (user?.role === "admin" && adminCount(state.users) <= 1)) {
-      return state;
-    }
-
-    const users = state.users.filter((user) => user.id !== userId);
-    const currentUserId = state.currentUserId === userId ? users.find((user) => user.role === "admin")?.id ?? users[0]?.id ?? state.currentUserId : state.currentUserId;
-
-    return {
-      ...state,
-      users,
-      currentUserId,
-    };
-  }
-
-  updateRolePermissionRules(state: OrfState, role: UserRole, rules: OrfState["permissionRules"]): OrfState {
-    if (role === "admin") {
-      return state;
-    }
-
-    const roleRules = rules.filter((rule) => rule.role === role);
-
-    return {
-      ...state,
-      permissionRules: [...state.permissionRules.filter((rule) => rule.role !== role), ...roleRules],
     };
   }
 
