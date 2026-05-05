@@ -2,16 +2,46 @@ import { Eye, EyeOff, LockKeyhole, Mail, Sparkles, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import authHero from "../assets/auth/orf-login-sky-adventure.png";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { useOrf } from "../state/OrfProvider";
 
 type AuthMode = "login" | "register";
 
+type AuthHeroOption = {
+  id: string;
+  label: string;
+  src: string;
+};
+
+const defaultAuthHeroFile = "orf-login-sky-adventure.png";
+const authHeroModules = import.meta.glob("../assets/auth/*.{png,jpg,jpeg,webp,avif}", {
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
+
+const authHeroOptions: AuthHeroOption[] = Object.entries(authHeroModules)
+  .map(([path, src]) => {
+    const label = path.split("/").at(-1) ?? path;
+    return { id: path, label, src };
+  })
+  .sort((first, second) => {
+    if (first.label === defaultAuthHeroFile) {
+      return -1;
+    }
+    if (second.label === defaultAuthHeroFile) {
+      return 1;
+    }
+    return first.label.localeCompare(second.label);
+  });
+
+const passwordRequirement = "密码至少 8 位";
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function AuthPage() {
   const navigate = useNavigate();
   const { authReady, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
   const [mode, setMode] = useState<AuthMode>("login");
+  const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -36,6 +66,13 @@ export function AuthPage() {
     }
 
     setAuthError("");
+    const validationMessage = validateAuthInput(mode, { name, email, password });
+    if (validationMessage) {
+      setAuthError(validationMessage);
+      notify(validationMessage);
+      return;
+    }
+
     setSubmitting(true);
     const result =
       mode === "login"
@@ -56,17 +93,37 @@ export function AuthPage() {
   const primaryLabel = mode === "login" ? "Sign In" : "Create Account";
   const switchLabel = mode === "login" ? "Register" : "Sign In";
   const busyLabel = mode === "login" ? "Signing In" : "Creating";
+  const selectedHero = authHeroOptions.find((option) => option.id === selectedHeroId) ?? authHeroOptions[0];
 
   return (
     <main className="orf-auth-page">
-      <img className="orf-auth-hero" src={authHero} alt="" aria-hidden="true" />
-      <span className="orf-auth-shape orf-auth-shape-one" aria-hidden="true" />
-      <span className="orf-auth-shape orf-auth-shape-two" aria-hidden="true" />
-      <span className="orf-auth-shape orf-auth-shape-three" aria-hidden="true" />
+      {selectedHero && <img className="orf-auth-hero" src={selectedHero.src} alt="" aria-hidden="true" draggable={false} />}
+      {authHeroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
+      {authHeroOptions.length > 1 && (
+        <div className="orf-auth-hero-switch-zone" aria-label="选择登录页背景">
+          <div className="orf-auth-hero-dots" role="radiogroup" aria-label="登录页背景">
+            {authHeroOptions.map((option, index) => {
+              const selected = option.id === selectedHero?.id;
+              return (
+                <button
+                  key={option.id}
+                  className="orf-auth-hero-dot"
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={`背景 ${index + 1}: ${option.label}`}
+                  data-selected={selected ? "true" : "false"}
+                  onClick={() => setSelectedHeroId(option.id)}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <section className="orf-auth-panel" aria-labelledby="auth-title">
         <div className="orf-auth-logo">
-          <img className="orf-auth-logo-image" src={brandLogo} alt="ORF Flow" />
+          <img className="orf-auth-logo-image" src={brandLogo} alt="ORF Flow" draggable={false} />
         </div>
 
         <div className="orf-auth-title-row">
@@ -75,7 +132,7 @@ export function AuthPage() {
           <span />
         </div>
 
-        <form className="orf-auth-form" onSubmit={submit}>
+        <form className="orf-auth-form" onSubmit={submit} noValidate>
           {mode === "register" && (
             <AuthPill icon={User}>
               <label className="sr-only" htmlFor="auth-name">Name</label>
@@ -158,6 +215,33 @@ export function AuthPage() {
       </section>
     </main>
   );
+}
+
+function validateAuthInput(mode: AuthMode, input: { name: string; email: string; password: string }) {
+  const email = input.email.trim();
+  const password = input.password.trim();
+
+  if (mode === "register" && !input.name.trim()) {
+    return "请输入姓名";
+  }
+
+  if (!email) {
+    return "请输入邮箱";
+  }
+
+  if (!emailPattern.test(email)) {
+    return "邮箱格式不正确";
+  }
+
+  if (!password) {
+    return "请输入密码";
+  }
+
+  if (mode === "register" && password.length < 8) {
+    return passwordRequirement;
+  }
+
+  return "";
 }
 
 function AuthPill({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {

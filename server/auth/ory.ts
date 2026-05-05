@@ -26,12 +26,45 @@ type OryFlow = {
   };
 };
 
+type OryUiMessage = {
+  text?: string;
+};
+
+type OryUiNode = {
+  attributes?: {
+    name?: string;
+  };
+  messages?: OryUiMessage[];
+};
+
+type OryErrorPayload = {
+  ui?: {
+    messages?: OryUiMessage[];
+    nodes?: OryUiNode[];
+  };
+  error?: {
+    message?: string;
+  };
+};
+
 type OryAuthResponse = {
   session?: OrySession;
   session_token?: string;
 };
 
 export const ORF_SESSION_COOKIE = "orf_ory_session";
+
+export class OryAuthFlowError extends Error {
+  status: number;
+  field?: "email" | "password";
+
+  constructor(message: string, status: number, field?: "email" | "password") {
+    super(message);
+    this.name = "OryAuthFlowError";
+    this.status = status;
+    this.field = field;
+  }
+}
 
 const trimSlash = (value: string) => value.replace(/\/+$/, "");
 
@@ -213,6 +246,53 @@ async function createApiFlow(flowType: "login" | "registration"): Promise<OryFlo
   return response.json() as Promise<OryFlow>;
 }
 
+async function readOryErrorPayload(response: Response): Promise<OryErrorPayload | null> {
+  try {
+    return await response.json() as OryErrorPayload;
+  } catch {
+    return null;
+  }
+}
+
+function oryMessages(payload: OryErrorPayload | null) {
+  const messages: Array<{ field?: string; text: string }> = [];
+
+  for (const message of payload?.ui?.messages ?? []) {
+    if (message.text) {
+      messages.push({ text: message.text });
+    }
+  }
+
+  for (const node of payload?.ui?.nodes ?? []) {
+    for (const message of node.messages ?? []) {
+      if (message.text) {
+        messages.push({ field: node.attributes?.name, text: message.text });
+      }
+    }
+  }
+
+  if (payload?.error?.message) {
+    messages.push({ text: payload.error.message });
+  }
+
+  return messages;
+}
+
+function registrationErrorMessage(payload: OryErrorPayload | null) {
+  const messages = oryMessages(payload);
+  const passwordError = messages.find((message) => message.field === "password" || /password/i.test(message.text));
+  if (passwordError) {
+    return { field: "password" as const, message: "密码至少 8 位" };
+  }
+
+  const emailError = messages.find((message) => message.field === "traits.email" || /e-?mail|email|identifier|already|exists/i.test(message.text));
+  if (emailError) {
+    return { field: "email" as const, message: "邮箱格式不正确或已注册" };
+  }
+
+  return { message: "注册失败，请检查邮箱和密码" };
+}
+
 async function submitApiFlow(flowType: "login" | "registration", body: unknown): Promise<OryAuthResponse> {
   const flow = await createApiFlow(flowType);
   if (!flow.ui?.action) {
@@ -229,6 +309,12 @@ async function submitApiFlow(flowType: "login" | "registration", body: unknown):
   });
 
   if (!response.ok) {
+    const payload = await readOryErrorPayload(response);
+    if (flowType === "registration") {
+      const error = registrationErrorMessage(payload);
+      throw new OryAuthFlowError(error.message, response.status, error.field);
+    }
+
     throw new Error(`Ory ${flowType} failed with ${response.status}`);
   }
 

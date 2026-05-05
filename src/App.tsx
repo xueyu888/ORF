@@ -52,11 +52,7 @@ export function App() {
 
 function AuthRoute() {
   const { authReady, isAuthenticated } = useOrf();
-  if (!authReady) {
-    return null;
-  }
-
-  return isAuthenticated ? <Navigate to="/tasks" replace /> : <AuthPage />;
+  return authReady && isAuthenticated ? <Navigate to="/tasks" replace /> : <AuthPage />;
 }
 
 function RequireAuth() {

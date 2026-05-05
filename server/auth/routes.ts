@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { env } from "../env";
-import { ORF_SESSION_COOKIE, getAuthenticatedOrfUser, loginWithPassword, registerWithPassword, revokeApiSession } from "./ory";
+import { ORF_SESSION_COOKIE, OryAuthFlowError, getAuthenticatedOrfUser, loginWithPassword, registerWithPassword, revokeApiSession } from "./ory";
 
 const loginBodySchema = z.object({
   email: z.string().email(),
@@ -83,6 +83,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
       request.log.warn(error, "Ory password registration failed");
       if (isAuthServiceUnavailable(error)) {
         return reply.code(503).send({ error: "Authentication service unavailable" });
+      }
+      if (error instanceof OryAuthFlowError) {
+        return reply.code(400).send({ error: error.message, field: error.field });
       }
       return reply.code(400).send({ error: "Registration failed" });
     }
