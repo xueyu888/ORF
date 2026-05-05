@@ -14,7 +14,6 @@ const titleMap: Record<string, string> = {
   tasks: "计划",
   "fantasy-ui": "Fantasy UI",
   feedback: "反馈",
-  review: "周复盘",
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",
   reports: "统计",

@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckSquare, Gauge, MessageSquare, Target } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
@@ -9,7 +9,6 @@ import { useOrf } from "../state/OrfProvider";
 
 export function DashboardPage() {
   const { state } = useOrf();
-  const navigate = useNavigate();
   const atRiskResults = state.results.filter((result) => result.status === "At Risk");
   const feedbackDue = state.feedback.filter((feedback) => feedback.status !== "Closed");
   const confidence = Math.round(state.objectives.reduce((sum, item) => sum + item.confidence, 0) / state.objectives.length);
@@ -22,7 +21,7 @@ export function DashboardPage() {
     <PageScaffold
       title="ORF 仪表盘"
       subtitle="面向大模型应用团队的目标驱动执行工作台"
-      action={<div className="flex gap-2"><Button variant="secondary">2026 Q2</Button><Button onClick={() => navigate("/review")}>开始周复盘</Button></div>}
+      action={<Button variant="secondary">2026 Q2</Button>}
     >
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="进行中的目标" value={`${state.objectives.length}`} delta="+1 个目标进入复盘" icon={Target} />

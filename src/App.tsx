@@ -16,7 +16,6 @@ import { ResultDetailPage } from "./pages/ResultDetailPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StrategyMapPage } from "./pages/StrategyMapPage";
 import { TasksPage } from "./pages/TasksPage";
-import { WeeklyReviewPage } from "./pages/WeeklyReviewPage";
 import { useOrf } from "./state/OrfProvider";
 
 export function App() {
@@ -32,7 +31,6 @@ export function App() {
         <Route path="fantasy-ui" element={<FantasyUiPreviewPage />} />
         <Route path="feedback" element={<FeedbackInboxPage />} />
         <Route path="feedback/:feedbackId" element={<FeedbackDetailPage />} />
-        <Route path="review" element={<WeeklyReviewPage />} />
         <Route path="strategy-map" element={<StrategyMapPage />} />
         <Route path="ai-evaluation" element={<AIEvaluationPage />} />
         <Route path="reports" element={<ReportsPage />} />
