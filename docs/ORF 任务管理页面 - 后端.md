@@ -1,5 +1,10 @@
 # ORF 任务管理页面 - 后端
 
+## 接口访问约定
+
+前端数据统一通过同源 `/api` 请求后端接口，例如 `/api/tasks`。
+前端不直接写死后端域名或端口，开发和生产环境由代理或网关转发到实际后端服务。
+
 本文档只记录任务管理页需要的后端数据契约：原始字段、枚举值和对象关系。
 
 前端布局、派生状态、进度计算和视觉规则见 [ORF 任务管理页面 - 前端.md](./ORF%20任务管理页面%20-%20前端.md)。
@@ -70,9 +75,13 @@ CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
 | `POST` | `/api/results` | 创建指标。 |
 | `POST` | `/api/tasks` | 创建任务。 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务。 |
+| `PATCH` | `/api/objectives/:objectiveId` | 更新目标标题，body: `{ "title": "..." }`。 |
+| `PATCH` | `/api/results/:resultId` | 更新指标标题，body: `{ "title": "..." }`。 |
+| `PATCH` | `/api/tasks/:taskId` | 更新任务标题，body: `{ "title": "..." }`。 |
 | `PATCH` | `/api/tasks/:taskId/status` | 更新任务原始状态，body: `{ "status": "Todo" }`。 |
 | `PATCH` | `/api/tasks/:taskId/completion` | 设置任务完成状态，body: `{ "done": true }`。 |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId` | 设置子任务完成状态，body: `{ "done": true }`。 |
+| `PATCH` | `/api/tasks/:taskId/checklist/:itemId/label` | 更新子任务标题，body: `{ "label": "..." }`。 |
 | `PATCH` | `/api/results/:resultId/order` | 调整同一目标下的指标顺序。 |
 | `PATCH` | `/api/tasks/:taskId/move` | 调整任务所属指标或同级顺序。 |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId/move` | 调整子任务所属任务或同级顺序。 |
