@@ -6,6 +6,7 @@ import {
   objectives,
   results,
   resultTrendPoints,
+  rolePermissions,
   taskChecklistItems,
   tasks,
   teamMembers,
@@ -24,16 +25,22 @@ const bootstrapAdmin = {
   name: "xueyu",
   email: "xueyu@qq.com",
   createdAt: "2026-04-01",
+  lastLoginAt: "2026-05-05T09:42:00.000Z",
 };
 type SeedUser = {
   id: string;
   name: string;
-  email: string | null;
+  email: string;
   createdAt: string;
+  lastLoginAt: string | null;
 };
 
 function userIdForName(name: string) {
   return `user-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+}
+
+function emailForName(name: string) {
+  return `${userIdForName(name).replace(/^user-/, "")}@orf.local`;
 }
 
 function collectUserNames() {
@@ -58,17 +65,28 @@ async function seed() {
     await tx.delete(resultTrendPoints);
     await tx.delete(results);
     await tx.delete(objectives);
+    await tx.delete(rolePermissions);
     await tx.delete(teamMembers);
     await tx.delete(users);
     await tx.delete(teams);
 
     await tx.insert(teams).values(team);
+    await tx.insert(rolePermissions).values(
+      initialOrfState.permissionRules.map((rule) => ({
+        teamId: team.id,
+        role: rule.role,
+        stage: rule.stage,
+        resource: rule.resource,
+        actions: rule.actions,
+      })),
+    );
 
     const userRows: SeedUser[] = collectUserNames().map((name) => ({
       id: userIdForName(name),
       name,
-      email: null,
+      email: emailForName(name),
       createdAt: "2026-04-01",
+      lastLoginAt: "2026-05-01T11:06:00.000Z",
     }));
     userRows.push(bootstrapAdmin);
 

@@ -29,6 +29,20 @@
       "when": 1777885616244,
       "tag": "0003_shallow_ultimatum",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777964934580,
+      "tag": "0004_good_the_captain",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777966381106,
+      "tag": "0005_colossal_vance_astro",
+      "breakpoints": true
     }
   ]
 }

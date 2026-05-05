@@ -8,6 +8,7 @@ export type AuthenticatedOrfUser = {
   name: string;
   email: string;
   role: "admin" | "member";
+  lastLoginAt: string | null;
 };
 
 type OryIdentity = {
@@ -154,12 +155,16 @@ async function nextUserId(email: string, identityId: string) {
   }
 }
 
-async function ensureTeamMembership(userId: string) {
+async function existingTeamRole(userId: string): Promise<AuthenticatedOrfUser["role"] | null> {
   const existingMemberships = await db.select({ role: teamMembers.role }).from(teamMembers).where(sql`${teamMembers.userId} = ${userId}`);
   if (existingMemberships.length > 0) {
     return existingMemberships.some((membership) => membership.role === "admin") ? "admin" : "member";
   }
 
+  return null;
+}
+
+async function createDefaultTeamMembership(userId: string): Promise<AuthenticatedOrfUser["role"]> {
   const [team] = await db.select({ id: teams.id }).from(teams).limit(1);
   if (!team) {
     return "member";
@@ -169,7 +174,7 @@ async function ensureTeamMembership(userId: string) {
   return "member";
 }
 
-async function upsertOrfUser(identity: OryIdentity): Promise<AuthenticatedOrfUser> {
+async function upsertOrfUser(identity: OryIdentity, options: { recordLogin?: boolean } = {}): Promise<AuthenticatedOrfUser> {
   const email = identityEmail(identity);
   if (!email) {
     throw new Error("Ory identity does not include traits.email");
@@ -177,31 +182,39 @@ async function upsertOrfUser(identity: OryIdentity): Promise<AuthenticatedOrfUse
 
   const name = identityName(identity, email);
   const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  const lastLoginAt = options.recordLogin ? new Date().toISOString() : undefined;
 
   if (existing) {
-    if (existing.name !== name) {
-      await db.update(users).set({ name }).where(sql`${users.id} = ${existing.id}`);
+    if (existing.name !== name || lastLoginAt) {
+      await db.update(users).set({ name, ...(lastLoginAt ? { lastLoginAt } : {}) }).where(sql`${users.id} = ${existing.id}`);
     }
 
-    const role = await ensureTeamMembership(existing.id);
+    const role = await existingTeamRole(existing.id);
+    if (!role) {
+      throw new Error("ORF user is not a member of any team");
+    }
+
     return {
       id: existing.id,
       name,
       email: existing.email ?? email,
       role,
+      lastLoginAt: lastLoginAt ?? existing.lastLoginAt,
     };
   }
 
   const id = await nextUserId(email, identity.id);
+  const createdLastLoginAt = lastLoginAt ?? null;
   await db.insert(users).values({
     id,
     name,
     email,
     createdAt: new Date().toISOString().slice(0, 10),
+    lastLoginAt: createdLastLoginAt,
   });
 
-  const role = await ensureTeamMembership(id);
-  return { id, name, email, role };
+  const role = await createDefaultTeamMembership(id);
+  return { id, name, email, role, lastLoginAt: createdLastLoginAt };
 }
 
 export async function getAuthenticatedOrfUser(cookie: string | undefined): Promise<AuthenticatedOrfUser | null> {
@@ -332,7 +345,7 @@ export async function loginWithPassword(identifier: string, password: string) {
     throw new Error("Ory login did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity);
+  const user = await upsertOrfUser(auth.session.identity, { recordLogin: true });
   return { sessionToken: auth.session_token, user };
 }
 
@@ -352,7 +365,7 @@ export async function registerWithPassword(input: { name: string; email: string;
     throw new Error("Ory registration did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity);
+  const user = await upsertOrfUser(auth.session.identity, { recordLogin: true });
   return { sessionToken: auth.session_token, user };
 }
 

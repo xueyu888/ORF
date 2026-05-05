@@ -11,9 +11,12 @@ import {
   resultTrendPoints,
   taskChecklistItems,
   tasks,
+  teams,
 } from "../db/schema";
+import { getPermissionRulesForTeam } from "./permissionRepository";
+import { getTeamUsers } from "./userRepository";
 
-export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback">;
+export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "permissionRules">;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -43,7 +46,7 @@ function reorderIds(ids: string[], movingId: string, referenceId: string, placem
 }
 
 export async function getTaskManagementData(): Promise<TaskManagementData> {
-  const [objectiveRows, resultRows, trendRows, taskRows, checklistRows, evidenceRows, feedbackRows, causeRows] = await Promise.all([
+  const [objectiveRows, resultRows, trendRows, taskRows, checklistRows, evidenceRows, feedbackRows, causeRows, teamRows] = await Promise.all([
     db.select().from(objectives),
     db.select().from(results),
     db.select().from(resultTrendPoints),
@@ -52,7 +55,9 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     db.select().from(evidence),
     db.select().from(feedback),
     db.select().from(feedbackCauseCategories),
+    db.select({ id: teams.id }).from(teams),
   ]);
+  const permissionRules = teamRows[0] ? await getPermissionRulesForTeam(teamRows[0].id) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();
   for (const item of checklistRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
@@ -174,16 +179,19 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     tasks: taskItems,
     evidence: evidenceItems,
     feedback: feedbackItems,
+    permissionRules,
   };
 }
 
 export async function getOrfStateSnapshot(): Promise<OrfState> {
   const data = await getTaskManagementData();
+  const [team] = await db.select({ id: teams.id }).from(teams).limit(1);
+  const teamUsers = team ? await getTeamUsers(team.id) : initialOrfState.users;
+
   return {
     ...data,
-    users: initialOrfState.users,
-    currentUserId: initialOrfState.currentUserId,
-    permissionRules: initialOrfState.permissionRules,
+    users: teamUsers,
+    currentUserId: teamUsers[0]?.id ?? initialOrfState.currentUserId,
     decisions: [],
     evalRuns: [],
     scenarios: [],
@@ -334,6 +342,58 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
     );
     await tx.update(tasks).set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt: today() }).where(eq(tasks.id, taskId));
 
+    return true;
+  });
+}
+
+export async function updateObjectiveTitle(objectiveId: string, title: string): Promise<boolean> {
+  const nextTitle = title.trim();
+  if (!nextTitle) {
+    return false;
+  }
+
+  const updated = await db.update(objectives).set({ title: nextTitle, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
+  return updated.length > 0;
+}
+
+export async function updateResultTitle(resultId: string, title: string): Promise<boolean> {
+  const nextTitle = title.trim();
+  if (!nextTitle) {
+    return false;
+  }
+
+  const updated = await db.update(results).set({ title: nextTitle }).where(eq(results.id, resultId)).returning({ id: results.id });
+  return updated.length > 0;
+}
+
+export async function updateTaskTitle(taskId: string, title: string): Promise<boolean> {
+  const nextTitle = title.trim();
+  if (!nextTitle) {
+    return false;
+  }
+
+  const updated = await db.update(tasks).set({ title: nextTitle, updatedAt: today() }).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
+  return updated.length > 0;
+}
+
+export async function updateChecklistItemLabel(taskId: string, itemId: string, label: string): Promise<boolean> {
+  const nextLabel = label.trim();
+  if (!nextLabel) {
+    return false;
+  }
+
+  return db.transaction(async (tx) => {
+    const updated = await tx
+      .update(taskChecklistItems)
+      .set({ label: nextLabel, updatedAt: today() })
+      .where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)))
+      .returning({ id: taskChecklistItems.id });
+
+    if (updated.length === 0) {
+      return false;
+    }
+
+    await tx.update(tasks).set({ updatedAt: today() }).where(eq(tasks.id, taskId));
     return true;
   });
 }

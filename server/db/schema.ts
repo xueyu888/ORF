@@ -1,4 +1,4 @@
-import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text } from "drizzle-orm/pg-core";
+import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp } from "drizzle-orm/pg-core";
 
 export const workStatusEnum = pgEnum("work_status", ["On Track", "At Risk", "Blocked", "Draft"]);
 export const taskStatusEnum = pgEnum("task_status", ["Backlog", "Todo", "In Progress", "In Review", "Done"]);
@@ -22,6 +22,7 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   email: text("email"),
   createdAt: date("created_at", { mode: "string" }).notNull(),
+  lastLoginAt: timestamp("last_login_at", { mode: "string", withTimezone: true }),
 });
 
 export const teamMembers = pgTable(
@@ -37,6 +38,22 @@ export const teamMembers = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.teamId, table.userId] }),
+  }),
+);
+
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    role: teamRoleEnum("role").notNull(),
+    stage: text("stage").notNull(),
+    resource: text("resource").notNull(),
+    actions: jsonb("actions").$type<string[]>().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.role, table.stage, table.resource] }),
   }),
 );
 
