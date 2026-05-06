@@ -7,7 +7,7 @@
 
 本文档只记录任务管理页需要的后端数据契约：原始字段、枚举值和对象关系。
 
-前端布局、派生状态和视觉规则见 [ORF 任务管理页面 - 前端.md](./ORF%20任务管理页面%20-%20前端.md)。
+前端布局、UI 状态和视觉规则见 [ORF 任务管理页面 - 前端.md](../frontend/ORF%20任务管理页面%20-%20前端.md)。
 
 目标进度条业务计算规则见 [目标进度条计算规则.md](./目标进度条计算规则.md)。
 
@@ -72,12 +72,13 @@ CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/health` | 服务健康检查。 |
-| `GET` | `/api/tasks-page` | 返回任务管理页需要的 `objectives`、`results`、`tasks`、`evidence`、`feedback`。 |
+| `GET` | `/api/tasks-page` | 返回任务管理页需要的 `objectives`、`results`、`tasks`、`evidence`、`feedback`、`permissionRules`、`automaticCompletions`。 |
 | `GET` | `/api/orf-state` | 返回 ORF 状态快照。 |
 | `POST` | `/api/results` | 创建指标。 |
 | `POST` | `/api/tasks` | 创建任务。 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务。 |
 | `PATCH` | `/api/objectives/:objectiveId` | 更新目标标题，body: `{ "title": "..." }`。 |
+| `PATCH` | `/api/objectives/:objectiveId/stage` | 更新目标阶段，body: `{ "stage": "goalFrozen" }`。 |
 | `PATCH` | `/api/results/:resultId` | 更新指标标题，body: `{ "title": "..." }`。 |
 | `PATCH` | `/api/tasks/:taskId` | 更新任务标题，body: `{ "title": "..." }`。 |
 | `PATCH` | `/api/tasks/:taskId/status` | 更新任务原始状态，body: `{ "status": "Todo" }`。 |
@@ -103,6 +104,8 @@ CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
 | `tasks` | `Task[]` | 指标下的任务节点。 |
 | `evidence` | `Evidence[]` | 用于计算指标最近更新时间。 |
 | `feedback` | `Feedback[]` | 用于计算指标最近更新时间。 |
+| `permissionRules` | `PermissionRule[]` | 前端控制当前阶段下的操作入口。 |
+| `automaticCompletions` | `Record<string, AutomaticCompletionResult>` | 后端自动化计算结果，仅目标冻结阶段返回对应目标结果。 |
 
 ## 2. 对象关系
 
@@ -138,7 +141,7 @@ type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
 任务管理页用法：
 
 - `Objective.status` 用于目标风险标签，前端展示为正常 / 有风险。
-- `Result.status` 是后端原始状态；任务管理页的指标展示状态由前端 `indicatorStatus(result, tasks)` 派生，不直接等同于 `Result.status`。
+- `Result.status` 是后端原始状态；任务管理页的指标展示状态由前端 `indicatorStatus(result, automaticCompletion)` 映射，不直接等同于 `Result.status`。
 
 ### `TaskStatus`
 
@@ -190,6 +193,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | --- | --- | --- |
 | `id` | `string` | 目标唯一标识。 |
 | `title` | `string` | 目标标题。 |
+| `stage` | `OrfStage` | 目标当前阶段。 |
 | `status` | `WorkStatus` | 目标风险标签数据源。 |
 | `resultIds` | `string[]` | 查找目标下指标。 |
 | `progress` | `number` | 后端计算后的目标进度，前端只负责展示。 |
@@ -268,12 +272,15 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 后端负责返回目标进度字段：
 
 - `Objective.progress`
+- `automaticCompletions`
 
 目标进度业务计算规则见 [目标进度条计算规则.md](./目标进度条计算规则.md)。
 
-后端不需要返回以下前端展示结果：
+后端负责自动化完成的业务计算，前端只把计算结果映射成 UI 状态。
 
-- `indicatorStatus(result, tasks)`
+后端不需要返回以下纯展示结果：
+
+- `indicatorStatus(result, automaticCompletion)`
 - `taskDisplayStatus(task)`
 - `subtaskDisplayStatus(...)`
 - `indicatorWorkProgress(...)`

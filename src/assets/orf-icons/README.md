@@ -22,4 +22,4 @@ Canonical icons and visual assets for ORF hierarchy rows and app surfaces. Runti
 
 Use these assets as the source shape for future page icons and UI styling. Runtime components should reference registered image assets through `src/config/assetLibrary.ts`; large reference boards should stay as source/reference material and should not be imported into the app bundle unless a specific screen needs to render them.
 
-Status rules live in `docs/ORF 任务管理页面.md`.
+Status rules live in `docs/backend/ORF 任务管理页面 - 后端.md`.
