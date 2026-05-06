@@ -949,6 +949,7 @@ button:disabled {
   position: relative;
   isolation: isolate;
   display: flex;
+  height: 100dvh;
   min-height: 100vh;
   align-items: center;
   overflow: hidden;
