@@ -26,6 +26,45 @@ ORF 是一个基于 ORF 思想设计的项目管理工具。它在产品理念�
 - `docs/design/设计原则.md`: ORF 业务原则、基础流程和积分规则。
 - `src/`: 未来代码目录。
 
+## 启动方式
+
+### 1) 安装依赖
+
+```bash
+npm install
+```
+
+### 2) 配置并验证数据库
+
+```bash
+cp .env.example .env
+node scripts/verify-db.mjs
+```
+
+### 3) 启动后端
+
+自动监听变更：
+
+```bash
+npm run server:dev
+```
+
+不监听变更：
+
+```bash
+npm run server:start
+```
+
+说明：当前 `.env` 中已启用 GitHub 提交同步到 Mattermost（`GITHUB_SYNC_ENABLED=true`），并监听 `zrx` 分支。
+
+### 4) 启动前端
+
+```bash
+npm run dev
+```
+
+前端默认通过同源 `/api` 访问后端，请确保后端已启动。
+
 ## Feedback
 
 - 使用 `npm run check` 检查基础工具链是否可用。
