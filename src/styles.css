@@ -1194,6 +1194,15 @@ button:disabled {
   opacity: 1;
 }
 
+.orf-auth-input:-webkit-autofill,
+.orf-auth-input:-webkit-autofill:hover,
+.orf-auth-input:-webkit-autofill:focus {
+  caret-color: #26384d;
+  -webkit-text-fill-color: #26384d;
+  transition: background-color 9999s ease-in-out 0s;
+  box-shadow: 0 0 0 1000px transparent inset;
+}
+
 .orf-auth-error {
   margin: -8px 8px -2px;
   border: 1px solid rgba(255, 255, 255, 0.7);
@@ -1543,6 +1552,13 @@ button:disabled {
   padding: 14px 16px;
 }
 
+.orf-user-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+
 .orf-user-search,
 .orf-user-select,
 .orf-user-add-button {
@@ -1604,7 +1620,6 @@ button:disabled {
 }
 
 .orf-user-add-button {
-  margin-left: auto;
   gap: 8px;
   border-color: rgba(255, 226, 160, 0.62);
   background:
@@ -2100,6 +2115,17 @@ button:disabled {
     padding: 18px;
   }
 
+  .orf-user-toolbar-actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+    margin-left: 0;
+  }
+
+  .orf-user-toolbar-actions .orf-permission-metrics {
+    justify-content: flex-end;
+  }
+
   .orf-user-search {
     width: 100%;
   }
@@ -2116,7 +2142,6 @@ button:disabled {
 
   .orf-user-add-button {
     width: 100%;
-    margin-left: 0;
     justify-content: center;
     font-size: 14px;
   }
