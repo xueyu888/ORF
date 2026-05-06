@@ -52,12 +52,7 @@ function normalizeRole(role: string): UserRole {
   return role === "admin" ? "admin" : "member";
 }
 
-async function adminCount(teamId: string) {
-  const rows = await db.select({ userId: teamMembers.userId }).from(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, "admin")));
-  return rows.length;
-}
-
-async function assertCanChangeRole(teamId: string, userId: string, nextRole: UserRole) {
+async function assertMembershipExists(teamId: string, userId: string) {
   const [membership] = await db
     .select({ role: teamMembers.role })
     .from(teamMembers)
@@ -67,9 +62,17 @@ async function assertCanChangeRole(teamId: string, userId: string, nextRole: Use
   if (!membership) {
     throw Object.assign(new Error("User not found"), { statusCode: 404 });
   }
+}
 
-  if (membership.role === "admin" && nextRole !== "admin" && (await adminCount(teamId)) <= 1) {
-    throw Object.assign(new Error("At least one admin is required"), { statusCode: 409 });
+function assertCanChangeRole(actorUserId: string, userId: string, nextRole: UserRole) {
+  if (actorUserId === userId && nextRole !== "admin") {
+    throw Object.assign(new Error("Admin cannot demote self"), { statusCode: 409 });
+  }
+}
+
+function assertCanDeleteUser(actorUserId: string, userId: string) {
+  if (actorUserId === userId) {
+    throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
   }
 }
 
@@ -96,7 +99,7 @@ export async function getTeamUsers(teamId: string): Promise<OrfUser[]> {
   }));
 }
 
-export async function createTeamUser(teamId: string, input: UserInput): Promise<OrfUser[]> {
+export async function createTeamUser(teamId: string, actorUserId: string, input: UserInput): Promise<OrfUser[]> {
   const normalized = normalizeInput(input);
   if (!normalized.name || !normalized.email) {
     throw Object.assign(new Error("Name and email are required"), { statusCode: 400 });
@@ -111,7 +114,7 @@ export async function createTeamUser(teamId: string, input: UserInput): Promise<
       .limit(1);
 
     if (membership) {
-      await assertCanChangeRole(teamId, matchedUser.id, normalized.role);
+      assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
     }
   }
 
@@ -142,13 +145,18 @@ export async function createTeamUser(teamId: string, input: UserInput): Promise<
   return getTeamUsers(teamId);
 }
 
-export async function updateTeamUser(teamId: string, userId: string, input: UserInput): Promise<OrfUser[]> {
+export async function updateTeamUser(teamId: string, actorUserId: string, userId: string, input: UserInput): Promise<OrfUser[]> {
   const normalized = normalizeInput(input);
+  assertCanChangeRole(actorUserId, userId, normalized.role);
+  return updateTeamUserRecord(teamId, userId, normalized);
+}
+
+async function updateTeamUserRecord(teamId: string, userId: string, normalized: UserInput): Promise<OrfUser[]> {
   if (!normalized.name || !normalized.email) {
     throw Object.assign(new Error("Name and email are required"), { statusCode: 400 });
   }
 
-  await assertCanChangeRole(teamId, userId, normalized.role);
+  await assertMembershipExists(teamId, userId);
 
   const [emailOwner] = await db
     .select({ id: users.id })
@@ -168,7 +176,9 @@ export async function updateTeamUser(teamId: string, userId: string, input: User
   return getTeamUsers(teamId);
 }
 
-export async function deleteTeamUser(teamId: string, userId: string): Promise<OrfUser[]> {
+export async function deleteTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
+  assertCanDeleteUser(actorUserId, userId);
+
   const [membership] = await db
     .select({ role: teamMembers.role })
     .from(teamMembers)
@@ -177,10 +187,6 @@ export async function deleteTeamUser(teamId: string, userId: string): Promise<Or
 
   if (!membership) {
     return getTeamUsers(teamId);
-  }
-
-  if (membership.role === "admin" && (await adminCount(teamId)) <= 1) {
-    throw Object.assign(new Error("At least one admin is required"), { statusCode: 409 });
   }
 
   await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));

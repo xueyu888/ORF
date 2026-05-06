@@ -150,6 +150,10 @@ function authFailureMessage(error: unknown, action: "login" | "registration") {
     }
 
     if (error.status === 400) {
+      if (action === "registration" && error.message && error.message !== "Registration failed") {
+        return error.message;
+      }
+
       return action === "registration" ? "注册失败，请检查邮箱和密码" : "账号或密码不正确";
     }
 
@@ -172,7 +176,15 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
-      return error.message === "At least one admin is required" ? "至少保留一个管理员" : error.message;
+      if (error.message === "Admin cannot delete self") {
+        return "管理员不能删除自己";
+      }
+
+      if (error.message === "Admin cannot demote self") {
+        return "管理员不能将自己降级为成员";
+      }
+
+      return error.message;
     }
 
     if (error.status === 404) {

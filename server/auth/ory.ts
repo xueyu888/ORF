@@ -298,9 +298,14 @@ function registrationErrorMessage(payload: OryErrorPayload | null) {
     return { field: "password" as const, message: "密码至少 8 位" };
   }
 
-  const emailError = messages.find((message) => message.field === "traits.email" || /e-?mail|email|identifier|already|exists/i.test(message.text));
-  if (emailError) {
-    return { field: "email" as const, message: "邮箱格式不正确或已注册" };
+  const existingEmailError = messages.find((message) => /same identifier|already exists|exists already|account.*exists/i.test(message.text));
+  if (existingEmailError) {
+    return { field: "email" as const, message: "邮箱已存在" };
+  }
+
+  const emailFormatError = messages.find((message) => message.field === "traits.email" || /e-?mail|email|identifier/i.test(message.text));
+  if (emailFormatError) {
+    return { field: "email" as const, message: "邮箱格式不正确" };
   }
 
   return { message: "注册失败，请检查邮箱和密码" };

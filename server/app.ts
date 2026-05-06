@@ -154,6 +154,21 @@ async function requireAdminTeamId(request: FastifyRequest, reply: FastifyReply) 
   return teamId;
 }
 
+async function requireAdminContext(request: FastifyRequest, reply: FastifyReply) {
+  const user = await requireAdminUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  const teamId = await getPrimaryTeamIdForUser(user.id);
+  if (!teamId) {
+    reply.code(404).send({ error: "Team not found" });
+    return null;
+  }
+
+  return { user, teamId };
+}
+
 async function requireWritePermission(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -240,34 +255,34 @@ export async function buildServer() {
   });
 
   app.post("/api/users", async (request, reply) => {
-    const teamId = await requireAdminTeamId(request, reply);
-    if (!teamId) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
       return reply;
     }
 
     const body = userBodySchema.parse(request.body);
-    return { users: await createTeamUser(teamId, body) };
+    return { users: await createTeamUser(context.teamId, context.user.id, body) };
   });
 
   app.patch("/api/users/:userId", async (request, reply) => {
-    const teamId = await requireAdminTeamId(request, reply);
-    if (!teamId) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
       return reply;
     }
 
     const params = userParamsSchema.parse(request.params);
     const body = userBodySchema.parse(request.body);
-    return { users: await updateTeamUser(teamId, params.userId, body) };
+    return { users: await updateTeamUser(context.teamId, context.user.id, params.userId, body) };
   });
 
   app.delete("/api/users/:userId", async (request, reply) => {
-    const teamId = await requireAdminTeamId(request, reply);
-    if (!teamId) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
       return reply;
     }
 
     const params = userParamsSchema.parse(request.params);
-    return { users: await deleteTeamUser(teamId, params.userId) };
+    return { users: await deleteTeamUser(context.teamId, context.user.id, params.userId) };
   });
 
   app.get("/api/permissions", async (request, reply) => {
