@@ -5,6 +5,7 @@ import { z, ZodError } from "zod";
 import { getAuthenticatedOrfUser } from "./auth/ory";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import { env } from "./env";
+import { registerOptionalIntegrations } from "./integrations";
 import {
   getPermissionRulesForTeam,
   getPrimaryTeamIdForUser,
@@ -242,6 +243,7 @@ export async function buildServer() {
     service: "orf-api",
   }));
 
+  registerOptionalIntegrations(app);
   registerAuthRoutes(app);
 
   app.get("/api/tasks-page", async () => getTaskManagementData());
