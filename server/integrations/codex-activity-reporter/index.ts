@@ -46,12 +46,43 @@ function includesAny(value: string, patterns: string[]) {
   return patterns.some((pattern) => value.includes(pattern.toLowerCase()));
 }
 
-function summarizeActivity(input: CodexActivityInput) {
+function activitySource(input: CodexActivityInput) {
   const parsed = codexActivityInputSchema.parse(input);
-  const source = normalizeForClassification([parsed.summary, ...parsed.details].join("\n"));
+  return normalizeForClassification([parsed.summary, ...parsed.details].join("\n"));
+}
+
+export function getCodexActivitySkipReason(input: CodexActivityInput) {
+  const source = activitySource(input);
 
   if (
-    includesAny(source, ["codex", "活动播报", "自动播报", "完成播报", "mattermost", "会话内容", "风格", "冷笑话"])
+    source.includes("you are a helpful assistant") &&
+    source.includes("short title for a task") &&
+    source.includes("created from that prompt")
+  ) {
+    return "internal-title";
+  }
+
+  return undefined;
+}
+
+function summarizeActivity(input: CodexActivityInput) {
+  const source = activitySource(input);
+
+  if (
+    includesAny(source, [
+      "codex",
+      "活动播报",
+      "自动播报",
+      "完成播报",
+      "mattermost",
+      "mm",
+      "会话内容",
+      "风格",
+      "单条消息",
+      "一条消息",
+      "表情包",
+      "冷笑话",
+    ])
   ) {
     return {
       summary: "调整了 Codex 活动播报机制",
@@ -109,17 +140,28 @@ function summarizeActivity(input: CodexActivityInput) {
   };
 }
 
-function sentence(value: string) {
-  const text = value.trim();
-  if (!text || /[。.!！?？]$/.test(text)) {
-    return text;
-  }
-
-  return `${text}。`;
+function clause(value: string) {
+  return trimSentenceEnd(value).replace(/\s*\n+\s*/g, " ").replace(/[ \t]+/g, " ").trim();
 }
 
-function quote(value: string) {
-  return `「${trimSentenceEnd(value)}」`;
+function oneLineMessage(value: string) {
+  return value.replace(/\s*\n+\s*/g, " ").replace(/[ \t]+/g, " ").trim();
+}
+
+function poemTopic(value: string) {
+  const text = clause(value);
+  const knownTopics = new Map([
+    ["调整了 Codex 活动播报机制", "播报机制"],
+    ["升级了项目运行环境配置", "运行环境"],
+    ["完善了 GitHub 推送同步流程", "推送同步"],
+    ["完成了项目验证", "项目验证"],
+    ["整理了项目文档", "项目文档"],
+    ["调整了后端实现", "后端实现"],
+    ["调整了前端体验", "前端体验"],
+    ["完成了一轮 ORF 项目协作", "ORF 协作"],
+  ]);
+
+  return knownTopics.get(text) ?? text.replace(/^(调整了|升级了|完善了|完成了|整理了)/, "");
 }
 
 export function readCodexActivityConfig(env: NodeJS.ProcessEnv = process.env) {
@@ -128,8 +170,6 @@ export function readCodexActivityConfig(env: NodeJS.ProcessEnv = process.env) {
 
 interface CodexActivityMessageContext {
   summary: string;
-  quotedSummary: string;
-  detailText?: string;
 }
 
 interface CodexActivityStyle {
@@ -141,96 +181,68 @@ interface CodexActivityStyle {
 const codexActivityStyles = [
   {
     id: "poem",
-    label: "写诗",
-    format: ({ quotedSummary, detailText }) =>
-      [
-        `刚把${quotedSummary}收进灯下。`,
-        detailText ? `余韵还在：${sentence(detailText)}` : "键盘声停下，事情往前亮了一格。",
-      ].join("\n"),
+    label: "赠汪伦魔改",
+    format: ({ summary }) => `薛宇行舟将欲走，忽闻代码播报声；桃花潭水深千尺，不及${poemTopic(summary)}情。`,
   },
   {
     id: "ci",
-    label: "写词",
-    format: ({ summary, detailText }) =>
-      [
-        `小令一阕，写的是：${sentence(summary)}`,
-        detailText ? `尾声轻轻一折：${sentence(detailText)}` : "风过命令行，收束得刚刚好。",
-      ].join("\n"),
+    label: "水调歌头魔改",
+    format: ({ summary }) => `明月几时有，把码问青天；不知${poemTopic(summary)}，今夕稳不稳。`,
   },
   {
     id: "classical",
-    label: "文言文",
-    format: ({ summary, detailText }) =>
-      [`事已成：${sentence(summary)}`, detailText ? `其详曰：${sentence(detailText)}` : "记之。"].join("\n"),
+    label: "早发白帝城魔改",
+    format: ({ summary }) => `朝辞白帝彩云间，千行代码一日还；两岸 bug 啼不住，${poemTopic(summary)}过万山。`,
   },
   {
     id: "humor",
-    label: "风趣幽默",
-    format: ({ summary, detailText }) =>
-      [
-        `这事办完了：${sentence(summary)}`,
-        detailText ? `顺手还把这串也带回来了：${sentence(detailText)}` : "键盘表示这把它很有参与感。",
-      ].join("\n"),
+    label: "静夜思魔改",
+    format: ({ summary }) => `床前代码光，疑是测试霜；举头看${poemTopic(summary)}，低头笑一场。`,
+  },
+  {
+    id: "meme",
+    label: "青玉案魔改",
+    format: ({ summary }) => `众里寻他千百度，蓦然回首，${poemTopic(summary)}正在灯火阑珊处 😎`,
   },
   {
     id: "serious",
-    label: "严肃",
-    format: ({ summary, detailText }) =>
-      [`已完成：${sentence(summary)}`, detailText ? `结果：${sentence(detailText)}` : "状态正常。"].join("\n"),
+    label: "登鹳雀楼魔改",
+    format: ({ summary }) => `白日依山尽，代码入海流；欲穷${poemTopic(summary)}目，更上一层楼。`,
   },
   {
     id: "cold-joke",
-    label: "冷笑话",
-    format: ({ quotedSummary, detailText }) =>
-      [
-        `冷笑话时间：刚处理完${quotedSummary}。`,
-        detailText ? `详情也没溜走：${sentence(detailText)}` : "它现在很“完成”，因为它真的完成了。",
-      ].join("\n"),
+    label: "虞美人魔改",
+    format: ({ summary }) => `问君能有几多愁，恰似${poemTopic(summary)}刚改完还回头。`,
   },
   {
     id: "wuxia",
-    label: "江湖",
-    format: ({ summary, detailText }) =>
-      [`一招收势：${sentence(summary)}`, detailText ? `案上留痕：${sentence(detailText)}` : "剑不出鞘，事已落定。"].join("\n"),
+    label: "侠客行魔改",
+    format: ({ summary }) => `十步改一处，千行不留 bug；事了拂衣去，${poemTopic(summary)}藏深处。`,
   },
   {
     id: "sci-fi",
-    label: "科幻",
-    format: ({ summary, detailText }) =>
-      [
-        `来自近未来的一条回执：${sentence(summary)}`,
-        detailText ? `舱内记录：${sentence(detailText)}` : "进度条轻轻合上了舱门。",
-      ].join("\n"),
+    label: "上李邕魔改",
+    format: ({ summary }) => `大鹏一日同风起，代码直上九万里；若问${poemTopic(summary)}何处去，星河尽头报捷归。`,
   },
   {
     id: "radio",
-    label: "深夜电台",
-    format: ({ summary, detailText }) =>
-      [
-        `这里插播一条不打扰的消息：${sentence(summary)}`,
-        detailText ? `把音量拧小一点，细节是：${sentence(detailText)}` : "灯还亮着，事已经过站。",
-      ].join("\n"),
+    label: "春晓魔改",
+    format: ({ summary }) => `春眠不觉晓，处处闻提交；夜来风雨声，${poemTopic(summary)}少不了。`,
   },
   {
     id: "news",
-    label: "快讯",
-    format: ({ summary, detailText }) =>
-      [`快讯：${sentence(summary)}`, detailText ? `现场补充：${sentence(detailText)}` : "目前一切平稳。"].join("\n"),
+    label: "清明魔改",
+    format: ({ summary }) => `清明时节码纷纷，路上行人欲断魂；借问${poemTopic(summary)}何处稳，牧童遥指测试门。`,
   },
   {
     id: "diary",
-    label: "日记",
-    format: ({ summary, detailText }) =>
-      [`今日小记：${sentence(summary)}`, detailText ? `旁注：${sentence(detailText)}` : "完成得不吵，挺好。"].join("\n"),
+    label: "饮酒魔改",
+    format: ({ summary }) => `采菊东篱下，悠然见提交；${poemTopic(summary)}归来后，南山也点头。`,
   },
   {
     id: "stage",
-    label: "舞台剧",
-    format: ({ summary, detailText }) =>
-      [
-        `灯光一亮，这一幕叫：${sentence(summary)}`,
-        detailText ? `演员退场前补了一句：${sentence(detailText)}` : "幕布落下，观众席很安静。",
-      ].join("\n"),
+    label: "破阵子魔改",
+    format: ({ summary }) => `醉里挑灯看码，梦回测试连营；${poemTopic(summary)}沙场点兵，稳了.jpg 😎`,
   },
 ] satisfies CodexActivityStyle[];
 
@@ -254,8 +266,6 @@ function buildMessageContext(input: CodexActivityInput): CodexActivityMessageCon
 
   return {
     summary: trimSentenceEnd(activitySummary.summary),
-    quotedSummary: quote(activitySummary.summary),
-    detailText: activitySummary.detailText,
   };
 }
 
@@ -263,7 +273,7 @@ export function formatCodexActivityMessage(input: CodexActivityInput, config: Pa
   const context = buildMessageContext(input);
   const style = resolveStyle(config.CODEX_ACTIVITY_STYLE) ?? codexActivityStyles[0];
 
-  return style.format(context);
+  return oneLineMessage(style.format(context));
 }
 
 function resolveStyleStateFile(config: Partial<CodexActivityConfig>) {
@@ -328,8 +338,13 @@ async function mattermostLogin(config: CodexActivityConfig) {
 }
 
 export async function postCodexActivity(input: CodexActivityInput, config = readCodexActivityConfig()) {
+  const skipReason = getCodexActivitySkipReason(input);
+  if (skipReason) {
+    return { skipped: true, reason: skipReason } as const;
+  }
+
   const selectedStyle = selectStyleForPost(config);
-  const message = selectedStyle.style.format(buildMessageContext(input));
+  const message = oneLineMessage(selectedStyle.style.format(buildMessageContext(input)));
   const token = await mattermostLogin(config);
   const channelId = config.CODEX_ACTIVITY_CHANNEL_ID ?? config.MATTERMOST_CHANNEL_ID;
   const response = await fetch(`${trimTrailingSlash(config.MATTERMOST_URL)}/api/v4/posts`, {
@@ -354,5 +369,5 @@ export async function postCodexActivity(input: CodexActivityInput, config = read
     writeStyleIndex(selectedStyle.stateFile, selectedStyle.nextIndex);
   }
 
-  return { postId: post.id, channelId, message };
+  return { skipped: false as const, postId: post.id, channelId, message };
 }

@@ -24,25 +24,25 @@ export const orfAssetLibrary = {
   },
   references: {
     fantasyUiPanelFrames: {
-      sourcePath: "src/assets/orf-icons/fantasy-ui-panel-frames.png",
+      sourcePath: "src/features/fantasy-ui/assets/reference-boards/fantasy-ui-panel-frames.png",
       name: "fantasy-ui-panel-frames",
       description: "Panel, card, popup, divider, chip, and corner ornament reference board.",
       usage: "Reference for card frames, objective panels, popovers, dividers, and decorative corners.",
     },
     fantasyUiControls: {
-      sourcePath: "src/assets/orf-icons/fantasy-ui-controls.png",
+      sourcePath: "src/features/fantasy-ui/assets/reference-boards/fantasy-ui-controls.png",
       name: "fantasy-ui-controls",
       description: "Button, tab, toggle, checkbox, radio, search, dropdown, pagination, and badge reference board.",
       usage: "Reference for action buttons, toolbar filters, status badges, and task tabs.",
     },
     fantasyUiNavigation: {
-      sourcePath: "src/assets/orf-icons/fantasy-ui-navigation.png",
+      sourcePath: "src/features/fantasy-ui/assets/reference-boards/fantasy-ui-navigation.png",
       name: "fantasy-ui-navigation",
       description: "Sidebar, top navigation, user panel, filter panel, collapsible list, and list row reference board.",
       usage: "Reference for the app sidebar, topbar, filter controls, and workflow rows.",
     },
     fantasyUiTaskWidgets: {
-      sourcePath: "src/assets/orf-icons/fantasy-ui-task-widgets.png",
+      sourcePath: "src/features/fantasy-ui/assets/reference-boards/fantasy-ui-task-widgets.png",
       name: "fantasy-ui-task-widgets",
       description: "Task card, kanban header, date tile, progress bar, stat card, timeline, and toast reference board.",
       usage: "Reference for task-page metrics, progress displays, rows, timeline-like hierarchy, and notifications.",

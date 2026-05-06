@@ -83,6 +83,7 @@ CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
 | `PATCH` | `/api/tasks/:taskId` | 更新任务标题，body: `{ "title": "..." }`。 |
 | `PATCH` | `/api/tasks/:taskId/status` | 更新任务原始状态，body: `{ "status": "Todo" }`。 |
 | `PATCH` | `/api/tasks/:taskId/completion` | 设置任务完成状态，body: `{ "done": true }`。 |
+| TODO | `/api/tasks/:taskId/archive` | 归档任务；归档不是删除，任务与指标的关联仍保留，默认任务树查询隐藏归档任务。 |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId` | 设置子任务完成状态，body: `{ "done": true }`。 |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId/label` | 更新子任务标题，body: `{ "label": "..." }`。 |
 | `PATCH` | `/api/results/:resultId/order` | 调整同一目标下的指标顺序。 |
@@ -236,6 +237,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `linkedResultId` | `string` | 关联指标。 |
 | `dueDate` | `string` | 目标行日期优先来源。 |
 | `updatedAt` | `string` | 任务行日期和指标最近更新时间来源。 |
+| TODO: `archivedAt` | `string \| null` | 任务归档时间；有值表示任务已归档。归档任务默认从任务管理树隐藏，但 `linkedResultId` 不变。 |
 | `checklist` | `TaskChecklistItem[]` | 子任务列表。 |
 
 `Task.assignee` 可以存在于数据模型中，但任务管理页不展示任务负责人，也不使用任务负责人作为个人视图过滤条件。
@@ -302,6 +304,8 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | 拖拽转换 | 不允许指标、任务、子任务之间互相转换。 |
 | 拖拽身份 | 拖拽是编辑操作，不是删除后重建；对象 `id` 不变。 |
 | 拖拽关联 | 拖拽后评论、历史记录和完成状态保留。 |
+| TODO: 归档任务 | 归档是隐藏操作，不是删除操作；归档后任务 `id`、评论、历史记录、完成状态、`linkedObjectiveId` 和 `linkedResultId` 都必须保留。 |
+| TODO: 归档查询 | `/api/tasks-page` 默认不返回已归档任务；后续若提供归档视图，应通过显式筛选参数返回。 |
 | 删除目标 | 删除目标会影响其下指标、任务和子任务。 |
 | 删除指标 | 删除指标会影响其下任务和子任务。 |
 | 删除任务 | 删除任务会影响其下子任务。 |
