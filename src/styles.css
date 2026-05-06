@@ -1,6 +1,6 @@
 @import "tailwindcss";
-@import "./styles/fantasy-theme.css";
-@import "./styles/fantasy-components.css";
+@import "./features/fantasy-ui/styles/fantasy-theme.css";
+@import "./features/fantasy-ui/styles/fantasy-components.css";
 
 :root {
   color-scheme: light;

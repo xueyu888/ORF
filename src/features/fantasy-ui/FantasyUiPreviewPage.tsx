@@ -15,8 +15,8 @@ import {
   FantasySvgButton,
   FantasyTabs,
   FantasyTaskCard,
-} from "../components/FantasyUI";
-import primaryButtonReference from "../assets/fantasy-ui/buttons/primary-button-reference.png";
+} from "./FantasyUI";
+import primaryButtonReference from "./assets/buttons/primary-button-reference.png";
 
 const tokens = [
   { label: "Blue", value: "--gi-blue", css: "var(--gi-blue)" },

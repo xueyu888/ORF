@@ -10,26 +10,27 @@
 
 ## 本地参考板
 
-- `src/assets/orf-icons/fantasy-ui-panel-frames.png`：面板边框、卡片框、弹窗、章节标题、分隔线、标签芯片、角花参考。
-- `src/assets/orf-icons/fantasy-ui-controls.png`：按钮、标签页、开关、复选框、搜索框、下拉、分页、状态徽章参考。
-- `src/assets/orf-icons/fantasy-ui-navigation.png`：侧边栏、顶栏、菜单状态、用户面板、筛选面板、折叠区块、列表行参考。
-- `src/assets/orf-icons/fantasy-ui-task-widgets.png`：任务卡、看板列头、日期片、进度条、统计卡、时间线、通知、任务详情参考。
+- `src/features/fantasy-ui/assets/reference-boards/fantasy-ui-panel-frames.png`：面板边框、卡片框、弹窗、章节标题、分隔线、标签芯片、角花参考。
+- `src/features/fantasy-ui/assets/reference-boards/fantasy-ui-controls.png`：按钮、标签页、开关、复选框、搜索框、下拉、分页、状态徽章参考。
+- `src/features/fantasy-ui/assets/reference-boards/fantasy-ui-navigation.png`：侧边栏、顶栏、菜单状态、用户面板、筛选面板、折叠区块、列表行参考。
+- `src/features/fantasy-ui/assets/reference-boards/fantasy-ui-task-widgets.png`：任务卡、看板列头、日期片、进度条、统计卡、时间线、通知、任务详情参考。
 
 这些图片只作为设计参考和素材库积累，不直接切图塞进运行时页面。运行时 UI 需要由 token、CSS 装饰原语和 React 组件组合生成，保证响应式、状态和可维护性。
 
 ## 预览入口
 
 - 本地运行后访问 `/fantasy-ui` 查看组件库效果。
-- 组件入口：`src/components/FantasyUI.tsx`。
-- Token 入口：`src/styles/fantasy-theme.css`。
-- 组件样式入口：`src/styles/fantasy-components.css`。
-- 主按钮 SVG 组装试验资产：`src/assets/fantasy-ui/buttons/primary-button-left.svg`、`primary-button-center.svg`、`primary-button-right.svg`。
+- 模块入口：`src/features/fantasy-ui/index.ts`。
+- 组件入口：`src/features/fantasy-ui/FantasyUI.tsx`。
+- Token 入口：`src/features/fantasy-ui/styles/fantasy-theme.css`。
+- 组件样式入口：`src/features/fantasy-ui/styles/fantasy-components.css`。
+- 主按钮 SVG 组装试验资产：`src/features/fantasy-ui/assets/buttons/primary-button-left.svg`、`primary-button-center.svg`、`primary-button-right.svg`。
 
 ## 工程化分层
 
 | 层级 | 目标 | 当前落地 |
 | --- | --- | --- |
-| 设计 Token 层 | 统一颜色、圆角、阴影、边框、动效 | `src/styles/fantasy-theme.css` 的 `--gi-*` 变量 |
+| 设计 Token 层 | 统一颜色、圆角、阴影、边框、动效 | `src/features/fantasy-ui/styles/fantasy-theme.css` 的 `--gi-*` 变量 |
 | 装饰原语层 | 沉淀角花、分隔线、纸感面、深蓝面 | `.gi-panel`、`.gi-card`、`.gi-corner`、`.gi-divider` |
 | 基础组件层 | 按钮、表单、徽章、Tab、侧边栏、弹窗 | `FantasyButton`、`FantasyInput`、`FantasySelect`、`FantasyBadge`、`FantasyTabs`、`FantasySidebar`、`FantasyModal` |
 | 业务组件层 | 带 ORF 语义的任务卡、看板列 | `FantasyTaskCard`、`FantasyKanbanColumn` |

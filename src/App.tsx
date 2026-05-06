@@ -6,7 +6,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
-import { FantasyUiPreviewPage } from "./pages/FantasyUiPreviewPage";
+import { FantasyUiPreviewPage } from "./features/fantasy-ui";
 import { MembersPage } from "./pages/MembersPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
 import { ObjectivesPage } from "./pages/ObjectivesPage";
