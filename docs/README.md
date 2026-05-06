@@ -35,6 +35,7 @@ docs/
 | [权限管理 - 前端.md](./frontend/权限管理%20-%20前端.md) | 权限管理页面 UI |
 | [权限管理 - 后端.md](./backend/权限管理%20-%20后端.md) | 权限管理 RBAC 模型和接口口径 |
 | [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push webhook 转发到 Mattermost ORF 频道 |
+| [Codex 活动播报 - 后端.md](./backend/Codex%20活动播报%20-%20后端.md) | Codex 工作完成后的 Mattermost 活动小报 |
 | [积分自动计算规则.md](./rules/积分自动计算规则.md) | 积分自动计算后端规则口径 |
 | [积分自动计算规则 - 前端.md](./frontend/积分自动计算规则%20-%20前端.md) | 积分自动计算前端展示和交互 |
 | [设计原则.md](./design/设计原则.md) | ORF 业务原则、基础流程和积分规则 |
