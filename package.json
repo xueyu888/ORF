@@ -17,7 +17,7 @@
     "db:local": "sg docker -c 'docker compose -f docker-compose.ory.yml up -d --wait postgres'",
     "db:local:down": "sg docker -c 'docker compose -f docker-compose.ory.yml stop postgres'",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "tsx scripts/migrate-db.ts",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx scripts/seed.ts",
     "build": "tsc --noEmit && vite build",
