@@ -17,11 +17,10 @@ test("summarizes Codex activity without copying conversation text", () => {
     { CODEX_ACTIVITY_STYLE: "serious" },
   );
 
-  assert.match(message, /Codex 活动播报机制/);
-  assert.match(message, /抽象总结对话/);
-  assert.match(message, /Mattermost/);
+  assert.match(message, /播报机制|代码播报/);
   assert.doesNotMatch(message, new RegExp(rawPrompt));
   assert.doesNotMatch(message, /formatter 的输入当作信号源/);
+  assert.doesNotMatch(message, /抽象总结对话|Mattermost/);
   assert.doesNotMatch(message, /发到mm/);
   assert.doesNotMatch(message, /^####/);
   assert.doesNotMatch(message, /xueyu/);
@@ -37,7 +36,7 @@ test("does not leak raw urls credentials or snippets into Mattermost copy", () =
     { CODEX_ACTIVITY_STYLE: "news" },
   );
 
-  assert.match(message, /Codex 活动播报机制|Mattermost/);
+  assert.match(message, /播报机制|代码播报/);
   assert.doesNotMatch(message, /10\.0\.0\.1|user@example\.com|not-a-real-password|const token|secret/);
 });
 
@@ -56,10 +55,12 @@ test("supports multiple rotating activity styles", () => {
   );
 
   assert.equal(new Set(messages).size, codexActivityStyleIds.length);
-  assert.ok(messages.some((message) => message.includes("小令")));
-  assert.ok(messages.some((message) => message.includes("事既毕")));
-  assert.ok(messages.some((message) => message.includes("表情包") && message.includes("稳了.jpg")));
-  assert.ok(messages.some((message) => message.includes("本台消息")));
+  const poemParodyPattern =
+    /行舟将欲走|明月几时有|朝辞白帝|床前代码光|众里寻他|白日依山尽|问君能有几多愁|十步改一处|大鹏一日同风起|春眠不觉晓|清明时节码纷纷|采菊东篱下|醉里挑灯看码/;
+  assert.ok(messages.every((message) => poemParodyPattern.test(message)));
+  assert.ok(messages.some((message) => message.includes("薛宇行舟将欲走")));
+  assert.ok(messages.some((message) => message.includes("稳了.jpg") || message.includes("😎")));
+  assert.ok(messages.every((message) => !/本台消息|表情包递上|这轮已经完成|讲个短笑话|今日小记|深夜电台|来自近未来|冷笑话时间/.test(message)));
   assert.ok(messages.every((message) => !message.includes("xueyu")));
   assert.ok(messages.every((message) => !message.includes("不要复制原始对话")));
   assert.ok(messages.every((message) => !message.includes("\n")));

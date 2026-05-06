@@ -140,10 +140,6 @@ function summarizeActivity(input: CodexActivityInput) {
   };
 }
 
-function quote(value: string) {
-  return `「${trimSentenceEnd(value)}」`;
-}
-
 function clause(value: string) {
   return trimSentenceEnd(value).replace(/\s*\n+\s*/g, " ").replace(/[ \t]+/g, " ").trim();
 }
@@ -152,14 +148,28 @@ function oneLineMessage(value: string) {
   return value.replace(/\s*\n+\s*/g, " ").replace(/[ \t]+/g, " ").trim();
 }
 
+function poemTopic(value: string) {
+  const text = clause(value);
+  const knownTopics = new Map([
+    ["调整了 Codex 活动播报机制", "播报机制"],
+    ["升级了项目运行环境配置", "运行环境"],
+    ["完善了 GitHub 推送同步流程", "推送同步"],
+    ["完成了项目验证", "项目验证"],
+    ["整理了项目文档", "项目文档"],
+    ["调整了后端实现", "后端实现"],
+    ["调整了前端体验", "前端体验"],
+    ["完成了一轮 ORF 项目协作", "ORF 协作"],
+  ]);
+
+  return knownTopics.get(text) ?? text.replace(/^(调整了|升级了|完善了|完成了|整理了)/, "");
+}
+
 export function readCodexActivityConfig(env: NodeJS.ProcessEnv = process.env) {
   return configSchema.parse(env);
 }
 
 interface CodexActivityMessageContext {
   summary: string;
-  quotedSummary: string;
-  detailText?: string;
 }
 
 interface CodexActivityStyle {
@@ -171,81 +181,68 @@ interface CodexActivityStyle {
 const codexActivityStyles = [
   {
     id: "poem",
-    label: "古诗",
-    format: ({ summary, detailText }) =>
-      `案上灯明一事成，${clause(summary)}；回头看，${clause(detailText ?? "这轮工作已经安稳落地")}。`,
+    label: "赠汪伦魔改",
+    format: ({ summary }) => `薛宇行舟将欲走，忽闻代码播报声；桃花潭水深千尺，不及${poemTopic(summary)}情。`,
   },
   {
     id: "ci",
-    label: "宋词",
-    format: ({ summary, detailText }) =>
-      `小令写到这里，风也慢了半拍：${clause(summary)}；余声落在案边，${clause(detailText ?? "事情已经收束妥当")}。`,
+    label: "水调歌头魔改",
+    format: ({ summary }) => `明月几时有，把码问青天；不知${poemTopic(summary)}，今夕稳不稳。`,
   },
   {
     id: "classical",
-    label: "文言文",
-    format: ({ summary, detailText }) =>
-      `事既毕，记曰：${clause(summary)}；其要在于${clause(detailText ?? "诸项已定，可据此复核")}。`,
+    label: "早发白帝城魔改",
+    format: ({ summary }) => `朝辞白帝彩云间，千行代码一日还；两岸 bug 啼不住，${poemTopic(summary)}过万山。`,
   },
   {
     id: "humor",
-    label: "笑话",
-    format: ({ summary, detailText }) =>
-      `讲个短笑话：${clause(summary)}办完后，键盘说它今天终于加班加得像个正经工具；顺手带回来的消息是，${clause(detailText ?? "状态正常")}。`,
+    label: "静夜思魔改",
+    format: ({ summary }) => `床前代码光，疑是测试霜；举头看${poemTopic(summary)}，低头笑一场。`,
   },
   {
     id: "meme",
-    label: "表情包",
-    format: ({ summary, detailText }) =>
-      `表情包递上：${clause(summary)}，这波属于“稳了.jpg” 😎；顺带一提，${clause(detailText ?? "现场可以先收工")}。`,
+    label: "青玉案魔改",
+    format: ({ summary }) => `众里寻他千百度，蓦然回首，${poemTopic(summary)}正在灯火阑珊处 😎`,
   },
   {
     id: "serious",
-    label: "严肃",
-    format: ({ summary, detailText }) =>
-      `这轮已经完成：${clause(summary)}；当前结果是，${clause(detailText ?? "状态正常，可以继续跟进")}。`,
+    label: "登鹳雀楼魔改",
+    format: ({ summary }) => `白日依山尽，代码入海流；欲穷${poemTopic(summary)}目，更上一层楼。`,
   },
   {
     id: "cold-joke",
-    label: "冷笑话",
-    format: ({ quotedSummary, detailText }) =>
-      `冷笑话时间：刚处理完${quotedSummary}，它现在很“完成”，因为它真的完成了；补一句，${clause(detailText ?? "没有多余尾巴")}。`,
+    label: "虞美人魔改",
+    format: ({ summary }) => `问君能有几多愁，恰似${poemTopic(summary)}刚改完还回头。`,
   },
   {
     id: "wuxia",
-    label: "江湖",
-    format: ({ summary, detailText }) =>
-      `一招收势，案上尘定：${clause(summary)}；留下的线索是，${clause(detailText ?? "事已落定")}。`,
+    label: "侠客行魔改",
+    format: ({ summary }) => `十步改一处，千行不留 bug；事了拂衣去，${poemTopic(summary)}藏深处。`,
   },
   {
     id: "sci-fi",
-    label: "科幻",
-    format: ({ summary, detailText }) =>
-      `来自近未来的一条回执：${clause(summary)}；舱内记录显示，${clause(detailText ?? "进度条已经合上舱门")}。`,
+    label: "上李邕魔改",
+    format: ({ summary }) => `大鹏一日同风起，代码直上九万里；若问${poemTopic(summary)}何处去，星河尽头报捷归。`,
   },
   {
     id: "radio",
-    label: "深夜电台",
-    format: ({ summary, detailText }) =>
-      `这里是深夜电台，轻轻插播一句：${clause(summary)}；把音量拧小一点，细节是${clause(detailText ?? "事情已经过站")}。`,
+    label: "春晓魔改",
+    format: ({ summary }) => `春眠不觉晓，处处闻提交；夜来风雨声，${poemTopic(summary)}少不了。`,
   },
   {
     id: "news",
-    label: "新闻播报",
-    format: ({ summary, detailText }) =>
-      `本台消息：${clause(summary)}；现场补充，${clause(detailText ?? "目前一切平稳")}。`,
+    label: "清明魔改",
+    format: ({ summary }) => `清明时节码纷纷，路上行人欲断魂；借问${poemTopic(summary)}何处稳，牧童遥指测试门。`,
   },
   {
     id: "diary",
-    label: "日记",
-    format: ({ summary, detailText }) =>
-      `今日小记：${clause(summary)}；旁边记一笔，${clause(detailText ?? "完成得不吵，挺好")}。`,
+    label: "饮酒魔改",
+    format: ({ summary }) => `采菊东篱下，悠然见提交；${poemTopic(summary)}归来后，南山也点头。`,
   },
   {
     id: "stage",
-    label: "舞台剧",
-    format: ({ summary, detailText }) =>
-      `灯光一亮，这一幕叫${clause(summary)}；演员退场前补了一句：${clause(detailText ?? "幕布落下，事情收好")}。`,
+    label: "破阵子魔改",
+    format: ({ summary }) => `醉里挑灯看码，梦回测试连营；${poemTopic(summary)}沙场点兵，稳了.jpg 😎`,
   },
 ] satisfies CodexActivityStyle[];
 
@@ -269,8 +266,6 @@ function buildMessageContext(input: CodexActivityInput): CodexActivityMessageCon
 
   return {
     summary: trimSentenceEnd(activitySummary.summary),
-    quotedSummary: quote(activitySummary.summary),
-    detailText: activitySummary.detailText,
   };
 }
 
