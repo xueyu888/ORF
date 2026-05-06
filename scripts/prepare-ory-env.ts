@@ -24,10 +24,11 @@ function databaseUrlFromEnv() {
 
 async function assertOryMigrationPermission(connectionString: string) {
   const pool = new Pool(createPgPoolConfig(connectionString));
-  const probeTable = `public._orf_ory_migration_probe_${process.pid}`;
+  const probeTable = `_orf_ory_migration_probe_${process.pid}`;
 
   try {
     await pool.query("begin");
+    // Probe the configured search_path; deployments may intentionally avoid public.
     await pool.query(`create table ${probeTable} (id text primary key)`);
     await pool.query("rollback");
   } catch (error) {
@@ -37,8 +38,7 @@ async function assertOryMigrationPermission(connectionString: string) {
       throw new Error(
         [
           "Ory is configured to use DATABASE_URL/REMOTE_DATABASE_URL, but this database user cannot run Ory migrations.",
-          "Grant CREATE on the public schema to the database user, then run npm run ory:dev again:",
-          "GRANT USAGE, CREATE ON SCHEMA public TO <database_user>;",
+          "Grant CREATE on the configured database schema to the database user, then run npm run ory:dev again.",
         ].join("\n"),
       );
     }
