@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { codexActivityStyleIds, formatCodexActivityMessage } from "../server/integrations/codex-activity-reporter";
+import {
+  codexActivityStyleIds,
+  formatCodexActivityMessage,
+  getCodexActivitySkipReason,
+} from "../server/integrations/codex-activity-reporter";
 
 test("summarizes Codex activity without copying conversation text", () => {
   const rawPrompt = "你千万别复制我的会话内容，我是让你总结，对话的内容，然后形成某一种风格，然后发到mm";
@@ -38,7 +42,8 @@ test("does not leak raw urls credentials or snippets into Mattermost copy", () =
 });
 
 test("supports multiple rotating activity styles", () => {
-  assert.ok(codexActivityStyleIds.length >= 10);
+  assert.ok(codexActivityStyleIds.length >= 11);
+  assert.ok(codexActivityStyleIds.includes("meme"));
 
   const messages = codexActivityStyleIds.map((styleId) =>
     formatCodexActivityMessage(
@@ -51,9 +56,21 @@ test("supports multiple rotating activity styles", () => {
   );
 
   assert.equal(new Set(messages).size, codexActivityStyleIds.length);
-  assert.ok(messages.some((message) => message.includes("小令一阕")));
-  assert.ok(messages.some((message) => message.includes("事已成")));
-  assert.ok(messages.some((message) => message.includes("冷")));
+  assert.ok(messages.some((message) => message.includes("小令")));
+  assert.ok(messages.some((message) => message.includes("事既毕")));
+  assert.ok(messages.some((message) => message.includes("表情包") && message.includes("稳了.jpg")));
+  assert.ok(messages.some((message) => message.includes("本台消息")));
   assert.ok(messages.every((message) => !message.includes("xueyu")));
   assert.ok(messages.every((message) => !message.includes("不要复制原始对话")));
+  assert.ok(messages.every((message) => !message.includes("\n")));
+});
+
+test("skips Codex internal title generation notifications", () => {
+  const skipReason = getCodexActivitySkipReason({
+    summary:
+      "You are a helpful assistant. You will be presented with a user prompt, and your job is to provide a short title for a task that will be created from that prompt.",
+    details: ['{"title":"改为单条人话消息"}'],
+  });
+
+  assert.equal(skipReason, "internal-title");
 });

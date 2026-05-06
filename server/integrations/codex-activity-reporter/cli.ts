@@ -1,5 +1,11 @@
 import "dotenv/config";
-import { codexActivityStyleIds, formatCodexActivityMessage, postCodexActivity, readCodexActivityConfig } from "./index";
+import {
+  codexActivityStyleIds,
+  formatCodexActivityMessage,
+  getCodexActivitySkipReason,
+  postCodexActivity,
+  readCodexActivityConfig,
+} from "./index";
 
 interface CliInput {
   summary?: string;
@@ -69,9 +75,15 @@ function parseArgs(argv: string[]): CliInput {
 
 async function main() {
   const input = parseArgs(process.argv.slice(2));
+  const activity = { summary: input.summary!, details: input.details, actor: input.actor };
+  const skipReason = getCodexActivitySkipReason(activity);
+  if (skipReason) {
+    console.log(JSON.stringify({ ok: true, skipped: true, reason: skipReason }, null, 2));
+    return;
+  }
+
   const envConfig = readCodexActivityConfig();
   const config = { ...envConfig, CODEX_ACTIVITY_STYLE: input.style ?? envConfig.CODEX_ACTIVITY_STYLE };
-  const activity = { summary: input.summary!, details: input.details, actor: input.actor };
 
   if (input.dryRun) {
     console.log(formatCodexActivityMessage(activity, { ...config, CODEX_ACTIVITY_STYLE: input.style ?? config.CODEX_ACTIVITY_STYLE }));
@@ -79,6 +91,11 @@ async function main() {
   }
 
   const result = await postCodexActivity(activity, config);
+  if (result.skipped) {
+    console.log(JSON.stringify({ ok: true, skipped: true, reason: result.reason }, null, 2));
+    return;
+  }
+
   console.log(JSON.stringify({ ok: true, postId: result.postId, channelId: result.channelId }, null, 2));
 }
 

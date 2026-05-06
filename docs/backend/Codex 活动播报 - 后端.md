@@ -2,14 +2,14 @@
 
 ## 目标
 
-把 Codex 每轮工作完成后的活动摘要发送到 Mattermost 的 ORF 频道，形成轻量活动记录。
+把 Codex 每轮工作完成后的活动摘要发送到 Mattermost 的 ORF 频道，形成轻量活动记录。每轮真实对话只产生一条 Mattermost 消息。
 
-播报不是会话转发器：原始用户消息和 Codex 回复只作为分类信号使用，输出前会改写成概括性的活动摘要，再套用当前轮换风格。
+播报不是会话转发器：原始用户消息和 Codex 回复只作为分类信号使用，输出前会改写成概括性的活动摘要，再套用当前轮换风格。消息正文使用单段自然语言，不使用标题、列表或多行模板；轮换风格包含古诗、文言文、宋词、笑话、新闻播报、表情包等口吻。
 
 当前实现支持两种触发方式：
 
 - 手动触发：用 `npm run codex:report -- --summary "..."` 发一条活动小报。
-- 自动触发：Codex 的 `notify` hook 调用 `notify-hook.sh`，在 ORF 工作区每轮任务结束后自动发一条活动小报。
+- 自动触发：Codex 的 `notify` hook 调用 `notify-hook.sh`，在 ORF 工作区每轮真实对话结束后自动发一条活动小报。
 
 ## 代码位置
 
@@ -17,7 +17,7 @@
 | --- | --- |
 | `server/integrations/codex-activity-reporter/index.ts` | 抽象总结活动、套用风格，并调用 Mattermost API 发帖。 |
 | `server/integrations/codex-activity-reporter/cli.ts` | 命令行入口。 |
-| `server/integrations/codex-activity-reporter/notify-hook.sh` | Codex `notify` hook 适配器。 |
+| `server/integrations/codex-activity-reporter/notify-hook.sh` | Codex `notify` hook 适配器，过滤 Codex 内部短标题生成通知。 |
 
 该集成不挂载到 ORF 业务 API，不依赖 `server/env.ts`。
 
@@ -32,7 +32,7 @@
 | `CODEX_ACTIVITY_CHANNEL_ID` | 可选。单独指定活动播报频道；不填则使用 `MATTERMOST_CHANNEL_ID`。 |
 | `CODEX_ACTIVITY_SCOPE` | 可选。默认 `orf`，只播报 ORF 工作区；设为 `all` 时播报所有 Codex 工作区。 |
 | `CODEX_ACTIVITY_INCLUDE_DETAILS` | 可选。默认 `true`，自动播报会把完成详情作为分类信号；输出仍是改写后的摘要，不原样复制详情。设为 `false` 时只使用任务摘要。 |
-| `CODEX_ACTIVITY_STYLE` | 可选。默认 `rotate`，按顺序轮换风格；也可以固定为 `poem`、`ci`、`classical`、`humor`、`serious`、`cold-joke`、`wuxia`、`sci-fi`、`radio`、`news`、`diary`、`stage`。 |
+| `CODEX_ACTIVITY_STYLE` | 可选。默认 `rotate`，按顺序轮换风格；也可以固定为 `poem`、`ci`、`classical`、`humor`、`meme`、`serious`、`cold-joke`、`wuxia`、`sci-fi`、`radio`、`news`、`diary`、`stage`。 |
 | `CODEX_ACTIVITY_STYLE_STATE_FILE` | 可选。默认 `.artifacts/codex-activity-style-state.json`，记录下一条要使用的轮换风格。 |
 
 ## 使用方式

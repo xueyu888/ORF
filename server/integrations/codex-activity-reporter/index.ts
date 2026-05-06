@@ -46,12 +46,43 @@ function includesAny(value: string, patterns: string[]) {
   return patterns.some((pattern) => value.includes(pattern.toLowerCase()));
 }
 
-function summarizeActivity(input: CodexActivityInput) {
+function activitySource(input: CodexActivityInput) {
   const parsed = codexActivityInputSchema.parse(input);
-  const source = normalizeForClassification([parsed.summary, ...parsed.details].join("\n"));
+  return normalizeForClassification([parsed.summary, ...parsed.details].join("\n"));
+}
+
+export function getCodexActivitySkipReason(input: CodexActivityInput) {
+  const source = activitySource(input);
 
   if (
-    includesAny(source, ["codex", "活动播报", "自动播报", "完成播报", "mattermost", "会话内容", "风格", "冷笑话"])
+    source.includes("you are a helpful assistant") &&
+    source.includes("short title for a task") &&
+    source.includes("created from that prompt")
+  ) {
+    return "internal-title";
+  }
+
+  return undefined;
+}
+
+function summarizeActivity(input: CodexActivityInput) {
+  const source = activitySource(input);
+
+  if (
+    includesAny(source, [
+      "codex",
+      "活动播报",
+      "自动播报",
+      "完成播报",
+      "mattermost",
+      "mm",
+      "会话内容",
+      "风格",
+      "单条消息",
+      "一条消息",
+      "表情包",
+      "冷笑话",
+    ])
   ) {
     return {
       summary: "调整了 Codex 活动播报机制",
@@ -109,17 +140,16 @@ function summarizeActivity(input: CodexActivityInput) {
   };
 }
 
-function sentence(value: string) {
-  const text = value.trim();
-  if (!text || /[。.!！?？]$/.test(text)) {
-    return text;
-  }
-
-  return `${text}。`;
-}
-
 function quote(value: string) {
   return `「${trimSentenceEnd(value)}」`;
+}
+
+function clause(value: string) {
+  return trimSentenceEnd(value).replace(/\s*\n+\s*/g, " ").replace(/[ \t]+/g, " ").trim();
+}
+
+function oneLineMessage(value: string) {
+  return value.replace(/\s*\n+\s*/g, " ").replace(/[ \t]+/g, " ").trim();
 }
 
 export function readCodexActivityConfig(env: NodeJS.ProcessEnv = process.env) {
@@ -141,96 +171,81 @@ interface CodexActivityStyle {
 const codexActivityStyles = [
   {
     id: "poem",
-    label: "写诗",
-    format: ({ quotedSummary, detailText }) =>
-      [
-        `刚把${quotedSummary}收进灯下。`,
-        detailText ? `余韵还在：${sentence(detailText)}` : "键盘声停下，事情往前亮了一格。",
-      ].join("\n"),
+    label: "古诗",
+    format: ({ summary, detailText }) =>
+      `案上灯明一事成，${clause(summary)}；回头看，${clause(detailText ?? "这轮工作已经安稳落地")}。`,
   },
   {
     id: "ci",
-    label: "写词",
+    label: "宋词",
     format: ({ summary, detailText }) =>
-      [
-        `小令一阕，写的是：${sentence(summary)}`,
-        detailText ? `尾声轻轻一折：${sentence(detailText)}` : "风过命令行，收束得刚刚好。",
-      ].join("\n"),
+      `小令写到这里，风也慢了半拍：${clause(summary)}；余声落在案边，${clause(detailText ?? "事情已经收束妥当")}。`,
   },
   {
     id: "classical",
     label: "文言文",
     format: ({ summary, detailText }) =>
-      [`事已成：${sentence(summary)}`, detailText ? `其详曰：${sentence(detailText)}` : "记之。"].join("\n"),
+      `事既毕，记曰：${clause(summary)}；其要在于${clause(detailText ?? "诸项已定，可据此复核")}。`,
   },
   {
     id: "humor",
-    label: "风趣幽默",
+    label: "笑话",
     format: ({ summary, detailText }) =>
-      [
-        `这事办完了：${sentence(summary)}`,
-        detailText ? `顺手还把这串也带回来了：${sentence(detailText)}` : "键盘表示这把它很有参与感。",
-      ].join("\n"),
+      `讲个短笑话：${clause(summary)}办完后，键盘说它今天终于加班加得像个正经工具；顺手带回来的消息是，${clause(detailText ?? "状态正常")}。`,
+  },
+  {
+    id: "meme",
+    label: "表情包",
+    format: ({ summary, detailText }) =>
+      `表情包递上：${clause(summary)}，这波属于“稳了.jpg” 😎；顺带一提，${clause(detailText ?? "现场可以先收工")}。`,
   },
   {
     id: "serious",
     label: "严肃",
     format: ({ summary, detailText }) =>
-      [`已完成：${sentence(summary)}`, detailText ? `结果：${sentence(detailText)}` : "状态正常。"].join("\n"),
+      `这轮已经完成：${clause(summary)}；当前结果是，${clause(detailText ?? "状态正常，可以继续跟进")}。`,
   },
   {
     id: "cold-joke",
     label: "冷笑话",
     format: ({ quotedSummary, detailText }) =>
-      [
-        `冷笑话时间：刚处理完${quotedSummary}。`,
-        detailText ? `详情也没溜走：${sentence(detailText)}` : "它现在很“完成”，因为它真的完成了。",
-      ].join("\n"),
+      `冷笑话时间：刚处理完${quotedSummary}，它现在很“完成”，因为它真的完成了；补一句，${clause(detailText ?? "没有多余尾巴")}。`,
   },
   {
     id: "wuxia",
     label: "江湖",
     format: ({ summary, detailText }) =>
-      [`一招收势：${sentence(summary)}`, detailText ? `案上留痕：${sentence(detailText)}` : "剑不出鞘，事已落定。"].join("\n"),
+      `一招收势，案上尘定：${clause(summary)}；留下的线索是，${clause(detailText ?? "事已落定")}。`,
   },
   {
     id: "sci-fi",
     label: "科幻",
     format: ({ summary, detailText }) =>
-      [
-        `来自近未来的一条回执：${sentence(summary)}`,
-        detailText ? `舱内记录：${sentence(detailText)}` : "进度条轻轻合上了舱门。",
-      ].join("\n"),
+      `来自近未来的一条回执：${clause(summary)}；舱内记录显示，${clause(detailText ?? "进度条已经合上舱门")}。`,
   },
   {
     id: "radio",
     label: "深夜电台",
     format: ({ summary, detailText }) =>
-      [
-        `这里插播一条不打扰的消息：${sentence(summary)}`,
-        detailText ? `把音量拧小一点，细节是：${sentence(detailText)}` : "灯还亮着，事已经过站。",
-      ].join("\n"),
+      `这里是深夜电台，轻轻插播一句：${clause(summary)}；把音量拧小一点，细节是${clause(detailText ?? "事情已经过站")}。`,
   },
   {
     id: "news",
-    label: "快讯",
+    label: "新闻播报",
     format: ({ summary, detailText }) =>
-      [`快讯：${sentence(summary)}`, detailText ? `现场补充：${sentence(detailText)}` : "目前一切平稳。"].join("\n"),
+      `本台消息：${clause(summary)}；现场补充，${clause(detailText ?? "目前一切平稳")}。`,
   },
   {
     id: "diary",
     label: "日记",
     format: ({ summary, detailText }) =>
-      [`今日小记：${sentence(summary)}`, detailText ? `旁注：${sentence(detailText)}` : "完成得不吵，挺好。"].join("\n"),
+      `今日小记：${clause(summary)}；旁边记一笔，${clause(detailText ?? "完成得不吵，挺好")}。`,
   },
   {
     id: "stage",
     label: "舞台剧",
     format: ({ summary, detailText }) =>
-      [
-        `灯光一亮，这一幕叫：${sentence(summary)}`,
-        detailText ? `演员退场前补了一句：${sentence(detailText)}` : "幕布落下，观众席很安静。",
-      ].join("\n"),
+      `灯光一亮，这一幕叫${clause(summary)}；演员退场前补了一句：${clause(detailText ?? "幕布落下，事情收好")}。`,
   },
 ] satisfies CodexActivityStyle[];
 
@@ -263,7 +278,7 @@ export function formatCodexActivityMessage(input: CodexActivityInput, config: Pa
   const context = buildMessageContext(input);
   const style = resolveStyle(config.CODEX_ACTIVITY_STYLE) ?? codexActivityStyles[0];
 
-  return style.format(context);
+  return oneLineMessage(style.format(context));
 }
 
 function resolveStyleStateFile(config: Partial<CodexActivityConfig>) {
@@ -328,8 +343,13 @@ async function mattermostLogin(config: CodexActivityConfig) {
 }
 
 export async function postCodexActivity(input: CodexActivityInput, config = readCodexActivityConfig()) {
+  const skipReason = getCodexActivitySkipReason(input);
+  if (skipReason) {
+    return { skipped: true, reason: skipReason } as const;
+  }
+
   const selectedStyle = selectStyleForPost(config);
-  const message = selectedStyle.style.format(buildMessageContext(input));
+  const message = oneLineMessage(selectedStyle.style.format(buildMessageContext(input)));
   const token = await mattermostLogin(config);
   const channelId = config.CODEX_ACTIVITY_CHANNEL_ID ?? config.MATTERMOST_CHANNEL_ID;
   const response = await fetch(`${trimTrailingSlash(config.MATTERMOST_URL)}/api/v4/posts`, {
@@ -354,5 +374,5 @@ export async function postCodexActivity(input: CodexActivityInput, config = read
     writeStyleIndex(selectedStyle.stateFile, selectedStyle.nextIndex);
   }
 
-  return { postId: post.id, channelId, message };
+  return { skipped: false as const, postId: post.id, channelId, message };
 }

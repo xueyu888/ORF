@@ -26,6 +26,10 @@ if [[ -z "$summary" ]]; then
   summary="完成了一轮 Codex 会话"
 fi
 
+if [[ "$summary" == *"short title for a task that will be created from that prompt"* ]]; then
+  exit 0
+fi
+
 mkdir -p "$(dirname "$log_file")"
 
 args=(run codex:report -- --summary "$summary")
