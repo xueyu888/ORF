@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { closeDb, db } from "../server/db/client";
 import { objectives, results, taskChecklistItems, tasks } from "../server/db/schema";
-import { calculateAutomaticCompletion, shouldCallAutomaticCompletion } from "../src/utils/automaticCompletion";
-import type { AutomaticCompletionSnapshot } from "../src/utils/automaticCompletion";
+import { calculateAutomaticCompletion, shouldCallAutomaticCompletion } from "../server/utils/automaticCompletion";
+import type { AutomaticCompletionSnapshot } from "../server/utils/automaticCompletion";
 import type { Objective, Result, Task, TaskStatus } from "../src/types/orf";
 
 interface ObjectiveRow {
@@ -112,6 +112,7 @@ function makeObjective(id: string, resultIds: string[], taskIds: string[]): Obje
     whyItMatters: id,
     owner: "User",
     cycle: "Database",
+    stage: "goalFrozen",
     status: "On Track",
     confidence: 100,
     progress: 0,

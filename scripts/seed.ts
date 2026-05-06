@@ -104,6 +104,7 @@ async function seed() {
         whyItMatters: objective.whyItMatters,
         owner: objective.owner,
         cycle: objective.cycle,
+        stage: objective.stage,
         status: objective.status,
         confidence: objective.confidence,
         progress: objective.progress,

@@ -43,6 +43,13 @@
       "when": 1777966381106,
       "tag": "0005_colossal_vance_astro",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778048784651,
+      "tag": "0006_modern_sinister_six",
+      "breakpoints": true
     }
   ]
 }

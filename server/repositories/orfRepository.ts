@@ -1,6 +1,19 @@
 import { and, eq } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
-import type { Evidence, Feedback, MetricDirection, OrfState, Priority, Result, Task, TaskStatus, UncertaintyLevel } from "../../src/types/orf";
+import type {
+  AutomaticCompletionResult,
+  Evidence,
+  Feedback,
+  MetricDirection,
+  Objective,
+  OrfStage,
+  OrfState,
+  Priority,
+  Result,
+  Task,
+  TaskStatus,
+  UncertaintyLevel,
+} from "../../src/types/orf";
 import { db } from "../db/client";
 import {
   evidence,
@@ -15,8 +28,9 @@ import {
 } from "../db/schema";
 import { getPermissionRulesForTeam } from "./permissionRepository";
 import { getTeamUsers } from "./userRepository";
+import { buildAutomaticCompletionSnapshot, calculateAutomaticCompletion } from "../utils/automaticCompletion";
 
-export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "permissionRules">;
+export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "permissionRules" | "automaticCompletions">;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -43,6 +57,40 @@ function reorderIds(ids: string[], movingId: string, referenceId: string, placem
 
   const insertIndex = placement === "before" ? referenceIndex : referenceIndex + 1;
   return [...withoutMoving.slice(0, insertIndex), movingId, ...withoutMoving.slice(insertIndex)];
+}
+
+function average(values: number[]) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function objectiveProgress(objective: Objective, resultItems: Result[], automaticCompletion?: AutomaticCompletionResult) {
+  if (!automaticCompletion) {
+    return Math.max(0, Math.min(100, Math.round(objective.progress)));
+  }
+
+  const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
+  return Math.round(average(objectiveResults.map((result) => automaticCompletion.rets[result.id] ?? 0)) * 100);
+}
+
+function calculateAutomaticCompletions(state: Pick<OrfState, "objectives" | "results" | "tasks">): Record<string, AutomaticCompletionResult> {
+  const completions: Record<string, AutomaticCompletionResult> = {};
+
+  for (const objective of state.objectives) {
+    if (objective.stage !== "goalFrozen") {
+      continue;
+    }
+
+    const snapshot = buildAutomaticCompletionSnapshot(state, objective.id);
+    if (snapshot) {
+      completions[objective.id] = calculateAutomaticCompletion(snapshot);
+    }
+  }
+
+  return completions;
 }
 
 export async function getTaskManagementData(): Promise<TaskManagementData> {
@@ -156,14 +204,14 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     reviewCadence: result.reviewCadence,
   }));
 
-  return {
-    objectives: objectiveRows.map((objective) => ({
+  const objectiveItems: Objective[] = objectiveRows.map((objective) => ({
       id: objective.id,
       title: objective.title,
       description: objective.description,
       whyItMatters: objective.whyItMatters,
       owner: objective.owner,
       cycle: objective.cycle,
+      stage: objective.stage,
       status: objective.status,
       confidence: objective.confidence,
       progress: objective.progress,
@@ -174,12 +222,20 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       taskIds: taskItems.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id),
       createdAt: objective.createdAt,
       updatedAt: objective.updatedAt,
+    }));
+  const automaticCompletions = calculateAutomaticCompletions({ objectives: objectiveItems, results: resultItems, tasks: taskItems });
+
+  return {
+    objectives: objectiveItems.map((objective) => ({
+      ...objective,
+      progress: objectiveProgress(objective, resultItems, automaticCompletions[objective.id]),
     })),
     results: resultItems,
     tasks: taskItems,
     evidence: evidenceItems,
     feedback: feedbackItems,
     permissionRules,
+    automaticCompletions,
   };
 }
 
@@ -353,6 +409,11 @@ export async function updateObjectiveTitle(objectiveId: string, title: string): 
   }
 
   const updated = await db.update(objectives).set({ title: nextTitle, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
+  return updated.length > 0;
+}
+
+export async function updateObjectiveStage(objectiveId: string, stage: OrfStage): Promise<boolean> {
+  const updated = await db.update(objectives).set({ stage, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
   return updated.length > 0;
 }
 

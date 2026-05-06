@@ -28,6 +28,7 @@ import {
   moveTask,
   setTaskCompletion,
   updateChecklistItemLabel,
+  updateObjectiveStage,
   updateObjectiveTitle,
   updateResultTitle,
   updateChecklistItem,
@@ -54,6 +55,7 @@ const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const titleBodySchema = z.object({ title: z.string().trim().min(1) });
 const labelBodySchema = z.object({ label: z.string().trim().min(1) });
 const completionBodySchema = z.object({ done: z.boolean() });
+const objectiveStageBodySchema = z.object({ stage: permissionStageSchema });
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
@@ -365,6 +367,22 @@ export async function buildServer() {
     }
 
     const updated = await updateObjectiveTitle(params.objectiveId, body.title);
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Objective not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.patch("/api/objectives/:objectiveId/stage", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = objectiveStageBodySchema.parse(request.body);
+    if (!(await requireWritePermission(request, reply, "edit", "objective"))) {
+      return reply;
+    }
+
+    const updated = await updateObjectiveStage(params.objectiveId, body.stage);
 
     if (!updated) {
       return reply.code(404).send({ error: "Objective not found" });

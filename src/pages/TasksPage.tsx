@@ -38,9 +38,9 @@ import type {
   Task,
   TaskChecklistItem,
   TaskStatus,
+  AutomaticCompletionResult,
 } from "../types/orf";
 import { avatarStyleForName } from "../utils/avatar";
-import { buildAutomaticCompletionSnapshot, calculateAutomaticCompletion, type AutomaticCompletionResult } from "../utils/automaticCompletion";
 import { initials } from "../utils/format";
 import type { DragEvent } from "react";
 
@@ -105,6 +105,7 @@ export function TasksPage() {
     setTaskCompletion,
     updateTaskChecklistItem,
     updateObjectiveTitle,
+    updateObjectiveStage,
     updateResultTitle,
     updateTaskTitle,
     updateTaskChecklistItemLabel,
@@ -115,7 +116,6 @@ export function TasksPage() {
   } = useOrf();
   const currentMember = currentUser?.name ?? "User";
   const [scope, setScope] = useState<TaskScope>("team");
-  const [objectiveStages, setObjectiveStages] = useState<Record<string, FlowStage>>({});
   const [collapsedResultIds, setCollapsedResultIds] = useState<Set<string>>(() => new Set());
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<BlockTarget | null>(null);
@@ -165,32 +165,14 @@ export function TasksPage() {
   );
 
   const commentCounts = useMemo(() => getCommentCounts(state.comments), [state.comments]);
-  const objectiveStage = (objectiveId: string) => objectiveStages[objectiveId] ?? "orfReestimate";
-  const automaticCompletions = useMemo(() => {
-    const completions = new Map<string, AutomaticCompletionResult>();
-
-    for (const objective of state.objectives) {
-      if (objectiveStage(objective.id) !== "goalFrozen") {
-        continue;
-      }
-
-      const snapshot = buildAutomaticCompletionSnapshot(state, objective.id);
-      if (snapshot) {
-        completions.set(objective.id, calculateAutomaticCompletion(snapshot));
-      }
-    }
-
-    return completions;
-  }, [objectiveStages, state.objectives, state.results, state.tasks]);
-  const completedResults = state.results.filter((result) => automaticCompletions.get(result.objectiveId)?.rets[result.id] === 1).length;
+  const objectiveStage = (objectiveId: string) => state.objectives.find((objective) => objective.id === objectiveId)?.stage ?? "orfReestimate";
+  const automaticCompletions = state.automaticCompletions;
+  const completedResults = state.results.filter((result) => automaticCompletions[result.objectiveId]?.rets[result.id] === 1).length;
   const totalResults = state.results.length;
   const overallObjectiveProgress = Math.round(
-    average(groups.map((group) => objectiveProgress(group.objective, group.results, automaticCompletions.get(group.objective.id)))),
+    average(groups.map((group) => objectiveProgress(group.objective))),
   );
   const canAtStage = (stage: FlowStage, action: PermissionAction, resource: PermissionResource) => canAccess(state, currentUser?.role, stage, action, resource);
-  const updateObjectiveStage = (objectiveId: string, stage: FlowStage) => {
-    setObjectiveStages((current) => ({ ...current, [objectiveId]: stage }));
-  };
   const stageForTask = (taskId: string) => {
     const task = state.tasks.find((item) => item.id === taskId);
     return objectiveStage(task?.linkedObjectiveId ?? "");
@@ -415,7 +397,7 @@ export function TasksPage() {
               key={group.objective.id}
               objective={group.objective}
               results={group.results}
-              automaticCompletion={automaticCompletions.get(group.objective.id)}
+              automaticCompletion={automaticCompletions[group.objective.id]}
               resultOwners={group.resultOwners}
               objectiveDue={group.objectiveDue}
               reviewDue={group.reviewDue}
@@ -688,7 +670,7 @@ function ObjectivePanel({
   onOpenBlockActionChange: (id: string | null) => void;
   dragDrop: DragDropController;
 }) {
-  const progress = objectiveProgress(objective, results, automaticCompletion);
+  const progress = objectiveProgress(objective);
   const complete = automaticCompletion?.goal === 1;
   const objectiveActionId = `objective:${objective.id}`;
   const objectiveAnchorId = `objective:${objective.id}`;
@@ -2426,10 +2408,6 @@ function indicatorStatus(result: Result, automaticCompletion?: AutomaticCompleti
   return result.status === "Draft" ? "todo" : "active";
 }
 
-function objectiveProgress(objective: Objective, results: ResultGroup[], automaticCompletion?: AutomaticCompletionResult) {
-  if (!automaticCompletion) {
-    return Math.max(0, Math.min(100, Math.round(objective.progress)));
-  }
-
-  return Math.round(average(results.map(({ result }) => automaticCompletion.rets[result.id] ?? 0)) * 100);
+function objectiveProgress(objective: Objective) {
+  return Math.max(0, Math.min(100, Math.round(objective.progress)));
 }

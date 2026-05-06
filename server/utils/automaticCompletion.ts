@@ -1,6 +1,4 @@
-import type { Objective, OrfStage, OrfState, Result, Task } from "../types/orf";
-
-export type CompletionBit = 0 | 1;
+import type { AutomaticCompletionResult, CompletionBit, Objective, OrfStage, OrfState, Result, Task } from "../../src/types/orf";
 
 export interface AutomaticCompletionSnapshot {
   objective: Objective;
@@ -8,15 +6,7 @@ export interface AutomaticCompletionSnapshot {
   tasks: Task[];
 }
 
-export interface AutomaticCompletionResult {
-  goal: CompletionBit;
-  rets: Record<string, CompletionBit>;
-  tasks: Record<string, CompletionBit>;
-  legal: boolean;
-  errors: string[];
-}
-
-export function buildAutomaticCompletionSnapshot(state: OrfState, objectiveId: string): AutomaticCompletionSnapshot | null {
+export function buildAutomaticCompletionSnapshot(state: Pick<OrfState, "objectives" | "results" | "tasks">, objectiveId: string): AutomaticCompletionSnapshot | null {
   const objective = state.objectives.find((item) => item.id === objectiveId);
   if (!objective) {
     return null;

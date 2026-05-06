@@ -11,6 +11,15 @@ export type UserRole = "admin" | "member";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
 export type PermissionAction = "view" | "create" | "edit" | "delete";
 export type PermissionResource = "objective" | "result" | "task" | "subtask";
+export type CompletionBit = 0 | 1;
+
+export interface AutomaticCompletionResult {
+  goal: CompletionBit;
+  rets: Record<string, CompletionBit>;
+  tasks: Record<string, CompletionBit>;
+  legal: boolean;
+  errors: string[];
+}
 
 export interface OrfUser {
   id: string;
@@ -46,6 +55,7 @@ export interface Objective {
   whyItMatters: string;
   owner: string;
   cycle: string;
+  stage: OrfStage;
   status: WorkStatus;
   confidence: number;
   progress: number;
@@ -220,6 +230,7 @@ export interface OrfState {
   users: OrfUser[];
   currentUserId: string;
   permissionRules: PermissionRule[];
+  automaticCompletions: Record<string, AutomaticCompletionResult>;
   objectives: Objective[];
   results: Result[];
   feedback: Feedback[];
