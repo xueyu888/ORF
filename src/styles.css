@@ -1178,15 +1178,17 @@ button:disabled {
 }
 
 .orf-auth-input {
+  --orf-auth-input-font-size: 18px;
+  --orf-auth-input-line-height: 1;
   min-width: 0;
   flex: 1;
   border: 0;
   background: transparent;
   color: #26384d;
   font-family: inherit;
-  font-size: 18px;
+  font-size: var(--orf-auth-input-font-size);
   font-weight: 800;
-  line-height: 1;
+  line-height: var(--orf-auth-input-line-height);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   outline: none;
@@ -1207,13 +1209,15 @@ button:disabled {
   appearance: none;
   -webkit-appearance: none;
   font-family: inherit !important;
-  font-size: inherit !important;
-  font-weight: inherit !important;
-  line-height: inherit !important;
+  font-size: var(--orf-auth-input-font-size) !important;
+  font-weight: 800 !important;
+  line-height: var(--orf-auth-input-line-height) !important;
+  color: #26384d !important;
+  opacity: 1 !important;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   caret-color: #26384d;
-  -webkit-text-fill-color: #26384d;
+  -webkit-text-fill-color: #26384d !important;
   transition: background-color 9999s ease-in-out 0s;
   box-shadow: 0 0 0 1000px transparent inset;
 }
@@ -1378,7 +1382,7 @@ button:disabled {
   }
 
   .orf-auth-input {
-    font-size: 16px;
+    --orf-auth-input-font-size: 16px;
   }
 
   .orf-auth-submit,

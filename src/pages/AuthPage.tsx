@@ -51,7 +51,6 @@ export function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [authError, setAuthError] = useState("");
-  const [formUnlocked, setFormUnlocked] = useState(false);
 
   useEffect(() => {
     if (authReady && isAuthenticated) {
@@ -146,11 +145,6 @@ export function AuthPage() {
   const busyLabel = mode === "login" ? "Signing In" : "Creating";
   const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : authHeroOptions;
   const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
-  const unlockFormInput = () => {
-    if (!formUnlocked) {
-      setFormUnlocked(true);
-    }
-  };
 
   return (
     <main className="orf-auth-page">
@@ -189,18 +183,16 @@ export function AuthPage() {
           <span />
         </div>
 
-        <form className="orf-auth-form" onSubmit={submit} noValidate autoComplete="off">
+        <form className="orf-auth-form" onSubmit={submit} noValidate>
           {mode === "register" && (
             <AuthPill icon={User}>
               <label className="sr-only" htmlFor="auth-name">Name</label>
               <input
                 id="auth-name"
                 className="orf-auth-input"
-                readOnly={!formUnlocked}
                 autoComplete="name"
                 placeholder="Name"
                 value={name}
-                onFocus={unlockFormInput}
                 onChange={(event) => setName(event.target.value)}
                 required
               />
@@ -213,11 +205,9 @@ export function AuthPage() {
               id="auth-email"
               className="orf-auth-input"
               type="email"
-              readOnly={!formUnlocked}
               autoComplete="email"
               placeholder="Email"
               value={email}
-              onFocus={unlockFormInput}
               onChange={(event) => setEmail(event.target.value)}
               required
             />
@@ -229,11 +219,9 @@ export function AuthPage() {
               id="auth-password"
               className="orf-auth-input"
               type={showPassword ? "text" : "password"}
-              readOnly={!formUnlocked}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               placeholder="Password"
               value={password}
-              onFocus={unlockFormInput}
               onChange={(event) => setPassword(event.target.value)}
               required
             />
