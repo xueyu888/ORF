@@ -170,6 +170,8 @@ const memeCues = [
   { text: "水豚噜噜加班.jpg 💻", translation: "Water Capybara Lulu working overtime" },
 ] as const;
 
+const messageSeparator = "---";
+
 interface WordNote {
   word: string;
   ipa: string;
@@ -376,6 +378,7 @@ function formatAotianSummary(pack: ActivitySummaryPack, tone: ActivityTone, meme
   }.`;
 
   return [
+    messageSeparator,
     chinese,
     formatEnglishNote(pack.english, english),
   ].join("\n");
