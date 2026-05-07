@@ -1,0 +1,12 @@
+{
+  "visual": {
+    "backgrounds": {
+      "login_background": {
+        "defaultBackgroundId": null
+      },
+      "sidebar_background": {
+        "defaultBackgroundId": null
+      }
+    }
+  }
+}
