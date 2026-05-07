@@ -1183,9 +1183,12 @@ button:disabled {
   border: 0;
   background: transparent;
   color: #26384d;
+  font-family: inherit;
   font-size: 18px;
   font-weight: 800;
   line-height: 1;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   outline: none;
   user-select: text;
 }
@@ -1195,9 +1198,20 @@ button:disabled {
   opacity: 1;
 }
 
+.orf-auth-input:autofill,
+.orf-auth-input:autofill:hover,
+.orf-auth-input:autofill:focus,
 .orf-auth-input:-webkit-autofill,
 .orf-auth-input:-webkit-autofill:hover,
 .orf-auth-input:-webkit-autofill:focus {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  line-height: inherit !important;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   caret-color: #26384d;
   -webkit-text-fill-color: #26384d;
   transition: background-color 9999s ease-in-out 0s;
