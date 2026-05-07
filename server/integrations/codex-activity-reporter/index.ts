@@ -170,10 +170,24 @@ const memeCues = [
   "水豚噜噜加班.jpg 💻",
 ] as const;
 
+interface WordNote {
+  word: string;
+  ipa: string;
+  part: string;
+  meaning: string;
+}
+
+interface EnglishNote {
+  sentence: string;
+  words: WordNote[];
+  grammar: string;
+}
+
 interface ActivitySummaryPack {
   summary: string;
   detail: string;
   punchline: string;
+  english: EnglishNote;
 }
 
 interface ActivityTone {
@@ -190,6 +204,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮把 Codex 活动播报机制又调顺了",
         detail: "重点是简明总结问答内容，语气自信直接，不再文言绕路",
         punchline: "此后每条播报都要一锤定音",
+        english: {
+          sentence: "The activity report has been refined.",
+          words: [
+            { word: "activity", ipa: "/ækˈtɪvəti/", part: "n.", meaning: "活动" },
+            { word: "report", ipa: "/rɪˈpɔːrt/", part: "n./v.", meaning: "报告；汇报" },
+            { word: "refine", ipa: "/rɪˈfaɪn/", part: "v.", meaning: "改进；打磨" },
+          ],
+          grammar: "`has been refined` 是现在完成时的被动语态，表示改动已完成并影响现在。",
+        },
       },
     ],
     [
@@ -198,6 +221,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮把项目运行环境配置对齐了",
         detail: "Node、npm 和项目约束各归其位，后续跑测试构建更省心",
         punchline: "环境已服，后续只管推进",
+        english: {
+          sentence: "The runtime configuration has been aligned.",
+          words: [
+            { word: "runtime", ipa: "/ˈrʌntaɪm/", part: "n.", meaning: "运行环境" },
+            { word: "configuration", ipa: "/kənˌfɪɡjəˈreɪʃən/", part: "n.", meaning: "配置" },
+            { word: "align", ipa: "/əˈlaɪn/", part: "v.", meaning: "对齐；校准" },
+          ],
+          grammar: "`has been aligned` 是现在完成时的被动语态，强调配置已被对齐。",
+        },
       },
     ],
     [
@@ -206,6 +238,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮把 GitHub 推送同步链路补稳了",
         detail: "新增提交能继续同步到 ORF 频道，推送路径更清楚",
         punchline: "代码既出，消息自会抵达战场",
+        english: {
+          sentence: "The GitHub push sync has been verified.",
+          words: [
+            { word: "push", ipa: "/pʊʃ/", part: "n./v.", meaning: "推送" },
+            { word: "sync", ipa: "/sɪŋk/", part: "n./v.", meaning: "同步" },
+            { word: "verify", ipa: "/ˈverɪfaɪ/", part: "v.", meaning: "验证" },
+          ],
+          grammar: "`has been verified` 是现在完成时的被动语态，表示验证已经完成。",
+        },
       },
     ],
     [
@@ -214,6 +255,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮完成了项目验证",
         detail: "测试和构建都已检查，当前改动可以继续往前走",
         punchline: "验证已过，前路无需犹疑",
+        english: {
+          sentence: "The project checks have passed.",
+          words: [
+            { word: "project", ipa: "/ˈprɑːdʒekt/", part: "n.", meaning: "项目" },
+            { word: "check", ipa: "/tʃek/", part: "n./v.", meaning: "检查；校验" },
+            { word: "pass", ipa: "/pæs/", part: "v.", meaning: "通过" },
+          ],
+          grammar: "`have passed` 是现在完成时，主语 `checks` 为复数，所以用 `have`。",
+        },
       },
     ],
     [
@@ -222,6 +272,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮整理了项目文档",
         detail: "相关思路和页面说明已经归档，后续实现有据可循",
         punchline: "文档成阵，后续实现照章推进",
+        english: {
+          sentence: "The project documents have been organized.",
+          words: [
+            { word: "document", ipa: "/ˈdɑːkjumənt/", part: "n.", meaning: "文档" },
+            { word: "organize", ipa: "/ˈɔːrɡənaɪz/", part: "v.", meaning: "整理；组织" },
+            { word: "project", ipa: "/ˈprɑːdʒekt/", part: "n.", meaning: "项目" },
+          ],
+          grammar: "`have been organized` 是现在完成时的被动语态，说明文档已被整理。",
+        },
       },
     ],
     [
@@ -230,6 +289,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮调整了后端实现",
         detail: "服务端逻辑按当前需求更新，并保留验证入口",
         punchline: "后端根基已稳，接口自当听令",
+        english: {
+          sentence: "The backend implementation has been updated.",
+          words: [
+            { word: "backend", ipa: "/ˌbækˈend/", part: "n.", meaning: "后端" },
+            { word: "implementation", ipa: "/ˌɪmplɪmenˈteɪʃən/", part: "n.", meaning: "实现" },
+            { word: "update", ipa: "/ʌpˈdeɪt/", part: "v.", meaning: "更新" },
+          ],
+          grammar: "`has been updated` 是现在完成时的被动语态，表示实现已被更新。",
+        },
       },
     ],
     [
@@ -238,6 +306,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮调整了前端体验",
         detail: "页面结构和交互表达更贴近当前产品方向",
         punchline: "界面方向已定，体验只会更强",
+        english: {
+          sentence: "The frontend experience has been improved.",
+          words: [
+            { word: "frontend", ipa: "/ˌfrʌntˈend/", part: "n.", meaning: "前端" },
+            { word: "experience", ipa: "/ɪkˈspɪriəns/", part: "n.", meaning: "体验" },
+            { word: "improve", ipa: "/ɪmˈpruːv/", part: "v.", meaning: "改进" },
+          ],
+          grammar: "`has been improved` 是现在完成时的被动语态，突出体验已被改进。",
+        },
       },
     ],
     [
@@ -246,6 +323,15 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         summary: "这轮完成了一次 ORF 项目协作",
         detail: "对话内容已经收束成可追踪记录，没有带出原始会话",
         punchline: "本轮战果已入账",
+        english: {
+          sentence: "One round of ORF collaboration has been completed.",
+          words: [
+            { word: "round", ipa: "/raʊnd/", part: "n.", meaning: "一轮" },
+            { word: "collaboration", ipa: "/kəˌlæbəˈreɪʃən/", part: "n.", meaning: "协作" },
+            { word: "complete", ipa: "/kəmˈpliːt/", part: "v.", meaning: "完成" },
+          ],
+          grammar: "`has been completed` 是现在完成时的被动语态，表示这一轮协作已经完成。",
+        },
       },
     ],
   ]);
@@ -255,12 +341,33 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
       summary: "这轮完成了一项 ORF 协作",
       detail: "对话已经整理成简明活动记录，后续可以继续接着推进",
       punchline: "此事已定，继续向前",
+      english: {
+        sentence: "This task has been completed.",
+        words: [
+          { word: "task", ipa: "/tæsk/", part: "n.", meaning: "任务" },
+          { word: "complete", ipa: "/kəmˈpliːt/", part: "v.", meaning: "完成" },
+          { word: "this", ipa: "/ðɪs/", part: "det.", meaning: "这个" },
+        ],
+        grammar: "`has been completed` 是现在完成时的被动语态，表示任务已经完成。",
+      },
     }
   );
 }
 
+function formatEnglishNote(note: EnglishNote) {
+  return [
+    `English: ${note.sentence}`,
+    "Words:",
+    ...note.words.map((word) => `- ${word.word} ${word.ipa} ${word.part} ${word.meaning}`),
+    `Grammar: ${note.grammar}`,
+  ].join("\n");
+}
+
 function formatAotianSummary(pack: ActivitySummaryPack, tone: ActivityTone, memeCue?: string) {
-  return `${tone.prefix}${pack.summary}。${pack.detail}。${pack.punchline}${tone.suffix}${memeCue ? ` ${memeCue}` : ""}`;
+  return [
+    `${tone.prefix}${pack.summary}。${pack.detail}。${pack.punchline}${tone.suffix}${memeCue ? ` ${memeCue}` : ""}`,
+    formatEnglishNote(pack.english),
+  ].join("\n");
 }
 
 export function readCodexActivityConfig(env: NodeJS.ProcessEnv = process.env) {
