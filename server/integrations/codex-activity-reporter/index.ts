@@ -201,18 +201,18 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
     [
       "调整了 Codex 活动播报机制",
       {
-        summary: "这轮把 Codex 活动播报压成一句狠话，问答清楚，气势拉满",
-        detail: "重点是简明总结问答内容，语气自信直接，不再文言绕路",
-        punchline: "此后每条播报都要一锤定音",
+        summary: "这轮明确 Codex 活动播报结构，先报任务，再报动作，最后报结果，废话退场",
+        detail: "重点是把每轮完成内容讲成任务、动作、结果，短句直接落地",
+        punchline: "此后每条播报都要说清战果",
         english: {
           translation:
-            "This round compresses the Codex activity report into one decisive line, with the Q&A clear and the tone unstoppable",
+            "This round clarifies the Codex activity report structure by naming the task, action, and result so every post states what changed",
           words: [
-            { word: "activity", ipa: "/ækˈtɪvəti/", part: "n.", meaning: "活动" },
-            { word: "report", ipa: "/rɪˈpɔːrt/", part: "n./v.", meaning: "报告；汇报" },
-            { word: "mechanism", ipa: "/ˈmekənɪzəm/", part: "n.", meaning: "机制" },
+            { word: "structure", ipa: "/ˈstrʌktʃər/", part: "n.", meaning: "结构" },
+            { word: "action", ipa: "/ˈækʃən/", part: "n.", meaning: "动作" },
+            { word: "result", ipa: "/rɪˈzʌlt/", part: "n.", meaning: "结果" },
           ],
-          grammar: "`with the Q&A clear` 是 with 复合结构，补充说明播报状态。",
+          grammar: "`by naming...` 是介词短语，说明明确结构的具体手段。",
         },
       },
     ],

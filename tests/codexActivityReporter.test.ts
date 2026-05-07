@@ -22,19 +22,21 @@ test("summarizes Codex activity without copying conversation text", () => {
 
   assert.doesNotMatch(message, /定论：/);
   assert.match(message, /活动播报/);
-  assert.match(message, /问答清楚/);
-  assert.match(message, /气势拉满/);
+  assert.match(message, /先报任务/);
+  assert.match(message, /再报动作/);
+  assert.match(message, /最后报结果/);
+  assert.match(message, /废话退场/);
   assert.match(message, /结论明确，继续推进/);
-  assert.match(message, /^这轮把 Codex 活动播报压成一句狠话/);
+  assert.match(message, /^这轮明确 Codex 活动播报结构/);
   assert.equal((message.split("\n")[0].match(/。/g) ?? []).length, 1);
   assert.match(
     message,
-    /English: This round compresses the Codex activity report into one decisive line, with the Q&A clear and the tone unstoppable, and the conclusion is clear and the advance continues\./,
+    /English: This round clarifies the Codex activity report structure by naming the task, action, and result so every post states what changed, and the conclusion is clear and the advance continues\./,
   );
   assert.equal((message.split("\n").find((line) => line.startsWith("English:"))?.match(/\./g) ?? []).length, 1);
   assert.match(message, /Words:/);
-  assert.match(message, /activity \/ækˈtɪvəti\/ n\. 活动/);
-  assert.match(message, /Grammar: .*with 复合结构/);
+  assert.match(message, /structure \/ˈstrʌktʃər\/ n\. 结构/);
+  assert.match(message, /Grammar: .*by naming/);
   assert.doesNotMatch(message, new RegExp(rawPrompt));
   assert.doesNotMatch(message, /formatter 的输入当作信号源/);
   assert.doesNotMatch(message, /抽象总结对话|Mattermost/);
