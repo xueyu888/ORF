@@ -4,6 +4,38 @@ export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "task
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
+export type VisualBackgroundScene = "login_background" | "sidebar_background";
+export type VisualBackgroundMode = "fixed" | "switchable";
+export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
+export type VisualBackgroundSwitchOrder = "sequential" | "random";
+export type VisualBackgroundConfig = {
+  mode: VisualBackgroundMode;
+  fixedBackgroundId: string | null;
+  switchTrigger: VisualBackgroundSwitchTrigger;
+  switchOrder: VisualBackgroundSwitchOrder;
+  switchIntervalMinutes: number;
+};
+export type VisualBackgroundImage = {
+  id: string;
+  scene: VisualBackgroundScene;
+  fileName: string;
+  url: string;
+  fileKey: string;
+  mimeType: string;
+  fileSize: number;
+  isDefault: boolean;
+  createdAt?: string;
+};
+export type VisualBackgroundsData = {
+  scene: VisualBackgroundScene;
+  config: VisualBackgroundConfig;
+  list: VisualBackgroundImage[];
+};
+type ApiEnvelope<T> = {
+  code: number;
+  message: string;
+  data: T;
+};
 
 export class ApiError extends Error {
   status: number;
@@ -43,7 +75,7 @@ async function readErrorPayload(response: Response) {
 
 export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  if (init?.body && !headers.has("Content-Type")) {
+  if (init?.body && !headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -63,4 +95,37 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function apiRequest(path: string, init?: RequestInit): Promise<void> {
   await apiJson<unknown>(path, init);
+}
+
+export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
+  const response = await apiJson<ApiEnvelope<VisualBackgroundsData>>(`/api/settings/visual/backgrounds?scene=${encodeURIComponent(scene)}`);
+  return response.data;
+}
+
+export async function uploadVisualBackground(scene: VisualBackgroundScene, file: File) {
+  const formData = new FormData();
+  formData.set("scene", scene);
+  formData.set("file", file);
+
+  const response = await apiJson<ApiEnvelope<VisualBackgroundImage>>("/api/settings/visual/backgrounds", {
+    method: "POST",
+    body: formData,
+  });
+  return response.data;
+}
+
+export async function setDefaultVisualBackground(id: string) {
+  const response = await apiJson<ApiEnvelope<{ id: string; scene: VisualBackgroundScene; config: VisualBackgroundConfig; isDefault: boolean }>>(
+    `/api/settings/visual/backgrounds/${encodeURIComponent(id)}/default`,
+    { method: "PUT" },
+  );
+  return response.data;
+}
+
+export async function saveVisualBackgroundConfig(scene: VisualBackgroundScene, config: VisualBackgroundConfig) {
+  const response = await apiJson<ApiEnvelope<{ scene: VisualBackgroundScene; config: VisualBackgroundConfig }>>("/api/settings/visual/background-config", {
+    method: "PUT",
+    body: JSON.stringify({ scene, config }),
+  });
+  return response.data;
 }

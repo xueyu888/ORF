@@ -154,18 +154,6 @@ export function PermissionsPage() {
 
   return (
     <div className="orf-user-management-page">
-      <header className="orf-user-management-hero">
-        <div className="orf-permission-title-block">
-          <span className="orf-permission-kicker">ADMIN CONTROL</span>
-          <h1>权限管理</h1>
-        </div>
-        <div className="orf-permission-metrics" aria-label="权限概览">
-          <span>
-            <strong>{activePermissionCount}</strong>权限
-          </span>
-        </div>
-      </header>
-
       <section className="orf-role-permissions-shell">
         <div className="orf-role-action-bar">
           <div className="orf-role-tabs" aria-label="选择角色">
@@ -176,15 +164,22 @@ export function PermissionsPage() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            className="orf-role-permission-save-button"
-            disabled={selectedRole === "admin" || !selectedRoleHasDraftChanges || isSavingPermissions}
-            onClick={() => void handleSaveRolePermissions()}
-          >
-            <Save className="h-4 w-4" />
-            {isSavingPermissions ? "保存中" : "保存角色权限"}
-          </button>
+          <div className="orf-user-toolbar-actions">
+            <div className="orf-permission-metrics" aria-label="权限概览">
+              <span>
+                <strong>{activePermissionCount}</strong>权限
+              </span>
+            </div>
+            <button
+              type="button"
+              className="orf-role-permission-save-button"
+              disabled={selectedRole === "admin" || !selectedRoleHasDraftChanges || isSavingPermissions}
+              onClick={() => void handleSaveRolePermissions()}
+            >
+              <Save className="h-4 w-4" />
+              {isSavingPermissions ? "保存中" : "保存角色权限"}
+            </button>
+          </div>
         </div>
 
         <div className="orf-role-permission-table-wrap">

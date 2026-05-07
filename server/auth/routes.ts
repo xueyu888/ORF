@@ -32,6 +32,10 @@ function isAuthServiceUnavailable(error: unknown) {
 
 export async function requireAuthenticatedApi(request: FastifyRequest, reply: FastifyReply) {
   const pathname = new URL(request.url, "http://orf.local").pathname;
+  if (request.method === "GET" && pathname === "/api/settings/visual/backgrounds") {
+    return;
+  }
+
   if (!pathname.startsWith("/api/") || pathname.startsWith("/api/auth/")) {
     return;
   }

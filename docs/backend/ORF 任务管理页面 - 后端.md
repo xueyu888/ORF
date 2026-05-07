@@ -45,23 +45,23 @@
 
 ## 0.1 本地环境命令
 
-本地 `.env` 需要包含：
+本地 `.env` 默认使用团队远程数据库配置。数据库配置从 `orf-team-database-config-20260506.zip` 解压得到，证书文件放在项目根目录 `certs/orf-postgres-root.crt`。
 
 ```text
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/orf
-# REMOTE_DATABASE_URL=postgresql://postgres:postgres@db.example.com:5432/orf
+DATABASE_URL=postgresql://orf_project_user:<password>@182.150.118.137:54321/orf?sslmode=verify-full&sslrootcert=./certs/orf-postgres-root.crt&options=-csearch_path%3Dorf_current%2Cpublic
 SERVER_HOST=0.0.0.0
 SERVER_PORT=8787
-CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
+CORS_ORIGIN=http://localhost:5173
 ```
 
 常用命令：
 
 | 命令 | 作用 |
 | --- | --- |
-| `npm run db:local` | 启动本地 Docker PostgreSQL，监听 `127.0.0.1:54322`。 |
+| `node scripts/verify-db.mjs` | 验证团队远程数据库连接、当前 schema 和 DDL 权限。 |
+| `npm run db:local` | 启动本地 Docker PostgreSQL，监听 `127.0.0.1:54322`；默认团队数据库配置下不是必须依赖。 |
 | `npm run db:generate` | 根据 Drizzle schema 生成 SQL migration。 |
-| `npm run db:migrate` | 将 migration 应用到 `DATABASE_URL`。 |
+| `npm run db:migrate` | 将 migration 应用到 `DATABASE_URL`；迁移记录写入当前 schema 的 `__drizzle_migrations`。 |
 | `npm run db:seed` | 将初始 ORF 数据写入数据库。 |
 | `npm run ory:dev` | 启动 Ory Kratos，数据库连接只读取 `.env`。 |
 | `npm run server:dev` | 以 watch 模式启动后端。 |

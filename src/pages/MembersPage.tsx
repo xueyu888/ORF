@@ -101,21 +101,6 @@ export function MembersPage() {
 
   return (
     <div className="orf-user-management-page">
-      <header className="orf-user-management-hero">
-        <div className="orf-permission-title-block">
-          <span className="orf-permission-kicker">ADMIN CONTROL</span>
-          <h1>成员管理</h1>
-        </div>
-        <div className="orf-permission-metrics" aria-label="成员概览">
-          <span>
-            <strong>{state.users.length}</strong>用户
-          </span>
-          <span>
-            <strong>{roles.length}</strong>角色
-          </span>
-        </div>
-      </header>
-
       <section className="orf-user-management-grid">
         <div className="orf-user-table-shell">
           <div className="orf-user-toolbar">
@@ -136,10 +121,20 @@ export function MembersPage() {
               </label>
             </div>
 
-            <button type="button" className="orf-user-add-button" onClick={openAddDialog}>
-              <Plus className="h-5 w-5" />
-              新增用户
-            </button>
+            <div className="orf-user-toolbar-actions">
+              <div className="orf-permission-metrics" aria-label="成员概览">
+                <span>
+                  <strong>{state.users.length}</strong>用户
+                </span>
+                <span>
+                  <strong>{roles.length}</strong>角色
+                </span>
+              </div>
+              <button type="button" className="orf-user-add-button" onClick={openAddDialog}>
+                <Plus className="h-5 w-5" />
+                新增用户
+              </button>
+            </div>
           </div>
 
           <div className="orf-user-table-wrap">

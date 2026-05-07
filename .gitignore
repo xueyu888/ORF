@@ -10,6 +10,7 @@ coverage/
 .env
 .env.*
 !.env.example
+orf-team-database-config-*.zip
 
 .vscode/
 .VSCodeCounter/
@@ -20,3 +21,8 @@ coverage/
 playwright-report/
 test-results/
 ory/.runtime/
+
+public/settings/backgrounds/*/user/*
+public/settings/user/*
+!public/settings/user/settings.json.example
+frontend-assets/*

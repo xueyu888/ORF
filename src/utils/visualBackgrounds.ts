@@ -1,0 +1,72 @@
+import type { VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsData } from "../state/apiClient";
+
+const rotationStoragePrefix = "orf.visualBackgroundRotation";
+const visualBackgroundChangedEvent = "orf:visual-background-changed";
+
+function rotationStorageKey(scene: VisualBackgroundScene) {
+  return `${rotationStoragePrefix}.${scene}`;
+}
+
+function readStoredIndex(scene: VisualBackgroundScene) {
+  const rawValue = window.localStorage.getItem(rotationStorageKey(scene));
+  const parsed = rawValue ? Number.parseInt(rawValue, 10) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : -1;
+}
+
+function writeStoredIndex(scene: VisualBackgroundScene, index: number) {
+  window.localStorage.setItem(rotationStorageKey(scene), String(index));
+}
+
+function fixedBackground(data: VisualBackgroundsData) {
+  return data.list.find((background) => background.id === data.config.fixedBackgroundId) ?? data.list[0] ?? null;
+}
+
+function nextSwitchableIndex(data: VisualBackgroundsData) {
+  if (data.list.length === 0) {
+    return -1;
+  }
+
+  if (data.config.switchOrder === "random") {
+    return Math.floor(Math.random() * data.list.length);
+  }
+
+  return (readStoredIndex(data.scene) + 1) % data.list.length;
+}
+
+export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgroundImage | null {
+  if (data.config.mode === "fixed") {
+    return fixedBackground(data);
+  }
+
+  const nextIndex = nextSwitchableIndex(data);
+  if (nextIndex < 0) {
+    return null;
+  }
+
+  writeStoredIndex(data.scene, nextIndex);
+  return data.list[nextIndex] ?? null;
+}
+
+export function visualBackgroundIntervalMs(data: VisualBackgroundsData) {
+  if (data.config.mode !== "switchable" || data.config.switchTrigger !== "interval") {
+    return null;
+  }
+
+  return Math.max(1, data.config.switchIntervalMinutes) * 60 * 1000;
+}
+
+export function dispatchVisualBackgroundChanged(scene: VisualBackgroundScene) {
+  window.dispatchEvent(new CustomEvent(visualBackgroundChangedEvent, { detail: { scene } }));
+}
+
+export function subscribeVisualBackgroundChanged(scene: VisualBackgroundScene, listener: () => void) {
+  const handler = (event: Event) => {
+    const detail = event instanceof CustomEvent ? (event.detail as { scene?: VisualBackgroundScene } | undefined) : undefined;
+    if (detail?.scene === scene) {
+      listener();
+    }
+  };
+
+  window.addEventListener(visualBackgroundChangedEvent, handler);
+  return () => window.removeEventListener(visualBackgroundChangedEvent, handler);
+}

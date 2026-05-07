@@ -12,5 +12,9 @@ export default defineConfig({
   schema: "./server/db/schema.ts",
   out: "./drizzle",
   dialect: "postgresql",
+  migrations: {
+    schema: "orf_current",
+    table: "__drizzle_migrations",
+  },
   dbCredentials: createDrizzleCredentials(databaseUrl),
 });

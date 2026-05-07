@@ -17,7 +17,6 @@ services:
 
   kratos-migrate:
     image: oryd/kratos:v26.2.0
-    network_mode: host
     env_file:
       - ./ory/.runtime/ory.env
     volumes:
@@ -31,7 +30,6 @@ services:
     depends_on:
       kratos-migrate:
         condition: service_completed_successfully
-    network_mode: host
     env_file:
       - ./ory/.runtime/ory.env
     environment:
@@ -39,6 +37,9 @@ services:
     volumes:
       - ./ory/kratos:/etc/config/kratos:ro
       - ./ory/.runtime/certs:/etc/ory/certs:ro
+    ports:
+      - "4433:4433"
+      - "4434:4434"
     command: serve -c /etc/config/kratos/kratos.yml --dev
     restart: unless-stopped
 
