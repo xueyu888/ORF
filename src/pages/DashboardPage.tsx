@@ -25,7 +25,7 @@ export function DashboardPage() {
     >
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard title="进行中的目标" value={`${state.objectives.length}`} delta="+1 个目标进入复盘" icon={Target} />
-        <MetricCard title="有风险的结果" value={`${atRiskResults.length}`} delta="较上周减少 2 个" icon={AlertTriangle} />
+        <MetricCard title="有风险的悬赏" value={`${atRiskResults.length}`} delta="较上周减少 2 个" icon={AlertTriangle} />
         <MetricCard title="待处理反馈" value={`${feedbackDue.length + 4}`} delta="3 个高影响信号" icon={MessageSquare} />
         <MetricCard title="工程信心" value={`${confidence}%`} delta="较上次周度更新 +6%" icon={Gauge} />
       </section>
@@ -35,7 +35,7 @@ export function DashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold orf-text-primary">目标健康看板</div>
-              <div className="mt-1 text-xs orf-text-muted">目标健康度、关联结果和最新反馈。</div>
+              <div className="mt-1 text-xs orf-text-muted">目标健康度、关联悬赏和最新反馈。</div>
             </div>
             <Link className="text-sm orf-accent-text orf-hover-text" to="/objectives">查看全部</Link>
           </div>
@@ -82,7 +82,7 @@ export function DashboardPage() {
       <Card className="orf-card-padding">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold orf-text-primary"><CheckSquare className="h-4 w-4 orf-accent-text" /> 我的 ORF 待办</div>
         <div className="grid gap-3 md:grid-cols-4">
-          {["更新 2 个结果", "评审 3 条反馈", "关闭 4 个任务", "准备周度更新"].map((todo) => (
+          {["更新 2 个悬赏", "评审 3 条反馈", "关闭 4 个行动项", "准备周度更新"].map((todo) => (
             <div key={todo} className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-primary">{todo}</div>
           ))}
         </div>

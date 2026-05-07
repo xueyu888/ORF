@@ -62,6 +62,7 @@ interface OrfContextValue {
   moveResult: OrfFlowStore["moveResult"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTaskChecklistItem: OrfFlowStore["moveTaskChecklistItem"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
+  submitLoot: OrfFlowStore["submitLoot"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   deleteObjective: (objectiveId: string) => void;
   deleteResult: (resultId: string) => void;
   deleteTask: (taskId: string) => void;
@@ -382,7 +383,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       resetState: () => commit(store.reset(), "本地缓存已重置"),
       createObjective: (input) => commit(store.createObjective(state, input), "目标已创建"),
       createResult: (input) => {
-        commit(store.createResult(state, input), "结果已创建");
+        commit(store.createResult(state, input), "悬赏已创建");
         syncTaskMutation(() =>
           apiRequest("/api/results", {
             method: "POST",
@@ -392,7 +393,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       createFeedback: (input) => commit(store.createFeedback(state, input), "反馈已捕获"),
       createTask: (input) => {
-        commit(store.createTask(state, input), "任务已创建");
+        commit(store.createTask(state, input), "行动项已创建");
         syncTaskMutation(() =>
           apiRequest("/api/tasks", {
             method: "POST",
@@ -401,7 +402,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       updateTaskStatus: (taskId, status) => {
-        commit(store.updateTaskStatus(state, taskId, status), `任务状态已更新`);
+        commit(store.updateTaskStatus(state, taskId, status), `行动项状态已更新`);
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/status`, {
             method: "PATCH",
@@ -410,7 +411,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       setTaskCompletion: (taskId, done) => {
-        commit(store.setTaskCompletion(state, taskId, done), `任务完成状态已更新`);
+        commit(store.setTaskCompletion(state, taskId, done), `行动项完成状态已更新`);
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
             method: "PATCH",
@@ -419,7 +420,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       updateTaskChecklistItem: (taskId, itemId, done) => {
-        commit(store.updateTaskChecklistItem(state, taskId, itemId, done), `子任务完成状态已更新`);
+        commit(store.updateTaskChecklistItem(state, taskId, itemId, done), `子行动项完成状态已更新`);
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
             method: "PATCH",
@@ -437,7 +438,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       updateObjectiveStage: (objectiveId, stage) => {
-        commit(store.updateObjectiveStage(state, objectiveId, stage), "目标阶段已更新");
+        commit(store.updateObjectiveStage(state, objectiveId, stage), "目标状态已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/stage`, {
             method: "PATCH",
@@ -446,7 +447,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       updateResultTitle: (resultId, title) => {
-        commit(store.updateResultTitle(state, resultId, title), "指标已更新");
+        commit(store.updateResultTitle(state, resultId, title), "悬赏已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
             method: "PATCH",
@@ -455,7 +456,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       updateTaskTitle: (taskId, title) => {
-        commit(store.updateTaskTitle(state, taskId, title), "任务已更新");
+        commit(store.updateTaskTitle(state, taskId, title), "行动项已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, {
             method: "PATCH",
@@ -464,7 +465,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       updateTaskChecklistItemLabel: (taskId, itemId, label) => {
-        commit(store.updateTaskChecklistItemLabel(state, taskId, itemId, label), "子任务已更新");
+        commit(store.updateTaskChecklistItemLabel(state, taskId, itemId, label), "子行动项已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}/label`, {
             method: "PATCH",
@@ -473,7 +474,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       createTaskChecklistItem: (taskId, afterItemId) => {
-        commit(store.createTaskChecklistItem(state, taskId, afterItemId), "子任务已添加");
+        commit(store.createTaskChecklistItem(state, taskId, afterItemId), "子行动项已添加");
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
             method: "POST",
@@ -482,7 +483,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       moveResult: (input) => {
-        commit(store.moveResult(state, input), "指标位置已更新");
+        commit(store.moveResult(state, input), "悬赏位置已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/results/${encodeURIComponent(input.resultId)}/order`, {
             method: "PATCH",
@@ -491,7 +492,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       moveTask: (input) => {
-        commit(store.moveTask(state, input), "任务位置已更新");
+        commit(store.moveTask(state, input), "行动项位置已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(input.taskId)}/move`, {
             method: "PATCH",
@@ -500,7 +501,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       moveTaskChecklistItem: (input) => {
-        commit(store.moveTaskChecklistItem(state, input), "子任务位置已更新");
+        commit(store.moveTaskChecklistItem(state, input), "子行动项位置已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/tasks/${encodeURIComponent(input.fromTaskId)}/checklist/${encodeURIComponent(input.itemId)}/move`, {
             method: "PATCH",
@@ -513,19 +514,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         syncTaskMutation(() => apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, { method: "DELETE" }));
       },
       deleteResult: (resultId) => {
-        commit(store.deleteResult(state, resultId), "指标已删除");
+        commit(store.deleteResult(state, resultId), "悬赏已删除");
         syncTaskMutation(() => apiRequest(`/api/results/${encodeURIComponent(resultId)}`, { method: "DELETE" }));
       },
       deleteTask: (taskId) => {
-        commit(store.deleteTask(state, taskId), "任务已删除");
+        commit(store.deleteTask(state, taskId), "行动项已删除");
         syncTaskMutation(() => apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" }));
       },
       deleteTaskChecklistItem: (taskId, itemId) => {
-        commit(store.deleteTaskChecklistItem(state, taskId, itemId), "子任务已删除");
+        commit(store.deleteTaskChecklistItem(state, taskId, itemId), "子行动项已删除");
         syncTaskMutation(() => apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, { method: "DELETE" }));
       },
       updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
-      updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "结果信心已更新"),
+      updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "悬赏信心已更新"),
+      submitLoot: (input) => commit(store.submitLoot(state, input), "战利品已提交"),
       createUser: async (input) => {
         try {
           const data = await apiJson<UsersResponse>("/api/users", {
@@ -595,7 +597,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       updateCommentMessage: (threadId, messageId, body) => commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新"),
       deleteCommentMessage: (threadId, messageId) => commit(store.deleteCommentMessage(state, threadId, messageId), "评论已删除"),
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
-        commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "结果更新已记录"),
+        commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "悬赏更新已记录"),
     }),
     [authReady, authUserId, authenticateWithPassword, currentUser, isAdmin, isAuthenticated, modal, refreshPermissionRules, refreshUsers, state, syncTaskMutation, theme, toasts],
   );

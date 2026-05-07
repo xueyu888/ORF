@@ -13,8 +13,8 @@ import { feedbackStatusLabel } from "../utils/labels";
 const tabs = ["Overview", "Results", "Tasks", "Feedback", "Decisions", "Evaluation"] as const;
 const tabLabel: Record<(typeof tabs)[number], string> = {
   Overview: "概览",
-  Results: "结果",
-  Tasks: "任务",
+  Results: "悬赏",
+  Tasks: "行动项",
   Feedback: "反馈",
   Decisions: "决策",
   Evaluation: "评估",
@@ -38,7 +38,7 @@ export function ObjectiveDetailPage() {
     <PageScaffold
       title={objective.title}
       subtitle={objective.description}
-      action={<div className="flex gap-2"><Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id })}><Plus className="h-4 w-4" />新建结果</Button><Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button><Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
+      action={<div className="flex gap-2"><Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id })}><Plus className="h-4 w-4" />新建悬赏</Button><Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button><Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
     >
       <Card className="orf-card-padding">
         <div className="flex flex-wrap items-center gap-3">

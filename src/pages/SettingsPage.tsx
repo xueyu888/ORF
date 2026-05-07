@@ -38,7 +38,7 @@ export function SettingsPage() {
       <Card className="orf-card-padding">
         <div className="text-sm font-semibold orf-text-primary">ORF 规则</div>
         <div className="mt-3 grid gap-3">
-          {Object.entries(rules).map(([key, value]) => <label key={key} className="flex items-center justify-between rounded-md orf-surface-muted p-3 text-sm orf-text-secondary"><span>{key === "requireResultForTask" ? "任务必须关联结果" : key === "requireEvidenceForFeedback" ? "反馈必须有证据" : key === "weeklyFeedbackCadence" ? "启用每周反馈节奏" : "自动生成复盘摘要"}</span><input type="checkbox" checked={value} onChange={(event) => setRules((current) => ({ ...current, [key]: event.target.checked }))} /></label>)}
+          {Object.entries(rules).map(([key, value]) => <label key={key} className="flex items-center justify-between rounded-md orf-surface-muted p-3 text-sm orf-text-secondary"><span>{key === "requireResultForTask" ? "行动项必须关联悬赏" : key === "requireEvidenceForFeedback" ? "反馈必须有佐证材料" : key === "weeklyFeedbackCadence" ? "启用每周反馈节奏" : "自动生成复盘摘要"}</span><input type="checkbox" checked={value} onChange={(event) => setRules((current) => ({ ...current, [key]: event.target.checked }))} /></label>)}
         </div>
       </Card>
       <Card className="flex items-center justify-between orf-card-padding"><div><div className="text-sm font-semibold orf-text-primary">本地缓存</div><div className="mt-1 text-sm orf-text-muted">清空本机缓存并重新载入初始 ORF Flow 数据。</div></div><Button variant="danger" onClick={resetState}>重置本地缓存</Button></Card>

@@ -1,15 +1,17 @@
-# ORF 任务管理页面 - 后端
+# ORF 挑战页面 - 后端
 
 ## 接口访问约定
 
 前端数据统一通过同源 `/api` 请求后端接口，例如 `/api/tasks`。
 前端不直接写死后端域名或端口，开发和生产环境由代理或网关转发到实际后端服务。
 
-本文档只记录任务管理页需要的后端数据契约：原始字段、枚举值和对象关系。
+本文档记录挑战页需要的后端数据契约：原始字段、枚举值和对象关系。
 
 前端布局、UI 状态和视觉规则见 [ORF 挑战页面 - 前端.md](../frontend/ORF%20挑战页面%20-%20前端.md)。
 
 目标进度条业务计算规则见 [目标进度条计算规则.md](./目标进度条计算规则.md)。
+
+提交战利品契约见 [ORF 提交战利品 - 后端.md](./ORF%20提交战利品%20-%20后端.md)。
 
 ## 0. 技术选型
 
@@ -72,7 +74,7 @@ CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/health` | 服务健康检查。 |
-| `GET` | `/api/tasks-page` | 返回任务管理页需要的 `objectives`、`results`、`tasks`、`evidence`、`feedback`、`permissionRules`、`automaticCompletions`。 |
+| `GET` | `/api/tasks-page` | 返回挑战页需要的 `objectives`、`results`、`tasks`、`evidence`、`feedback`、`permissionRules`、`automaticCompletions`。 |
 | `GET` | `/api/orf-state` | 返回 ORF 状态快照。 |
 | `POST` | `/api/results` | 创建指标。 |
 | `POST` | `/api/tasks` | 创建任务。 |

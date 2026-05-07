@@ -75,7 +75,7 @@ function NewResultModal({ objectiveId }: { objectiveId?: string }) {
   const [metricName, setMetricName] = useState("幻觉率");
 
   return (
-    <ModalFrame title="新建结果">
+    <ModalFrame title="新建悬赏">
       <form
         className="grid gap-4"
         onSubmit={(event) => {
@@ -85,9 +85,9 @@ function NewResultModal({ objectiveId }: { objectiveId?: string }) {
         }}
       >
         <Field label="所属目标"><select className="orf-input px-3 py-2" value={selectedObjectiveId} onChange={(event) => setSelectedObjectiveId(event.target.value)}>{state.objectives.map((objective) => <option key={objective.id} value={objective.id}>{objective.title}</option>)}</select></Field>
-        <Field label="结果标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
-        <Field label="指标"><input className="orf-input px-3 py-2" value={metricName} onChange={(event) => setMetricName(event.target.value)} /></Field>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存结果</Button></div>
+        <Field label="悬赏标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
+        <Field label="衡量指标"><input className="orf-input px-3 py-2" value={metricName} onChange={(event) => setMetricName(event.target.value)} /></Field>
+        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存悬赏</Button></div>
       </form>
     </ModalFrame>
   );
@@ -131,7 +131,7 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
         }}
       >
         <Field label="现象"><textarea className="orf-input min-h-24 px-3 py-2" value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} /></Field>
-        <Field label="关联结果"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
+        <Field label="关联悬赏"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="原因分类"><select className="orf-input px-3 py-2" value={cause} onChange={(event) => setCause(event.target.value)}>{state.causeCategories.map((item) => <option key={item}>{item}</option>)}</select></Field>
           <Field label="影响"><select className="orf-input px-3 py-2" value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "严重"}</option>)}</select></Field>
@@ -157,12 +157,12 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
   const [linkedResultId, setLinkedResultId] = useState(initialResultId);
   const selectedResult = resultOptions.find((result) => result.id === linkedResultId) ?? (!objectiveId ? state.results.find((result) => result.id === linkedResultId) : undefined);
   const [title, setTitle] = useState(linkedFeedback ? `处理反馈：${linkedFeedback.causeCategories.join(" + ")}` : "为 RAG 检索增加版本感知过滤");
-  const [description, setDescription] = useState(linkedFeedback?.suggestedAdjustment ?? "执行支撑关联结果的下一步动作。");
+  const [description, setDescription] = useState(linkedFeedback?.suggestedAdjustment ?? "完成悬赏需要推进的行动。");
   const [assignee, setAssignee] = useState(defaultAssignee);
   const [priority, setPriority] = useState<Priority>("High");
 
   return (
-    <ModalFrame title="新建任务">
+    <ModalFrame title="新建行动项">
       <form
         className="grid gap-4"
         onSubmit={(event) => {
@@ -183,14 +183,14 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
           closeModal();
         }}
       >
-        <Field label="任务标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
+        <Field label="行动项标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="说明"><textarea className="orf-input min-h-24 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-        <Field label="关联结果"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
+        <Field label="关联悬赏"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="执行人"><input className="orf-input px-3 py-2" value={assignee} onChange={(event) => setAssignee(event.target.value)} /></Field>
           <Field label="优先级"><select className="orf-input px-3 py-2" value={priority} onChange={(event) => setPriority(event.target.value as Priority)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "紧急"}</option>)}</select></Field>
         </div>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存任务</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存行动项</Button></div>
       </form>
     </ModalFrame>
   );
@@ -200,12 +200,12 @@ function ResultUpdateModal({ resultId, feedbackId }: { resultId?: string; feedba
   const { state, proposeResultUpdate, closeModal } = useOrf();
   const result = state.results.find((item) => item.id === resultId) ?? state.results[0];
   const [title, setTitle] = useState(result?.title ?? "");
-  const [reason, setReason] = useState("反馈显示当前结果需要更清晰的可验证边界。");
+  const [reason, setReason] = useState("反馈显示当前悬赏需要更清晰的可验证边界。");
 
   if (!result) return null;
 
   return (
-    <ModalFrame title="提出结果更新">
+    <ModalFrame title="提出悬赏更新">
       <form
         className="grid gap-4"
         onSubmit={(event) => {
@@ -214,8 +214,8 @@ function ResultUpdateModal({ resultId, feedbackId }: { resultId?: string; feedba
           closeModal();
         }}
       >
-        <div className="orf-surface-muted orf-text-secondary rounded-lg border orf-border p-3 text-sm">当前结果：<span className="orf-text-primary">{result.title}</span></div>
-        <Field label="更新后的结果"><textarea className="orf-input min-h-20 px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
+        <div className="orf-surface-muted orf-text-secondary rounded-lg border orf-border p-3 text-sm">当前悬赏：<span className="orf-text-primary">{result.title}</span></div>
+        <Field label="更新后的悬赏"><textarea className="orf-input min-h-20 px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="修改原因"><textarea className="orf-input min-h-24 px-3 py-2" value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">记录更新</Button></div>
       </form>

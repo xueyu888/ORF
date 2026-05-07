@@ -4328,6 +4328,92 @@ body[data-dragging-floating="true"] {
   transform: translateX(1px);
 }
 
+@media (max-width: 1279px) {
+  .orf-objective-header,
+  .orf-result-row,
+  .orf-task-row,
+  .orf-subtask-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .orf-objective-header > :not(.orf-row-main-cell):not(.orf-block-actions),
+  .orf-row-depth-1 > :not(.orf-row-main-cell):not(.orf-block-actions):not(.orf-disclosure-action),
+  .orf-row-depth-2 > :not(.orf-row-main-cell):not(.orf-block-actions):not(.orf-disclosure-action),
+  .orf-row-depth-3 > :not(.orf-row-main-cell):not(.orf-block-actions):not(.orf-disclosure-action) {
+    width: fit-content;
+    max-width: 100%;
+  }
+
+  .orf-objective-header > :not(.orf-row-main-cell):not(.orf-block-actions) {
+    margin-left: 44px;
+  }
+
+  .orf-row-depth-1 > :not(.orf-row-main-cell):not(.orf-block-actions):not(.orf-disclosure-action) {
+    margin-left: 64px;
+    max-width: calc(100% - 64px);
+  }
+
+  .orf-row-depth-2 > :not(.orf-row-main-cell):not(.orf-block-actions):not(.orf-disclosure-action) {
+    margin-left: 88px;
+    max-width: calc(100% - 88px);
+  }
+
+  .orf-row-depth-3 > :not(.orf-row-main-cell):not(.orf-block-actions):not(.orf-disclosure-action) {
+    margin-left: 112px;
+    max-width: calc(100% - 112px);
+  }
+
+  .orf-task-row,
+  .orf-subtask-row {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .orf-empty-slot {
+    display: none;
+  }
+
+  .orf-progress-value {
+    width: min(220px, 100%);
+  }
+}
+
+@media (min-width: 1280px) and (max-width: 1439px) {
+  .orf-objective-header,
+  .orf-result-row,
+  .orf-task-row,
+  .orf-subtask-row {
+    gap: 12px;
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .orf-result-row,
+  .orf-task-row,
+  .orf-subtask-row {
+    margin-right: 8px;
+    margin-left: 8px;
+  }
+}
+
+@media (max-width: 900px) {
+  .orf-block-actions {
+    transform: translateY(-50%) !important;
+  }
+
+  .orf-row-depth-1 .orf-disclosure-action {
+    left: 84px !important;
+  }
+
+  .orf-row-depth-2 .orf-disclosure-action {
+    left: 112px !important;
+  }
+}
+
 .orf-inline-title-editor {
   display: block;
 }

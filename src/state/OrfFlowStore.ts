@@ -6,6 +6,7 @@ type Placement = "before" | "after";
 type MoveResultInput = { resultId: string; objectiveId: string; referenceResultId: string; placement: Placement };
 type MoveTaskInput = { taskId: string; toResultId: string; referenceTaskId?: string; placement?: Placement };
 type MoveSubtaskInput = { itemId: string; fromTaskId: string; toTaskId: string; referenceItemId?: string; placement?: Placement };
+type SubmitLootInput = { bountyId: string; body: string; author?: string };
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
 const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -244,11 +245,11 @@ export class OrfFlowStore {
       id,
       objectiveId: input.objectiveId,
       title: input.title,
-      description: input.description ?? "由 ORF Flow 规划创建的结果。",
+      description: input.description ?? "由 ORF Flow 规划创建的悬赏。",
       metricName: input.metricName,
       metricRequirement: input.metricRequirement ?? `${input.metricName}：写清统计对象和完成标准后进入执行。`,
       statisticalObject: input.statisticalObject ?? "负责人确认的标准样本集和线上反馈样本",
-      completionStandard: input.completionStandard ?? "达到目标值并有证据支撑",
+      completionStandard: input.completionStandard ?? "完成标准清楚，并有战利品说明支撑",
       sampleSet: input.sampleSet ?? "负责人确认的标准样本集",
       measurementScope: input.measurementScope ?? "固定测试环境下统计系统侧链路表现",
       uncertaintyLevel: input.uncertaintyLevel ?? "进阶",
@@ -418,7 +419,7 @@ export class OrfFlowStore {
 
         const item = {
           id: `ck-${Date.now()}`,
-          label: "新子任务",
+          label: "新子行动项",
           done: false,
           updatedAt: now,
         };
@@ -797,6 +798,36 @@ export class OrfFlowStore {
     };
   }
 
+  submitLoot(state: OrfState, input: SubmitLootInput): OrfState {
+    const bounty = state.results.find((result) => result.id === input.bountyId);
+    const body = input.body.trim();
+    if (!bounty || !body) {
+      return state;
+    }
+
+    const now = currentDate();
+    const next = this.addComment(state, {
+      targetType: "result",
+      targetId: bounty.id,
+      targetTitle: bounty.title,
+      body: `战利品提交：${body}`,
+      author: input.author,
+    });
+
+    return {
+      ...next,
+      tasks: next.tasks.map((task) =>
+        task.linkedResultId === bounty.id && task.status !== "Done"
+          ? {
+              ...task,
+              status: "In Review",
+              updatedAt: now,
+            }
+          : task,
+      ),
+    };
+  }
+
   updateCommentThreadStatus(state: OrfState, threadId: string, status: CommentStatus): OrfState {
     const now = currentTime();
 
@@ -860,7 +891,7 @@ export class OrfFlowStore {
       decisions: [
         {
           id: `dec-${Date.now()}`,
-          title: `更新结果：${title}`,
+          title: `更新悬赏：${title}`,
           reason,
           evidence: feedbackId ? `关联反馈 ${feedbackId}` : "手动 ORF 复盘",
           owner: currentUserName(state),

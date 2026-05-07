@@ -16,16 +16,16 @@ const roleLabel: Record<UserRole, string> = {
 
 const stageLabel: Record<OrfStage, string> = {
   goalSetting: "目标设定",
-  resultClaiming: "指标领取",
+  resultClaiming: "悬赏领取",
   orfReestimate: "ORF 重估",
   goalFrozen: "目标冻结",
 };
 
 const resourceLabel: Record<PermissionResource, string> = {
   objective: "目标",
-  result: "指标",
-  task: "任务",
-  subtask: "子任务",
+  result: "悬赏",
+  task: "行动项",
+  subtask: "子行动项",
 };
 
 const actionLabel: Record<PermissionAction, string> = {

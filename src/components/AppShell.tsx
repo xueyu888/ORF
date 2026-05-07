@@ -11,7 +11,7 @@ import { useOrf } from "../state/OrfProvider";
 const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
   objectives: "目标",
-  tasks: "计划",
+  tasks: "挑战",
   "fantasy-ui": "Fantasy UI",
   feedback: "反馈",
   "strategy-map": "策略地图",
@@ -23,6 +23,10 @@ const titleMap: Record<string, string> = {
 };
 
 function breadcrumb(pathname: string) {
+  if (/^\/tasks\/bounties\/[^/]+\/loot\/?$/.test(pathname)) {
+    return "提交战利品";
+  }
+
   const parts = pathname.split("/").filter(Boolean);
   if (parts.length === 0) {
     return "仪表盘";
@@ -60,7 +64,7 @@ export function AppShell() {
               onClick={() => setCommandOpen(true)}
               className="orf-search-trigger h-10 w-full pl-9 pr-3 text-left text-sm transition"
             >
-              搜索目标、结果、任务、反馈...
+              搜索目标、悬赏、行动项、反馈...
             </button>
           </div>
           <Button variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>

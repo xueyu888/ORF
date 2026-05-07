@@ -59,7 +59,7 @@ export function ObjectivesPage() {
       ) : (
         <Card className="overflow-hidden">
           <div className="grid grid-cols-[1.6fr_120px_110px_120px_1fr_90px_90px_120px] gap-3 border-b orf-border px-4 py-3 text-xs font-medium orf-text-muted">
-            <span>目标</span><span>负责人</span><span>状态</span><span>信心</span><span>进度</span><span>结果</span><span>反馈</span><span>最近更新</span>
+            <span>目标</span><span>负责人</span><span>状态</span><span>信心</span><span>进度</span><span>悬赏</span><span>反馈</span><span>最近更新</span>
           </div>
           {objectives.map((objective) => (
             <Link key={objective.id} to={`/objectives/${objective.id}`} className="orf-table-row grid grid-cols-[1.6fr_120px_110px_120px_1fr_90px_90px_120px] items-center gap-3 px-4 py-3 text-sm">

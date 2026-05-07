@@ -7,6 +7,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
 import { FantasyUiPreviewPage } from "./features/fantasy-ui";
+import { LootSubmitPage } from "./pages/LootSubmitPage";
 import { MembersPage } from "./pages/MembersPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
 import { ObjectivesPage } from "./pages/ObjectivesPage";
@@ -15,7 +16,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { ResultDetailPage } from "./pages/ResultDetailPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StrategyMapPage } from "./pages/StrategyMapPage";
-import { TasksPage } from "./pages/TasksPage";
+import { ChallengePlanPage } from "./pages/TasksPage";
 import { useOrf } from "./state/OrfProvider";
 
 export function App() {
@@ -27,7 +28,8 @@ export function App() {
         <Route path="objectives" element={<ObjectivesPage />} />
         <Route path="objectives/:objectiveId" element={<ObjectiveDetailPage />} />
         <Route path="objectives/:objectiveId/results/:resultId" element={<ResultDetailPage />} />
-        <Route path="tasks" element={<TasksPage />} />
+        <Route path="tasks" element={<ChallengePlanPage />} />
+        <Route path="tasks/bounties/:bountyId/loot" element={<LootSubmitPage />} />
         <Route path="fantasy-ui" element={<FantasyUiPreviewPage />} />
         <Route path="feedback" element={<FeedbackInboxPage />} />
         <Route path="feedback/:feedbackId" element={<FeedbackDetailPage />} />
