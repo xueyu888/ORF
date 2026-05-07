@@ -39,10 +39,12 @@ import {
 } from "./repositories/orfRepository";
 import { createTeamUser, deleteTeamUser, getTeamUsers, updateTeamUser } from "./repositories/userRepository";
 import {
+  backgroundSceneConfigSchema,
   backgroundSceneSchema,
   getVisualBackgroundFile,
   listVisualBackgrounds,
   saveUploadedVisualBackground,
+  saveVisualBackgroundConfig,
   setDefaultVisualBackground,
   visualBackgroundError,
 } from "./settings/visualBackgrounds";
@@ -84,6 +86,10 @@ const updateRolePermissionsBodySchema = z.object({
 });
 const visualBackgroundQuerySchema = z.object({
   scene: backgroundSceneSchema,
+});
+const visualBackgroundConfigBodySchema = z.object({
+  scene: backgroundSceneSchema,
+  config: backgroundSceneConfigSchema,
 });
 const visualBackgroundParamsSchema = z.object({
   id: z.string().min(1),
@@ -341,6 +347,20 @@ export async function buildServer() {
         code: 0,
         message: "ok",
         data: await setDefaultVisualBackground(params.id),
+      };
+    } catch (error) {
+      const mapped = visualBackgroundError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.put("/api/settings/visual/background-config", async (request, reply) => {
+    try {
+      const body = visualBackgroundConfigBodySchema.parse(request.body);
+      return {
+        code: 0,
+        message: "ok",
+        data: await saveVisualBackgroundConfig(body.scene, body.config),
       };
     } catch (error) {
       const mapped = visualBackgroundError(error);
