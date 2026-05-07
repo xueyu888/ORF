@@ -164,10 +164,10 @@ function formatMattermostMessage(value: string) {
 }
 
 const memeCues = [
-  "水豚噜噜点头.jpg 🦫",
-  "水豚噜噜端茶.jpg 🍵",
-  "水豚噜噜稳住.jpg 😌",
-  "水豚噜噜加班.jpg 💻",
+  { text: "水豚噜噜点头.jpg 🦫", translation: "Water Capybara Lulu nods.jpg." },
+  { text: "水豚噜噜端茶.jpg 🍵", translation: "Water Capybara Lulu serves tea.jpg." },
+  { text: "水豚噜噜稳住.jpg 😌", translation: "Water Capybara Lulu keeps things steady.jpg." },
+  { text: "水豚噜噜加班.jpg 💻", translation: "Water Capybara Lulu works overtime.jpg." },
 ] as const;
 
 interface WordNote {
@@ -178,7 +178,7 @@ interface WordNote {
 }
 
 interface EnglishNote {
-  sentence: string;
+  translation: string;
   words: WordNote[];
   grammar: string;
 }
@@ -191,8 +191,8 @@ interface ActivitySummaryPack {
 }
 
 interface ActivityTone {
-  prefix: string;
-  suffix: string;
+  closing: string;
+  translation: string;
 }
 
 function activitySummaryPack(summary: string): ActivitySummaryPack {
@@ -205,13 +205,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "重点是简明总结问答内容，语气自信直接，不再文言绕路",
         punchline: "此后每条播报都要一锤定音",
         english: {
-          sentence: "The activity report has been refined.",
+          translation:
+            "This round tuned the Codex activity reporting mechanism back into shape. The focus is to summarize each Q&A clearly and concisely, with a confident and direct tone, without taking the classical-Chinese detour. From now on, every report must land the final word.",
           words: [
             { word: "activity", ipa: "/ækˈtɪvəti/", part: "n.", meaning: "活动" },
             { word: "report", ipa: "/rɪˈpɔːrt/", part: "n./v.", meaning: "报告；汇报" },
-            { word: "refine", ipa: "/rɪˈfaɪn/", part: "v.", meaning: "改进；打磨" },
+            { word: "mechanism", ipa: "/ˈmekənɪzəm/", part: "n.", meaning: "机制" },
           ],
-          grammar: "`has been refined` 是现在完成时的被动语态，表示改动已完成并影响现在。",
+          grammar: "`This round tuned...` 是一般过去时，结构是主语 + 动词过去式 + 宾语。",
         },
       },
     ],
@@ -222,13 +223,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "Node、npm 和项目约束各归其位，后续跑测试构建更省心",
         punchline: "环境已服，后续只管推进",
         english: {
-          sentence: "The runtime configuration has been aligned.",
+          translation:
+            "This round aligned the project runtime configuration. Node, npm, and the project constraints have each returned to their proper place, so running tests and builds later will be easier.",
           words: [
             { word: "runtime", ipa: "/ˈrʌntaɪm/", part: "n.", meaning: "运行环境" },
             { word: "configuration", ipa: "/kənˌfɪɡjəˈreɪʃən/", part: "n.", meaning: "配置" },
             { word: "align", ipa: "/əˈlaɪn/", part: "v.", meaning: "对齐；校准" },
           ],
-          grammar: "`has been aligned` 是现在完成时的被动语态，强调配置已被对齐。",
+          grammar: "`This round aligned...` 是一般过去时，说明本轮已经完成对齐动作。",
         },
       },
     ],
@@ -239,13 +241,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "新增提交能继续同步到 ORF 频道，推送路径更清楚",
         punchline: "代码既出，消息自会抵达战场",
         english: {
-          sentence: "The GitHub push sync has been verified.",
+          translation:
+            "This round made the GitHub push sync pipeline sturdier. New commits can keep syncing to the ORF channel, and the push path is clearer. Once the code goes out, the message will reach the battlefield.",
           words: [
             { word: "push", ipa: "/pʊʃ/", part: "n./v.", meaning: "推送" },
             { word: "sync", ipa: "/sɪŋk/", part: "n./v.", meaning: "同步" },
-            { word: "verify", ipa: "/ˈverɪfaɪ/", part: "v.", meaning: "验证" },
+            { word: "pipeline", ipa: "/ˈpaɪplaɪn/", part: "n.", meaning: "流程；管线" },
           ],
-          grammar: "`has been verified` 是现在完成时的被动语态，表示验证已经完成。",
+          grammar: "`can keep syncing` 使用情态动词 `can` 加动词原形，表示后续仍然可以持续同步。",
         },
       },
     ],
@@ -256,13 +259,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "测试和构建都已检查，当前改动可以继续往前走",
         punchline: "验证已过，前路无需犹疑",
         english: {
-          sentence: "The project checks have passed.",
+          translation:
+            "This round completed project validation. Tests and builds have both been checked, and the current changes can keep moving forward. Validation has passed, so there is no need to hesitate on the road ahead.",
           words: [
             { word: "project", ipa: "/ˈprɑːdʒekt/", part: "n.", meaning: "项目" },
             { word: "check", ipa: "/tʃek/", part: "n./v.", meaning: "检查；校验" },
             { word: "pass", ipa: "/pæs/", part: "v.", meaning: "通过" },
           ],
-          grammar: "`have passed` 是现在完成时，主语 `checks` 为复数，所以用 `have`。",
+          grammar: "`Validation has passed` 是现在完成时，表示验证已经通过并影响当前判断。",
         },
       },
     ],
@@ -273,13 +277,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "相关思路和页面说明已经归档，后续实现有据可循",
         punchline: "文档成阵，后续实现照章推进",
         english: {
-          sentence: "The project documents have been organized.",
+          translation:
+            "This round organized the project documents. The relevant ideas and page notes have been archived, so later implementation has a trail to follow. The documents have formed their battle line, and implementation can advance by the rules.",
           words: [
             { word: "document", ipa: "/ˈdɑːkjumənt/", part: "n.", meaning: "文档" },
             { word: "organize", ipa: "/ˈɔːrɡənaɪz/", part: "v.", meaning: "整理；组织" },
             { word: "project", ipa: "/ˈprɑːdʒekt/", part: "n.", meaning: "项目" },
           ],
-          grammar: "`have been organized` 是现在完成时的被动语态，说明文档已被整理。",
+          grammar: "`have been archived` 是现在完成时的被动语态，说明文档已经被归档。",
         },
       },
     ],
@@ -290,13 +295,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "服务端逻辑按当前需求更新，并保留验证入口",
         punchline: "后端根基已稳，接口自当听令",
         english: {
-          sentence: "The backend implementation has been updated.",
+          translation:
+            "This round adjusted the backend implementation. The server logic was updated for the current requirement, with the validation entry point kept in place. The backend foundation is steady, and the interfaces shall answer the command.",
           words: [
             { word: "backend", ipa: "/ˌbækˈend/", part: "n.", meaning: "后端" },
             { word: "implementation", ipa: "/ˌɪmplɪmenˈteɪʃən/", part: "n.", meaning: "实现" },
             { word: "update", ipa: "/ʌpˈdeɪt/", part: "v.", meaning: "更新" },
           ],
-          grammar: "`has been updated` 是现在完成时的被动语态，表示实现已被更新。",
+          grammar: "`was updated` 是一般过去时的被动语态，说明服务端逻辑已经被更新。",
         },
       },
     ],
@@ -307,13 +313,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "页面结构和交互表达更贴近当前产品方向",
         punchline: "界面方向已定，体验只会更强",
         english: {
-          sentence: "The frontend experience has been improved.",
+          translation:
+            "This round adjusted the frontend experience. The page structure and interaction wording are closer to the current product direction. The interface direction is set, and the experience will only grow stronger.",
           words: [
             { word: "frontend", ipa: "/ˌfrʌntˈend/", part: "n.", meaning: "前端" },
             { word: "experience", ipa: "/ɪkˈspɪriəns/", part: "n.", meaning: "体验" },
             { word: "improve", ipa: "/ɪmˈpruːv/", part: "v.", meaning: "改进" },
           ],
-          grammar: "`has been improved` 是现在完成时的被动语态，突出体验已被改进。",
+          grammar: "`will only grow stronger` 使用一般将来时，表达体验后续会继续增强。",
         },
       },
     ],
@@ -324,13 +331,14 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
         detail: "对话内容已经收束成可追踪记录，没有带出原始会话",
         punchline: "本轮战果已入账",
         english: {
-          sentence: "One round of ORF collaboration has been completed.",
+          translation:
+            "This round completed one ORF project collaboration. The conversation has been gathered into a traceable record without carrying out the original chat. This round's result has been booked.",
           words: [
             { word: "round", ipa: "/raʊnd/", part: "n.", meaning: "一轮" },
             { word: "collaboration", ipa: "/kəˌlæbəˈreɪʃən/", part: "n.", meaning: "协作" },
             { word: "complete", ipa: "/kəmˈpliːt/", part: "v.", meaning: "完成" },
           ],
-          grammar: "`has been completed` 是现在完成时的被动语态，表示这一轮协作已经完成。",
+          grammar: "`has been gathered` 是现在完成时的被动语态，表示对话已经被收束成记录。",
         },
       },
     ],
@@ -342,31 +350,48 @@ function activitySummaryPack(summary: string): ActivitySummaryPack {
       detail: "对话已经整理成简明活动记录，后续可以继续接着推进",
       punchline: "此事已定，继续向前",
       english: {
-        sentence: "This task has been completed.",
+        translation:
+          "This round completed one ORF collaboration. The conversation has been arranged into a concise activity record, and later work can continue from here. This matter is settled; keep moving forward.",
         words: [
-          { word: "task", ipa: "/tæsk/", part: "n.", meaning: "任务" },
-          { word: "complete", ipa: "/kəmˈpliːt/", part: "v.", meaning: "完成" },
-          { word: "this", ipa: "/ðɪs/", part: "det.", meaning: "这个" },
+          { word: "round", ipa: "/raʊnd/", part: "n.", meaning: "一轮" },
+          { word: "collaboration", ipa: "/kəˌlæbəˈreɪʃən/", part: "n.", meaning: "协作" },
+          { word: "concise", ipa: "/kənˈsaɪs/", part: "adj.", meaning: "简明的" },
         ],
-        grammar: "`has been completed` 是现在完成时的被动语态，表示任务已经完成。",
+        grammar: "`can continue` 使用情态动词 `can` 加动词原形，表示后续工作可以继续。",
       },
     }
   );
 }
 
-function formatEnglishNote(note: EnglishNote) {
+function joinChineseSentences(sentences: string[]) {
+  return `${sentences.map((sentence) => trimSentenceEnd(sentence)).filter(Boolean).join("。")}。`;
+}
+
+function joinEnglishSentences(sentences: (string | undefined)[]) {
+  return sentences
+    .map((sentence) => sentence?.trim())
+    .filter((sentence): sentence is string => Boolean(sentence))
+    .join(" ");
+}
+
+function formatEnglishNote(note: EnglishNote, translation: string) {
   return [
-    `English: ${note.sentence}`,
+    `English: ${translation}`,
     "Words:",
     ...note.words.map((word) => `- ${word.word} ${word.ipa} ${word.part} ${word.meaning}`),
     `Grammar: ${note.grammar}`,
   ].join("\n");
 }
 
-function formatAotianSummary(pack: ActivitySummaryPack, tone: ActivityTone, memeCue?: string) {
+function formatAotianSummary(pack: ActivitySummaryPack, tone: ActivityTone, memeCue?: (typeof memeCues)[number]) {
+  const chinese = `${joinChineseSentences([pack.summary, pack.detail, pack.punchline, tone.closing])}${
+    memeCue ? ` ${memeCue.text}` : ""
+  }`;
+  const english = joinEnglishSentences([pack.english.translation, tone.translation, memeCue?.translation]);
+
   return [
-    `${tone.prefix}${pack.summary}。${pack.detail}。${pack.punchline}${tone.suffix}${memeCue ? ` ${memeCue}` : ""}`,
-    formatEnglishNote(pack.english),
+    chinese,
+    formatEnglishNote(pack.english, english),
   ].join("\n");
 }
 
@@ -388,68 +413,68 @@ const codexActivityStyles = [
   {
     id: "poem",
     label: "龙傲天",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "龙傲天版：", suffix: "，这点小事，拿下。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "这点小事，拿下", translation: "This small matter is handled." }),
   },
   {
     id: "ci",
     label: "龙傲天二",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "本座战报：", suffix: "，全局尽在掌中。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "全局尽在本座掌中", translation: "The whole situation is in my hands." }),
   },
   {
     id: "classical",
     label: "龙傲天三",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "胜者记录：", suffix: "，无需多言。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "胜者无需多言", translation: "The victor needs no further words." }),
   },
   {
     id: "humor",
     label: "龙傲天四",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "强者速览：", suffix: "，问题见我，自会退散。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "问题见我，自会退散", translation: "When problems meet me, they step aside on their own." }),
   },
   {
     id: "meme",
     label: "表情包",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "龙傲天表情包版：", suffix: "，稳如本座。" }, memeCues[0]),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "稳如本座", translation: "It is as steady as I am." }, memeCues[0]),
   },
   {
     id: "serious",
     label: "龙傲天五",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "定论：", suffix: "，结论明确，继续推进。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "结论明确，继续推进", translation: "The conclusion is clear; keep pushing forward." }),
   },
   {
     id: "cold-joke",
     label: "龙傲天六",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "冷面强者曰：", suffix: "，不服也得服。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "不服也得服", translation: "Even if it refuses, it still has to yield." }),
   },
   {
     id: "wuxia",
     label: "龙傲天七",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "江湖已知：", suffix: "，此局我定。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "此局我定", translation: "I decide the outcome of this round." }),
   },
   {
     id: "sci-fi",
     label: "龙傲天八",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "未来回执：", suffix: "，时间线已向我方收束。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "时间线已向我方收束", translation: "The timeline has already converged in our favor." }),
   },
   {
     id: "radio",
     label: "龙傲天九",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "全频道通告：", suffix: "，众人只需看结果。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "众人只需看结果", translation: "Everyone only needs to look at the result." }),
   },
   {
     id: "news",
     label: "龙傲天十",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "捷报：", suffix: "，胜势已成。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "胜势已成", translation: "The winning momentum is already formed." }),
   },
   {
     id: "diary",
     label: "龙傲天十一",
-    format: ({ pack }) => formatAotianSummary(pack, { prefix: "强者小记：", suffix: "，平平无奇地赢了。" }),
+    format: ({ pack }) => formatAotianSummary(pack, { closing: "平平无奇地赢了", translation: "I won in an utterly ordinary way." }),
   },
   {
     id: "stage",
     label: "龙傲天",
     format: ({ pack }) =>
-      formatAotianSummary(pack, { prefix: "龙傲天终局版：", suffix: "，区区小事，已被本座拿下。" }, memeCues[2]),
+      formatAotianSummary(pack, { closing: "区区小事，已被本座拿下", translation: "This trivial matter has already been taken down by me." }, memeCues[2]),
   },
 ] satisfies CodexActivityStyle[];
 
