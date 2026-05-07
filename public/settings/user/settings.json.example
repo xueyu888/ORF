@@ -2,10 +2,18 @@
   "visual": {
     "backgrounds": {
       "login_background": {
-        "defaultBackgroundId": null
+        "mode": "fixed",
+        "fixedBackgroundId": null,
+        "switchTrigger": "on_open",
+        "switchOrder": "random",
+        "switchIntervalMinutes": 10
       },
       "sidebar_background": {
-        "defaultBackgroundId": null
+        "mode": "fixed",
+        "fixedBackgroundId": null,
+        "switchTrigger": "on_open",
+        "switchOrder": "random",
+        "switchIntervalMinutes": 10
       }
     }
   }
