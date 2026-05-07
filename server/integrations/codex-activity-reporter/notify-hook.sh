@@ -11,6 +11,10 @@ detail=${CODEX_ACTIVITY_DETAIL:-${CODEX_NOTIFY_EXTRA:-}}
 include_details=${CODEX_ACTIVITY_INCLUDE_DETAILS:-true}
 log_file="$orf_root/.artifacts/codex-activity-reporter.log"
 
+now() {
+  date '+%Y-%m-%d %H:%M:%S %z'
+}
+
 if [[ ! -d "$orf_root" ]]; then
   exit 0
 fi
@@ -50,6 +54,13 @@ if [[ "$include_details" == "true" && -n "$context" ]]; then
 fi
 
 (
+  printf '[%s] report_start summary=%s scope=%s cwd=%s repo=%s branch=%s\n' \
+    "$(now)" \
+    "${summary:-<empty>}" \
+    "${scope:-<empty>}" \
+    "${cwd:-<empty>}" \
+    "${repo:-<empty>}" \
+    "${branch:-<empty>}"
   cd "$orf_root"
   if [[ -s "$HOME/.nvm/nvm.sh" ]]; then
     # shellcheck source=/dev/null
@@ -57,4 +68,7 @@ fi
     nvm use default --silent >/dev/null 2>&1 || true
   fi
   npm "${args[@]}"
+  rc=$?
+  printf '[%s] report_end status=%s\n' "$(now)" "$rc"
+  exit "$rc"
 ) >>"$log_file" 2>&1 || true
