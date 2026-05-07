@@ -5,6 +5,7 @@ import { z, ZodError } from "zod";
 import { getAuthenticatedOrfUser } from "./auth/ory";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import { env } from "./env";
+import { registerOptionalIntegrations } from "./integrations";
 import {
   getPermissionRulesForTeam,
   getPrimaryTeamIdForUser,
@@ -28,6 +29,7 @@ import {
   moveTask,
   setTaskCompletion,
   updateChecklistItemLabel,
+  updateObjectiveStage,
   updateObjectiveTitle,
   updateResultTitle,
   updateChecklistItem,
@@ -54,6 +56,7 @@ const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const titleBodySchema = z.object({ title: z.string().trim().min(1) });
 const labelBodySchema = z.object({ label: z.string().trim().min(1) });
 const completionBodySchema = z.object({ done: z.boolean() });
+const objectiveStageBodySchema = z.object({ stage: permissionStageSchema });
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
@@ -240,6 +243,7 @@ export async function buildServer() {
     service: "orf-api",
   }));
 
+  registerOptionalIntegrations(app);
   registerAuthRoutes(app);
 
   app.get("/api/tasks-page", async () => getTaskManagementData());
@@ -365,6 +369,22 @@ export async function buildServer() {
     }
 
     const updated = await updateObjectiveTitle(params.objectiveId, body.title);
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Objective not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.patch("/api/objectives/:objectiveId/stage", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = objectiveStageBodySchema.parse(request.body);
+    if (!(await requireWritePermission(request, reply, "edit", "objective"))) {
+      return reply;
+    }
+
+    const updated = await updateObjectiveStage(params.objectiveId, body.stage);
 
     if (!updated) {
       return reply.code(404).send({ error: "Objective not found" });

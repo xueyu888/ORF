@@ -1,4 +1,5 @@
 import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import type { OrfStage } from "../../src/types/orf";
 
 export const workStatusEnum = pgEnum("work_status", ["On Track", "At Risk", "Blocked", "Draft"]);
 export const taskStatusEnum = pgEnum("task_status", ["Backlog", "Todo", "In Progress", "In Review", "Done"]);
@@ -67,6 +68,7 @@ export const objectives = pgTable("objectives", {
   whyItMatters: text("why_it_matters").notNull(),
   owner: text("owner").notNull(),
   cycle: text("cycle").notNull(),
+  stage: text("stage").$type<OrfStage>().notNull().default("orfReestimate"),
   status: workStatusEnum("status").notNull(),
   confidence: integer("confidence").notNull(),
   progress: integer("progress").notNull(),

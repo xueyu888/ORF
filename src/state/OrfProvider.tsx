@@ -54,6 +54,7 @@ interface OrfContextValue {
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
   updateObjectiveTitle: (objectiveId: string, title: string) => void;
+  updateObjectiveStage: (objectiveId: string, stage: OrfState["objectives"][number]["stage"]) => void;
   updateResultTitle: (resultId: string, title: string) => void;
   updateTaskTitle: (taskId: string, title: string) => void;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => void;
@@ -104,6 +105,7 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     evidence: data.evidence,
     feedback: data.feedback,
     permissionRules: data.permissionRules,
+    automaticCompletions: data.automaticCompletions,
   };
 }
 
@@ -431,6 +433,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
             method: "PATCH",
             body: JSON.stringify({ title }),
+          }),
+        );
+      },
+      updateObjectiveStage: (objectiveId, stage) => {
+        commit(store.updateObjectiveStage(state, objectiveId, stage), "目标阶段已更新");
+        syncTaskMutation(() =>
+          apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/stage`, {
+            method: "PATCH",
+            body: JSON.stringify({ stage }),
           }),
         );
       },

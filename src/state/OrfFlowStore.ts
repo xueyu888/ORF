@@ -171,9 +171,14 @@ const normalizeState = (state: OrfState): OrfState => ({
   ...state,
   users: state.users ?? cloneValue(initialOrfState.users),
   currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
+  automaticCompletions: state.automaticCompletions ?? {},
   comments: (state.comments ?? []).map((thread) => ({
     ...thread,
     messages: thread.messages ?? [],
+  })),
+  objectives: state.objectives.map((objective) => ({
+    ...objective,
+    stage: objective.stage ?? "orfReestimate",
   })),
   tasks: state.tasks.map((task) => ({
     ...task,
@@ -217,6 +222,7 @@ export class OrfFlowStore {
       whyItMatters: input.whyItMatters,
       owner: input.owner || currentUserName(state),
       cycle: input.cycle,
+      stage: "orfReestimate" as const,
       status: "Draft" as const,
       confidence: 50,
       progress: 0,
@@ -444,6 +450,14 @@ export class OrfFlowStore {
       comments: state.comments.map((thread) =>
         thread.targetType === "objective" && thread.targetId === objectiveId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
       ),
+    };
+  }
+
+  updateObjectiveStage(state: OrfState, objectiveId: string, stage: OrfState["objectives"][number]["stage"]): OrfState {
+    const now = currentDate();
+    return {
+      ...state,
+      objectives: state.objectives.map((objective) => (objective.id === objectiveId ? { ...objective, stage, updatedAt: now } : objective)),
     };
   }
 

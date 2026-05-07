@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateAutomaticCompletion, shouldCallAutomaticCompletion } from "../src/utils/automaticCompletion";
-import type { AutomaticCompletionSnapshot } from "../src/utils/automaticCompletion";
+import { calculateAutomaticCompletion, shouldCallAutomaticCompletion } from "../server/utils/automaticCompletion";
+import type { AutomaticCompletionSnapshot } from "../server/utils/automaticCompletion";
 import type { Objective, Result, Task } from "../src/types/orf";
 
 type Bit = 0 | 1;
@@ -278,6 +278,7 @@ function makeObjective(id: string, resultIds: string[]): Objective {
     whyItMatters: id,
     owner: "User",
     cycle: "Test",
+    stage: "goalFrozen",
     status: "On Track",
     confidence: 100,
     progress: 0,
