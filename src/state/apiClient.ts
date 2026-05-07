@@ -5,6 +5,16 @@ export type AuthSession = { authenticated: false; user: null } | { authenticated
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
 export type VisualBackgroundScene = "login_background" | "sidebar_background";
+export type VisualBackgroundMode = "fixed" | "switchable";
+export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
+export type VisualBackgroundSwitchOrder = "sequential" | "random";
+export type VisualBackgroundConfig = {
+  mode: VisualBackgroundMode;
+  fixedBackgroundId: string | null;
+  switchTrigger: VisualBackgroundSwitchTrigger;
+  switchOrder: VisualBackgroundSwitchOrder;
+  switchIntervalMinutes: number;
+};
 export type VisualBackgroundImage = {
   id: string;
   scene: VisualBackgroundScene;
@@ -18,7 +28,7 @@ export type VisualBackgroundImage = {
 };
 export type VisualBackgroundsData = {
   scene: VisualBackgroundScene;
-  defaultBackgroundId: string | null;
+  config: VisualBackgroundConfig;
   list: VisualBackgroundImage[];
 };
 type ApiEnvelope<T> = {
@@ -105,9 +115,17 @@ export async function uploadVisualBackground(scene: VisualBackgroundScene, file:
 }
 
 export async function setDefaultVisualBackground(id: string) {
-  const response = await apiJson<ApiEnvelope<{ id: string; scene: VisualBackgroundScene; isDefault: boolean }>>(
+  const response = await apiJson<ApiEnvelope<{ id: string; scene: VisualBackgroundScene; config: VisualBackgroundConfig; isDefault: boolean }>>(
     `/api/settings/visual/backgrounds/${encodeURIComponent(id)}/default`,
     { method: "PUT" },
   );
+  return response.data;
+}
+
+export async function saveVisualBackgroundConfig(scene: VisualBackgroundScene, config: VisualBackgroundConfig) {
+  const response = await apiJson<ApiEnvelope<{ scene: VisualBackgroundScene; config: VisualBackgroundConfig }>>("/api/settings/visual/background-config", {
+    method: "PUT",
+    body: JSON.stringify({ scene, config }),
+  });
   return response.data;
 }

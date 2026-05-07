@@ -6,6 +6,7 @@ import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { navItems } from "../config/navigation";
 import { getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
+import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
@@ -29,18 +30,41 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
 
   useEffect(() => {
     let cancelled = false;
-    void getVisualBackgrounds("sidebar_background")
-      .then((data) => {
-        if (cancelled) {
-          return;
-        }
-        const defaultBackground = data.list.find((background) => background.id === data.defaultBackgroundId);
-        setConfiguredSidebarBackgroundUrl(defaultBackground?.url ?? null);
-      })
-      .catch(() => undefined);
+    let intervalId: number | null = null;
+
+    const clearRotationTimer = () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const loadSidebarBackground = () => {
+      clearRotationTimer();
+      void getVisualBackgrounds("sidebar_background")
+        .then((data) => {
+          if (cancelled) {
+            return;
+          }
+          setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? null);
+
+          const intervalMs = visualBackgroundIntervalMs(data);
+          if (intervalMs) {
+            intervalId = window.setInterval(() => {
+              setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? null);
+            }, intervalMs);
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    loadSidebarBackground();
+    const unsubscribe = subscribeVisualBackgroundChanged("sidebar_background", loadSidebarBackground);
 
     return () => {
       cancelled = true;
+      unsubscribe();
+      clearRotationTimer();
     };
   }, []);
 

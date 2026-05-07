@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
+import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 
 type AuthMode = "login" | "register";
 
@@ -59,25 +60,48 @@ export function AuthPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId: number | null = null;
 
-    void getVisualBackgrounds("login_background")
-      .then((data) => {
-        if (cancelled || data.list.length === 0) {
-          return;
-        }
+    const clearRotationTimer = () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
 
-        const options = data.list.map((background) => ({
-          id: background.id,
-          label: background.fileName,
-          src: background.url,
-        }));
-        setConfiguredHeroOptions(options);
-        setSelectedHeroId(data.defaultBackgroundId ?? options[0]?.id ?? "");
-      })
-      .catch(() => undefined);
+    const loadLoginBackground = () => {
+      clearRotationTimer();
+      void getVisualBackgrounds("login_background")
+        .then((data) => {
+          if (cancelled || data.list.length === 0) {
+            return;
+          }
+
+          const options = data.list.map((background) => ({
+            id: background.id,
+            label: background.fileName,
+            src: background.url,
+          }));
+          setConfiguredHeroOptions(options);
+          setSelectedHeroId(pickVisualBackground(data)?.id ?? options[0]?.id ?? "");
+
+          const intervalMs = visualBackgroundIntervalMs(data);
+          if (intervalMs) {
+            intervalId = window.setInterval(() => {
+              setSelectedHeroId(pickVisualBackground(data)?.id ?? options[0]?.id ?? "");
+            }, intervalMs);
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    loadLoginBackground();
+    const unsubscribe = subscribeVisualBackgroundChanged("login_background", loadLoginBackground);
 
     return () => {
       cancelled = true;
+      unsubscribe();
+      clearRotationTimer();
     };
   }, []);
 
