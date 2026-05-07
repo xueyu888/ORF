@@ -112,7 +112,7 @@ function ObjectivePanel({
     <section ref={setObjectiveElement} className={clsx("orf-objective-panel relative", isFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable")}>
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
       <div
-        className={clsx("orf-objective-header group relative grid min-h-[58px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(0,1fr)_82px_128px_104px_126px_112px]", rowActive && "orf-row-active")}
+        className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
         onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
         onPointerEnter={() => handlers.onActiveActionChange(actionId)}
         onPointerLeave={() => {
@@ -144,10 +144,11 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
+        <EmptySlot />
+        <AvatarStack names={group.challengers} />
         <StatusChip tone={objectiveStatusTone(group.objective, automaticCompletion)}>{objectiveStatusLabel(group.objective, automaticCompletion)}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
-        <AvatarStack names={group.challengers} />
-        <TimeValue icon={CalendarDays} value={group.deadline || "未设置"} />
+        <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
       </div>
 
@@ -193,18 +194,16 @@ function BountyRow({
     { type: "bounty", bountyId: bounty.result.id },
     { type: "bountyActions", bountyId: bounty.result.id },
   ]);
-  const rowGrid = scope === "mine" ? "xl:grid-cols-[minmax(0,1fr)_92px_86px_118px_118px_108px_112px]" : "xl:grid-cols-[minmax(0,1fr)_92px_86px_118px_118px_108px]";
-
   return (
     <div className="relative">
       <div
         className={clsx(
-          "orf-result-row orf-row-depth-1 group relative grid min-h-[56px] items-center gap-4 px-5 text-sm",
-          rowGrid,
+          "orf-result-row orf-challenge-row orf-challenge-row-bounty orf-row-depth-1 group relative grid min-h-[56px] items-center px-5 text-sm",
           rowActive && "orf-row-active",
           handlers.dragDrop.dragItem?.type === "bounty" && handlers.dragDrop.dragItem.id === bounty.result.id && "orf-row-dragging",
           dropClass,
         )}
+        data-scope={scope}
         onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
         onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
         onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, bountyDropTargetForEvent(handlers.dragDrop.dragItem, bounty.result, event))}
@@ -264,16 +263,14 @@ function BountyRow({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyCell>
-        <div className="flex flex-wrap gap-1"><Badge>{bounty.kind}</Badge><Badge>{bounty.difficulty}</Badge></div>
+        <div className="orf-row-kind-cell"><Badge>{bounty.kind}</Badge><Badge>{bounty.difficulty}</Badge></div>
+        <AvatarStack names={bounty.result.owner ? [bounty.result.owner] : []} />
         <StatusChip tone={bounty.status}>{bountyStatusLabel[bounty.status]}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(bounty.deadline, now)} />
+        <DateStack primary={bounty.deadline || "未设置"} secondary={bounty.updatedAt || "未设置"} />
         <ProgressValue value={bounty.progress} />
-        <div className="grid gap-1">
-          <TimeValue icon={CalendarDays} value={bounty.deadline || "未设置"} />
-          <TimeValue icon={Clock3} subtle value={bounty.updatedAt || "未设置"} />
-        </div>
         {scope === "mine" ? (
-          <Link className="orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/tasks/bounties/${bounty.result.id}/loot`}>
+          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/tasks/bounties/${bounty.result.id}/loot`}>
             提交战利品
           </Link>
         ) : null}
@@ -330,7 +327,7 @@ function ActionRow({
     <div className="relative">
       <div
         className={clsx(
-          "orf-task-row orf-row-depth-2 group relative grid min-h-[42px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(0,1fr)_170px_120px_150px]",
+          "orf-task-row orf-challenge-row orf-challenge-row-action orf-row-depth-2 group relative grid min-h-[42px] items-center px-5 text-sm",
           rowActive && "orf-row-active",
           handlers.dragDrop.dragItem?.type === "action" && handlers.dragDrop.dragItem.id === action.id && "orf-row-dragging",
           dropClass,
@@ -395,8 +392,11 @@ function ActionRow({
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "task", action.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyCell>
         <EmptySlot />
-        <StatusChip tone={status === "done" ? "done" : status === "active" ? "active" : "open"}>{status === "done" ? "已完成" : status === "active" ? "进行中" : "待行动"}</StatusChip>
+        <EmptySlot />
+        <EmptySlot />
+        <EmptySlot />
         <TimeValue icon={Clock3} value={action.updatedAt || "未设置"} />
+        <EmptySlot />
       </div>
 
       {open &&
@@ -444,7 +444,7 @@ function SubActionRow({
   return (
     <div
       className={clsx(
-        "orf-subtask-row orf-row-depth-3 group relative grid min-h-[36px] items-center gap-4 px-5 text-sm xl:grid-cols-[minmax(0,1fr)_170px_120px_150px]",
+        "orf-subtask-row orf-challenge-row orf-challenge-row-action orf-row-depth-3 group relative grid min-h-[36px] items-center px-5 text-sm",
         rowActive && "orf-row-active",
         handlers.dragDrop.dragItem?.type === "subAction" && handlers.dragDrop.dragItem.id === item.id && "orf-row-dragging",
         dropClass,
@@ -496,8 +496,11 @@ function SubActionRow({
         <CommentCountBadge count={commentCountFor(handlers.commentCounts, "subtask", item.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
       </HierarchyCell>
       <EmptySlot />
-      <StatusChip tone={status === "done" ? "done" : status === "active" ? "active" : "open"}>{status === "done" ? "已完成" : status === "active" ? "进行中" : "待行动"}</StatusChip>
+      <EmptySlot />
+      <EmptySlot />
+      <EmptySlot />
       <TimeValue icon={Clock3} value={item.updatedAt || action.updatedAt || "未设置"} />
+      <EmptySlot />
     </div>
   );
 }
@@ -545,29 +548,38 @@ function ProgressValue({ value }: { value: number }) {
   const bounded = Math.max(0, Math.min(100, Math.round(value)));
 
   return (
-    <div className="orf-progress-value orf-progress-value-neutral flex items-center gap-3">
-      <div className="orf-progress-track h-1.5 w-20 overflow-hidden rounded-full bg-[#dfe4eb]">
+    <div className="orf-progress-value orf-progress-value-neutral flex items-center gap-2">
+      <div className="orf-progress-track h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe4eb]">
         <div className="h-full rounded-full bg-[#7f8da3]" style={{ width: `${bounded}%` }} />
       </div>
-      <span className="w-10 text-right text-sm font-bold text-[#344054]">{bounded}%</span>
+      <span className="w-9 text-right text-sm font-bold text-[#344054]">{bounded}%</span>
+    </div>
+  );
+}
+
+function DateStack({ primary, secondary }: { primary: string; secondary?: string }) {
+  return (
+    <div className="orf-date-stack">
+      <TimeValue icon={CalendarDays} value={primary} />
+      {secondary && <TimeValue icon={Clock3} subtle value={secondary} />}
     </div>
   );
 }
 
 function TimeValue({ icon: Icon, subtle, value }: { icon: LucideIcon; subtle?: boolean; value: string }) {
   return (
-    <span className={clsx("inline-flex h-7 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "text-[#667085]" : "text-[#344054]")} title={value}>
+    <span className={clsx("orf-time-value inline-flex h-7 min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "text-[#667085]" : "text-[#344054]")} title={value}>
       <Icon className={clsx("h-4 w-4", subtle ? "text-[#98a2b3]" : "text-[#667085]")} />
-      {value}
+      <span className="orf-time-value-text">{value}</span>
     </span>
   );
 }
 
 function AvatarStack({ names }: { names: string[] }) {
-  if (names.length === 0) return <span className="text-sm font-medium text-[#98a2b3]">未分配</span>;
+  if (names.length === 0) return <span className="orf-avatar-stack text-sm font-medium text-[#98a2b3]">未分配</span>;
 
   return (
-    <div className="flex items-center">
+    <div className="orf-avatar-stack flex items-center">
       {names.slice(0, 4).map((name, index) => (
         <div
           key={name}
@@ -588,5 +600,5 @@ function Badge({ children }: { children: ReactNode }) {
 }
 
 function EmptySlot() {
-  return <span className="orf-empty-slot inline-flex h-7" aria-hidden="true" />;
+  return <span className="orf-empty-slot" aria-hidden="true" />;
 }

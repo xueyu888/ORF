@@ -11,9 +11,9 @@ export function ChallengeToolbar({
   scope: ChallengeScope;
 }) {
   return (
-    <div className="orf-task-toolbar flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="orf-task-toolbar">
       <ScopeTabs isAdmin={isAdmin} onChange={onScopeChange} value={scope} />
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="orf-task-toolbar-actions">
         <button className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
           <CalendarDays className="h-4 w-4 text-[#667085]" />
           全部周期

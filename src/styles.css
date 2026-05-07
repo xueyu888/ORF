@@ -4319,6 +4319,10 @@ body[data-dragging-floating="true"] {
   position: sticky;
   top: 92px;
   z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin: -4px -10px 0;
   padding: 8px 10px;
   border-radius: var(--orf-radius-card);
@@ -4326,6 +4330,14 @@ body[data-dragging-floating="true"] {
     linear-gradient(90deg, rgba(255, 248, 232, 0.9) 0%, rgba(235, 249, 255, 0.82) 100%);
   box-shadow: 0 14px 34px rgba(98, 77, 48, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(18px);
+}
+
+.orf-task-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .orf-plan-mode-control,
@@ -4341,9 +4353,16 @@ body[data-dragging-floating="true"] {
   box-shadow: inset 3px 0 0 rgba(82, 215, 246, 0.52);
 }
 
+.orf-team-dashboard {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .orf-dashboard-metric {
   position: relative;
   overflow: hidden;
+  min-height: 112px;
   border: var(--orf-border-width) solid rgba(183, 139, 72, 0.32);
   border-radius: 0;
   background:
@@ -4353,6 +4372,7 @@ body[data-dragging-floating="true"] {
     var(--orf-bg-card);
   clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
   box-shadow: 0 18px 42px rgba(98, 77, 48, 0.13), inset 0 0 0 1px rgba(255, 255, 255, 0.72), inset 0 -1px 0 rgba(183, 139, 72, 0.22);
+  padding: 14px 18px;
   backdrop-filter: blur(14px);
   transition:
     box-shadow 160ms ease,
@@ -4548,11 +4568,105 @@ body[data-dragging-floating="true"] {
 
 .orf-objective-header {
   min-height: var(--orf-row-height);
+  margin: 2px 10px 0;
   border-radius: calc(var(--orf-radius-card) - 1px) calc(var(--orf-radius-card) - 1px) 0 0;
   box-shadow: none;
   transition:
     background 140ms ease,
     box-shadow 140ms ease;
+}
+
+.orf-challenge-row {
+  grid-template-columns:
+    minmax(300px, 1fr)
+    96px
+    112px
+    104px
+    140px
+    132px
+    112px;
+  column-gap: 12px;
+  row-gap: 8px;
+}
+
+.orf-challenge-row-bounty[data-scope="mine"] {
+  grid-template-columns:
+    minmax(280px, 1fr)
+    96px
+    112px
+    104px
+    140px
+    132px
+    112px
+    122px;
+}
+
+.orf-challenge-row > .orf-row-main-cell {
+  min-width: 0;
+}
+
+.orf-challenge-row > :not(.orf-row-main-cell):not(.orf-block-actions):not(.orf-disclosure-action) {
+  min-width: 0;
+  justify-self: start;
+}
+
+.orf-row-kind-cell,
+.orf-avatar-stack,
+.orf-status-chip,
+.orf-time-value,
+.orf-date-stack {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.orf-row-kind-cell {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-self: start !important;
+  gap: 5px;
+}
+
+.orf-avatar-stack,
+.orf-status-chip,
+.orf-time-value,
+.orf-date-stack {
+  justify-self: start !important;
+}
+
+.orf-progress-value {
+  justify-self: start !important;
+  width: 112px;
+}
+
+.orf-row-loot-action {
+  justify-self: start !important;
+  width: 112px;
+}
+
+.orf-date-stack {
+  display: grid;
+  gap: 2px;
+}
+
+.orf-time-value {
+  max-width: 100%;
+}
+
+.orf-time-value svg {
+  flex: 0 0 auto;
+}
+
+.orf-time-value-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orf-empty-slot {
+  display: inline-flex;
+  height: 28px;
+  width: 100%;
 }
 
 .orf-objective-panel-editable .orf-objective-header {
@@ -4804,6 +4918,20 @@ body[data-dragging-floating="true"] {
 }
 
 @media (max-width: 1279px) {
+  .orf-task-toolbar {
+    position: static;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .orf-task-toolbar-actions {
+    justify-content: flex-start;
+  }
+
+  .orf-team-dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .orf-objective-header,
   .orf-result-row,
   .orf-task-row,
@@ -4852,17 +4980,61 @@ body[data-dragging-floating="true"] {
     display: none;
   }
 
+  .orf-row-kind-cell,
+  .orf-avatar-stack,
+  .orf-status-chip,
+  .orf-time-value,
+  .orf-date-stack,
+  .orf-progress-value,
+  .orf-row-loot-action {
+    justify-self: start !important;
+  }
+
   .orf-progress-value {
     width: min(220px, 100%);
   }
 }
 
 @media (min-width: 1280px) and (max-width: 1439px) {
+  .orf-challenge-row {
+    grid-template-columns:
+      minmax(260px, 1fr)
+      80px
+      86px
+      88px
+      112px
+      106px
+      100px;
+    column-gap: 8px;
+  }
+
+  .orf-challenge-row-bounty[data-scope="mine"] {
+    grid-template-columns:
+      minmax(240px, 1fr)
+      80px
+      86px
+      88px
+      112px
+      106px
+      100px
+      98px;
+  }
+
+  .orf-row-loot-action {
+    width: 96px;
+    padding-right: 8px;
+    padding-left: 8px;
+    font-size: 12px;
+  }
+
+  .orf-progress-value {
+    width: 100px;
+  }
+
   .orf-objective-header,
   .orf-result-row,
   .orf-task-row,
   .orf-subtask-row {
-    gap: 12px;
     padding-right: 16px;
     padding-left: 16px;
   }
@@ -4872,6 +5044,12 @@ body[data-dragging-floating="true"] {
   .orf-subtask-row {
     margin-right: 8px;
     margin-left: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  .orf-team-dashboard {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
