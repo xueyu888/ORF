@@ -82,11 +82,12 @@ export function ChallengePlanPage() {
   );
   const submittedLootIds = useMemo(() => submittedLootIdsFromComments(state.comments), [state.comments]);
   const showAll = isAdmin && scope === "all";
+  const automaticCompletions = state.automaticCompletions ?? {};
   const groups = useMemo(
     () =>
       buildChallengeTree(
         {
-          automaticCompletions: state.automaticCompletions,
+          automaticCompletions,
           evidence: state.evidence,
           feedback: state.feedback,
           objectives: state.objectives,
@@ -96,7 +97,7 @@ export function ChallengePlanPage() {
         },
         showAll ? undefined : objectiveIdsInMyChallenges,
       ),
-    [objectiveIdsInMyChallenges, showAll, state.automaticCompletions, state.evidence, state.feedback, state.objectives, state.results, state.tasks, submittedLootIds],
+    [automaticCompletions, objectiveIdsInMyChallenges, showAll, state.evidence, state.feedback, state.objectives, state.results, state.tasks, submittedLootIds],
   );
   const commentCounts = useMemo(() => commentCountsByTarget(state.comments), [state.comments]);
 
@@ -251,7 +252,7 @@ export function ChallengePlanPage() {
       {showAll && <TeamDashboard groups={groups} />}
       <ChallengeToolbar isAdmin={isAdmin} onScopeChange={setScope} scope={scope} />
       <ChallengeTree
-        automaticCompletions={state.automaticCompletions}
+        automaticCompletions={automaticCompletions}
         emptyText={showAll ? "当前还没有挑战内容。" : "当前没有与你的挑战目标相关的内容。"}
         groups={groups}
         handlers={{

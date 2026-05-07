@@ -6,7 +6,7 @@ import type { BountyNode, ObjectiveNode } from "./types";
 
 export function buildChallengeTree(
   input: {
-    automaticCompletions: Record<string, AutomaticCompletionResult>;
+    automaticCompletions?: Record<string, AutomaticCompletionResult>;
     evidence: Evidence[];
     feedback: Feedback[];
     objectives: Objective[];
@@ -28,7 +28,7 @@ export function buildChallengeTree(
         return {
           result,
           actions,
-          status: bountyStatus(result, actions, input.automaticCompletions[result.objectiveId]?.rets[result.id], input.submittedLootIds.has(result.id)),
+          status: bountyStatus(result, actions, input.automaticCompletions?.[result.objectiveId]?.rets?.[result.id], input.submittedLootIds.has(result.id)),
           deadline: bountyDeadline(actions),
           updatedAt: bountyUpdatedAt(result, actions, input.feedback, input.evidence),
           progress: resultProgress(result),

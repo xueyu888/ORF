@@ -55,7 +55,7 @@ export function ChallengeTree({
   now,
   scope,
 }: {
-  automaticCompletions: Record<string, AutomaticCompletionResult>;
+  automaticCompletions?: Record<string, AutomaticCompletionResult>;
   emptyText: string;
   groups: ObjectiveNode[];
   handlers: RowHandlers;
@@ -67,7 +67,7 @@ export function ChallengeTree({
       {groups.map((group) => (
         <ObjectivePanel
           key={group.objective.id}
-          automaticCompletion={automaticCompletions[group.objective.id]}
+          automaticCompletion={automaticCompletions?.[group.objective.id]}
           group={group}
           handlers={handlers}
           now={now}
