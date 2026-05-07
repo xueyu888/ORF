@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
+import { getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 
 type AuthMode = "login" | "register";
@@ -42,6 +43,7 @@ export function AuthPage() {
   const { authReady, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
   const [mode, setMode] = useState<AuthMode>("login");
   const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
+  const [configuredHeroOptions, setConfiguredHeroOptions] = useState<AuthHeroOption[]>([]);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -54,6 +56,30 @@ export function AuthPage() {
       navigate("/tasks");
     }
   }, [authReady, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void getVisualBackgrounds("login_background")
+      .then((data) => {
+        if (cancelled || data.list.length === 0) {
+          return;
+        }
+
+        const options = data.list.map((background) => ({
+          id: background.id,
+          label: background.fileName,
+          src: background.url,
+        }));
+        setConfiguredHeroOptions(options);
+        setSelectedHeroId(data.defaultBackgroundId ?? options[0]?.id ?? "");
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setAuthError("");
@@ -93,16 +119,17 @@ export function AuthPage() {
   const primaryLabel = mode === "login" ? "Sign In" : "Create Account";
   const switchLabel = mode === "login" ? "Register" : "Sign In";
   const busyLabel = mode === "login" ? "Signing In" : "Creating";
-  const selectedHero = authHeroOptions.find((option) => option.id === selectedHeroId) ?? authHeroOptions[0];
+  const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : authHeroOptions;
+  const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
 
   return (
     <main className="orf-auth-page">
       {selectedHero && <img className="orf-auth-hero" src={selectedHero.src} alt="" aria-hidden="true" draggable={false} />}
-      {authHeroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
-      {authHeroOptions.length > 1 && (
+      {heroOptions.length > 1 && <span className="orf-auth-top-gradient" aria-hidden="true" />}
+      {heroOptions.length > 1 && (
         <div className="orf-auth-hero-switch-zone" aria-label="选择登录页背景">
           <div className="orf-auth-hero-dots" role="radiogroup" aria-label="登录页背景">
-            {authHeroOptions.map((option, index) => {
+            {heroOptions.map((option, index) => {
               const selected = option.id === selectedHero?.id;
               return (
                 <button

@@ -1,9 +1,10 @@
 import { Command, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { navItems } from "../config/navigation";
+import { getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import { Avatar } from "./ui";
 
@@ -20,12 +21,31 @@ const sidebarGroups = [
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
   const { currentUser, isAdmin, logout } = useOrf();
   const [collapsed, setCollapsed] = useState(false);
+  const [configuredSidebarBackgroundUrl, setConfiguredSidebarBackgroundUrl] = useState<string | null>(null);
   const visibleGroups = sidebarGroups
     .map((group) => (group.title === "admin" && !isAdmin ? { ...group, items: [] } : group))
     .filter((group) => group.items.length > 0);
   const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
+
+  useEffect(() => {
+    let cancelled = false;
+    void getVisualBackgrounds("sidebar_background")
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+        const defaultBackground = data.list.find((background) => background.id === data.defaultBackgroundId);
+        setConfiguredSidebarBackgroundUrl(defaultBackground?.url ?? null);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const sidebarStyle = {
-    "--orf-sidebar-bg-image": toCssImageUrl(sidebarBackground.src),
+    "--orf-sidebar-bg-image": toCssImageUrl(configuredSidebarBackgroundUrl ?? sidebarBackground.src),
     "--orf-sidebar-bg-position": sidebarBackground.position,
     "--orf-sidebar-bg-filter": sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
