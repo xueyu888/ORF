@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
@@ -37,6 +38,14 @@ import {
   updateTaskStatus,
 } from "./repositories/orfRepository";
 import { createTeamUser, deleteTeamUser, getTeamUsers, updateTeamUser } from "./repositories/userRepository";
+import {
+  backgroundSceneSchema,
+  getVisualBackgroundFile,
+  listVisualBackgrounds,
+  saveUploadedVisualBackground,
+  setDefaultVisualBackground,
+  visualBackgroundError,
+} from "./settings/visualBackgrounds";
 
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
 const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
@@ -72,6 +81,17 @@ const permissionRuleSchema = z.object({
 });
 const updateRolePermissionsBodySchema = z.object({
   permissionRules: z.array(permissionRuleSchema),
+});
+const visualBackgroundQuerySchema = z.object({
+  scene: backgroundSceneSchema,
+});
+const visualBackgroundParamsSchema = z.object({
+  id: z.string().min(1),
+});
+const visualBackgroundStaticParamsSchema = z.object({
+  scene: backgroundSceneSchema,
+  scope: z.enum(["default", "user"]),
+  fileName: z.string().min(1),
 });
 const defaultPermissionStage = "orfReestimate";
 const createResultBodySchema = z.object({
@@ -218,6 +238,12 @@ export async function buildServer() {
     origin: corsOrigin(),
     credentials: true,
   });
+  await app.register(multipart, {
+    limits: {
+      fileSize: 10 * 1024 * 1024,
+      files: 1,
+    },
+  });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof ZodError) {
@@ -245,6 +271,82 @@ export async function buildServer() {
 
   registerOptionalIntegrations(app);
   registerAuthRoutes(app);
+
+  app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
+    try {
+      const params = visualBackgroundStaticParamsSchema.parse(request.params);
+      const file = await getVisualBackgroundFile(params.scene, params.scope, params.fileName);
+      reply.header("Content-Type", file.mimeType);
+      return reply.send(file.stream);
+    } catch (error) {
+      const mapped = visualBackgroundError(error);
+      return reply.code(mapped.status).send({ error: mapped.message });
+    }
+  });
+
+  app.get("/api/settings/visual/backgrounds", async (request, reply) => {
+    try {
+      const query = visualBackgroundQuerySchema.parse(request.query);
+      return {
+        code: 0,
+        message: "ok",
+        data: await listVisualBackgrounds(query.scene),
+      };
+    } catch (error) {
+      const mapped = visualBackgroundError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.post("/api/settings/visual/backgrounds", async (request, reply) => {
+    try {
+      let scene: z.infer<typeof backgroundSceneSchema> | null = null;
+      let file: { fileName: string; mimeType: string; buffer: Buffer } | null = null;
+
+      for await (const part of request.parts()) {
+        if (part.type === "field" && part.fieldname === "scene") {
+          scene = backgroundSceneSchema.parse(part.value);
+        }
+        if (part.type === "file" && part.fieldname === "file") {
+          file = {
+            fileName: part.filename,
+            mimeType: part.mimetype,
+            buffer: await part.toBuffer(),
+          };
+        }
+      }
+
+      if (!scene) {
+        return reply.code(400).send({ code: 40001, message: "invalid scene", data: null });
+      }
+      if (!file) {
+        return reply.code(400).send({ code: 40002, message: "file is required", data: null });
+      }
+
+      return {
+        code: 0,
+        message: "ok",
+        data: await saveUploadedVisualBackground({ scene, ...file }),
+      };
+    } catch (error) {
+      const mapped = visualBackgroundError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.put("/api/settings/visual/backgrounds/:id/default", async (request, reply) => {
+    try {
+      const params = visualBackgroundParamsSchema.parse(request.params);
+      return {
+        code: 0,
+        message: "ok",
+        data: await setDefaultVisualBackground(params.id),
+      };
+    } catch (error) {
+      const mapped = visualBackgroundError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
 
   app.get("/api/tasks-page", async () => getTaskManagementData());
   app.get("/api/orf-state", async () => getOrfStateSnapshot());
