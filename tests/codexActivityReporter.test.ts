@@ -22,16 +22,19 @@ test("summarizes Codex activity without copying conversation text", () => {
 
   assert.doesNotMatch(message, /定论：/);
   assert.match(message, /活动播报/);
-  assert.match(message, /简明总结问答内容/);
+  assert.match(message, /问答清楚/);
+  assert.match(message, /气势拉满/);
   assert.match(message, /结论明确，继续推进/);
-  assert.match(message, /^这轮把 Codex 活动播报机制又调顺了。/);
+  assert.match(message, /^这轮把 Codex 活动播报压成一句狠话/);
+  assert.equal((message.split("\n")[0].match(/。/g) ?? []).length, 1);
   assert.match(
     message,
-    /English: This round tuned the Codex activity reporting mechanism back into shape\..*The conclusion is clear; keep pushing forward\./,
+    /English: This round compresses the Codex activity report into one decisive line, with the Q&A clear and the tone unstoppable, and the conclusion is clear and the advance continues\./,
   );
+  assert.equal((message.split("\n").find((line) => line.startsWith("English:"))?.match(/\./g) ?? []).length, 1);
   assert.match(message, /Words:/);
   assert.match(message, /activity \/ækˈtɪvəti\/ n\. 活动/);
-  assert.match(message, /Grammar: .*一般过去时/);
+  assert.match(message, /Grammar: .*with 复合结构/);
   assert.doesNotMatch(message, new RegExp(rawPrompt));
   assert.doesNotMatch(message, /formatter 的输入当作信号源/);
   assert.doesNotMatch(message, /抽象总结对话|Mattermost/);
@@ -55,7 +58,8 @@ test("does not leak raw urls credentials or snippets into Mattermost copy", () =
   assert.doesNotMatch(message, /捷报：/);
   assert.match(message, /活动播报/);
   assert.match(message, /胜势已成/);
-  assert.match(message, /The winning momentum is already formed\./);
+  assert.match(message, /the winning momentum is already formed\./);
+  assert.equal((message.split("\n")[0].match(/。/g) ?? []).length, 1);
   assert.match(message, /English:/);
   assert.match(message, /Words:/);
   assert.match(message, /Grammar:/);
@@ -78,13 +82,15 @@ test("supports multiple rotating confident activity styles", () => {
   );
 
   assert.equal(new Set(messages).size, codexActivityStyleIds.length);
-  assert.ok(messages.every((message) => /拿下|本座|强者|胜者|不服|此局|时间线|众人|胜势|赢了|一锤定音|自信/.test(message)));
+  assert.ok(messages.every((message) => /气势拉满|拿下|本座|胜者|退散|结论|不服|此局|时间线|众人|胜势|赢了/.test(message)));
   assert.ok(messages.every((message) => message.includes("活动播报")));
   assert.ok(messages.some((message) => message.includes("水豚噜噜")));
   assert.ok(messages.every((message) => /English:/.test(message)));
   assert.ok(messages.every((message) => /Words:/.test(message)));
   assert.ok(messages.every((message) => /Grammar:/.test(message)));
   assert.ok(messages.every((message) => /\/[A-Za-zæɑɔəɛɪʊʌˈˌːðŋʃʒθtʃdʒɡ -]+\/.*(n\.|v\.|det\.)/.test(message)));
+  assert.ok(messages.every((message) => (message.split("\n")[0].match(/。/g) ?? []).length === 1));
+  assert.ok(messages.every((message) => (message.split("\n").find((line) => line.startsWith("English:"))?.match(/\./g) ?? []).length === 1));
   assert.ok(messages.every((message) => !/文言：|行舟将欲走|明月几时有|朝辞白帝|床前代码光/.test(message)));
   assert.ok(messages.every((message) => !chineseTitlePrefix.test(message)));
   assert.ok(messages.every((message) => !message.includes("xueyu")));
