@@ -13,39 +13,29 @@ function firstContentLine(message: string) {
   return message.split("\n").find((line) => line !== "---") ?? "";
 }
 
-test("summarizes Codex activity without copying conversation text", () => {
-  const rawPrompt = "你千万别复制我的会话内容，我是让你总结，对话的内容，然后形成某一种风格，然后发到mm";
-  const rawResult = "我会把 formatter 的输入当作信号源，不把你的原话输出到 Mattermost。";
+test("keeps the concrete session summary instead of replacing it with boilerplate", () => {
   const message = formatCodexActivityMessage(
     {
-      summary: rawPrompt,
-      details: [rawResult],
+      summary: "现在在弄悬赏大厅，别写空话套话",
+      details: ["把悬赏大厅改成主动贡献入口，补充 ContributionSummary、RecruitmentSection 和 AvailableBountyList。"],
     },
     { CODEX_ACTIVITY_STYLE: "serious" },
   );
 
   assert.doesNotMatch(message, /定论：/);
   assert.match(message, /^---\n/);
-  assert.match(message, /活动播报/);
-  assert.match(message, /先报任务/);
-  assert.match(message, /再报动作/);
-  assert.match(message, /最后报结果/);
-  assert.match(message, /废话退场/);
+  assert.match(message, /悬赏大厅/);
+  assert.match(message, /主动贡献入口/);
+  assert.match(message, /ContributionSummary/);
+  assert.match(message, /AvailableBountyList/);
   assert.match(message, /结论明确，继续推进/);
-  assert.match(firstContentLine(message), /^这轮明确 Codex 活动播报结构/);
+  assert.doesNotMatch(message, /整理了项目文档|调整了前端体验|完成了一轮 ORF 项目协作/);
   assert.equal((firstContentLine(message).match(/。/g) ?? []).length, 1);
-  assert.match(
-    message,
-    /English: This round clarifies the Codex activity report structure by naming the task, action, and result so every post states what changed, and the conclusion is clear and the advance continues\./,
-  );
-  assert.equal((message.split("\n").find((line) => line.startsWith("English:"))?.match(/\./g) ?? []).length, 1);
-  assert.match(message, /Words:/);
-  assert.match(message, /structure \/ˈstrʌktʃər\/ n\. 结构/);
-  assert.match(message, /Grammar: .*by naming/);
-  assert.doesNotMatch(message, new RegExp(rawPrompt));
-  assert.doesNotMatch(message, /formatter 的输入当作信号源/);
-  assert.doesNotMatch(message, /抽象总结对话|Mattermost/);
-  assert.doesNotMatch(message, /发到mm/);
+  assert.doesNotMatch(message, /English:/);
+  assert.doesNotMatch(message, /Words:/);
+  assert.doesNotMatch(message, /Grammar:/);
+  assert.doesNotMatch(message, /空话套话/);
+  assert.doesNotMatch(message, /This round records.*悬赏大厅/);
   assert.doesNotMatch(message, /文言：/);
   assert.doesNotMatch(message, chineseTitlePrefix);
   assert.doesNotMatch(message, /^####/);
@@ -64,15 +54,14 @@ test("does not leak raw urls credentials or snippets into Mattermost copy", () =
 
   assert.doesNotMatch(message, /捷报：/);
   assert.match(message, /^---\n/);
-  assert.match(message, /活动播报/);
   assert.match(message, /胜势已成/);
-  assert.match(message, /the winning momentum is already formed\./);
   assert.equal((firstContentLine(message).match(/。/g) ?? []).length, 1);
-  assert.match(message, /English:/);
-  assert.match(message, /Words:/);
-  assert.match(message, /Grammar:/);
+  assert.doesNotMatch(message, /English:/);
+  assert.doesNotMatch(message, /Words:/);
+  assert.doesNotMatch(message, /Grammar:/);
   assert.doesNotMatch(message, chineseTitlePrefix);
   assert.doesNotMatch(message, /10\.0\.0\.1|user@example\.com|not-a-real-password|const token|secret/);
+  assert.match(message, /\[redacted\]|\[url\]|\[email\]/);
 });
 
 test("supports multiple rotating confident activity styles", () => {
@@ -92,19 +81,71 @@ test("supports multiple rotating confident activity styles", () => {
   assert.equal(new Set(messages).size, codexActivityStyleIds.length);
   assert.ok(messages.every((message) => message.startsWith("---\n")));
   assert.ok(messages.every((message) => /气势拉满|拿下|本座|胜者|退散|结论|不服|此局|时间线|众人|胜势|赢了/.test(message)));
-  assert.ok(messages.every((message) => message.includes("活动播报")));
+  assert.ok(messages.every((message) => message.includes("调整自动播报")));
   assert.ok(messages.some((message) => message.includes("水豚噜噜")));
-  assert.ok(messages.every((message) => /English:/.test(message)));
-  assert.ok(messages.every((message) => /Words:/.test(message)));
-  assert.ok(messages.every((message) => /Grammar:/.test(message)));
-  assert.ok(messages.every((message) => /\/[A-Za-zæɑɔəɛɪʊʌˈˌːðŋʃʒθtʃdʒɡ -]+\/.*(n\.|v\.|det\.)/.test(message)));
+  assert.ok(messages.every((message) => !/English:/.test(message)));
+  assert.ok(messages.every((message) => !/Words:/.test(message)));
+  assert.ok(messages.every((message) => !/Grammar:/.test(message)));
   assert.ok(messages.every((message) => (firstContentLine(message).match(/。/g) ?? []).length === 1));
-  assert.ok(messages.every((message) => (message.split("\n").find((line) => line.startsWith("English:"))?.match(/\./g) ?? []).length === 1));
   assert.ok(messages.every((message) => !/文言：|行舟将欲走|明月几时有|朝辞白帝|床前代码光/.test(message)));
   assert.ok(messages.every((message) => !chineseTitlePrefix.test(message)));
   assert.ok(messages.every((message) => !message.includes("xueyu")));
   assert.ok(messages.every((message) => !message.includes("不要复制原始对话")));
   assert.ok(messages.every((message) => message.includes("\n")));
+});
+
+test("ignores conversational agreement when result bullets are available", () => {
+  const message = formatCodexActivityMessage(
+    {
+      summary: "这轮你说得对，我把刚才那种业务关键词规则化的方向撤掉了",
+      details: [
+        "改动结果：",
+        "- 播报实现：删掉固定模板映射，改为从本轮 summary/details 里取最具体的一句。",
+        "- 测试：新增验证，确保悬赏大厅不会被替换成整理项目文档这类套话。",
+      ],
+    },
+    { CODEX_ACTIVITY_STYLE: "wuxia" },
+  );
+
+  assert.match(message, /删掉固定模板映射|悬赏大厅不会被替换/);
+  assert.doesNotMatch(message, /你说得对|刚才那种|方向撤掉/);
+  assert.match(message, /此局我定/);
+});
+
+test("uses explicit Codex-written activity summary when present", () => {
+  const message = formatCodexActivityMessage(
+    {
+      summary: "看起来并没有解决问题",
+      details: [
+        "你说得对，第一行还是不应该被播报。",
+        "播报摘要：修正 Codex 活动播报，让 notify hook 读取 Codex 自己写的一句话总结，而不是截取回复开头。",
+      ],
+    },
+    { CODEX_ACTIVITY_STYLE: "sci-fi" },
+  );
+
+  assert.match(message, /notify hook/);
+  assert.match(message, /Codex 自己写的一句话总结/);
+  assert.doesNotMatch(message, /你说得对|看起来并没有解决问题|第一行还是不应该被播报/);
+  assert.match(message, /时间线已向我方收束/);
+});
+
+test("uses explicit matching English summary instead of generic English filler", () => {
+  const message = formatCodexActivityMessage(
+    {
+      summary: "中英文为什么对不上？",
+      details: [
+        "播报摘要：修正 Codex 活动播报，让中文和英文都来自 Codex 自己写的同一轮总结。",
+        "播报英文：This round fixes the Codex activity report so both Chinese and English come from Codex-written summaries for the same session.",
+      ],
+    },
+    { CODEX_ACTIVITY_STYLE: "serious" },
+  );
+
+  assert.match(message, /中文和英文都来自 Codex 自己写的同一轮总结/);
+  assert.match(message, /English: This round fixes the Codex activity report so both Chinese and English come from Codex-written summaries for the same session, and the conclusion is clear and the advance continues\./);
+  assert.doesNotMatch(message, /concrete session result stated above/);
+  assert.match(message, /summary \/ˈsʌməri\/ n\. 总结/);
 });
 
 test("skips Codex internal title generation notifications", () => {

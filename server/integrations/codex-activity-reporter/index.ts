@@ -38,6 +38,16 @@ function cleanActivityText(value: string) {
     .join("\n");
 }
 
+function redactSensitiveText(value: string) {
+  return value
+    .replace(/\bconst\s+[A-Za-z_$][\w$]*\s*=\s*['"][^'"]+['"]/g, "[code redacted]")
+    .replace(/\bconst\s+[A-Za-z_$][\w$]*\s*=\s*\[redacted\]/g, "[code redacted]")
+    .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/\b(password|passwd|pwd|token|secret|api[_-]?key)\s*[:=]\s*['"]?[^'"\s，。；,;]+['"]?/gi, "$1=[redacted]")
+    .replace(/(密码|口令|密钥|令牌)\s*(是|为|[:=])\s*[^，。；,;\s]+/g, "$1=[redacted]");
+}
+
 function normalizeForClassification(value: string) {
   return cleanActivityText(value).toLowerCase();
 }
@@ -65,89 +75,133 @@ export function getCodexActivitySkipReason(input: CodexActivityInput) {
   return undefined;
 }
 
-function summarizeActivity(input: CodexActivityInput) {
-  const source = activitySource(input);
+function cleanSummaryLine(value: string) {
+  return redactSensitiveText(value)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^[-*]\s+/, "")
+    .replace(/^#+\s+/, "")
+    .replace(/^(`?[\w./ -]+`?\s*)?[:：]\s*/, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  if (
-    includesAny(source, [
-      "codex",
-      "活动播报",
-      "自动播报",
-      "完成播报",
-      "mattermost",
-      "mm",
-      "会话内容",
-      "风格",
-      "单条消息",
-      "一条消息",
-      "表情包",
-      "文言文",
-      "英文",
-      "english",
-      "音标",
-      "语法",
-      "换行",
-      "水豚",
-      "噜噜",
-      "龙傲天",
-      "自信",
-      "冷笑话",
-    ])
-  ) {
-    return {
-      summary: "调整了 Codex 活动播报机制",
-      detailText: includesAny(source, ["复制", "原样", "会话内容", "隐私"])
-        ? "改成先抽象总结对话，再按轮换风格发送到 Mattermost，避免复述原始会话。"
-        : "让完成通知按多种语气轮换，并保持 Mattermost 推送链路可用。",
-    };
+function lineLooksConcrete(value: string) {
+  return includesAny(value, [
+    "改",
+    "更新",
+    "重写",
+    "写入",
+    "补充",
+    "修正",
+    "提交",
+    "推送",
+    "设计",
+    "新增",
+    "删除",
+    "调整",
+    "实现",
+    "修复",
+    "悬赏大厅",
+    "征召",
+    "积分",
+  ]);
+}
+
+function lineLooksBoilerplate(value: string) {
+  return includesAny(value, [
+    "你说得对",
+    "我理解",
+    "明白",
+    "刚才",
+    "方向撤掉",
+    "截图里",
+    "暴露的问题",
+    "看起来",
+    "并没有解决问题",
+    "我会",
+    "我先",
+    "接下来",
+    "已改完",
+    "改动结果：",
+    "现在改成：",
+    "验证：",
+    "验证已跑",
+    "dry-run",
+    "未跑构建",
+    "当前改动",
+    "工作区",
+    "如果你想",
+    "后续可以",
+    "谢谢",
+    "不要复制原始对话",
+    "原始对话",
+  ]);
+}
+
+function summaryCandidates(input: CodexActivityInput) {
+  const parsed = codexActivityInputSchema.parse(input);
+  return [...parsed.details, parsed.summary]
+    .flatMap((text) => cleanActivityText(text).split("\n"))
+    .map(cleanSummaryLine)
+    .filter((line) => line.length >= 6 && !lineLooksBoilerplate(line));
+}
+
+function explicitSummaryCandidate(input: CodexActivityInput) {
+  const parsed = codexActivityInputSchema.parse(input);
+  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
+    const match = line.match(/^(播报摘要|活动摘要|Activity summary|Summary)\s*[:：]\s*(.+)$/i);
+    if (match?.[2]) {
+      const value = cleanSummaryLine(match[2]);
+      if (value) return value;
+    }
   }
 
-  if (includesAny(source, ["node", "npm", "engine", "engines", "运行环境", "升级"])) {
-    return {
-      summary: "升级了项目运行环境配置",
-      detailText: "本机 Node 版本和项目 engines 约束已对齐，测试与构建继续通过。",
-    };
+  return undefined;
+}
+
+function explicitEnglishCandidate(input: CodexActivityInput) {
+  const parsed = codexActivityInputSchema.parse(input);
+  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
+    const match = line.match(/^(播报英文|活动英文|Broadcast English|English summary)\s*[:：]\s*(.+)$/i);
+    if (match?.[2]) {
+      const value = redactSensitiveText(match[2]).replace(/\s+/g, " ").trim();
+      if (value) return trimSentenceEnd(value);
+    }
   }
 
-  if (includesAny(source, ["github", "push", "推送", "同步", "commit", "提交"])) {
-    return {
-      summary: "完善了 GitHub 推送同步流程",
-      detailText: "提交、推送和 ORF 频道同步链路完成了一轮验证。",
-    };
+  return undefined;
+}
+
+function summaryCandidateScore(line: string, index: number) {
+  let score = 100 - index;
+
+  if (lineLooksConcrete(line)) score += 30;
+  if (/(\.md|\.ts|\.tsx|tests?\/|server\/|docs\/)/i.test(line)) score += 10;
+  if (/[A-Z][A-Za-z0-9]+[A-Z][A-Za-z0-9]+/.test(line)) score += 8;
+  if (includesAny(line, ["文档", "实现", "测试", "验证", "播报", "悬赏大厅", "征召", "积分"])) score += 8;
+  if (includesAny(line, ["明确", "改为", "删掉", "确保", "避免", "通过"])) score += 8;
+  if (/^[^，。；]{2,16}[：:]/.test(line)) score += 6;
+  if (line.length > 120) score -= 10;
+
+  return score;
+}
+
+function buildOneSentenceSummary(input: CodexActivityInput) {
+  const explicit = explicitSummaryCandidate(input);
+  if (explicit) {
+    const normalized = clause(explicit);
+    return normalized.startsWith("这轮") ? normalized : `这轮${normalized}`;
   }
 
-  if (includesAny(source, ["测试", "test", "build", "构建", "验证"])) {
-    return {
-      summary: "完成了项目验证",
-      detailText: "测试和构建结果已经检查，当前改动可继续推进。",
-    };
-  }
-
-  if (includesAny(source, ["文档", "docs", "readme", "规则"])) {
-    return {
-      summary: "整理了项目文档",
-      detailText: "相关说明已经归档到文档目录，方便后续追踪。",
-    };
-  }
-
-  if (includesAny(source, ["后端", "server", "api", "数据库", "接口"])) {
-    return {
-      summary: "调整了后端实现",
-      detailText: "后端逻辑按当前需求更新，并保留了验证入口。",
-    };
-  }
-
-  if (includesAny(source, ["前端", "页面", "ui", "组件", "样式"])) {
-    return {
-      summary: "调整了前端体验",
-      detailText: "页面交互和展示细节按当前需求推进了一步。",
-    };
-  }
-
-  return {
-    summary: "完成了一轮 ORF 项目协作",
-    detailText: "本轮对话已经收束成可追踪的活动记录，没有携带原始会话内容。",
-  };
+  const candidates = summaryCandidates(input);
+  const [text = "完成了一轮 ORF 项目协作"] = candidates
+    .map((line, index) => ({ line, score: summaryCandidateScore(line, index) }))
+    .sort((left, right) => right.score - left.score)
+    .map((item) => item.line);
+  const normalized = clause(text);
+  const summary = normalized.startsWith("这轮") ? normalized : `这轮${normalized}`;
+  return summary.length > 120 ? `${summary.slice(0, 117)}...` : summary;
 }
 
 function clause(value: string) {
@@ -189,7 +243,7 @@ interface ActivitySummaryPack {
   summary: string;
   detail: string;
   punchline: string;
-  english: EnglishNote;
+  english?: EnglishNote;
 }
 
 interface ActivityTone {
@@ -197,169 +251,26 @@ interface ActivityTone {
   translation: string;
 }
 
-function activitySummaryPack(summary: string): ActivitySummaryPack {
+function activitySummaryPack(summary: string, englishSummary?: string): ActivitySummaryPack {
   const text = clause(summary);
-  const packs = new Map<string, ActivitySummaryPack>([
-    [
-      "调整了 Codex 活动播报机制",
-      {
-        summary: "这轮明确 Codex 活动播报结构，先报任务，再报动作，最后报结果，废话退场",
-        detail: "重点是把每轮完成内容讲成任务、动作、结果，短句直接落地",
-        punchline: "此后每条播报都要说清战果",
-        english: {
-          translation:
-            "This round clarifies the Codex activity report structure by naming the task, action, and result so every post states what changed",
-          words: [
-            { word: "structure", ipa: "/ˈstrʌktʃər/", part: "n.", meaning: "结构" },
-            { word: "action", ipa: "/ˈækʃən/", part: "n.", meaning: "动作" },
-            { word: "result", ipa: "/rɪˈzʌlt/", part: "n.", meaning: "结果" },
-          ],
-          grammar: "`by naming...` 是介词短语，说明明确结构的具体手段。",
-        },
-      },
-    ],
-    [
-      "升级了项目运行环境配置",
-      {
-        summary: "这轮把项目运行环境配置排成阵列，Node、npm 和约束全部归位",
-        detail: "Node、npm 和项目约束各归其位，后续跑测试构建更省心",
-        punchline: "环境已服，后续只管推进",
-        english: {
-          translation: "This round aligns the runtime configuration, with Node, npm, and project constraints all in formation",
-          words: [
-            { word: "runtime", ipa: "/ˈrʌntaɪm/", part: "n.", meaning: "运行环境" },
-            { word: "configuration", ipa: "/kənˌfɪɡjəˈreɪʃən/", part: "n.", meaning: "配置" },
-            { word: "align", ipa: "/əˈlaɪn/", part: "v.", meaning: "对齐；校准" },
-          ],
-          grammar: "`all in formation` 是形容词短语，说明配置已经归位。",
-        },
-      },
-    ],
-    [
-      "完善了 GitHub 推送同步流程",
-      {
-        summary: "这轮把 GitHub 推送同步链路加固，提交进 ORF 频道一路畅通",
-        detail: "新增提交能继续同步到 ORF 频道，推送路径更清楚",
-        punchline: "代码既出，消息自会抵达战场",
-        english: {
-          translation:
-            "This round fortifies the GitHub push sync pipeline, letting every commit march cleanly into the ORF channel",
-          words: [
-            { word: "push", ipa: "/pʊʃ/", part: "n./v.", meaning: "推送" },
-            { word: "sync", ipa: "/sɪŋk/", part: "n./v.", meaning: "同步" },
-            { word: "pipeline", ipa: "/ˈpaɪplaɪn/", part: "n.", meaning: "流程；管线" },
-          ],
-          grammar: "`letting...` 是现在分词短语，说明前一句动作带来的结果。",
-        },
-      },
-    ],
-    [
-      "完成了项目验证",
-      {
-        summary: "这轮完成项目验证，测试构建已过，前路打开",
-        detail: "测试和构建都已检查，当前改动可以继续往前走",
-        punchline: "验证已过，前路无需犹疑",
-        english: {
-          translation: "This round clears project validation, with tests and builds passed and the road ahead open",
-          words: [
-            { word: "project", ipa: "/ˈprɑːdʒekt/", part: "n.", meaning: "项目" },
-            { word: "check", ipa: "/tʃek/", part: "n./v.", meaning: "检查；校验" },
-            { word: "pass", ipa: "/pæs/", part: "v.", meaning: "通过" },
-          ],
-          grammar: "`with tests and builds passed` 是 with 复合结构，说明验证依据。",
-        },
-      },
-    ],
-    [
-      "整理了项目文档",
-      {
-        summary: "这轮整理项目文档，思路归档，后续实现有路可循",
-        detail: "相关思路和页面说明已经归档，后续实现有据可循",
-        punchline: "文档成阵，后续实现照章推进",
-        english: {
-          translation:
-            "This round arrays the project documents, with the ideas archived and the next implementation path revealed",
-          words: [
-            { word: "document", ipa: "/ˈdɑːkjumənt/", part: "n.", meaning: "文档" },
-            { word: "organize", ipa: "/ˈɔːrɡənaɪz/", part: "v.", meaning: "整理；组织" },
-            { word: "project", ipa: "/ˈprɑːdʒekt/", part: "n.", meaning: "项目" },
-          ],
-          grammar: "`with the ideas archived` 是 with 复合结构，表示思路已被归档。",
-        },
-      },
-    ],
-    [
-      "调整了后端实现",
-      {
-        summary: "这轮稳住后端实现，服务逻辑更新，验证入口仍在",
-        detail: "服务端逻辑按当前需求更新，并保留验证入口",
-        punchline: "后端根基已稳，接口自当听令",
-        english: {
-          translation:
-            "This round steadies the backend implementation, with server logic updated and validation still at the gate",
-          words: [
-            { word: "backend", ipa: "/ˌbækˈend/", part: "n.", meaning: "后端" },
-            { word: "implementation", ipa: "/ˌɪmplɪmenˈteɪʃən/", part: "n.", meaning: "实现" },
-            { word: "update", ipa: "/ʌpˈdeɪt/", part: "v.", meaning: "更新" },
-          ],
-          grammar: "`server logic updated` 省略了 `being`，表达逻辑已被更新。",
-        },
-      },
-    ],
-    [
-      "调整了前端体验",
-      {
-        summary: "这轮打磨前端体验，页面方向已定，界面继续推进",
-        detail: "页面结构和交互表达更贴近当前产品方向",
-        punchline: "界面方向已定，体验只会更强",
-        english: {
-          translation: "This round sharpens the frontend experience, with the page direction set and the interface ready to advance",
-          words: [
-            { word: "frontend", ipa: "/ˌfrʌntˈend/", part: "n.", meaning: "前端" },
-            { word: "experience", ipa: "/ɪkˈspɪriəns/", part: "n.", meaning: "体验" },
-            { word: "improve", ipa: "/ɪmˈpruːv/", part: "v.", meaning: "改进" },
-          ],
-          grammar: "`ready to advance` 是形容词短语，表示界面已经准备继续推进。",
-        },
-      },
-    ],
-    [
-      "完成了一轮 ORF 项目协作",
-      {
-        summary: "这轮收束 ORF 项目协作，对话成记录，原文不外露",
-        detail: "对话内容已经收束成可追踪记录，没有带出原始会话",
-        punchline: "本轮战果已入账",
-        english: {
-          translation:
-            "This round seals one ORF collaboration, with the chat distilled into a traceable record and no raw words exposed",
-          words: [
-            { word: "round", ipa: "/raʊnd/", part: "n.", meaning: "一轮" },
-            { word: "collaboration", ipa: "/kəˌlæbəˈreɪʃən/", part: "n.", meaning: "协作" },
-            { word: "complete", ipa: "/kəmˈpliːt/", part: "v.", meaning: "完成" },
-          ],
-          grammar: "`distilled into...` 是过去分词短语，表示对话已被提炼成记录。",
-        },
-      },
-    ],
-  ]);
-
-  return (
-    packs.get(text) ?? {
-      summary: "这轮收束 ORF 协作，对话成简报，下一步已就位",
-      detail: "对话已经整理成简明活动记录，后续可以继续接着推进",
-      punchline: "此事已定，继续向前",
-      english: {
-        translation:
-          "This round seals one ORF collaboration, with the chat distilled into a concise record and the next move ready",
+  const english: EnglishNote | undefined = englishSummary
+    ? {
+        translation: englishSummary,
         words: [
-          { word: "round", ipa: "/raʊnd/", part: "n.", meaning: "一轮" },
-          { word: "collaboration", ipa: "/kəˌlæbəˈreɪʃən/", part: "n.", meaning: "协作" },
-          { word: "concise", ipa: "/kənˈsaɪs/", part: "adj.", meaning: "简明的" },
+          { word: "summary", ipa: "/ˈsʌməri/", part: "n.", meaning: "总结" },
+          { word: "specific", ipa: "/spəˈsɪfɪk/", part: "adj.", meaning: "具体的" },
+          { word: "result", ipa: "/rɪˈzʌlt/", part: "n.", meaning: "结果" },
         ],
-        grammar: "`with the chat distilled...` 是 with 复合结构，说明协作记录已收束。",
-      },
-    }
-  );
+        grammar: "`This round...` 用一般现在时，概括本轮实际完成的事情。",
+      }
+    : undefined;
+
+  return {
+    summary: text,
+    detail: text,
+    punchline: "播报只记录本轮实事",
+    english,
+  };
 }
 
 function formatEnglishNote(note: EnglishNote, translation: string) {
@@ -373,14 +284,14 @@ function formatEnglishNote(note: EnglishNote, translation: string) {
 
 function formatAotianSummary(pack: ActivitySummaryPack, tone: ActivityTone, memeCue?: (typeof memeCues)[number]) {
   const chinese = `${trimSentenceEnd(pack.summary)}，${trimSentenceEnd(tone.closing)}${memeCue ? `，${memeCue.text}` : ""}。`;
-  const english = `${trimSentenceEnd(pack.english.translation)}, and ${trimSentenceEnd(tone.translation)}${
-    memeCue ? `, with ${memeCue.translation}` : ""
-  }.`;
+  const english = pack.english
+    ? `${trimSentenceEnd(pack.english.translation)}, and ${trimSentenceEnd(tone.translation)}${memeCue ? `, with ${memeCue.translation}` : ""}.`
+    : undefined;
 
   return [
     messageSeparator,
     chinese,
-    formatEnglishNote(pack.english, english),
+    ...(pack.english && english ? [formatEnglishNote(pack.english, english)] : []),
   ].join("\n");
 }
 
@@ -483,10 +394,8 @@ function resolveStyle(styleId: string | undefined) {
 }
 
 function buildMessageContext(input: CodexActivityInput): CodexActivityMessageContext {
-  const activitySummary = summarizeActivity(input);
-
   return {
-    pack: activitySummaryPack(trimSentenceEnd(activitySummary.summary)),
+    pack: activitySummaryPack(trimSentenceEnd(buildOneSentenceSummary(input)), explicitEnglishCandidate(input)),
   };
 }
 
