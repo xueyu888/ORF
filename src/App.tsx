@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AIEvaluationPage } from "./pages/AIEvaluationPage";
 import { AuthPage } from "./pages/AuthPage";
+import { BountyHallPage } from "./pages/BountyHallPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
@@ -25,6 +26,7 @@ export function App() {
       <Route path="auth" element={<AuthRoute />} />
       <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<DashboardPage />} />
+        <Route path="bounties" element={<BountyHallPage />} />
         <Route path="objectives" element={<ObjectivesPage />} />
         <Route path="objectives/:objectiveId" element={<ObjectiveDetailPage />} />
         <Route path="objectives/:objectiveId/results/:resultId" element={<ResultDetailPage />} />
@@ -53,7 +55,7 @@ export function App() {
           }
         />
         <Route path="settings" element={<SettingsPage />} />
-        <Route path="*" element={<Navigate to="/tasks" replace />} />
+        <Route path="*" element={<Navigate to="/bounties" replace />} />
       </Route>
     </Routes>
   );
@@ -61,7 +63,7 @@ export function App() {
 
 function AuthRoute() {
   const { authReady, isAuthenticated } = useOrf();
-  return authReady && isAuthenticated ? <Navigate to="/tasks" replace /> : <AuthPage />;
+  return authReady && isAuthenticated ? <Navigate to="/bounties" replace /> : <AuthPage />;
 }
 
 function RequireAuth() {
@@ -75,5 +77,5 @@ function RequireAuth() {
 
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { isAdmin } = useOrf();
-  return isAdmin ? children : <Navigate to="/tasks" replace />;
+  return isAdmin ? children : <Navigate to="/bounties" replace />;
 }
