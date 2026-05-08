@@ -103,7 +103,7 @@ export function BountyHallPage() {
 
         const actions = state.tasks.filter((task) => task.linkedResultId === result.id);
         const effectiveResult = isUnclaimedOwner(result.owner) ? { ...result, owner: "" } : result;
-        const status = bountyStatus(effectiveResult, actions, state.automaticCompletions[objective.id]?.rets[result.id], submittedLootIds.has(result.id));
+        const status = bountyStatus(effectiveResult, actions, state.automaticCompletions?.[objective.id]?.rets?.[result.id], submittedLootIds.has(result.id));
         if (status !== "open") return [];
 
         const kind: BountyKind = objective.resultIds[0] === result.id ? "mainline" : "side";
@@ -829,7 +829,7 @@ function contributionSummary(state: OrfState, currentMember: string, submittedLo
     if (!result.owner || isUnclaimedOwner(result.owner)) continue;
     const objective = state.objectives.find((item) => item.id === result.objectiveId);
     const actions = state.tasks.filter((task) => task.linkedResultId === result.id);
-    const status = bountyStatus(result, actions, objective ? state.automaticCompletions[objective.id]?.rets[result.id] : undefined, submittedLootIds.has(result.id));
+    const status = bountyStatus(result, actions, objective ? state.automaticCompletions?.[objective.id]?.rets?.[result.id] : undefined, submittedLootIds.has(result.id));
     const row = members.get(result.owner) ?? { name: result.owner, points: 0, settledCount: 0 };
     if (status === "settled") {
       row.points += basePoints(result);

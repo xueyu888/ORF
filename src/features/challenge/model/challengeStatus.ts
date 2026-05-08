@@ -44,7 +44,7 @@ export function objectiveStatusTone(objective: Objective, automaticCompletion?: 
 }
 
 export function actionVisualStatus(action: Task, automaticCompletion?: AutomaticCompletionResult): ActionVisualStatus {
-  const automaticTaskCompletion = automaticCompletion?.tasks[action.id];
+  const automaticTaskCompletion = automaticCompletion?.tasks?.[action.id];
   if (automaticTaskCompletion !== undefined) {
     return automaticTaskCompletion === 1 ? "done" : "todo";
   }

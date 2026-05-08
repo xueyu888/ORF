@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { AIEvaluationPage } from "./pages/AIEvaluationPage";
@@ -69,10 +70,24 @@ function AuthRoute() {
 function RequireAuth() {
   const { authReady, isAuthenticated } = useOrf();
   if (!authReady) {
-    return null;
+    return <AuthLoadingScreen />;
   }
 
   return isAuthenticated ? <AppShell /> : <Navigate to="/auth" replace />;
+}
+
+function AuthLoadingScreen() {
+  return (
+    <main className="orf-auth-loading-page" role="status" aria-live="polite">
+      <div className="orf-auth-loading-panel">
+        <Loader2 className="h-7 w-7 animate-spin" />
+        <div>
+          <div className="orf-auth-loading-title">正在连接认证服务</div>
+          <div className="orf-auth-loading-copy">如果这里停留过久，请确认后端服务已启动。</div>
+        </div>
+      </div>
+    </main>
+  );
 }
 
 function RequireAdmin({ children }: { children: ReactNode }) {

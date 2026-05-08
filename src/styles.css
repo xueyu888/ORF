@@ -128,6 +128,41 @@ button:disabled {
   opacity: 0.55;
 }
 
+.orf-auth-loading-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--orf-page-glow);
+}
+
+.orf-auth-loading-panel {
+  display: inline-flex;
+  max-width: min(100%, 420px);
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(215, 173, 95, 0.28);
+  border-radius: var(--orf-radius-card);
+  background: rgba(255, 249, 235, 0.9);
+  box-shadow: var(--orf-shadow-card);
+  color: var(--orf-accent-text);
+  padding: 16px 18px;
+}
+
+.orf-auth-loading-title {
+  color: var(--orf-text-primary);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.orf-auth-loading-copy {
+  margin-top: 4px;
+  color: var(--orf-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

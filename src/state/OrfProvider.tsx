@@ -97,6 +97,7 @@ const OrfContext = createContext<OrfContextValue | null>(null);
 
 const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
+const AUTH_SESSION_TIMEOUT_MS = 8000;
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return {
@@ -107,7 +108,7 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     evidence: data.evidence,
     feedback: data.feedback,
     permissionRules: data.permissionRules,
-    automaticCompletions: data.automaticCompletions,
+    automaticCompletions: data.automaticCompletions ?? {},
   };
 }
 
@@ -246,7 +247,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isAdmin = currentUser?.role === "admin";
   const refreshAuthSession = useCallback(async () => {
     try {
-      const session = await apiJson<AuthSession>("/api/auth/session");
+      const session = await apiJson<AuthSession>("/api/auth/session", {
+        signal: AbortSignal.timeout(AUTH_SESSION_TIMEOUT_MS),
+      });
       if (!session.authenticated) {
         setAuthUserId(null);
         return;
