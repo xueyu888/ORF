@@ -17,6 +17,7 @@ import {
 } from "./repositories/permissionRepository";
 import {
   createChecklistItem,
+  claimResult,
   createResult,
   createTask,
   deleteChecklistItem,
@@ -529,6 +530,30 @@ export async function buildServer() {
     }
 
     return { ok: true };
+  });
+
+  app.patch("/api/results/:resultId/challenge", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
+      request.log.warn(error, "Ory challenge session check failed");
+      return null;
+    });
+
+    if (!user) {
+      return reply.code(401).send({ error: "Unauthorized" });
+    }
+
+    const outcome = await claimResult(params.resultId, user.name);
+
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+
+    if (outcome.status === "alreadyClaimed") {
+      return reply.code(409).send({ error: "Result already has a challenger", owner: outcome.owner });
+    }
+
+    return { result: outcome.result };
   });
 
   app.patch("/api/tasks/:taskId", async (request, reply) => {

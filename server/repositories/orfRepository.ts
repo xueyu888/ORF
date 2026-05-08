@@ -322,13 +322,47 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     direction: input.direction ?? "increase",
     status: "Draft",
     confidence: 50,
-    owner: input.owner || "User",
+    owner: input.owner ?? "",
     reviewCadence: "Weekly",
     sortOrder,
   });
 
   const data = await getTaskManagementData();
   return data.results.find((result) => result.id === id) ?? null;
+}
+
+export type ClaimResultOutcome =
+  | { status: "claimed"; result: Result }
+  | { status: "alreadyClaimed"; owner: string }
+  | { status: "notFound" };
+
+export async function claimResult(resultId: string, challenger: string): Promise<ClaimResultOutcome> {
+  const nextOwner = challenger.trim();
+  if (!nextOwner) {
+    return { status: "notFound" };
+  }
+
+  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
+  if (!result) {
+    return { status: "notFound" };
+  }
+
+  const currentOwner = result.owner.trim();
+  if (currentOwner && currentOwner !== "User" && currentOwner !== nextOwner) {
+    return { status: "alreadyClaimed", owner: result.owner };
+  }
+
+  await db
+    .update(results)
+    .set({
+      owner: nextOwner,
+      status: result.status === "Draft" ? "On Track" : result.status,
+    })
+    .where(eq(results.id, resultId));
+
+  const data = await getTaskManagementData();
+  const claimed = data.results.find((item) => item.id === resultId);
+  return claimed ? { status: "claimed", result: claimed } : { status: "notFound" };
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task | null> {

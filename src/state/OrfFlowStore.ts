@@ -260,7 +260,7 @@ export class OrfFlowStore {
       direction: input.direction ?? "increase",
       status: input.status ?? "Draft",
       confidence: input.confidence ?? 50,
-      owner: input.owner || currentUserName(state),
+      owner: input.owner ?? "",
       evidenceIds: [],
       taskIds: [],
       feedbackIds: [],
@@ -473,6 +473,31 @@ export class OrfFlowStore {
       results: state.results.map((result) => (result.id === resultId ? { ...result, title: nextTitle } : result)),
       comments: state.comments.map((thread) =>
         thread.targetType === "result" && thread.targetId === resultId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
+      ),
+    };
+  }
+
+  claimBounty(state: OrfState, resultId: string, challenger: string): OrfState {
+    const nextChallenger = challenger.trim();
+    if (!nextChallenger) {
+      return state;
+    }
+
+    const result = state.results.find((item) => item.id === resultId);
+    if (!result || (result.owner.trim() && result.owner !== "User" && result.owner !== nextChallenger)) {
+      return state;
+    }
+
+    return {
+      ...state,
+      results: state.results.map((item) =>
+        item.id === resultId
+          ? {
+              ...item,
+              owner: nextChallenger,
+              status: item.status === "Draft" ? "On Track" : item.status,
+            }
+          : item,
       ),
     };
   }

@@ -48,6 +48,7 @@ interface OrfContextValue {
   resetState: () => void;
   createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => void : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => void;
+  claimBounty: (resultId: string) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -192,6 +193,30 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
 
     if (error.status === 404) {
       return "用户不存在，已刷新成员列表";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
+function bountyMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return "你没有接受这个悬赏的权限";
+    }
+
+    if (error.status === 404) {
+      return "悬赏不存在，已刷新数据";
+    }
+
+    if (error.status === 409) {
+      return "这个悬赏已经有挑战者";
     }
 
     return error.message || fallback;
@@ -390,6 +415,26 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify(input),
           }),
         );
+      },
+      claimBounty: async (resultId) => {
+        const challenger = currentUser?.name ?? "";
+        const next = store.claimBounty(state, resultId, challenger);
+        if (next === state) {
+          notify("这个悬赏暂时不能接受挑战");
+          return false;
+        }
+
+        commit(next, "已接受挑战");
+
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/challenge`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          return true;
+        } catch (error) {
+          notify(bountyMutationFailureMessage(error, "接受挑战失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       createFeedback: (input) => commit(store.createFeedback(state, input), "反馈已捕获"),
       createTask: (input) => {
@@ -599,7 +644,22 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "悬赏更新已记录"),
     }),
-    [authReady, authUserId, authenticateWithPassword, currentUser, isAdmin, isAuthenticated, modal, refreshPermissionRules, refreshUsers, state, syncTaskMutation, theme, toasts],
+    [
+      authReady,
+      authUserId,
+      authenticateWithPassword,
+      currentUser,
+      isAdmin,
+      isAuthenticated,
+      modal,
+      refreshPermissionRules,
+      refreshTaskManagementData,
+      refreshUsers,
+      state,
+      syncTaskMutation,
+      theme,
+      toasts,
+    ],
   );
 
   return <OrfContext.Provider value={value}>{children}</OrfContext.Provider>;
