@@ -77,6 +77,12 @@ CORS_ORIGIN=http://localhost:5173
 | `GET` | `/api/tasks-page` | 返回挑战页需要的 `objectives`、`results`、`tasks`、`evidence`、`feedback`、`permissionRules`、`automaticCompletions`。 |
 | `GET` | `/api/orf-state` | 返回 ORF 状态快照。 |
 | `POST` | `/api/results` | 创建悬赏指标。 |
+| TODO | `/api/result-candidates` | 成员提交候选悬赏指标。 |
+| TODO | `/api/result-candidates/:candidateId/adopt` | 主管采纳候选悬赏指标，并发布到悬赏大厅。 |
+| TODO | `/api/results/:resultId/priority-challenge/accept` | 提出人接受优先挑战权，成为挑战者并进入确认期。 |
+| TODO | `/api/results/:resultId/priority-challenge/decline` | 提出人放弃优先挑战权，悬赏指标进入公共池。 |
+| TODO | `/api/results/:resultId/challenge-applications` | 其他成员申请挑战公共池中的悬赏指标。 |
+| TODO | `/api/results/:resultId/challenge-applications/:applicationId/approve` | 主管确认挑战者。 |
 | `POST` | `/api/tasks` | 创建任务。 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务。 |
 | `PATCH` | `/api/objectives/:objectiveId` | 更新目标标题，body: `{ "title": "..." }`。 |
@@ -215,6 +221,14 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `title` | `string` | 悬赏指标标题。 |
 | `owner` | `string` | 悬赏指标负责人；一个悬赏指标只允许一个负责人。 |
 | `status` | `WorkStatus` | 后端原始状态。 |
+| TODO: `source` | `"managerDefined" \| "memberProposed"` | 悬赏指标来源。 |
+| TODO: `definer` | `string` | 悬赏指标定义人；用于悬赏指标定义分归属。 |
+| TODO: `finalDueAt` | `string` | 主管设置的最终截止时间。 |
+| TODO: `acceptedAt` | `string \| null` | 挑战者接受挑战时间，用于计算确认期。 |
+| TODO: `confirmationDueAt` | `string \| null` | 悬赏指标确认截止时间。 |
+| TODO: `confirmedAt` | `string \| null` | 悬赏指标冻结确认时间。 |
+| TODO: `priorityChallengeExpiresAt` | `string \| null` | 成员提出的候选悬赏指标被采纳后，提出人 2 小时优先挑战权的过期时间。 |
+| TODO: `priorityDeclinedBy` | `string[]` | 放弃优先挑战权的提出人列表；放弃后不得再次挑战同一悬赏指标。 |
 | `uncertaintyLevel` | `UncertaintyLevel` | 悬赏指标不确定性等级；结算积分按不确定性分 × 完成系数计算。 |
 | `baseline` | `number` | 悬赏指标进度计算。 |
 | `current` | `number` | 悬赏指标进度计算。 |
@@ -225,6 +239,17 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 `Result.owner` 是挑战页负责人展示和个人视图过滤的来源。
 
 `Result.uncertaintyLevel` 是唯一评级字段。
+
+确认期计算：
+
+```text
+剩余时间 = finalDueAt - acceptedAt
+原始确认期 = 剩余时间 × 30%
+确认期 = clamp(roundToHalfDay(原始确认期), 0.5 天, 9 天)
+confirmationDueAt = acceptedAt + 确认期
+```
+
+如果 `finalDueAt - acceptedAt < 0.5 天`，后端不得开始挑战，必须要求主管延长最终截止时间或关闭悬赏指标。
 
 ### `Task`
 
