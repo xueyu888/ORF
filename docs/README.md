@@ -40,7 +40,6 @@ docs/
 | [权限管理 - 前端.md](./frontend/权限管理%20-%20前端.md) | 权限管理页面 UI |
 | [权限管理 - 后端.md](./backend/权限管理%20-%20后端.md) | 权限管理 RBAC 模型和接口口径 |
 | [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push webhook 转发到 Mattermost ORF 频道 |
-| [Codex 活动播报 - 后端.md](./backend/Codex%20活动播报%20-%20后端.md) | Codex 工作完成后的 Mattermost 活动小报 |
 | [ORF 游戏化流程设计.md](./rules/ORF%20游戏化流程设计.md) | 指标作为悬赏流转的产品术语、核心原则和主支线流程 |
 | [ORF 思路记录.md](./rules/ORF%20思路记录.md) | ORF 产品方法中待沉淀的原则和思路 |
 | [积分自动计算规则.md](./rules/积分自动计算规则.md) | 积分自动计算后端规则口径 |
