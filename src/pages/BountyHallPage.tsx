@@ -36,7 +36,8 @@ type SortKey = "deadline" | "points" | "difficulty" | "created";
 
 type BountyItem = {
   actions: Task[];
-  basePoints: number;
+  uncertaintyPoints: number;
+  definitionPoints: number;
   deadline: string;
   difficultyRank: number;
   isRecruitment: boolean;
@@ -51,11 +52,11 @@ type CommentTarget = {
 };
 
 const difficultyScores: Record<UncertaintyLevel, number> = {
-  入门: 1,
-  进阶: 3,
-  破局: 9,
-  渡劫: 27,
-  飞升: 81,
+  入门: 10,
+  进阶: 30,
+  破局: 90,
+  渡劫: 270,
+  飞升: 810,
 };
 
 const difficultyRanks: Record<UncertaintyLevel, number> = {
@@ -110,7 +111,8 @@ export function BountyHallPage() {
         return [
           {
             actions,
-            basePoints: basePoints(result),
+            uncertaintyPoints: uncertaintyPoints(result),
+            definitionPoints: definitionPoints(),
             deadline: bountyDeadline(actions),
             difficultyRank: difficultyRank(result),
             isRecruitment: kind === "mainline" && objective.owner === currentMember,
@@ -442,7 +444,7 @@ function Toolbar({
         </SelectControl>
         <SelectControl label="排序" value={sortKey} onChange={(value) => onSortChange(value as SortKey)}>
           <option value="deadline">截止时间</option>
-          <option value="points">基础积分</option>
+          <option value="points">不确定性分</option>
           <option value="difficulty">难度</option>
           <option value="created">发布时间</option>
         </SelectControl>
@@ -492,7 +494,7 @@ function RecruitmentCard({
         <div className="flex flex-wrap items-center gap-2">
           <Chip tone="warning">主线悬赏</Chip>
           <Chip>{difficultyLabel(item.result)}</Chip>
-          <Chip>{item.basePoints} 分</Chip>
+          <Chip>{item.uncertaintyPoints} 分</Chip>
         </div>
         <h3 className="orf-text-primary mt-3 line-clamp-2 text-base font-semibold">{item.result.title}</h3>
         <div className="orf-text-secondary mt-2 truncate text-sm">{item.objective.title}</div>
@@ -543,7 +545,7 @@ function BountyCard({
           <div className="flex min-w-0 flex-wrap gap-1.5">
             <Chip tone={item.kind === "mainline" ? "accent" : "neutral"}>{item.kind === "mainline" ? "主线" : "支线"}</Chip>
             <Chip>{difficultyLabel(item.result)}</Chip>
-            <Chip tone="gold">{item.basePoints} 分</Chip>
+            <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
           </div>
           <div className="opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
             <MoreHorizontal className="orf-text-muted h-5 w-5" aria-hidden="true" />
@@ -635,7 +637,7 @@ function BountyPreviewDrawer({
             <div className="flex flex-wrap gap-1.5">
               <Chip tone={item.kind === "mainline" ? "accent" : "neutral"}>{item.kind === "mainline" ? "主线悬赏" : "支线悬赏"}</Chip>
               <Chip>{difficultyLabel(item.result)}</Chip>
-              <Chip tone="gold">{item.basePoints} 基础积分</Chip>
+              <Chip tone="gold">{item.uncertaintyPoints} 不确定性分</Chip>
             </div>
             <h2 className="orf-text-primary mt-3 text-xl font-semibold leading-7">{item.result.title}</h2>
             <div className="orf-text-secondary mt-2 text-sm">{item.objective.title}</div>
@@ -657,7 +659,8 @@ function BountyPreviewDrawer({
             <SectionTitle icon={Trophy}>积分口径</SectionTitle>
             <div className="grid gap-3 sm:grid-cols-2">
               <MetricBox label="难度" value={difficultyLabel(item.result)} />
-              <MetricBox label="基础积分" value={`${item.basePoints}`} />
+              <MetricBox label="不确定性分" value={`${item.uncertaintyPoints}`} />
+              <MetricBox label="指标定义分" value={`${item.definitionPoints}`} />
               <MetricBox label="剩余时间" value={item.deadline ? remainingTime(item.deadline, now) : "未设置"} />
               <MetricBox label="评论" value={`${commentCount}`} />
             </div>
@@ -745,7 +748,7 @@ function ChallengeConfirmModal({
             <div className="mt-3 flex flex-wrap gap-1.5">
               <Chip tone={item.kind === "mainline" ? "accent" : "neutral"}>{item.kind === "mainline" ? "主线" : "支线"}</Chip>
               <Chip>{difficultyLabel(item.result)}</Chip>
-              <Chip tone="gold">{item.basePoints} 分</Chip>
+              <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
             </div>
           </div>
           <p className="orf-text-secondary text-sm">大厅只记录你接受挑战；执行行动项、提交战利品和验收结算都在挑战页处理。</p>
@@ -808,7 +811,7 @@ function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neu
 }
 
 function compareBounties(left: BountyItem, right: BountyItem, sortKey: SortKey) {
-  if (sortKey === "points") return right.basePoints - left.basePoints || compareByUrgency(left, right);
+  if (sortKey === "points") return right.uncertaintyPoints - left.uncertaintyPoints || compareByUrgency(left, right);
   if (sortKey === "difficulty") return right.difficultyRank - left.difficultyRank || compareByUrgency(left, right);
   if (sortKey === "created") return right.objective.updatedAt.localeCompare(left.objective.updatedAt) || left.result.title.localeCompare(right.result.title);
   return compareByUrgency(left, right);
@@ -817,7 +820,7 @@ function compareBounties(left: BountyItem, right: BountyItem, sortKey: SortKey) 
 function compareByUrgency(left: BountyItem, right: BountyItem) {
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.basePoints - left.basePoints || left.result.title.localeCompare(right.result.title);
+  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || left.result.title.localeCompare(right.result.title);
 }
 
 function contributionSummary(state: OrfState, currentMember: string, submittedLootIds: Set<string>) {
@@ -833,7 +836,7 @@ function contributionSummary(state: OrfState, currentMember: string, submittedLo
     const status = bountyStatus(result, actions, objective ? state.automaticCompletions?.[objective.id]?.rets?.[result.id] : undefined, submittedLootIds.has(result.id));
     const row = members.get(result.owner) ?? { name: result.owner, points: 0, settledCount: 0 };
     if (status === "settled") {
-      row.points += basePoints(result);
+      row.points += uncertaintyPoints(result);
       row.settledCount += 1;
     }
     members.set(result.owner, row);
@@ -847,8 +850,12 @@ function contributionSummary(state: OrfState, currentMember: string, submittedLo
   return { points: current.points, rankText, settledCount: current.settledCount };
 }
 
-function basePoints(result: Result) {
+function uncertaintyPoints(result: Result) {
   return result.uncertaintyLevel ? difficultyScores[result.uncertaintyLevel] : difficultyScores["进阶"];
+}
+
+function definitionPoints() {
+  return 2;
 }
 
 function difficultyRank(result: Result) {
