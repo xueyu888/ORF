@@ -30,8 +30,8 @@ test("formats a concise Chinese report with English grammar and meme lines", () 
   assert.match(message, /主动贡献入口/);
   assert.match(message, /ContributionSummary/);
   assert.match(message, /AvailableBountyList/);
-  assert.match(message, /English: This round adds the Bounty Hall, including ContributionSummary, RecruitmentSection, and AvailableBountyList\./);
-  assert.match(message, /Grammar: /);
+  assert.match(message, /英文：The implementation adds the Bounty Hall, including ContributionSummary, RecruitmentSection, and AvailableBountyList\./);
+  assert.match(message, /语法：including 后面列出具体内容/);
   assert.match(message, /表情包：/);
   assert.doesNotMatch(message, /整理了项目文档|调整了前端体验|完成了一轮 ORF 项目协作/);
   assert.doesNotMatch(message, oldTemplateTone);
@@ -50,8 +50,8 @@ test("does not leak raw urls credentials or snippets into Mattermost copy", () =
   );
 
   assert.match(message, /^---\n/);
-  assert.match(message, /English: /);
-  assert.match(message, /Grammar: /);
+  assert.match(message, /英文：/);
+  assert.match(message, /语法：/);
   assert.match(message, /表情包：/);
   assert.doesNotMatch(message, oldTemplateTone);
   assert.doesNotMatch(message, /10\.0\.0\.1|user@example\.com|not-a-real-password|const token|secret/);
@@ -75,8 +75,8 @@ test("accepts legacy style names but keeps the same normal format", () => {
   assert.equal(new Set(messages).size, 1);
   assert.ok(messages.every((message) => message.startsWith("---\n")));
   assert.ok(messages.every((message) => message.includes("调整自动播报")));
-  assert.ok(messages.every((message) => message.includes("English: ")));
-  assert.ok(messages.every((message) => message.includes("Grammar: ")));
+  assert.ok(messages.every((message) => message.includes("英文：")));
+  assert.ok(messages.every((message) => message.includes("语法：")));
   assert.ok(messages.every((message) => message.includes("表情包：")));
   assert.ok(messages.every((message) => !oldTemplateTone.test(message)));
   assert.ok(messages.every((message) => !message.includes("不要复制原始对话")));
@@ -117,8 +117,8 @@ test("uses explicit Codex-written activity fields when present", () => {
 
   assert.match(message, /notify hook/);
   assert.match(message, /Codex 自己写的一句话总结/);
-  assert.match(message, /English: This round fixes the Codex activity report so the notify hook reads a Codex-written one-sentence summary instead of the first reply line\./);
-  assert.match(message, /Grammar: instead of \.\.\. 表示“而不是”，用于对比旧做法和新做法。/);
+  assert.match(message, /英文：This round fixes the Codex activity report so the notify hook reads a Codex-written one-sentence summary instead of the first reply line\./);
+  assert.match(message, /语法：instead of 表示“而不是”，用于对比旧做法和新做法。/);
   assert.match(message, /表情包：播报归位\.jpg 🧭/);
   assert.doesNotMatch(message, /你说得对|看起来并没有解决问题|第一行还是不应该被播报/);
   assert.doesNotMatch(message, oldTemplateTone);
@@ -137,9 +137,9 @@ test("uses explicit matching English summary instead of generic English filler",
   );
 
   assert.match(message, /中文和英文都来自 Codex 自己写的同一轮总结/);
-  assert.match(message, /English: This round fixes the Codex activity report so both Chinese and English come from Codex-written summaries for the same session\./);
+  assert.match(message, /英文：This round fixes the Codex activity report so both Chinese and English come from Codex-written summaries for the same session\./);
   assert.doesNotMatch(message, /concrete session result stated above/);
-  assert.match(message, /Grammar: `so \.\.\.` 引出结果/);
+  assert.match(message, /语法：so 后面接完整句子/);
 });
 
 test("skips Codex internal title generation notifications", () => {
