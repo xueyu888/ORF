@@ -26,3 +26,13 @@ public/settings/backgrounds/*/user/*
 public/settings/user/*
 !public/settings/user/settings.json.example
 frontend-assets/*
+
+
+
+test_case/
+todo/
+
+
+docs/testing/
+tests/testing/
+reports/
