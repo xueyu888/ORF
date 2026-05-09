@@ -33,13 +33,14 @@
 - 主要业务表从一开始预留 `team_id`、`created_by`、`updated_by`。
 - 目标、悬赏指标、任务等对象后续可扩展 `owner_user_id`、`visibility` 或对象级权限表。
 - 查询层必须保留统一注入权限条件的空间，不能把权限判断散落在页面逻辑里。
+- 产品文案中的“指挥官”不作为独立权限角色；后端权限校验按 `admin` / 管理员处理。
 - 拖拽调整位置或父对象按编辑处理：对象 `id` 不变。
 - 删除需要独立权限；删除有下级的对象时，后端必须校验对象关系。
 
 权限管理建议分阶段实现：
 
 1. 团队隔离：用户只能访问当前团队数据。
-2. 角色权限：管理员、成员、只读、主管等角色。
+2. 角色权限：管理员、成员、只读等角色；指挥官动作复用管理员权限。
 3. 对象权限：目标、悬赏指标、任务级别的可见 / 可编辑 / 可审批。
 4. 审计日志：记录状态变更、悬赏指标调整、目标确认等关键操作。
 
@@ -78,11 +79,11 @@ CORS_ORIGIN=http://localhost:5173
 | `GET` | `/api/orf-state` | 返回 ORF 状态快照。 |
 | `POST` | `/api/results` | 创建悬赏指标。 |
 | TODO | `/api/result-candidates` | 成员提交候选悬赏指标。 |
-| TODO | `/api/result-candidates/:candidateId/adopt` | 主管采纳候选悬赏指标，并发布到悬赏大厅。 |
+| TODO | `/api/result-candidates/:candidateId/adopt` | 指挥官采纳候选悬赏指标，并发布到悬赏大厅；接口需管理员权限。 |
 | TODO | `/api/results/:resultId/priority-challenge/accept` | 提出人接受优先挑战权，成为挑战者并进入确认期。 |
 | TODO | `/api/results/:resultId/priority-challenge/decline` | 提出人放弃优先挑战权，悬赏指标进入公共池。 |
 | TODO | `/api/results/:resultId/challenge-applications` | 其他成员申请挑战公共池中的悬赏指标。 |
-| TODO | `/api/results/:resultId/challenge-applications/:applicationId/approve` | 主管确认挑战者。 |
+| TODO | `/api/results/:resultId/challenge-applications/:applicationId/approve` | 指挥官确认挑战者；接口需管理员权限。 |
 | `POST` | `/api/tasks` | 创建任务。 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务。 |
 | `PATCH` | `/api/objectives/:objectiveId` | 更新目标标题，body: `{ "title": "..." }`。 |
@@ -223,7 +224,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `status` | `WorkStatus` | 后端原始状态。 |
 | TODO: `source` | `"managerDefined" \| "memberProposed"` | 悬赏指标来源。 |
 | TODO: `definer` | `string` | 悬赏指标定义人；用于悬赏指标定义分归属。 |
-| TODO: `finalDueAt` | `string` | 主管设置的最终截止时间。 |
+| TODO: `finalDueAt` | `string` | 指挥官设置的最终截止时间；权限上按管理员校验。 |
 | TODO: `acceptedAt` | `string \| null` | 挑战者接受挑战时间，用于计算确认期。 |
 | TODO: `confirmationDueAt` | `string \| null` | 悬赏指标确认截止时间。 |
 | TODO: `confirmedAt` | `string \| null` | 悬赏指标冻结确认时间。 |
@@ -249,7 +250,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 confirmationDueAt = acceptedAt + 确认期
 ```
 
-如果 `finalDueAt - acceptedAt < 0.5 天`，后端不得开始挑战，必须要求主管延长最终截止时间或关闭悬赏指标。
+如果 `finalDueAt - acceptedAt < 0.5 天`，后端不得开始挑战，必须要求指挥官延长最终截止时间或关闭悬赏指标；该操作按管理员权限校验。
 
 ### `Task`
 
