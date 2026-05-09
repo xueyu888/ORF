@@ -1,9 +1,15 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
+import { promisify } from "node:util";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+
+const execFileAsync = promisify(execFile);
+const gitFieldSeparator = "\x1f";
+const gitRecordSeparator = "\x1e";
 
 const configSchema = z.object({
   MATTERMOST_URL: z.string().url().optional(),
@@ -17,6 +23,8 @@ const configSchema = z.object({
   GITHUB_SYNC_INTERVAL_SECONDS: z.coerce.number().int().positive().default(60),
   GITHUB_SYNC_LOOKBACK: z.coerce.number().int().positive().default(20),
   GITHUB_SYNC_STATE_FILE: z.string().default(".artifacts/github-sync-state.json"),
+  GITHUB_SYNC_GIT_REMOTE: z.string().trim().min(1).default("origin"),
+  GITHUB_SYNC_GIT_CWD: z.string().trim().min(1).optional(),
   GITHUB_API_URL: z.string().url().default("https://api.github.com"),
   GITHUB_TOKEN: z.string().optional(),
 });
@@ -98,6 +106,18 @@ const syncStateSchema = z.record(
 type GitHubMattermostSyncConfig = z.infer<typeof configSchema>;
 export type GitHubPushPayload = z.infer<typeof githubPushPayloadSchema>;
 type GitHubApiCommit = z.infer<typeof githubApiCommitSchema>;
+type GitRemoteHead = { name: string; sha: string };
+
+class GitHubApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(message);
+    this.name = "GitHubApiError";
+  }
+}
 
 function readConfig() {
   return configSchema.parse(process.env);
@@ -315,14 +335,21 @@ function githubApiHeaders(config: GitHubMattermostSyncConfig) {
   return headers;
 }
 
+async function assertGitHubApiOk(response: Response, message: string) {
+  if (response.ok) {
+    return;
+  }
+
+  const body = await response.text().catch(() => "");
+  throw new GitHubApiError(`${message} with HTTP ${response.status}`, response.status, body);
+}
+
 async function fetchGitHubBranches(config: GitHubMattermostSyncConfig) {
   const url = new URL(`${config.GITHUB_API_URL}/repos/${config.GITHUB_REPOSITORY_FULL_NAME}/branches`);
   url.searchParams.set("per_page", "100");
 
   const response = await fetch(url, { headers: githubApiHeaders(config) });
-  if (!response.ok) {
-    throw new Error(`GitHub branches fetch failed with HTTP ${response.status}`);
-  }
+  await assertGitHubApiOk(response, "GitHub branches fetch failed");
 
   return githubApiBranchesSchema.parse(await response.json()).map((branch) => branch.name);
 }
@@ -333,11 +360,99 @@ async function fetchLatestGitHubCommits(config: GitHubMattermostSyncConfig, bran
   url.searchParams.set("per_page", String(config.GITHUB_SYNC_LOOKBACK));
 
   const response = await fetch(url, { headers: githubApiHeaders(config) });
-  if (!response.ok) {
-    throw new Error(`GitHub commits fetch failed for ${branch} with HTTP ${response.status}`);
-  }
+  await assertGitHubApiOk(response, `GitHub commits fetch failed for ${branch}`);
 
   return githubApiCommitsSchema.parse(await response.json());
+}
+
+function shouldUseGitFallback(error: unknown): error is GitHubApiError {
+  return error instanceof GitHubApiError && (error.status === 403 || error.status === 429);
+}
+
+function gitCommitUrl(repository: string, sha: string) {
+  return `https://github.com/${repository}/commit/${sha}`;
+}
+
+async function runGit(config: GitHubMattermostSyncConfig, args: string[]) {
+  const cwd = config.GITHUB_SYNC_GIT_CWD ?? process.cwd();
+  const { stdout } = await execFileAsync("git", args, {
+    cwd,
+    encoding: "utf8",
+    maxBuffer: 10 * 1024 * 1024,
+  });
+
+  return stdout;
+}
+
+function parseGitRemoteHeads(stdout: string): GitRemoteHead[] {
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .flatMap((line) => {
+      const [sha, ref] = line.split(/\s+/, 2);
+      if (!sha || !ref?.startsWith("refs/heads/")) {
+        return [];
+      }
+
+      return [{ name: ref.slice("refs/heads/".length), sha }];
+    });
+}
+
+function parseGitLog(stdout: string, repository: string): GitHubApiCommit[] {
+  return stdout
+    .split(gitRecordSeparator)
+    .map((record) => record.trim())
+    .filter(Boolean)
+    .flatMap((record) => {
+      const [sha, authorName = "unknown", subject = "No commit message"] = record.split(gitFieldSeparator);
+      if (!sha) {
+        return [];
+      }
+
+      return [
+        {
+          sha,
+          html_url: gitCommitUrl(repository, sha),
+          commit: {
+            message: subject,
+            author: {
+              name: authorName,
+            },
+          },
+          author: null,
+        },
+      ];
+    });
+}
+
+async function fetchGitRemoteHeads(config: GitHubMattermostSyncConfig) {
+  const stdout = await runGit(config, ["ls-remote", "--heads", config.GITHUB_SYNC_GIT_REMOTE]);
+  return parseGitRemoteHeads(stdout);
+}
+
+async function fetchGitRemoteObjects(config: GitHubMattermostSyncConfig) {
+  await runGit(config, ["fetch", "--quiet", "--prune", config.GITHUB_SYNC_GIT_REMOTE, "+refs/heads/*:refs/remotes/orf-github-sync/*"]);
+}
+
+async function fetchGitCommit(config: GitHubMattermostSyncConfig, sha: string) {
+  const stdout = await runGit(config, ["show", "-s", `--format=%H%x1f%an%x1f%s%x1e`, sha]);
+  return parseGitLog(stdout, config.GITHUB_REPOSITORY_FULL_NAME)[0];
+}
+
+async function fetchGitNewCommits(config: GitHubMattermostSyncConfig, lastSeenSha: string, latestSha: string) {
+  try {
+    const stdout = await runGit(config, [
+      "log",
+      `--max-count=${config.GITHUB_SYNC_LOOKBACK}`,
+      "--format=%H%x1f%an%x1f%s%x1e",
+      `${lastSeenSha}..${latestSha}`,
+    ]);
+    return parseGitLog(stdout, config.GITHUB_REPOSITORY_FULL_NAME).reverse();
+  } catch {
+    const latestCommit = await fetchGitCommit(config, latestSha);
+    return latestCommit ? [latestCommit] : [];
+  }
 }
 
 async function syncGitHubBranchCommits(
@@ -399,7 +514,65 @@ async function syncGitHubBranchCommits(
   return true;
 }
 
-async function syncGitHubCommits(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+async function syncGitBranchCommits(
+  app: FastifyInstance,
+  config: GitHubMattermostSyncConfig,
+  state: z.infer<typeof syncStateSchema>,
+  head: GitRemoteHead,
+  initializeOnly: boolean,
+) {
+  const key = syncStateKey(config, head.name);
+  const lastSeenSha = state[key]?.lastSeenSha;
+
+  if (!lastSeenSha) {
+    state[key] = { lastSeenSha: head.sha };
+    if (initializeOnly) {
+      app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, sha: shortSha(head.sha) }, "Initialized GitHub sync state from git");
+      return true;
+    }
+
+    const latestCommit = await fetchGitCommit(config, head.sha);
+    if (!latestCommit) {
+      return false;
+    }
+
+    await postToMattermost(
+      config,
+      formatGitHubCommitSyncMessage({
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        branch: head.name,
+        commits: [latestCommit],
+      }),
+    );
+    app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: 1 }, "Synced GitHub commits to Mattermost from git");
+    return true;
+  }
+
+  if (lastSeenSha === head.sha) {
+    return false;
+  }
+
+  const newCommits = await fetchGitNewCommits(config, lastSeenSha, head.sha);
+  if (newCommits.length === 0) {
+    state[key] = { lastSeenSha: head.sha };
+    return true;
+  }
+
+  await postToMattermost(
+    config,
+    formatGitHubCommitSyncMessage({
+      repository: config.GITHUB_REPOSITORY_FULL_NAME,
+      branch: head.name,
+      commits: newCommits,
+    }),
+  );
+
+  state[key] = { lastSeenSha: head.sha };
+  app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: newCommits.length }, "Synced GitHub commits to Mattermost from git");
+  return true;
+}
+
+async function syncGitHubCommitsViaApi(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
   const branches = await fetchGitHubBranches(config);
   const state = await readSyncState(config);
   const allBranchesKey = allBranchesStateKey(config);
@@ -417,6 +590,49 @@ async function syncGitHubCommits(app: FastifyInstance, config: GitHubMattermostS
 
   if (changed) {
     await writeSyncState(config, state);
+  }
+}
+
+async function syncGitHubCommitsFromGit(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+  const heads = await fetchGitRemoteHeads(config);
+  await fetchGitRemoteObjects(config);
+
+  const state = await readSyncState(config);
+  const allBranchesKey = allBranchesStateKey(config);
+  const initializeOnly = !state[allBranchesKey];
+  let changed = false;
+
+  for (const head of heads) {
+    changed = (await syncGitBranchCommits(app, config, state, head, initializeOnly)) || changed;
+  }
+
+  if (initializeOnly) {
+    state[allBranchesKey] = { lastSeenSha: "initialized" };
+    changed = true;
+  }
+
+  if (changed) {
+    await writeSyncState(config, state);
+  }
+}
+
+async function syncGitHubCommits(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+  try {
+    await syncGitHubCommitsViaApi(app, config);
+  } catch (error) {
+    if (!shouldUseGitFallback(error)) {
+      throw error;
+    }
+
+    app.log.warn(
+      {
+        status: error.status,
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        remote: config.GITHUB_SYNC_GIT_REMOTE,
+      },
+      "GitHub API sync was rate limited; using git remote fallback",
+    );
+    await syncGitHubCommitsFromGit(app, config);
   }
 }
 
