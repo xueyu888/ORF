@@ -3,6 +3,7 @@ import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesRe
 import { OrfFlowStore } from "./OrfFlowStore";
 import type {
   CommentStatus,
+  CommentThread,
   CommentTargetType,
   Feedback,
   FeedbackStatus,
@@ -17,6 +18,7 @@ import type {
 type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | null;
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
+type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
 
 interface ModalState {
   type: ModalType;
@@ -125,6 +127,26 @@ function mergeUsers(state: OrfState, data: UsersResponse): OrfState {
     ...state,
     users: data.users,
     currentUserId: data.users.some((user) => user.id === state.currentUserId) ? state.currentUserId : data.users[0]?.id ?? state.currentUserId,
+  };
+}
+
+function mergeCommentThread(state: OrfState, commentThread: CommentThread): OrfState {
+  const comments = state.comments.filter(
+    (thread) =>
+      thread.id !== commentThread.id &&
+      !(thread.targetType === commentThread.targetType && thread.targetId === commentThread.targetId && thread.status === commentThread.status),
+  );
+
+  return {
+    ...state,
+    comments: [commentThread, ...comments].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+  };
+}
+
+function removeCommentThread(state: OrfState, threadId: string): OrfState {
+  return {
+    ...state,
+    comments: state.comments.filter((thread) => thread.id !== threadId),
   };
 }
 
@@ -313,6 +335,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const applyUsers = useCallback((data: UsersResponse) => {
     setState((current) => {
       const next = mergeUsers(current, data);
+      store.save(next);
+      return next;
+    });
+  }, []);
+  const applyCommentThread = useCallback((commentThread: CommentThread) => {
+    setState((current) => {
+      const next = mergeCommentThread(current, commentThread);
+      store.save(next);
+      return next;
+    });
+  }, []);
+  const applyRemovedCommentThread = useCallback((threadId: string) => {
+    setState((current) => {
+      const next = removeCommentThread(current, threadId);
       store.save(next);
       return next;
     });
@@ -678,7 +714,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       addComment: (input) => {
         commit(store.addComment(state, input), "评论已添加");
-        void apiRequest("/api/comments", {
+        void apiJson<CommentMutationResponse>("/api/comments", {
           method: "POST",
           body: JSON.stringify({
             targetType: input.targetType,
@@ -690,7 +726,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             replyToAuthor: input.replyToAuthor,
           }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论添加失败"));
             void refreshTaskManagementData().catch(() => undefined);
@@ -698,11 +738,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       updateCommentThreadStatus: (threadId, status) => {
         commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/status`, {
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/status`, {
           method: "PATCH",
           body: JSON.stringify({ status }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论状态更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
@@ -710,11 +754,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       updateCommentMessage: (threadId, messageId, body) => {
         commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
           method: "PATCH",
           body: JSON.stringify({ body }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
@@ -722,8 +770,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       deleteCommentMessage: (threadId, messageId) => {
         commit(store.deleteCommentMessage(state, threadId, messageId), "评论已删除");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })
-          .then(refreshTaskManagementData)
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            } else {
+              applyRemovedCommentThread(threadId);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论删除失败"));
             void refreshTaskManagementData().catch(() => undefined);
@@ -733,6 +787,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "悬赏更新已记录"),
     }),
     [
+      applyCommentThread,
+      applyRemovedCommentThread,
       authReady,
       authUserId,
       authenticateWithPassword,

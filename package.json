@@ -13,6 +13,7 @@
     "server:start": "tsx server/index.ts",
     "codex:report": "tsx server/integrations/codex-activity-reporter/cli.ts",
     "test": "tsx --test tests/*.test.ts",
+    "test:e2e": "playwright test",
     "ory:dev": "tsx scripts/prepare-ory-env.ts && sg docker -c 'docker compose -f docker-compose.ory.yml up -d kratos'",
     "ory:down": "sg docker -c 'docker compose -f docker-compose.ory.yml down'",
     "db:local": "sg docker -c 'docker compose -f docker-compose.ory.yml up -d --wait postgres'",
