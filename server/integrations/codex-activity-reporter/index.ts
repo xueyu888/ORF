@@ -173,6 +173,32 @@ function explicitEnglishCandidate(input: CodexActivityInput) {
   return undefined;
 }
 
+function explicitGrammarCandidate(input: CodexActivityInput) {
+  const parsed = codexActivityInputSchema.parse(input);
+  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
+    const match = line.match(/^(播报语法|活动语法|Grammar note|Grammar)\s*[:：]\s*(.+)$/i);
+    if (match?.[2]) {
+      const value = cleanSummaryLine(match[2]);
+      if (value) return trimSentenceEnd(value);
+    }
+  }
+
+  return undefined;
+}
+
+function explicitMemeCandidate(input: CodexActivityInput) {
+  const parsed = codexActivityInputSchema.parse(input);
+  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
+    const match = line.match(/^(播报表情|活动表情|Meme)\s*[:：]\s*(.+)$/i);
+    if (match?.[2]) {
+      const value = cleanSummaryLine(match[2]);
+      if (value) return value;
+    }
+  }
+
+  return undefined;
+}
+
 function summaryCandidateScore(line: string, index: number) {
   let score = 100 - index;
 
@@ -181,6 +207,7 @@ function summaryCandidateScore(line: string, index: number) {
   if (/[A-Z][A-Za-z0-9]+[A-Z][A-Za-z0-9]+/.test(line)) score += 8;
   if (includesAny(line, ["文档", "实现", "测试", "验证", "播报", "悬赏大厅", "征召", "积分"])) score += 8;
   if (includesAny(line, ["明确", "改为", "删掉", "确保", "避免", "通过"])) score += 8;
+  if (includesAny(line, ["密码", "口令", "密钥", "令牌", "[redacted]", "[code redacted]"])) score -= 20;
   if (/^[^，。；]{2,16}[：:]/.test(line)) score += 6;
   if (line.length > 120) score -= 10;
 
@@ -217,81 +244,101 @@ function formatMattermostMessage(value: string) {
     .join("\n");
 }
 
-const memeCues = [
-  { text: "水豚噜噜点头.jpg 🦫", translation: "Water Capybara Lulu nodding" },
-  { text: "水豚噜噜端茶.jpg 🍵", translation: "Water Capybara Lulu serving tea" },
-  { text: "水豚噜噜稳住.jpg 😌", translation: "Water Capybara Lulu holding the line" },
-  { text: "水豚噜噜加班.jpg 💻", translation: "Water Capybara Lulu working overtime" },
-] as const;
-
 const messageSeparator = "---";
-
-interface WordNote {
-  word: string;
-  ipa: string;
-  part: string;
-  meaning: string;
-}
 
 interface EnglishNote {
   translation: string;
-  words: WordNote[];
   grammar: string;
 }
 
 interface ActivitySummaryPack {
   summary: string;
-  detail: string;
-  punchline: string;
-  english?: EnglishNote;
+  english: EnglishNote;
+  meme: string;
 }
 
-interface ActivityTone {
-  closing: string;
-  translation: string;
+function translatedTopic(summary: string) {
+  if (summary.includes("悬赏大厅")) return "the Bounty Hall";
+  if (summary.includes("评论") && summary.includes("后端")) return "the comment backend";
+  if (summary.includes("评论")) return "comments";
+  if (summary.includes("Codex") && summary.includes("活动播报")) return "the Codex activity report";
+  if (summary.includes("活动播报")) return "the activity report";
+  if (summary.includes("数据库")) return "the database flow";
+  if (summary.includes("前端")) return "the frontend";
+  if (summary.includes("后端")) return "the backend";
+  if (summary.includes("文档")) return "the documentation";
+  return "the ORF work";
 }
 
-function activitySummaryPack(summary: string, englishSummary?: string): ActivitySummaryPack {
+function translatedAction(summary: string) {
+  if (includesAny(summary, ["修复", "修正", "解决"])) return "fixes";
+  if (includesAny(summary, ["新增", "补充"])) return "adds";
+  if (includesAny(summary, ["接入", "对接", "持久化", "写入"])) return "wires up";
+  if (includesAny(summary, ["提交", "推送"])) return "ships";
+  if (includesAny(summary, ["改", "调整", "更新", "重写"])) return "updates";
+  if (includesAny(summary, ["实现"])) return "implements";
+  return "summarizes";
+}
+
+function fallbackEnglishSummary(summary: string) {
+  const topic = translatedTopic(summary);
+  const action = translatedAction(summary);
+  const identifiers = Array.from(new Set(summary.match(/\b[A-Z][A-Za-z0-9]+(?:[A-Z][A-Za-z0-9]+)+\b/g) ?? [])).slice(0, 3);
+  const identifierText =
+    identifiers.length === 0
+      ? ""
+      : identifiers.length === 1
+        ? `, including ${identifiers[0]}`
+        : `, including ${identifiers.slice(0, -1).join(", ")}, and ${identifiers.at(-1)}`;
+  const result = includesAny(summary, ["通过", "测试", "验证"])
+    ? " and keeps the checks passing"
+    : includesAny(summary, ["白屏", "显示不出来"])
+      ? " so the page can render again"
+      : includesAny(summary, ["持久化", "数据库"])
+        ? " so the data can stay in the database"
+        : "";
+
+  return `This round ${action} ${topic}${identifierText}${result}.`;
+}
+
+function fallbackGrammarNote(englishSummary: string) {
+  if (englishSummary.includes("so ")) {
+    return "`so ...` 引出结果；`This round ...` 用一般现在时概括本轮完成的工作。";
+  }
+
+  return "`This round ...` 用一般现在时，适合简洁汇报本轮已经完成的改动。";
+}
+
+function fallbackMeme(summary: string) {
+  if (includesAny(summary, ["测试", "验证", "通过"])) return "测试全绿.jpg ✅";
+  if (includesAny(summary, ["提交", "推送"])) return "已推送.jpg 🚀";
+  if (includesAny(summary, ["文档"])) return "文档归位.jpg 📝";
+  if (includesAny(summary, ["修复", "修正", "白屏", "问题"])) return "修完收工.jpg ✅";
+  return "稳住推进.jpg 👍";
+}
+
+function activitySummaryPack(summary: string, input: CodexActivityInput): ActivitySummaryPack {
   const text = clause(summary);
-  const english: EnglishNote | undefined = englishSummary
-    ? {
-        translation: englishSummary,
-        words: [
-          { word: "summary", ipa: "/ˈsʌməri/", part: "n.", meaning: "总结" },
-          { word: "specific", ipa: "/spəˈsɪfɪk/", part: "adj.", meaning: "具体的" },
-          { word: "result", ipa: "/rɪˈzʌlt/", part: "n.", meaning: "结果" },
-        ],
-        grammar: "`This round...` 用一般现在时，概括本轮实际完成的事情。",
-      }
-    : undefined;
+  const englishSummary = explicitEnglishCandidate(input) ?? fallbackEnglishSummary(text);
+  const grammar = explicitGrammarCandidate(input) ?? fallbackGrammarNote(englishSummary);
 
   return {
     summary: text,
-    detail: text,
-    punchline: "播报只记录本轮实事",
-    english,
+    english: {
+      translation: trimSentenceEnd(englishSummary),
+      grammar,
+    },
+    meme: explicitMemeCandidate(input) ?? fallbackMeme(text),
   };
 }
 
-function formatEnglishNote(note: EnglishNote, translation: string) {
-  return [
-    `English: ${translation}`,
-    "Words:",
-    ...note.words.map((word) => `- ${word.word} ${word.ipa} ${word.part} ${word.meaning}`),
-    `Grammar: ${note.grammar}`,
-  ].join("\n");
-}
-
-function formatAotianSummary(pack: ActivitySummaryPack, tone: ActivityTone, memeCue?: (typeof memeCues)[number]) {
-  const chinese = `${trimSentenceEnd(pack.summary)}，${trimSentenceEnd(tone.closing)}${memeCue ? `，${memeCue.text}` : ""}。`;
-  const english = pack.english
-    ? `${trimSentenceEnd(pack.english.translation)}, and ${trimSentenceEnd(tone.translation)}${memeCue ? `, with ${memeCue.translation}` : ""}.`
-    : undefined;
-
+function formatNormalSummary(pack: ActivitySummaryPack) {
   return [
     messageSeparator,
-    chinese,
-    ...(pack.english && english ? [formatEnglishNote(pack.english, english)] : []),
+    `${trimSentenceEnd(pack.summary)}。`,
+    `English: ${trimSentenceEnd(pack.english.translation)}.`,
+    `Grammar: ${trimSentenceEnd(pack.english.grammar)}。`,
+    `表情包：${pack.meme}`,
   ].join("\n");
 }
 
@@ -311,74 +358,14 @@ interface CodexActivityStyle {
 
 const codexActivityStyles = [
   {
-    id: "poem",
-    label: "龙傲天",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "这点小事，拿下", translation: "this small matter is handled" }),
-  },
-  {
-    id: "ci",
-    label: "龙傲天二",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "全局尽在本座掌中", translation: "the whole situation is in my hands" }),
-  },
-  {
-    id: "classical",
-    label: "龙傲天三",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "胜者无需多言", translation: "the victor needs no further words" }),
-  },
-  {
-    id: "humor",
-    label: "龙傲天四",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "问题见我，自会退散", translation: "problems step aside when they meet me" }),
-  },
-  {
-    id: "meme",
-    label: "表情包",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "稳如本座", translation: "it is as steady as I am" }, memeCues[0]),
-  },
-  {
-    id: "serious",
-    label: "龙傲天五",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "结论明确，继续推进", translation: "the conclusion is clear and the advance continues" }),
-  },
-  {
-    id: "cold-joke",
-    label: "龙傲天六",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "不服也得服", translation: "even refusal has to yield" }),
-  },
-  {
-    id: "wuxia",
-    label: "龙傲天七",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "此局我定", translation: "I decide this round" }),
-  },
-  {
-    id: "sci-fi",
-    label: "龙傲天八",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "时间线已向我方收束", translation: "the timeline converges in our favor" }),
-  },
-  {
-    id: "radio",
-    label: "龙傲天九",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "众人只需看结果", translation: "everyone only needs to see the result" }),
-  },
-  {
-    id: "news",
-    label: "龙傲天十",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "胜势已成", translation: "the winning momentum is already formed" }),
-  },
-  {
-    id: "diary",
-    label: "龙傲天十一",
-    format: ({ pack }) => formatAotianSummary(pack, { closing: "平平无奇地赢了", translation: "I won in an utterly ordinary way" }),
-  },
-  {
-    id: "stage",
-    label: "龙傲天",
-    format: ({ pack }) =>
-      formatAotianSummary(pack, { closing: "区区小事，已被本座拿下", translation: "this trivial matter has already been taken down by me" }, memeCues[2]),
+    id: "normal",
+    label: "简洁",
+    format: ({ pack }) => formatNormalSummary(pack),
   },
 ] satisfies CodexActivityStyle[];
 
-export const codexActivityStyleIds = codexActivityStyles.map((style) => style.id);
+const legacyStyleIds = ["poem", "ci", "classical", "humor", "meme", "serious", "cold-joke", "wuxia", "sci-fi", "radio", "news", "diary", "stage"];
+export const codexActivityStyleIds = [...codexActivityStyles.map((style) => style.id), ...legacyStyleIds];
 
 function resolveStyle(styleId: string | undefined) {
   if (!styleId || styleId === "rotate") {
@@ -386,16 +373,20 @@ function resolveStyle(styleId: string | undefined) {
   }
 
   const style = codexActivityStyles.find((candidate) => candidate.id === styleId);
-  if (!style) {
+  if (style) {
+    return style;
+  }
+
+  if (!legacyStyleIds.includes(styleId)) {
     throw new Error(`Unknown Codex activity style: ${styleId}. Available styles: ${codexActivityStyleIds.join(", ")}`);
   }
 
-  return style;
+  return codexActivityStyles[0];
 }
 
 function buildMessageContext(input: CodexActivityInput): CodexActivityMessageContext {
   return {
-    pack: activitySummaryPack(trimSentenceEnd(buildOneSentenceSummary(input)), explicitEnglishCandidate(input)),
+    pack: activitySummaryPack(trimSentenceEnd(buildOneSentenceSummary(input)), input),
   };
 }
 
