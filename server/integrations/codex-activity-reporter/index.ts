@@ -53,7 +53,8 @@ function normalizeForClassification(value: string) {
 }
 
 function includesAny(value: string, patterns: string[]) {
-  return patterns.some((pattern) => value.includes(pattern.toLowerCase()));
+  const normalized = value.toLowerCase();
+  return patterns.some((pattern) => normalized.includes(pattern.toLowerCase()));
 }
 
 function activitySource(input: CodexActivityInput) {
@@ -152,19 +153,38 @@ function lineLooksBoilerplate(value: string) {
 }
 
 function summaryCandidates(input: CodexActivityInput) {
-  const parsed = codexActivityInputSchema.parse(input);
-  return [...parsed.details, parsed.summary]
-    .flatMap((text) => cleanActivityText(text).split("\n"))
+  return activityLines(input)
     .map(cleanSummaryLine)
     .filter((line) => line.length >= 6 && !lineLooksBoilerplate(line));
 }
 
-function explicitSummaryCandidate(input: CodexActivityInput) {
+function activityLines(input: CodexActivityInput) {
   const parsed = codexActivityInputSchema.parse(input);
-  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
-    const match = line.match(/^(播报摘要|活动摘要|Activity summary|Summary)\s*[:：]\s*(.+)$/i);
-    if (match?.[2]) {
-      const value = cleanSummaryLine(match[2]);
+  return [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"));
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function cleanAnswerLine(value: string) {
+  return redactSensitiveText(value)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^[-*]\s+/, "")
+    .replace(/^#+\s+/, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function explicitFieldCandidate(input: CodexActivityInput, labels: string[], clean: (value: string) => string) {
+  const labelPattern = labels.map(escapeRegExp).join("|");
+  const fieldPattern = new RegExp(`^(?:${labelPattern})\\s*[:：]\\s*(.+)$`, "i");
+
+  for (const line of activityLines(input)) {
+    const match = line.match(fieldPattern);
+    if (match?.[1]) {
+      const value = clean(match[1]);
       if (value) return value;
     }
   }
@@ -172,43 +192,30 @@ function explicitSummaryCandidate(input: CodexActivityInput) {
   return undefined;
 }
 
-function explicitEnglishCandidate(input: CodexActivityInput) {
-  const parsed = codexActivityInputSchema.parse(input);
-  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
-    const match = line.match(/^(播报英文|活动英文|Broadcast English|English summary)\s*[:：]\s*(.+)$/i);
-    if (match?.[2]) {
-      const value = redactSensitiveText(match[2]).replace(/\s+/g, " ").trim();
-      if (value) return trimSentenceEnd(value);
-    }
-  }
+function explicitQuestionCandidate(input: CodexActivityInput) {
+  return explicitFieldCandidate(input, ["播报问题", "活动问题", "Question", "问题"], cleanSummaryLine);
+}
 
-  return undefined;
+function explicitLegacySummaryCandidate(input: CodexActivityInput) {
+  return explicitFieldCandidate(input, ["播报摘要", "活动摘要", "Activity summary", "Summary"], cleanSummaryLine);
+}
+
+function explicitAnswerCandidate(input: CodexActivityInput) {
+  return explicitFieldCandidate(
+    input,
+    ["播报回答", "活动回答", "Answer", "回答", "播报英文", "活动英文", "Broadcast English", "English summary"],
+    (value) => trimEnglishSentenceEnd(cleanAnswerLine(value)),
+  );
 }
 
 function explicitGrammarCandidate(input: CodexActivityInput) {
-  const parsed = codexActivityInputSchema.parse(input);
-  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
-    const match = line.match(/^(播报语法|活动语法|Grammar note|Grammar)\s*[:：]\s*(.+)$/i);
-    if (match?.[2]) {
-      const value = cleanGrammarNote(match[2]);
-      if (value) return trimSentenceEnd(value);
-    }
-  }
-
-  return undefined;
+  return explicitFieldCandidate(input, ["播报语法", "活动语法", "Grammar note", "Grammar", "语法"], (value) =>
+    trimChineseSentenceEnd(cleanGrammarNote(value)),
+  );
 }
 
 function explicitMemeCandidate(input: CodexActivityInput) {
-  const parsed = codexActivityInputSchema.parse(input);
-  for (const line of [...parsed.details, parsed.summary].flatMap((text) => cleanActivityText(text).split("\n"))) {
-    const match = line.match(/^(播报表情|活动表情|Meme)\s*[:：]\s*(.+)$/i);
-    if (match?.[2]) {
-      const value = cleanSummaryLine(match[2]);
-      if (value) return value;
-    }
-  }
-
-  return undefined;
+  return explicitFieldCandidate(input, ["播报表情", "活动表情", "Meme", "表情包"], cleanSummaryLine);
 }
 
 function summaryCandidateScore(line: string, index: number) {
@@ -226,32 +233,58 @@ function summaryCandidateScore(line: string, index: number) {
   return score;
 }
 
-function buildOneSentenceSummary(input: CodexActivityInput) {
-  const explicit = explicitSummaryCandidate(input);
-  if (explicit) {
-    return naturalSummaryClause(explicit);
-  }
-
-  const candidates = summaryCandidates(input);
-  const [text = "完成了一轮 ORF 项目协作"] = candidates
+function bestSummaryCandidate(input: CodexActivityInput) {
+  return summaryCandidates(input)
     .map((line, index) => ({ line, score: summaryCandidateScore(line, index) }))
     .sort((left, right) => right.score - left.score)
-    .map((item) => item.line);
-  return naturalSummaryClause(text);
+    .map((item) => item.line)[0];
+}
+
+function buildReportQuestion(input: CodexActivityInput) {
+  const explicit = explicitQuestionCandidate(input) ?? explicitLegacySummaryCandidate(input);
+  if (explicit) {
+    return naturalQuestionClause(explicit);
+  }
+
+  const parsed = codexActivityInputSchema.parse(input);
+  const summary = cleanSummaryLine(parsed.summary);
+  if (summary.length >= 6 && !lineLooksBoilerplate(summary)) {
+    return naturalQuestionClause(summary);
+  }
+
+  return naturalQuestionClause(bestSummaryCandidate(input) ?? "这轮需要明确 ORF 工作的真实问题");
 }
 
 function clause(value: string) {
   return trimSentenceEnd(value).replace(/\s*\n+\s*/g, " ").replace(/[ \t]+/g, " ").trim();
 }
 
-function naturalSummaryClause(value: string) {
+function naturalQuestionClause(value: string) {
   return clause(value)
     .replace(
-      /^这轮(?:我们|我)?(?=把|对|为|修复|修正|解决|新增|补充|实现|接入|对接|持久化|写入|提交|推送|更新|调整|改|重写|讨论|确认|明确|测试|验证)/,
+      /^这轮(?:用户|你|我们|我)?(?=把|对|为|修复|修正|解决|新增|补充|实现|接入|对接|持久化|写入|提交|推送|更新|调整|改|重写|讨论|确认|明确|测试|验证|指出|质疑|要求|想要|希望)/,
       "",
     )
-    .replace(/^这轮(?:我们|我)?\s*/, "")
+    .replace(/^这轮(?:用户|你|我们|我)?\s*/, "")
     .trim();
+}
+
+function trimChineseSentenceEnd(value: string) {
+  return value.trim().replace(/[。.!！？?]+$/, "");
+}
+
+function trimEnglishSentenceEnd(value: string) {
+  return value.trim().replace(/[。.!！？?]+$/, "");
+}
+
+function formatChineseSentence(value: string) {
+  const text = value.trim();
+  if (/[。！？?]$/.test(text)) return text;
+  return `${trimChineseSentenceEnd(text)}。`;
+}
+
+function formatEnglishSentence(value: string) {
+  return `${trimEnglishSentenceEnd(value)}.`;
 }
 
 function formatMattermostMessage(value: string) {
@@ -265,33 +298,15 @@ function formatMattermostMessage(value: string) {
 
 const messageSeparator = "---";
 
-interface EnglishNote {
-  translation: string;
+interface ActivityReportPack {
+  question: string;
+  answer: string;
   grammar: string;
-}
-
-interface ActivitySummaryPack {
-  summary: string;
-  english: EnglishNote;
   meme: string;
 }
 
-function translatedTopic(summary: string) {
-  if (summary.includes("悬赏大厅")) return "the Bounty Hall";
-  if (summary.includes("评论") && summary.includes("后端")) return "the comment backend";
-  if (summary.includes("评论")) return "comments";
-  if (summary.includes("Codex") && summary.includes("活动播报")) return "the Codex activity report";
-  if (summary.includes("活动播报")) return "the activity report";
-  if (summary.includes("数据库")) return "the database flow";
-  if (summary.includes("前端")) return "the frontend";
-  if (summary.includes("后端")) return "the backend";
-  if (summary.includes("文档")) return "the documentation";
-  return "the ORF work";
-}
-
-function fallbackEnglishSummary(summary: string) {
-  const topic = translatedTopic(summary);
-  const identifiers = Array.from(new Set(summary.match(/\b[A-Z][A-Za-z0-9]+(?:[A-Z][A-Za-z0-9]+)+\b/g) ?? [])).slice(0, 3);
+function englishIdentifierText(value: string) {
+  const identifiers = Array.from(new Set(value.match(/\b[A-Z][A-Za-z0-9]+(?:[A-Z][A-Za-z0-9]+)+\b/g) ?? [])).slice(0, 3);
   const identifierText =
     identifiers.length === 0
       ? ""
@@ -299,88 +314,108 @@ function fallbackEnglishSummary(summary: string) {
         ? `, including ${identifiers[0]}`
         : `, including ${identifiers.slice(0, -1).join(", ")}, and ${identifiers.at(-1)}`;
 
-  if (summary.includes("活动播报") && includesAny(summary, ["自然", "生硬", "截断", "省略号", "语法", "英文", "表情"])) {
-    return `The Codex activity report now reads more naturally, with cleaner English, a real grammar note, and a more fitting meme cue.`;
-  }
-
-  if (includesAny(summary, ["讨论", "确认", "明确", "意思", "模型", "指标"])) {
-    return `The discussion clarified how ${topic} should work${identifierText}, so the next change has a clearer scope.`;
-  }
-
-  if (includesAny(summary, ["修复", "修正", "解决", "白屏", "显示不出来"])) {
-    const result = includesAny(summary, ["白屏", "显示不出来"]) ? " so the page can render again" : "";
-    return `The fix updates ${topic}${identifierText}${result}.`;
-  }
-
-  if (includesAny(summary, ["新增", "补充", "实现", "接入", "对接", "持久化", "写入"])) {
-    const result = includesAny(summary, ["持久化", "数据库"]) ? " so the data stays in the database" : "";
-    return `The implementation adds ${topic}${identifierText}${result}.`;
-  }
-
-  if (includesAny(summary, ["提交", "推送"])) {
-    return `The update was committed and pushed for ${topic}${identifierText}.`;
-  }
-
-  if (includesAny(summary, ["改", "调整", "更新", "重写"])) {
-    return `The update changes ${topic}${identifierText}.`;
-  }
-
-  return `The note records the latest ORF decision for ${topic}${identifierText}.`;
+  return identifierText;
 }
 
-function fallbackGrammarNote(englishSummary: string) {
-  if (englishSummary.includes(" instead of ")) {
+function fallbackEnglishAnswer(question: string, evidence: string | undefined) {
+  const signal = [question, evidence].filter(Boolean).join("\n");
+  const identifierText = englishIdentifierText(signal);
+
+  if (includesAny(signal, ["活动播报", "自动播报", "播报"]) && includesAny(signal, ["模板", "机械", "愚蠢", "空话", "套话", "answer", "英文", "语法", "中文"])) {
+    return "The answer is to make the activity report question-first and AI-written, so it captures the user's concern before summarizing the response in English";
+  }
+
+  if (includesAny(signal, ["三个文档", "三处", "三个地方", "都一样", "重复"]) && includesAny(signal, ["引用", "单一来源", "source"])) {
+    return "The answer is to treat the repeated rule text as a single-source reference issue instead of flattening three contexts into one document-edit template";
+  }
+
+  if (includesAny(signal, ["引用", "单一来源"])) {
+    return "The answer keeps the reference relationship explicit instead of turning the context into a vague document note";
+  }
+
+  if (includesAny(signal, ["悬赏大厅"])) {
+    return `The answer keeps the Bounty Hall work specific${identifierText}, rather than turning it into a generic frontend update`;
+  }
+
+  if (includesAny(signal, ["评论"]) && includesAny(signal, ["后端"])) {
+    return "The answer keeps the comment backend issue tied to the actual verification needed, rather than treating the discussion as a finished fix";
+  }
+
+  if (includesAny(signal, ["质疑", "不对", "问题", "为什么", "怎么", "是不是", "吗"])) {
+    return "The answer clarifies the decision without pretending that a follow-up implementation has already happened";
+  }
+
+  if (includesAny(signal, ["修复", "修正", "实现", "新增", "补充", "调整", "改成", "写入", "提交", "推送", "验证"])) {
+    return `The answer summarizes the concrete ORF result${identifierText} without inventing extra scope`;
+  }
+
+  return "The answer records the actual ORF decision in plain English without inventing completed work";
+}
+
+function fallbackGrammarNote(answer: string) {
+  if (answer.includes(" instead of ")) {
     return "instead of 后面接名词或动名词，用来说明新做法替代了旧做法。";
   }
 
-  if (englishSummary.includes(" so ")) {
+  if (answer.includes(" rather than ")) {
+    return "rather than 用来连接被排除的旧做法，强调这次回答选择了另一种表达方式。";
+  }
+
+  if (answer.includes(" without ")) {
+    return "without 后面接名词或动名词，用来说明某件事不会伴随发生。";
+  }
+
+  if (answer.includes(" so ")) {
     return "so 后面接完整句子，用来说明前面的改动带来的结果。";
   }
 
-  if (englishSummary.includes(", including ")) {
+  if (answer.includes(", including ")) {
     return "including 后面列出具体内容，用来补充说明这次改动涉及哪些模块。";
   }
 
-  if (englishSummary.includes(" was ")) {
+  if (answer.includes(" was ")) {
     return "was 加过去分词构成被动语态，适合说明某项工作已经被完成。";
   }
 
-  return "一般现在时可以用来做简短播报，直接说明这次工作产生的结果。";
+  if (answer.includes("The answer ")) {
+    return "The answer 后面接现在时动词，可以直接说明这轮回复给出的判断。";
+  }
+
+  return "一般现在时可以用来做简短回答，直接说明这轮对话形成的判断。";
 }
 
-function fallbackMeme(summary: string) {
-  if (includesAny(summary, ["测试", "验证", "通过"])) return "测试全绿.jpg ✅";
-  if (includesAny(summary, ["提交", "推送"])) return "推送已到.jpg 🚀";
-  if (includesAny(summary, ["文档"])) return "文档归位.jpg 📝";
-  if (includesAny(summary, ["活动播报", "播报"])) return "播报不尬了.jpg ✅";
-  if (includesAny(summary, ["悬赏大厅"])) return "悬赏大厅开门.jpg 🏁";
-  if (includesAny(summary, ["评论"])) return "评论落库.jpg 💬";
-  if (includesAny(summary, ["讨论", "确认", "明确"])) return "这次说清楚了.jpg 🧭";
-  if (includesAny(summary, ["修复", "修正", "白屏", "问题"])) return "问题收口.jpg ✅";
-  return "继续推进.jpg 👍";
+function fallbackMeme(question: string, answer: string) {
+  const signal = `${question}\n${answer}`;
+  if (includesAny(signal, ["引用", "single-source", "reference"])) return "引用归位.jpg 🧭";
+  if (includesAny(signal, ["模板", "套话", "generic", "flattening", "keyword"])) return "别再套模板.jpg";
+  if (includesAny(signal, ["question-first", "问题"])) return "先看问题.jpg";
+  if (includesAny(signal, ["测试", "验证", "通过"])) return "测试全绿.jpg ✅";
+  if (includesAny(signal, ["提交", "推送"])) return "推送已到.jpg 🚀";
+  if (includesAny(signal, ["悬赏大厅"])) return "悬赏大厅开门.jpg 🏁";
+  if (includesAny(signal, ["评论"])) return "评论落库.jpg 💬";
+  if (includesAny(signal, ["修复", "修正", "白屏"])) return "问题收口.jpg ✅";
+  return "这次说清楚了.jpg 🧭";
 }
 
-function activitySummaryPack(summary: string, input: CodexActivityInput): ActivitySummaryPack {
-  const text = clause(summary);
-  const englishSummary = explicitEnglishCandidate(input) ?? fallbackEnglishSummary(text);
-  const grammar = explicitGrammarCandidate(input) ?? fallbackGrammarNote(englishSummary);
+function activityReportPack(input: CodexActivityInput): ActivityReportPack {
+  const question = buildReportQuestion(input);
+  const answer = explicitAnswerCandidate(input) ?? fallbackEnglishAnswer(question, bestSummaryCandidate(input));
+  const grammar = explicitGrammarCandidate(input) ?? fallbackGrammarNote(answer);
 
   return {
-    summary: text,
-    english: {
-      translation: trimSentenceEnd(englishSummary),
-      grammar,
-    },
-    meme: explicitMemeCandidate(input) ?? fallbackMeme(text),
+    question,
+    answer: trimEnglishSentenceEnd(answer),
+    grammar,
+    meme: explicitMemeCandidate(input) ?? fallbackMeme(question, answer),
   };
 }
 
-function formatNormalSummary(pack: ActivitySummaryPack) {
+function formatNormalSummary(pack: ActivityReportPack) {
   return [
     messageSeparator,
-    `${trimSentenceEnd(pack.summary)}。`,
-    `英文：${trimSentenceEnd(pack.english.translation)}.`,
-    `语法：${trimSentenceEnd(pack.english.grammar)}。`,
+    `问题：${formatChineseSentence(pack.question)}`,
+    `Answer: ${formatEnglishSentence(pack.answer)}`,
+    `语法：${formatChineseSentence(pack.grammar)}`,
     `表情包：${pack.meme}`,
   ].join("\n");
 }
@@ -390,7 +425,7 @@ export function readCodexActivityConfig(env: NodeJS.ProcessEnv = process.env) {
 }
 
 interface CodexActivityMessageContext {
-  pack: ActivitySummaryPack;
+  pack: ActivityReportPack;
 }
 
 interface CodexActivityStyle {
@@ -429,7 +464,7 @@ function resolveStyle(styleId: string | undefined) {
 
 function buildMessageContext(input: CodexActivityInput): CodexActivityMessageContext {
   return {
-    pack: activitySummaryPack(trimSentenceEnd(buildOneSentenceSummary(input)), input),
+    pack: activityReportPack(input),
   };
 }
 
