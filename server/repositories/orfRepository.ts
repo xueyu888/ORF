@@ -1,7 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
   AutomaticCompletionResult,
+  CommentStatus,
+  CommentTargetType,
+  CommentThread,
   Evidence,
   Feedback,
   MetricDirection,
@@ -16,6 +19,8 @@ import type {
 } from "../../src/types/orf";
 import { db } from "../db/client";
 import {
+  commentMessages,
+  commentThreads,
   evidence,
   feedback,
   feedbackCauseCategories,
@@ -30,9 +35,25 @@ import { getPermissionRulesForTeam } from "./permissionRepository";
 import { getTeamUsers } from "./userRepository";
 import { buildAutomaticCompletionSnapshot, calculateAutomaticCompletion } from "../utils/automaticCompletion";
 
-export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "permissionRules" | "automaticCompletions">;
+export type TaskManagementData = Pick<
+  OrfState,
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "permissionRules" | "automaticCompletions"
+>;
+
+type CommentActor = {
+  id: string;
+  name: string;
+  role: "admin" | "member";
+};
+
+type CommentMutationOutcome =
+  | { status: "ok"; thread?: CommentThread }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalid" };
 
 const today = () => new Date().toISOString().slice(0, 10);
+const nowIso = () => new Date().toISOString();
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
 function optional<T>(value: T | null): T | undefined {
@@ -94,7 +115,19 @@ function calculateAutomaticCompletions(state: Pick<OrfState, "objectives" | "res
 }
 
 export async function getTaskManagementData(): Promise<TaskManagementData> {
-  const [objectiveRows, resultRows, trendRows, taskRows, checklistRows, evidenceRows, feedbackRows, causeRows, teamRows] = await Promise.all([
+  const [
+    objectiveRows,
+    resultRows,
+    trendRows,
+    taskRows,
+    checklistRows,
+    evidenceRows,
+    feedbackRows,
+    causeRows,
+    commentThreadRows,
+    commentMessageRows,
+    teamRows,
+  ] = await Promise.all([
     db.select().from(objectives),
     db.select().from(results),
     db.select().from(resultTrendPoints),
@@ -103,6 +136,8 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     db.select().from(evidence),
     db.select().from(feedback),
     db.select().from(feedbackCauseCategories),
+    db.select().from(commentThreads),
+    db.select().from(commentMessages),
     db.select({ id: teams.id }).from(teams),
   ]);
   const permissionRules = teamRows[0] ? await getPermissionRulesForTeam(teamRows[0].id) : initialOrfState.permissionRules;
@@ -130,6 +165,22 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
 
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
+  const messagesByThread = new Map<string, CommentThread["messages"]>();
+  for (const message of [...commentMessageRows].sort(
+    (left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt),
+  )) {
+    const messages = messagesByThread.get(message.threadId) ?? [];
+    messages.push({
+      id: message.id,
+      author: message.author,
+      body: message.body,
+      createdAt: message.createdAt,
+      parentMessageId: optional(message.parentMessageId),
+      replyToMessageId: optional(message.replyToMessageId),
+      replyToAuthor: optional(message.replyToAuthor),
+    });
+    messagesByThread.set(message.threadId, messages);
+  }
 
   const taskItems: Task[] = orderedTaskRows.map((task) => ({
     id: task.id,
@@ -224,6 +275,19 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       updatedAt: objective.updatedAt,
     }));
   const automaticCompletions = calculateAutomaticCompletions({ objectives: objectiveItems, results: resultItems, tasks: taskItems });
+  const commentItems: CommentThread[] = [...commentThreadRows]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .map((thread) => ({
+      id: thread.id,
+      targetType: thread.targetType,
+      targetId: thread.targetId,
+      targetTitle: thread.targetTitle,
+      status: thread.status,
+      createdBy: thread.createdBy,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      messages: messagesByThread.get(thread.id) ?? [],
+    }));
 
   return {
     objectives: objectiveItems.map((objective) => ({
@@ -234,6 +298,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     tasks: taskItems,
     evidence: evidenceItems,
     feedback: feedbackItems,
+    comments: commentItems,
     permissionRules,
     automaticCompletions,
   };
@@ -252,7 +317,7 @@ export async function getOrfStateSnapshot(): Promise<OrfState> {
     evalRuns: [],
     scenarios: [],
     failureSamples: [],
-    comments: [],
+    comments: data.comments,
     causeCategories: Array.from(new Set(data.feedback.flatMap((item) => item.causeCategories))),
     rules: {
       requireResultForTask: true,
@@ -365,6 +430,327 @@ export async function claimResult(resultId: string, challenger: string): Promise
   return claimed ? { status: "claimed", result: claimed } : { status: "notFound" };
 }
 
+export interface CreateCommentInput {
+  targetType: CommentTargetType;
+  targetId: string;
+  targetTitle: string;
+  body: string;
+  parentMessageId?: string;
+  replyToMessageId?: string;
+  replyToAuthor?: string;
+}
+
+type CommentTarget = {
+  teamId: string;
+  title: string;
+};
+
+async function resolveCommentTarget(targetType: CommentTargetType, targetId: string): Promise<CommentTarget | null> {
+  if (targetType === "objective") {
+    const [target] = await db
+      .select({ teamId: objectives.teamId, title: objectives.title })
+      .from(objectives)
+      .where(eq(objectives.id, targetId))
+      .limit(1);
+    return target ?? null;
+  }
+
+  if (targetType === "result") {
+    const [target] = await db
+      .select({ teamId: results.teamId, title: results.title })
+      .from(results)
+      .where(eq(results.id, targetId))
+      .limit(1);
+    return target ?? null;
+  }
+
+  if (targetType === "task") {
+    const [target] = await db
+      .select({ teamId: tasks.teamId, title: tasks.title })
+      .from(tasks)
+      .where(eq(tasks.id, targetId))
+      .limit(1);
+    return target ?? null;
+  }
+
+  const [target] = await db
+    .select({ teamId: tasks.teamId, title: taskChecklistItems.label })
+    .from(taskChecklistItems)
+    .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
+    .where(eq(taskChecklistItems.id, targetId))
+    .limit(1);
+  return target ?? null;
+}
+
+async function getCommentThread(threadId: string): Promise<CommentThread | null> {
+  const [thread] = await db.select().from(commentThreads).where(eq(commentThreads.id, threadId)).limit(1);
+  if (!thread) {
+    return null;
+  }
+
+  const messages = await db.select().from(commentMessages).where(eq(commentMessages.threadId, thread.id));
+  return {
+    id: thread.id,
+    targetType: thread.targetType,
+    targetId: thread.targetId,
+    targetTitle: thread.targetTitle,
+    status: thread.status,
+    createdBy: thread.createdBy,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    messages: messages
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt))
+      .map((message) => ({
+        id: message.id,
+        author: message.author,
+        body: message.body,
+        createdAt: message.createdAt,
+        parentMessageId: optional(message.parentMessageId),
+        replyToMessageId: optional(message.replyToMessageId),
+        replyToAuthor: optional(message.replyToAuthor),
+      })),
+  };
+}
+
+function canManageComment(actor: CommentActor, ownerUserId: string) {
+  return actor.role === "admin" || actor.id === ownerUserId;
+}
+
+export async function createComment(input: CreateCommentInput, actor: CommentActor): Promise<CommentMutationOutcome> {
+  const body = input.body.trim();
+  if (!body) {
+    return { status: "invalid" };
+  }
+
+  const target = await resolveCommentTarget(input.targetType, input.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+
+  const targetTitle = input.targetTitle.trim() || target.title;
+  const createdAt = nowIso();
+  const threadId = await db.transaction(async (tx) => {
+    if (input.parentMessageId) {
+      const [parent] = await tx
+        .select({ threadId: commentMessages.threadId })
+        .from(commentMessages)
+        .innerJoin(commentThreads, eq(commentThreads.id, commentMessages.threadId))
+        .where(
+          and(
+            eq(commentMessages.id, input.parentMessageId),
+            eq(commentThreads.targetType, input.targetType),
+            eq(commentThreads.targetId, input.targetId),
+          ),
+        )
+        .limit(1);
+
+      if (!parent) {
+        return null;
+      }
+
+      const messageRows = await tx
+        .select({ sortOrder: commentMessages.sortOrder })
+        .from(commentMessages)
+        .where(eq(commentMessages.threadId, parent.threadId));
+      const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
+
+      await tx.insert(commentMessages).values({
+        id: makeId("cmsg"),
+        threadId: parent.threadId,
+        authorUserId: actor.id,
+        author: actor.name,
+        body,
+        createdAt,
+        parentMessageId: input.parentMessageId,
+        replyToMessageId: input.replyToMessageId ?? null,
+        replyToAuthor: input.replyToAuthor ?? null,
+        sortOrder,
+      });
+      await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
+      return parent.threadId;
+    }
+
+    const [openThread] = await tx
+      .select({ id: commentThreads.id })
+      .from(commentThreads)
+      .where(and(eq(commentThreads.targetType, input.targetType), eq(commentThreads.targetId, input.targetId), eq(commentThreads.status, "open")))
+      .limit(1);
+    const nextThreadId = openThread?.id ?? makeId("cthread");
+
+    if (!openThread) {
+      await tx.insert(commentThreads).values({
+        id: nextThreadId,
+        teamId: target.teamId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        targetTitle,
+        status: "open",
+        createdBy: actor.id,
+        createdAt,
+        updatedAt: createdAt,
+      });
+    } else {
+      await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, nextThreadId));
+    }
+
+    const messageRows = await tx
+      .select({ sortOrder: commentMessages.sortOrder })
+      .from(commentMessages)
+      .where(eq(commentMessages.threadId, nextThreadId));
+    const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
+
+    await tx.insert(commentMessages).values({
+      id: makeId("cmsg"),
+      threadId: nextThreadId,
+      authorUserId: actor.id,
+      author: actor.name,
+      body,
+      createdAt,
+      parentMessageId: null,
+      replyToMessageId: null,
+      replyToAuthor: null,
+      sortOrder,
+    });
+
+    return nextThreadId;
+  });
+
+  if (!threadId) {
+    return { status: "notFound" };
+  }
+
+  return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
+}
+
+export async function updateCommentThreadStatus(
+  threadId: string,
+  status: CommentStatus,
+  actor: CommentActor,
+): Promise<CommentMutationOutcome> {
+  const [thread] = await db.select().from(commentThreads).where(eq(commentThreads.id, threadId)).limit(1);
+  if (!thread) {
+    return { status: "notFound" };
+  }
+
+  if (!canManageComment(actor, thread.createdBy)) {
+    return { status: "forbidden" };
+  }
+
+  await db.update(commentThreads).set({ status, updatedAt: nowIso() }).where(eq(commentThreads.id, threadId));
+  return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
+}
+
+export async function updateCommentMessage(
+  threadId: string,
+  messageId: string,
+  body: string,
+  actor: CommentActor,
+): Promise<CommentMutationOutcome> {
+  const nextBody = body.trim();
+  if (!nextBody) {
+    return { status: "invalid" };
+  }
+
+  const [message] = await db
+    .select({ authorUserId: commentMessages.authorUserId })
+    .from(commentMessages)
+    .where(and(eq(commentMessages.threadId, threadId), eq(commentMessages.id, messageId)))
+    .limit(1);
+  if (!message) {
+    return { status: "notFound" };
+  }
+
+  if (!canManageComment(actor, message.authorUserId)) {
+    return { status: "forbidden" };
+  }
+
+  await db.transaction(async (tx) => {
+    const updatedAt = nowIso();
+    await tx
+      .update(commentMessages)
+      .set({ body: nextBody })
+      .where(and(eq(commentMessages.threadId, threadId), eq(commentMessages.id, messageId)));
+    await tx.update(commentThreads).set({ updatedAt }).where(eq(commentThreads.id, threadId));
+  });
+
+  return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
+}
+
+export async function deleteCommentMessage(
+  threadId: string,
+  messageId: string,
+  actor: CommentActor,
+): Promise<CommentMutationOutcome> {
+  const [message] = await db
+    .select({ authorUserId: commentMessages.authorUserId })
+    .from(commentMessages)
+    .where(and(eq(commentMessages.threadId, threadId), eq(commentMessages.id, messageId)))
+    .limit(1);
+  if (!message) {
+    return { status: "notFound" };
+  }
+
+  if (!canManageComment(actor, message.authorUserId)) {
+    return { status: "forbidden" };
+  }
+
+  const threadRemoved = await db.transaction(async (tx) => {
+    await tx
+      .delete(commentMessages)
+      .where(
+        and(
+          eq(commentMessages.threadId, threadId),
+          or(eq(commentMessages.id, messageId), eq(commentMessages.parentMessageId, messageId)),
+        ),
+      );
+
+    const [remaining] = await tx.select({ id: commentMessages.id }).from(commentMessages).where(eq(commentMessages.threadId, threadId)).limit(1);
+    if (!remaining) {
+      await tx.delete(commentThreads).where(eq(commentThreads.id, threadId));
+      return true;
+    }
+
+    await tx.update(commentThreads).set({ updatedAt: nowIso() }).where(eq(commentThreads.id, threadId));
+    return false;
+  });
+
+  return threadRemoved ? { status: "ok" } : { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
+}
+
+export async function submitLootComment(resultId: string, body: string, actor: CommentActor): Promise<CommentMutationOutcome> {
+  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
+  if (!result) {
+    return { status: "notFound" };
+  }
+
+  const outcome = await createComment(
+    {
+      targetType: "result",
+      targetId: result.id,
+      targetTitle: result.title,
+      body: `战利品提交：${body}`,
+    },
+    actor,
+  );
+  if (outcome.status !== "ok") {
+    return outcome;
+  }
+
+  await db.transaction(async (tx) => {
+    const taskRows = await tx
+      .select({ id: tasks.id, status: tasks.status })
+      .from(tasks)
+      .where(eq(tasks.linkedResultId, resultId));
+    await Promise.all(
+      taskRows
+        .filter((task) => task.status !== "Done")
+        .map((task) => tx.update(tasks).set({ status: "In Review", updatedAt: today() }).where(eq(tasks.id, task.id))),
+    );
+  });
+
+  return outcome;
+}
+
 export async function createTask(input: CreateTaskInput): Promise<Task | null> {
   const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
   if (!result) {
@@ -442,8 +828,22 @@ export async function updateObjectiveTitle(objectiveId: string, title: string): 
     return false;
   }
 
-  const updated = await db.update(objectives).set({ title: nextTitle, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
-  return updated.length > 0;
+  return db.transaction(async (tx) => {
+    const updated = await tx
+      .update(objectives)
+      .set({ title: nextTitle, updatedAt: today() })
+      .where(eq(objectives.id, objectiveId))
+      .returning({ id: objectives.id });
+    if (updated.length === 0) {
+      return false;
+    }
+
+    await tx
+      .update(commentThreads)
+      .set({ targetTitle: nextTitle, updatedAt: nowIso() })
+      .where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
+    return true;
+  });
 }
 
 export async function updateObjectiveStage(objectiveId: string, stage: OrfStage): Promise<boolean> {
@@ -457,8 +857,18 @@ export async function updateResultTitle(resultId: string, title: string): Promis
     return false;
   }
 
-  const updated = await db.update(results).set({ title: nextTitle }).where(eq(results.id, resultId)).returning({ id: results.id });
-  return updated.length > 0;
+  return db.transaction(async (tx) => {
+    const updated = await tx.update(results).set({ title: nextTitle }).where(eq(results.id, resultId)).returning({ id: results.id });
+    if (updated.length === 0) {
+      return false;
+    }
+
+    await tx
+      .update(commentThreads)
+      .set({ targetTitle: nextTitle, updatedAt: nowIso() })
+      .where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
+    return true;
+  });
 }
 
 export async function updateTaskTitle(taskId: string, title: string): Promise<boolean> {
@@ -467,8 +877,18 @@ export async function updateTaskTitle(taskId: string, title: string): Promise<bo
     return false;
   }
 
-  const updated = await db.update(tasks).set({ title: nextTitle, updatedAt: today() }).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
-  return updated.length > 0;
+  return db.transaction(async (tx) => {
+    const updated = await tx.update(tasks).set({ title: nextTitle, updatedAt: today() }).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
+    if (updated.length === 0) {
+      return false;
+    }
+
+    await tx
+      .update(commentThreads)
+      .set({ targetTitle: nextTitle, updatedAt: nowIso() })
+      .where(and(eq(commentThreads.targetType, "task"), eq(commentThreads.targetId, taskId)));
+    return true;
+  });
 }
 
 export async function updateChecklistItemLabel(taskId: string, itemId: string, label: string): Promise<boolean> {
@@ -489,23 +909,93 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
     }
 
     await tx.update(tasks).set({ updatedAt: today() }).where(eq(tasks.id, taskId));
+    await tx
+      .update(commentThreads)
+      .set({ targetTitle: nextLabel, updatedAt: nowIso() })
+      .where(and(eq(commentThreads.targetType, "subtask"), eq(commentThreads.targetId, itemId)));
     return true;
   });
 }
 
 export async function deleteObjective(objectiveId: string): Promise<boolean> {
-  const deleted = await db.delete(objectives).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
-  return deleted.length > 0;
+  return db.transaction(async (tx) => {
+    const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+    if (!objective) {
+      return false;
+    }
+
+    const resultRows = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
+    const taskRows = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.linkedObjectiveId, objectiveId));
+    const resultIds = resultRows.map((result) => result.id);
+    const taskIds = taskRows.map((task) => task.id);
+    const checklistRows =
+      taskIds.length > 0
+        ? await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(inArray(taskChecklistItems.taskId, taskIds))
+        : [];
+    const checklistIds = checklistRows.map((item) => item.id);
+
+    if (checklistIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), inArray(commentThreads.targetId, checklistIds)));
+    }
+    if (taskIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), inArray(commentThreads.targetId, taskIds)));
+    }
+    if (resultIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "result"), inArray(commentThreads.targetId, resultIds)));
+    }
+    await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
+
+    const deleted = await tx.delete(objectives).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
+    return deleted.length > 0;
+  });
 }
 
 export async function deleteResult(resultId: string): Promise<boolean> {
-  const deleted = await db.delete(results).where(eq(results.id, resultId)).returning({ id: results.id });
-  return deleted.length > 0;
+  return db.transaction(async (tx) => {
+    const [result] = await tx.select({ id: results.id }).from(results).where(eq(results.id, resultId)).limit(1);
+    if (!result) {
+      return false;
+    }
+
+    const taskRows = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.linkedResultId, resultId));
+    const taskIds = taskRows.map((task) => task.id);
+    const checklistRows =
+      taskIds.length > 0
+        ? await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(inArray(taskChecklistItems.taskId, taskIds))
+        : [];
+    const checklistIds = checklistRows.map((item) => item.id);
+
+    if (checklistIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), inArray(commentThreads.targetId, checklistIds)));
+    }
+    if (taskIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), inArray(commentThreads.targetId, taskIds)));
+    }
+    await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
+
+    const deleted = await tx.delete(results).where(eq(results.id, resultId)).returning({ id: results.id });
+    return deleted.length > 0;
+  });
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
-  const deleted = await db.delete(tasks).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
-  return deleted.length > 0;
+  return db.transaction(async (tx) => {
+    const [task] = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (!task) {
+      return false;
+    }
+
+    const checklistRows = await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId));
+    const checklistIds = checklistRows.map((item) => item.id);
+
+    if (checklistIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), inArray(commentThreads.targetId, checklistIds)));
+    }
+    await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), eq(commentThreads.targetId, taskId)));
+
+    const deleted = await tx.delete(tasks).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
+    return deleted.length > 0;
+  });
 }
 
 export async function deleteChecklistItem(taskId: string, itemId: string): Promise<boolean> {
@@ -523,6 +1013,7 @@ export async function deleteChecklistItem(taskId: string, itemId: string): Promi
       return false;
     }
 
+    await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), eq(commentThreads.targetId, itemId)));
     const rows = await tx
       .select({ id: taskChecklistItems.id, done: taskChecklistItems.done })
       .from(taskChecklistItems)

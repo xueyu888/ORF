@@ -50,6 +50,13 @@
       "when": 1778048784651,
       "tag": "0006_modern_sinister_six",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778287512831,
+      "tag": "0007_lazy_shooting_star",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,8 @@ export const evidenceTypeEnum = pgEnum("evidence_type", ["Eval run", "Log sample
 export const feedbackSourceEnum = pgEnum("feedback_source", ["User report", "Eval run", "Log", "Incident", "Team review"]);
 export const feedbackStatusEnum = pgEnum("feedback_status", ["New", "Reviewing", "Action Created", "Result Updated", "Closed"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "member", "readonly", "supervisor"]);
+export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask"]);
+export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
 
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
@@ -212,4 +214,37 @@ export const evidence = pgTable("evidence", {
   linkedFeedbackId: text("linked_feedback_id").references(() => feedback.id),
   createdBy: text("created_by").references(() => users.id),
   updatedBy: text("updated_by").references(() => users.id),
+});
+
+export const commentThreads = pgTable("comment_threads", {
+  id: text("id").primaryKey(),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  targetType: commentTargetTypeEnum("target_type").notNull(),
+  targetId: text("target_id").notNull(),
+  targetTitle: text("target_title").notNull(),
+  status: commentStatusEnum("status").notNull().default("open"),
+  createdBy: text("created_by")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+});
+
+export const commentMessages = pgTable("comment_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id")
+    .notNull()
+    .references(() => commentThreads.id, { onDelete: "cascade" }),
+  authorUserId: text("author_user_id")
+    .notNull()
+    .references(() => users.id),
+  author: text("author").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  parentMessageId: text("parent_message_id"),
+  replyToMessageId: text("reply_to_message_id"),
+  replyToAuthor: text("reply_to_author"),
+  sortOrder: integer("sort_order").notNull().default(0),
 });

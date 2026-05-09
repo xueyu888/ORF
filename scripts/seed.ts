@@ -1,5 +1,7 @@
 import { closeDb, db } from "../server/db/client";
 import {
+  commentMessages,
+  commentThreads,
   evidence,
   feedback,
   feedbackCauseCategories,
@@ -51,12 +53,16 @@ function collectUserNames() {
       ...initialOrfState.tasks.map((item) => item.assignee),
       ...initialOrfState.feedback.map((item) => item.owner),
       ...initialOrfState.evidence.map((item) => item.owner),
+      ...initialOrfState.comments.map((item) => item.createdBy),
+      ...initialOrfState.comments.flatMap((thread) => thread.messages.map((message) => message.author)),
     ]),
   ).filter(Boolean);
 }
 
 async function seed() {
   await db.transaction(async (tx) => {
+    await tx.delete(commentMessages);
+    await tx.delete(commentThreads);
     await tx.delete(evidence);
     await tx.delete(feedbackCauseCategories);
     await tx.delete(feedback);
@@ -240,6 +246,38 @@ async function seed() {
         updatedBy: userIdForName(item.owner),
       })),
     );
+
+    if (initialOrfState.comments.length > 0) {
+      await tx.insert(commentThreads).values(
+        initialOrfState.comments.map((thread) => ({
+          id: thread.id,
+          teamId: team.id,
+          targetType: thread.targetType,
+          targetId: thread.targetId,
+          targetTitle: thread.targetTitle,
+          status: thread.status,
+          createdBy: userIdForName(thread.createdBy),
+          createdAt: thread.createdAt,
+          updatedAt: thread.updatedAt,
+        })),
+      );
+      await tx.insert(commentMessages).values(
+        initialOrfState.comments.flatMap((thread) =>
+          thread.messages.map((message, index) => ({
+            id: message.id,
+            threadId: thread.id,
+            authorUserId: userIdForName(message.author),
+            author: message.author,
+            body: message.body,
+            createdAt: message.createdAt,
+            parentMessageId: message.parentMessageId ?? null,
+            replyToMessageId: message.replyToMessageId ?? null,
+            replyToAuthor: message.replyToAuthor ?? null,
+            sortOrder: index,
+          })),
+        ),
+      );
+    }
   });
 }
 

@@ -25,6 +25,7 @@ export type CommentReplyInput = {
 };
 
 export function CommentPanel({
+  canManageAllComments = false,
   currentMember,
   onAddComment,
   onClose,
@@ -33,6 +34,7 @@ export function CommentPanel({
   targetTitle,
   threads,
 }: {
+  canManageAllComments?: boolean;
   currentMember: string;
   onAddComment: (body: string, replyInput?: CommentReplyInput) => void;
   onClose: () => void;
@@ -174,6 +176,8 @@ export function CommentPanel({
               <div className="orf-comment-fixed-root">
                 <CommentMessageRow
                   entry={activeRootEntry}
+                  canManageAllComments={canManageAllComments}
+                  currentMember={currentMember}
                   selected={selectedMessageId === activeRootEntry.message.id}
                   onSelect={setSelectedMessageId}
                   onReply={(message) => handleReply(activeRootEntry.message.id, message)}
@@ -187,6 +191,8 @@ export function CommentPanel({
                     <CommentMessageRow
                       key={`${entry.threadId}:${entry.message.id}`}
                       entry={entry}
+                      canManageAllComments={canManageAllComments}
+                      currentMember={currentMember}
                       selected={selectedMessageId === entry.message.id}
                       onSelect={setSelectedMessageId}
                       onReply={(message) => handleReply(activeRootEntry.message.id, message)}
@@ -205,6 +211,8 @@ export function CommentPanel({
                 <CommentMessageRow
                   key={`${entry.threadId}:${entry.message.id}`}
                   entry={entry}
+                  canManageAllComments={canManageAllComments}
+                  currentMember={currentMember}
                   selected={selectedMessageId === entry.message.id}
                   showReplyEntry
                   onSelect={setSelectedMessageId}
@@ -234,6 +242,8 @@ export function CommentPanel({
 }
 
 function CommentMessageRow({
+  canManageAllComments,
+  currentMember,
   entry,
   onDelete,
   onEdit,
@@ -243,6 +253,8 @@ function CommentMessageRow({
   selected,
   showReplyEntry = false,
 }: {
+  canManageAllComments: boolean;
+  currentMember: string;
   entry: CommentEntry;
   onDelete: (threadId: string, messageId: string) => void;
   onEdit: (threadId: string, message: CommentMessage) => void;
@@ -253,6 +265,7 @@ function CommentMessageRow({
   showReplyEntry?: boolean;
 }) {
   const { message, threadId } = entry;
+  const canManageMessage = canManageAllComments || message.author === currentMember;
   const deleteMessage = () => {
     if (window.confirm("删除这条评论？")) {
       onDelete(threadId, message.id);
@@ -270,15 +283,19 @@ function CommentMessageRow({
             <button type="button" className="orf-comment-icon-button" aria-label="回复评论" title="回复" onClick={(event) => { event.stopPropagation(); onReply(message); }}>
               <Reply className="h-3.5 w-3.5" />
             </button>
-            <button type="button" className="orf-comment-icon-button orf-comment-icon-button-danger" aria-label="删除评论" title="删除" onClick={(event) => { event.stopPropagation(); deleteMessage(); }}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-            <button type="button" className="orf-comment-icon-button" aria-label="编辑评论" title="编辑" onClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }}>
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
+            {canManageMessage && (
+              <>
+                <button type="button" className="orf-comment-icon-button orf-comment-icon-button-danger" aria-label="删除评论" title="删除" onClick={(event) => { event.stopPropagation(); deleteMessage(); }}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" className="orf-comment-icon-button" aria-label="编辑评论" title="编辑" onClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }}>
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
           </div>
         </div>
-        <p className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); onEdit(threadId, message); }}>
+        <p className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
           {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
           {message.body}
         </p>

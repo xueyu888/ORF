@@ -283,6 +283,7 @@ export function ChallengePlanPage() {
 
       {commentTarget && (
         <CommentPanel
+          canManageAllComments={isAdmin}
           currentMember={currentMember}
           targetTitle={commentTarget.title}
           threads={state.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}

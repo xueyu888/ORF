@@ -16,10 +16,12 @@ import {
   replaceRolePermissionRules,
 } from "./repositories/permissionRepository";
 import {
+  createComment,
   createChecklistItem,
   claimResult,
   createResult,
   createTask,
+  deleteCommentMessage,
   deleteChecklistItem,
   deleteObjective,
   deleteResult,
@@ -30,6 +32,9 @@ import {
   moveResult,
   moveTask,
   setTaskCompletion,
+  submitLootComment,
+  updateCommentMessage,
+  updateCommentThreadStatus,
   updateChecklistItemLabel,
   updateObjectiveStage,
   updateObjectiveTitle,
@@ -55,6 +60,8 @@ const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
 const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "飞升"]);
 const userRoleSchema = z.enum(["admin", "member"]);
+const commentTargetTypeSchema = z.enum(["objective", "result", "task", "subtask"]);
+const commentStatusSchema = z.enum(["open", "resolved"]);
 const userBodySchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().email().transform((value) => value.toLowerCase()),
@@ -73,6 +80,8 @@ const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
+const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
+const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
 const permissionRoleParamsSchema = z.object({ role: userRoleSchema });
 const placementSchema = z.enum(["before", "after"]);
@@ -141,6 +150,18 @@ const moveChecklistBodySchema = z.object({
   referenceItemId: z.string().optional(),
   placement: placementSchema.optional(),
 });
+const createCommentBodySchema = z.object({
+  targetType: commentTargetTypeSchema,
+  targetId: z.string().min(1),
+  targetTitle: z.string().trim().min(1),
+  body: z.string().trim().min(1),
+  parentMessageId: z.string().min(1).optional(),
+  replyToMessageId: z.string().min(1).optional(),
+  replyToAuthor: z.string().trim().min(1).optional(),
+});
+const updateCommentStatusBodySchema = z.object({ status: commentStatusSchema });
+const updateCommentMessageBodySchema = z.object({ body: z.string().trim().min(1) });
+const submitLootBodySchema = z.object({ body: z.string().trim().min(1) });
 
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
@@ -163,6 +184,20 @@ async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
 
   if (user.role !== "admin") {
     reply.code(403).send({ error: "Forbidden" });
+    return null;
+  }
+
+  return user;
+}
+
+async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
+  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
+    request.log.warn(error, "Ory API session check failed");
+    return null;
+  });
+
+  if (!user) {
+    reply.code(401).send({ error: "Unauthorized" });
     return null;
   }
 
@@ -236,6 +271,22 @@ async function requireWritePermission(
   }
 
   return true;
+}
+
+function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof createComment>>) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Comment target not found" });
+  }
+
+  if (outcome.status === "forbidden") {
+    return reply.code(403).send({ error: "Forbidden" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Comment body is required" });
+  }
+
+  return { ok: true, commentThread: outcome.thread ?? null };
 }
 
 export async function buildServer() {
@@ -371,6 +422,48 @@ export async function buildServer() {
 
   app.get("/api/tasks-page", async () => getTaskManagementData());
   app.get("/api/orf-state", async () => getOrfStateSnapshot());
+
+  app.post("/api/comments", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const body = createCommentBodySchema.parse(request.body);
+    return sendCommentOutcome(reply, await createComment(body, user));
+  });
+
+  app.patch("/api/comments/:threadId/status", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const params = commentThreadParamsSchema.parse(request.params);
+    const body = updateCommentStatusBodySchema.parse(request.body);
+    return sendCommentOutcome(reply, await updateCommentThreadStatus(params.threadId, body.status, user));
+  });
+
+  app.patch("/api/comments/:threadId/messages/:messageId", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const params = commentMessageParamsSchema.parse(request.params);
+    const body = updateCommentMessageBodySchema.parse(request.body);
+    return sendCommentOutcome(reply, await updateCommentMessage(params.threadId, params.messageId, body.body, user));
+  });
+
+  app.delete("/api/comments/:threadId/messages/:messageId", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const params = commentMessageParamsSchema.parse(request.params);
+    return sendCommentOutcome(reply, await deleteCommentMessage(params.threadId, params.messageId, user));
+  });
 
   app.get("/api/users", async (request, reply) => {
     const teamId = await requireAdminTeamId(request, reply);
@@ -534,13 +627,9 @@ export async function buildServer() {
 
   app.patch("/api/results/:resultId/challenge", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
-    const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-      request.log.warn(error, "Ory challenge session check failed");
-      return null;
-    });
-
+    const user = await requireApiUser(request, reply);
     if (!user) {
-      return reply.code(401).send({ error: "Unauthorized" });
+      return reply;
     }
 
     const outcome = await claimResult(params.resultId, user.name);
@@ -554,6 +643,17 @@ export async function buildServer() {
     }
 
     return { result: outcome.result };
+  });
+
+  app.post("/api/results/:resultId/loot", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const body = submitLootBodySchema.parse(request.body);
+    return sendCommentOutcome(reply, await submitLootComment(params.resultId, body.body, user));
   });
 
   app.patch("/api/tasks/:taskId", async (request, reply) => {

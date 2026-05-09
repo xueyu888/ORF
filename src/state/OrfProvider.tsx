@@ -107,6 +107,7 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     tasks: data.tasks,
     evidence: data.evidence,
     feedback: data.feedback,
+    comments: data.comments,
     permissionRules: data.permissionRules,
     automaticCompletions: data.automaticCompletions ?? {},
   };
@@ -218,6 +219,30 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
 
     if (error.status === 409) {
       return "这个悬赏已经有挑战者";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
+function commentMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return "只能编辑或删除自己的评论";
+    }
+
+    if (error.status === 404) {
+      return "评论对象不存在，已刷新数据";
+    }
+
+    if (error.status === 400) {
+      return "评论内容不能为空";
     }
 
     return error.message || fallback;
@@ -575,7 +600,18 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
       updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "悬赏信心已更新"),
-      submitLoot: (input) => commit(store.submitLoot(state, input), "战利品已提交"),
+      submitLoot: (input) => {
+        commit(store.submitLoot(state, input), "战利品已提交");
+        void apiRequest(`/api/results/${encodeURIComponent(input.bountyId)}/loot`, {
+          method: "POST",
+          body: JSON.stringify({ body: input.body }),
+        })
+          .then(refreshTaskManagementData)
+          .catch((error) => {
+            notify(commentMutationFailureMessage(error, "战利品提交失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
       createUser: async (input) => {
         try {
           const data = await apiJson<UsersResponse>("/api/users", {
@@ -640,10 +676,59 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      addComment: (input) => commit(store.addComment(state, input), "评论已添加"),
-      updateCommentThreadStatus: (threadId, status) => commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开"),
-      updateCommentMessage: (threadId, messageId, body) => commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新"),
-      deleteCommentMessage: (threadId, messageId) => commit(store.deleteCommentMessage(state, threadId, messageId), "评论已删除"),
+      addComment: (input) => {
+        commit(store.addComment(state, input), "评论已添加");
+        void apiRequest("/api/comments", {
+          method: "POST",
+          body: JSON.stringify({
+            targetType: input.targetType,
+            targetId: input.targetId,
+            targetTitle: input.targetTitle,
+            body: input.body,
+            parentMessageId: input.parentMessageId,
+            replyToMessageId: input.replyToMessageId,
+            replyToAuthor: input.replyToAuthor,
+          }),
+        })
+          .then(refreshTaskManagementData)
+          .catch((error) => {
+            notify(commentMutationFailureMessage(error, "评论添加失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateCommentThreadStatus: (threadId, status) => {
+        commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开");
+        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status }),
+        })
+          .then(refreshTaskManagementData)
+          .catch((error) => {
+            notify(commentMutationFailureMessage(error, "评论状态更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateCommentMessage: (threadId, messageId, body) => {
+        commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新");
+        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ body }),
+        })
+          .then(refreshTaskManagementData)
+          .catch((error) => {
+            notify(commentMutationFailureMessage(error, "评论更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      deleteCommentMessage: (threadId, messageId) => {
+        commit(store.deleteCommentMessage(state, threadId, messageId), "评论已删除");
+        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })
+          .then(refreshTaskManagementData)
+          .catch((error) => {
+            notify(commentMutationFailureMessage(error, "评论删除失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
         commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "悬赏更新已记录"),
     }),
