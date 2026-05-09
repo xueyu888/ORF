@@ -51,6 +51,8 @@ type CommentMutationOutcome =
   | { status: "notFound" }
   | { status: "forbidden" }
   | { status: "invalid" };
+type CommentThreadRow = typeof commentThreads.$inferSelect;
+type CommentMessageRow = typeof commentMessages.$inferSelect;
 
 const today = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
@@ -58,6 +60,27 @@ const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toSt
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
+}
+
+function isMissingCommentStorageError(error: unknown) {
+  const cause = error && typeof error === "object" && "cause" in error ? (error as { cause?: unknown }).cause : error;
+  if (!cause || typeof cause !== "object" || !("code" in cause)) {
+    return false;
+  }
+
+  return cause.code === "42P01" || cause.code === "42704";
+}
+
+async function getCommentRows(): Promise<[CommentThreadRow[], CommentMessageRow[]]> {
+  try {
+    return await Promise.all([db.select().from(commentThreads), db.select().from(commentMessages)]);
+  } catch (error) {
+    if (isMissingCommentStorageError(error)) {
+      return [[], []];
+    }
+
+    throw error;
+  }
 }
 
 function statusFromChecklist(rows: readonly { done: boolean }[], fallback: TaskStatus = "Todo"): TaskStatus {
@@ -124,8 +147,6 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     evidenceRows,
     feedbackRows,
     causeRows,
-    commentThreadRows,
-    commentMessageRows,
     teamRows,
   ] = await Promise.all([
     db.select().from(objectives),
@@ -136,10 +157,9 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     db.select().from(evidence),
     db.select().from(feedback),
     db.select().from(feedbackCauseCategories),
-    db.select().from(commentThreads),
-    db.select().from(commentMessages),
     db.select({ id: teams.id }).from(teams),
   ]);
+  const [commentThreadRows, commentMessageRows] = await getCommentRows();
   const permissionRules = teamRows[0] ? await getPermissionRulesForTeam(teamRows[0].id) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();

@@ -107,7 +107,7 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     tasks: data.tasks,
     evidence: data.evidence,
     feedback: data.feedback,
-    comments: data.comments,
+    comments: data.comments ?? state.comments ?? [],
     permissionRules: data.permissionRules,
     automaticCompletions: data.automaticCompletions ?? {},
   };
