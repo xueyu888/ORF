@@ -32,10 +32,10 @@ test("formats GitHub push payload for Mattermost", () => {
   assert.doesNotMatch(message, /Body is omitted/);
 });
 
-test("formats polled GitHub commits for Mattermost", () => {
+test("formats polled GitHub push commits for Mattermost", () => {
   const message = formatGitHubCommitSyncMessage({
     repository: "xueyu888/ORF",
-    branch: "main",
+    branch: "xy",
     commits: [
       {
         sha: "3333333333333333333333333333333333333333",
@@ -49,8 +49,8 @@ test("formats polled GitHub commits for Mattermost", () => {
     ],
   });
 
-  assert.match(message, /GitHub sync: \[xueyu888\/ORF\]/);
-  assert.match(message, /Detected 1 new commit on `main`/);
+  assert.match(message, /GitHub push: \[xueyu888\/ORF\]/);
+  assert.match(message, /Detected 1 pushed commit on `xy`/);
   assert.match(message, /`3333333`/);
   assert.match(message, /docs: update sync instructions - xueyu/);
   assert.doesNotMatch(message, /Long body/);
