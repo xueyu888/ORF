@@ -209,7 +209,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `progress` | `number` | 后端计算后的目标进度，前端只负责展示。 |
 | `updatedAt` | `string` | 计算复盘日期兜底值。 |
 
-目标行不依赖 `Objective.owner` 展示负责人；目标行头像组来自目标下可见悬赏指标的 `Result.owner`。
+目标行不展示负责人；目标行头像组来自目标下可见悬赏指标的 `Result.owner`。
 
 ### `Result`
 
@@ -220,11 +220,12 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `id` | `string` | 悬赏指标唯一标识。 |
 | `objectiveId` | `string` | 关联目标。 |
 | `title` | `string` | 悬赏指标标题。 |
-| `owner` | `string` | 悬赏指标负责人；一个悬赏指标只允许一个负责人。 |
+| `owner` | `string` | 当前挑战者；一个悬赏指标最多一个挑战者。 |
 | `status` | `WorkStatus` | 后端原始状态。 |
 | TODO: `source` | `"managerDefined" \| "memberProposed"` | 悬赏指标来源。 |
 | TODO: `definer` | `string` | 悬赏指标定义人；用于悬赏指标定义分归属。 |
-| TODO: `finalDueAt` | `string` | 指挥官设置的最终截止时间；权限上按管理员校验。 |
+| TODO: `finalDueAt` | `string` | 指挥官设置的悬赏指标最终截止时间；大厅剩余时间、排序和确认期计算都以它为准。 |
+| TODO: `assignedChallenger` | `string \| null` | 指挥官指定的待接受挑战者；接受挑战后写入 `owner`。 |
 | TODO: `acceptedAt` | `string \| null` | 挑战者接受挑战时间，用于计算确认期。 |
 | TODO: `confirmationDueAt` | `string \| null` | 悬赏指标确认截止时间。 |
 | TODO: `confirmedAt` | `string \| null` | 悬赏指标冻结确认时间。 |
@@ -237,7 +238,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `unit` | `string` | 悬赏指标值展示单位。 |
 | `direction` | `MetricDirection` | 悬赏指标进度计算方向。 |
 
-`Result.owner` 是挑战页负责人展示和个人视图过滤的来源。
+`Result.owner` 只表示已接受挑战的挑战者，是挑战页个人视图过滤的来源；目标不使用负责人语义，征召中待接受的人使用 `assignedChallenger`。
 
 `Result.uncertaintyLevel` 是唯一评级字段。
 
@@ -263,12 +264,12 @@ confirmationDueAt = acceptedAt + 确认期
 | `status` | `TaskStatus` | 任务展示状态和任务完成状态计算。 |
 | `linkedObjectiveId` | `string` | 关联目标。 |
 | `linkedResultId` | `string` | 关联悬赏指标。 |
-| `dueDate` | `string` | 目标行日期优先来源。 |
+| `dueDate` | `string` | 任务自身截止时间。 |
 | `updatedAt` | `string` | 任务行日期和悬赏指标最近更新时间来源。 |
 | TODO: `archivedAt` | `string \| null` | 任务归档时间；有值表示任务已归档。归档任务默认从挑战树隐藏，但 `linkedResultId` 不变。 |
 | `checklist` | `TaskChecklistItem[]` | 子任务列表。 |
 
-`Task.assignee` 可以存在于数据模型中，但挑战页不展示任务负责人，也不使用任务负责人作为个人视图过滤条件。
+`Task.dueDate` 不替代 `Result.finalDueAt`。`Task.assignee` 可以存在于数据模型中，但挑战页不展示任务负责人，也不使用任务负责人作为个人视图过滤条件。
 
 ### `TaskChecklistItem`
 
