@@ -31,7 +31,7 @@
 权限管理预留要求：
 
 - 主要业务表从一开始预留 `team_id`、`created_by`、`updated_by`。
-- 目标、悬赏指标、任务等对象后续可扩展 `owner_user_id`、`visibility` 或对象级权限表。
+- 悬赏指标、任务等对象后续可扩展 `visibility` 或对象级权限表；目标不设置责任人语义。
 - 查询层必须保留统一注入权限条件的空间，不能把权限判断散落在页面逻辑里。
 - 产品文案中的“指挥官”不作为独立权限角色；后端权限校验按 `admin` / 管理员处理。
 - 拖拽调整位置或父对象按编辑处理：对象 `id` 不变。
@@ -80,9 +80,9 @@ CORS_ORIGIN=http://localhost:5173
 | `POST` | `/api/results` | 创建悬赏指标。 |
 | TODO | `/api/result-candidates` | 成员提交候选悬赏指标。 |
 | TODO | `/api/result-candidates/:candidateId/adopt` | 指挥官采纳候选悬赏指标，并发布到悬赏大厅；接口需管理员权限。 |
-| TODO | `/api/results/:resultId/priority-challenge/accept` | 提出人接受优先挑战权，成为挑战者并进入确认期。 |
-| TODO | `/api/results/:resultId/priority-challenge/decline` | 提出人放弃优先挑战权，悬赏指标进入公共池。 |
-| TODO | `/api/results/:resultId/challenge-applications` | 其他成员申请挑战公共池中的悬赏指标。 |
+| `PATCH` | `/api/results/:resultId/challenge` | 接受优先挑战或征召，写入当前挑战者并进入确认期。 |
+| `PATCH` | `/api/results/:resultId/priority-decline` | 提出人放弃优先挑战权，悬赏指标进入公共池。 |
+| `POST` | `/api/results/:resultId/challenge-applications` | 其他成员申请挑战公共池中的悬赏指标。 |
 | TODO | `/api/results/:resultId/challenge-applications/:applicationId/approve` | 指挥官确认挑战者；接口需管理员权限。 |
 | `POST` | `/api/tasks` | 创建任务。 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务。 |
@@ -209,7 +209,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `progress` | `number` | 后端计算后的目标进度，前端只负责展示。 |
 | `updatedAt` | `string` | 计算复盘日期兜底值。 |
 
-目标行不展示负责人；目标行头像组来自目标下可见悬赏指标的 `Result.owner`。
+目标行不展示责任人；目标行头像组来自目标下可见悬赏指标的 `Result.owner`。
 
 ### `Result`
 
@@ -222,15 +222,16 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `title` | `string` | 悬赏指标标题。 |
 | `owner` | `string` | 当前挑战者；一个悬赏指标最多一个挑战者。 |
 | `status` | `WorkStatus` | 后端原始状态。 |
-| TODO: `source` | `"managerDefined" \| "memberProposed"` | 悬赏指标来源。 |
-| TODO: `definer` | `string` | 悬赏指标定义人；用于悬赏指标定义分归属。 |
-| TODO: `finalDueAt` | `string` | 指挥官设置的悬赏指标最终截止时间；大厅剩余时间、排序和确认期计算都以它为准。 |
-| TODO: `assignedChallenger` | `string \| null` | 指挥官指定的待接受挑战者；接受挑战后写入 `owner`。 |
-| TODO: `acceptedAt` | `string \| null` | 挑战者接受挑战时间，用于计算确认期。 |
-| TODO: `confirmationDueAt` | `string \| null` | 悬赏指标确认截止时间。 |
-| TODO: `confirmedAt` | `string \| null` | 悬赏指标冻结确认时间。 |
-| TODO: `priorityChallengeExpiresAt` | `string \| null` | 成员提出的候选悬赏指标被采纳后，提出人 2 小时优先挑战权的过期时间。 |
-| TODO: `priorityDeclinedBy` | `string[]` | 放弃优先挑战权的提出人列表；放弃后不得再次挑战同一悬赏指标。 |
+| `source` | `"managerDefined" \| "memberProposed"` | 悬赏指标来源。 |
+| `definer` | `string` | 悬赏指标定义人；用于悬赏指标定义分归属。 |
+| `finalDueAt` | `string` | 指挥官设置的悬赏指标最终截止时间；大厅剩余时间、排序和确认期计算都以它为准。 |
+| `assignedChallenger` | `string \| null` | 指挥官指定的待接受挑战者；接受挑战后写入 `owner`。 |
+| `acceptedAt` | `string \| null` | 挑战者接受挑战时间，用于计算确认期。 |
+| `confirmationDueAt` | `string \| null` | 悬赏指标确认截止时间。 |
+| `confirmedAt` | `string \| null` | 悬赏指标冻结确认时间。 |
+| `priorityChallengeExpiresAt` | `string \| null` | 成员提出的候选悬赏指标被采纳后，提出人 2 小时优先挑战权的过期时间。 |
+| `priorityDeclinedBy` | `string[]` | 放弃优先挑战权的提出人列表；放弃后不得再次挑战同一悬赏指标。 |
+| `challengeApplications` | `ChallengeApplication[]` | 成员申请挑战记录；申请不写入 `owner`。 |
 | `uncertaintyLevel` | `UncertaintyLevel` | 悬赏指标不确定性等级；结算积分按不确定性分 × 完成系数计算。 |
 | `baseline` | `number` | 悬赏指标进度计算。 |
 | `current` | `number` | 悬赏指标进度计算。 |
@@ -238,7 +239,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `unit` | `string` | 悬赏指标值展示单位。 |
 | `direction` | `MetricDirection` | 悬赏指标进度计算方向。 |
 
-`Result.owner` 只表示已接受挑战的挑战者，是挑战页个人视图过滤的来源；目标不使用负责人语义，征召中待接受的人使用 `assignedChallenger`。
+`Result.owner` 只表示已接受挑战的挑战者，是挑战页个人视图过滤的来源；目标不使用责任人语义，征召中待接受的人使用 `assignedChallenger`。
 
 `Result.uncertaintyLevel` 是唯一评级字段。
 
@@ -269,7 +270,7 @@ confirmationDueAt = acceptedAt + 确认期
 | TODO: `archivedAt` | `string \| null` | 任务归档时间；有值表示任务已归档。归档任务默认从挑战树隐藏，但 `linkedResultId` 不变。 |
 | `checklist` | `TaskChecklistItem[]` | 子任务列表。 |
 
-`Task.dueDate` 不替代 `Result.finalDueAt`。`Task.assignee` 可以存在于数据模型中，但挑战页不展示任务负责人，也不使用任务负责人作为个人视图过滤条件。
+`Task.dueDate` 不替代 `Result.finalDueAt`。`Task.assignee` 可以存在于数据模型中，但挑战页不展示任务执行人，也不使用任务执行人作为个人视图过滤条件。
 
 ### `TaskChecklistItem`
 

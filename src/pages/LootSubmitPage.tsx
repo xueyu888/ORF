@@ -45,7 +45,7 @@ export function LootSubmitPage() {
           }}
         >
           <div className="grid gap-1">
-            <div className="text-xs font-medium orf-text-muted">悬赏标题</div>
+            <div className="text-xs font-medium orf-text-muted">悬赏指标标题</div>
             <div className="rounded-md border orf-border orf-surface-muted px-3 py-2 text-sm font-semibold orf-text-primary">{bounty.title}</div>
           </div>
 

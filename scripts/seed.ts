@@ -48,8 +48,8 @@ function emailForName(name: string) {
 function collectUserNames() {
   return Array.from(
     new Set([
-      ...initialOrfState.objectives.map((item) => item.owner),
       ...initialOrfState.results.map((item) => item.owner),
+      ...initialOrfState.results.map((item) => item.definer ?? ""),
       ...initialOrfState.tasks.map((item) => item.assignee),
       ...initialOrfState.feedback.map((item) => item.owner),
       ...initialOrfState.evidence.map((item) => item.owner),
@@ -108,7 +108,6 @@ async function seed() {
         title: objective.title,
         description: objective.description,
         whyItMatters: objective.whyItMatters,
-        owner: objective.owner,
         cycle: objective.cycle,
         stage: objective.stage,
         status: objective.status,
@@ -118,8 +117,8 @@ async function seed() {
         successDefinition: objective.successDefinition,
         createdAt: objective.createdAt,
         updatedAt: objective.updatedAt,
-        createdBy: userIdForName(objective.owner),
-        updatedBy: userIdForName(objective.owner),
+        createdBy: bootstrapAdmin.id,
+        updatedBy: bootstrapAdmin.id,
       })),
     );
 
@@ -145,10 +144,20 @@ async function seed() {
         status: result.status,
         confidence: result.confidence,
         owner: result.owner,
+        source: result.source ?? "managerDefined",
+        definer: result.definer ?? "",
+        finalDueAt: result.finalDueAt ?? null,
+        assignedChallenger: result.assignedChallenger ?? null,
+        acceptedAt: result.acceptedAt ?? null,
+        confirmationDueAt: result.confirmationDueAt ?? null,
+        confirmedAt: result.confirmedAt ?? null,
+        priorityChallengeExpiresAt: result.priorityChallengeExpiresAt ?? null,
+        priorityDeclinedBy: result.priorityDeclinedBy ?? [],
+        challengeApplications: result.challengeApplications ?? [],
         reviewCadence: result.reviewCadence,
         sortOrder: initialOrfState.objectives.find((objective) => objective.id === result.objectiveId)?.resultIds.indexOf(result.id) ?? 0,
-        createdBy: userIdForName(result.owner),
-        updatedBy: userIdForName(result.owner),
+        createdBy: result.definer ? userIdForName(result.definer) : result.owner ? userIdForName(result.owner) : bootstrapAdmin.id,
+        updatedBy: result.definer ? userIdForName(result.definer) : result.owner ? userIdForName(result.owner) : bootstrapAdmin.id,
       })),
     );
 

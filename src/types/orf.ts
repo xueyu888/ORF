@@ -5,6 +5,8 @@ export type Priority = "Low" | "Medium" | "High" | "Critical";
 export type Impact = "Low" | "Medium" | "High" | "Critical";
 export type MetricDirection = "increase" | "decrease";
 export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
+export type BountySource = "managerDefined" | "memberProposed";
+export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
@@ -41,6 +43,14 @@ export interface TrendPoint {
   value: number;
 }
 
+export interface ChallengeApplication {
+  id: string;
+  applicant: string;
+  status: ChallengeApplicationStatus;
+  createdAt: string;
+  decidedAt?: string | null;
+}
+
 export interface ActivityItem {
   id: string;
   actor: string;
@@ -53,7 +63,6 @@ export interface Objective {
   title: string;
   description: string;
   whyItMatters: string;
-  owner: string;
   cycle: string;
   stage: OrfStage;
   status: WorkStatus;
@@ -88,6 +97,16 @@ export interface Result {
   status: WorkStatus;
   confidence: number;
   owner: string;
+  source?: BountySource;
+  definer?: string;
+  finalDueAt?: string;
+  assignedChallenger?: string | null;
+  acceptedAt?: string | null;
+  confirmationDueAt?: string | null;
+  confirmedAt?: string | null;
+  priorityChallengeExpiresAt?: string | null;
+  priorityDeclinedBy?: string[];
+  challengeApplications?: ChallengeApplication[];
   evidenceIds: string[];
   taskIds: string[];
   feedbackIds: string[];

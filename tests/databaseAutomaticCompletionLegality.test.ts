@@ -110,7 +110,6 @@ function makeObjective(id: string, resultIds: string[], taskIds: string[]): Obje
     title: id,
     description: id,
     whyItMatters: id,
-    owner: "User",
     cycle: "Database",
     stage: "goalFrozen",
     status: "On Track",

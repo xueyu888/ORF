@@ -18,9 +18,11 @@ import {
 import {
   createComment,
   createChecklistItem,
-  claimResult,
+  acceptResultChallenge,
+  applyForResultChallenge,
   createResult,
   createTask,
+  declinePriorityChallenge,
   deleteCommentMessage,
   deleteChecklistItem,
   deleteObjective,
@@ -59,6 +61,7 @@ const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", 
 const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
 const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "飞升"]);
+const bountySourceSchema = z.enum(["managerDefined", "memberProposed"]);
 const userRoleSchema = z.enum(["admin", "member"]);
 const commentTargetTypeSchema = z.enum(["objective", "result", "task", "subtask"]);
 const commentStatusSchema = z.enum(["open", "resolved"]);
@@ -122,6 +125,12 @@ const createResultBodySchema = z.object({
   direction: metricDirectionSchema.optional(),
   uncertaintyLevel: uncertaintyLevelSchema.optional(),
   owner: z.string().optional(),
+  source: bountySourceSchema.optional(),
+  definer: z.string().optional(),
+  finalDueAt: z.string().optional(),
+  assignedChallenger: z.string().nullable().optional(),
+  priorityChallengeExpiresAt: z.string().nullable().optional(),
+  priorityDeclinedBy: z.array(z.string()).optional(),
 });
 const createTaskBodySchema = z.object({
   title: z.string().min(1),
@@ -632,14 +641,62 @@ export async function buildServer() {
       return reply;
     }
 
-    const outcome = await claimResult(params.resultId, user.name);
+    const outcome = await acceptResultChallenge(params.resultId, user.name);
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Result not found" });
     }
 
-    if (outcome.status === "alreadyClaimed") {
+    if (outcome.status === "alreadyAccepted") {
       return reply.code(409).send({ error: "Result already has a challenger", owner: outcome.owner });
+    }
+
+    if (outcome.status === "invalidDueDate") {
+      return reply.code(409).send({ error: "Result final due date is too close to start confirmation" });
+    }
+
+    return { result: outcome.result };
+  });
+
+  app.post("/api/results/:resultId/challenge-applications", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const outcome = await applyForResultChallenge(params.resultId, user.name);
+
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+    if (outcome.status === "alreadyAccepted") {
+      return reply.code(409).send({ error: "Result already has a challenger", owner: outcome.owner });
+    }
+    if (outcome.status === "alreadyApplied") {
+      return reply.code(409).send({ error: "Challenge application already exists" });
+    }
+
+    return { result: outcome.result };
+  });
+
+  app.patch("/api/results/:resultId/priority-decline", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const outcome = await declinePriorityChallenge(params.resultId, user.name);
+
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+    if (outcome.status === "notAllowed") {
+      return reply.code(403).send({ error: "Only the definer can decline priority challenge" });
+    }
+    if (outcome.status === "alreadyDeclined") {
+      return reply.code(409).send({ error: "Priority challenge already declined" });
     }
 
     return { result: outcome.result };

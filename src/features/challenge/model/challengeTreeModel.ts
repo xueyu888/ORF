@@ -1,6 +1,6 @@
 import type { AutomaticCompletionResult, Evidence, Feedback, Objective, Result, Task } from "../../../types/orf";
 import { resultProgress } from "../../../utils/format";
-import { addDays, bountyDeadline, bountyUpdatedAt, latestDate } from "./challengeDates";
+import { addDays, bountyUpdatedAt, latestDate } from "./challengeDates";
 import { bountyDifficulty, bountyStatus } from "./challengeStatus";
 import type { BountyNode, ObjectiveNode } from "./types";
 
@@ -29,7 +29,7 @@ export function buildChallengeTree(
           result,
           actions,
           status: bountyStatus(result, actions, input.automaticCompletions?.[result.objectiveId]?.rets?.[result.id], input.submittedLootIds.has(result.id)),
-          deadline: bountyDeadline(actions),
+          deadline: result.finalDueAt ?? "",
           updatedAt: bountyUpdatedAt(result, actions, input.feedback, input.evidence),
           progress: resultProgress(result),
           kind: index === 0 ? "主线" : "支线",
@@ -51,17 +51,17 @@ export function summarizeDashboard(groups: ObjectiveNode[]) {
   const total = Math.max(1, bounties.length);
   const settled = bounties.filter((bounty) => bounty.status === "settled").length;
   const review = bounties.filter((bounty) => bounty.status === "review").length;
-  const unclaimed = bounties.filter((bounty) => !bounty.result.owner).length;
+  const unassigned = bounties.filter((bounty) => !bounty.result.owner).length;
   const objectiveProgress = Math.round(average(groups.map((group) => group.objective.progress)));
 
   return {
     settled,
     review,
-    unclaimed,
+    unassigned,
     objectiveProgress,
     settledProgress: (settled / total) * 100,
     reviewProgress: (review / total) * 100,
-    unclaimedProgress: (unclaimed / total) * 100,
+    unassignedProgress: (unassigned / total) * 100,
   };
 }
 

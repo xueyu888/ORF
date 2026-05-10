@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, CheckCircle2, MessageSquare, Target } from "lucide-react";
 import type { ElementType } from "react";
-import { Card, ConfidenceBadge, ProgressBar, StatusBadge, Avatar } from "./ui";
+import { Card, ConfidenceBadge, ProgressBar, StatusBadge } from "./ui";
 import type { Feedback, Objective, Result, Task } from "../types/orf";
 import { metricValue, resultProgress } from "../utils/format";
 import { taskStatusLabel } from "../utils/labels";
@@ -35,7 +35,7 @@ export function ObjectiveCard({ objective, results, feedback }: { objective: Obj
           <StatusBadge status={objective.status} />
         </div>
         <div className="mt-4 flex items-center justify-between">
-          <div className="flex items-center gap-2"><Avatar name={objective.owner} size="sm" /><span className="text-xs orf-text-secondary">{objective.owner}</span></div>
+          <div className="text-xs orf-text-secondary">{objective.cycle}</div>
           <ConfidenceBadge value={objective.confidence} />
         </div>
         <div className="mt-4">

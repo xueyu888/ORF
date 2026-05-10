@@ -252,7 +252,7 @@ function BountyRow({
           </span>
           {isSameTarget(handlers.editingTarget, target) ? (
             <InlineTitleEditor
-              ariaLabel="编辑悬赏标题"
+              ariaLabel="编辑悬赏指标标题"
               className="orf-result-title text-base font-semibold"
               onCancel={handlers.onCancelEdit}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}

@@ -2,6 +2,8 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
   AutomaticCompletionResult,
+  BountySource,
+  ChallengeApplication,
   CommentStatus,
   CommentTargetType,
   CommentThread,
@@ -57,9 +59,33 @@ type CommentMessageRow = typeof commentMessages.$inferSelect;
 const today = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+const HALF_DAY_MS = 12 * 60 * 60 * 1000;
+const MAX_CONFIRMATION_HALVES = 18;
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
+}
+
+function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
+  if (!finalDueAt) return null;
+
+  const finalDueDate = new Date(`${finalDueAt}T23:59:00`);
+  const acceptedDate = new Date(acceptedAt);
+  if (Number.isNaN(finalDueDate.getTime()) || Number.isNaN(acceptedDate.getTime())) return null;
+
+  const remainingMs = finalDueDate.getTime() - acceptedDate.getTime();
+  if (remainingMs < HALF_DAY_MS) return null;
+
+  const roundedHalfDays = Math.round((remainingMs * 0.3) / HALF_DAY_MS);
+  const confirmationHalves = Math.min(MAX_CONFIRMATION_HALVES, Math.max(1, roundedHalfDays));
+  return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function isMissingCommentStorageError(error: unknown) {
@@ -268,6 +294,16 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     status: result.status,
     confidence: result.confidence,
     owner: result.owner,
+    source: result.source,
+    definer: result.definer,
+    finalDueAt: optional(result.finalDueAt),
+    assignedChallenger: result.assignedChallenger,
+    acceptedAt: result.acceptedAt,
+    confirmationDueAt: result.confirmationDueAt,
+    confirmedAt: result.confirmedAt,
+    priorityChallengeExpiresAt: result.priorityChallengeExpiresAt,
+    priorityDeclinedBy: result.priorityDeclinedBy ?? [],
+    challengeApplications: result.challengeApplications ?? [],
     evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
     taskIds: taskItems.filter((task) => task.linkedResultId === result.id).map((task) => task.id),
     feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
@@ -280,7 +316,6 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       title: objective.title,
       description: objective.description,
       whyItMatters: objective.whyItMatters,
-      owner: objective.owner,
       cycle: objective.cycle,
       stage: objective.stage,
       status: objective.status,
@@ -360,6 +395,13 @@ export interface CreateResultInput {
   direction?: MetricDirection;
   uncertaintyLevel?: UncertaintyLevel;
   owner?: string;
+  source?: BountySource;
+  definer?: string;
+  finalDueAt?: string;
+  assignedChallenger?: string | null;
+  priorityChallengeExpiresAt?: string | null;
+  priorityDeclinedBy?: string[];
+  challengeApplications?: ChallengeApplication[];
 }
 
 export interface CreateTaskInput {
@@ -408,6 +450,13 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     status: "Draft",
     confidence: 50,
     owner: input.owner ?? "",
+    source: input.source ?? "managerDefined",
+    definer: input.definer ?? "",
+    finalDueAt: input.finalDueAt ?? addDays(today(), 14),
+    assignedChallenger: input.assignedChallenger ?? null,
+    priorityChallengeExpiresAt: input.priorityChallengeExpiresAt ?? null,
+    priorityDeclinedBy: input.priorityDeclinedBy ?? [],
+    challengeApplications: input.challengeApplications ?? [],
     reviewCadence: "Weekly",
     sortOrder,
   });
@@ -416,12 +465,13 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
   return data.results.find((result) => result.id === id) ?? null;
 }
 
-export type ClaimResultOutcome =
-  | { status: "claimed"; result: Result }
-  | { status: "alreadyClaimed"; owner: string }
+export type AcceptResultChallengeOutcome =
+  | { status: "accepted"; result: Result }
+  | { status: "alreadyAccepted"; owner: string }
+  | { status: "invalidDueDate" }
   | { status: "notFound" };
 
-export async function claimResult(resultId: string, challenger: string): Promise<ClaimResultOutcome> {
+export async function acceptResultChallenge(resultId: string, challenger: string): Promise<AcceptResultChallengeOutcome> {
   const nextOwner = challenger.trim();
   if (!nextOwner) {
     return { status: "notFound" };
@@ -433,21 +483,118 @@ export async function claimResult(resultId: string, challenger: string): Promise
   }
 
   const currentOwner = result.owner.trim();
-  if (currentOwner && currentOwner !== "User" && currentOwner !== nextOwner) {
-    return { status: "alreadyClaimed", owner: result.owner };
+  if (currentOwner && currentOwner !== "User" && currentOwner !== "未分配" && currentOwner !== nextOwner) {
+    return { status: "alreadyAccepted", owner: result.owner };
+  }
+
+  const acceptedAt = nowIso();
+  const nextConfirmationDueAt = confirmationDueAt(result.finalDueAt, acceptedAt);
+  if (!nextConfirmationDueAt) {
+    return { status: "invalidDueDate" };
   }
 
   await db
     .update(results)
     .set({
       owner: nextOwner,
+      assignedChallenger: result.assignedChallenger === nextOwner ? null : result.assignedChallenger,
+      acceptedAt: result.acceptedAt ?? acceptedAt,
+      confirmationDueAt: result.confirmationDueAt ?? nextConfirmationDueAt,
+      challengeApplications: (result.challengeApplications ?? []).map((application) =>
+        application.applicant === nextOwner && application.status === "pending" ? { ...application, status: "approved", decidedAt: acceptedAt } : application,
+      ),
       status: result.status === "Draft" ? "On Track" : result.status,
     })
     .where(eq(results.id, resultId));
 
   const data = await getTaskManagementData();
-  const claimed = data.results.find((item) => item.id === resultId);
-  return claimed ? { status: "claimed", result: claimed } : { status: "notFound" };
+  const accepted = data.results.find((item) => item.id === resultId);
+  return accepted ? { status: "accepted", result: accepted } : { status: "notFound" };
+}
+
+export type ApplyResultChallengeOutcome =
+  | { status: "applied"; result: Result }
+  | { status: "alreadyApplied" }
+  | { status: "alreadyAccepted"; owner: string }
+  | { status: "notFound" };
+
+export async function applyForResultChallenge(resultId: string, applicant: string): Promise<ApplyResultChallengeOutcome> {
+  const nextApplicant = applicant.trim();
+  if (!nextApplicant) {
+    return { status: "notFound" };
+  }
+
+  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
+  if (!result) {
+    return { status: "notFound" };
+  }
+
+  const currentOwner = result.owner.trim();
+  if (currentOwner && currentOwner !== "User" && currentOwner !== "未分配") {
+    return { status: "alreadyAccepted", owner: result.owner };
+  }
+
+  const applications = result.challengeApplications ?? [];
+  if (applications.some((application) => application.applicant === nextApplicant && application.status === "pending")) {
+    return { status: "alreadyApplied" };
+  }
+
+  const application: ChallengeApplication = {
+    id: makeId("challenge-application"),
+    applicant: nextApplicant,
+    status: "pending",
+    createdAt: nowIso(),
+    decidedAt: null,
+  };
+
+  await db
+    .update(results)
+    .set({
+      challengeApplications: [application, ...applications],
+    })
+    .where(eq(results.id, resultId));
+
+  const data = await getTaskManagementData();
+  const applied = data.results.find((item) => item.id === resultId);
+  return applied ? { status: "applied", result: applied } : { status: "notFound" };
+}
+
+export type DeclinePriorityChallengeOutcome =
+  | { status: "declined"; result: Result }
+  | { status: "alreadyDeclined" }
+  | { status: "notAllowed" }
+  | { status: "notFound" };
+
+export async function declinePriorityChallenge(resultId: string, member: string): Promise<DeclinePriorityChallengeOutcome> {
+  const currentMember = member.trim();
+  if (!currentMember) {
+    return { status: "notFound" };
+  }
+
+  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
+  if (!result) {
+    return { status: "notFound" };
+  }
+  if (result.definer !== currentMember) {
+    return { status: "notAllowed" };
+  }
+
+  const declinedBy = new Set(result.priorityDeclinedBy ?? []);
+  if (declinedBy.has(currentMember)) {
+    return { status: "alreadyDeclined" };
+  }
+  declinedBy.add(currentMember);
+
+  await db
+    .update(results)
+    .set({
+      priorityDeclinedBy: Array.from(declinedBy),
+    })
+    .where(eq(results.id, resultId));
+
+  const data = await getTaskManagementData();
+  const declined = data.results.find((item) => item.id === resultId);
+  return declined ? { status: "declined", result: declined } : { status: "notFound" };
 }
 
 export interface CreateCommentInput {

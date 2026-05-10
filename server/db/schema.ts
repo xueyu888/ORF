@@ -1,5 +1,5 @@
 import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp } from "drizzle-orm/pg-core";
-import type { OrfStage } from "../../src/types/orf";
+import type { BountySource, ChallengeApplication, OrfStage } from "../../src/types/orf";
 
 export const workStatusEnum = pgEnum("work_status", ["On Track", "At Risk", "Blocked", "Draft"]);
 export const taskStatusEnum = pgEnum("task_status", ["Backlog", "Todo", "In Progress", "In Review", "Done"]);
@@ -68,7 +68,6 @@ export const objectives = pgTable("objectives", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   whyItMatters: text("why_it_matters").notNull(),
-  owner: text("owner").notNull(),
   cycle: text("cycle").notNull(),
   stage: text("stage").$type<OrfStage>().notNull().default("orfReestimate"),
   status: workStatusEnum("status").notNull(),
@@ -107,6 +106,16 @@ export const results = pgTable("results", {
   status: workStatusEnum("status").notNull(),
   confidence: integer("confidence").notNull(),
   owner: text("owner").notNull(),
+  source: text("source").$type<BountySource>().notNull().default("managerDefined"),
+  definer: text("definer").notNull().default(""),
+  finalDueAt: date("final_due_at", { mode: "string" }),
+  assignedChallenger: text("assigned_challenger"),
+  acceptedAt: timestamp("accepted_at", { mode: "string", withTimezone: true }),
+  confirmationDueAt: timestamp("confirmation_due_at", { mode: "string", withTimezone: true }),
+  confirmedAt: timestamp("confirmed_at", { mode: "string", withTimezone: true }),
+  priorityChallengeExpiresAt: timestamp("priority_challenge_expires_at", { mode: "string", withTimezone: true }),
+  priorityDeclinedBy: jsonb("priority_declined_by").$type<string[]>(),
+  challengeApplications: jsonb("challenge_applications").$type<ChallengeApplication[]>(),
   reviewCadence: text("review_cadence").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   createdBy: text("created_by").references(() => users.id),

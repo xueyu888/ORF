@@ -16,7 +16,7 @@ const roleLabel: Record<UserRole, string> = {
 
 const stageLabel: Record<OrfStage, string> = {
   goalSetting: "目标设定",
-  resultClaiming: "悬赏领取",
+  resultClaiming: "悬赏申请",
   orfReestimate: "ORF 重估",
   goalFrozen: "目标冻结",
 };
