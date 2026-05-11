@@ -14,6 +14,7 @@ const titleMap: Record<string, string> = {
   objectives: "目标",
   tasks: "挑战",
   "fantasy-ui": "Fantasy UI",
+  "genshin-ui-kit": "Genshin UI Kit",
   feedback: "反馈",
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",

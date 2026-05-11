@@ -9,6 +9,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
 import { FantasyUiPreviewPage } from "./features/fantasy-ui";
+import { GenshinUIKitPreviewPage } from "./features/genshin-ui-kit";
 import { LootSubmitPage } from "./pages/LootSubmitPage";
 import { MembersPage } from "./pages/MembersPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
@@ -25,6 +26,7 @@ export function App() {
   return (
     <Routes>
       <Route path="auth" element={<AuthRoute />} />
+      <Route path="preview/genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
       <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="bounties" element={<BountyHallPage />} />
@@ -34,6 +36,7 @@ export function App() {
         <Route path="tasks" element={<ChallengePlanPage />} />
         <Route path="tasks/bounties/:bountyId/loot" element={<LootSubmitPage />} />
         <Route path="fantasy-ui" element={<FantasyUiPreviewPage />} />
+        <Route path="genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
         <Route path="feedback" element={<FeedbackInboxPage />} />
         <Route path="feedback/:feedbackId" element={<FeedbackDetailPage />} />
         <Route path="strategy-map" element={<StrategyMapPage />} />
