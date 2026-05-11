@@ -3,7 +3,7 @@ import { CalendarDays, Clock3, MessageSquare, type LucideIcon } from "lucide-rea
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
+import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import type { AutomaticCompletionResult, Result, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
@@ -231,9 +231,10 @@ function BountyRow({
           <DisclosureAction
             actionId={actionId}
             activeActionId={handlers.activeActionId}
-            className="absolute left-6 top-1/2 -translate-y-1/2"
+            className="absolute top-1/2 -translate-y-1/2"
             expanded={open}
             label={open ? "折叠悬赏" : "展开悬赏"}
+            left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1]}
             onActiveActionChange={handlers.onActiveActionChange}
             onOpenActionChange={handlers.onOpenActionChange}
             onToggle={() => handlers.onToggleBounty(bounty.result.id)}
@@ -359,9 +360,10 @@ function ActionRow({
           <DisclosureAction
             actionId={actionId}
             activeActionId={handlers.activeActionId}
-            className="absolute left-[54px] top-1/2 -translate-y-1/2"
+            className="absolute top-1/2 -translate-y-1/2"
             expanded={open}
             label={open ? "折叠行动项" : "展开行动项"}
+            left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[2]}
             onActiveActionChange={handlers.onActiveActionChange}
             onOpenActionChange={handlers.onOpenActionChange}
             onToggle={() => handlers.onToggleAction(action.id)}
