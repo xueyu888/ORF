@@ -3,6 +3,7 @@ import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
 import { TeamDashboard } from "./components/TeamDashboard";
+import { canShowFrontend } from "../../config/frontendVisibility";
 import { useOrf } from "../../state/OrfProvider";
 import type { PermissionResource, Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
@@ -22,7 +23,6 @@ export function ChallengePlanPage() {
     deleteResult,
     deleteTask,
     deleteTaskChecklistItem,
-    isAdmin,
     moveResult,
     moveTask,
     moveTaskChecklistItem,
@@ -39,7 +39,8 @@ export function ChallengePlanPage() {
   } = useOrf();
   const role = currentUser?.role;
   const currentMember = currentUser?.name ?? "User";
-  const [scope, setScope] = useState<ChallengeScope>(isAdmin ? "all" : "mine");
+  const canShowAllChallenges = canShowFrontend(currentUser, "challenge.scope.all");
+  const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
@@ -51,10 +52,10 @@ export function ChallengePlanPage() {
   const now = useMinuteNow();
 
   useEffect(() => {
-    if (!isAdmin && scope === "all") {
+    if (!canShowAllChallenges && scope === "all") {
       setScope("mine");
     }
-  }, [isAdmin, scope]);
+  }, [canShowAllChallenges, scope]);
 
   useEffect(() => {
     if (!openActionId) return undefined;
@@ -81,7 +82,7 @@ export function ChallengePlanPage() {
     [currentMember, state.results],
   );
   const submittedLootIds = useMemo(() => submittedLootIdsFromComments(state.comments), [state.comments]);
-  const showAll = isAdmin && scope === "all";
+  const showAll = canShowAllChallenges && scope === "all";
   const automaticCompletions = state.automaticCompletions ?? {};
   const groups = useMemo(
     () =>
@@ -250,7 +251,7 @@ export function ChallengePlanPage() {
       }}
     >
       {showAll && <TeamDashboard groups={groups} />}
-      <ChallengeToolbar isAdmin={isAdmin} onScopeChange={setScope} scope={scope} />
+      <ChallengeToolbar canShowAll={canShowAllChallenges} onScopeChange={setScope} scope={scope} />
       <ChallengeTree
         automaticCompletions={automaticCompletions}
         emptyText={showAll ? "当前还没有挑战内容。" : "当前没有与你的挑战目标相关的内容。"}
@@ -283,7 +284,7 @@ export function ChallengePlanPage() {
 
       {commentTarget && (
         <CommentPanel
-          canManageAllComments={isAdmin}
+          canManageAllComments={canShowFrontend(currentUser, "comment.manageAllControls")}
           currentMember={currentMember}
           targetTitle={commentTarget.title}
           threads={state.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}

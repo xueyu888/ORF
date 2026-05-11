@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { canShowFrontend, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { AIEvaluationPage } from "./pages/AIEvaluationPage";
 import { AuthPage } from "./pages/AuthPage";
 import { BountyHallPage } from "./pages/BountyHallPage";
@@ -45,17 +46,17 @@ export function App() {
         <Route
           path="members"
           element={
-            <RequireAdmin>
+            <RequireFrontendVisibility visibilityKey="page.members">
               <MembersPage />
-            </RequireAdmin>
+            </RequireFrontendVisibility>
           }
         />
         <Route
           path="permissions"
           element={
-            <RequireAdmin>
+            <RequireFrontendVisibility visibilityKey="page.permissions">
               <PermissionsPage />
-            </RequireAdmin>
+            </RequireFrontendVisibility>
           }
         />
         <Route path="settings" element={<SettingsPage />} />
@@ -93,7 +94,7 @@ function AuthLoadingScreen() {
   );
 }
 
-function RequireAdmin({ children }: { children: ReactNode }) {
-  const { isAdmin } = useOrf();
-  return isAdmin ? children : <Navigate to="/bounties" replace />;
+function RequireFrontendVisibility({ children, visibilityKey }: { children: ReactNode; visibilityKey: FrontendVisibilityKey }) {
+  const { currentUser } = useOrf();
+  return canShowFrontend(currentUser, visibilityKey) ? children : <Navigate to="/bounties" replace />;
 }
