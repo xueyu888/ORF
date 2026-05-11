@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { hasPermission } from "../config/permissions";
 import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
 import type {
@@ -474,13 +475,25 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       notify,
       removeToast: (id: string) => setToasts((items) => items.filter((item) => item.id !== id)),
       resetState: () => commit(store.reset(), "本地缓存已重置"),
-      createObjective: (input) => commit(store.createObjective(state, input), "目标已创建"),
+      createObjective: (input) => {
+        if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
+          notify("没有新建目标权限");
+          return;
+        }
+
+        commit(store.createObjective(state, input), "目标已创建");
+      },
       createResult: (input) => {
         const payload = {
           ...input,
           source: input.source ?? "managerDefined",
           definer: input.definer ?? currentUser?.name ?? "",
         };
+        if (payload.source !== "memberProposed" && !hasPermission(currentUser, state.permissionRules, "result.create")) {
+          notify("没有新建悬赏指标权限");
+          return;
+        }
+
         commit(store.createResult(state, payload), payload.source === "memberProposed" ? "候选悬赏指标已提交，等待指挥官采纳" : "悬赏指标已创建");
         syncTaskMutation(() =>
           apiRequest("/api/results", {

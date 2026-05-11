@@ -2367,6 +2367,14 @@ button:disabled {
   background: rgba(255, 226, 160, 0.14);
 }
 
+.orf-permission-key-cell {
+  color: #44566c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .orf-role-permission-footer {
   display: flex;
   align-items: center;

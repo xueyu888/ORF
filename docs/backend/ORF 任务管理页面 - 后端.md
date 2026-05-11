@@ -114,7 +114,7 @@ CORS_ORIGIN=http://localhost:5173
 | `tasks` | `Task[]` | 悬赏指标下的任务节点。 |
 | `evidence` | `Evidence[]` | 用于计算悬赏指标最近更新时间。 |
 | `feedback` | `Feedback[]` | 用于计算悬赏指标最近更新时间。 |
-| `permissionRules` | `PermissionRule[]` | 前端控制当前阶段下的操作入口。 |
+| `permissionRules` | `PermissionRule[]` | 前端控制权限清单内的操作入口。 |
 | `automaticCompletions` | `Record<string, AutomaticCompletionResult>` | 后端自动化计算结果，仅目标冻结阶段返回对应目标结果。 |
 
 ## 2. 对象关系

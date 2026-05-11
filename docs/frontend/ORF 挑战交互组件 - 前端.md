@@ -19,15 +19,18 @@
 
 ## 2. 权限拦截
 
-前端在执行写操作前检查 `permissionRules`。
+前端在执行下列操作前检查 `permissionRules`。
 
-| 操作 | 权限动作 |
+| 操作 | 权限 key |
 | --- | --- |
-| 新增 | `create` |
-| 编辑标题 | `edit` |
-| 勾选完成 | `edit` |
-| 拖拽 | `edit` |
-| 删除 | `delete` |
+| 新增悬赏指标 | `result.create` |
+| 编辑目标 | `objective.edit` |
+| 编辑悬赏指标 | `result.edit` |
+| 拖拽悬赏指标 | `result.edit` |
+| 删除目标 | `objective.delete` |
+| 删除悬赏指标 | `result.delete` |
+| 删除行动项 | `task.delete` |
+| 删除子行动项 | `subtask.delete` |
 
 无权限时只提示，不执行状态修改。
 

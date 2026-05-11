@@ -46,9 +46,5 @@
   "challenge.scope.all": {
     "label": "挑战页所有挑战范围",
     "audience": ["admin"]
-  },
-  "comment.manageAllControls": {
-    "label": "评论组件全量管理控件",
-    "audience": ["admin"]
   }
 }

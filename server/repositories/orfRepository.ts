@@ -43,6 +43,7 @@ export type TaskManagementData = Pick<
 >;
 
 type CommentActor = {
+  canManageAllComments?: boolean;
   id: string;
   name: string;
   role: "admin" | "member";
@@ -680,7 +681,7 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
 }
 
 function canManageComment(actor: CommentActor, ownerUserId: string) {
-  return actor.role === "admin" || actor.id === ownerUserId;
+  return actor.role === "admin" || actor.canManageAllComments === true || actor.id === ownerUserId;
 }
 
 export async function createComment(input: CreateCommentInput, actor: CommentActor): Promise<CommentMutationOutcome> {

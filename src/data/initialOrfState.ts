@@ -1,22 +1,7 @@
 import type { OrfState } from "../types/orf";
 
 const defaultPermissionRules: OrfState["permissionRules"] = [
-  { role: "member", stage: "goalSetting", resource: "objective", actions: ["view"] },
-  { role: "member", stage: "goalSetting", resource: "result", actions: ["view"] },
-  { role: "member", stage: "goalSetting", resource: "task", actions: [] },
-  { role: "member", stage: "goalSetting", resource: "subtask", actions: [] },
-  { role: "member", stage: "resultClaiming", resource: "objective", actions: ["view"] },
-  { role: "member", stage: "resultClaiming", resource: "result", actions: ["view"] },
-  { role: "member", stage: "resultClaiming", resource: "task", actions: [] },
-  { role: "member", stage: "resultClaiming", resource: "subtask", actions: [] },
-  { role: "member", stage: "orfReestimate", resource: "objective", actions: ["view", "edit"] },
-  { role: "member", stage: "orfReestimate", resource: "result", actions: ["view", "edit"] },
-  { role: "member", stage: "orfReestimate", resource: "task", actions: ["view", "edit", "create"] },
-  { role: "member", stage: "orfReestimate", resource: "subtask", actions: ["view", "edit", "create"] },
-  { role: "member", stage: "goalFrozen", resource: "objective", actions: ["view"] },
-  { role: "member", stage: "goalFrozen", resource: "result", actions: ["view"] },
-  { role: "member", stage: "goalFrozen", resource: "task", actions: ["view", "edit", "create"] },
-  { role: "member", stage: "goalFrozen", resource: "subtask", actions: ["view", "edit", "create"] },
+  { role: "member", permissions: [] },
 ];
 
 const confidenceTrend = [

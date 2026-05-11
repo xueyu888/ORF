@@ -1,3 +1,5 @@
+import type { PermissionKey } from "../config/permissions";
+
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
 export type FeedbackStatus = "New" | "Reviewing" | "Action Created" | "Result Updated" | "Closed";
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
@@ -11,8 +13,6 @@ export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboar
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
-export type PermissionAction = "view" | "create" | "edit" | "delete";
-export type PermissionResource = "objective" | "result" | "task" | "subtask";
 export type CompletionBit = 0 | 1;
 
 export interface AutomaticCompletionResult {
@@ -33,9 +33,7 @@ export interface OrfUser {
 
 export interface PermissionRule {
   role: UserRole;
-  stage: OrfStage;
-  resource: PermissionResource;
-  actions: PermissionAction[];
+  permissions: PermissionKey[];
 }
 
 export interface TrendPoint {

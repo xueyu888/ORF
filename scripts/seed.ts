@@ -15,6 +15,7 @@ import {
   teams,
   users,
 } from "../server/db/schema";
+import { permissionStorageResource, permissionStorageStage } from "../server/repositories/permissionRepository";
 import { initialOrfState } from "../src/data/initialOrfState";
 
 const team = {
@@ -81,9 +82,9 @@ async function seed() {
       initialOrfState.permissionRules.map((rule) => ({
         teamId: team.id,
         role: rule.role,
-        stage: rule.stage,
-        resource: rule.resource,
-        actions: rule.actions,
+        stage: permissionStorageStage,
+        resource: permissionStorageResource,
+        actions: rule.permissions,
       })),
     );
 

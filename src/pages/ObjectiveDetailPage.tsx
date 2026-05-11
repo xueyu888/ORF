@@ -6,6 +6,7 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, IntegrityCheck, ResultCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
+import { hasPermission } from "../config/permissions";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackStatus, TaskStatus } from "../types/orf";
 import { feedbackStatusLabel } from "../utils/labels";
@@ -22,7 +23,7 @@ const tabLabel: Record<(typeof tabs)[number], string> = {
 
 export function ObjectiveDetailPage() {
   const { objectiveId } = useParams();
-  const { state, openModal, updateTaskStatus, updateFeedbackStatus } = useOrf();
+  const { currentUser, state, openModal, updateTaskStatus, updateFeedbackStatus } = useOrf();
   const [tab, setTab] = useState<(typeof tabs)[number]>("Overview");
   const objective = state.objectives.find((item) => item.id === objectiveId);
 
@@ -33,12 +34,13 @@ export function ObjectiveDetailPage() {
   const feedback = state.feedback.filter((item) => item.linkedObjectiveId === objective.id);
   const decisions = state.decisions.filter((decision) => decision.linkedObjectiveId === objective.id);
   const atRiskCount = results.filter((result) => result.status === "At Risk").length;
+  const canCreateResult = hasPermission(currentUser, state.permissionRules, "result.create");
 
   return (
     <PageScaffold
       title={objective.title}
       subtitle={objective.description}
-      action={<div className="flex gap-2"><Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id })}><Plus className="h-4 w-4" />新建悬赏指标</Button><Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button><Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
+      action={<div className="flex gap-2">{canCreateResult && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id })}><Plus className="h-4 w-4" />新建悬赏指标</Button>}<Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button><Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
     >
       <Card className="orf-card-padding">
         <div className="flex flex-wrap items-center gap-3">

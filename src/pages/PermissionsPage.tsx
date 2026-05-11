@@ -1,101 +1,40 @@
 import { clsx } from "clsx";
 import { Save } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { permissionDefinitions, rolePermissionKeys, type PermissionKey } from "../config/permissions";
 import { useOrf } from "../state/OrfProvider";
-import type { OrfStage, PermissionAction, PermissionResource, PermissionRule, UserRole } from "../types/orf";
+import type { PermissionRule, UserRole } from "../types/orf";
 
 const roles: UserRole[] = ["member", "admin"];
-const stages: OrfStage[] = ["goalSetting", "resultClaiming", "orfReestimate", "goalFrozen"];
-const resources: PermissionResource[] = ["objective", "result", "task", "subtask"];
-const actions: PermissionAction[] = ["view", "create", "edit", "delete"];
 
 const roleLabel: Record<UserRole, string> = {
   admin: "管理员",
   member: "成员",
 };
 
-const stageLabel: Record<OrfStage, string> = {
-  goalSetting: "目标设定",
-  resultClaiming: "悬赏申请",
-  orfReestimate: "ORF 重估",
-  goalFrozen: "目标冻结",
-};
-
-const resourceLabel: Record<PermissionResource, string> = {
-  objective: "目标",
-  result: "悬赏",
-  task: "行动项",
-  subtask: "子行动项",
-};
-
-const actionLabel: Record<PermissionAction, string> = {
-  view: "查看",
-  create: "创建",
-  edit: "编辑",
-  delete: "删除",
-};
-
-const permissionKey = (role: UserRole, stage: OrfStage, resource: PermissionResource) => `${role}:${stage}:${resource}`;
-
-function isPermissionAllowedFromMap(
-  permissionRuleMap: Map<string, PermissionAction[]>,
-  role: UserRole,
-  stage: OrfStage,
-  resource: PermissionResource,
-  action: PermissionAction,
-) {
-  if (role === "admin") {
-    return true;
-  }
-
-  return permissionRuleMap.get(permissionKey(role, stage, resource))?.includes(action) ?? false;
+function normalizedRoleRule(role: UserRole, permissionRules: readonly PermissionRule[]): PermissionRule {
+  return {
+    role,
+    permissions: rolePermissionKeys(permissionRules, role),
+  };
 }
 
-function setPermissionRuleAllowed(
-  permissionRules: PermissionRule[],
-  input: { role: UserRole; stage: OrfStage; resource: PermissionResource; action: PermissionAction; allowed: boolean },
-) {
-  let ruleExists = false;
-  const nextRules = permissionRules.map((rule) => {
-    if (rule.role !== input.role || rule.stage !== input.stage || rule.resource !== input.resource) {
-      return rule;
-    }
+function setRolePermissionAllowed(permissionRules: PermissionRule[], role: UserRole, key: PermissionKey, allowed: boolean) {
+  const currentRule = normalizedRoleRule(role, permissionRules);
+  const nextPermissions = allowed
+    ? rolePermissionKeys([{ ...currentRule, permissions: [...currentRule.permissions, key] }], role)
+    : currentRule.permissions.filter((item) => item !== key);
 
-    ruleExists = true;
-    const nextActions = input.allowed
-      ? actions.filter((action) => action === input.action || rule.actions.includes(action))
-      : rule.actions.filter((action) => action !== input.action);
+  const nextRule: PermissionRule = {
+    role,
+    permissions: nextPermissions,
+  };
 
-    return { ...rule, actions: nextActions };
-  });
-
-  if (ruleExists || !input.allowed) {
-    return nextRules;
-  }
-
-  return [
-    ...permissionRules,
-    {
-      role: input.role,
-      stage: input.stage,
-      resource: input.resource,
-      actions: [input.action],
-    },
-  ];
+  return [...permissionRules.filter((rule) => rule.role !== role), nextRule];
 }
 
-function permissionRuleSignature(permissionRules: PermissionRule[], role: UserRole) {
-  const permissionRuleMap = new Map(
-    permissionRules.filter((rule) => rule.role === role).map((rule) => [permissionKey(rule.role, rule.stage, rule.resource), rule.actions]),
-  );
-
-  return stages
-    .flatMap((stage) =>
-      resources.flatMap((resource) =>
-        actions.map((action) => `${stage}:${resource}:${action}:${permissionRuleMap.get(permissionKey(role, stage, resource))?.includes(action) ? "1" : "0"}`),
-      ),
-    )
-    .join("|");
+function permissionRuleSignature(permissionRules: readonly PermissionRule[], role: UserRole) {
+  return rolePermissionKeys(permissionRules, role).join("|");
 }
 
 export function PermissionsPage() {
@@ -104,36 +43,22 @@ export function PermissionsPage() {
   const [draftPermissionRules, setDraftPermissionRules] = useState(state.permissionRules);
   const [isSavingPermissions, setIsSavingPermissions] = useState(false);
   const savedPermissionRules = state.permissionRules;
-  const activePermissionCount = savedPermissionRules.reduce((total, rule) => total + rule.actions.length, 0);
   const selectedRoleUserCount = state.users.filter((user) => user.role === selectedRole).length;
+  const selectedRolePermissionCount = selectedRole === "admin" ? permissionDefinitions.length : rolePermissionKeys(draftPermissionRules, selectedRole).length;
 
   useEffect(() => {
     setDraftPermissionRules(savedPermissionRules);
   }, [savedPermissionRules]);
 
-  const draftPermissionRuleMap = useMemo(
-    () => new Map(draftPermissionRules.map((rule) => [permissionKey(rule.role, rule.stage, rule.resource), rule.actions])),
-    [draftPermissionRules],
-  );
   const selectedRoleHasDraftChanges = useMemo(
     () => selectedRole !== "admin" && permissionRuleSignature(savedPermissionRules, selectedRole) !== permissionRuleSignature(draftPermissionRules, selectedRole),
     [draftPermissionRules, savedPermissionRules, selectedRole],
   );
 
-  const isDraftPermissionAllowed = (role: UserRole, stage: OrfStage, resource: PermissionResource, action: PermissionAction) => {
-    return isPermissionAllowedFromMap(draftPermissionRuleMap, role, stage, resource, action);
-  };
+  const selectedRolePermissions = useMemo(() => new Set(rolePermissionKeys(draftPermissionRules, selectedRole)), [draftPermissionRules, selectedRole]);
 
-  const handleDraftPermissionChange = (stage: OrfStage, resource: PermissionResource, action: PermissionAction, allowed: boolean) => {
-    setDraftPermissionRules((current) =>
-      setPermissionRuleAllowed(current, {
-        role: selectedRole,
-        stage,
-        resource,
-        action,
-        allowed,
-      }),
-    );
+  const handleDraftPermissionChange = (key: PermissionKey, allowed: boolean) => {
+    setDraftPermissionRules((current) => setRolePermissionAllowed(current, selectedRole, key, allowed));
   };
 
   const handleSaveRolePermissions = async () => {
@@ -143,10 +68,7 @@ export function PermissionsPage() {
 
     setIsSavingPermissions(true);
     try {
-      await updateRolePermissionRules(
-        selectedRole,
-        draftPermissionRules.filter((rule) => rule.role === selectedRole),
-      );
+      await updateRolePermissionRules(selectedRole, [normalizedRoleRule(selectedRole, draftPermissionRules)]);
     } finally {
       setIsSavingPermissions(false);
     }
@@ -167,7 +89,7 @@ export function PermissionsPage() {
           <div className="orf-user-toolbar-actions">
             <div className="orf-permission-metrics" aria-label="权限概览">
               <span>
-                <strong>{activePermissionCount}</strong>权限
+                <strong>{selectedRolePermissionCount}</strong>权限
               </span>
             </div>
             <button
@@ -186,47 +108,41 @@ export function PermissionsPage() {
           <table className="orf-role-permission-table">
             <thead>
               <tr>
-                <th>阶段</th>
-                <th>资源</th>
-                {actions.map((action) => (
-                  <th key={action}>{actionLabel[action]}</th>
-                ))}
+                <th>分组</th>
+                <th>权限 key</th>
+                <th>含义</th>
+                <th>使用位置</th>
+                <th>允许</th>
               </tr>
             </thead>
             <tbody>
-              {stages.flatMap((stage) =>
-                resources.map((resource, resourceIndex) => (
-                  <tr key={`${stage}-${resource}`}>
-                    {resourceIndex === 0 && (
-                      <th className="orf-role-stage-cell" rowSpan={resources.length} scope="rowgroup">
-                        {stageLabel[stage]}
-                      </th>
-                    )}
-                    <th className="orf-role-resource-cell" scope="row">
-                      {resourceLabel[resource]}
-                    </th>
-                    {actions.map((action) => {
-                      const allowed = isDraftPermissionAllowed(selectedRole, stage, resource, action);
-                      const locked = selectedRole === "admin";
+              {permissionDefinitions.map((permission) => {
+                const allowed = selectedRole === "admin" || selectedRolePermissions.has(permission.key);
+                const locked = selectedRole === "admin";
 
-                      return (
-                        <td key={action}>
-                          <label className={clsx("orf-permission-toggle", allowed && "orf-permission-toggle-on", locked && "orf-permission-toggle-locked")} title={locked ? "管理员默认全权限" : actionLabel[action]}>
-                            <input
-                              type="checkbox"
-                              checked={allowed}
-                              disabled={locked}
-                              onChange={(event) => handleDraftPermissionChange(stage, resource, action, event.target.checked)}
-                              aria-label={`${roleLabel[selectedRole]} ${stageLabel[stage]} ${resourceLabel[resource]} ${actionLabel[action]}`}
-                            />
-                            <span>{allowed ? "✓" : "×"}</span>
-                          </label>
-                        </td>
-                      );
-                    })}
+                return (
+                  <tr key={permission.key}>
+                    <th className="orf-role-stage-cell" scope="row">
+                      {permission.category}
+                    </th>
+                    <td className="orf-permission-key-cell">{permission.key}</td>
+                    <td>{permission.label}</td>
+                    <td>{permission.location}</td>
+                    <td>
+                      <label className={clsx("orf-permission-toggle", allowed && "orf-permission-toggle-on", locked && "orf-permission-toggle-locked")} title={locked ? "管理员默认全权限" : permission.label}>
+                        <input
+                          type="checkbox"
+                          checked={allowed}
+                          disabled={locked}
+                          onChange={(event) => handleDraftPermissionChange(permission.key, event.target.checked)}
+                          aria-label={`${roleLabel[selectedRole]} ${permission.label}`}
+                        />
+                        <span>{allowed ? "✓" : "×"}</span>
+                      </label>
+                    </td>
                   </tr>
-                )),
-              )}
+                );
+              })}
             </tbody>
           </table>
         </div>

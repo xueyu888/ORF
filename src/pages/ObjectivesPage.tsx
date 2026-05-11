@@ -4,14 +4,16 @@ import { Link } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { ObjectiveCard } from "../components/SharedCards";
 import { Button, Card, EmptyState, ProgressBar, StatusBadge } from "../components/ui";
+import { hasPermission } from "../config/permissions";
 import { useOrf } from "../state/OrfProvider";
 import type { WorkStatus } from "../types/orf";
 
 export function ObjectivesPage() {
-  const { state, openModal } = useOrf();
+  const { currentUser, state, openModal } = useOrf();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"All" | WorkStatus>("All");
   const [view, setView] = useState<"Cards" | "Table">("Cards");
+  const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
 
   const objectives = useMemo(
     () =>
@@ -27,7 +29,7 @@ export function ObjectivesPage() {
     <PageScaffold
       title="目标"
       subtitle="管理 ORF 的 O 层。目标定义团队想要改变的状态。"
-      action={<Button onClick={() => openModal({ type: "newObjective" })}><Plus className="h-4 w-4" />新建目标</Button>}
+      action={canCreateObjective ? <Button onClick={() => openModal({ type: "newObjective" })}><Plus className="h-4 w-4" />新建目标</Button> : undefined}
     >
       <Card className="flex flex-wrap items-center gap-3 orf-card-padding">
         <input className="orf-input h-9 max-w-xs px-3 text-sm" placeholder="搜索目标..." value={query} onChange={(event) => setQuery(event.target.value)} />

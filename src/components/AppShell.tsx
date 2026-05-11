@@ -6,6 +6,7 @@ import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
 import { Toasts } from "./Toasts";
+import { hasPermission } from "../config/permissions";
 import { useOrf } from "../state/OrfProvider";
 
 const titleMap: Record<string, string> = {
@@ -39,8 +40,9 @@ function breadcrumb(pathname: string) {
 
 export function AppShell() {
   const location = useLocation();
-  const { openModal } = useOrf();
+  const { currentUser, openModal, state } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
+  const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -73,10 +75,12 @@ export function AppShell() {
             <Plus className="h-4 w-4" />
             新建反馈
           </Button>
-          <Button onClick={() => openModal({ type: "newObjective" })}>
-            <Plus className="h-4 w-4" />
-            新建目标
-          </Button>
+          {canCreateObjective && (
+            <Button onClick={() => openModal({ type: "newObjective" })}>
+              <Plus className="h-4 w-4" />
+              新建目标
+            </Button>
+          )}
         </header>
         <main className="orf-main-content">
           <Outlet />
