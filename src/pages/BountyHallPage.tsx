@@ -1,15 +1,9 @@
 import { clsx } from "clsx";
 import {
-  ArrowUpDown,
   Check,
   Clock,
   ExternalLink,
-  Flag,
-  Link2,
-  ListChecks,
   Loader2,
-  MessageSquare,
-  MoreHorizontal,
   Search,
   Send,
   ShieldAlert,
@@ -21,26 +15,18 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { CommentPanel, type CommentReplyInput } from "../features/challenge/comments/CommentPanel";
 import { remainingTime } from "../features/challenge/model/challengeDates";
-import { commentCountFor, commentCountsByTarget, submittedLootIdsFromComments } from "../features/challenge/model/challengeComments";
+import { submittedLootIdsFromComments } from "../features/challenge/model/challengeComments";
 import { bountyStatus } from "../features/challenge/model/challengeStatus";
 import { useOrf } from "../state/OrfProvider";
-import type { BountySource, Objective, OrfState, Result, Task, UncertaintyLevel } from "../types/orf";
-import { metricValue, resultProgress } from "../utils/format";
-import { Button, EmptyState, IconButton, ProgressBar } from "../components/ui";
+import type { BountySource, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
+import { Button, EmptyState, IconButton } from "../components/ui";
 
-type BountyKind = "mainline" | "side";
 type DifficultyFilter = "all" | UncertaintyLevel;
-type KindFilter = "all" | BountyKind;
-type SourceFilter = "all" | BountySource;
 type SortKey = "deadline" | "points" | "difficulty" | "created";
 
 type BountyItem = {
-  actions: Task[];
-  applicationCount: number;
   uncertaintyPoints: number;
-  definitionPoints: number;
   deadline: string;
   definer: string;
   difficultyRank: number;
@@ -49,7 +35,6 @@ type BountyItem = {
   isCurrentDefinerLockedOut: boolean;
   isPriorityChallenge: boolean;
   isPriorityReserved: boolean;
-  kind: BountyKind;
   objective: Objective;
   priorityExpiresAt: string;
   result: Result;
@@ -60,11 +45,6 @@ type ChallengeAction = "apply" | "accept";
 type ChallengeConfirmTarget = {
   action: ChallengeAction;
   item: BountyItem;
-};
-
-type CommentTarget = {
-  id: string;
-  title: string;
 };
 
 const difficultyScores: Record<UncertaintyLevel, number> = {
@@ -87,34 +67,25 @@ const difficultyOptions: DifficultyFilter[] = ["all", "入门", "进阶", "破�
 
 export function BountyHallPage() {
   const {
-    addComment,
     acceptBountyChallenge,
     applyForBounty,
     currentUser,
-    deleteCommentMessage,
     declinePriorityChallenge,
-    isAdmin,
-    notify,
     openModal,
     state,
-    updateCommentMessage,
   } = useOrf();
   const navigate = useNavigate();
   const currentMember = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? "User";
   const [query, setQuery] = useState("");
-  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>("all");
   const [objectiveFilter, setObjectiveFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("deadline");
   const [preview, setPreview] = useState<BountyItem | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
-  const [commentTarget, setCommentTarget] = useState<CommentTarget | null>(null);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
 
   const submittedLootIds = useMemo(() => submittedLootIdsFromComments(state.comments), [state.comments]);
-  const commentCounts = useMemo(() => commentCountsByTarget(state.comments), [state.comments]);
   const allBounties = useMemo(
     () =>
       state.results.flatMap((result) => {
@@ -126,7 +97,7 @@ export function BountyHallPage() {
         const status = bountyStatus(effectiveResult, actions, state.automaticCompletions?.[objective.id]?.rets?.[result.id], submittedLootIds.has(result.id));
         if (status !== "open") return [];
 
-        const kind: BountyKind = objective.resultIds[0] === result.id ? "mainline" : "side";
+        const isMainline = objective.resultIds[0] === result.id;
         const challengeApplications = result.challengeApplications ?? [];
         const pendingApplications = challengeApplications.filter((application) => application.status === "pending");
         const source = result.source ?? "managerDefined";
@@ -139,19 +110,15 @@ export function BountyHallPage() {
         const isPriorityActive = Boolean(priorityExpiresAt) && isFutureTime(priorityExpiresAt, now) && !definerDeclined;
         return [
           {
-            actions,
-            applicationCount: pendingApplications.length,
             uncertaintyPoints: uncertaintyPoints(result),
-            definitionPoints: definitionPoints(),
             deadline: result.finalDueAt ?? "",
             definer,
             difficultyRank: difficultyRank(result),
             hasCurrentApplication: pendingApplications.some((application) => application.applicant === currentMember),
-            isRecruitment: kind === "mainline" && result.assignedChallenger === currentMember,
+            isRecruitment: isMainline && result.assignedChallenger === currentMember,
             isCurrentDefinerLockedOut: isCurrentDefiner && (!isPriorityActive || priorityDeclinedBy.includes(currentMember)),
             isPriorityChallenge: isCurrentDefiner && isPriorityActive,
             isPriorityReserved: source === "memberProposed" && isPriorityActive,
-            kind,
             objective,
             priorityExpiresAt,
             result,
@@ -190,39 +157,22 @@ export function BountyHallPage() {
     const filtered = availableBounties.filter((item) => {
       const queryMatch =
         !normalizedQuery ||
-        `${item.result.title} ${item.result.metricName} ${item.result.description} ${item.objective.title}`.toLowerCase().includes(normalizedQuery);
-      const kindMatch = kindFilter === "all" || item.kind === kindFilter;
-      const sourceMatch = sourceFilter === "all" || item.source === sourceFilter;
+        `${item.result.title} ${item.objective.title}`.toLowerCase().includes(normalizedQuery);
       const difficultyMatch = difficultyFilter === "all" || item.result.uncertaintyLevel === difficultyFilter;
       const objectiveMatch = objectiveFilter === "all" || item.objective.id === objectiveFilter;
-      return queryMatch && kindMatch && sourceMatch && difficultyMatch && objectiveMatch;
+      return queryMatch && difficultyMatch && objectiveMatch;
     });
 
     return [...filtered].sort((left, right) => compareBounties(left, right, sortKey));
-  }, [availableBounties, difficultyFilter, kindFilter, objectiveFilter, query, sortKey, sourceFilter]);
+  }, [availableBounties, difficultyFilter, objectiveFilter, query, sortKey]);
 
   const contribution = useMemo(() => contributionSummary(state, currentMember, submittedLootIds), [currentMember, state, submittedLootIds]);
-  const hasFilters = query.trim() || kindFilter !== "all" || sourceFilter !== "all" || difficultyFilter !== "all" || objectiveFilter !== "all";
+  const hasFilters = query.trim() || difficultyFilter !== "all" || objectiveFilter !== "all";
 
   const clearFilters = () => {
     setQuery("");
-    setKindFilter("all");
-    setSourceFilter("all");
     setDifficultyFilter("all");
     setObjectiveFilter("all");
-  };
-
-  const openComments = (item: BountyItem) => setCommentTarget({ id: item.result.id, title: item.result.title });
-
-  const copyBountyLink = (item: BountyItem) => {
-    const url = `${window.location.origin}/objectives/${item.objective.id}/results/${item.result.id}`;
-    const write = navigator.clipboard?.writeText(url);
-    if (!write) {
-      notify("当前浏览器不支持复制链接");
-      return;
-    }
-
-    void write.then(() => notify("链接已复制")).catch(() => notify("复制链接失败"));
   };
 
   const applyChallenge = async (item: BountyItem) => {
@@ -242,6 +192,7 @@ export function BountyHallPage() {
     if (ok) {
       setConfirmTarget(null);
       setPreview((current) => (current?.result.id === item.result.id ? null : current));
+      navigate("/tasks");
     }
   };
 
@@ -267,27 +218,10 @@ export function BountyHallPage() {
             <Send className="h-4 w-4" />
             提出候选悬赏指标
           </Button>
-          {isAdmin && (
-            <>
-              <Button variant="secondary" onClick={() => openModal({ type: "newResult" })}>
-                <Target className="h-4 w-4" />
-                新建悬赏指标
-              </Button>
-              <Button onClick={() => openModal({ type: "newObjective" })}>
-                <Flag className="h-4 w-4" />
-                新建目标
-              </Button>
-            </>
-          )}
         </div>
       </header>
 
-      <ContributionSummary
-        availableCount={availableBounties.length}
-        points={contribution.points}
-        rankText={contribution.rankText}
-        settledCount={contribution.settledCount}
-      />
+      <ContributionSummary points={contribution.points} />
 
       {recruitmentItems.length > 0 && (
         <section className="grid gap-3" aria-labelledby="recruitment-title">
@@ -340,18 +274,14 @@ export function BountyHallPage() {
         <Toolbar
           difficultyFilter={difficultyFilter}
           hasFilters={Boolean(hasFilters)}
-          kindFilter={kindFilter}
           objectiveFilter={objectiveFilter}
           objectiveOptions={objectiveOptions}
           query={query}
-          sourceFilter={sourceFilter}
           sortKey={sortKey}
           onClear={clearFilters}
           onDifficultyChange={setDifficultyFilter}
-          onKindChange={setKindFilter}
           onObjectiveChange={setObjectiveFilter}
           onQueryChange={setQuery}
-          onSourceChange={setSourceFilter}
           onSortChange={setSortKey}
         />
 
@@ -371,13 +301,10 @@ export function BountyHallPage() {
             {filteredBounties.map((item) => (
               <BountyCard
                 key={item.result.id}
-                commentCount={commentCountFor(commentCounts, "result", item.result.id)}
                 item={item}
                 now={now}
                 processing={processingBountyId === item.result.id}
                 onApply={() => setConfirmTarget({ action: "apply", item })}
-                onComment={() => openComments(item)}
-                onCopy={() => copyBountyLink(item)}
                 onPreview={() => setPreview(item)}
               />
             ))}
@@ -391,15 +318,13 @@ export function BountyHallPage() {
       </section>
 
       {preview && (
-        <BountyPreviewDrawer
-          commentCount={commentCountFor(commentCounts, "result", preview.result.id)}
+        <LightBountyPreview
           item={preview}
           now={now}
           processing={processingBountyId === preview.result.id}
           action={preview.isRecruitment || preview.isPriorityChallenge ? "accept" : "apply"}
           onAction={() => setConfirmTarget({ action: preview.isRecruitment || preview.isPriorityChallenge ? "accept" : "apply", item: preview })}
           onClose={() => setPreview(null)}
-          onComment={() => openComments(preview)}
           onDeclinePriority={preview.isPriorityChallenge ? () => declinePriority(preview) : undefined}
         />
       )}
@@ -412,55 +337,18 @@ export function BountyHallPage() {
           onConfirm={() => void (confirmTarget.action === "accept" ? acceptChallenge(confirmTarget.item) : applyChallenge(confirmTarget.item))}
         />
       )}
-
-      {commentTarget && (
-        <CommentPanel
-          canManageAllComments={isAdmin}
-          currentMember={currentMember}
-          targetTitle={commentTarget.title}
-          threads={state.comments.filter((thread) => thread.targetType === "result" && thread.targetId === commentTarget.id)}
-          onAddComment={(body, replyInput?: CommentReplyInput) =>
-            addComment({
-              targetType: "result",
-              targetId: commentTarget.id,
-              targetTitle: commentTarget.title,
-              body,
-              author: currentMember,
-              parentMessageId: replyInput?.parentMessageId,
-              replyToMessageId: replyInput?.replyToMessageId,
-              replyToAuthor: replyInput?.replyToAuthor,
-            })
-          }
-          onClose={() => setCommentTarget(null)}
-          onDeleteComment={deleteCommentMessage}
-          onUpdateComment={updateCommentMessage}
-        />
-      )}
     </div>
   );
 }
 
-function ContributionSummary({
-  availableCount,
-  points,
-  rankText,
-  settledCount,
-}: {
-  availableCount: number;
-  points: number;
-  rankText: string;
-  settledCount: number;
-}) {
+function ContributionSummary({ points }: { points: number }) {
   return (
-    <section className="orf-card orf-card-padding grid gap-4 md:grid-cols-[1.1fr_1fr_1fr_auto] md:items-center" aria-label="我的贡献概览">
+    <section className="orf-card orf-card-padding grid gap-4 md:grid-cols-[1fr_auto] md:items-center" aria-label="我的贡献概览">
       <SummaryMetric icon={Trophy} label="我的积分" value={formatPoints(points)} />
-      <SummaryMetric icon={Star} label="贡献排名" value={rankText} />
-      <SummaryMetric icon={Check} label="已结算悬赏" value={`${settledCount}`} />
       <Link className="orf-control orf-secondary-action inline-flex items-center justify-center gap-2 border px-3 py-2 text-sm font-medium" to="/reports">
         查看积分明细
         <ExternalLink className="h-4 w-4" />
       </Link>
-      <div className="orf-text-muted md:col-span-4 text-xs">当前大厅有 {availableCount} 条可申请挑战悬赏指标；申请通过后的执行状态统一在挑战页处理。</div>
     </section>
   );
 }
@@ -482,34 +370,26 @@ function SummaryMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: 
 function Toolbar({
   difficultyFilter,
   hasFilters,
-  kindFilter,
   objectiveFilter,
   objectiveOptions,
   query,
-  sourceFilter,
   sortKey,
   onClear,
   onDifficultyChange,
-  onKindChange,
   onObjectiveChange,
   onQueryChange,
-  onSourceChange,
   onSortChange,
 }: {
   difficultyFilter: DifficultyFilter;
   hasFilters: boolean;
-  kindFilter: KindFilter;
   objectiveFilter: string;
   objectiveOptions: Objective[];
   query: string;
-  sourceFilter: SourceFilter;
   sortKey: SortKey;
   onClear: () => void;
   onDifficultyChange: (value: DifficultyFilter) => void;
-  onKindChange: (value: KindFilter) => void;
   onObjectiveChange: (value: string) => void;
   onQueryChange: (value: string) => void;
-  onSourceChange: (value: SourceFilter) => void;
   onSortChange: (value: SortKey) => void;
 }) {
   return (
@@ -521,21 +401,11 @@ function Toolbar({
           className="orf-input h-11 pl-9 pr-3"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="搜索悬赏指标标题、目标或指标..."
+          placeholder="搜索悬赏指标标题或目标..."
         />
       </label>
 
       <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:items-center">
-        <SelectControl label="类型" value={kindFilter} onChange={(value) => onKindChange(value as KindFilter)}>
-          <option value="all">全部类型</option>
-          <option value="mainline">主线悬赏</option>
-          <option value="side">支线悬赏</option>
-        </SelectControl>
-        <SelectControl label="来源" value={sourceFilter} onChange={(value) => onSourceChange(value as SourceFilter)}>
-          <option value="all">全部来源</option>
-          <option value="managerDefined">指挥官定义</option>
-          <option value="memberProposed">成员提出</option>
-        </SelectControl>
         <SelectControl label="难度" value={difficultyFilter} onChange={(value) => onDifficultyChange(value as DifficultyFilter)}>
           {difficultyOptions.map((item) => (
             <option key={item} value={item}>
@@ -601,20 +471,18 @@ function RecruitmentCard({
     <div className="orf-card orf-card-padding grid gap-4 border-[color:var(--orf-warning-border)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
       <button className="min-w-0 text-left" onClick={onPreview}>
         <div className="flex flex-wrap items-center gap-2">
-          <Chip tone="warning">主线悬赏</Chip>
           <Chip>{difficultyLabel(item.result)}</Chip>
           <Chip>{item.uncertaintyPoints} 分</Chip>
         </div>
         <h3 className="orf-text-primary mt-3 line-clamp-2 text-base font-semibold">{item.result.title}</h3>
         <div className="orf-text-secondary mt-2 truncate text-sm">{item.objective.title}</div>
         <div className="orf-text-muted mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <span>征召原因：主线悬赏尚未确认挑战者</span>
           <span>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
         </div>
       </button>
       <div className="flex items-center gap-2">
         <Button variant="secondary" onClick={onPreview}>
-          查看详情
+          查看口径
         </Button>
         <Button onClick={onAccept} disabled={processing}>
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
@@ -644,7 +512,6 @@ function PriorityChallengeCard({
     <div className="orf-card orf-card-padding grid gap-4 border-[color:var(--orf-warning-border)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
       <button className="min-w-0 text-left" onClick={onPreview}>
         <div className="flex flex-wrap items-center gap-2">
-          <Chip tone="gold">成员提出</Chip>
           <Chip>{difficultyLabel(item.result)}</Chip>
           <Chip>{item.uncertaintyPoints} 分</Chip>
         </div>
@@ -652,7 +519,7 @@ function PriorityChallengeCard({
         <div className="orf-text-secondary mt-2 truncate text-sm">{item.objective.title}</div>
         <div className="orf-text-muted mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           <span>提出人：{item.definer || "未记录"}</span>
-          <span>{remainingTime(item.priorityExpiresAt, now)}</span>
+          <span>{remainingDateTime(item.priorityExpiresAt, now)}</span>
         </div>
       </button>
       <div className="flex items-center gap-2">
@@ -669,85 +536,42 @@ function PriorityChallengeCard({
 }
 
 function BountyCard({
-  commentCount,
   item,
   now,
   processing,
   onApply,
-  onComment,
-  onCopy,
   onPreview,
 }: {
-  commentCount: number;
   item: BountyItem;
   now: Date;
   processing: boolean;
   onApply: () => void;
-  onComment: () => void;
-  onCopy: () => void;
   onPreview: () => void;
 }) {
-  const progress = resultProgress(item.result);
-  const validationSummary = item.result.completionStandard || item.result.metricRequirement || item.result.description;
-
   return (
-    <article className="orf-card orf-card-hover group grid min-h-[292px] grid-rows-[1fr_auto] overflow-visible">
+    <article className="orf-card orf-card-hover group grid min-h-[224px] grid-rows-[1fr_auto] overflow-visible">
       <button className="grid min-w-0 gap-3 p-4 text-left" onClick={onPreview}>
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap gap-1.5">
-            <Chip tone={item.kind === "mainline" ? "accent" : "neutral"}>{item.kind === "mainline" ? "主线" : "支线"}</Chip>
-            <Chip tone={item.source === "memberProposed" ? "gold" : "neutral"}>{sourceLabel(item)}</Chip>
-            <Chip>{difficultyLabel(item.result)}</Chip>
-            <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
-          </div>
-          <div className="opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-            <MoreHorizontal className="orf-text-muted h-5 w-5" aria-hidden="true" />
-          </div>
+        <div className="flex min-w-0 flex-wrap gap-1.5">
+          <Chip>{difficultyLabel(item.result)}</Chip>
+          <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
         </div>
 
         <div className="min-w-0">
           <h3 className="orf-text-primary line-clamp-2 min-h-[48px] text-base font-semibold leading-6">{item.result.title}</h3>
           <div className="orf-text-secondary mt-2 truncate text-sm">{item.objective.title}</div>
+          {item.source === "memberProposed" && item.definer && <div className="orf-text-muted mt-2 truncate text-xs font-semibold">提出人：{item.definer}</div>}
         </div>
 
-        <div className="grid gap-2">
-          <div className="orf-text-secondary flex items-center justify-between gap-3 text-sm">
-            <span className="inline-flex min-w-0 items-center gap-1.5">
-              <Clock className="h-4 w-4 shrink-0" />
-              <span className="truncate">{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
-            </span>
-            <span className="orf-text-muted shrink-0">{progress}%</span>
-          </div>
-          <ProgressBar value={progress} />
-        </div>
-
-        <div className="orf-surface-muted rounded-md border orf-border p-3">
-          <div className="orf-text-muted text-xs font-semibold">指标快照</div>
-          <div className="orf-text-primary mt-1 truncate text-sm">
-            当前 {metricValue(item.result.current, item.result.unit, item.result.direction)} / 目标{" "}
-            {metricValue(item.result.target, item.result.unit, item.result.direction)}
-          </div>
-        </div>
-
-        <div className="orf-text-muted min-h-[20px] truncate text-xs opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100" title={validationSummary}>
-          {item.definer ? `定义人：${item.definer} · ` : ""}{item.applicationCount > 0 ? `待确认申请：${item.applicationCount} 人 · ` : ""}验收：{validationSummary}
+        <div className="orf-text-secondary inline-flex min-w-0 items-center gap-1.5 text-sm">
+          <Clock className="h-4 w-4 shrink-0" />
+          <span className="truncate">{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
         </div>
       </button>
 
       <div className="flex items-center justify-between gap-2 border-t orf-border px-4 py-3">
-        <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">
-          <IconButton icon={ListChecks} label={`行动项 ${item.actions.length}`} onClick={onPreview} />
-          <IconButton icon={MessageSquare} label={`评论 ${commentCount}`} onClick={onComment} />
-          <IconButton icon={Link2} label="复制链接" onClick={onCopy} />
-          <Link
-            className="orf-control orf-ghost-action inline-flex h-9 w-9 items-center justify-center"
-            title="打开详情"
-            aria-label="打开详情"
-            to={`/objectives/${item.objective.id}/results/${item.result.id}`}
-          >
-            <ExternalLink className="h-4 w-4" />
-          </Link>
-        </div>
+        <Button variant="secondary" onClick={onPreview}>
+          查看口径
+        </Button>
         <Button className="ml-auto" onClick={onApply} disabled={processing}>
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           申请挑战
@@ -757,129 +581,69 @@ function BountyCard({
   );
 }
 
-function BountyPreviewDrawer({
+function LightBountyPreview({
   action,
-  commentCount,
   item,
   now,
   processing,
   onAction,
   onClose,
-  onComment,
   onDeclinePriority,
 }: {
   action: ChallengeAction;
-  commentCount: number;
   item: BountyItem;
   now: Date;
   processing: boolean;
   onAction: () => void;
   onClose: () => void;
-  onComment: () => void;
   onDeclinePriority?: () => void;
 }) {
-  const navigate = useNavigate();
   useEscape(onClose);
-  const progress = resultProgress(item.result);
+  const actionLabel = action === "accept" ? "接受挑战" : "申请挑战";
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/35" onMouseDown={onClose}>
-      <aside
-        className="orf-card fixed bottom-0 right-0 top-0 z-50 flex w-full max-w-[520px] flex-col rounded-none"
-        aria-label="悬赏指标预览"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/35 px-4 py-[10vh]" onMouseDown={onClose}>
+      <aside className="orf-card z-50 w-full max-w-2xl" aria-label="悬赏指标轻详情" onMouseDown={(event) => event.stopPropagation()}>
         <div className="flex items-start justify-between gap-3 border-b orf-border p-5">
           <div className="min-w-0">
             <div className="flex flex-wrap gap-1.5">
-              <Chip tone={item.kind === "mainline" ? "accent" : "neutral"}>{item.kind === "mainline" ? "主线悬赏" : "支线悬赏"}</Chip>
-              <Chip tone={item.source === "memberProposed" ? "gold" : "neutral"}>{sourceLabel(item)}</Chip>
               <Chip>{difficultyLabel(item.result)}</Chip>
-              <Chip tone="gold">{item.uncertaintyPoints} 不确定性分</Chip>
+              <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
             </div>
             <h2 className="orf-text-primary mt-3 text-xl font-semibold leading-7">{item.result.title}</h2>
             <div className="orf-text-secondary mt-2 text-sm">{item.objective.title}</div>
           </div>
-          <IconButton icon={X} label="关闭预览" onClick={onClose} />
+          <IconButton icon={X} label="关闭轻详情" onClick={onClose} />
         </div>
 
-        <div className="grid flex-1 content-start gap-5 overflow-y-auto p-5">
+        <div className="grid gap-5 p-5">
           <section className="grid gap-3">
             <SectionTitle icon={Target}>悬赏口径</SectionTitle>
             <InfoRow label="衡量要求" value={item.result.metricRequirement ?? item.result.description} />
-            <InfoRow label="统计对象" value={item.result.statisticalObject ?? "未填写"} />
             <InfoRow label="完成标准" value={item.result.completionStandard ?? "未填写"} />
-            <InfoRow label="样本集" value={item.result.sampleSet ?? "未填写"} />
-            <InfoRow label="统计范围" value={item.result.measurementScope ?? "未填写"} />
+            {item.definer && <InfoRow label="提出人" value={item.definer} />}
           </section>
 
           <section className="grid gap-3">
-            <SectionTitle icon={Trophy}>积分口径</SectionTitle>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <SectionTitle icon={Trophy}>挑战判断</SectionTitle>
+            <div className="grid gap-3 sm:grid-cols-3">
               <MetricBox label="难度" value={difficultyLabel(item.result)} />
               <MetricBox label="不确定性分" value={`${item.uncertaintyPoints}`} />
-              <MetricBox label="指标定义分" value={`${item.definitionPoints}`} />
               <MetricBox label="剩余时间" value={item.deadline ? remainingTime(item.deadline, now) : "未设置"} />
-              <MetricBox label="评论" value={`${commentCount}`} />
             </div>
-          </section>
-
-          <section className="grid gap-3">
-            <SectionTitle icon={Flag}>来源信息</SectionTitle>
-            <InfoRow label="来源" value={sourceLabel(item)} />
-            <InfoRow label={item.source === "memberProposed" ? "提出人" : "定义人"} value={item.definer || "未记录"} />
-            {item.priorityExpiresAt && <InfoRow label="优先挑战" value={remainingTime(item.priorityExpiresAt, now)} />}
-          </section>
-
-          <section className="grid gap-3">
-            <SectionTitle icon={ArrowUpDown}>指标快照</SectionTitle>
-            <div className="grid gap-2">
-              <div className="orf-text-secondary flex justify-between gap-3 text-sm">
-                <span>
-                  当前 {metricValue(item.result.current, item.result.unit, item.result.direction)} / 目标{" "}
-                  {metricValue(item.result.target, item.result.unit, item.result.direction)}
-                </span>
-                <span>{progress}%</span>
-              </div>
-              <ProgressBar value={progress} />
-            </div>
-          </section>
-
-          <section className="grid gap-3">
-            <SectionTitle icon={ListChecks}>行动项摘要</SectionTitle>
-            {item.actions.length > 0 ? (
-              <div className="grid gap-2">
-                {item.actions.slice(0, 5).map((action) => (
-                  <div key={action.id} className="orf-surface-muted flex min-w-0 items-center justify-between gap-3 rounded-md border orf-border p-3 text-sm">
-                    <span className="orf-text-primary truncate">{action.title}</span>
-                    <span className="orf-text-muted shrink-0">{action.dueDate}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="orf-text-muted rounded-md border orf-border p-3 text-sm">这个悬赏指标暂时没有行动项。</div>
-            )}
           </section>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t orf-border p-5">
-          <Button variant="secondary" onClick={onComment}>
-            <MessageSquare className="h-4 w-4" />
-            评论
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t orf-border p-5">
           <div className="flex items-center gap-2">
             {onDeclinePriority && (
               <Button variant="secondary" onClick={onDeclinePriority}>
                 放弃
               </Button>
             )}
-            <Button variant="secondary" onClick={() => navigate(`/objectives/${item.objective.id}/results/${item.result.id}`)}>
-              <ExternalLink className="h-4 w-4" />
-              详情
-            </Button>
             <Button onClick={onAction} disabled={processing}>
               {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-              {action === "accept" ? "接受挑战" : "申请挑战"}
+              {actionLabel}
             </Button>
           </div>
         </div>
@@ -922,7 +686,6 @@ function ChallengeConfirmModal({
             <div className="orf-text-primary line-clamp-2 text-base font-semibold">{item.item.result.title}</div>
             <div className="orf-text-secondary mt-2 truncate text-sm">{item.item.objective.title}</div>
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <Chip tone={item.item.kind === "mainline" ? "accent" : "neutral"}>{item.item.kind === "mainline" ? "主线" : "支线"}</Chip>
               <Chip>{difficultyLabel(item.item.result)}</Chip>
               <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
             </div>
@@ -1005,49 +768,30 @@ function compareByPriorityTime(left: BountyItem, right: BountyItem) {
   return leftExpiresAt.localeCompare(rightExpiresAt) || compareByUrgency(left, right);
 }
 
-function sourceLabel(item: BountyItem) {
-  if (item.source === "managerDefined") return "指挥官定义";
-  return item.isPriorityReserved ? "成员提出" : "公共池";
-}
-
 function isFutureTime(value: string, now: Date) {
   const target = new Date(value);
   return !Number.isNaN(target.getTime()) && target.getTime() > now.getTime();
 }
 
 function contributionSummary(state: OrfState, currentMember: string, submittedLootIds: Set<string>) {
-  const members = new Map<string, { name: string; points: number; settledCount: number }>();
-  for (const user of state.users) {
-    members.set(user.name, { name: user.name, points: 0, settledCount: 0 });
-  }
+  let points = 0;
 
   for (const result of state.results) {
     if (!result.owner || isEmptyChallenger(result.owner)) continue;
+    if (result.owner !== currentMember) continue;
     const objective = state.objectives.find((item) => item.id === result.objectiveId);
     const actions = state.tasks.filter((task) => task.linkedResultId === result.id);
     const status = bountyStatus(result, actions, objective ? state.automaticCompletions?.[objective.id]?.rets?.[result.id] : undefined, submittedLootIds.has(result.id));
-    const row = members.get(result.owner) ?? { name: result.owner, points: 0, settledCount: 0 };
     if (status === "settled") {
-      row.points += uncertaintyPoints(result);
-      row.settledCount += 1;
+      points += uncertaintyPoints(result);
     }
-    members.set(result.owner, row);
   }
 
-  const ranking = Array.from(members.values()).sort((left, right) => right.points - left.points || left.name.localeCompare(right.name));
-  const current = members.get(currentMember) ?? { name: currentMember, points: 0, settledCount: 0 };
-  const rankIndex = ranking.findIndex((item) => item.name === currentMember);
-  const rankText = current.points > 0 && rankIndex >= 0 ? `${rankIndex + 1} / ${ranking.length}` : "暂无";
-
-  return { points: current.points, rankText, settledCount: current.settledCount };
+  return { points };
 }
 
 function uncertaintyPoints(result: Result) {
   return result.uncertaintyLevel ? difficultyScores[result.uncertaintyLevel] : difficultyScores["进阶"];
-}
-
-function definitionPoints() {
-  return 2;
 }
 
 function difficultyRank(result: Result) {
@@ -1061,6 +805,24 @@ function difficultyLabel(result: Result) {
 function isEmptyChallenger(owner: string) {
   const value = owner.trim();
   return value === "" || value === "User" || value === "未分配";
+}
+
+function remainingDateTime(value: string, now: Date) {
+  if (!value) return "未设置";
+
+  const target = new Date(value);
+  if (Number.isNaN(target.getTime())) return value;
+
+  const diffMinutes = Math.ceil((target.getTime() - now.getTime()) / 60000);
+  const absMinutes = Math.abs(diffMinutes);
+  const prefix = diffMinutes >= 0 ? "剩余" : "已超时";
+  const days = Math.floor(absMinutes / 1440);
+  const hours = Math.floor((absMinutes % 1440) / 60);
+  const minutes = absMinutes % 60;
+
+  if (days > 0) return `${prefix} ${days} 天 ${hours} 小时`;
+  if (hours > 0) return `${prefix} ${hours} 小时 ${minutes} 分钟`;
+  return `${prefix} ${minutes} 分钟`;
 }
 
 function currentCycle(objectives: Objective[]) {
