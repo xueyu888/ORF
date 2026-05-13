@@ -1,3 +1,5 @@
+import type { PermissionKey } from "../config/permissions";
+
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
 export type FeedbackStatus = "New" | "Reviewing" | "Action Created" | "Result Updated" | "Closed";
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
@@ -5,12 +7,12 @@ export type Priority = "Low" | "Medium" | "High" | "Critical";
 export type Impact = "Low" | "Medium" | "High" | "Critical";
 export type MetricDirection = "increase" | "decrease";
 export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
+export type BountySource = "managerDefined" | "memberProposed";
+export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
-export type PermissionAction = "view" | "create" | "edit" | "delete";
-export type PermissionResource = "objective" | "result" | "task" | "subtask";
 export type CompletionBit = 0 | 1;
 
 export interface AutomaticCompletionResult {
@@ -31,14 +33,20 @@ export interface OrfUser {
 
 export interface PermissionRule {
   role: UserRole;
-  stage: OrfStage;
-  resource: PermissionResource;
-  actions: PermissionAction[];
+  permissions: PermissionKey[];
 }
 
 export interface TrendPoint {
   date: string;
   value: number;
+}
+
+export interface ChallengeApplication {
+  id: string;
+  applicant: string;
+  status: ChallengeApplicationStatus;
+  createdAt: string;
+  decidedAt?: string | null;
 }
 
 export interface ActivityItem {
@@ -53,7 +61,6 @@ export interface Objective {
   title: string;
   description: string;
   whyItMatters: string;
-  owner: string;
   cycle: string;
   stage: OrfStage;
   status: WorkStatus;
@@ -88,6 +95,16 @@ export interface Result {
   status: WorkStatus;
   confidence: number;
   owner: string;
+  source?: BountySource;
+  definer?: string;
+  finalDueAt?: string;
+  assignedChallenger?: string | null;
+  acceptedAt?: string | null;
+  confirmationDueAt?: string | null;
+  confirmedAt?: string | null;
+  priorityChallengeExpiresAt?: string | null;
+  priorityDeclinedBy?: string[];
+  challengeApplications?: ChallengeApplication[];
   evidenceIds: string[];
   taskIds: string[];
   feedbackIds: string[];

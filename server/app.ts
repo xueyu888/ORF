@@ -8,19 +8,22 @@ import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import { env } from "./env";
 import { registerOptionalIntegrations } from "./integrations";
 import {
+  getRolePermissionKeysForTeam,
   getPermissionRulesForTeam,
   getPrimaryTeamIdForUser,
-  permissionActions,
-  permissionResources,
-  permissionStages,
+  hasRolePermission,
+  permissionKeys,
   replaceRolePermissionRules,
 } from "./repositories/permissionRepository";
+import type { PermissionKey } from "../src/config/permissions";
 import {
   createComment,
   createChecklistItem,
-  claimResult,
+  acceptResultChallenge,
+  applyForResultChallenge,
   createResult,
   createTask,
+  declinePriorityChallenge,
   deleteCommentMessage,
   deleteChecklistItem,
   deleteObjective,
@@ -59,6 +62,7 @@ const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", 
 const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
 const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "飞升"]);
+const bountySourceSchema = z.enum(["managerDefined", "memberProposed"]);
 const userRoleSchema = z.enum(["admin", "member"]);
 const commentTargetTypeSchema = z.enum(["objective", "result", "task", "subtask"]);
 const commentStatusSchema = z.enum(["open", "resolved"]);
@@ -68,14 +72,13 @@ const userBodySchema = z.object({
   role: userRoleSchema,
 });
 const editablePermissionRoleSchema = z.enum(["member"]);
-const permissionStageSchema = z.enum(permissionStages);
-const permissionResourceSchema = z.enum(permissionResources);
-const permissionActionSchema = z.enum(permissionActions);
+const objectiveStageSchema = z.enum(["goalSetting", "resultClaiming", "orfReestimate", "goalFrozen"]);
+const permissionKeySchema = z.enum(permissionKeys);
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const titleBodySchema = z.object({ title: z.string().trim().min(1) });
 const labelBodySchema = z.object({ label: z.string().trim().min(1) });
 const completionBodySchema = z.object({ done: z.boolean() });
-const objectiveStageBodySchema = z.object({ stage: permissionStageSchema });
+const objectiveStageBodySchema = z.object({ stage: objectiveStageSchema });
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
@@ -87,9 +90,7 @@ const permissionRoleParamsSchema = z.object({ role: userRoleSchema });
 const placementSchema = z.enum(["before", "after"]);
 const permissionRuleSchema = z.object({
   role: editablePermissionRoleSchema,
-  stage: permissionStageSchema,
-  resource: permissionResourceSchema,
-  actions: z.array(permissionActionSchema),
+  permissions: z.array(permissionKeySchema),
 });
 const updateRolePermissionsBodySchema = z.object({
   permissionRules: z.array(permissionRuleSchema),
@@ -109,7 +110,6 @@ const visualBackgroundStaticParamsSchema = z.object({
   scope: z.enum(["default", "user"]),
   fileName: z.string().min(1),
 });
-const defaultPermissionStage = "orfReestimate";
 const createResultBodySchema = z.object({
   objectiveId: z.string().min(1),
   title: z.string().min(1),
@@ -122,6 +122,12 @@ const createResultBodySchema = z.object({
   direction: metricDirectionSchema.optional(),
   uncertaintyLevel: uncertaintyLevelSchema.optional(),
   owner: z.string().optional(),
+  source: bountySourceSchema.optional(),
+  definer: z.string().optional(),
+  finalDueAt: z.string().optional(),
+  assignedChallenger: z.string().nullable().optional(),
+  priorityChallengeExpiresAt: z.string().nullable().optional(),
+  priorityDeclinedBy: z.array(z.string()).optional(),
 });
 const createTaskBodySchema = z.object({
   title: z.string().min(1),
@@ -237,8 +243,7 @@ async function requireAdminContext(request: FastifyRequest, reply: FastifyReply)
 async function requireWritePermission(
   request: FastifyRequest,
   reply: FastifyReply,
-  action: (typeof permissionActions)[number],
-  resource: (typeof permissionResources)[number],
+  permission: PermissionKey,
 ) {
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
     request.log.warn(error, "Ory permission session check failed");
@@ -261,9 +266,7 @@ async function requireWritePermission(
   }
 
   const permissionRules = await getPermissionRulesForTeam(teamId);
-  const allowed = permissionRules.some(
-    (rule) => rule.role === user.role && rule.stage === defaultPermissionStage && rule.resource === resource && rule.actions.includes(action),
-  );
+  const allowed = hasRolePermission(user.role, permissionRules, permission);
 
   if (!allowed) {
     reply.code(403).send({ error: "Forbidden" });
@@ -271,6 +274,30 @@ async function requireWritePermission(
   }
 
   return true;
+}
+
+async function requireAuthenticatedForWrite(request: FastifyRequest, reply: FastifyReply) {
+  return Boolean(await requireApiUser(request, reply));
+}
+
+async function commentActorWithPermissions(request: FastifyRequest, reply: FastifyReply) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  if (user.role === "admin") {
+    return { ...user, canManageAllComments: true };
+  }
+
+  const teamId = await getPrimaryTeamIdForUser(user.id);
+  if (!teamId) {
+    reply.code(404).send({ error: "Team not found" });
+    return null;
+  }
+
+  const permissions = await getRolePermissionKeysForTeam(teamId, user.role);
+  return { ...user, canManageAllComments: permissions.includes("comment.manage") };
 }
 
 function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof createComment>>) {
@@ -434,7 +461,7 @@ export async function buildServer() {
   });
 
   app.patch("/api/comments/:threadId/status", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
+    const user = await commentActorWithPermissions(request, reply);
     if (!user) {
       return reply;
     }
@@ -445,7 +472,7 @@ export async function buildServer() {
   });
 
   app.patch("/api/comments/:threadId/messages/:messageId", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
+    const user = await commentActorWithPermissions(request, reply);
     if (!user) {
       return reply;
     }
@@ -456,7 +483,7 @@ export async function buildServer() {
   });
 
   app.delete("/api/comments/:threadId/messages/:messageId", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
+    const user = await commentActorWithPermissions(request, reply);
     if (!user) {
       return reply;
     }
@@ -533,7 +560,10 @@ export async function buildServer() {
 
   app.post("/api/results", async (request, reply) => {
     const body = createResultBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "create", "result"))) {
+    const allowed = body.source === "memberProposed"
+      ? await requireAuthenticatedForWrite(request, reply)
+      : await requireWritePermission(request, reply, "result.create");
+    if (!allowed) {
       return reply;
     }
 
@@ -548,7 +578,7 @@ export async function buildServer() {
 
   app.post("/api/tasks", async (request, reply) => {
     const body = createTaskBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "create", "task"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -564,7 +594,7 @@ export async function buildServer() {
   app.post("/api/tasks/:taskId/checklist", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = createChecklistItemBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "create", "subtask"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -580,7 +610,7 @@ export async function buildServer() {
   app.patch("/api/objectives/:objectiveId", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "objective"))) {
+    if (!(await requireWritePermission(request, reply, "objective.edit"))) {
       return reply;
     }
 
@@ -596,7 +626,7 @@ export async function buildServer() {
   app.patch("/api/objectives/:objectiveId/stage", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
     const body = objectiveStageBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "objective"))) {
+    if (!(await requireWritePermission(request, reply, "objective.edit"))) {
       return reply;
     }
 
@@ -612,7 +642,7 @@ export async function buildServer() {
   app.patch("/api/results/:resultId", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "result"))) {
+    if (!(await requireWritePermission(request, reply, "result.edit"))) {
       return reply;
     }
 
@@ -632,14 +662,62 @@ export async function buildServer() {
       return reply;
     }
 
-    const outcome = await claimResult(params.resultId, user.name);
+    const outcome = await acceptResultChallenge(params.resultId, user.name);
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Result not found" });
     }
 
-    if (outcome.status === "alreadyClaimed") {
+    if (outcome.status === "alreadyAccepted") {
       return reply.code(409).send({ error: "Result already has a challenger", owner: outcome.owner });
+    }
+
+    if (outcome.status === "invalidDueDate") {
+      return reply.code(409).send({ error: "Result final due date is too close to start confirmation" });
+    }
+
+    return { result: outcome.result };
+  });
+
+  app.post("/api/results/:resultId/challenge-applications", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const outcome = await applyForResultChallenge(params.resultId, user.name);
+
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+    if (outcome.status === "alreadyAccepted") {
+      return reply.code(409).send({ error: "Result already has a challenger", owner: outcome.owner });
+    }
+    if (outcome.status === "alreadyApplied") {
+      return reply.code(409).send({ error: "Challenge application already exists" });
+    }
+
+    return { result: outcome.result };
+  });
+
+  app.patch("/api/results/:resultId/priority-decline", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const outcome = await declinePriorityChallenge(params.resultId, user.name);
+
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+    if (outcome.status === "notAllowed") {
+      return reply.code(403).send({ error: "Only the definer can decline priority challenge" });
+    }
+    if (outcome.status === "alreadyDeclined") {
+      return reply.code(409).send({ error: "Priority challenge already declined" });
     }
 
     return { result: outcome.result };
@@ -659,7 +737,7 @@ export async function buildServer() {
   app.patch("/api/tasks/:taskId", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "task"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -675,7 +753,7 @@ export async function buildServer() {
   app.patch("/api/tasks/:taskId/checklist/:itemId/label", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = labelBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "subtask"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -691,7 +769,7 @@ export async function buildServer() {
   app.patch("/api/tasks/:taskId/status", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = updateTaskStatusBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "task"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -707,7 +785,7 @@ export async function buildServer() {
   app.patch("/api/tasks/:taskId/completion", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "task"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -723,7 +801,7 @@ export async function buildServer() {
   app.patch("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "subtask"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -739,7 +817,7 @@ export async function buildServer() {
   app.patch("/api/results/:resultId/order", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = moveResultBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "result"))) {
+    if (!(await requireWritePermission(request, reply, "result.edit"))) {
       return reply;
     }
 
@@ -755,7 +833,7 @@ export async function buildServer() {
   app.patch("/api/tasks/:taskId/move", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = moveTaskBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "task"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -771,7 +849,7 @@ export async function buildServer() {
   app.patch("/api/tasks/:taskId/checklist/:itemId/move", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = moveChecklistBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "edit", "subtask"))) {
+    if (!(await requireAuthenticatedForWrite(request, reply))) {
       return reply;
     }
 
@@ -786,7 +864,7 @@ export async function buildServer() {
 
   app.delete("/api/objectives/:objectiveId", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "delete", "objective"))) {
+    if (!(await requireWritePermission(request, reply, "objective.delete"))) {
       return reply;
     }
 
@@ -801,7 +879,7 @@ export async function buildServer() {
 
   app.delete("/api/results/:resultId", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "delete", "result"))) {
+    if (!(await requireWritePermission(request, reply, "result.delete"))) {
       return reply;
     }
 
@@ -816,7 +894,7 @@ export async function buildServer() {
 
   app.delete("/api/tasks/:taskId", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "delete", "task"))) {
+    if (!(await requireWritePermission(request, reply, "task.delete"))) {
       return reply;
     }
 
@@ -831,7 +909,7 @@ export async function buildServer() {
 
   app.delete("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "delete", "subtask"))) {
+    if (!(await requireWritePermission(request, reply, "subtask.delete"))) {
       return reply;
     }
 

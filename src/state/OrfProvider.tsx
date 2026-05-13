@@ -1,8 +1,10 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { hasPermission } from "../config/permissions";
 import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
-import { OrfFlowStore } from "./OrfFlowStore";
+import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
 import type {
   CommentStatus,
+  CommentThread,
   CommentTargetType,
   Feedback,
   FeedbackStatus,
@@ -11,18 +13,21 @@ import type {
   Result,
   Task,
   TaskStatus,
+  BountySource,
   UserRole,
 } from "../types/orf";
 
 type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | null;
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
+type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
 
 interface ModalState {
   type: ModalType;
   objectiveId?: string;
   resultId?: string;
   feedbackId?: string;
+  source?: BountySource;
 }
 
 interface ToastMessage {
@@ -48,7 +53,9 @@ interface OrfContextValue {
   resetState: () => void;
   createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => void : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => void;
-  claimBounty: (resultId: string) => Promise<boolean>;
+  applyForBounty: (resultId: string) => Promise<boolean>;
+  acceptBountyChallenge: (resultId: string) => Promise<boolean>;
+  declinePriorityChallenge: (resultId: string) => boolean;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -100,7 +107,7 @@ const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
-  return {
+  return normalizeState({
     ...state,
     objectives: data.objectives,
     results: data.results,
@@ -110,7 +117,7 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     comments: data.comments ?? state.comments ?? [],
     permissionRules: data.permissionRules,
     automaticCompletions: data.automaticCompletions ?? {},
-  };
+  });
 }
 
 function mergePermissionRules(state: OrfState, data: PermissionRulesResponse): OrfState {
@@ -125,6 +132,26 @@ function mergeUsers(state: OrfState, data: UsersResponse): OrfState {
     ...state,
     users: data.users,
     currentUserId: data.users.some((user) => user.id === state.currentUserId) ? state.currentUserId : data.users[0]?.id ?? state.currentUserId,
+  };
+}
+
+function mergeCommentThread(state: OrfState, commentThread: CommentThread): OrfState {
+  const comments = state.comments.filter(
+    (thread) =>
+      thread.id !== commentThread.id &&
+      !(thread.targetType === commentThread.targetType && thread.targetId === commentThread.targetId && thread.status === commentThread.status),
+  );
+
+  return {
+    ...state,
+    comments: [commentThread, ...comments].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+  };
+}
+
+function removeCommentThread(state: OrfState, threadId: string): OrfState {
+  return {
+    ...state,
+    comments: state.comments.filter((thread) => thread.id !== threadId),
   };
 }
 
@@ -210,7 +237,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 403) {
-      return "你没有接受这个悬赏的权限";
+      return "你没有接受这个悬赏指标的权限";
     }
 
     if (error.status === 404) {
@@ -218,7 +245,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
-      return "这个悬赏已经有挑战者";
+      return "这个悬赏指标已经有挑战者";
     }
 
     return error.message || fallback;
@@ -313,6 +340,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const applyUsers = useCallback((data: UsersResponse) => {
     setState((current) => {
       const next = mergeUsers(current, data);
+      store.save(next);
+      return next;
+    });
+  }, []);
+  const applyCommentThread = useCallback((commentThread: CommentThread) => {
+    setState((current) => {
+      const next = mergeCommentThread(current, commentThread);
+      store.save(next);
+      return next;
+    });
+  }, []);
+  const applyRemovedCommentThread = useCallback((threadId: string) => {
+    setState((current) => {
+      const next = removeCommentThread(current, threadId);
       store.save(next);
       return next;
     });
@@ -434,21 +475,58 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       notify,
       removeToast: (id: string) => setToasts((items) => items.filter((item) => item.id !== id)),
       resetState: () => commit(store.reset(), "本地缓存已重置"),
-      createObjective: (input) => commit(store.createObjective(state, input), "目标已创建"),
+      createObjective: (input) => {
+        if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
+          notify("没有新建目标权限");
+          return;
+        }
+
+        commit(store.createObjective(state, input), "目标已创建");
+      },
       createResult: (input) => {
-        commit(store.createResult(state, input), "悬赏已创建");
+        const payload = {
+          ...input,
+          source: input.source ?? "managerDefined",
+          definer: input.definer ?? currentUser?.name ?? "",
+        };
+        if (payload.source !== "memberProposed" && !hasPermission(currentUser, state.permissionRules, "result.create")) {
+          notify("没有新建悬赏指标权限");
+          return;
+        }
+
+        commit(store.createResult(state, payload), payload.source === "memberProposed" ? "候选悬赏指标已提交，等待指挥官采纳" : "悬赏指标已创建");
         syncTaskMutation(() =>
           apiRequest("/api/results", {
             method: "POST",
-            body: JSON.stringify(input),
+            body: JSON.stringify(payload),
           }),
         );
       },
-      claimBounty: async (resultId) => {
-        const challenger = currentUser?.name ?? "";
-        const next = store.claimBounty(state, resultId, challenger);
+      applyForBounty: async (resultId) => {
+        const applicant = currentUser?.name ?? "";
+        const next = store.applyForBounty(state, resultId, applicant);
         if (next === state) {
-          notify("这个悬赏暂时不能接受挑战");
+          notify("这个悬赏指标暂时不能申请挑战");
+          return false;
+        }
+
+        commit(next, "挑战申请已提交，等待指挥官确认");
+
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/challenge-applications`, { method: "POST" });
+          await refreshTaskManagementData();
+          return true;
+        } catch (error) {
+          notify(bountyMutationFailureMessage(error, "申请挑战失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      acceptBountyChallenge: async (resultId) => {
+        const challenger = currentUser?.name ?? "";
+        const next = store.acceptBountyChallenge(state, resultId, challenger);
+        if (next === state) {
+          notify("这个悬赏指标暂时不能接受挑战");
           return false;
         }
 
@@ -463,6 +541,22 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
+      },
+      declinePriorityChallenge: (resultId) => {
+        const next = store.declinePriorityChallenge(state, resultId, currentUser?.name ?? "");
+        if (next === state) {
+          notify("这个优先挑战暂时不能放弃");
+          return false;
+        }
+
+        commit(next, "已放弃优先挑战权");
+        void apiRequest(`/api/results/${encodeURIComponent(resultId)}/priority-decline`, { method: "PATCH" })
+          .then(() => refreshTaskManagementData())
+          .catch((error) => {
+            notify(bountyMutationFailureMessage(error, "放弃优先挑战失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+        return true;
       },
       createFeedback: (input) => commit(store.createFeedback(state, input), "反馈已捕获"),
       createTask: (input) => {
@@ -520,7 +614,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       updateResultTitle: (resultId, title) => {
-        commit(store.updateResultTitle(state, resultId, title), "悬赏已更新");
+        commit(store.updateResultTitle(state, resultId, title), "悬赏指标已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
             method: "PATCH",
@@ -556,7 +650,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         );
       },
       moveResult: (input) => {
-        commit(store.moveResult(state, input), "悬赏位置已更新");
+        commit(store.moveResult(state, input), "悬赏指标位置已更新");
         syncTaskMutation(() =>
           apiRequest(`/api/results/${encodeURIComponent(input.resultId)}/order`, {
             method: "PATCH",
@@ -587,7 +681,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         syncTaskMutation(() => apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, { method: "DELETE" }));
       },
       deleteResult: (resultId) => {
-        commit(store.deleteResult(state, resultId), "悬赏已删除");
+        commit(store.deleteResult(state, resultId), "悬赏指标已删除");
         syncTaskMutation(() => apiRequest(`/api/results/${encodeURIComponent(resultId)}`, { method: "DELETE" }));
       },
       deleteTask: (taskId) => {
@@ -678,7 +772,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       addComment: (input) => {
         commit(store.addComment(state, input), "评论已添加");
-        void apiRequest("/api/comments", {
+        void apiJson<CommentMutationResponse>("/api/comments", {
           method: "POST",
           body: JSON.stringify({
             targetType: input.targetType,
@@ -690,7 +784,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             replyToAuthor: input.replyToAuthor,
           }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论添加失败"));
             void refreshTaskManagementData().catch(() => undefined);
@@ -698,11 +796,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       updateCommentThreadStatus: (threadId, status) => {
         commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/status`, {
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/status`, {
           method: "PATCH",
           body: JSON.stringify({ status }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论状态更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
@@ -710,11 +812,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       updateCommentMessage: (threadId, messageId, body) => {
         commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
           method: "PATCH",
           body: JSON.stringify({ body }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
@@ -722,17 +828,25 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       deleteCommentMessage: (threadId, messageId) => {
         commit(store.deleteCommentMessage(state, threadId, messageId), "评论已删除");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })
-          .then(refreshTaskManagementData)
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            } else {
+              applyRemovedCommentThread(threadId);
+            }
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论删除失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
       proposeResultUpdate: (resultId, title, reason, feedbackId) =>
-        commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "悬赏更新已记录"),
+        commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "悬赏指标更新已记录"),
     }),
     [
+      applyCommentThread,
+      applyRemovedCommentThread,
       authReady,
       authUserId,
       authenticateWithPassword,

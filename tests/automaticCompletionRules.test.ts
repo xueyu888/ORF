@@ -276,7 +276,6 @@ function makeObjective(id: string, resultIds: string[]): Objective {
     title: id,
     description: id,
     whyItMatters: id,
-    owner: "User",
     cycle: "Test",
     stage: "goalFrozen",
     status: "On Track",

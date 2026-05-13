@@ -1,7 +1,8 @@
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import type { ConnectionOptions } from "node:tls";
+import tls, { type ConnectionOptions } from "node:tls";
 import type { PoolConfig } from "pg";
 
 type PostgresCredentials = {
@@ -44,6 +45,16 @@ function readSslFile(filePath: string | null, label: string): string | undefined
   return fs.readFileSync(resolvedPath, "utf8");
 }
 
+function tlsIdentityOptions(hostname: string): Pick<ConnectionOptions, "servername" | "checkServerIdentity"> {
+  if (net.isIP(hostname) === 0) {
+    return { servername: hostname };
+  }
+
+  return {
+    checkServerIdentity: (_servername, cert) => tls.checkServerIdentity(hostname, cert),
+  };
+}
+
 function sslOptions(url: URL): ConnectionOptions | undefined {
   const sslMode = url.searchParams.get("sslmode");
   const certPath = url.searchParams.get("sslcert");
@@ -65,7 +76,7 @@ function sslOptions(url: URL): ConnectionOptions | undefined {
     cert,
     key,
     rejectUnauthorized: shouldVerify,
-    servername: url.hostname,
+    ...tlsIdentityOptions(url.hostname),
   };
 }
 

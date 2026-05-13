@@ -21,7 +21,7 @@ export function ResultDetailPage() {
   const metricRequirement = result.metricRequirement ?? `${result.metricName}：${result.description}`;
   const statisticalObject = result.statisticalObject ?? "当前悬赏关联的标准评估集、线上日志样本和结构化反馈";
   const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有战利品说明支持`;
-  const sampleSet = result.sampleSet ?? "负责人提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
+  const sampleSet = result.sampleSet ?? "指挥官提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
   const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";
   const uncertaintyLevel = result.uncertaintyLevel ?? "进阶";
 
@@ -29,7 +29,7 @@ export function ResultDetailPage() {
     <PageScaffold
       title={result.title}
       subtitle={`目标 / 悬赏 · ${objective?.title ?? ""}`}
-      action={<div className="flex flex-wrap gap-2"><Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/tasks/bounties/${result.id}/loot`}><Send className="h-4 w-4" />提交战利品</Link><Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出悬赏更新</Button></div>}
+      action={<div className="flex flex-wrap gap-2"><Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/tasks/bounties/${result.id}/loot`}><Send className="h-4 w-4" />提交战利品</Link><Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出悬赏指标更新</Button></div>}
     >
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="grid gap-4">

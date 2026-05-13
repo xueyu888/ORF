@@ -19,18 +19,24 @@ const anchorLeftByDepth: Record<HierarchyDepth, number> = {
   3: TREE_FIRST_ANCHOR_LEFT + TREE_INDENT_STEP * 2,
 };
 
+const disclosureLeftByDepth: Record<HierarchyDepth, number> = {
+  1: anchorLeftByDepth[1] - TREE_PRE_ICON_SLOT,
+  2: anchorLeftByDepth[2] - TREE_PRE_ICON_SLOT,
+  3: anchorLeftByDepth[3] - TREE_PRE_ICON_SLOT,
+};
+
 export const HIERARCHY_TREE_METRICS = {
   anchorLeftByDepth,
   branchLength: TREE_BRANCH_LENGTH,
+  disclosureLeftByDepth,
   indentStep: TREE_INDENT_STEP,
   preIconSlot: TREE_PRE_ICON_SLOT,
 } as const;
 
-// Depth 2/3 rows reserve a 24px disclosure slot plus an 8px gap before the main icon.
 const contentLeftByDepth: Record<HierarchyDepth, number> = {
   1: anchorLeftByDepth[1] - TREE_ROW_PADDING_X,
-  2: anchorLeftByDepth[2] - TREE_ROW_PADDING_X - TREE_PRE_ICON_SLOT,
-  3: anchorLeftByDepth[3] - TREE_ROW_PADDING_X - TREE_PRE_ICON_SLOT,
+  2: anchorLeftByDepth[2] - TREE_ROW_PADDING_X,
+  3: anchorLeftByDepth[3] - TREE_ROW_PADDING_X,
 };
 
 type AnchorGeometry = {
@@ -81,7 +87,7 @@ export function HierarchyRootCell({
   children: ReactNode;
   className?: string;
 }) {
-  // The root icon center is the first branch rail; child rows reserve their own pre-icon slots.
+  // The root icon center is the first branch rail; child rows keep operation controls outside the title cell.
   return (
     <div className={clsx("orf-row-main-cell relative flex min-w-0 items-center", className)}>
       <div className="relative z-30 flex w-full min-w-0 items-center gap-3">
@@ -233,8 +239,7 @@ function getTreeGeometry(container: HTMLElement): TreeGeometry {
 
     const sortedChildren = children.sort((left, right) => left.centerY - right.centerY);
     const lastChild = sortedChildren[sortedChildren.length - 1];
-    const minChildBranchEndX = Math.min(...sortedChildren.map((child) => child.branchEndX ?? child.left));
-    const x = round(Math.min(parent.centerX, minChildBranchEndX - TREE_BRANCH_LENGTH));
+    const x = round(parent.centerX);
     const startY = round(parent.bottom);
     const endY = round(Math.max(startY, lastChild.centerY - TREE_RADIUS));
 

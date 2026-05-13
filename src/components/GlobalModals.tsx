@@ -29,19 +29,23 @@ export function GlobalModals() {
   const { modal } = useOrf();
 
   if (modal.type === "newObjective") return <NewObjectiveModal />;
-  if (modal.type === "newResult") return <NewResultModal objectiveId={modal.objectiveId} />;
+  if (modal.type === "newResult") return <NewResultModal objectiveId={modal.objectiveId} source={modal.source} />;
   if (modal.type === "newFeedback") return <NewFeedbackModal objectiveId={modal.objectiveId} resultId={modal.resultId} />;
   if (modal.type === "newTask") return <NewTaskModal objectiveId={modal.objectiveId} resultId={modal.resultId} feedbackId={modal.feedbackId} />;
   if (modal.type === "resultUpdate") return <ResultUpdateModal resultId={modal.resultId} feedbackId={modal.feedbackId} />;
   return null;
 }
 
+function defaultFinalDueAt() {
+  const date = new Date();
+  date.setDate(date.getDate() + 14);
+  return date.toISOString().slice(0, 10);
+}
+
 function NewObjectiveModal() {
-  const { createObjective, closeModal, currentUser, state } = useOrf();
-  const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
+  const { createObjective, closeModal } = useOrf();
   const [title, setTitle] = useState("降低权限策略问答中的幻觉率");
   const [whyItMatters, setWhyItMatters] = useState("权限策略回答错误会导致客户配置错误和支持升级。");
-  const [owner, setOwner] = useState(defaultOwner);
   const [cycle, setCycle] = useState("2026 Q2");
   const [boundary, setBoundary] = useState("只关注 AI 应用回答行为，不扩展到身份系统内部实现。");
 
@@ -51,14 +55,13 @@ function NewObjectiveModal() {
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          createObjective({ title, whyItMatters, owner, cycle, boundary });
+          createObjective({ title, whyItMatters, cycle, boundary });
           closeModal();
         }}
       >
         <Field label="目标标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="为什么重要"><textarea className="orf-input min-h-24 px-3 py-2" value={whyItMatters} onChange={(event) => setWhyItMatters(event.target.value)} /></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="负责人"><input className="orf-input px-3 py-2" value={owner} onChange={(event) => setOwner(event.target.value)} /></Field>
           <Field label="周期"><input className="orf-input px-3 py-2" value={cycle} onChange={(event) => setCycle(event.target.value)} /></Field>
         </div>
         <Field label="边界 / 不做什么"><textarea className="orf-input min-h-20 px-3 py-2" value={boundary} onChange={(event) => setBoundary(event.target.value)} /></Field>
@@ -68,26 +71,28 @@ function NewObjectiveModal() {
   );
 }
 
-function NewResultModal({ objectiveId }: { objectiveId?: string }) {
+function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveId?: string; source?: "managerDefined" | "memberProposed" }) {
   const { state, createResult, closeModal } = useOrf();
   const [selectedObjectiveId, setSelectedObjectiveId] = useState(objectiveId ?? state.objectives[0]?.id ?? "");
   const [title, setTitle] = useState("权限策略回答幻觉率降低到 3%");
   const [metricName, setMetricName] = useState("幻觉率");
+  const [finalDueAt, setFinalDueAt] = useState(() => defaultFinalDueAt());
 
   return (
-    <ModalFrame title="新建悬赏">
+    <ModalFrame title={source === "memberProposed" ? "提出候选悬赏指标" : "新建悬赏指标"}>
       <form
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          createResult({ objectiveId: selectedObjectiveId, title, metricName, baseline: 10, current: 7, target: 3, unit: "%", direction: "decrease" });
+          createResult({ objectiveId: selectedObjectiveId, title, metricName, baseline: 10, current: 7, target: 3, unit: "%", direction: "decrease", finalDueAt, source });
           closeModal();
         }}
       >
         <Field label="所属目标"><select className="orf-input px-3 py-2" value={selectedObjectiveId} onChange={(event) => setSelectedObjectiveId(event.target.value)}>{state.objectives.map((objective) => <option key={objective.id} value={objective.id}>{objective.title}</option>)}</select></Field>
-        <Field label="悬赏标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
+        <Field label="悬赏指标标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="衡量指标"><input className="orf-input px-3 py-2" value={metricName} onChange={(event) => setMetricName(event.target.value)} /></Field>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存悬赏</Button></div>
+        <Field label="最终截止时间"><input className="orf-input px-3 py-2" type="date" value={finalDueAt} onChange={(event) => setFinalDueAt(event.target.value)} /></Field>
+        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">{source === "memberProposed" ? "提交候选" : "保存悬赏指标"}</Button></div>
       </form>
     </ModalFrame>
   );
@@ -138,7 +143,7 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="来源"><select className="orf-input px-3 py-2" value={source} onChange={(event) => setSource(event.target.value as FeedbackSource)}>{["User report", "Eval run", "Log", "Incident", "Team review"].map((item) => <option key={item} value={item}>{item === "User report" ? "用户反馈" : item === "Eval run" ? "评估运行" : item === "Log" ? "日志" : item === "Incident" ? "事故" : "团队复盘"}</option>)}</select></Field>
-          <Field label="负责人"><input className="orf-input px-3 py-2" value={owner} onChange={(event) => setOwner(event.target.value)} /></Field>
+          <Field label="处理人"><input className="orf-input px-3 py-2" value={owner} onChange={(event) => setOwner(event.target.value)} /></Field>
         </div>
         <Field label="建议调整"><textarea className="orf-input min-h-20 px-3 py-2" value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} /></Field>
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存反馈</Button></div>
@@ -205,7 +210,7 @@ function ResultUpdateModal({ resultId, feedbackId }: { resultId?: string; feedba
   if (!result) return null;
 
   return (
-    <ModalFrame title="提出悬赏更新">
+    <ModalFrame title="提出悬赏指标更新">
       <form
         className="grid gap-4"
         onSubmit={(event) => {

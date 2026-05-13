@@ -1,0 +1,50 @@
+{
+  "nav.bounties": {
+    "label": "侧边栏悬赏入口",
+    "audience": "all"
+  },
+  "nav.tasks": {
+    "label": "侧边栏挑战入口",
+    "audience": "all"
+  },
+  "nav.feedback": {
+    "label": "侧边栏反馈入口",
+    "audience": "all"
+  },
+  "nav.reports": {
+    "label": "侧边栏统计入口",
+    "audience": "all"
+  },
+  "nav.members": {
+    "label": "侧边栏成员管理入口",
+    "audience": ["admin"]
+  },
+  "nav.permissions": {
+    "label": "侧边栏权限管理入口",
+    "audience": ["admin"]
+  },
+  "nav.settings": {
+    "label": "侧边栏设置入口",
+    "audience": "all"
+  },
+  "command.auth": {
+    "label": "命令菜单注册登录入口",
+    "audience": "all"
+  },
+  "command.objectives": {
+    "label": "命令菜单目标入口",
+    "audience": "all"
+  },
+  "page.members": {
+    "label": "成员管理页面访问",
+    "audience": ["admin"]
+  },
+  "page.permissions": {
+    "label": "权限管理页面访问",
+    "audience": ["admin"]
+  },
+  "challenge.scope.all": {
+    "label": "挑战页所有挑战范围",
+    "audience": ["admin"]
+  }
+}
