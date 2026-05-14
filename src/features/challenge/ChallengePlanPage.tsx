@@ -3,11 +3,13 @@ import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
 import { TeamDashboard } from "./components/TeamDashboard";
+import { canShowFrontend } from "../../config/frontendVisibility";
+import { hasPermission, type PermissionKey } from "../../config/permissions";
 import { useOrf } from "../../state/OrfProvider";
-import type { PermissionResource, Result } from "../../types/orf";
+import type { Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget, submittedLootIdsFromComments } from "./model/challengeComments";
-import { canAccess, canAccessDragItem, canAccessTarget, objectiveStage, permissionDeniedMessage, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
+import { canAccessDragItem, canAccessTarget, canUsePermission, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
 import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
@@ -22,7 +24,6 @@ export function ChallengePlanPage() {
     deleteResult,
     deleteTask,
     deleteTaskChecklistItem,
-    isAdmin,
     moveResult,
     moveTask,
     moveTaskChecklistItem,
@@ -39,7 +40,8 @@ export function ChallengePlanPage() {
   } = useOrf();
   const role = currentUser?.role;
   const currentMember = currentUser?.name ?? "User";
-  const [scope, setScope] = useState<ChallengeScope>(isAdmin ? "all" : "mine");
+  const canShowAllChallenges = canShowFrontend(currentUser, "challenge.scope.all");
+  const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
@@ -51,10 +53,10 @@ export function ChallengePlanPage() {
   const now = useMinuteNow();
 
   useEffect(() => {
-    if (!isAdmin && scope === "all") {
+    if (!canShowAllChallenges && scope === "all") {
       setScope("mine");
     }
-  }, [isAdmin, scope]);
+  }, [canShowAllChallenges, scope]);
 
   useEffect(() => {
     if (!openActionId) return undefined;
@@ -81,7 +83,7 @@ export function ChallengePlanPage() {
     [currentMember, state.results],
   );
   const submittedLootIds = useMemo(() => submittedLootIdsFromComments(state.comments), [state.comments]);
-  const showAll = isAdmin && scope === "all";
+  const showAll = canShowAllChallenges && scope === "all";
   const automaticCompletions = state.automaticCompletions ?? {};
   const groups = useMemo(
     () =>
@@ -101,33 +103,32 @@ export function ChallengePlanPage() {
   );
   const commentCounts = useMemo(() => commentCountsByTarget(state.comments), [state.comments]);
 
-  const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
-    if (canAccessTarget(state, role, target, action)) return true;
-    notify(permissionDeniedMessage(action, resourceForTarget(target)));
+  const requirePermissionKey = (key: PermissionKey) => {
+    if (canUsePermission(state, role, key)) return true;
+    notify(permissionDeniedMessage(key));
     return false;
   };
 
-  const requirePermission = (objectiveId: string, action: "create" | "delete" | "edit", resource: PermissionResource) => {
-    if (canAccess(state, role, objectiveStage(state, objectiveId), action, resource)) return true;
-    notify(permissionDeniedMessage(action, resource));
+  const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
+    if (canAccessTarget(state, role, target, action)) return true;
+    const key = permissionKeyForChallengeAction(resourceForTarget(target), action);
+    if (key) notify(permissionDeniedMessage(key));
     return false;
   };
 
   const addBounty = (objectiveId: string) => {
-    if (requirePermission(objectiveId, "create", "result")) {
+    if (requirePermissionKey("result.create")) {
       openModal({ type: "newResult", objectiveId });
     }
   };
 
   const addAction = (bounty: Result) => {
-    if (requirePermission(bounty.objectiveId, "create", "task")) {
-      openModal({ type: "newTask", objectiveId: bounty.objectiveId, resultId: bounty.id });
-    }
+    openModal({ type: "newTask", objectiveId: bounty.objectiveId, resultId: bounty.id });
   };
 
   const addSubAction = (actionId: string, afterItemId?: string) => {
     const action = state.tasks.find((item) => item.id === actionId);
-    if (!action || !requirePermission(action.linkedObjectiveId, "create", "subtask")) return;
+    if (!action) return;
     createTaskChecklistItem(actionId, afterItemId);
     setCollapsedActionIds((items) => withoutItem(items, actionId));
   };
@@ -181,13 +182,13 @@ export function ChallengePlanPage() {
 
   const setActionDone = (actionId: string, done: boolean) => {
     const action = state.tasks.find((item) => item.id === actionId);
-    if (!action || !requirePermission(action.linkedObjectiveId, "edit", "task")) return;
+    if (!action) return;
     setTaskCompletion(actionId, done);
   };
 
   const setSubActionDone = (actionId: string, itemId: string, done: boolean) => {
     const action = state.tasks.find((item) => item.id === actionId);
-    if (!action || !requirePermission(action.linkedObjectiveId, "edit", "subtask")) return;
+    if (!action) return;
     updateTaskChecklistItem(actionId, itemId, done);
   };
 
@@ -206,8 +207,9 @@ export function ChallengePlanPage() {
     onDropTargetChange: setDropTarget,
     onDrop: (target: DropTarget) => {
       if (!dragItem) return;
-      if (!canAccessDragItem(state, role, dragItem, "edit")) {
-        notify(permissionDeniedMessage("edit", resourceForDragItem(dragItem)));
+      if (!canAccessDragItem(state, role, dragItem)) {
+        const key = permissionKeyForChallengeAction(resourceForDragItem(dragItem), "edit");
+        if (key) notify(permissionDeniedMessage(key));
         setDragItem(null);
         setDropTarget(null);
         return;
@@ -250,7 +252,7 @@ export function ChallengePlanPage() {
       }}
     >
       {showAll && <TeamDashboard groups={groups} />}
-      <ChallengeToolbar isAdmin={isAdmin} onScopeChange={setScope} scope={scope} />
+      <ChallengeToolbar canShowAll={canShowAllChallenges} onScopeChange={setScope} scope={scope} />
       <ChallengeTree
         automaticCompletions={automaticCompletions}
         emptyText={showAll ? "当前还没有挑战内容。" : "当前没有与你的挑战目标相关的内容。"}
@@ -283,7 +285,7 @@ export function ChallengePlanPage() {
 
       {commentTarget && (
         <CommentPanel
-          canManageAllComments={isAdmin}
+          canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
           targetTitle={commentTarget.title}
           threads={state.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}

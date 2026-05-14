@@ -25,6 +25,9 @@ const configSchema = z.object({
   GITHUB_SYNC_STATE_FILE: z.string().default(".artifacts/github-sync-state.json"),
   GITHUB_SYNC_GIT_REMOTE: z.string().trim().min(1).default("origin"),
   GITHUB_SYNC_GIT_CWD: z.string().trim().min(1).optional(),
+  GITHUB_ISSUES_SYNC_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+  GITHUB_ISSUES_SYNC_INTERVAL_SECONDS: z.coerce.number().int().positive().default(300),
+  GITHUB_ISSUES_SYNC_LOOKBACK: z.coerce.number().int().positive().default(50),
   GITHUB_API_URL: z.string().url().default("https://api.github.com"),
   GITHUB_TOKEN: z.string().optional(),
 });
@@ -89,6 +92,30 @@ const githubApiCommitSchema = z.object({
 });
 
 const githubApiCommitsSchema = z.array(githubApiCommitSchema);
+const githubApiIssueSchema = z.object({
+  number: z.number().int().positive(),
+  title: z.string().min(1),
+  html_url: z.string().url(),
+  state: z.string().default("open"),
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+  user: z
+    .object({
+      login: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
+  pull_request: z.unknown().optional(),
+});
+const githubApiIssuesSchema = z.array(githubApiIssueSchema);
+const githubIssuesWebhookPayloadSchema = z.object({
+  action: z.string().min(1),
+  repository: z.object({
+    full_name: z.string().min(1),
+    html_url: z.string().url().optional(),
+  }),
+  issue: githubApiIssueSchema,
+});
 const githubApiBranchSchema = z.object({
   name: z.string().min(1),
   commit: z.object({
@@ -96,17 +123,22 @@ const githubApiBranchSchema = z.object({
   }),
 });
 const githubApiBranchesSchema = z.array(githubApiBranchSchema);
+const syncStateEntrySchema = z.object({
+  lastSeenSha: z.string().min(1).optional(),
+  openIssueNumbers: z.array(z.number().int().positive()).optional(),
+  issueInitialized: z.boolean().optional(),
+});
 const syncStateSchema = z.record(
   z.string(),
-  z.object({
-    lastSeenSha: z.string().min(1),
-  }),
+  syncStateEntrySchema,
 );
 
 type GitHubMattermostSyncConfig = z.infer<typeof configSchema>;
 export type GitHubPushPayload = z.infer<typeof githubPushPayloadSchema>;
+export type GitHubIssue = z.infer<typeof githubApiIssueSchema>;
 type GitHubApiCommit = z.infer<typeof githubApiCommitSchema>;
 type GitRemoteHead = { name: string; sha: string };
+type SyncState = z.infer<typeof syncStateSchema>;
 
 class GitHubApiError extends Error {
   constructor(
@@ -168,6 +200,27 @@ function githubApiCommitLine(commit: GitHubApiCommit) {
   return `${prefix} ${firstCommitLine(commit.commit.message)} - ${author}`;
 }
 
+function issueAuthor(issue: GitHubIssue) {
+  return issue.user?.login || "unknown";
+}
+
+function issueOpenedDate(issue: GitHubIssue) {
+  if (!issue.created_at) {
+    return "unknown date";
+  }
+
+  const openedAt = new Date(issue.created_at);
+  if (Number.isNaN(openedAt.getTime())) {
+    return "unknown date";
+  }
+
+  return openedAt.toISOString().slice(0, 10);
+}
+
+function issueLine(issue: GitHubIssue) {
+  return `- [#${issue.number}](${issue.html_url}) ${issue.title} - ${issueAuthor(issue)}, opened ${issueOpenedDate(issue)}`;
+}
+
 export function formatGitHubPushMessage(payload: GitHubPushPayload) {
   const branch = refName(payload.ref);
   const commits = payload.commits.length > 0 ? payload.commits : payload.head_commit ? [payload.head_commit] : [];
@@ -201,6 +254,24 @@ export function formatGitHubCommitSyncMessage(input: { repository: string; branc
   ].join("\n\n");
 }
 
+export function formatGitHubIssuesMessage(input: { repository: string; issues: GitHubIssue[]; mode: "current" | "new" }) {
+  const repoUrl = `https://github.com/${input.repository}`;
+  const issueWord = input.issues.length === 1 ? "issue" : "issues";
+  const summary =
+    input.mode === "current"
+      ? `Found ${input.issues.length} currently open ${issueWord}.`
+      : `Detected ${input.issues.length} newly open or reopened ${issueWord}.`;
+  const visibleIssues = input.issues.slice(0, 10);
+  const hiddenIssueCount = Math.max(0, input.issues.length - visibleIssues.length);
+  const issueLines = visibleIssues.map(issueLine);
+
+  if (hiddenIssueCount > 0) {
+    issueLines.push(`- ... ${hiddenIssueCount} more open ${issueWord}`);
+  }
+
+  return [`#### GitHub issues: [${input.repository}](${repoUrl})`, summary, issueLines.join("\n")].join("\n\n");
+}
+
 function hasMattermostConfig(config: GitHubMattermostSyncConfig) {
   return Boolean(config.MATTERMOST_URL && config.MATTERMOST_LOGIN_ID && config.MATTERMOST_PASSWORD && config.MATTERMOST_CHANNEL_ID);
 }
@@ -211,6 +282,10 @@ function webhookConfigured(config: GitHubMattermostSyncConfig) {
 
 function pollingConfigured(config: GitHubMattermostSyncConfig) {
   return Boolean(config.GITHUB_SYNC_ENABLED && hasMattermostConfig(config));
+}
+
+function issuePollingConfigured(config: GitHubMattermostSyncConfig) {
+  return Boolean(config.GITHUB_ISSUES_SYNC_ENABLED && hasMattermostConfig(config));
 }
 
 function timingSafeTokenEqual(left: string, right: string) {
@@ -308,6 +383,10 @@ function allBranchesStateKey(config: GitHubMattermostSyncConfig) {
   return `${config.GITHUB_REPOSITORY_FULL_NAME}:*`;
 }
 
+function openIssuesStateKey(config: GitHubMattermostSyncConfig) {
+  return `${config.GITHUB_REPOSITORY_FULL_NAME}:issues:open`;
+}
+
 async function readSyncState(config: GitHubMattermostSyncConfig) {
   try {
     const raw = await readFile(config.GITHUB_SYNC_STATE_FILE, "utf8");
@@ -363,6 +442,19 @@ async function fetchLatestGitHubCommits(config: GitHubMattermostSyncConfig, bran
   await assertGitHubApiOk(response, `GitHub commits fetch failed for ${branch}`);
 
   return githubApiCommitsSchema.parse(await response.json());
+}
+
+async function fetchOpenGitHubIssues(config: GitHubMattermostSyncConfig) {
+  const url = new URL(`${config.GITHUB_API_URL}/repos/${config.GITHUB_REPOSITORY_FULL_NAME}/issues`);
+  url.searchParams.set("state", "open");
+  url.searchParams.set("sort", "created");
+  url.searchParams.set("direction", "desc");
+  url.searchParams.set("per_page", String(Math.min(config.GITHUB_ISSUES_SYNC_LOOKBACK, 100)));
+
+  const response = await fetch(url, { headers: githubApiHeaders(config) });
+  await assertGitHubApiOk(response, "GitHub issues fetch failed");
+
+  return githubApiIssuesSchema.parse(await response.json()).filter((issue) => !issue.pull_request);
 }
 
 function shouldUseGitFallback(error: unknown): error is GitHubApiError {
@@ -458,7 +550,7 @@ async function fetchGitNewCommits(config: GitHubMattermostSyncConfig, lastSeenSh
 async function syncGitHubBranchCommits(
   app: FastifyInstance,
   config: GitHubMattermostSyncConfig,
-  state: z.infer<typeof syncStateSchema>,
+  state: SyncState,
   branch: string,
   initializeOnly: boolean,
 ) {
@@ -517,7 +609,7 @@ async function syncGitHubBranchCommits(
 async function syncGitBranchCommits(
   app: FastifyInstance,
   config: GitHubMattermostSyncConfig,
-  state: z.infer<typeof syncStateSchema>,
+  state: SyncState,
   head: GitRemoteHead,
   initializeOnly: boolean,
 ) {
@@ -636,6 +728,63 @@ async function syncGitHubCommits(app: FastifyInstance, config: GitHubMattermostS
   }
 }
 
+function issueNumbers(issues: GitHubIssue[]) {
+  return issues.map((issue) => issue.number).sort((left, right) => left - right);
+}
+
+function sameIssueNumbers(left: number[] | undefined, right: number[]) {
+  if (!left || left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((value, index) => value === right[index]);
+}
+
+async function syncGitHubIssues(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+  const openIssues = await fetchOpenGitHubIssues(config);
+  const state = await readSyncState(config);
+  const key = openIssuesStateKey(config);
+  const entry = state[key] ?? {};
+  const openNumbers = issueNumbers(openIssues);
+  const previousNumbers = new Set(entry.openIssueNumbers ?? []);
+
+  if (!entry.issueInitialized) {
+    if (openIssues.length > 0) {
+      await postToMattermost(
+        config,
+        formatGitHubIssuesMessage({
+          repository: config.GITHUB_REPOSITORY_FULL_NAME,
+          issues: openIssues,
+          mode: "current",
+        }),
+      );
+      app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, count: openIssues.length }, "Synced current GitHub issues to Mattermost");
+    }
+
+    state[key] = { ...entry, openIssueNumbers: openNumbers, issueInitialized: true };
+    await writeSyncState(config, state);
+    return;
+  }
+
+  const newlyOpenIssues = openIssues.filter((issue) => !previousNumbers.has(issue.number));
+  if (newlyOpenIssues.length > 0) {
+    await postToMattermost(
+      config,
+      formatGitHubIssuesMessage({
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        issues: newlyOpenIssues,
+        mode: "new",
+      }),
+    );
+    app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, count: newlyOpenIssues.length }, "Synced new GitHub issues to Mattermost");
+  }
+
+  if (newlyOpenIssues.length > 0 || !sameIssueNumbers(entry.openIssueNumbers, openNumbers)) {
+    state[key] = { ...entry, openIssueNumbers: openNumbers, issueInitialized: true };
+    await writeSyncState(config, state);
+  }
+}
+
 function startGitHubPolling(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
   if (!pollingConfigured(config)) {
     app.log.info(
@@ -672,14 +821,52 @@ function startGitHubPolling(app: FastifyInstance, config: GitHubMattermostSyncCo
   });
 }
 
+function startGitHubIssuesPolling(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+  if (!issuePollingConfigured(config)) {
+    app.log.info(
+      {
+        enabled: config.GITHUB_ISSUES_SYNC_ENABLED,
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        mattermostConfigured: hasMattermostConfig(config),
+      },
+      "GitHub issues sync disabled",
+    );
+    return;
+  }
+
+  let running = false;
+  const run = async () => {
+    if (running) {
+      return;
+    }
+
+    running = true;
+    try {
+      await syncGitHubIssues(app, config);
+    } catch (error) {
+      app.log.error(error, "GitHub issues polling sync failed");
+    } finally {
+      running = false;
+    }
+  };
+
+  void run();
+  const interval = setInterval(run, config.GITHUB_ISSUES_SYNC_INTERVAL_SECONDS * 1000);
+  app.addHook("onClose", async () => {
+    clearInterval(interval);
+  });
+}
+
 function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
   if (!webhookConfigured(config)) {
     return;
   }
 
+  const webhookPaths = new Set(["/webhooks/github/push", "/webhooks/github/issues"]);
+
   app.addHook("preParsing", async (request, _reply, payload) => {
     const pathname = new URL(request.url, "http://orf.local").pathname;
-    if (pathname !== "/webhooks/github/push") {
+    if (!webhookPaths.has(pathname)) {
       return payload;
     }
 
@@ -715,10 +902,45 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
     await postToMattermost(config, formatGitHubPushMessage(payload));
     return { ok: true, channelId: config.MATTERMOST_CHANNEL_ID };
   });
+
+  app.post("/webhooks/github/issues", async (request, reply) => {
+    if (!requireWebhookSignature(config, request, reply)) {
+      return reply;
+    }
+
+    const event = getHeaderValue(request.headers["x-github-event"]);
+    if (event === "ping") {
+      return { ok: true, ignored: false, event };
+    }
+
+    if (event !== "issues") {
+      return { ok: true, ignored: true, event: event ?? null };
+    }
+
+    const payload = githubIssuesWebhookPayloadSchema.parse(request.body);
+    if (config.GITHUB_REPOSITORY_FULL_NAME && payload.repository.full_name !== config.GITHUB_REPOSITORY_FULL_NAME) {
+      return reply.code(202).send({ ok: true, ignored: true, repository: payload.repository.full_name });
+    }
+
+    if (payload.action !== "opened" && payload.action !== "reopened") {
+      return { ok: true, ignored: true, action: payload.action };
+    }
+
+    await postToMattermost(
+      config,
+      formatGitHubIssuesMessage({
+        repository: payload.repository.full_name,
+        issues: [payload.issue],
+        mode: "new",
+      }),
+    );
+    return { ok: true, channelId: config.MATTERMOST_CHANNEL_ID };
+  });
 }
 
 export function registerGitHubMattermostSync(app: FastifyInstance) {
   const config = readConfig();
   registerOptionalWebhook(app, config);
   startGitHubPolling(app, config);
+  startGitHubIssuesPolling(app, config);
 }

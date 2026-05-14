@@ -2367,6 +2367,14 @@ button:disabled {
   background: rgba(255, 226, 160, 0.14);
 }
 
+.orf-permission-key-cell {
+  color: #44566c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .orf-role-permission-footer {
   display: flex;
   align-items: center;
@@ -5580,4 +5588,58 @@ body[data-dragging-floating="true"] {
 .orf-progress-mini-fill {
   border-radius: var(--orf-radius-status-tag);
   background: var(--orf-success-text);
+}
+
+button,
+button[class],
+[role="button"],
+a.orf-control,
+a.orf-primary-action,
+a.orf-secondary-action,
+a.orf-sidebar-link,
+a.orf-row-loot-action,
+.orf-search-trigger,
+.orf-sidebar-command,
+.orf-floating-control,
+.orf-scope-tab,
+.orf-permission-view-tabs button,
+.orf-permission-view-tabs a,
+.orf-settings-nav button,
+.orf-settings-upload-button,
+.orf-settings-default-button,
+.orf-settings-segmented button,
+.orf-user-add-button,
+.orf-user-actions button,
+.orf-role-tabs button,
+.orf-role-permission-save-button,
+.orf-user-dialog-actions button {
+  border-radius: var(--orf-radius-status-tag);
+}
+
+button[class],
+[role="button"],
+a.orf-control,
+a.orf-primary-action,
+a.orf-secondary-action,
+a.orf-sidebar-link,
+a.orf-row-loot-action,
+.orf-search-trigger,
+.orf-sidebar-command,
+.orf-floating-control,
+.orf-scope-tabs,
+.orf-scope-tab,
+.orf-permission-view-tabs,
+.orf-permission-view-tabs button,
+.orf-permission-view-tabs a,
+.orf-settings-nav button,
+.orf-settings-upload-button,
+.orf-settings-default-button,
+.orf-settings-segmented,
+.orf-settings-segmented button,
+.orf-user-add-button,
+.orf-user-actions button,
+.orf-role-tabs button,
+.orf-role-permission-save-button,
+.orf-user-dialog-actions button {
+  clip-path: none;
 }

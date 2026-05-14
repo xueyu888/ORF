@@ -12,9 +12,9 @@ const actionItems: { action: ChallengeRowAction; icon: LucideIcon; label: string
 
 export const rowActionLeft = {
   objective: 20,
-  bounty: HIERARCHY_TREE_METRICS.anchorLeftByDepth[1] - HIERARCHY_TREE_METRICS.preIconSlot,
-  action: HIERARCHY_TREE_METRICS.anchorLeftByDepth[2] - HIERARCHY_TREE_METRICS.preIconSlot,
-  subAction: HIERARCHY_TREE_METRICS.anchorLeftByDepth[3] - HIERARCHY_TREE_METRICS.preIconSlot,
+  bounty: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1],
+  action: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[2],
+  subAction: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[3],
 } as const;
 
 export function ChallengeRowActions({
@@ -125,6 +125,7 @@ export function DisclosureAction({
   className,
   expanded,
   label,
+  left,
   onActiveActionChange,
   onOpenActionChange,
   onToggle,
@@ -135,6 +136,7 @@ export function DisclosureAction({
   className?: string;
   expanded: boolean;
   label: string;
+  left?: number;
   onActiveActionChange: (id: string | null) => void;
   onOpenActionChange: (id: string | null) => void;
   onToggle: () => void;
@@ -156,6 +158,7 @@ export function DisclosureAction({
         onToggle();
       }}
       onPointerEnter={() => onActiveActionChange(actionId)}
+      style={left === undefined ? undefined : { left }}
       title={label}
     >
       {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}

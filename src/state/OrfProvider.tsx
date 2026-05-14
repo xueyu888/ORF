@@ -1,8 +1,10 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { hasPermission } from "../config/permissions";
 import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
-import { OrfFlowStore } from "./OrfFlowStore";
+import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
 import type {
   CommentStatus,
+  CommentThread,
   CommentTargetType,
   Feedback,
   FeedbackStatus,
@@ -11,18 +13,21 @@ import type {
   Result,
   Task,
   TaskStatus,
+  BountySource,
   UserRole,
 } from "../types/orf";
 
 type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | null;
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
+type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
 
 interface ModalState {
   type: ModalType;
   objectiveId?: string;
   resultId?: string;
   feedbackId?: string;
+  source?: BountySource;
 }
 
 interface ToastMessage {
@@ -34,6 +39,7 @@ interface OrfContextValue {
   state: OrfState;
   currentUser: OrfUser | null;
   authReady: boolean;
+  dataReady: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
   modal: ModalState;
@@ -48,7 +54,9 @@ interface OrfContextValue {
   resetState: () => void;
   createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => void : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => void;
-  claimBounty: (resultId: string) => Promise<boolean>;
+  applyForBounty: (resultId: string) => Promise<boolean>;
+  acceptBountyChallenge: (resultId: string) => Promise<boolean>;
+  declinePriorityChallenge: (resultId: string) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -63,7 +71,7 @@ interface OrfContextValue {
   moveResult: OrfFlowStore["moveResult"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTaskChecklistItem: OrfFlowStore["moveTaskChecklistItem"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
-  submitLoot: OrfFlowStore["submitLoot"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
+  submitLoot: OrfFlowStore["submitLoot"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => Promise<boolean> : never;
   deleteObjective: (objectiveId: string) => void;
   deleteResult: (resultId: string) => void;
   deleteTask: (taskId: string) => void;
@@ -100,7 +108,7 @@ const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
-  return {
+  return normalizeState({
     ...state,
     objectives: data.objectives,
     results: data.results,
@@ -110,7 +118,7 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     comments: data.comments ?? state.comments ?? [],
     permissionRules: data.permissionRules,
     automaticCompletions: data.automaticCompletions ?? {},
-  };
+  });
 }
 
 function mergePermissionRules(state: OrfState, data: PermissionRulesResponse): OrfState {
@@ -125,6 +133,26 @@ function mergeUsers(state: OrfState, data: UsersResponse): OrfState {
     ...state,
     users: data.users,
     currentUserId: data.users.some((user) => user.id === state.currentUserId) ? state.currentUserId : data.users[0]?.id ?? state.currentUserId,
+  };
+}
+
+function mergeCommentThread(state: OrfState, commentThread: CommentThread): OrfState {
+  const comments = state.comments.filter(
+    (thread) =>
+      thread.id !== commentThread.id &&
+      !(thread.targetType === commentThread.targetType && thread.targetId === commentThread.targetId && thread.status === commentThread.status),
+  );
+
+  return {
+    ...state,
+    comments: [commentThread, ...comments].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
+  };
+}
+
+function removeCommentThread(state: OrfState, threadId: string): OrfState {
+  return {
+    ...state,
+    comments: state.comments.filter((thread) => thread.id !== threadId),
   };
 }
 
@@ -143,9 +171,7 @@ function mergeAuthenticatedUser(state: OrfState, user: OrfUser): OrfState {
 
 function persistAuthenticatedUser(user: OrfUser, setState: (update: (current: OrfState) => OrfState) => void) {
   setState((current) => {
-    const next = mergeAuthenticatedUser(current, user);
-    store.save(next);
-    return next;
+    return mergeAuthenticatedUser(current, user);
   });
 }
 
@@ -210,7 +236,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 403) {
-      return "你没有接受这个悬赏的权限";
+      return "你没有接受这个悬赏指标的权限";
     }
 
     if (error.status === 404) {
@@ -218,7 +244,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
-      return "这个悬赏已经有挑战者";
+      return "这个悬赏指标已经有挑战者";
     }
 
     return error.message || fallback;
@@ -251,6 +277,30 @@ function commentMutationFailureMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function businessMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return "没有执行这个操作的权限";
+    }
+
+    if (error.status === 404) {
+      return "操作对象不存在，已刷新数据";
+    }
+
+    if (error.status === 409) {
+      return error.message || "数据状态已变化，请刷新后再试";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
 function loadTheme(): ThemeMode {
   try {
     const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
@@ -264,6 +314,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(loadInitialState);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme());
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -290,20 +341,17 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   }, []);
   const applyTaskManagementData = useCallback((data: TaskManagementData) => {
     setState((current) => {
-      const next = mergeTaskManagementData(current, data);
-      store.save(next);
-      return next;
+      return mergeTaskManagementData(current, data);
     });
   }, []);
   const refreshTaskManagementData = useCallback(async () => {
     const data = await apiJson<TaskManagementData>("/api/tasks-page");
     applyTaskManagementData(data);
+    setDataReady(true);
   }, [applyTaskManagementData]);
   const applyPermissionRules = useCallback((data: PermissionRulesResponse) => {
     setState((current) => {
-      const next = mergePermissionRules(current, data);
-      store.save(next);
-      return next;
+      return mergePermissionRules(current, data);
     });
   }, []);
   const refreshPermissionRules = useCallback(async () => {
@@ -312,24 +360,23 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   }, [applyPermissionRules]);
   const applyUsers = useCallback((data: UsersResponse) => {
     setState((current) => {
-      const next = mergeUsers(current, data);
-      store.save(next);
-      return next;
+      return mergeUsers(current, data);
+    });
+  }, []);
+  const applyCommentThread = useCallback((commentThread: CommentThread) => {
+    setState((current) => {
+      return mergeCommentThread(current, commentThread);
+    });
+  }, []);
+  const applyRemovedCommentThread = useCallback((threadId: string) => {
+    setState((current) => {
+      return removeCommentThread(current, threadId);
     });
   }, []);
   const refreshUsers = useCallback(async () => {
     const data = await apiJson<UsersResponse>("/api/users");
     applyUsers(data);
   }, [applyUsers]);
-  const syncTaskMutation = useCallback(
-    (request: () => Promise<void>) => {
-      void request()
-        .then(refreshTaskManagementData)
-        .catch(() => undefined);
-    },
-    [refreshTaskManagementData],
-  );
-
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
@@ -346,6 +393,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
+    setDataReady(false);
 
     void apiJson<TaskManagementData>("/api/tasks-page")
       .then((data) => {
@@ -353,7 +401,12 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           applyTaskManagementData(data);
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) {
+          setDataReady(true);
+        }
+      });
 
     void apiJson<PermissionRulesResponse>("/api/permissions")
       .then((data) => {
@@ -380,7 +433,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);
-    store.save(next);
     if (message) {
       notify(message);
     }
@@ -422,6 +474,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       state,
       currentUser,
       authReady,
+      dataReady,
       isAuthenticated,
       isAdmin,
       modal,
@@ -433,30 +486,81 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       closeModal: () => setModal({ type: null }),
       notify,
       removeToast: (id: string) => setToasts((items) => items.filter((item) => item.id !== id)),
-      resetState: () => commit(store.reset(), "本地缓存已重置"),
-      createObjective: (input) => commit(store.createObjective(state, input), "目标已创建"),
-      createResult: (input) => {
-        commit(store.createResult(state, input), "悬赏已创建");
-        syncTaskMutation(() =>
-          apiRequest("/api/results", {
-            method: "POST",
-            body: JSON.stringify(input),
-          }),
-        );
+      resetState: () => {
+        void refreshTaskManagementData()
+          .then(() => notify("数据已从后端重新加载"))
+          .catch((error) => notify(businessMutationFailureMessage(error, "重新加载数据失败")));
       },
-      claimBounty: async (resultId) => {
-        const challenger = currentUser?.name ?? "";
-        const next = store.claimBounty(state, resultId, challenger);
+      createObjective: (input) => {
+        if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
+          notify("没有新建目标权限");
+          return;
+        }
+
+        void apiRequest("/api/objectives", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("目标已创建"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "目标创建失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      createResult: (input) => {
+        const payload = {
+          ...input,
+          source: input.source ?? "managerDefined",
+          definer: input.definer ?? currentUser?.name ?? "",
+        };
+        if (payload.source !== "memberProposed" && !hasPermission(currentUser, state.permissionRules, "result.create")) {
+          notify("没有新建悬赏指标权限");
+          return;
+        }
+
+        void apiRequest("/api/results", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify(payload.source === "memberProposed" ? "候选悬赏指标已提交，等待指挥官采纳" : "悬赏指标已创建"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "悬赏指标创建失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      applyForBounty: async (resultId) => {
+        const applicant = currentUser?.name ?? "";
+        const next = store.applyForBounty(state, resultId, applicant);
         if (next === state) {
-          notify("这个悬赏暂时不能接受挑战");
+          notify("这个悬赏指标暂时不能申请挑战");
           return false;
         }
 
-        commit(next, "已接受挑战");
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/challenge-applications`, { method: "POST" });
+          await refreshTaskManagementData();
+          notify("挑战申请已提交，等待指挥官确认");
+          return true;
+        } catch (error) {
+          notify(bountyMutationFailureMessage(error, "申请挑战失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      acceptBountyChallenge: async (resultId) => {
+        const challenger = currentUser?.name ?? "";
+        const next = store.acceptBountyChallenge(state, resultId, challenger);
+        if (next === state) {
+          notify("这个悬赏指标暂时不能接受挑战");
+          return false;
+        }
 
         try {
           await apiRequest(`/api/results/${encodeURIComponent(resultId)}/challenge`, { method: "PATCH" });
           await refreshTaskManagementData();
+          notify("已接受挑战");
           return true;
         } catch (error) {
           notify(bountyMutationFailureMessage(error, "接受挑战失败"));
@@ -464,153 +568,274 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      createFeedback: (input) => commit(store.createFeedback(state, input), "反馈已捕获"),
-      createTask: (input) => {
-        commit(store.createTask(state, input), "行动项已创建");
-        syncTaskMutation(() =>
-          apiRequest("/api/tasks", {
-            method: "POST",
-            body: JSON.stringify(input),
-          }),
-        );
+      declinePriorityChallenge: async (resultId) => {
+        const next = store.declinePriorityChallenge(state, resultId, currentUser?.name ?? "");
+        if (next === state) {
+          notify("这个优先挑战暂时不能放弃");
+          return false;
+        }
+
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/priority-decline`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          notify("已放弃优先挑战权");
+          return true;
+        } catch (error) {
+          notify(bountyMutationFailureMessage(error, "放弃优先挑战失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
-      updateTaskStatus: (taskId, status) => {
-        commit(store.updateTaskStatus(state, taskId, status), `行动项状态已更新`);
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/status`, {
-            method: "PATCH",
-            body: JSON.stringify({ status }),
-          }),
-        );
-      },
-      setTaskCompletion: (taskId, done) => {
-        commit(store.setTaskCompletion(state, taskId, done), `行动项完成状态已更新`);
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
-            method: "PATCH",
-            body: JSON.stringify({ done }),
-          }),
-        );
-      },
-      updateTaskChecklistItem: (taskId, itemId, done) => {
-        commit(store.updateTaskChecklistItem(state, taskId, itemId, done), `子行动项完成状态已更新`);
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ done }),
-          }),
-        );
-      },
-      updateObjectiveTitle: (objectiveId, title) => {
-        commit(store.updateObjectiveTitle(state, objectiveId, title), "目标已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ title }),
-          }),
-        );
-      },
-      updateObjectiveStage: (objectiveId, stage) => {
-        commit(store.updateObjectiveStage(state, objectiveId, stage), "目标状态已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/stage`, {
-            method: "PATCH",
-            body: JSON.stringify({ stage }),
-          }),
-        );
-      },
-      updateResultTitle: (resultId, title) => {
-        commit(store.updateResultTitle(state, resultId, title), "悬赏已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ title }),
-          }),
-        );
-      },
-      updateTaskTitle: (taskId, title) => {
-        commit(store.updateTaskTitle(state, taskId, title), "行动项已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ title }),
-          }),
-        );
-      },
-      updateTaskChecklistItemLabel: (taskId, itemId, label) => {
-        commit(store.updateTaskChecklistItemLabel(state, taskId, itemId, label), "子行动项已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}/label`, {
-            method: "PATCH",
-            body: JSON.stringify({ label }),
-          }),
-        );
-      },
-      createTaskChecklistItem: (taskId, afterItemId) => {
-        commit(store.createTaskChecklistItem(state, taskId, afterItemId), "子行动项已添加");
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
-            method: "POST",
-            body: JSON.stringify({ afterItemId }),
-          }),
-        );
-      },
-      moveResult: (input) => {
-        commit(store.moveResult(state, input), "悬赏位置已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/results/${encodeURIComponent(input.resultId)}/order`, {
-            method: "PATCH",
-            body: JSON.stringify({ referenceResultId: input.referenceResultId, placement: input.placement }),
-          }),
-        );
-      },
-      moveTask: (input) => {
-        commit(store.moveTask(state, input), "行动项位置已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(input.taskId)}/move`, {
-            method: "PATCH",
-            body: JSON.stringify({ toResultId: input.toResultId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
-          }),
-        );
-      },
-      moveTaskChecklistItem: (input) => {
-        commit(store.moveTaskChecklistItem(state, input), "子行动项位置已更新");
-        syncTaskMutation(() =>
-          apiRequest(`/api/tasks/${encodeURIComponent(input.fromTaskId)}/checklist/${encodeURIComponent(input.itemId)}/move`, {
-            method: "PATCH",
-            body: JSON.stringify({ toTaskId: input.toTaskId, referenceItemId: input.referenceItemId, placement: input.placement }),
-          }),
-        );
-      },
-      deleteObjective: (objectiveId) => {
-        commit(store.deleteObjective(state, objectiveId), "目标已删除");
-        syncTaskMutation(() => apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, { method: "DELETE" }));
-      },
-      deleteResult: (resultId) => {
-        commit(store.deleteResult(state, resultId), "悬赏已删除");
-        syncTaskMutation(() => apiRequest(`/api/results/${encodeURIComponent(resultId)}`, { method: "DELETE" }));
-      },
-      deleteTask: (taskId) => {
-        commit(store.deleteTask(state, taskId), "行动项已删除");
-        syncTaskMutation(() => apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" }));
-      },
-      deleteTaskChecklistItem: (taskId, itemId) => {
-        commit(store.deleteTaskChecklistItem(state, taskId, itemId), "子行动项已删除");
-        syncTaskMutation(() => apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, { method: "DELETE" }));
-      },
-      updateFeedbackStatus: (feedbackId, status) => commit(store.updateFeedbackStatus(state, feedbackId, status), `反馈状态已更新`),
-      updateResultConfidence: (resultId, confidence) => commit(store.updateResultConfidence(state, resultId, confidence), "悬赏信心已更新"),
-      submitLoot: (input) => {
-        commit(store.submitLoot(state, input), "战利品已提交");
-        void apiRequest(`/api/results/${encodeURIComponent(input.bountyId)}/loot`, {
+      createFeedback: (input) => {
+        void apiRequest("/api/feedback", {
           method: "POST",
-          body: JSON.stringify({ body: input.body }),
+          body: JSON.stringify({
+            phenomenon: input.phenomenon,
+            causeCategories: input.causeCategories,
+            impact: input.impact,
+            linkedResultId: input.linkedResultId,
+            suggestedAdjustment: input.suggestedAdjustment,
+            source: input.source,
+            owner: input.owner,
+          }),
         })
           .then(refreshTaskManagementData)
+          .then(() => notify("反馈已捕获"))
           .catch((error) => {
-            notify(commentMutationFailureMessage(error, "战利品提交失败"));
+            notify(businessMutationFailureMessage(error, "反馈保存失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
+      },
+      createTask: (input) => {
+        void apiRequest("/api/tasks", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("行动项已创建"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "行动项创建失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateTaskStatus: (taskId, status) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("行动项状态已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "行动项状态更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      setTaskCompletion: (taskId, done) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
+          method: "PATCH",
+          body: JSON.stringify({ done }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("行动项完成状态已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "行动项完成状态更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateTaskChecklistItem: (taskId, itemId, done) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ done }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("子行动项完成状态已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "子行动项完成状态更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateObjectiveTitle: (objectiveId, title) => {
+        void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("目标已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "目标更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateObjectiveStage: (objectiveId, stage) => {
+        void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/stage`, {
+          method: "PATCH",
+          body: JSON.stringify({ stage }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("目标状态已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "目标状态更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateResultTitle: (resultId, title) => {
+        void apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("悬赏指标已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "悬赏指标更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateTaskTitle: (taskId, title) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("行动项已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "行动项更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateTaskChecklistItemLabel: (taskId, itemId, label) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}/label`, {
+          method: "PATCH",
+          body: JSON.stringify({ label }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("子行动项已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "子行动项更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      createTaskChecklistItem: (taskId, afterItemId) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
+          method: "POST",
+          body: JSON.stringify({ afterItemId }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("子行动项已添加"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "子行动项添加失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      moveResult: (input) => {
+        void apiRequest(`/api/results/${encodeURIComponent(input.resultId)}/order`, {
+          method: "PATCH",
+          body: JSON.stringify({ referenceResultId: input.referenceResultId, placement: input.placement }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("悬赏指标位置已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "悬赏指标位置更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      moveTask: (input) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(input.taskId)}/move`, {
+          method: "PATCH",
+          body: JSON.stringify({ toResultId: input.toResultId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("行动项位置已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "行动项位置更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      moveTaskChecklistItem: (input) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(input.fromTaskId)}/checklist/${encodeURIComponent(input.itemId)}/move`, {
+          method: "PATCH",
+          body: JSON.stringify({ toTaskId: input.toTaskId, referenceItemId: input.referenceItemId, placement: input.placement }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("子行动项位置已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "子行动项位置更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      deleteObjective: (objectiveId) => {
+        void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, { method: "DELETE" })
+          .then(refreshTaskManagementData)
+          .then(() => notify("目标已删除"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "目标删除失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      deleteResult: (resultId) => {
+        void apiRequest(`/api/results/${encodeURIComponent(resultId)}`, { method: "DELETE" })
+          .then(refreshTaskManagementData)
+          .then(() => notify("悬赏指标已删除"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "悬赏指标删除失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      deleteTask: (taskId) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" })
+          .then(refreshTaskManagementData)
+          .then(() => notify("行动项已删除"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "行动项删除失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      deleteTaskChecklistItem: (taskId, itemId) => {
+        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, { method: "DELETE" })
+          .then(refreshTaskManagementData)
+          .then(() => notify("子行动项已删除"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "子行动项删除失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateFeedbackStatus: (feedbackId, status) => {
+        void apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/status`, {
+          method: "PATCH",
+          body: JSON.stringify({ status }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("反馈状态已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "反馈状态更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      updateResultConfidence: (resultId, confidence) => {
+        void apiRequest(`/api/results/${encodeURIComponent(resultId)}/confidence`, {
+          method: "PATCH",
+          body: JSON.stringify({ confidence }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("悬赏信心已更新"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "悬赏信心更新失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
+      submitLoot: async (input) => {
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(input.bountyId)}/loot`, {
+            method: "POST",
+            body: JSON.stringify({ body: input.body }),
+          });
+          await refreshTaskManagementData();
+          notify("战利品已提交");
+          return true;
+        } catch (error) {
+          notify(commentMutationFailureMessage(error, "战利品提交失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       createUser: async (input) => {
         try {
@@ -677,8 +902,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
       },
       addComment: (input) => {
-        commit(store.addComment(state, input), "评论已添加");
-        void apiRequest("/api/comments", {
+        void apiJson<CommentMutationResponse>("/api/comments", {
           method: "POST",
           body: JSON.stringify({
             targetType: input.targetType,
@@ -690,49 +914,80 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             replyToAuthor: input.replyToAuthor,
           }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+            notify("评论已添加");
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论添加失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
       updateCommentThreadStatus: (threadId, status) => {
-        commit(store.updateCommentThreadStatus(state, threadId, status), status === "resolved" ? "评论已解决" : "评论已重新打开");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/status`, {
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/status`, {
           method: "PATCH",
           body: JSON.stringify({ status }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+            notify(status === "resolved" ? "评论已解决" : "评论已重新打开");
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论状态更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
       updateCommentMessage: (threadId, messageId, body) => {
-        commit(store.updateCommentMessage(state, threadId, messageId, body), "评论已更新");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, {
           method: "PATCH",
           body: JSON.stringify({ body }),
         })
-          .then(refreshTaskManagementData)
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            }
+            notify("评论已更新");
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
       deleteCommentMessage: (threadId, messageId) => {
-        commit(store.deleteCommentMessage(state, threadId, messageId), "评论已删除");
-        void apiRequest(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })
-          .then(refreshTaskManagementData)
+        void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" })
+          .then((response) => {
+            if (response.commentThread) {
+              applyCommentThread(response.commentThread);
+            } else {
+              applyRemovedCommentThread(threadId);
+            }
+            notify("评论已删除");
+          })
           .catch((error) => {
             notify(commentMutationFailureMessage(error, "评论删除失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      proposeResultUpdate: (resultId, title, reason, feedbackId) =>
-        commit(store.proposeResultUpdate(state, resultId, title, reason, feedbackId), "悬赏更新已记录"),
+      proposeResultUpdate: (resultId, title, reason, feedbackId) => {
+        void apiRequest(`/api/results/${encodeURIComponent(resultId)}/update-proposal`, {
+          method: "POST",
+          body: JSON.stringify({ title, reason, feedbackId }),
+        })
+          .then(refreshTaskManagementData)
+          .then(() => notify("悬赏指标更新已记录"))
+          .catch((error) => {
+            notify(businessMutationFailureMessage(error, "悬赏指标更新记录失败"));
+            void refreshTaskManagementData().catch(() => undefined);
+          });
+      },
     }),
     [
+      applyCommentThread,
+      applyRemovedCommentThread,
       authReady,
       authUserId,
       authenticateWithPassword,
@@ -744,7 +999,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       refreshTaskManagementData,
       refreshUsers,
       state,
-      syncTaskMutation,
       theme,
       toasts,
     ],

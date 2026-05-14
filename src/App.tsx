@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { canShowFrontend, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { AIEvaluationPage } from "./pages/AIEvaluationPage";
 import { AuthPage } from "./pages/AuthPage";
 import { BountyHallPage } from "./pages/BountyHallPage";
@@ -9,6 +10,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
 import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
 import { FantasyUiPreviewPage } from "./features/fantasy-ui";
+import { GenshinUIKitPreviewPage } from "./features/genshin-ui-kit";
 import { LootSubmitPage } from "./pages/LootSubmitPage";
 import { MembersPage } from "./pages/MembersPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
@@ -25,6 +27,7 @@ export function App() {
   return (
     <Routes>
       <Route path="auth" element={<AuthRoute />} />
+      <Route path="preview/genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
       <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="bounties" element={<BountyHallPage />} />
@@ -34,6 +37,7 @@ export function App() {
         <Route path="tasks" element={<ChallengePlanPage />} />
         <Route path="tasks/bounties/:bountyId/loot" element={<LootSubmitPage />} />
         <Route path="fantasy-ui" element={<FantasyUiPreviewPage />} />
+        <Route path="genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
         <Route path="feedback" element={<FeedbackInboxPage />} />
         <Route path="feedback/:feedbackId" element={<FeedbackDetailPage />} />
         <Route path="strategy-map" element={<StrategyMapPage />} />
@@ -42,17 +46,17 @@ export function App() {
         <Route
           path="members"
           element={
-            <RequireAdmin>
+            <RequireFrontendVisibility visibilityKey="page.members">
               <MembersPage />
-            </RequireAdmin>
+            </RequireFrontendVisibility>
           }
         />
         <Route
           path="permissions"
           element={
-            <RequireAdmin>
+            <RequireFrontendVisibility visibilityKey="page.permissions">
               <PermissionsPage />
-            </RequireAdmin>
+            </RequireFrontendVisibility>
           }
         />
         <Route path="settings" element={<SettingsPage />} />
@@ -90,7 +94,7 @@ function AuthLoadingScreen() {
   );
 }
 
-function RequireAdmin({ children }: { children: ReactNode }) {
-  const { isAdmin } = useOrf();
-  return isAdmin ? children : <Navigate to="/bounties" replace />;
+function RequireFrontendVisibility({ children, visibilityKey }: { children: ReactNode; visibilityKey: FrontendVisibilityKey }) {
+  const { currentUser } = useOrf();
+  return canShowFrontend(currentUser, visibilityKey) ? children : <Navigate to="/bounties" replace />;
 }

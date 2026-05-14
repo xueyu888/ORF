@@ -10,7 +10,7 @@ Canonical icons and visual assets for ORF hierarchy rows and app surfaces. Runti
 | Asset | Meaning |
 | --- | --- |
 | `objective-flag.svg` | Objective object icon. |
-| `metric-square.svg` | Result / metric object icon. Use color to express metric status. |
+| `metric-square.svg` | Result / 悬赏指标 object icon. Use color to express bounty metric status. |
 | `completion-circle-empty.svg` | Task / subtask incomplete checkbox. |
 | `completion-circle-done.svg` | Task / subtask complete checkbox. |
 | `sidebar-energy-bg.png` | Sidebar atmospheric background. |
@@ -19,4 +19,4 @@ Canonical icons and visual assets for ORF hierarchy rows and app surfaces. Runti
 Fantasy UI reference boards and button assets live in `src/features/fantasy-ui/assets/`.
 Runtime components should reference registered image assets through `src/config/assetLibrary.ts`; large reference boards should stay as source/reference material and should not be imported into the app bundle unless a specific screen needs to render them.
 
-Status rules live in `docs/backend/ORF 任务管理页面 - 后端.md`.
+Challenge status rules live in `docs/backend/ORF 任务管理页面 - 后端.md`.

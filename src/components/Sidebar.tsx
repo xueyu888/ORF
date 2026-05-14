@@ -3,6 +3,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
+import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -20,11 +21,11 @@ const sidebarGroups = [
 }));
 
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
-  const { currentUser, isAdmin, logout } = useOrf();
+  const { currentUser, logout } = useOrf();
   const [collapsed, setCollapsed] = useState(false);
   const [configuredSidebarBackgroundUrl, setConfiguredSidebarBackgroundUrl] = useState<string | null>(null);
   const visibleGroups = sidebarGroups
-    .map((group) => (group.title === "admin" && !isAdmin ? { ...group, items: [] } : group))
+    .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
   const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
 
@@ -125,15 +126,17 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           <Command className="orf-sidebar-icon h-5 w-5 shrink-0" />
           <span className="orf-sidebar-label flex-1">搜索</span>
         </button>
-        <NavLink
-          to="/settings"
-          className="orf-sidebar-command flex w-full items-center border text-left transition"
-          aria-label="设置"
-          title="设置"
-        >
-          <Settings className="orf-sidebar-icon h-5 w-5 shrink-0" />
-          <span className="orf-sidebar-label flex-1">设置</span>
-        </NavLink>
+        {canShowFrontend(currentUser, "nav.settings") && (
+          <NavLink
+            to="/settings"
+            className="orf-sidebar-command flex w-full items-center border text-left transition"
+            aria-label="设置"
+            title="设置"
+          >
+            <Settings className="orf-sidebar-icon h-5 w-5 shrink-0" />
+            <span className="orf-sidebar-label flex-1">设置</span>
+          </NavLink>
+        )}
         <button
           onClick={logout}
           className="orf-sidebar-command flex w-full items-center border text-left transition"

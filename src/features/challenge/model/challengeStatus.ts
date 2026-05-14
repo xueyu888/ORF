@@ -10,7 +10,7 @@ const difficultyRank: Record<UncertaintyLevel, number> = {
 };
 
 export const bountyStatusLabel: Record<BountyStatus, string> = {
-  open: "待挑战",
+  open: "可申请",
   active: "挑战中",
   review: "待验收",
   settled: "已结算",

@@ -57,6 +57,20 @@
       "when": 1778287512831,
       "tag": "0007_lazy_shooting_star",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778425860807,
+      "tag": "0008_dizzy_hardball",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778426332670,
+      "tag": "0009_ordinary_captain_marvel",
+      "breakpoints": true
     }
   ]
 }

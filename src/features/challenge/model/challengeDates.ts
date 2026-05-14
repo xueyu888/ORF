@@ -1,9 +1,5 @@
 import type { Evidence, Feedback, Result, Task } from "../../../types/orf";
 
-export function bountyDeadline(actions: Task[]) {
-  return latestDate(actions.map((action) => action.dueDate));
-}
-
 export function bountyUpdatedAt(result: Result, actions: Task[], feedback: Feedback[], evidence: Evidence[]) {
   return latestDate([
     result.trend.at(-1)?.date,

@@ -1,22 +1,21 @@
 import { Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { canShowFrontendPath } from "../config/frontendVisibility";
 import { quickPages } from "../config/navigation";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import { commandTypeLabel } from "../utils/labels";
 
-const adminOnlyPaths = new Set(["/members", "/permissions"]);
-
 export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
-  const { isAdmin, state } = useOrf();
+  const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
 
   const items = useMemo(() => {
     const pageItems = quickPages
-      .filter((item) => isAdmin || !adminOnlyPaths.has(item.path))
+      .filter((item) => canShowFrontendPath(currentUser, item.path))
       .map((item) => ({ label: item.label, path: item.path, type: "Page" }));
     const objectiveItems = state.objectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
     const resultItems = state.results.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));
@@ -26,7 +25,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
     return [...pageItems, ...objectiveItems, ...resultItems, ...taskItems, ...feedbackItems].filter((item) =>
       `${item.label} ${item.type}`.toLowerCase().includes(query.toLowerCase()),
     );
-  }, [isAdmin, query, state]);
+  }, [currentUser, query, state]);
 
   if (!open) {
     return null;

@@ -2,17 +2,17 @@ import { CalendarDays, ChevronDown, Filter } from "lucide-react";
 import type { ChallengeScope } from "../model/types";
 
 export function ChallengeToolbar({
-  isAdmin,
+  canShowAll,
   onScopeChange,
   scope,
 }: {
-  isAdmin: boolean;
+  canShowAll: boolean;
   onScopeChange: (scope: ChallengeScope) => void;
   scope: ChallengeScope;
 }) {
   return (
     <div className="orf-task-toolbar">
-      <ScopeTabs isAdmin={isAdmin} onChange={onScopeChange} value={scope} />
+      <ScopeTabs canShowAll={canShowAll} onChange={onScopeChange} value={scope} />
       <div className="orf-task-toolbar-actions">
         <button className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
           <CalendarDays className="h-4 w-4 text-[#667085]" />
@@ -28,8 +28,8 @@ export function ChallengeToolbar({
   );
 }
 
-function ScopeTabs({ isAdmin, onChange, value }: { isAdmin: boolean; onChange: (scope: ChallengeScope) => void; value: ChallengeScope }) {
-  const items = isAdmin
+function ScopeTabs({ canShowAll, onChange, value }: { canShowAll: boolean; onChange: (scope: ChallengeScope) => void; value: ChallengeScope }) {
+  const items = canShowAll
     ? [
         { value: "all" as const, label: "所有挑战" },
         { value: "mine" as const, label: "我的挑战" },

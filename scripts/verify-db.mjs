@@ -1,8 +1,76 @@
 import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
 import path from "node:path";
+import tls from "node:tls";
 import pg from "pg";
 
 const envFile = ".env";
+const sslQueryKeys = ["sslmode", "sslcert", "sslkey", "sslrootcert"];
+
+function resolveFilePath(filePath) {
+  if (filePath === "~") {
+    return os.homedir();
+  }
+
+  if (filePath.startsWith("~/")) {
+    return path.join(os.homedir(), filePath.slice(2));
+  }
+
+  return filePath;
+}
+
+function readSslFile(filePath, label) {
+  if (!filePath) {
+    return undefined;
+  }
+
+  const resolvedPath = resolveFilePath(filePath);
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Database SSL ${label} file does not exist: ${resolvedPath}`);
+  }
+
+  return fs.readFileSync(resolvedPath, "utf8");
+}
+
+function tlsIdentityOptions(hostname) {
+  if (net.isIP(hostname) === 0) {
+    return { servername: hostname };
+  }
+
+  return {
+    checkServerIdentity: (_servername, cert) => tls.checkServerIdentity(hostname, cert),
+  };
+}
+
+function createPgPoolConfig(connectionString) {
+  const url = new URL(connectionString);
+  const sslMode = url.searchParams.get("sslmode");
+  const rootCertPath = url.searchParams.get("sslrootcert");
+  const certPath = url.searchParams.get("sslcert");
+  const keyPath = url.searchParams.get("sslkey");
+  const hasSslConfig = Boolean(sslMode || rootCertPath || certPath || keyPath);
+  const ssl =
+    hasSslConfig && sslMode !== "disable"
+      ? {
+          ca: readSslFile(rootCertPath, "root certificate"),
+          cert: readSslFile(certPath, "client certificate"),
+          key: readSslFile(keyPath, "client key"),
+          rejectUnauthorized: sslMode === "verify-ca" || sslMode === "verify-full" || (!sslMode && Boolean(rootCertPath)),
+          ...tlsIdentityOptions(url.hostname),
+        }
+      : undefined;
+
+  for (const key of sslQueryKeys) {
+    url.searchParams.delete(key);
+  }
+
+  return {
+    connectionString: url.toString(),
+    ssl,
+    max: 1,
+  };
+}
 
 if (fs.existsSync(envFile)) {
   for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
@@ -17,29 +85,13 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
 
 if (!connectionString) {
-  throw new Error("DATABASE_URL is not set. Copy .env.orf-team to .env first.");
+  throw new Error("DATABASE_URL or REMOTE_DATABASE_URL is required.");
 }
 
-const url = new URL(connectionString);
-const rootCert = url.searchParams.get("sslrootcert");
-const sslMode = url.searchParams.get("sslmode");
-const ssl =
-  sslMode && sslMode !== "disable"
-    ? {
-        ca: rootCert ? fs.readFileSync(path.resolve(rootCert), "utf8") : undefined,
-        rejectUnauthorized: sslMode === "verify-ca" || sslMode === "verify-full",
-        servername: url.hostname,
-      }
-    : undefined;
-
-for (const key of ["sslmode", "sslrootcert", "sslcert", "sslkey"]) {
-  url.searchParams.delete(key);
-}
-
-const pool = new pg.Pool({ connectionString: url.toString(), ssl, max: 1 });
+const pool = new pg.Pool(createPgPoolConfig(connectionString));
 
 try {
   const identity = await pool.query(

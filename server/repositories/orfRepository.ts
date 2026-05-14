@@ -2,11 +2,14 @@ import { and, eq, inArray, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
   AutomaticCompletionResult,
+  BountySource,
+  ChallengeApplication,
   CommentStatus,
   CommentTargetType,
   CommentThread,
   Evidence,
   Feedback,
+  FeedbackStatus,
   MetricDirection,
   Objective,
   OrfStage,
@@ -41,6 +44,7 @@ export type TaskManagementData = Pick<
 >;
 
 type CommentActor = {
+  canManageAllComments?: boolean;
   id: string;
   name: string;
   role: "admin" | "member";
@@ -57,9 +61,33 @@ type CommentMessageRow = typeof commentMessages.$inferSelect;
 const today = () => new Date().toISOString().slice(0, 10);
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+const HALF_DAY_MS = 12 * 60 * 60 * 1000;
+const MAX_CONFIRMATION_HALVES = 18;
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
+}
+
+function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
+  if (!finalDueAt) return null;
+
+  const finalDueDate = new Date(`${finalDueAt}T23:59:00`);
+  const acceptedDate = new Date(acceptedAt);
+  if (Number.isNaN(finalDueDate.getTime()) || Number.isNaN(acceptedDate.getTime())) return null;
+
+  const remainingMs = finalDueDate.getTime() - acceptedDate.getTime();
+  if (remainingMs < HALF_DAY_MS) return null;
+
+  const roundedHalfDays = Math.round((remainingMs * 0.3) / HALF_DAY_MS);
+  const confirmationHalves = Math.min(MAX_CONFIRMATION_HALVES, Math.max(1, roundedHalfDays));
+  return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function isMissingCommentStorageError(error: unknown) {
@@ -268,6 +296,16 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     status: result.status,
     confidence: result.confidence,
     owner: result.owner,
+    source: result.source,
+    definer: result.definer,
+    finalDueAt: optional(result.finalDueAt),
+    assignedChallenger: result.assignedChallenger,
+    acceptedAt: result.acceptedAt,
+    confirmationDueAt: result.confirmationDueAt,
+    confirmedAt: result.confirmedAt,
+    priorityChallengeExpiresAt: result.priorityChallengeExpiresAt,
+    priorityDeclinedBy: result.priorityDeclinedBy ?? [],
+    challengeApplications: result.challengeApplications ?? [],
     evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
     taskIds: taskItems.filter((task) => task.linkedResultId === result.id).map((task) => task.id),
     feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
@@ -280,7 +318,6 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       title: objective.title,
       description: objective.description,
       whyItMatters: objective.whyItMatters,
-      owner: objective.owner,
       cycle: objective.cycle,
       stage: objective.stage,
       status: objective.status,
@@ -360,6 +397,13 @@ export interface CreateResultInput {
   direction?: MetricDirection;
   uncertaintyLevel?: UncertaintyLevel;
   owner?: string;
+  source?: BountySource;
+  definer?: string;
+  finalDueAt?: string;
+  assignedChallenger?: string | null;
+  priorityChallengeExpiresAt?: string | null;
+  priorityDeclinedBy?: string[];
+  challengeApplications?: ChallengeApplication[];
 }
 
 export interface CreateTaskInput {
@@ -370,6 +414,41 @@ export interface CreateTaskInput {
   linkedObjectiveId?: string;
   linkedResultId: string;
   dueDate?: string;
+  feedbackOriginId?: string;
+}
+
+export interface CreateObjectiveInput {
+  title: string;
+  whyItMatters: string;
+  cycle: string;
+  boundary: string;
+}
+
+export async function createObjective(input: CreateObjectiveInput, context: { teamId: string; userId: string }): Promise<Objective | null> {
+  const id = makeId("obj");
+  const now = today();
+
+  await db.insert(objectives).values({
+    id,
+    teamId: context.teamId,
+    title: input.title,
+    description: input.whyItMatters,
+    whyItMatters: input.whyItMatters,
+    cycle: input.cycle,
+    stage: "orfReestimate",
+    status: "Draft",
+    confidence: 50,
+    progress: 0,
+    boundary: input.boundary,
+    successDefinition: "Success definition will be refined during result planning.",
+    createdAt: now,
+    updatedAt: now,
+    createdBy: context.userId,
+    updatedBy: context.userId,
+  });
+
+  const data = await getTaskManagementData();
+  return data.objectives.find((objective) => objective.id === id) ?? null;
 }
 
 export interface CreateChecklistItemInput {
@@ -408,6 +487,13 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     status: "Draft",
     confidence: 50,
     owner: input.owner ?? "",
+    source: input.source ?? "managerDefined",
+    definer: input.definer ?? "",
+    finalDueAt: input.finalDueAt ?? addDays(today(), 14),
+    assignedChallenger: input.assignedChallenger ?? null,
+    priorityChallengeExpiresAt: input.priorityChallengeExpiresAt ?? null,
+    priorityDeclinedBy: input.priorityDeclinedBy ?? [],
+    challengeApplications: input.challengeApplications ?? [],
     reviewCadence: "Weekly",
     sortOrder,
   });
@@ -416,12 +502,13 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
   return data.results.find((result) => result.id === id) ?? null;
 }
 
-export type ClaimResultOutcome =
-  | { status: "claimed"; result: Result }
-  | { status: "alreadyClaimed"; owner: string }
+export type AcceptResultChallengeOutcome =
+  | { status: "accepted"; result: Result }
+  | { status: "alreadyAccepted"; owner: string }
+  | { status: "invalidDueDate" }
   | { status: "notFound" };
 
-export async function claimResult(resultId: string, challenger: string): Promise<ClaimResultOutcome> {
+export async function acceptResultChallenge(resultId: string, challenger: string): Promise<AcceptResultChallengeOutcome> {
   const nextOwner = challenger.trim();
   if (!nextOwner) {
     return { status: "notFound" };
@@ -433,21 +520,245 @@ export async function claimResult(resultId: string, challenger: string): Promise
   }
 
   const currentOwner = result.owner.trim();
-  if (currentOwner && currentOwner !== "User" && currentOwner !== nextOwner) {
-    return { status: "alreadyClaimed", owner: result.owner };
+  if (currentOwner && currentOwner !== "User" && currentOwner !== "未分配" && currentOwner !== nextOwner) {
+    return { status: "alreadyAccepted", owner: result.owner };
+  }
+
+  const acceptedAt = nowIso();
+  const nextConfirmationDueAt = confirmationDueAt(result.finalDueAt, acceptedAt);
+  if (!nextConfirmationDueAt) {
+    return { status: "invalidDueDate" };
   }
 
   await db
     .update(results)
     .set({
       owner: nextOwner,
+      assignedChallenger: result.assignedChallenger === nextOwner ? null : result.assignedChallenger,
+      acceptedAt: result.acceptedAt ?? acceptedAt,
+      confirmationDueAt: result.confirmationDueAt ?? nextConfirmationDueAt,
+      challengeApplications: (result.challengeApplications ?? []).map((application) =>
+        application.applicant === nextOwner && application.status === "pending" ? { ...application, status: "approved", decidedAt: acceptedAt } : application,
+      ),
       status: result.status === "Draft" ? "On Track" : result.status,
     })
     .where(eq(results.id, resultId));
 
   const data = await getTaskManagementData();
-  const claimed = data.results.find((item) => item.id === resultId);
-  return claimed ? { status: "claimed", result: claimed } : { status: "notFound" };
+  const accepted = data.results.find((item) => item.id === resultId);
+  return accepted ? { status: "accepted", result: accepted } : { status: "notFound" };
+}
+
+export type ApplyResultChallengeOutcome =
+  | { status: "applied"; result: Result }
+  | { status: "alreadyApplied" }
+  | { status: "alreadyAccepted"; owner: string }
+  | { status: "notFound" };
+
+export async function applyForResultChallenge(resultId: string, applicant: string): Promise<ApplyResultChallengeOutcome> {
+  const nextApplicant = applicant.trim();
+  if (!nextApplicant) {
+    return { status: "notFound" };
+  }
+
+  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
+  if (!result) {
+    return { status: "notFound" };
+  }
+
+  const currentOwner = result.owner.trim();
+  if (currentOwner && currentOwner !== "User" && currentOwner !== "未分配") {
+    return { status: "alreadyAccepted", owner: result.owner };
+  }
+
+  const applications = result.challengeApplications ?? [];
+  if (applications.some((application) => application.applicant === nextApplicant && application.status === "pending")) {
+    return { status: "alreadyApplied" };
+  }
+
+  const application: ChallengeApplication = {
+    id: makeId("challenge-application"),
+    applicant: nextApplicant,
+    status: "pending",
+    createdAt: nowIso(),
+    decidedAt: null,
+  };
+
+  await db
+    .update(results)
+    .set({
+      challengeApplications: [application, ...applications],
+    })
+    .where(eq(results.id, resultId));
+
+  const data = await getTaskManagementData();
+  const applied = data.results.find((item) => item.id === resultId);
+  return applied ? { status: "applied", result: applied } : { status: "notFound" };
+}
+
+export type DeclinePriorityChallengeOutcome =
+  | { status: "declined"; result: Result }
+  | { status: "alreadyDeclined" }
+  | { status: "notAllowed" }
+  | { status: "notFound" };
+
+export async function declinePriorityChallenge(resultId: string, member: string): Promise<DeclinePriorityChallengeOutcome> {
+  const currentMember = member.trim();
+  if (!currentMember) {
+    return { status: "notFound" };
+  }
+
+  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
+  if (!result) {
+    return { status: "notFound" };
+  }
+  if (result.definer !== currentMember) {
+    return { status: "notAllowed" };
+  }
+
+  const declinedBy = new Set(result.priorityDeclinedBy ?? []);
+  if (declinedBy.has(currentMember)) {
+    return { status: "alreadyDeclined" };
+  }
+  declinedBy.add(currentMember);
+
+  await db
+    .update(results)
+    .set({
+      priorityDeclinedBy: Array.from(declinedBy),
+    })
+    .where(eq(results.id, resultId));
+
+  const data = await getTaskManagementData();
+  const declined = data.results.find((item) => item.id === resultId);
+  return declined ? { status: "declined", result: declined } : { status: "notFound" };
+}
+
+export type CreateFeedbackInput = Pick<
+  Feedback,
+  "phenomenon" | "causeCategories" | "impact" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner"
+>;
+
+export async function createFeedback(input: CreateFeedbackInput, actorId: string): Promise<Feedback | null> {
+  const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
+  if (!result) {
+    return null;
+  }
+
+  const id = makeId("fb");
+  const now = today();
+  await db.transaction(async (tx) => {
+    await tx.insert(feedback).values({
+      id,
+      teamId: result.teamId,
+      phenomenon: input.phenomenon,
+      impact: input.impact,
+      linkedObjectiveId: result.objectiveId,
+      linkedResultId: result.id,
+      suggestedAdjustment: input.suggestedAdjustment,
+      source: input.source,
+      status: "New",
+      owner: input.owner,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: actorId,
+      updatedBy: actorId,
+    });
+
+    const categories = input.causeCategories.map((category, index) => ({ feedbackId: id, category, sortOrder: index }));
+    if (categories.length > 0) {
+      await tx.insert(feedbackCauseCategories).values(categories);
+    }
+  });
+
+  const data = await getTaskManagementData();
+  return data.feedback.find((item) => item.id === id) ?? null;
+}
+
+export async function updateFeedbackStatus(feedbackId: string, status: FeedbackStatus, actorId: string): Promise<boolean> {
+  const updated = await db
+    .update(feedback)
+    .set({ status, updatedAt: today(), updatedBy: actorId })
+    .where(eq(feedback.id, feedbackId))
+    .returning({ id: feedback.id });
+  return updated.length > 0;
+}
+
+export async function updateResultConfidence(resultId: string, confidence: number, actorId: string): Promise<boolean> {
+  const updated = await db
+    .update(results)
+    .set({ confidence, updatedBy: actorId })
+    .where(eq(results.id, resultId))
+    .returning({ id: results.id });
+  return updated.length > 0;
+}
+
+export async function proposeResultUpdate(
+  input: { resultId: string; title: string; reason: string; feedbackId?: string },
+  actor: { id: string; name: string },
+): Promise<boolean> {
+  const nextTitle = input.title.trim();
+  const reason = input.reason.trim();
+  if (!nextTitle || !reason) {
+    return false;
+  }
+
+  return db.transaction(async (tx) => {
+    const [result] = await tx.select().from(results).where(eq(results.id, input.resultId)).limit(1);
+    if (!result) {
+      return false;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ title: nextTitle, updatedBy: actor.id })
+      .where(eq(results.id, input.resultId))
+      .returning({ id: results.id });
+    if (updated.length === 0) {
+      return false;
+    }
+
+    await tx
+      .update(commentThreads)
+      .set({ targetTitle: nextTitle, updatedAt: nowIso() })
+      .where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, input.resultId)));
+
+    if (input.feedbackId) {
+      await tx
+        .update(feedback)
+        .set({ status: "Result Updated", updatedAt: today(), updatedBy: actor.id })
+        .where(eq(feedback.id, input.feedbackId));
+    }
+
+    const threadId = makeId("cthread");
+    const messageId = makeId("cmsg");
+    const now = nowIso();
+    await tx.insert(commentThreads).values({
+      id: threadId,
+      teamId: result.teamId,
+      targetType: "result",
+      targetId: result.id,
+      targetTitle: nextTitle,
+      status: "open",
+      createdBy: actor.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await tx.insert(commentMessages).values({
+      id: messageId,
+      threadId,
+      authorUserId: actor.id,
+      author: actor.name,
+      body: `悬赏指标更新：${nextTitle}\n原因：${reason}`,
+      createdAt: now,
+      parentMessageId: null,
+      replyToMessageId: null,
+      replyToAuthor: null,
+      sortOrder: 0,
+    });
+
+    return true;
+  });
 }
 
 export interface CreateCommentInput {
@@ -533,7 +844,7 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
 }
 
 function canManageComment(actor: CommentActor, ownerUserId: string) {
-  return actor.role === "admin" || actor.id === ownerUserId;
+  return actor.role === "admin" || actor.canManageAllComments === true || actor.id === ownerUserId;
 }
 
 export async function createComment(input: CreateCommentInput, actor: CommentActor): Promise<CommentMutationOutcome> {
@@ -792,7 +1103,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     assignee: input.assignee || "User",
     linkedObjectiveId: result.objectiveId,
     linkedResultId: result.id,
-    feedbackOriginId: null,
+    feedbackOriginId: input.feedbackOriginId ?? null,
     dueDate: input.dueDate ?? now,
     tags: ["ORF"],
     createdAt: now,

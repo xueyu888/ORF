@@ -4,11 +4,11 @@ import { PageScaffold } from "../components/PageScaffold";
 import { Card, ProgressBar, StatusBadge } from "../components/ui";
 import { useOrf } from "../state/OrfProvider";
 
-type NodeInfo = { type: string; title: string; status?: string; progress?: number; path?: string; owner?: string };
+type NodeInfo = { type: string; title: string; status?: string; progress?: number; path?: string; challenger?: string };
 
 export function StrategyMapPage() {
   const { state } = useOrf();
-  const [selected, setSelected] = useState<NodeInfo>({ type: "北极星目标", title: "建立可靠的 AI 应用交付能力", progress: 62, owner: "AI 应用团队" });
+  const [selected, setSelected] = useState<NodeInfo>({ type: "北极星目标", title: "建立可靠的 AI 应用交付能力", progress: 62 });
   const pillars = ["评估优先", "可靠 RAG", "Agent 安全", "成本与时延控制", "反馈驱动迭代"];
 
   return (
@@ -16,13 +16,13 @@ export function StrategyMapPage() {
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <Card className="overflow-hidden orf-card-padding">
           <div>
-            <StrategyRow nodes={[{ type: "北极星目标", title: "建立可靠的 AI 应用交付能力", progress: 62, owner: "AI 应用团队" }]} onSelect={setSelected} />
+            <StrategyRow nodes={[{ type: "北极星目标", title: "建立可靠的 AI 应用交付能力", progress: 62 }]} onSelect={setSelected} />
             <Connector />
             <StrategyRow nodes={pillars.map((pillar) => ({ type: "战略支柱", title: pillar, progress: 60 }))} onSelect={setSelected} />
             <Connector />
-            <StrategyRow nodes={state.objectives.map((objective) => ({ type: "目标", title: objective.title, status: objective.status, progress: objective.progress, owner: objective.owner, path: `/objectives/${objective.id}` }))} onSelect={setSelected} />
+            <StrategyRow nodes={state.objectives.map((objective) => ({ type: "目标", title: objective.title, status: objective.status, progress: objective.progress, path: `/objectives/${objective.id}` }))} onSelect={setSelected} />
             <Connector />
-            <StrategyRow nodes={state.results.slice(0, 5).map((result) => ({ type: "悬赏", title: result.title, status: result.status, progress: result.confidence, owner: result.owner, path: `/objectives/${result.objectiveId}/results/${result.id}` }))} onSelect={setSelected} />
+            <StrategyRow nodes={state.results.slice(0, 5).map((result) => ({ type: "悬赏", title: result.title, status: result.status, progress: result.confidence, challenger: result.owner, path: `/objectives/${result.objectiveId}/results/${result.id}` }))} onSelect={setSelected} />
             <Connector />
             <StrategyRow nodes={state.tasks.slice(0, 4).map((task) => ({ type: "行动项", title: task.title, status: task.status, progress: task.status === "Done" ? 100 : 45, owner: task.assignee, path: "/tasks" }))} onSelect={setSelected} />
           </div>
@@ -31,7 +31,7 @@ export function StrategyMapPage() {
           <div className="text-xs uppercase tracking-wide orf-text-muted">{selected.type}</div>
           <div className="mt-2 text-lg font-semibold orf-text-primary">{selected.title}</div>
           <div className="mt-4 grid gap-3 text-sm">
-            {selected.owner && <Info label="负责人" value={selected.owner} />}
+            {selected.challenger && <Info label="挑战者" value={selected.challenger} />}
             {selected.status && <div className="flex items-center justify-between rounded-md orf-surface-muted p-3"><span className="orf-text-muted">状态</span><StatusBadge status={selected.status as never} /></div>}
             {typeof selected.progress === "number" && <div className="rounded-md orf-surface-muted p-3"><div className="mb-2 flex justify-between text-xs orf-text-muted"><span>进度</span><span>{selected.progress}%</span></div><ProgressBar value={selected.progress} /></div>}
             {selected.path && <Link to={selected.path} className="orf-primary-action rounded-md px-3 py-2 text-center text-sm font-medium">打开</Link>}

@@ -8,14 +8,14 @@ import { useOrf } from "../state/OrfProvider";
 export function LootSubmitPage() {
   const { bountyId } = useParams();
   const navigate = useNavigate();
-  const { state, currentUser, submitLoot } = useOrf();
+  const { dataReady, state, currentUser, submitLoot } = useOrf();
   const bounty = state.results.find((result) => result.id === bountyId);
   const objective = bounty ? state.objectives.find((item) => item.id === bounty.objectiveId) : undefined;
   const [body, setBody] = useState("");
   const [error, setError] = useState("");
 
   if (!bounty) {
-    return <Navigate to="/tasks" replace />;
+    return dataReady ? <Navigate to="/tasks" replace /> : <PageScaffold title="加载中" subtitle="正在加载悬赏数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
   }
 
   return (
@@ -40,12 +40,15 @@ export function LootSubmitPage() {
               return;
             }
 
-            submitLoot({ bountyId: bounty.id, body: value, author: currentUser?.name });
-            navigate("/tasks");
+            void submitLoot({ bountyId: bounty.id, body: value, author: currentUser?.name }).then((ok) => {
+              if (ok) {
+                navigate("/tasks");
+              }
+            });
           }}
         >
           <div className="grid gap-1">
-            <div className="text-xs font-medium orf-text-muted">悬赏标题</div>
+            <div className="text-xs font-medium orf-text-muted">悬赏指标标题</div>
             <div className="rounded-md border orf-border orf-surface-muted px-3 py-2 text-sm font-semibold orf-text-primary">{bounty.title}</div>
           </div>
 

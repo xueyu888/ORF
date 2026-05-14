@@ -6,9 +6,11 @@ import { evidenceTypeLabel } from "../utils/labels";
 
 export function FeedbackDetailPage() {
   const { feedbackId } = useParams();
-  const { state, openModal, updateFeedbackStatus } = useOrf();
+  const { dataReady, state, openModal, updateFeedbackStatus } = useOrf();
   const feedback = state.feedback.find((item) => item.id === feedbackId);
-  if (!feedback) return <Navigate to="/feedback" replace />;
+  if (!feedback) {
+    return dataReady ? <Navigate to="/feedback" replace /> : <PageScaffold title="加载中" subtitle="正在加载反馈数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+  }
 
   const objective = state.objectives.find((item) => item.id === feedback.linkedObjectiveId);
   const result = state.results.find((item) => item.id === feedback.linkedResultId);
@@ -18,7 +20,7 @@ export function FeedbackDetailPage() {
     <PageScaffold
       title={feedback.id}
       subtitle={feedback.phenomenon}
-      action={<div className="flex gap-2"><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: feedback.linkedObjectiveId, resultId: feedback.linkedResultId, feedbackId: feedback.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: feedback.linkedResultId, feedbackId: feedback.id })}>提出悬赏更新</Button><Button variant="secondary" onClick={() => updateFeedbackStatus(feedback.id, "Closed")}>标记为已知边界</Button></div>}
+      action={<div className="flex gap-2"><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: feedback.linkedObjectiveId, resultId: feedback.linkedResultId, feedbackId: feedback.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: feedback.linkedResultId, feedbackId: feedback.id })}>提出悬赏指标更新</Button><Button variant="secondary" onClick={() => updateFeedbackStatus(feedback.id, "Closed")}>标记为已知边界</Button></div>}
     >
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="grid gap-4">
@@ -31,7 +33,7 @@ export function FeedbackDetailPage() {
         <aside className="grid content-start gap-4">
           <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">关联目标</div><div className="mt-3 text-sm orf-text-secondary">{objective?.title}</div></Card>
           <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">关联悬赏</div><div className="mt-3 text-sm orf-text-secondary">{result?.title}</div></Card>
-          <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">推荐动作</div><div className="mt-3 grid gap-2 text-sm orf-text-secondary"><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">创建执行行动项</button><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">更新悬赏表述</button><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">补充回归样本</button></div></Card>
+          <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">推荐动作</div><div className="mt-3 grid gap-2 text-sm orf-text-secondary"><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">创建执行行动项</button><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">更新悬赏指标表述</button><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">补充回归样本</button></div></Card>
         </aside>
       </div>
     </PageScaffold>

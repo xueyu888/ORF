@@ -21,8 +21,8 @@ ORF 是一个基于 ORF 思想设计的项目管理工具。它在产品理念�
 
 - `docs/`: 仓库文档。
 - `docs/README.md`: 文档目录入口。
-- `docs/frontend/ORF 任务管理页面 - 前端.md`: 当前任务管理页面的前端说明。
-- `docs/backend/ORF 任务管理页面 - 后端.md`: 当前任务管理页面的后端说明。
+- `docs/frontend/ORF 挑战页面 - 前端.md`: 当前挑战页的前端说明。
+- `docs/backend/ORF 任务管理页面 - 后端.md`: 当前挑战页的后端说明。
 - `docs/design/设计原则.md`: ORF 业务原则、基础流程和积分规则。
 - `src/`: 未来代码目录。
 
@@ -55,7 +55,7 @@ npm run server:dev
 npm run server:start
 ```
 
-说明：当前 `.env` 中已启用 GitHub 提交同步到 Mattermost（`GITHUB_SYNC_ENABLED=true`），并监听 `zrx` 分支。
+说明：当前 `.env` 中已启用 GitHub 提交和 Issues 同步到 Mattermost（`GITHUB_SYNC_ENABLED=true`，`GITHUB_ISSUES_SYNC_ENABLED=true`），提交同步监听所有分支。
 
 ### 4) 启动前端
 

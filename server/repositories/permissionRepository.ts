@@ -1,48 +1,40 @@
 import { and, eq } from "drizzle-orm";
+import { hasRolePermission, normalizePermissionKeys, permissionKeys, type PermissionKey } from "../../src/config/permissions";
 import { initialOrfState } from "../../src/data/initialOrfState";
-import type { OrfStage, PermissionAction, PermissionResource, PermissionRule, UserRole } from "../../src/types/orf";
+import type { PermissionRule, UserRole } from "../../src/types/orf";
 import { db } from "../db/client";
 import { rolePermissions, teamMembers, teams } from "../db/schema";
 
-export const permissionStages = ["goalSetting", "resultClaiming", "orfReestimate", "goalFrozen"] as const satisfies readonly OrfStage[];
-export const permissionResources = ["objective", "result", "task", "subtask"] as const satisfies readonly PermissionResource[];
-export const permissionActions = ["view", "create", "edit", "delete"] as const satisfies readonly PermissionAction[];
-export const persistedPermissionRoles = ["member"] as const satisfies readonly UserRole[];
+export { hasRolePermission, permissionKeys };
 
-const permissionKey = (role: UserRole, stage: OrfStage, resource: PermissionResource) => `${role}:${stage}:${resource}`;
+export const persistedPermissionRoles = ["member"] as const satisfies readonly UserRole[];
+export const permissionStorageStage = "global";
+export const permissionStorageResource = "permissionKeys";
 
 function defaultPermissionRulesForRole(role: UserRole): PermissionRule[] {
   if (role === "admin") {
     return [];
   }
 
-  const initialRuleMap = new Map(initialOrfState.permissionRules.map((rule) => [permissionKey(rule.role, rule.stage, rule.resource), rule.actions]));
-
-  return permissionStages.flatMap((stage) =>
-    permissionResources.map((resource) => ({
-      role,
-      stage,
-      resource,
-      actions: normalizeActions(initialRuleMap.get(permissionKey(role, stage, resource)) ?? []),
-    })),
-  );
-}
-
-function normalizeActions(actions: readonly string[]): PermissionAction[] {
-  return permissionActions.filter((action) => actions.includes(action));
+  const initialRule = initialOrfState.permissionRules.find((rule) => rule.role === role);
+  return [{ role, permissions: normalizePermissionKeys(initialRule?.permissions ?? []) }];
 }
 
 function normalizePermissionRules(role: UserRole, rules: readonly PermissionRule[]): PermissionRule[] {
-  const ruleMap = new Map(rules.filter((rule) => rule.role === role).map((rule) => [permissionKey(role, rule.stage, rule.resource), rule.actions]));
+  if (role === "admin") {
+    return [];
+  }
 
-  return permissionStages.flatMap((stage) =>
-    permissionResources.map((resource) => ({
-      role,
-      stage,
-      resource,
-      actions: normalizeActions(ruleMap.get(permissionKey(role, stage, resource)) ?? []),
-    })),
-  );
+  return [{ role, permissions: normalizePermissionKeys(rules.find((rule) => rule.role === role)?.permissions ?? []) }];
+}
+
+function permissionRulesFromRows(role: UserRole, rows: { stage: string; resource: string; actions: string[] }[]): PermissionRule[] {
+  const storedRule = rows.find((row) => row.stage === permissionStorageStage && row.resource === permissionStorageResource);
+  if (!storedRule) {
+    return defaultPermissionRulesForRole(role);
+  }
+
+  return [{ role, permissions: normalizePermissionKeys(storedRule.actions) }];
 }
 
 export async function getPrimaryTeamIdForUser(userId: string): Promise<string | null> {
@@ -63,7 +55,15 @@ export async function ensureDefaultPermissionRules(teamId: string): Promise<void
 
   await db
     .insert(rolePermissions)
-    .values(defaultRules.map((rule) => ({ teamId, role: rule.role, stage: rule.stage, resource: rule.resource, actions: rule.actions })))
+    .values(
+      defaultRules.map((rule) => ({
+        teamId,
+        role: rule.role,
+        stage: permissionStorageStage,
+        resource: permissionStorageResource,
+        actions: rule.permissions,
+      })),
+    )
     .onConflictDoNothing();
 }
 
@@ -71,25 +71,19 @@ export async function getPermissionRulesForTeam(teamId: string): Promise<Permiss
   await ensureDefaultPermissionRules(teamId);
 
   const rows = await db.select().from(rolePermissions).where(eq(rolePermissions.teamId, teamId));
-  const rulesByRole = new Map<UserRole, PermissionRule[]>();
 
-  for (const role of persistedPermissionRoles) {
-    const roleRows = rows.filter((row) => row.role === role);
-    rulesByRole.set(
+  return persistedPermissionRoles.flatMap((role) =>
+    permissionRulesFromRows(
       role,
-      normalizePermissionRules(
-        role,
-        roleRows.map((row) => ({
-          role,
-          stage: row.stage as OrfStage,
-          resource: row.resource as PermissionResource,
-          actions: normalizeActions(row.actions),
+      rows
+        .filter((row) => row.role === role)
+        .map((row) => ({
+          stage: row.stage,
+          resource: row.resource,
+          actions: row.actions,
         })),
-      ),
-    );
-  }
-
-  return persistedPermissionRoles.flatMap((role) => rulesByRole.get(role) ?? defaultPermissionRulesForRole(role));
+    ),
+  );
 }
 
 export async function replaceRolePermissionRules(teamId: string, role: UserRole, rules: readonly PermissionRule[]): Promise<PermissionRule[]> {
@@ -106,12 +100,17 @@ export async function replaceRolePermissionRules(teamId: string, role: UserRole,
       normalizedRules.map((rule) => ({
         teamId,
         role: rule.role,
-        stage: rule.stage,
-        resource: rule.resource,
-        actions: rule.actions,
+        stage: permissionStorageStage,
+        resource: permissionStorageResource,
+        actions: rule.permissions,
       })),
     );
   });
 
   return getPermissionRulesForTeam(teamId);
+}
+
+export async function getRolePermissionKeysForTeam(teamId: string, role: UserRole): Promise<PermissionKey[]> {
+  const rules = await getPermissionRulesForTeam(teamId);
+  return normalizePermissionKeys(rules.find((rule) => rule.role === role)?.permissions ?? []);
 }

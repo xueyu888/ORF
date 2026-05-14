@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { formatGitHubCommitSyncMessage, formatGitHubPushMessage, type GitHubPushPayload } from "../server/integrations/github-mattermost-sync";
+import {
+  formatGitHubCommitSyncMessage,
+  formatGitHubIssuesMessage,
+  formatGitHubPushMessage,
+  type GitHubIssue,
+  type GitHubPushPayload,
+} from "../server/integrations/github-mattermost-sync";
 
 test("formats GitHub push payload for Mattermost", () => {
   const payload: GitHubPushPayload = {
@@ -54,4 +60,28 @@ test("formats polled GitHub push commits for Mattermost", () => {
   assert.match(message, /`3333333`/);
   assert.match(message, /docs: update sync instructions - xueyu/);
   assert.doesNotMatch(message, /Long body/);
+});
+
+test("formats GitHub issues for Mattermost", () => {
+  const issues: GitHubIssue[] = [
+    {
+      number: 3,
+      title: "[BUG] Missing bounty owner field",
+      html_url: "https://github.com/xueyu888/ORF/issues/3",
+      state: "open",
+      created_at: "2026-05-14T03:33:12Z",
+      user: { login: "wuyuzhi-dd" },
+    },
+  ];
+
+  const message = formatGitHubIssuesMessage({
+    repository: "xueyu888/ORF",
+    issues,
+    mode: "current",
+  });
+
+  assert.match(message, /GitHub issues: \[xueyu888\/ORF\]/);
+  assert.match(message, /Found 1 currently open issue/);
+  assert.match(message, /\[#3\]\(https:\/\/github.com\/xueyu888\/ORF\/issues\/3\)/);
+  assert.match(message, /Missing bounty owner field - wuyuzhi-dd, opened 2026-05-14/);
 });
