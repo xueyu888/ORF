@@ -11,6 +11,8 @@ coverage/
 .env.*
 !.env.example
 orf-team-database-config-*.zip
+anemo-foundation-ui-kit-v*.zip
+gf-foundation-ui-kit.zip
 
 .vscode/
 .VSCodeCounter/
