@@ -21,8 +21,9 @@ ORF 是一个基于 ORF 思想设计的项目管理工具。它在产品理念�
 
 - `docs/`: 仓库文档。
 - `docs/README.md`: 文档目录入口。
-- `docs/frontend/ORF 挑战页面 - 前端.md`: 当前挑战页的前端说明。
-- `docs/backend/ORF 任务管理页面 - 后端.md`: 当前挑战页的后端说明。
+- `docs/frontend/ORF 悬赏目标流程 - 前端.md`: 悬赏大厅和悬赏目标申请流程的前端说明。
+- `docs/frontend/ORF 我的挑战页面 - 前端.md`: 我的挑战页面的前端说明。
+- `docs/backend/ORF 任务管理页面 - 后端.md`: 我的挑战和悬赏大厅的后端说明。
 - `docs/design/设计原则.md`: ORF 业务原则、基础流程和积分规则。
 - `src/`: 未来代码目录。
 
