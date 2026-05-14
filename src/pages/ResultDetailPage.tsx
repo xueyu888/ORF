@@ -11,9 +11,11 @@ import { metricValue, resultProgress } from "../utils/format";
 
 export function ResultDetailPage() {
   const { resultId } = useParams();
-  const { state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
+  const { dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
   const result = state.results.find((item) => item.id === resultId);
-  if (!result) return <Navigate to="/objectives" replace />;
+  if (!result) {
+    return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载悬赏数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+  }
 
   const objective = state.objectives.find((item) => item.id === result.objectiveId);
   const tasks = state.tasks.filter((task) => result.taskIds.includes(task.id));

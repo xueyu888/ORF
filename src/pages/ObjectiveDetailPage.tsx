@@ -23,11 +23,13 @@ const tabLabel: Record<(typeof tabs)[number], string> = {
 
 export function ObjectiveDetailPage() {
   const { objectiveId } = useParams();
-  const { currentUser, state, openModal, updateTaskStatus, updateFeedbackStatus } = useOrf();
+  const { currentUser, dataReady, state, openModal, updateTaskStatus, updateFeedbackStatus } = useOrf();
   const [tab, setTab] = useState<(typeof tabs)[number]>("Overview");
   const objective = state.objectives.find((item) => item.id === objectiveId);
 
-  if (!objective) return <Navigate to="/objectives" replace />;
+  if (!objective) {
+    return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载目标数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+  }
 
   const results = state.results.filter((result) => result.objectiveId === objective.id);
   const tasks = state.tasks.filter((task) => task.linkedObjectiveId === objective.id);

@@ -1,10 +1,8 @@
-import { clsx } from "clsx";
 import {
   Check,
   Clock,
   ExternalLink,
   Loader2,
-  Search,
   Send,
   ShieldAlert,
   Star,
@@ -14,13 +12,26 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
 import { submittedLootIdsFromComments } from "../features/challenge/model/challengeComments";
 import { bountyStatus } from "../features/challenge/model/challengeStatus";
+import {
+  BountyBadge,
+  BountyButton,
+  BountyCardSurface,
+  BountyDialog,
+  BountyEmptyState,
+  BountyIconButton,
+  BountyInfoLine,
+  BountyLinkButton,
+  BountyMetricBox,
+  BountyPanel,
+  BountySelect,
+  BountyTextInput,
+} from "../features/bounty-hall/BountyHallSkin";
 import { useOrf } from "../state/OrfProvider";
 import type { BountySource, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
-import { Button, EmptyState, IconButton } from "../components/ui";
 
 type DifficultyFilter = "all" | UncertaintyLevel;
 type SortKey = "deadline" | "points" | "difficulty" | "created";
@@ -196,8 +207,11 @@ export function BountyHallPage() {
     }
   };
 
-  const declinePriority = (item: BountyItem) => {
-    if (declinePriorityChallenge(item.result.id)) {
+  const declinePriority = async (item: BountyItem) => {
+    setProcessingBountyId(item.result.id);
+    const ok = await declinePriorityChallenge(item.result.id);
+    setProcessingBountyId(null);
+    if (ok) {
       setPreview((current) => (current?.result.id === item.result.id ? null : current));
     }
   };
@@ -206,18 +220,18 @@ export function BountyHallPage() {
     <div className="bounty-hall-page grid gap-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="orf-text-muted text-sm font-semibold">当前周期 · {currentCycle(state.objectives)}</div>
-          <h1 className="orf-text-primary mt-1 text-3xl font-semibold">悬赏大厅</h1>
+          <div className="bounty-page-eyebrow">当前周期 · {currentCycle(state.objectives)}</div>
+          <h1 className="bounty-page-title">悬赏大厅</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="secondary" onClick={() => navigate("/tasks")}>
+          <BountyButton variant="secondary" onClick={() => navigate("/tasks")}>
             <Trophy className="h-4 w-4" />
             我的挑战
-          </Button>
-          <Button variant="secondary" onClick={() => openModal({ type: "newResult", source: "memberProposed" })}>
+          </BountyButton>
+          <BountyButton variant="secondary" onClick={() => openModal({ type: "newResult", source: "memberProposed" })}>
             <Send className="h-4 w-4" />
             提出候选悬赏指标
-          </Button>
+          </BountyButton>
         </div>
       </header>
 
@@ -225,11 +239,9 @@ export function BountyHallPage() {
 
       {recruitmentItems.length > 0 && (
         <section className="grid gap-3" aria-labelledby="recruitment-title">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-[color:var(--orf-warning-text)]" />
-            <h2 id="recruitment-title" className="orf-text-primary text-base font-semibold">
-              征召令
-            </h2>
+          <div className="bounty-section-heading">
+            <ShieldAlert className="h-5 w-5" />
+            <h2 id="recruitment-title">征召令</h2>
           </div>
           <div className="grid gap-3">
             {recruitmentItems.map((item) => (
@@ -248,11 +260,9 @@ export function BountyHallPage() {
 
       {priorityItems.length > 0 && (
         <section className="grid gap-3" aria-labelledby="priority-title">
-          <div className="flex items-center gap-2">
-            <Star className="h-5 w-5 text-[color:var(--orf-warning-text)]" />
-            <h2 id="priority-title" className="orf-text-primary text-base font-semibold">
-              优先挑战
-            </h2>
+          <div className="bounty-section-heading">
+            <Star className="h-5 w-5" />
+            <h2 id="priority-title">优先挑战</h2>
           </div>
           <div className="grid gap-3">
             {priorityItems.map((item) => (
@@ -271,33 +281,35 @@ export function BountyHallPage() {
       )}
 
       <section className="grid gap-4" aria-label="可申请挑战悬赏指标">
-        <Toolbar
-          difficultyFilter={difficultyFilter}
-          hasFilters={Boolean(hasFilters)}
-          objectiveFilter={objectiveFilter}
-          objectiveOptions={objectiveOptions}
-          query={query}
-          sortKey={sortKey}
-          onClear={clearFilters}
-          onDifficultyChange={setDifficultyFilter}
-          onObjectiveChange={setObjectiveFilter}
-          onQueryChange={setQuery}
-          onSortChange={setSortKey}
-        />
+        <BountyPanel>
+          <Toolbar
+            difficultyFilter={difficultyFilter}
+            hasFilters={Boolean(hasFilters)}
+            objectiveFilter={objectiveFilter}
+            objectiveOptions={objectiveOptions}
+            query={query}
+            sortKey={sortKey}
+            onClear={clearFilters}
+            onDifficultyChange={setDifficultyFilter}
+            onObjectiveChange={setObjectiveFilter}
+            onQueryChange={setQuery}
+            onSortChange={setSortKey}
+          />
+        </BountyPanel>
 
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="orf-text-secondary text-sm">
-            当前可申请 <span className="orf-text-primary font-semibold">{filteredBounties.length}</span> 条
+          <div className="bounty-list-count">
+            当前可申请 <span>{filteredBounties.length}</span> 条
           </div>
           {hasFilters && (
-            <button className="orf-text-secondary orf-hover-text text-sm font-medium" onClick={clearFilters}>
+            <button className="bounty-clear-button" onClick={clearFilters}>
               清空筛选
             </button>
           )}
         </div>
 
         {filteredBounties.length > 0 ? (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+          <div className="bounty-card-grid">
             {filteredBounties.map((item) => (
               <BountyCard
                 key={item.result.id}
@@ -310,7 +322,7 @@ export function BountyHallPage() {
             ))}
           </div>
         ) : (
-          <EmptyState
+          <BountyEmptyState
             title={hasFilters ? "没有符合条件的可申请悬赏指标" : "当前没有可申请挑战的悬赏指标"}
             description={hasFilters ? "调整搜索或筛选条件后再查看。" : "新的未分配悬赏发布后会出现在这里；已提交的申请等待指挥官确认。"}
           />
@@ -343,25 +355,27 @@ export function BountyHallPage() {
 
 function ContributionSummary({ points }: { points: number }) {
   return (
-    <section className="orf-card orf-card-padding grid gap-4 md:grid-cols-[1fr_auto] md:items-center" aria-label="我的贡献概览">
-      <SummaryMetric icon={Trophy} label="我的积分" value={formatPoints(points)} />
-      <Link className="orf-control orf-secondary-action inline-flex items-center justify-center gap-2 border px-3 py-2 text-sm font-medium" to="/reports">
-        查看积分明细
-        <ExternalLink className="h-4 w-4" />
-      </Link>
-    </section>
+    <BountyPanel title="我的贡献" count="积分">
+      <div className="bounty-contribution">
+        <SummaryMetric icon={Trophy} label="我的积分" value={formatPoints(points)} />
+        <BountyLinkButton to="/reports">
+          查看积分明细
+          <ExternalLink className="h-4 w-4" />
+        </BountyLinkButton>
+      </div>
+    </BountyPanel>
   );
 }
 
 function SummaryMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <div className="orf-fantasy-emblem flex h-10 w-10 shrink-0 items-center justify-center [--orf-fantasy-tone:var(--orf-fantasy-blue)]">
+      <div className="bounty-emblem shrink-0">
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
-        <div className="orf-text-muted text-xs font-semibold">{label}</div>
-        <div className="orf-text-primary truncate text-2xl font-semibold">{value}</div>
+        <div className="bounty-contribution-value">{value}</div>
+        <div className="bounty-contribution-label">{label}</div>
       </div>
     </div>
   );
@@ -393,64 +407,39 @@ function Toolbar({
   onSortChange: (value: SortKey) => void;
 }) {
   return (
-    <div className="orf-card orf-card-padding grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto] lg:items-center">
-      <label className="relative block min-w-0">
-        <span className="sr-only">搜索悬赏指标</span>
-        <Search className="orf-text-muted pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
-        <input
-          className="orf-input h-11 pl-9 pr-3"
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="搜索悬赏指标标题或目标..."
-        />
-      </label>
+    <div className="bounty-toolbar">
+      <BountyTextInput
+        ariaLabel="搜索悬赏指标"
+        value={query}
+        onValueChange={onQueryChange}
+        placeholder="搜索悬赏指标标题或目标..."
+      />
 
-      <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:items-center">
-        <SelectControl label="难度" value={difficultyFilter} onChange={(value) => onDifficultyChange(value as DifficultyFilter)}>
+      <div className="bounty-toolbar-controls">
+        <BountySelect label="难度" value={difficultyFilter} onChange={(value) => onDifficultyChange(value as DifficultyFilter)}>
           {difficultyOptions.map((item) => (
             <option key={item} value={item}>
               {item === "all" ? "全部难度" : item}
             </option>
           ))}
-        </SelectControl>
-        <SelectControl label="目标" value={objectiveFilter} onChange={onObjectiveChange}>
+        </BountySelect>
+        <BountySelect label="目标" value={objectiveFilter} onChange={onObjectiveChange}>
           <option value="all">全部目标</option>
           {objectiveOptions.map((objective) => (
             <option key={objective.id} value={objective.id}>
               {objective.title}
             </option>
           ))}
-        </SelectControl>
-        <SelectControl label="排序" value={sortKey} onChange={(value) => onSortChange(value as SortKey)}>
+        </BountySelect>
+        <BountySelect label="排序" value={sortKey} onChange={(value) => onSortChange(value as SortKey)}>
           <option value="deadline">截止时间</option>
           <option value="points">不确定性分</option>
           <option value="difficulty">难度</option>
           <option value="created">发布时间</option>
-        </SelectControl>
-        {hasFilters && <IconButton icon={X} label="清空筛选" onClick={onClear} />}
+        </BountySelect>
+        {hasFilters && <BountyIconButton icon={X} label="清空筛选" onClick={onClear} />}
       </div>
     </div>
-  );
-}
-
-function SelectControl({
-  children,
-  label,
-  onChange,
-  value,
-}: {
-  children: ReactNode;
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <label className="grid min-w-[132px] gap-1">
-      <span className="orf-text-muted text-xs font-semibold">{label}</span>
-      <select className="orf-input h-10 px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
-        {children}
-      </select>
-    </label>
   );
 }
 
@@ -468,28 +457,30 @@ function RecruitmentCard({
   onPreview: () => void;
 }) {
   return (
-    <div className="orf-card orf-card-padding grid gap-4 border-[color:var(--orf-warning-border)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-      <button className="min-w-0 text-left" onClick={onPreview}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Chip>{difficultyLabel(item.result)}</Chip>
-          <Chip>{item.uncertaintyPoints} 分</Chip>
-        </div>
-        <h3 className="orf-text-primary mt-3 line-clamp-2 text-base font-semibold">{item.result.title}</h3>
-        <div className="orf-text-secondary mt-2 truncate text-sm">{item.objective.title}</div>
-        <div className="orf-text-muted mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <span>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
+    <BountyCardSurface priority>
+      <button className="bounty-card-click" onClick={onPreview}>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip>{difficultyLabel(item.result)}</Chip>
+            <Chip>{item.uncertaintyPoints} 分</Chip>
+          </div>
+          <h3 className="mt-3 line-clamp-2">{item.result.title}</h3>
+          <p className="mt-2 truncate text-sm">{item.objective.title}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <small>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</small>
+          </div>
         </div>
       </button>
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" onClick={onPreview}>
+      <div className="bounty-card-footer">
+        <BountyButton variant="secondary" onClick={onPreview}>
           查看口径
-        </Button>
-        <Button onClick={onAccept} disabled={processing}>
+        </BountyButton>
+        <BountyButton onClick={onAccept} disabled={processing}>
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           接受挑战
-        </Button>
+        </BountyButton>
       </div>
-    </div>
+    </BountyCardSurface>
   );
 }
 
@@ -509,29 +500,31 @@ function PriorityChallengeCard({
   onPreview: () => void;
 }) {
   return (
-    <div className="orf-card orf-card-padding grid gap-4 border-[color:var(--orf-warning-border)] md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-      <button className="min-w-0 text-left" onClick={onPreview}>
-        <div className="flex flex-wrap items-center gap-2">
-          <Chip>{difficultyLabel(item.result)}</Chip>
-          <Chip>{item.uncertaintyPoints} 分</Chip>
-        </div>
-        <h3 className="orf-text-primary mt-3 line-clamp-2 text-base font-semibold">{item.result.title}</h3>
-        <div className="orf-text-secondary mt-2 truncate text-sm">{item.objective.title}</div>
-        <div className="orf-text-muted mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          <span>提出人：{item.definer || "未记录"}</span>
-          <span>{remainingDateTime(item.priorityExpiresAt, now)}</span>
+    <BountyCardSurface priority>
+      <button className="bounty-card-click" onClick={onPreview}>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip>{difficultyLabel(item.result)}</Chip>
+            <Chip>{item.uncertaintyPoints} 分</Chip>
+          </div>
+          <h3 className="mt-3 line-clamp-2">{item.result.title}</h3>
+          <p className="mt-2 truncate text-sm">{item.objective.title}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <small>提出人：{item.definer || "未记录"}</small>
+            <small>{remainingDateTime(item.priorityExpiresAt, now)}</small>
+          </div>
         </div>
       </button>
-      <div className="flex items-center gap-2">
-        <Button variant="secondary" onClick={onDecline} disabled={processing}>
+      <div className="bounty-card-footer">
+        <BountyButton variant="secondary" onClick={onDecline} disabled={processing}>
           放弃
-        </Button>
-        <Button onClick={onAccept} disabled={processing}>
+        </BountyButton>
+        <BountyButton onClick={onAccept} disabled={processing}>
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
           接受挑战
-        </Button>
+        </BountyButton>
       </div>
-    </div>
+    </BountyCardSurface>
   );
 }
 
@@ -549,35 +542,35 @@ function BountyCard({
   onPreview: () => void;
 }) {
   return (
-    <article className="orf-card orf-card-hover group grid min-h-[224px] grid-rows-[1fr_auto] overflow-visible">
-      <button className="grid min-w-0 gap-3 p-4 text-left" onClick={onPreview}>
-        <div className="flex min-w-0 flex-wrap gap-1.5">
-          <Chip>{difficultyLabel(item.result)}</Chip>
-          <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
-        </div>
+    <BountyCardSurface>
+      <button className="bounty-card-click" onClick={onPreview}>
+        <div>
+          <div className="flex min-w-0 flex-wrap gap-1.5">
+            <Chip>{difficultyLabel(item.result)}</Chip>
+            <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
+          </div>
 
-        <div className="min-w-0">
-          <h3 className="orf-text-primary line-clamp-2 min-h-[48px] text-base font-semibold leading-6">{item.result.title}</h3>
-          <div className="orf-text-secondary mt-2 truncate text-sm">{item.objective.title}</div>
-          {item.source === "memberProposed" && item.definer && <div className="orf-text-muted mt-2 truncate text-xs font-semibold">提出人：{item.definer}</div>}
-        </div>
+          <h3 className="mt-3 line-clamp-2">{item.result.title}</h3>
+          <p className="mt-2 truncate text-sm">{item.objective.title}</p>
+          {item.source === "memberProposed" && item.definer && <small className="mt-2 block truncate font-semibold">提出人：{item.definer}</small>}
 
-        <div className="orf-text-secondary inline-flex min-w-0 items-center gap-1.5 text-sm">
-          <Clock className="h-4 w-4 shrink-0" />
-          <span className="truncate">{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
+          <div className="mt-4 inline-flex min-w-0 items-center gap-1.5 text-sm">
+            <Clock className="h-4 w-4 shrink-0" />
+            <span className="truncate">{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
+          </div>
         </div>
       </button>
 
-      <div className="flex items-center justify-between gap-2 border-t orf-border px-4 py-3">
-        <Button variant="secondary" onClick={onPreview}>
+      <div className="bounty-card-footer">
+        <BountyButton variant="secondary" onClick={onPreview}>
           查看口径
-        </Button>
-        <Button className="ml-auto" onClick={onApply} disabled={processing}>
+        </BountyButton>
+        <BountyButton onClick={onApply} disabled={processing}>
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           申请挑战
-        </Button>
+        </BountyButton>
       </div>
-    </article>
+    </BountyCardSurface>
   );
 }
 
@@ -602,53 +595,45 @@ function LightBountyPreview({
   const actionLabel = action === "accept" ? "接受挑战" : "申请挑战";
 
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/35 px-4 py-[10vh]" onMouseDown={onClose}>
-      <aside className="orf-card z-50 w-full max-w-2xl" aria-label="悬赏指标轻详情" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 border-b orf-border p-5">
-          <div className="min-w-0">
-            <div className="flex flex-wrap gap-1.5">
-              <Chip>{difficultyLabel(item.result)}</Chip>
-              <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
-            </div>
-            <h2 className="orf-text-primary mt-3 text-xl font-semibold leading-7">{item.result.title}</h2>
-            <div className="orf-text-secondary mt-2 text-sm">{item.objective.title}</div>
-          </div>
-          <IconButton icon={X} label="关闭轻详情" onClick={onClose} />
-        </div>
+    <BountyDialog
+      onClose={onClose}
+      subtitle={item.objective.title}
+      title={item.result.title}
+      footer={
+        <>
+          {onDeclinePriority && (
+            <BountyButton variant="secondary" onClick={onDeclinePriority}>
+              放弃
+            </BountyButton>
+          )}
+          <BountyButton onClick={onAction} disabled={processing}>
+            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            {actionLabel}
+          </BountyButton>
+        </>
+      }
+    >
+      <div className="flex flex-wrap gap-1.5">
+        <Chip>{difficultyLabel(item.result)}</Chip>
+        <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
+      </div>
 
-        <div className="grid gap-5 p-5">
-          <section className="grid gap-3">
-            <SectionTitle icon={Target}>悬赏口径</SectionTitle>
-            <InfoRow label="衡量要求" value={item.result.metricRequirement ?? item.result.description} />
-            <InfoRow label="完成标准" value={item.result.completionStandard ?? "未填写"} />
-            {item.definer && <InfoRow label="提出人" value={item.definer} />}
-          </section>
+      <section className="grid gap-3">
+        <SectionTitle icon={Target}>悬赏口径</SectionTitle>
+        <InfoRow label="衡量要求" value={item.result.metricRequirement ?? item.result.description} />
+        <InfoRow label="完成标准" value={item.result.completionStandard ?? "未填写"} />
+        {item.definer && <InfoRow label="提出人" value={item.definer} />}
+      </section>
 
-          <section className="grid gap-3">
-            <SectionTitle icon={Trophy}>挑战判断</SectionTitle>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <MetricBox label="难度" value={difficultyLabel(item.result)} />
-              <MetricBox label="不确定性分" value={`${item.uncertaintyPoints}`} />
-              <MetricBox label="剩余时间" value={item.deadline ? remainingTime(item.deadline, now) : "未设置"} />
-            </div>
-          </section>
+      <section className="grid gap-3">
+        <SectionTitle icon={Trophy}>挑战判断</SectionTitle>
+        <div className="bounty-metric-grid">
+          <BountyMetricBox label="难度" value={difficultyLabel(item.result)} />
+          <BountyMetricBox label="不确定性分" value={`${item.uncertaintyPoints}`} />
+          <BountyMetricBox label="剩余时间" value={item.deadline ? remainingTime(item.deadline, now) : "未设置"} />
         </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t orf-border p-5">
-          <div className="flex items-center gap-2">
-            {onDeclinePriority && (
-              <Button variant="secondary" onClick={onDeclinePriority}>
-                放弃
-              </Button>
-            )}
-            <Button onClick={onAction} disabled={processing}>
-              {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-              {actionLabel}
-            </Button>
-          </div>
-        </div>
-      </aside>
-    </div>
+      </section>
+    </BountyDialog>
   );
 }
 
@@ -672,44 +657,42 @@ function ChallengeConfirmModal({
       : "申请挑战只表达负责意愿，不会直接成为挑战者；指挥官确认后，你再接受挑战并进入确认期。";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[14vh]" onMouseDown={onCancel}>
-      <div className="orf-card w-full max-w-lg" onMouseDown={(event) => event.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3 border-b orf-border p-5">
-          <div>
-            <div className="orf-text-muted text-sm font-semibold">{actionLabel}</div>
-            <h2 className="orf-text-primary mt-1 text-lg font-semibold">{title}</h2>
-          </div>
-          <IconButton icon={X} label="关闭" onClick={onCancel} />
-        </div>
-        <div className="grid gap-4 p-5">
-          <div className="orf-surface-muted rounded-md border orf-border p-4">
-            <div className="orf-text-primary line-clamp-2 text-base font-semibold">{item.item.result.title}</div>
-            <div className="orf-text-secondary mt-2 truncate text-sm">{item.item.objective.title}</div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              <Chip>{difficultyLabel(item.item.result)}</Chip>
-              <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
-            </div>
-          </div>
-          <p className="orf-text-secondary text-sm">{description}</p>
-          <div className="flex justify-end gap-2">
-            <Button variant="secondary" onClick={onCancel} disabled={processing}>
-              取消
-            </Button>
-            <Button onClick={onConfirm} disabled={processing}>
-              {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : item.action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-              {actionLabel}
-            </Button>
+    <BountyDialog
+      onClose={onCancel}
+      title={title}
+      subtitle={actionLabel}
+      variant="confirm"
+      footer={
+        <>
+          <BountyButton variant="secondary" onClick={onCancel} disabled={processing}>
+            取消
+          </BountyButton>
+          <BountyButton onClick={onConfirm} disabled={processing}>
+            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : item.action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            {actionLabel}
+          </BountyButton>
+        </>
+      }
+    >
+      <BountyCardSurface>
+        <div className="p-4">
+          <h3 className="line-clamp-2">{item.item.result.title}</h3>
+          <p className="mt-2 truncate text-sm">{item.item.objective.title}</p>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            <Chip>{difficultyLabel(item.item.result)}</Chip>
+            <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
           </div>
         </div>
-      </div>
-    </div>
+      </BountyCardSurface>
+      <p className="text-sm leading-6">{description}</p>
+    </BountyDialog>
   );
 }
 
 function SectionTitle({ children, icon: Icon }: { children: ReactNode; icon: LucideIcon }) {
   return (
-    <div className="orf-text-primary flex items-center gap-2 text-sm font-semibold">
-      <Icon className="h-4 w-4 text-[color:var(--orf-accent-text)]" />
+    <div className="flex items-center gap-2 text-sm font-bold text-[#526376]">
+      <Icon className="h-4 w-4 text-[#2e8fa6]" />
       {children}
     </div>
   );
@@ -717,36 +700,15 @@ function SectionTitle({ children, icon: Icon }: { children: ReactNode; icon: Luc
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1">
-      <div className="orf-text-muted text-xs font-semibold">{label}</div>
-      <div className="orf-text-primary text-sm leading-6">{value}</div>
-    </div>
-  );
-}
-
-function MetricBox({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="orf-surface-muted rounded-md border orf-border p-3">
-      <div className="orf-text-muted text-xs font-semibold">{label}</div>
-      <div className="orf-text-primary mt-1 text-lg font-semibold">{value}</div>
-    </div>
+    <BountyInfoLine>
+      <span>{label}</span>
+      <div>{value}</div>
+    </BountyInfoLine>
   );
 }
 
 function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" | "gold" | "warning" }) {
-  return (
-    <span
-      className={clsx(
-        "orf-status-tag inline-flex h-7 items-center justify-center border px-2.5 text-xs font-bold leading-none",
-        tone === "neutral" && "orf-badge-neutral",
-        tone === "accent" && "orf-badge-accent",
-        tone === "gold" && "border-[color:var(--orf-warning-border)] bg-[color:var(--orf-warning-bg)] text-[color:var(--orf-warning-text)]",
-        tone === "warning" && "orf-badge-warning",
-      )}
-    >
-      {children}
-    </span>
-  );
+  return <BountyBadge tone={tone}>{children}</BountyBadge>;
 }
 
 function compareBounties(left: BountyItem, right: BountyItem, sortKey: SortKey) {
