@@ -6,9 +6,11 @@ import { evidenceTypeLabel } from "../utils/labels";
 
 export function FeedbackDetailPage() {
   const { feedbackId } = useParams();
-  const { state, openModal, updateFeedbackStatus } = useOrf();
+  const { dataReady, state, openModal, updateFeedbackStatus } = useOrf();
   const feedback = state.feedback.find((item) => item.id === feedbackId);
-  if (!feedback) return <Navigate to="/feedback" replace />;
+  if (!feedback) {
+    return dataReady ? <Navigate to="/feedback" replace /> : <PageScaffold title="加载中" subtitle="正在加载反馈数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+  }
 
   const objective = state.objectives.find((item) => item.id === feedback.linkedObjectiveId);
   const result = state.results.find((item) => item.id === feedback.linkedResultId);

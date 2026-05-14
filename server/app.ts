@@ -21,6 +21,8 @@ import {
   createChecklistItem,
   acceptResultChallenge,
   applyForResultChallenge,
+  createFeedback,
+  createObjective,
   createResult,
   createTask,
   declinePriorityChallenge,
@@ -34,13 +36,16 @@ import {
   moveChecklistItem,
   moveResult,
   moveTask,
+  proposeResultUpdate,
   setTaskCompletion,
   submitLootComment,
   updateCommentMessage,
   updateCommentThreadStatus,
   updateChecklistItemLabel,
+  updateFeedbackStatus,
   updateObjectiveStage,
   updateObjectiveTitle,
+  updateResultConfidence,
   updateResultTitle,
   updateChecklistItem,
   updateTaskTitle,
@@ -60,9 +65,12 @@ import {
 
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
 const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
+const impactSchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
 const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "飞升"]);
 const bountySourceSchema = z.enum(["managerDefined", "memberProposed"]);
+const feedbackSourceSchema = z.enum(["User report", "Eval run", "Log", "Incident", "Team review"]);
+const feedbackStatusSchema = z.enum(["New", "Reviewing", "Action Created", "Result Updated", "Closed"]);
 const userRoleSchema = z.enum(["admin", "member"]);
 const commentTargetTypeSchema = z.enum(["objective", "result", "task", "subtask"]);
 const commentStatusSchema = z.enum(["open", "resolved"]);
@@ -83,6 +91,7 @@ const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
+const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
@@ -129,6 +138,28 @@ const createResultBodySchema = z.object({
   priorityChallengeExpiresAt: z.string().nullable().optional(),
   priorityDeclinedBy: z.array(z.string()).optional(),
 });
+const createObjectiveBodySchema = z.object({
+  title: z.string().trim().min(1),
+  whyItMatters: z.string().trim().min(1),
+  cycle: z.string().trim().min(1),
+  boundary: z.string().trim().min(1),
+});
+const createFeedbackBodySchema = z.object({
+  phenomenon: z.string().trim().min(1),
+  causeCategories: z.array(z.string().trim().min(1)).min(1),
+  impact: impactSchema,
+  linkedResultId: z.string().min(1),
+  suggestedAdjustment: z.string().trim().min(1),
+  source: feedbackSourceSchema,
+  owner: z.string().trim().min(1),
+});
+const updateFeedbackStatusBodySchema = z.object({ status: feedbackStatusSchema });
+const updateResultConfidenceBodySchema = z.object({ confidence: z.number().int().min(0).max(100) });
+const resultUpdateProposalBodySchema = z.object({
+  title: z.string().trim().min(1),
+  reason: z.string().trim().min(1),
+  feedbackId: z.string().min(1).optional(),
+});
 const createTaskBodySchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
@@ -137,6 +168,7 @@ const createTaskBodySchema = z.object({
   linkedObjectiveId: z.string().optional(),
   linkedResultId: z.string().min(1),
   dueDate: z.string().optional(),
+  feedbackOriginId: z.string().optional(),
 });
 const createChecklistItemBodySchema = z.object({
   label: z.string().optional(),
@@ -240,7 +272,7 @@ async function requireAdminContext(request: FastifyRequest, reply: FastifyReply)
   return { user, teamId };
 }
 
-async function requireWritePermission(
+async function requireWriteContext(
   request: FastifyRequest,
   reply: FastifyReply,
   permission: PermissionKey,
@@ -252,6 +284,37 @@ async function requireWritePermission(
 
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
+    return null;
+  }
+
+  const teamId = await getPrimaryTeamIdForUser(user.id);
+  if (!teamId) {
+    reply.code(404).send({ error: "Team not found" });
+    return null;
+  }
+
+  if (user.role === "admin") {
+    return { user, teamId };
+  }
+
+  const permissionRules = await getPermissionRulesForTeam(teamId);
+  const allowed = hasRolePermission(user.role, permissionRules, permission);
+
+  if (!allowed) {
+    reply.code(403).send({ error: "Forbidden" });
+    return null;
+  }
+
+  return { user, teamId };
+}
+
+async function requireWritePermission(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  permission: PermissionKey,
+) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
     return false;
   }
 
@@ -558,6 +621,18 @@ export async function buildServer() {
     };
   });
 
+  app.post("/api/objectives", async (request, reply) => {
+    const context = await requireWriteContext(request, reply, "objective.create");
+    if (!context) {
+      return reply;
+    }
+
+    const body = createObjectiveBodySchema.parse(request.body);
+    const objective = await createObjective(body, { teamId: context.teamId, userId: context.user.id });
+
+    return { objective };
+  });
+
   app.post("/api/results", async (request, reply) => {
     const body = createResultBodySchema.parse(request.body);
     const allowed = body.source === "memberProposed"
@@ -574,6 +649,39 @@ export async function buildServer() {
     }
 
     return { result };
+  });
+
+  app.post("/api/feedback", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const body = createFeedbackBodySchema.parse(request.body);
+    const item = await createFeedback(body, user.id);
+
+    if (!item) {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+
+    return { feedback: item };
+  });
+
+  app.patch("/api/feedback/:feedbackId/status", async (request, reply) => {
+    const params = feedbackParamsSchema.parse(request.params);
+    const body = updateFeedbackStatusBodySchema.parse(request.body);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const updated = await updateFeedbackStatus(params.feedbackId, body.status, user.id);
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Feedback not found" });
+    }
+
+    return { ok: true };
   });
 
   app.post("/api/tasks", async (request, reply) => {
@@ -647,6 +755,43 @@ export async function buildServer() {
     }
 
     const updated = await updateResultTitle(params.resultId, body.title);
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.patch("/api/results/:resultId/confidence", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const body = updateResultConfidenceBodySchema.parse(request.body);
+    const context = await requireWriteContext(request, reply, "result.edit");
+    if (!context) {
+      return reply;
+    }
+
+    const updated = await updateResultConfidence(params.resultId, body.confidence, context.user.id);
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.post("/api/results/:resultId/update-proposal", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const body = resultUpdateProposalBodySchema.parse(request.body);
+    const context = await requireWriteContext(request, reply, "result.edit");
+    if (!context) {
+      return reply;
+    }
+
+    const updated = await proposeResultUpdate(
+      { resultId: params.resultId, title: body.title, reason: body.reason, feedbackId: body.feedbackId },
+      { id: context.user.id, name: context.user.name },
+    );
 
     if (!updated) {
       return reply.code(404).send({ error: "Result not found" });

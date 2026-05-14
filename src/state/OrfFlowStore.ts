@@ -1,7 +1,6 @@
 import { initialOrfState } from "../data/initialOrfState";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
 
-const STORAGE_KEY = "orf-flow-state-v3";
 type Placement = "before" | "after";
 type MoveResultInput = { resultId: string; objectiveId: string; referenceResultId: string; placement: Placement };
 type MoveTaskInput = { taskId: string; toResultId: string; referenceTaskId?: string; placement?: Placement };
@@ -197,6 +196,21 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   }),
 });
 
+const emptyBusinessState = (): OrfState => ({
+  ...cloneState(initialOrfState),
+  automaticCompletions: {},
+  objectives: [],
+  results: [],
+  feedback: [],
+  tasks: [],
+  evidence: [],
+  decisions: [],
+  evalRuns: [],
+  scenarios: [],
+  failureSamples: [],
+  comments: [],
+});
+
 export const normalizeState = (state: OrfState): OrfState => {
   const tasks = state.tasks.map((task) => ({
     ...task,
@@ -242,28 +256,11 @@ export const normalizeState = (state: OrfState): OrfState => {
 
 export class OrfFlowStore {
   load(): OrfState {
-    const fallback = cloneState(initialOrfState);
-
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        return normalizeState(fallback);
-      }
-
-      return normalizeState({ ...fallback, ...(JSON.parse(raw) as Partial<OrfState>) });
-    } catch {
-      return normalizeState(fallback);
-    }
-  }
-
-  save(state: OrfState): void {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeState(state)));
+    return normalizeState(emptyBusinessState());
   }
 
   reset(): OrfState {
-    const state = normalizeState(cloneState(initialOrfState));
-    this.save(state);
-    return state;
+    return normalizeState(emptyBusinessState());
   }
 
   createObjective(state: OrfState, input: Pick<OrfState["objectives"][number], "title" | "whyItMatters" | "cycle" | "boundary">): OrfState {

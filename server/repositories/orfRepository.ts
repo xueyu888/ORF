@@ -9,6 +9,7 @@ import type {
   CommentThread,
   Evidence,
   Feedback,
+  FeedbackStatus,
   MetricDirection,
   Objective,
   OrfStage,
@@ -413,6 +414,41 @@ export interface CreateTaskInput {
   linkedObjectiveId?: string;
   linkedResultId: string;
   dueDate?: string;
+  feedbackOriginId?: string;
+}
+
+export interface CreateObjectiveInput {
+  title: string;
+  whyItMatters: string;
+  cycle: string;
+  boundary: string;
+}
+
+export async function createObjective(input: CreateObjectiveInput, context: { teamId: string; userId: string }): Promise<Objective | null> {
+  const id = makeId("obj");
+  const now = today();
+
+  await db.insert(objectives).values({
+    id,
+    teamId: context.teamId,
+    title: input.title,
+    description: input.whyItMatters,
+    whyItMatters: input.whyItMatters,
+    cycle: input.cycle,
+    stage: "orfReestimate",
+    status: "Draft",
+    confidence: 50,
+    progress: 0,
+    boundary: input.boundary,
+    successDefinition: "Success definition will be refined during result planning.",
+    createdAt: now,
+    updatedAt: now,
+    createdBy: context.userId,
+    updatedBy: context.userId,
+  });
+
+  const data = await getTaskManagementData();
+  return data.objectives.find((objective) => objective.id === id) ?? null;
 }
 
 export interface CreateChecklistItemInput {
@@ -596,6 +632,133 @@ export async function declinePriorityChallenge(resultId: string, member: string)
   const data = await getTaskManagementData();
   const declined = data.results.find((item) => item.id === resultId);
   return declined ? { status: "declined", result: declined } : { status: "notFound" };
+}
+
+export type CreateFeedbackInput = Pick<
+  Feedback,
+  "phenomenon" | "causeCategories" | "impact" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner"
+>;
+
+export async function createFeedback(input: CreateFeedbackInput, actorId: string): Promise<Feedback | null> {
+  const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
+  if (!result) {
+    return null;
+  }
+
+  const id = makeId("fb");
+  const now = today();
+  await db.transaction(async (tx) => {
+    await tx.insert(feedback).values({
+      id,
+      teamId: result.teamId,
+      phenomenon: input.phenomenon,
+      impact: input.impact,
+      linkedObjectiveId: result.objectiveId,
+      linkedResultId: result.id,
+      suggestedAdjustment: input.suggestedAdjustment,
+      source: input.source,
+      status: "New",
+      owner: input.owner,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: actorId,
+      updatedBy: actorId,
+    });
+
+    const categories = input.causeCategories.map((category, index) => ({ feedbackId: id, category, sortOrder: index }));
+    if (categories.length > 0) {
+      await tx.insert(feedbackCauseCategories).values(categories);
+    }
+  });
+
+  const data = await getTaskManagementData();
+  return data.feedback.find((item) => item.id === id) ?? null;
+}
+
+export async function updateFeedbackStatus(feedbackId: string, status: FeedbackStatus, actorId: string): Promise<boolean> {
+  const updated = await db
+    .update(feedback)
+    .set({ status, updatedAt: today(), updatedBy: actorId })
+    .where(eq(feedback.id, feedbackId))
+    .returning({ id: feedback.id });
+  return updated.length > 0;
+}
+
+export async function updateResultConfidence(resultId: string, confidence: number, actorId: string): Promise<boolean> {
+  const updated = await db
+    .update(results)
+    .set({ confidence, updatedBy: actorId })
+    .where(eq(results.id, resultId))
+    .returning({ id: results.id });
+  return updated.length > 0;
+}
+
+export async function proposeResultUpdate(
+  input: { resultId: string; title: string; reason: string; feedbackId?: string },
+  actor: { id: string; name: string },
+): Promise<boolean> {
+  const nextTitle = input.title.trim();
+  const reason = input.reason.trim();
+  if (!nextTitle || !reason) {
+    return false;
+  }
+
+  return db.transaction(async (tx) => {
+    const [result] = await tx.select().from(results).where(eq(results.id, input.resultId)).limit(1);
+    if (!result) {
+      return false;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ title: nextTitle, updatedBy: actor.id })
+      .where(eq(results.id, input.resultId))
+      .returning({ id: results.id });
+    if (updated.length === 0) {
+      return false;
+    }
+
+    await tx
+      .update(commentThreads)
+      .set({ targetTitle: nextTitle, updatedAt: nowIso() })
+      .where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, input.resultId)));
+
+    if (input.feedbackId) {
+      await tx
+        .update(feedback)
+        .set({ status: "Result Updated", updatedAt: today(), updatedBy: actor.id })
+        .where(eq(feedback.id, input.feedbackId));
+    }
+
+    const threadId = makeId("cthread");
+    const messageId = makeId("cmsg");
+    const now = nowIso();
+    await tx.insert(commentThreads).values({
+      id: threadId,
+      teamId: result.teamId,
+      targetType: "result",
+      targetId: result.id,
+      targetTitle: nextTitle,
+      status: "open",
+      createdBy: actor.id,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await tx.insert(commentMessages).values({
+      id: messageId,
+      threadId,
+      authorUserId: actor.id,
+      author: actor.name,
+      body: `悬赏指标更新：${nextTitle}\n原因：${reason}`,
+      createdAt: now,
+      parentMessageId: null,
+      replyToMessageId: null,
+      replyToAuthor: null,
+      sortOrder: 0,
+    });
+
+    return true;
+  });
 }
 
 export interface CreateCommentInput {
@@ -940,7 +1103,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     assignee: input.assignee || "User",
     linkedObjectiveId: result.objectiveId,
     linkedResultId: result.id,
-    feedbackOriginId: null,
+    feedbackOriginId: input.feedbackOriginId ?? null,
     dueDate: input.dueDate ?? now,
     tags: ["ORF"],
     createdAt: now,

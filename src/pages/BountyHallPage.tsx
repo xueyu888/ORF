@@ -207,8 +207,11 @@ export function BountyHallPage() {
     }
   };
 
-  const declinePriority = (item: BountyItem) => {
-    if (declinePriorityChallenge(item.result.id)) {
+  const declinePriority = async (item: BountyItem) => {
+    setProcessingBountyId(item.result.id);
+    const ok = await declinePriorityChallenge(item.result.id);
+    setProcessingBountyId(null);
+    if (ok) {
       setPreview((current) => (current?.result.id === item.result.id ? null : current));
     }
   };
