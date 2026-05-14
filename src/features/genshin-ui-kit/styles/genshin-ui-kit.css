@@ -3177,3 +3177,20 @@
     justify-content: flex-start;
   }
 }
+
+.gk-frame-button,
+.gk-shop-button,
+.gk-kit-button,
+.gk-kit-icon-button,
+.gk-kit-strip.is-clickable {
+  border-radius: 999px;
+}
+
+.gk-frame-button__shadow,
+.gk-frame-button__outer,
+.gk-frame-button__inner,
+.gk-frame-button__socket,
+.gk-frame-button__outer::before {
+  border-radius: 999px;
+  clip-path: none;
+}
