@@ -55,7 +55,7 @@ npm run server:dev
 npm run server:start
 ```
 
-说明：当前 `.env` 中已启用 GitHub 提交同步到 Mattermost（`GITHUB_SYNC_ENABLED=true`），并监听 `zrx` 分支。
+说明：当前 `.env` 中已启用 GitHub 提交和 Issues 同步到 Mattermost（`GITHUB_SYNC_ENABLED=true`，`GITHUB_ISSUES_SYNC_ENABLED=true`），提交同步监听所有分支。
 
 ### 4) 启动前端
 
