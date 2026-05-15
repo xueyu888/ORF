@@ -17,15 +17,14 @@ import {
 } from "./repositories/permissionRepository";
 import type { PermissionKey } from "../src/config/permissions";
 import {
+  acceptObjectiveChallenge,
+  applyForObjectiveChallenge,
   createComment,
   createChecklistItem,
-  acceptResultChallenge,
-  applyForResultChallenge,
   createFeedback,
   createObjective,
   createResult,
   createTask,
-  declinePriorityChallenge,
   deleteCommentMessage,
   deleteChecklistItem,
   deleteObjective,
@@ -38,7 +37,7 @@ import {
   moveTask,
   proposeResultUpdate,
   setTaskCompletion,
-  submitLootComment,
+  submitObjectiveLootComment,
   updateCommentMessage,
   updateCommentThreadStatus,
   updateChecklistItemLabel,
@@ -130,19 +129,15 @@ const createResultBodySchema = z.object({
   unit: z.string().optional(),
   direction: metricDirectionSchema.optional(),
   uncertaintyLevel: uncertaintyLevelSchema.optional(),
-  owner: z.string().optional(),
   source: bountySourceSchema.optional(),
   definer: z.string().optional(),
-  finalDueAt: z.string().optional(),
-  assignedChallenger: z.string().nullable().optional(),
-  priorityChallengeExpiresAt: z.string().nullable().optional(),
-  priorityDeclinedBy: z.array(z.string()).optional(),
 });
 const createObjectiveBodySchema = z.object({
   title: z.string().trim().min(1),
   whyItMatters: z.string().trim().min(1),
   cycle: z.string().trim().min(1),
   boundary: z.string().trim().min(1),
+  finalDueAt: z.string().optional(),
 });
 const createFeedbackBodySchema = z.object({
   phenomenon: z.string().trim().min(1),
@@ -800,83 +795,61 @@ export async function buildServer() {
     return { ok: true };
   });
 
-  app.patch("/api/results/:resultId/challenge", async (request, reply) => {
-    const params = resultParamsSchema.parse(request.params);
+  app.patch("/api/objectives/:objectiveId/challenge", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
     }
 
-    const outcome = await acceptResultChallenge(params.resultId, user.name);
+    const outcome = await acceptObjectiveChallenge(params.objectiveId, user.name);
 
     if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Result not found" });
+      return reply.code(404).send({ error: "Objective not found" });
     }
 
     if (outcome.status === "alreadyAccepted") {
-      return reply.code(409).send({ error: "Result already has a challenger", owner: outcome.owner });
+      return reply.code(409).send({ error: "Objective already includes this challenger", challengers: outcome.challengers });
     }
 
     if (outcome.status === "invalidDueDate") {
-      return reply.code(409).send({ error: "Result final due date is too close to start confirmation" });
+      return reply.code(409).send({ error: "Objective final due date is too close to start confirmation" });
     }
 
-    return { result: outcome.result };
+    return { objective: outcome.objective };
   });
 
-  app.post("/api/results/:resultId/challenge-applications", async (request, reply) => {
-    const params = resultParamsSchema.parse(request.params);
+  app.post("/api/objectives/:objectiveId/challenge-applications", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
     }
 
-    const outcome = await applyForResultChallenge(params.resultId, user.name);
+    const outcome = await applyForObjectiveChallenge(params.objectiveId, user.name);
 
     if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Result not found" });
+      return reply.code(404).send({ error: "Objective not found" });
     }
     if (outcome.status === "alreadyAccepted") {
-      return reply.code(409).send({ error: "Result already has a challenger", owner: outcome.owner });
+      return reply.code(409).send({ error: "Objective already includes this challenger", challengers: outcome.challengers });
     }
     if (outcome.status === "alreadyApplied") {
       return reply.code(409).send({ error: "Challenge application already exists" });
     }
 
-    return { result: outcome.result };
+    return { objective: outcome.objective };
   });
 
-  app.patch("/api/results/:resultId/priority-decline", async (request, reply) => {
-    const params = resultParamsSchema.parse(request.params);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const outcome = await declinePriorityChallenge(params.resultId, user.name);
-
-    if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Result not found" });
-    }
-    if (outcome.status === "notAllowed") {
-      return reply.code(403).send({ error: "Only the definer can decline priority challenge" });
-    }
-    if (outcome.status === "alreadyDeclined") {
-      return reply.code(409).send({ error: "Priority challenge already declined" });
-    }
-
-    return { result: outcome.result };
-  });
-
-  app.post("/api/results/:resultId/loot", async (request, reply) => {
-    const params = resultParamsSchema.parse(request.params);
+  app.post("/api/objectives/:objectiveId/loot", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
     }
 
     const body = submitLootBodySchema.parse(request.body);
-    return sendCommentOutcome(reply, await submitLootComment(params.resultId, body.body, user));
+    return sendCommentOutcome(reply, await submitObjectiveLootComment(params.objectiveId, body.body, user));
   });
 
   app.patch("/api/tasks/:taskId", async (request, reply) => {

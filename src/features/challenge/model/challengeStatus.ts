@@ -1,4 +1,4 @@
-import type { AutomaticCompletionResult, Objective, Result, Task, TaskChecklistItem, TaskStatus, UncertaintyLevel } from "../../../types/orf";
+import type { Objective, Result, Task, TaskChecklistItem, TaskStatus, UncertaintyLevel } from "../../../types/orf";
 import type { ActionVisualStatus, BountyStatus } from "./types";
 
 const difficultyRank: Record<UncertaintyLevel, number> = {
@@ -16,10 +16,11 @@ export const bountyStatusLabel: Record<BountyStatus, string> = {
   settled: "已结算",
 };
 
-export function bountyStatus(result: Result, actions: Task[], completed?: 0 | 1, lootSubmitted = false): BountyStatus {
-  if (completed === 1 || actions.some((action) => action.status === "Done")) return "settled";
-  if (lootSubmitted || actions.some((action) => action.status === "In Review")) return "review";
-  if (result.owner) return "active";
+export function bountyStatus(result: Result, actions: Task[], objective?: Objective): BountyStatus {
+  if (result.acceptedResult === "completed" || result.acceptedResult === "falsified") return "settled";
+  if (objective?.acceptedResult || objective?.objectiveSettlementPoints != null) return "settled";
+  if (objective?.lootSubmittedAt) return "review";
+  if ((objective?.challengers.length ?? 0) > 0) return "active";
   return "open";
 }
 
@@ -27,28 +28,29 @@ export function bountyDifficulty(result: Result) {
   return result.uncertaintyLevel ? `${difficultyRank[result.uncertaintyLevel]} 星` : "2 星";
 }
 
-export function objectiveComplete(objective: Objective, automaticCompletion?: AutomaticCompletionResult) {
-  return automaticCompletion?.goal === 1 || objective.progress >= 100;
+export function objectiveComplete(objective: Objective) {
+  return objective.acceptedResult === "completed" || objective.acceptedResult === "falsified" || objective.acceptedResult === "overdelivered";
 }
 
-export function objectiveStatusLabel(objective: Objective, automaticCompletion?: AutomaticCompletionResult) {
-  if (objectiveComplete(objective, automaticCompletion)) return "已完成";
+export function objectiveStatusLabel(objective: Objective) {
+  if (objectiveComplete(objective)) return "已完成";
+  if (objective.lootSubmittedAt) return "待验收";
+  if (objective.challengers.length > 0) return "挑战中";
+  if (objective.challengeApplications.some((application) => application.status === "pending")) return "申请中";
+  if (objective.assignedChallengers.length > 0) return "征召中";
   if (objective.status === "At Risk" || objective.status === "Blocked") return "有风险";
   return "正常";
 }
 
-export function objectiveStatusTone(objective: Objective, automaticCompletion?: AutomaticCompletionResult) {
-  if (objectiveComplete(objective, automaticCompletion)) return "done";
+export function objectiveStatusTone(objective: Objective) {
+  if (objectiveComplete(objective)) return "done";
+  if (objective.lootSubmittedAt) return "review";
+  if (objective.challengers.length > 0 || objective.challengeApplications.some((application) => application.status === "pending")) return "active";
   if (objective.status === "At Risk" || objective.status === "Blocked") return "warning";
   return "success";
 }
 
-export function actionVisualStatus(action: Task, automaticCompletion?: AutomaticCompletionResult): ActionVisualStatus {
-  const automaticTaskCompletion = automaticCompletion?.tasks?.[action.id];
-  if (automaticTaskCompletion !== undefined) {
-    return automaticTaskCompletion === 1 ? "done" : "todo";
-  }
-
+export function actionVisualStatus(action: Task): ActionVisualStatus {
   return taskStatusToVisualStatus(action.status);
 }
 

@@ -71,6 +71,20 @@
       "when": 1778426332670,
       "tag": "0009_ordinary_captain_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778812424998,
+      "tag": "0010_slippery_red_skull",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778812570566,
+      "tag": "0011_polite_wendigo",
+      "breakpoints": true
     }
   ]
 }
