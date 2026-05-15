@@ -48,6 +48,7 @@ function NewObjectiveModal() {
   const [whyItMatters, setWhyItMatters] = useState("权限策略回答错误会导致客户配置错误和支持升级。");
   const [cycle, setCycle] = useState("2026 Q2");
   const [boundary, setBoundary] = useState("只关注 AI 应用回答行为，不扩展到身份系统内部实现。");
+  const [finalDueAt, setFinalDueAt] = useState(() => defaultFinalDueAt());
 
   return (
     <ModalFrame title="新建目标">
@@ -55,7 +56,7 @@ function NewObjectiveModal() {
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          createObjective({ title, whyItMatters, cycle, boundary });
+          createObjective({ title, whyItMatters, cycle, boundary, finalDueAt });
           closeModal();
         }}
       >
@@ -63,6 +64,7 @@ function NewObjectiveModal() {
         <Field label="为什么重要"><textarea className="orf-input min-h-24 px-3 py-2" value={whyItMatters} onChange={(event) => setWhyItMatters(event.target.value)} /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="周期"><input className="orf-input px-3 py-2" value={cycle} onChange={(event) => setCycle(event.target.value)} /></Field>
+          <Field label="最终截止时间"><input className="orf-input px-3 py-2" type="date" value={finalDueAt} onChange={(event) => setFinalDueAt(event.target.value)} /></Field>
         </div>
         <Field label="边界 / 不做什么"><textarea className="orf-input min-h-20 px-3 py-2" value={boundary} onChange={(event) => setBoundary(event.target.value)} /></Field>
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存目标</Button></div>
@@ -76,7 +78,6 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
   const [selectedObjectiveId, setSelectedObjectiveId] = useState(objectiveId ?? state.objectives[0]?.id ?? "");
   const [title, setTitle] = useState("权限策略回答幻觉率降低到 3%");
   const [metricName, setMetricName] = useState("幻觉率");
-  const [finalDueAt, setFinalDueAt] = useState(() => defaultFinalDueAt());
 
   return (
     <ModalFrame title={source === "memberProposed" ? "提出候选悬赏指标" : "新建悬赏指标"}>
@@ -84,14 +85,13 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          createResult({ objectiveId: selectedObjectiveId, title, metricName, baseline: 10, current: 7, target: 3, unit: "%", direction: "decrease", finalDueAt, source });
+          createResult({ objectiveId: selectedObjectiveId, title, metricName, baseline: 10, current: 7, target: 3, unit: "%", direction: "decrease", source });
           closeModal();
         }}
       >
         <Field label="所属目标"><select className="orf-input px-3 py-2" value={selectedObjectiveId} onChange={(event) => setSelectedObjectiveId(event.target.value)}>{state.objectives.map((objective) => <option key={objective.id} value={objective.id}>{objective.title}</option>)}</select></Field>
         <Field label="悬赏指标标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="衡量指标"><input className="orf-input px-3 py-2" value={metricName} onChange={(event) => setMetricName(event.target.value)} /></Field>
-        <Field label="最终截止时间"><input className="orf-input px-3 py-2" type="date" value={finalDueAt} onChange={(event) => setFinalDueAt(event.target.value)} /></Field>
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">{source === "memberProposed" ? "提交候选" : "保存悬赏指标"}</Button></div>
       </form>
     </ModalFrame>

@@ -4632,6 +4632,7 @@ body[data-dragging-floating="true"] {
   row-gap: 8px;
 }
 
+.orf-challenge-row-objective[data-scope="mine"],
 .orf-challenge-row-bounty[data-scope="mine"] {
   grid-template-columns:
     minmax(280px, 1fr)
@@ -5051,6 +5052,7 @@ body[data-dragging-floating="true"] {
     column-gap: 8px;
   }
 
+  .orf-challenge-row-objective[data-scope="mine"],
   .orf-challenge-row-bounty[data-scope="mine"] {
     grid-template-columns:
       minmax(240px, 1fr)

@@ -1,11 +1,22 @@
 import { initialOrfState } from "../data/initialOrfState";
-import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, OrfState, Result, Task, TaskStatus } from "../types/orf";
+import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus, UncertaintyLevel } from "../types/orf";
 
 type Placement = "before" | "after";
 type MoveResultInput = { resultId: string; objectiveId: string; referenceResultId: string; placement: Placement };
 type MoveTaskInput = { taskId: string; toResultId: string; referenceTaskId?: string; placement?: Placement };
 type MoveSubtaskInput = { itemId: string; fromTaskId: string; toTaskId: string; referenceItemId?: string; placement?: Placement };
-type SubmitLootInput = { bountyId: string; body: string; author?: string };
+type SubmitLootInput = { objectiveId: string; body: string; author?: string };
+type LegacyResult = Result & {
+  owner?: string;
+  finalDueAt?: string;
+  assignedChallenger?: string | null;
+  acceptedAt?: string | null;
+  confirmationDueAt?: string | null;
+  confirmedAt?: string | null;
+  priorityChallengeExpiresAt?: string | null;
+  priorityDeclinedBy?: string[];
+  challengeApplications?: ChallengeApplication[];
+};
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
 const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -16,6 +27,13 @@ const currentUserName = (state: OrfState) => state.users.find((user) => user.id 
 const latestDate = (values: Array<string | undefined | null>) => values.filter(Boolean).sort().at(-1) ?? "";
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
+const uncertaintyScores: Record<UncertaintyLevel, number> = {
+  入门: 10,
+  进阶: 30,
+  破局: 90,
+  渡劫: 270,
+  飞升: 810,
+};
 
 const addDays = (value: string, days: number) => {
   const date = new Date(`${value}T00:00:00`);
@@ -38,10 +56,12 @@ const confirmationDueAt = (finalDueAt: string | undefined, acceptedAt: string) =
   const confirmationHalves = Math.min(MAX_CONFIRMATION_HALVES, Math.max(1, roundedHalfDays));
   return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
 };
-const hasAcceptedChallenger = (owner: string) => {
-  const value = owner.trim();
+const isRealMember = (owner: string | undefined | null) => {
+  const value = owner?.trim() ?? "";
   return value !== "" && value !== "User" && value !== "未分配";
 };
+const uniqueMembers = (values: Array<string | undefined | null>) => Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
+const uncertaintyScore = (level: UncertaintyLevel | undefined) => (level ? uncertaintyScores[level] : uncertaintyScores["进阶"]);
 const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStatus): TaskStatus => {
   if (checklist.length === 0) {
     return fallback === "Done" ? "Todo" : fallback;
@@ -198,7 +218,6 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
 
 const emptyBusinessState = (): OrfState => ({
   ...cloneState(initialOrfState),
-  automaticCompletions: {},
   objectives: [],
   results: [],
   feedback: [],
@@ -216,43 +235,73 @@ export const normalizeState = (state: OrfState): OrfState => {
     ...task,
     checklist: task.checklist.map((item) => ({ ...item, updatedAt: item.updatedAt ?? task.updatedAt })),
   }));
-  const dueDatesByResult = new Map<string, string[]>();
-
-  for (const task of tasks) {
-    const dates = dueDatesByResult.get(task.linkedResultId) ?? [];
-    dates.push(task.dueDate);
-    dueDatesByResult.set(task.linkedResultId, dates);
-  }
+  const legacyResults = state.results as LegacyResult[];
 
   return {
     ...state,
     users: state.users ?? cloneValue(initialOrfState.users),
     currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
-    automaticCompletions: state.automaticCompletions ?? {},
     comments: (state.comments ?? []).map((thread) => ({
       ...thread,
       messages: thread.messages ?? [],
     })),
-    objectives: state.objectives.map((objective) => ({
-      ...objective,
-      stage: objective.stage ?? "orfReestimate",
-    })),
-    results: state.results.map((result) => ({
-      ...result,
-      source: result.source ?? "managerDefined",
-      definer: result.definer ?? "",
-      finalDueAt: result.finalDueAt ?? latestDate(dueDatesByResult.get(result.id) ?? []),
-      assignedChallenger: result.assignedChallenger ?? null,
-      acceptedAt: result.acceptedAt ?? null,
-      confirmationDueAt: result.confirmationDueAt ?? null,
-      confirmedAt: result.confirmedAt ?? null,
-      priorityChallengeExpiresAt: result.priorityChallengeExpiresAt ?? null,
-      priorityDeclinedBy: result.priorityDeclinedBy ?? [],
-      challengeApplications: result.challengeApplications ?? [],
-    })),
+    objectives: state.objectives.map((objective) => normalizeObjective(objective, legacyResults, tasks)),
+    results: legacyResults.map(normalizeResult),
     tasks,
   };
 };
+
+function normalizeObjective(objective: Objective, results: LegacyResult[], tasks: Task[]): Objective {
+  const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
+  const typedResults = objectiveResults.map(normalizeResult);
+  const acceptedResults = typedResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
+
+  return {
+    ...objective,
+    stage: objective.stage ?? "orfReestimate",
+    finalDueAt:
+      objective.finalDueAt ||
+      latestDate(objectiveResults.map((result) => result.finalDueAt)) ||
+      latestDate(tasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.dueDate)) ||
+      addDays(objective.updatedAt, 14),
+    challengers: objective.challengers?.length ? objective.challengers : uniqueMembers(objectiveResults.map((result) => result.owner)),
+    assignedChallengers: objective.assignedChallengers?.length
+      ? objective.assignedChallengers
+      : uniqueMembers(objectiveResults.map((result) => result.assignedChallenger)),
+    challengeApplications: objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []),
+    acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
+    confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),
+    confirmedAt: objective.confirmedAt ?? objectiveResults.find((result) => result.confirmedAt)?.confirmedAt ?? null,
+    lootSubmittedAt: objective.lootSubmittedAt ?? null,
+    acceptedResult: objective.acceptedResult ?? null,
+    completionMultiplier: objective.completionMultiplier ?? null,
+    objectiveBasePoints: objective.objectiveBasePoints ?? acceptedResults.reduce((sum, result) => sum + result.uncertaintyScore, 0),
+    objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
+  };
+}
+
+function normalizeResult(result: LegacyResult): Result {
+  const {
+    owner: _owner,
+    finalDueAt: _finalDueAt,
+    assignedChallenger: _assignedChallenger,
+    acceptedAt: _acceptedAt,
+    confirmationDueAt: _confirmationDueAt,
+    confirmedAt: _confirmedAt,
+    priorityChallengeExpiresAt: _priorityChallengeExpiresAt,
+    priorityDeclinedBy: _priorityDeclinedBy,
+    challengeApplications: _challengeApplications,
+    ...rest
+  } = result;
+
+  return {
+    ...(rest as Result),
+    source: result.source ?? "managerDefined",
+    definer: result.definer ?? "",
+    uncertaintyScore: typeof result.uncertaintyScore === "number" ? result.uncertaintyScore : uncertaintyScore(result.uncertaintyLevel),
+    acceptedResult: result.acceptedResult ?? "unreviewed",
+  };
+}
 
 export class OrfFlowStore {
   load(): OrfState {
@@ -263,7 +312,7 @@ export class OrfFlowStore {
     return normalizeState(emptyBusinessState());
   }
 
-  createObjective(state: OrfState, input: Pick<OrfState["objectives"][number], "title" | "whyItMatters" | "cycle" | "boundary">): OrfState {
+  createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt">>): OrfState {
     const id = `obj-${Date.now()}`;
     const now = new Date().toISOString().slice(0, 10);
     const objective = {
@@ -281,6 +330,18 @@ export class OrfFlowStore {
       resultIds: [],
       feedbackIds: [],
       taskIds: [],
+      finalDueAt: input.finalDueAt ?? addDays(now, 14),
+      challengers: [],
+      assignedChallengers: [],
+      challengeApplications: [],
+      acceptedAt: null,
+      confirmationDueAt: null,
+      confirmedAt: null,
+      lootSubmittedAt: null,
+      acceptedResult: null,
+      completionMultiplier: null,
+      objectiveBasePoints: 0,
+      objectiveSettlementPoints: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -309,17 +370,10 @@ export class OrfFlowStore {
       direction: input.direction ?? "increase",
       status: input.status ?? "Draft",
       confidence: input.confidence ?? 50,
-      owner: input.owner ?? "",
       source: input.source ?? "managerDefined",
       definer: input.definer ?? currentUserName(state),
-      finalDueAt: input.finalDueAt ?? addDays(currentDate(), 14),
-      assignedChallenger: input.assignedChallenger ?? null,
-      acceptedAt: input.acceptedAt ?? null,
-      confirmationDueAt: input.confirmationDueAt ?? null,
-      confirmedAt: input.confirmedAt ?? null,
-      priorityChallengeExpiresAt: input.priorityChallengeExpiresAt ?? null,
-      priorityDeclinedBy: input.priorityDeclinedBy ?? [],
-      challengeApplications: input.challengeApplications ?? [],
+      uncertaintyScore: input.uncertaintyScore ?? uncertaintyScore(input.uncertaintyLevel),
+      acceptedResult: input.acceptedResult ?? "unreviewed",
       evidenceIds: [],
       taskIds: [],
       feedbackIds: [],
@@ -536,18 +590,18 @@ export class OrfFlowStore {
     };
   }
 
-  applyForBounty(state: OrfState, resultId: string, applicant: string): OrfState {
+  applyForBounty(state: OrfState, objectiveId: string, applicant: string): OrfState {
     const nextApplicant = applicant.trim();
     if (!nextApplicant) {
       return state;
     }
 
-    const result = state.results.find((item) => item.id === resultId);
-    if (!result || hasAcceptedChallenger(result.owner)) {
+    const objective = state.objectives.find((item) => item.id === objectiveId);
+    if (!objective || objective.challengers.includes(nextApplicant)) {
       return state;
     }
 
-    const applications = result.challengeApplications ?? [];
+    const applications = objective.challengeApplications ?? [];
     if (applications.some((item) => item.applicant === nextApplicant && item.status === "pending")) {
       return state;
     }
@@ -562,42 +616,43 @@ export class OrfFlowStore {
 
     return {
       ...state,
-      results: state.results.map((item) =>
-        item.id === resultId
+      objectives: state.objectives.map((item) =>
+        item.id === objectiveId
           ? {
               ...item,
               challengeApplications: [application, ...(item.challengeApplications ?? [])],
+              updatedAt: currentDate(),
             }
           : item,
       ),
     };
   }
 
-  acceptBountyChallenge(state: OrfState, resultId: string, challenger: string): OrfState {
+  acceptBountyChallenge(state: OrfState, objectiveId: string, challenger: string): OrfState {
     const nextChallenger = challenger.trim();
     if (!nextChallenger) {
       return state;
     }
 
-    const result = state.results.find((item) => item.id === resultId);
-    if (!result || (hasAcceptedChallenger(result.owner) && result.owner !== nextChallenger)) {
+    const objective = state.objectives.find((item) => item.id === objectiveId);
+    if (!objective || objective.challengers.includes(nextChallenger)) {
       return state;
     }
 
     const now = currentTime();
-    const nextConfirmationDueAt = confirmationDueAt(result.finalDueAt, now);
+    const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, now);
     if (!nextConfirmationDueAt) {
       return state;
     }
 
     return {
       ...state,
-      results: state.results.map((item) =>
-        item.id === resultId
+      objectives: state.objectives.map((item) =>
+        item.id === objectiveId
           ? {
               ...item,
-              owner: nextChallenger,
-              assignedChallenger: item.assignedChallenger === nextChallenger ? null : item.assignedChallenger,
+              challengers: [...item.challengers, nextChallenger],
+              assignedChallengers: item.assignedChallengers.filter((member) => member !== nextChallenger),
               acceptedAt: item.acceptedAt ?? now,
               confirmationDueAt: item.confirmationDueAt ?? nextConfirmationDueAt,
               challengeApplications: (item.challengeApplications ?? []).map((application) =>
@@ -606,36 +661,7 @@ export class OrfFlowStore {
                   : application,
               ),
               status: item.status === "Draft" ? "On Track" : item.status,
-            }
-          : item,
-      ),
-    };
-  }
-
-  declinePriorityChallenge(state: OrfState, resultId: string, member: string): OrfState {
-    const currentMember = member.trim();
-    if (!currentMember) {
-      return state;
-    }
-
-    const result = state.results.find((item) => item.id === resultId);
-    if (!result || result.definer !== currentMember) {
-      return state;
-    }
-
-    const declinedBy = new Set(result.priorityDeclinedBy ?? []);
-    if (declinedBy.has(currentMember)) {
-      return state;
-    }
-    declinedBy.add(currentMember);
-
-    return {
-      ...state,
-      results: state.results.map((item) =>
-        item.id === resultId
-          ? {
-              ...item,
-              priorityDeclinedBy: Array.from(declinedBy),
+              updatedAt: currentDate(),
             }
           : item,
       ),
@@ -964,31 +990,31 @@ export class OrfFlowStore {
   }
 
   submitLoot(state: OrfState, input: SubmitLootInput): OrfState {
-    const bounty = state.results.find((result) => result.id === input.bountyId);
+    const objective = state.objectives.find((item) => item.id === input.objectiveId);
     const body = input.body.trim();
-    if (!bounty || !body) {
+    if (!objective || !body) {
       return state;
     }
 
     const now = currentDate();
     const next = this.addComment(state, {
-      targetType: "result",
-      targetId: bounty.id,
-      targetTitle: bounty.title,
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
       body: `战利品提交：${body}`,
       author: input.author,
     });
 
     return {
       ...next,
-      tasks: next.tasks.map((task) =>
-        task.linkedResultId === bounty.id && task.status !== "Done"
+      objectives: next.objectives.map((item) =>
+        item.id === objective.id
           ? {
-              ...task,
-              status: "In Review",
+              ...item,
+              lootSubmittedAt: currentTime(),
               updatedAt: now,
             }
-          : task,
+          : item,
       ),
     };
   }

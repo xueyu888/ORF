@@ -21,7 +21,6 @@ test.beforeEach(async ({ page }) => {
         feedback: initialOrfState.feedback,
         comments: initialOrfState.comments,
         permissionRules: emptyMemberRules,
-        automaticCompletions: initialOrfState.automaticCompletions,
       },
     });
   });

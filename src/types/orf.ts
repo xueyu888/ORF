@@ -9,19 +9,12 @@ export type MetricDirection = "increase" | "decrease";
 export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
+export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
+export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
-export type CompletionBit = 0 | 1;
-
-export interface AutomaticCompletionResult {
-  goal: CompletionBit;
-  rets: Record<string, CompletionBit>;
-  tasks: Record<string, CompletionBit>;
-  legal: boolean;
-  errors: string[];
-}
 
 export interface OrfUser {
   id: string;
@@ -71,6 +64,18 @@ export interface Objective {
   resultIds: string[];
   feedbackIds: string[];
   taskIds: string[];
+  finalDueAt: string;
+  challengers: string[];
+  assignedChallengers: string[];
+  challengeApplications: ChallengeApplication[];
+  acceptedAt?: string | null;
+  confirmationDueAt?: string | null;
+  confirmedAt?: string | null;
+  lootSubmittedAt?: string | null;
+  acceptedResult?: ObjectiveAcceptedResult | null;
+  completionMultiplier?: number | null;
+  objectiveBasePoints: number;
+  objectiveSettlementPoints?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -94,17 +99,10 @@ export interface Result {
   direction: MetricDirection;
   status: WorkStatus;
   confidence: number;
-  owner: string;
   source?: BountySource;
   definer?: string;
-  finalDueAt?: string;
-  assignedChallenger?: string | null;
-  acceptedAt?: string | null;
-  confirmationDueAt?: string | null;
-  confirmedAt?: string | null;
-  priorityChallengeExpiresAt?: string | null;
-  priorityDeclinedBy?: string[];
-  challengeApplications?: ChallengeApplication[];
+  uncertaintyScore: number;
+  acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
   taskIds: string[];
   feedbackIds: string[];
@@ -247,7 +245,6 @@ export interface OrfState {
   users: OrfUser[];
   currentUserId: string;
   permissionRules: PermissionRule[];
-  automaticCompletions: Record<string, AutomaticCompletionResult>;
   objectives: Objective[];
   results: Result[];
   feedback: Feedback[];

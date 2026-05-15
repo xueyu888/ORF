@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
-import type { AutomaticCompletionResult, Result, Task, TaskChecklistItem } from "../../../types/orf";
+import type { Result, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -48,14 +48,12 @@ type RowHandlers = {
 };
 
 export function ChallengeTree({
-  automaticCompletions,
   emptyText,
   groups,
   handlers,
   now,
   scope,
 }: {
-  automaticCompletions?: Record<string, AutomaticCompletionResult>;
   emptyText: string;
   groups: ObjectiveNode[];
   handlers: RowHandlers;
@@ -67,7 +65,6 @@ export function ChallengeTree({
       {groups.map((group) => (
         <ObjectivePanel
           key={group.objective.id}
-          automaticCompletion={automaticCompletions?.[group.objective.id]}
           group={group}
           handlers={handlers}
           now={now}
@@ -80,13 +77,11 @@ export function ChallengeTree({
 }
 
 function ObjectivePanel({
-  automaticCompletion,
   group,
   handlers,
   now,
   scope,
 }: {
-  automaticCompletion?: AutomaticCompletionResult;
   group: ObjectiveNode;
   handlers: RowHandlers;
   now: Date;
@@ -94,7 +89,7 @@ function ObjectivePanel({
 }) {
   const target: ChallengeTarget = { type: "objective", id: group.objective.id, title: group.objective.title };
   const [objectiveElement, setObjectiveElement] = useState<HTMLElement | null>(null);
-  const complete = objectiveComplete(group.objective, automaticCompletion);
+  const complete = objectiveComplete(group.objective);
   const actionId = `objective:${group.objective.id}`;
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
@@ -113,6 +108,7 @@ function ObjectivePanel({
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
       <div
         className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
+        data-scope={scope}
         onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
         onPointerEnter={() => handlers.onActiveActionChange(actionId)}
         onPointerLeave={() => {
@@ -146,17 +142,21 @@ function ObjectivePanel({
         </HierarchyRootCell>
         <EmptySlot />
         <AvatarStack names={group.challengers} />
-        <StatusChip tone={objectiveStatusTone(group.objective, automaticCompletion)}>{objectiveStatusLabel(group.objective, automaticCompletion)}</StatusChip>
+        <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
+        {scope === "mine" ? (
+          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/objectives/${group.objective.id}/loot`}>
+            提交战利品
+          </Link>
+        ) : null}
       </div>
 
       <div className="orf-objective-body">
         {group.bounties.map((bounty) => (
           <BountyRow
             key={bounty.result.id}
-            automaticCompletion={automaticCompletion}
             bounty={bounty}
             handlers={handlers}
             now={now}
@@ -170,14 +170,12 @@ function ObjectivePanel({
 }
 
 function BountyRow({
-  automaticCompletion,
   bounty,
   handlers,
   now,
   parentAnchorId,
   scope,
 }: {
-  automaticCompletion?: AutomaticCompletionResult;
   bounty: BountyNode;
   handlers: RowHandlers;
   now: Date;
@@ -265,16 +263,12 @@ function BountyRow({
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyCell>
         <div className="orf-row-kind-cell"><Badge>{bounty.kind}</Badge><Badge>{bounty.difficulty}</Badge></div>
-        <AvatarStack names={bounty.result.owner ? [bounty.result.owner] : []} />
+        <EmptySlot />
         <StatusChip tone={bounty.status}>{bountyStatusLabel[bounty.status]}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(bounty.deadline, now)} />
         <DateStack primary={bounty.deadline || "未设置"} secondary={bounty.updatedAt || "未设置"} />
         <ProgressValue value={bounty.progress} />
-        {scope === "mine" ? (
-          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/tasks/bounties/${bounty.result.id}/loot`}>
-            提交战利品
-          </Link>
-        ) : null}
+        {scope === "mine" ? <EmptySlot /> : null}
       </div>
 
       {open && bounty.actions.length > 0 && (
@@ -283,7 +277,6 @@ function BountyRow({
             <ActionRow
               key={action.id}
               action={action}
-              automaticCompletion={automaticCompletion}
               handlers={handlers}
               parentAnchorId={anchorId}
             />
@@ -296,12 +289,10 @@ function BountyRow({
 
 function ActionRow({
   action,
-  automaticCompletion,
   handlers,
   parentAnchorId,
 }: {
   action: Task;
-  automaticCompletion?: AutomaticCompletionResult;
   handlers: RowHandlers;
   parentAnchorId: string;
 }) {
@@ -314,7 +305,7 @@ function ActionRow({
     hasSubActions: action.checklist.length > 0,
   };
   const open = !handlers.collapsedActionIds.has(action.id);
-  const status = actionVisualStatus(action, automaticCompletion);
+  const status = actionVisualStatus(action);
   const complete = status === "done";
   const anchorId = `action:${action.id}`;
   const actionId = `action:${action.id}`;

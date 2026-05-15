@@ -54,9 +54,8 @@ interface OrfContextValue {
   resetState: () => void;
   createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => void : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => void;
-  applyForBounty: (resultId: string) => Promise<boolean>;
-  acceptBountyChallenge: (resultId: string) => Promise<boolean>;
-  declinePriorityChallenge: (resultId: string) => Promise<boolean>;
+  applyForBounty: (objectiveId: string) => Promise<boolean>;
+  acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -117,7 +116,6 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     feedback: data.feedback,
     comments: data.comments ?? state.comments ?? [],
     permissionRules: data.permissionRules,
-    automaticCompletions: data.automaticCompletions ?? {},
   });
 }
 
@@ -530,16 +528,16 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      applyForBounty: async (resultId) => {
+      applyForBounty: async (objectiveId) => {
         const applicant = currentUser?.name ?? "";
-        const next = store.applyForBounty(state, resultId, applicant);
+        const next = store.applyForBounty(state, objectiveId, applicant);
         if (next === state) {
-          notify("这个悬赏指标暂时不能申请挑战");
+          notify("这个目标暂时不能申请挑战");
           return false;
         }
 
         try {
-          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/challenge-applications`, { method: "POST" });
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications`, { method: "POST" });
           await refreshTaskManagementData();
           notify("挑战申请已提交，等待指挥官确认");
           return true;
@@ -549,39 +547,21 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      acceptBountyChallenge: async (resultId) => {
+      acceptBountyChallenge: async (objectiveId) => {
         const challenger = currentUser?.name ?? "";
-        const next = store.acceptBountyChallenge(state, resultId, challenger);
+        const next = store.acceptBountyChallenge(state, objectiveId, challenger);
         if (next === state) {
-          notify("这个悬赏指标暂时不能接受挑战");
+          notify("这个目标暂时不能接受挑战");
           return false;
         }
 
         try {
-          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/challenge`, { method: "PATCH" });
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge`, { method: "PATCH" });
           await refreshTaskManagementData();
           notify("已接受挑战");
           return true;
         } catch (error) {
           notify(bountyMutationFailureMessage(error, "接受挑战失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      declinePriorityChallenge: async (resultId) => {
-        const next = store.declinePriorityChallenge(state, resultId, currentUser?.name ?? "");
-        if (next === state) {
-          notify("这个优先挑战暂时不能放弃");
-          return false;
-        }
-
-        try {
-          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/priority-decline`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("已放弃优先挑战权");
-          return true;
-        } catch (error) {
-          notify(bountyMutationFailureMessage(error, "放弃优先挑战失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
@@ -824,7 +804,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       submitLoot: async (input) => {
         try {
-          await apiRequest(`/api/results/${encodeURIComponent(input.bountyId)}/loot`, {
+          await apiRequest(`/api/objectives/${encodeURIComponent(input.objectiveId)}/loot`, {
             method: "POST",
             body: JSON.stringify({ body: input.body }),
           });

@@ -11,7 +11,6 @@ function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
     feedback: initialOrfState.feedback,
     comments: initialOrfState.comments,
     permissionRules: initialOrfState.permissionRules,
-    automaticCompletions: initialOrfState.automaticCompletions,
   };
 }
 

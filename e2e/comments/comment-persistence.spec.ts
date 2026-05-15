@@ -17,7 +17,6 @@ function taskManagementData(comments: CommentThread[] = []) {
     feedback: initialOrfState.feedback,
     comments,
     permissionRules: initialOrfState.permissionRules,
-    automaticCompletions: initialOrfState.automaticCompletions,
   };
 }
 

@@ -1,4 +1,121 @@
-import type { OrfState } from "../types/orf";
+import type { ChallengeApplication, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
+
+const uncertaintyScores: Record<UncertaintyLevel, number> = {
+  入门: 10,
+  进阶: 30,
+  破局: 90,
+  渡劫: 270,
+  飞升: 810,
+};
+
+type ObjectiveChallengeFields = Pick<
+  Objective,
+  | "finalDueAt"
+  | "challengers"
+  | "assignedChallengers"
+  | "challengeApplications"
+  | "acceptedAt"
+  | "confirmationDueAt"
+  | "confirmedAt"
+  | "lootSubmittedAt"
+  | "acceptedResult"
+  | "completionMultiplier"
+  | "objectiveBasePoints"
+  | "objectiveSettlementPoints"
+>;
+type LegacyObjective = Omit<Objective, keyof ObjectiveChallengeFields> & Partial<ObjectiveChallengeFields>;
+type LegacyResult = Omit<Result, "uncertaintyScore" | "acceptedResult"> &
+  Partial<Pick<Result, "uncertaintyScore" | "acceptedResult">> & {
+    owner?: string;
+    finalDueAt?: string;
+    assignedChallenger?: string | null;
+    acceptedAt?: string | null;
+    confirmationDueAt?: string | null;
+    confirmedAt?: string | null;
+    priorityChallengeExpiresAt?: string | null;
+    priorityDeclinedBy?: string[];
+    challengeApplications?: ChallengeApplication[];
+  };
+type LegacyInitialState = Omit<OrfState, "objectives" | "results"> & {
+  objectives: LegacyObjective[];
+  results: LegacyResult[];
+};
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function latestDate(values: Array<string | undefined | null>) {
+  return values.filter(Boolean).sort().at(-1) ?? "";
+}
+
+function isRealMember(value: string | undefined | null) {
+  const name = value?.trim() ?? "";
+  return name !== "" && name !== "User" && name !== "未分配";
+}
+
+function uniqueMembers(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
+}
+
+function uncertaintyScore(level: UncertaintyLevel | undefined) {
+  return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
+}
+
+function normalizeInitialState(state: LegacyInitialState): OrfState {
+  const results: Result[] = state.results.map((item) => {
+    const {
+      owner: _owner,
+      finalDueAt: _finalDueAt,
+      assignedChallenger: _assignedChallenger,
+      acceptedAt: _acceptedAt,
+      confirmationDueAt: _confirmationDueAt,
+      confirmedAt: _confirmedAt,
+      priorityChallengeExpiresAt: _priorityChallengeExpiresAt,
+      priorityDeclinedBy: _priorityDeclinedBy,
+      challengeApplications: _challengeApplications,
+      ...result
+    } = item;
+
+    return {
+      ...result,
+      uncertaintyScore: item.uncertaintyScore ?? uncertaintyScore(item.uncertaintyLevel),
+      acceptedResult: item.acceptedResult ?? "unreviewed",
+    };
+  });
+
+  const objectives: Objective[] = state.objectives.map((objective) => {
+    const objectiveResults = state.results.filter((result) => result.objectiveId === objective.id);
+    const challengers = uniqueMembers(objective.challengers ?? objectiveResults.map((result) => result.owner));
+    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger));
+    const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
+    const finalDueAt = objective.finalDueAt || latestDate(objectiveResults.map((result) => result.finalDueAt)) || addDays(objective.updatedAt, 14);
+    const acceptedResults = results.filter(
+      (result) => result.objectiveId === objective.id && (result.acceptedResult === "completed" || result.acceptedResult === "falsified"),
+    );
+
+    return {
+      ...objective,
+      finalDueAt,
+      challengers,
+      assignedChallengers,
+      challengeApplications,
+      acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
+      confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),
+      confirmedAt: objective.confirmedAt ?? objectiveResults.find((result) => result.confirmedAt)?.confirmedAt ?? null,
+      lootSubmittedAt: objective.lootSubmittedAt ?? null,
+      acceptedResult: objective.acceptedResult ?? null,
+      completionMultiplier: objective.completionMultiplier ?? null,
+      objectiveBasePoints: objective.objectiveBasePoints ?? acceptedResults.reduce((sum, result) => sum + result.uncertaintyScore, 0),
+      objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
+    };
+  });
+
+  return { ...state, objectives, results };
+}
 
 const defaultPermissionRules: OrfState["permissionRules"] = [
   { role: "member", permissions: [] },
@@ -11,7 +128,7 @@ const confidenceTrend = [
   { date: "Apr 22", value: 72 },
 ];
 
-export const initialOrfState: OrfState = {
+const legacyInitialOrfState: LegacyInitialState = {
   users: [
     { id: "user-alex", name: "Alex Chen", email: "alex@orf.local", role: "admin", lastLoginAt: "2026-05-05T09:42:00.000Z" },
     { id: "user-mia", name: "Mia Zhang", email: "mia@orf.local", role: "member", lastLoginAt: "2026-05-04T18:10:00.000Z" },
@@ -19,7 +136,6 @@ export const initialOrfState: OrfState = {
   ],
   currentUserId: "user-alex",
   permissionRules: defaultPermissionRules,
-  automaticCompletions: {},
   causeCategories: [
     "需求缺口",
     "Prompt 问题",
@@ -892,3 +1008,5 @@ export const initialOrfState: OrfState = {
     autoCreateReviewSummary: true,
   },
 };
+
+export const initialOrfState: OrfState = normalizeInitialState(legacyInitialOrfState);

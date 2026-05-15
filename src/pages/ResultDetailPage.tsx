@@ -31,12 +31,12 @@ export function ResultDetailPage() {
     <PageScaffold
       title={result.title}
       subtitle={`目标 / 悬赏 · ${objective?.title ?? ""}`}
-      action={<div className="flex flex-wrap gap-2"><Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/tasks/bounties/${result.id}/loot`}><Send className="h-4 w-4" />提交战利品</Link><Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出悬赏指标更新</Button></div>}
+      action={<div className="flex flex-wrap gap-2"><Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/objectives/${result.objectiveId}/loot`}><Send className="h-4 w-4" />提交目标战利品</Link><Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出悬赏指标更新</Button></div>}
     >
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="grid gap-4">
           <Card className="orf-card-padding">
-            <div className="flex flex-wrap items-center gap-3"><StatusBadge status={result.status} /><ConfidenceBadge value={result.confidence} /><span className="text-sm orf-text-secondary">{result.owner}</span></div>
+            <div className="flex flex-wrap items-center gap-3"><StatusBadge status={result.status} /><ConfidenceBadge value={result.confidence} /><span className="text-sm orf-text-secondary">定义人：{result.definer || "未记录"}</span></div>
             <p className="mt-4 text-sm orf-text-secondary">{result.description}</p>
             <div className="mt-5 grid gap-4 lg:grid-cols-[280px_1fr]">
               <div className="rounded-lg border orf-border orf-surface-muted p-4">

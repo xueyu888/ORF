@@ -1,7 +1,6 @@
 import { and, eq, inArray, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
-  AutomaticCompletionResult,
   BountySource,
   ChallengeApplication,
   CommentStatus,
@@ -36,11 +35,10 @@ import {
 } from "../db/schema";
 import { getPermissionRulesForTeam } from "./permissionRepository";
 import { getTeamUsers } from "./userRepository";
-import { buildAutomaticCompletionSnapshot, calculateAutomaticCompletion } from "../utils/automaticCompletion";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "permissionRules" | "automaticCompletions"
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "permissionRules"
 >;
 
 type CommentActor = {
@@ -63,6 +61,13 @@ const nowIso = () => new Date().toISOString();
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
+const uncertaintyScores: Record<UncertaintyLevel, number> = {
+  入门: 10,
+  进阶: 30,
+  破局: 90,
+  渡劫: 270,
+  飞升: 810,
+};
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
@@ -131,38 +136,17 @@ function reorderIds(ids: string[], movingId: string, referenceId: string, placem
   return [...withoutMoving.slice(0, insertIndex), movingId, ...withoutMoving.slice(insertIndex)];
 }
 
-function average(values: number[]) {
-  if (values.length === 0) {
-    return 0;
-  }
-
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+function isRealMember(value: string | undefined | null) {
+  const name = value?.trim() ?? "";
+  return name !== "" && name !== "User" && name !== "未分配";
 }
 
-function objectiveProgress(objective: Objective, resultItems: Result[], automaticCompletion?: AutomaticCompletionResult) {
-  if (!automaticCompletion) {
-    return Math.max(0, Math.min(100, Math.round(objective.progress)));
-  }
-
-  const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
-  return Math.round(average(objectiveResults.map((result) => automaticCompletion.rets[result.id] ?? 0)) * 100);
+function uniqueMembers(values: Array<string | undefined | null>) {
+  return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
 }
 
-function calculateAutomaticCompletions(state: Pick<OrfState, "objectives" | "results" | "tasks">): Record<string, AutomaticCompletionResult> {
-  const completions: Record<string, AutomaticCompletionResult> = {};
-
-  for (const objective of state.objectives) {
-    if (objective.stage !== "goalFrozen") {
-      continue;
-    }
-
-    const snapshot = buildAutomaticCompletionSnapshot(state, objective.id);
-    if (snapshot) {
-      completions[objective.id] = calculateAutomaticCompletion(snapshot);
-    }
-  }
-
-  return completions;
+function uncertaintyScore(level: UncertaintyLevel | null) {
+  return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
 }
 
 export async function getTaskManagementData(): Promise<TaskManagementData> {
@@ -295,17 +279,10 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     direction: result.direction,
     status: result.status,
     confidence: result.confidence,
-    owner: result.owner,
     source: result.source,
     definer: result.definer,
-    finalDueAt: optional(result.finalDueAt),
-    assignedChallenger: result.assignedChallenger,
-    acceptedAt: result.acceptedAt,
-    confirmationDueAt: result.confirmationDueAt,
-    confirmedAt: result.confirmedAt,
-    priorityChallengeExpiresAt: result.priorityChallengeExpiresAt,
-    priorityDeclinedBy: result.priorityDeclinedBy ?? [],
-    challengeApplications: result.challengeApplications ?? [],
+    uncertaintyScore: result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel),
+    acceptedResult: result.acceptedResult ?? "unreviewed",
     evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
     taskIds: taskItems.filter((task) => task.linkedResultId === result.id).map((task) => task.id),
     feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
@@ -313,7 +290,11 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     reviewCadence: result.reviewCadence,
   }));
 
-  const objectiveItems: Objective[] = objectiveRows.map((objective) => ({
+  const objectiveItems: Objective[] = objectiveRows.map((objective) => {
+    const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
+    const acceptedResults = objectiveResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
+
+    return {
       id: objective.id,
       title: objective.title,
       description: objective.description,
@@ -322,16 +303,28 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       stage: objective.stage,
       status: objective.status,
       confidence: objective.confidence,
-      progress: objective.progress,
+      progress: Math.max(0, Math.min(100, Math.round(objective.progress))),
       boundary: objective.boundary,
       successDefinition: objective.successDefinition,
-      resultIds: resultItems.filter((result) => result.objectiveId === objective.id).map((result) => result.id),
+      resultIds: objectiveResults.map((result) => result.id),
       feedbackIds: feedbackItems.filter((item) => item.linkedObjectiveId === objective.id).map((item) => item.id),
       taskIds: taskItems.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id),
+      finalDueAt: objective.finalDueAt || addDays(objective.updatedAt, 14),
+      challengers: objective.challengers,
+      assignedChallengers: objective.assignedChallengers,
+      challengeApplications: objective.challengeApplications,
+      acceptedAt: objective.acceptedAt,
+      confirmationDueAt: objective.confirmationDueAt,
+      confirmedAt: objective.confirmedAt,
+      lootSubmittedAt: objective.lootSubmittedAt,
+      acceptedResult: objective.acceptedResult,
+      completionMultiplier: objective.completionMultiplier,
+      objectiveBasePoints: objective.objectiveBasePoints || acceptedResults.reduce((sum, result) => sum + result.uncertaintyScore, 0),
+      objectiveSettlementPoints: objective.objectiveSettlementPoints,
       createdAt: objective.createdAt,
       updatedAt: objective.updatedAt,
-    }));
-  const automaticCompletions = calculateAutomaticCompletions({ objectives: objectiveItems, results: resultItems, tasks: taskItems });
+    };
+  });
   const commentItems: CommentThread[] = [...commentThreadRows]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .map((thread) => ({
@@ -347,17 +340,13 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     }));
 
   return {
-    objectives: objectiveItems.map((objective) => ({
-      ...objective,
-      progress: objectiveProgress(objective, resultItems, automaticCompletions[objective.id]),
-    })),
+    objectives: objectiveItems,
     results: resultItems,
     tasks: taskItems,
     evidence: evidenceItems,
     feedback: feedbackItems,
     comments: commentItems,
     permissionRules,
-    automaticCompletions,
   };
 }
 
@@ -396,14 +385,8 @@ export interface CreateResultInput {
   unit?: string;
   direction?: MetricDirection;
   uncertaintyLevel?: UncertaintyLevel;
-  owner?: string;
   source?: BountySource;
   definer?: string;
-  finalDueAt?: string;
-  assignedChallenger?: string | null;
-  priorityChallengeExpiresAt?: string | null;
-  priorityDeclinedBy?: string[];
-  challengeApplications?: ChallengeApplication[];
 }
 
 export interface CreateTaskInput {
@@ -422,6 +405,7 @@ export interface CreateObjectiveInput {
   whyItMatters: string;
   cycle: string;
   boundary: string;
+  finalDueAt?: string;
 }
 
 export async function createObjective(input: CreateObjectiveInput, context: { teamId: string; userId: string }): Promise<Objective | null> {
@@ -441,6 +425,18 @@ export async function createObjective(input: CreateObjectiveInput, context: { te
     progress: 0,
     boundary: input.boundary,
     successDefinition: "Success definition will be refined during result planning.",
+    finalDueAt: input.finalDueAt ?? addDays(now, 14),
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    acceptedAt: null,
+    confirmationDueAt: null,
+    confirmedAt: null,
+    lootSubmittedAt: null,
+    acceptedResult: null,
+    completionMultiplier: null,
+    objectiveBasePoints: 0,
+    objectiveSettlementPoints: null,
     createdAt: now,
     updatedAt: now,
     createdBy: context.userId,
@@ -486,14 +482,10 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     direction: input.direction ?? "increase",
     status: "Draft",
     confidence: 50,
-    owner: input.owner ?? "",
     source: input.source ?? "managerDefined",
     definer: input.definer ?? "",
-    finalDueAt: input.finalDueAt ?? addDays(today(), 14),
-    assignedChallenger: input.assignedChallenger ?? null,
-    priorityChallengeExpiresAt: input.priorityChallengeExpiresAt ?? null,
-    priorityDeclinedBy: input.priorityDeclinedBy ?? [],
-    challengeApplications: input.challengeApplications ?? [],
+    uncertaintyScore: uncertaintyScore(input.uncertaintyLevel ?? null),
+    acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
     sortOrder,
   });
@@ -502,76 +494,78 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
   return data.results.find((result) => result.id === id) ?? null;
 }
 
-export type AcceptResultChallengeOutcome =
-  | { status: "accepted"; result: Result }
-  | { status: "alreadyAccepted"; owner: string }
+export type AcceptObjectiveChallengeOutcome =
+  | { status: "accepted"; objective: Objective }
+  | { status: "alreadyAccepted"; challengers: string[] }
   | { status: "invalidDueDate" }
   | { status: "notFound" };
 
-export async function acceptResultChallenge(resultId: string, challenger: string): Promise<AcceptResultChallengeOutcome> {
-  const nextOwner = challenger.trim();
-  if (!nextOwner) {
+export async function acceptObjectiveChallenge(objectiveId: string, challenger: string): Promise<AcceptObjectiveChallengeOutcome> {
+  const nextChallenger = challenger.trim();
+  if (!nextChallenger) {
     return { status: "notFound" };
   }
 
-  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
-  if (!result) {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) {
     return { status: "notFound" };
   }
 
-  const currentOwner = result.owner.trim();
-  if (currentOwner && currentOwner !== "User" && currentOwner !== "未分配" && currentOwner !== nextOwner) {
-    return { status: "alreadyAccepted", owner: result.owner };
+  const currentChallengers = uniqueMembers(objective.challengers ?? []);
+  if (currentChallengers.includes(nextChallenger)) {
+    return { status: "alreadyAccepted", challengers: currentChallengers };
   }
 
   const acceptedAt = nowIso();
-  const nextConfirmationDueAt = confirmationDueAt(result.finalDueAt, acceptedAt);
+  const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
   if (!nextConfirmationDueAt) {
     return { status: "invalidDueDate" };
   }
 
   await db
-    .update(results)
+    .update(objectives)
     .set({
-      owner: nextOwner,
-      assignedChallenger: result.assignedChallenger === nextOwner ? null : result.assignedChallenger,
-      acceptedAt: result.acceptedAt ?? acceptedAt,
-      confirmationDueAt: result.confirmationDueAt ?? nextConfirmationDueAt,
-      challengeApplications: (result.challengeApplications ?? []).map((application) =>
-        application.applicant === nextOwner && application.status === "pending" ? { ...application, status: "approved", decidedAt: acceptedAt } : application,
+      challengers: [...currentChallengers, nextChallenger],
+      assignedChallengers: uniqueMembers(objective.assignedChallengers ?? []).filter((member) => member !== nextChallenger),
+      acceptedAt: objective.acceptedAt ?? acceptedAt,
+      confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
+      challengeApplications: (objective.challengeApplications ?? []).map((application) =>
+        application.applicant === nextChallenger && application.status === "pending" ? { ...application, status: "approved", decidedAt: acceptedAt } : application,
       ),
-      status: result.status === "Draft" ? "On Track" : result.status,
+      status: objective.status === "Draft" ? "On Track" : objective.status,
+      updatedAt: today(),
+      updatedBy: objective.updatedBy,
     })
-    .where(eq(results.id, resultId));
+    .where(eq(objectives.id, objectiveId));
 
   const data = await getTaskManagementData();
-  const accepted = data.results.find((item) => item.id === resultId);
-  return accepted ? { status: "accepted", result: accepted } : { status: "notFound" };
+  const accepted = data.objectives.find((item) => item.id === objectiveId);
+  return accepted ? { status: "accepted", objective: accepted } : { status: "notFound" };
 }
 
-export type ApplyResultChallengeOutcome =
-  | { status: "applied"; result: Result }
+export type ApplyObjectiveChallengeOutcome =
+  | { status: "applied"; objective: Objective }
   | { status: "alreadyApplied" }
-  | { status: "alreadyAccepted"; owner: string }
+  | { status: "alreadyAccepted"; challengers: string[] }
   | { status: "notFound" };
 
-export async function applyForResultChallenge(resultId: string, applicant: string): Promise<ApplyResultChallengeOutcome> {
+export async function applyForObjectiveChallenge(objectiveId: string, applicant: string): Promise<ApplyObjectiveChallengeOutcome> {
   const nextApplicant = applicant.trim();
   if (!nextApplicant) {
     return { status: "notFound" };
   }
 
-  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
-  if (!result) {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) {
     return { status: "notFound" };
   }
 
-  const currentOwner = result.owner.trim();
-  if (currentOwner && currentOwner !== "User" && currentOwner !== "未分配") {
-    return { status: "alreadyAccepted", owner: result.owner };
+  const challengers = uniqueMembers(objective.challengers ?? []);
+  if (challengers.includes(nextApplicant)) {
+    return { status: "alreadyAccepted", challengers };
   }
 
-  const applications = result.challengeApplications ?? [];
+  const applications = objective.challengeApplications ?? [];
   if (applications.some((application) => application.applicant === nextApplicant && application.status === "pending")) {
     return { status: "alreadyApplied" };
   }
@@ -585,53 +579,16 @@ export async function applyForResultChallenge(resultId: string, applicant: strin
   };
 
   await db
-    .update(results)
+    .update(objectives)
     .set({
       challengeApplications: [application, ...applications],
+      updatedAt: today(),
     })
-    .where(eq(results.id, resultId));
+    .where(eq(objectives.id, objectiveId));
 
   const data = await getTaskManagementData();
-  const applied = data.results.find((item) => item.id === resultId);
-  return applied ? { status: "applied", result: applied } : { status: "notFound" };
-}
-
-export type DeclinePriorityChallengeOutcome =
-  | { status: "declined"; result: Result }
-  | { status: "alreadyDeclined" }
-  | { status: "notAllowed" }
-  | { status: "notFound" };
-
-export async function declinePriorityChallenge(resultId: string, member: string): Promise<DeclinePriorityChallengeOutcome> {
-  const currentMember = member.trim();
-  if (!currentMember) {
-    return { status: "notFound" };
-  }
-
-  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
-  if (!result) {
-    return { status: "notFound" };
-  }
-  if (result.definer !== currentMember) {
-    return { status: "notAllowed" };
-  }
-
-  const declinedBy = new Set(result.priorityDeclinedBy ?? []);
-  if (declinedBy.has(currentMember)) {
-    return { status: "alreadyDeclined" };
-  }
-  declinedBy.add(currentMember);
-
-  await db
-    .update(results)
-    .set({
-      priorityDeclinedBy: Array.from(declinedBy),
-    })
-    .where(eq(results.id, resultId));
-
-  const data = await getTaskManagementData();
-  const declined = data.results.find((item) => item.id === resultId);
-  return declined ? { status: "declined", result: declined } : { status: "notFound" };
+  const applied = data.objectives.find((item) => item.id === objectiveId);
+  return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
 
 export type CreateFeedbackInput = Pick<
@@ -1048,17 +1005,17 @@ export async function deleteCommentMessage(
   return threadRemoved ? { status: "ok" } : { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
 
-export async function submitLootComment(resultId: string, body: string, actor: CommentActor): Promise<CommentMutationOutcome> {
-  const [result] = await db.select().from(results).where(eq(results.id, resultId)).limit(1);
-  if (!result) {
+export async function submitObjectiveLootComment(objectiveId: string, body: string, actor: CommentActor): Promise<CommentMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) {
     return { status: "notFound" };
   }
 
   const outcome = await createComment(
     {
-      targetType: "result",
-      targetId: result.id,
-      targetTitle: result.title,
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
       body: `战利品提交：${body}`,
     },
     actor,
@@ -1067,17 +1024,7 @@ export async function submitLootComment(resultId: string, body: string, actor: C
     return outcome;
   }
 
-  await db.transaction(async (tx) => {
-    const taskRows = await tx
-      .select({ id: tasks.id, status: tasks.status })
-      .from(tasks)
-      .where(eq(tasks.linkedResultId, resultId));
-    await Promise.all(
-      taskRows
-        .filter((task) => task.status !== "Done")
-        .map((task) => tx.update(tasks).set({ status: "In Review", updatedAt: today() }).where(eq(tasks.id, task.id))),
-    );
-  });
+  await db.update(objectives).set({ lootSubmittedAt: nowIso(), updatedAt: today() }).where(eq(objectives.id, objectiveId));
 
   return outcome;
 }
