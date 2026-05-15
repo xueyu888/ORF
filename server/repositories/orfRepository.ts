@@ -68,6 +68,13 @@ const uncertaintyScores: Record<UncertaintyLevel, number> = {
   渡劫: 270,
   飞升: 810,
 };
+const difficultyRanks: Record<UncertaintyLevel, number> = {
+  入门: 1,
+  进阶: 2,
+  破局: 3,
+  渡劫: 4,
+  飞升: 5,
+};
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
@@ -371,6 +378,121 @@ export async function getOrfStateSnapshot(): Promise<OrfState> {
       weeklyFeedbackCadence: true,
       autoCreateReviewSummary: false,
     },
+  };
+}
+
+export type BountyHallItem = {
+  uncertaintyPoints: number;
+  deadline: string;
+  definer: string;
+  difficultyRank: number;
+  hasCurrentApplication: boolean;
+  isRecruitment: boolean;
+  objective: Objective;
+  result: Result;
+  results: Result[];
+  source: BountySource;
+};
+
+export type BountyHallData = {
+  recruitmentItems: BountyHallItem[];
+  availableItems: BountyHallItem[];
+  objectiveOptions: Objective[];
+  contribution: { points: number };
+};
+
+function resultDifficultyRank(result: Result) {
+  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : difficultyRanks["进阶"];
+}
+
+function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
+  const leftDeadline = left.deadline || "9999-12-31";
+  const rightDeadline = right.deadline || "9999-12-31";
+  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || left.result.title.localeCompare(right.result.title);
+}
+
+function objectiveClosedForBountyHall(objective: Objective) {
+  return Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null);
+}
+
+function contributionSummaryFor(data: TaskManagementData, member: string) {
+  return {
+    points: data.objectives.reduce((sum, objective) => {
+      if (!objective.challengers.includes(member)) return sum;
+      return sum + (objective.objectiveSettlementPoints ?? 0);
+    }, 0),
+  };
+}
+
+export async function getBountyHallData(member: string): Promise<BountyHallData> {
+  const data = await getTaskManagementData();
+  const items = data.objectives.flatMap((objective) => {
+    const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
+    const result = objectiveResults[0];
+    if (!result) return [];
+    if (objective.challengers.includes(member) || objectiveClosedForBountyHall(objective)) return [];
+
+    const pendingApplications = (objective.challengeApplications ?? []).filter((application) => application.status === "pending");
+    return [{
+      uncertaintyPoints: objectiveResults.reduce((sum, item) => sum + item.uncertaintyScore, 0),
+      deadline: objective.finalDueAt,
+      definer: result.definer ?? "",
+      difficultyRank: Math.max(...objectiveResults.map(resultDifficultyRank)),
+      hasCurrentApplication: pendingApplications.some((application) => application.applicant === member),
+      isRecruitment: objective.assignedChallengers.includes(member),
+      objective,
+      result,
+      results: objectiveResults,
+      source: result.source ?? "managerDefined",
+    }];
+  }).sort(compareBountyItems);
+
+  const availableItems = items.filter((item) => !item.isRecruitment && !item.hasCurrentApplication);
+  const objectiveOptionIds = new Set(availableItems.map((item) => item.objective.id));
+
+  return {
+    recruitmentItems: items.filter((item) => item.isRecruitment),
+    availableItems,
+    objectiveOptions: data.objectives.filter((objective) => objectiveOptionIds.has(objective.id)),
+    contribution: contributionSummaryFor(data, member),
+  };
+}
+
+function filterComments(data: TaskManagementData, ids: {
+  objectiveIds: Set<string>;
+  resultIds: Set<string>;
+  taskIds: Set<string>;
+  checklistItemIds: Set<string>;
+}) {
+  return data.comments.filter((thread) => {
+    if (thread.targetType === "objective") return ids.objectiveIds.has(thread.targetId);
+    if (thread.targetType === "result") return ids.resultIds.has(thread.targetId);
+    if (thread.targetType === "task") return ids.taskIds.has(thread.targetId);
+    if (thread.targetType === "subtask") return ids.checklistItemIds.has(thread.targetId);
+    return false;
+  });
+}
+
+export async function getMyChallengesData(member: string, includeAll = false): Promise<TaskManagementData> {
+  const data = await getTaskManagementData();
+  if (includeAll) return data;
+
+  const objectivesForMember = data.objectives.filter((objective) => objective.challengers.includes(member));
+  const objectiveIds = new Set(objectivesForMember.map((objective) => objective.id));
+  const resultsForMember = data.results.filter((result) => objectiveIds.has(result.objectiveId));
+  const resultIds = new Set(resultsForMember.map((result) => result.id));
+  const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId) || resultIds.has(task.linkedResultId));
+  const taskIds = new Set(tasksForMember.map((task) => task.id));
+  const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
+
+  return {
+    objectives: objectivesForMember,
+    results: resultsForMember,
+    tasks: tasksForMember,
+    evidence: data.evidence.filter((item) => resultIds.has(item.linkedResultId)),
+    feedback: data.feedback.filter((item) => objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)),
+    comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
+    permissionRules: data.permissionRules,
   };
 }
 

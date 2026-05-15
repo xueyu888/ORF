@@ -28,6 +28,8 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/tasks-page` | 返回目标、指标、任务、评论、权限等页面数据 |
+| `GET` | `/api/bounties` | 返回悬赏大厅数据 |
+| `GET` | `/api/my-challenges` | 返回我的挑战数据 |
 | `POST` | `/api/objectives` | 创建悬赏目标 |
 | `PATCH` | `/api/objectives/:objectiveId` | 更新目标 |
 | `PATCH` | `/api/objectives/:objectiveId/stage` | 更新目标阶段 |
@@ -52,6 +54,29 @@
 | `DELETE` | `/api/tasks/:taskId/checklist/:itemId` | 删除子任务 |
 
 ## 返回集合
+
+### `GET /api/bounties`
+
+返回当前用户尚未正式接受的悬赏目标：
+
+| 集合 | 用途 |
+| --- | --- |
+| `recruitmentItems` | 当前用户被征召的目标 |
+| `availableItems` | 当前用户可申请的目标 |
+| `objectiveOptions` | 大厅目标筛选项 |
+| `contribution` | 当前用户积分摘要 |
+
+### `GET /api/my-challenges`
+
+返回当前用户已正式接受的悬赏目标：
+
+```text
+currentUser in Objective.challengers
+```
+
+列表项包含 `Objective`、所属 `Result[]`、所属 `Task[]` 和评论计数。
+
+### `GET /api/tasks-page`
 
 `GET /api/tasks-page` 返回：
 
@@ -119,6 +144,8 @@ Objective
 - `Task.checklist[] -> TaskChecklistItem[]`
 
 挑战、征召、申请、确认期字段只存在于 `Objective`。
+
+目标不挂在页面表上。悬赏大厅和我的挑战只按 `Objective` 字段派生列表归属。
 
 ## 枚举
 
@@ -203,6 +230,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 ## 约束
 
 - 我的挑战过滤：`currentUser in Objective.challengers`。
+- 悬赏大厅过滤：`currentUser not in Objective.challengers`，且目标未提交战利品、未验收、未结算。
 - `申请挑战` 和 `接受挑战` 仅在目标未关闭、未提交战利品、未验收、未结算时允许。
 - `提交战利品` 仅允许 `Objective.challengers` 中的成员执行；目标已关闭、已提交、已验收或已结算时拒绝。
 - 任务和子任务勾选状态不推导目标完成、指标完成或积分结算。

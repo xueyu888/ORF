@@ -30,6 +30,8 @@ import {
   deleteObjective,
   deleteResult,
   deleteTask,
+  getBountyHallData,
+  getMyChallengesData,
   getOrfStateSnapshot,
   getTaskManagementData,
   moveChecklistItem,
@@ -102,6 +104,9 @@ const permissionRuleSchema = z.object({
 });
 const updateRolePermissionsBodySchema = z.object({
   permissionRules: z.array(permissionRuleSchema),
+});
+const myChallengesQuerySchema = z.object({
+  scope: z.enum(["mine", "all"]).default("mine"),
 });
 const visualBackgroundQuerySchema = z.object({
   scene: backgroundSceneSchema,
@@ -506,6 +511,27 @@ export async function buildServer() {
   });
 
   app.get("/api/tasks-page", async () => getTaskManagementData());
+  app.get("/api/bounties", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    return getBountyHallData(user.name);
+  });
+  app.get("/api/my-challenges", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const query = myChallengesQuerySchema.parse(request.query);
+    if (query.scope === "all" && user.role !== "admin") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    return getMyChallengesData(user.name, query.scope === "all");
+  });
   app.get("/api/orf-state", async () => getOrfStateSnapshot());
 
   app.post("/api/comments", async (request, reply) => {

@@ -9,7 +9,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
 import {
@@ -27,36 +27,18 @@ import {
   BountyTextInput,
 } from "../features/bounty-hall/BountyHallSkin";
 import { useOrf } from "../state/OrfProvider";
-import type { BountySource, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
+import { getBountyHallData, type BountyHallData, type BountyHallItem } from "../state/apiClient";
+import type { Objective, Result, UncertaintyLevel } from "../types/orf";
 
 type DifficultyFilter = "all" | UncertaintyLevel;
 type SortKey = "deadline" | "points" | "difficulty" | "created";
 
-type BountyItem = {
-  uncertaintyPoints: number;
-  deadline: string;
-  definer: string;
-  difficultyRank: number;
-  hasCurrentApplication: boolean;
-  isRecruitment: boolean;
-  objective: Objective;
-  result: Result;
-  results: Result[];
-  source: BountySource;
-};
+type BountyItem = BountyHallItem;
 
 type ChallengeAction = "apply" | "accept";
 type ChallengeConfirmTarget = {
   action: ChallengeAction;
   item: BountyItem;
-};
-
-const difficultyRanks: Record<UncertaintyLevel, number> = {
-  入门: 1,
-  进阶: 2,
-  破局: 3,
-  渡劫: 4,
-  飞升: 5,
 };
 
 const difficultyOptions: DifficultyFilter[] = ["all", "入门", "进阶", "破局", "渡劫", "飞升"];
@@ -65,12 +47,11 @@ export function BountyHallPage() {
   const {
     acceptBountyChallenge,
     applyForBounty,
-    currentUser,
     openModal,
-    state,
   } = useOrf();
   const navigate = useNavigate();
-  const currentMember = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? "User";
+  const [bountyData, setBountyData] = useState<BountyHallData | null>(null);
+  const [loadingBounties, setLoadingBounties] = useState(true);
   const [query, setQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>("all");
   const [objectiveFilter, setObjectiveFilter] = useState("all");
@@ -80,53 +61,32 @@ export function BountyHallPage() {
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
 
-  const allBounties = useMemo(
-    () =>
-      state.objectives.flatMap((objective) => {
-        const results = state.results.filter((result) => result.objectiveId === objective.id);
-        const result = results[0];
-        if (!result) return [];
-        if (objective.challengers.includes(currentMember) || objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null) return [];
+  const loadBountyData = useCallback(async () => {
+    setLoadingBounties(true);
+    try {
+      setBountyData(await getBountyHallData());
+    } catch {
+      setBountyData(null);
+    } finally {
+      setLoadingBounties(false);
+    }
+  }, []);
 
-        const challengeApplications = objective.challengeApplications ?? [];
-        const pendingApplications = challengeApplications.filter((application) => application.status === "pending");
-        const source = result.source ?? "managerDefined";
-        const definer = result.definer ?? "";
-        return [
-          {
-            uncertaintyPoints: results.reduce((sum, item) => sum + item.uncertaintyScore, 0),
-            deadline: objective.finalDueAt,
-            definer,
-            difficultyRank: Math.max(...results.map(difficultyRank)),
-            hasCurrentApplication: pendingApplications.some((application) => application.applicant === currentMember),
-            isRecruitment: objective.assignedChallengers.includes(currentMember),
-            objective,
-            result,
-            results,
-            source,
-          },
-        ];
-      }),
-    [currentMember, state.objectives, state.results],
-  );
+  useEffect(() => {
+    void loadBountyData();
+  }, [loadBountyData]);
 
   const recruitmentItems = useMemo(
-    () => allBounties.filter((item) => item.isRecruitment).sort(compareByUrgency),
-    [allBounties],
+    () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),
+    [bountyData],
   );
 
-  const availableBounties = useMemo(
-    () =>
-      allBounties.filter(
-        (item) => !item.isRecruitment && !item.hasCurrentApplication,
-      ),
-    [allBounties],
-  );
-
-  const objectiveOptions = useMemo(() => {
-    const ids = new Set(availableBounties.map((item) => item.objective.id));
-    return state.objectives.filter((objective) => ids.has(objective.id));
-  }, [availableBounties, state.objectives]);
+  const availableBounties = bountyData?.availableItems ?? [];
+  const objectiveOptions = bountyData?.objectiveOptions ?? [];
+  const pageObjectives = useMemo(() => {
+    const objectives = [...recruitmentItems, ...availableBounties].map((item) => item.objective);
+    return objectives.length > 0 ? objectives : objectiveOptions;
+  }, [availableBounties, objectiveOptions, recruitmentItems]);
 
   const filteredBounties = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -142,7 +102,7 @@ export function BountyHallPage() {
     return [...filtered].sort((left, right) => compareBounties(left, right, sortKey));
   }, [availableBounties, difficultyFilter, objectiveFilter, query, sortKey]);
 
-  const contribution = useMemo(() => contributionSummary(state, currentMember), [currentMember, state]);
+  const contribution = bountyData?.contribution ?? { points: 0 };
   const hasFilters = query.trim() || difficultyFilter !== "all" || objectiveFilter !== "all";
 
   const clearFilters = () => {
@@ -156,6 +116,7 @@ export function BountyHallPage() {
     const ok = await applyForBounty(item.objective.id);
     setProcessingBountyId(null);
     if (ok) {
+      await loadBountyData();
       setConfirmTarget(null);
       setPreview((current) => (current?.objective.id === item.objective.id ? null : current));
     }
@@ -166,6 +127,7 @@ export function BountyHallPage() {
     const ok = await acceptBountyChallenge(item.objective.id);
     setProcessingBountyId(null);
     if (ok) {
+      await loadBountyData();
       setConfirmTarget(null);
       setPreview((current) => (current?.objective.id === item.objective.id ? null : current));
       navigate("/tasks");
@@ -176,7 +138,7 @@ export function BountyHallPage() {
     <div className="bounty-hall-page grid gap-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="bounty-page-eyebrow">当前周期 · {currentCycle(state.objectives)}</div>
+          <div className="bounty-page-eyebrow">当前周期 · {currentCycle(pageObjectives)}</div>
           <h1 className="bounty-page-title">悬赏大厅</h1>
         </div>
         <div className="bounty-header-actions">
@@ -256,8 +218,8 @@ export function BountyHallPage() {
           </div>
         ) : (
           <BountyEmptyState
-            title={hasFilters ? "没有符合条件的可申请悬赏指标" : "当前没有可申请挑战的悬赏指标"}
-            description={hasFilters ? "调整搜索或筛选条件后再查看。" : "新的未分配悬赏发布后会出现在这里；已提交的申请等待指挥官确认。"}
+            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的可申请悬赏指标" : "当前没有可申请挑战的悬赏指标"}
+            description={loadingBounties ? "正在读取悬赏大厅专用接口。" : hasFilters ? "调整搜索或筛选条件后再查看。" : "新的未分配悬赏发布后会出现在这里；已提交的申请等待指挥官确认。"}
           />
         )}
       </section>
@@ -602,23 +564,6 @@ function compareByUrgency(left: BountyItem, right: BountyItem) {
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
   return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || left.result.title.localeCompare(right.result.title);
-}
-
-function contributionSummary(state: OrfState, currentMember: string) {
-  let points = 0;
-
-  for (const objective of state.objectives) {
-    if (!objective.challengers.includes(currentMember)) continue;
-    if (objective.objectiveSettlementPoints != null) {
-      points += objective.objectiveSettlementPoints;
-    }
-  }
-
-  return { points };
-}
-
-function difficultyRank(result: Result) {
-  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : difficultyRanks["进阶"];
 }
 
 function difficultyLabel(result: Result) {
