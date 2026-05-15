@@ -17,7 +17,6 @@ test.beforeEach(async ({ page }) => {
         feedback: initialOrfState.feedback,
         comments: initialOrfState.comments,
         permissionRules: initialOrfState.permissionRules,
-        automaticCompletions: initialOrfState.automaticCompletions,
       },
     });
   });
@@ -38,7 +37,7 @@ test("renders the bounty hall through the swappable skin and opens the light det
 
   await page.getByLabel("搜索悬赏指标").fill("缓存");
   await expect(page.getByText("当前可申请 1 条")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "缓存命中率达到 40%" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "降低 AI 应用运行成本并保持回答质量" })).toBeVisible();
 
   await page.getByRole("button", { name: "查看口径" }).first().click();
   await expect(page.getByRole("dialog")).toBeVisible();

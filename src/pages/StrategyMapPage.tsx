@@ -22,7 +22,10 @@ export function StrategyMapPage() {
             <Connector />
             <StrategyRow nodes={state.objectives.map((objective) => ({ type: "目标", title: objective.title, status: objective.status, progress: objective.progress, path: `/objectives/${objective.id}` }))} onSelect={setSelected} />
             <Connector />
-            <StrategyRow nodes={state.results.slice(0, 5).map((result) => ({ type: "悬赏", title: result.title, status: result.status, progress: result.confidence, challenger: result.owner, path: `/objectives/${result.objectiveId}/results/${result.id}` }))} onSelect={setSelected} />
+            <StrategyRow nodes={state.results.slice(0, 5).map((result) => {
+              const objective = state.objectives.find((item) => item.id === result.objectiveId);
+              return { type: "悬赏", title: result.title, status: result.status, progress: result.confidence, challenger: objective?.challengers.join("、"), path: `/objectives/${result.objectiveId}/results/${result.id}` };
+            })} onSelect={setSelected} />
             <Connector />
             <StrategyRow nodes={state.tasks.slice(0, 4).map((task) => ({ type: "行动项", title: task.title, status: task.status, progress: task.status === "Done" ? 100 : 45, owner: task.assignee, path: "/tasks" }))} onSelect={setSelected} />
           </div>

@@ -113,7 +113,7 @@ export function ObjectiveDetailPage() {
         <Card className="overflow-hidden">
           {results.map((result) => (
             <Link key={result.id} to={`/objectives/${objective.id}/results/${result.id}`} className="orf-table-row grid grid-cols-[1.5fr_140px_90px_90px_90px_110px_110px_110px] items-center gap-3 px-4 py-3 text-sm">
-              <span className="orf-text-primary">{result.title}</span><span className="orf-text-secondary">{result.metricName}</span><span>{result.baseline}{result.unit}</span><span>{result.current}{result.unit}</span><span>{result.target}{result.unit}</span><StatusBadge status={result.status} /><span>{result.confidence}%</span><span>{result.owner}</span>
+              <span className="orf-text-primary">{result.title}</span><span className="orf-text-secondary">{result.metricName}</span><span>{result.baseline}{result.unit}</span><span>{result.current}{result.unit}</span><span>{result.target}{result.unit}</span><StatusBadge status={result.status} /><span>{result.confidence}%</span><span>{result.definer || "未记录"}</span>
             </Link>
           ))}
         </Card>

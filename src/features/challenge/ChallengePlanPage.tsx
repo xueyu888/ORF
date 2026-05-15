@@ -8,7 +8,7 @@ import { hasPermission, type PermissionKey } from "../../config/permissions";
 import { useOrf } from "../../state/OrfProvider";
 import type { Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
-import { commentCountsByTarget, commentTargetForChallengeTarget, submittedLootIdsFromComments } from "./model/challengeComments";
+import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, canUsePermission, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
@@ -79,27 +79,23 @@ export function ChallengePlanPage() {
   };
 
   const objectiveIdsInMyChallenges = useMemo(
-    () => new Set(state.results.filter((result) => result.owner === currentMember).map((result) => result.objectiveId)),
-    [currentMember, state.results],
+    () => new Set(state.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id)),
+    [currentMember, state.objectives],
   );
-  const submittedLootIds = useMemo(() => submittedLootIdsFromComments(state.comments), [state.comments]);
   const showAll = canShowAllChallenges && scope === "all";
-  const automaticCompletions = state.automaticCompletions ?? {};
   const groups = useMemo(
     () =>
       buildChallengeTree(
         {
-          automaticCompletions,
           evidence: state.evidence,
           feedback: state.feedback,
           objectives: state.objectives,
           results: state.results,
-          submittedLootIds,
           tasks: state.tasks,
         },
         showAll ? undefined : objectiveIdsInMyChallenges,
       ),
-    [automaticCompletions, objectiveIdsInMyChallenges, showAll, state.evidence, state.feedback, state.objectives, state.results, state.tasks, submittedLootIds],
+    [objectiveIdsInMyChallenges, showAll, state.evidence, state.feedback, state.objectives, state.results, state.tasks],
   );
   const commentCounts = useMemo(() => commentCountsByTarget(state.comments), [state.comments]);
 
@@ -254,7 +250,6 @@ export function ChallengePlanPage() {
       {showAll && <TeamDashboard groups={groups} />}
       <ChallengeToolbar canShowAll={canShowAllChallenges} onScopeChange={setScope} scope={scope} />
       <ChallengeTree
-        automaticCompletions={automaticCompletions}
         emptyText={showAll ? "当前还没有挑战内容。" : "当前没有与你的挑战目标相关的内容。"}
         groups={groups}
         handlers={{

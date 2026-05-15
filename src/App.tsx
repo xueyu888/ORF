@@ -35,7 +35,7 @@ export function App() {
         <Route path="objectives/:objectiveId" element={<ObjectiveDetailPage />} />
         <Route path="objectives/:objectiveId/results/:resultId" element={<ResultDetailPage />} />
         <Route path="tasks" element={<ChallengePlanPage />} />
-        <Route path="tasks/bounties/:bountyId/loot" element={<LootSubmitPage />} />
+        <Route path="objectives/:objectiveId/loot" element={<LootSubmitPage />} />
         <Route path="fantasy-ui" element={<FantasyUiPreviewPage />} />
         <Route path="genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
         <Route path="feedback" element={<FeedbackInboxPage />} />

@@ -5,7 +5,6 @@ import {
   Loader2,
   Send,
   ShieldAlert,
-  Star,
   Target,
   Trophy,
   X,
@@ -14,8 +13,6 @@ import {
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
-import { submittedLootIdsFromComments } from "../features/challenge/model/challengeComments";
-import { bountyStatus } from "../features/challenge/model/challengeStatus";
 import {
   BountyBadge,
   BountyButton,
@@ -43,12 +40,9 @@ type BountyItem = {
   difficultyRank: number;
   hasCurrentApplication: boolean;
   isRecruitment: boolean;
-  isCurrentDefinerLockedOut: boolean;
-  isPriorityChallenge: boolean;
-  isPriorityReserved: boolean;
   objective: Objective;
-  priorityExpiresAt: string;
   result: Result;
+  results: Result[];
   source: BountySource;
 };
 
@@ -56,14 +50,6 @@ type ChallengeAction = "apply" | "accept";
 type ChallengeConfirmTarget = {
   action: ChallengeAction;
   item: BountyItem;
-};
-
-const difficultyScores: Record<UncertaintyLevel, number> = {
-  入门: 10,
-  进阶: 30,
-  破局: 90,
-  渡劫: 270,
-  飞升: 810,
 };
 
 const difficultyRanks: Record<UncertaintyLevel, number> = {
@@ -81,7 +67,6 @@ export function BountyHallPage() {
     acceptBountyChallenge,
     applyForBounty,
     currentUser,
-    declinePriorityChallenge,
     openModal,
     state,
   } = useOrf();
@@ -96,48 +81,34 @@ export function BountyHallPage() {
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
 
-  const submittedLootIds = useMemo(() => submittedLootIdsFromComments(state.comments), [state.comments]);
   const allBounties = useMemo(
     () =>
-      state.results.flatMap((result) => {
-        const objective = state.objectives.find((item) => item.id === result.objectiveId);
-        if (!objective) return [];
+      state.objectives.flatMap((objective) => {
+        const results = state.results.filter((result) => result.objectiveId === objective.id);
+        const result = results[0];
+        if (!result) return [];
+        if (objective.challengers.includes(currentMember) || objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null) return [];
 
-        const actions = state.tasks.filter((task) => task.linkedResultId === result.id);
-        const effectiveResult = isEmptyChallenger(result.owner) ? { ...result, owner: "" } : result;
-        const status = bountyStatus(effectiveResult, actions, state.automaticCompletions?.[objective.id]?.rets?.[result.id], submittedLootIds.has(result.id));
-        if (status !== "open") return [];
-
-        const isMainline = objective.resultIds[0] === result.id;
-        const challengeApplications = result.challengeApplications ?? [];
+        const challengeApplications = objective.challengeApplications ?? [];
         const pendingApplications = challengeApplications.filter((application) => application.status === "pending");
         const source = result.source ?? "managerDefined";
         const definer = result.definer ?? "";
-        const priorityExpiresAt = result.priorityChallengeExpiresAt ?? "";
-        if (source === "memberProposed" && !priorityExpiresAt && !result.owner) return [];
-        const priorityDeclinedBy = result.priorityDeclinedBy ?? [];
-        const definerDeclined = Boolean(definer) && priorityDeclinedBy.includes(definer);
-        const isCurrentDefiner = source === "memberProposed" && definer === currentMember;
-        const isPriorityActive = Boolean(priorityExpiresAt) && isFutureTime(priorityExpiresAt, now) && !definerDeclined;
         return [
           {
-            uncertaintyPoints: uncertaintyPoints(result),
-            deadline: result.finalDueAt ?? "",
+            uncertaintyPoints: results.reduce((sum, item) => sum + item.uncertaintyScore, 0),
+            deadline: objective.finalDueAt,
             definer,
-            difficultyRank: difficultyRank(result),
+            difficultyRank: Math.max(...results.map(difficultyRank)),
             hasCurrentApplication: pendingApplications.some((application) => application.applicant === currentMember),
-            isRecruitment: isMainline && result.assignedChallenger === currentMember,
-            isCurrentDefinerLockedOut: isCurrentDefiner && (!isPriorityActive || priorityDeclinedBy.includes(currentMember)),
-            isPriorityChallenge: isCurrentDefiner && isPriorityActive,
-            isPriorityReserved: source === "memberProposed" && isPriorityActive,
+            isRecruitment: objective.assignedChallengers.includes(currentMember),
             objective,
-            priorityExpiresAt,
             result,
+            results,
             source,
           },
         ];
       }),
-    [currentMember, now, state.automaticCompletions, state.objectives, state.results, state.tasks, submittedLootIds],
+    [currentMember, state.objectives, state.results],
   );
 
   const recruitmentItems = useMemo(
@@ -145,15 +116,10 @@ export function BountyHallPage() {
     [allBounties],
   );
 
-  const priorityItems = useMemo(
-    () => allBounties.filter((item) => item.isPriorityChallenge).sort(compareByPriorityTime),
-    [allBounties],
-  );
-
   const availableBounties = useMemo(
     () =>
       allBounties.filter(
-        (item) => !item.isRecruitment && !item.hasCurrentApplication && !item.isPriorityChallenge && !item.isPriorityReserved && !item.isCurrentDefinerLockedOut,
+        (item) => !item.isRecruitment && !item.hasCurrentApplication,
       ),
     [allBounties],
   );
@@ -168,8 +134,8 @@ export function BountyHallPage() {
     const filtered = availableBounties.filter((item) => {
       const queryMatch =
         !normalizedQuery ||
-        `${item.result.title} ${item.objective.title}`.toLowerCase().includes(normalizedQuery);
-      const difficultyMatch = difficultyFilter === "all" || item.result.uncertaintyLevel === difficultyFilter;
+        `${item.objective.title} ${item.results.map((result) => result.title).join(" ")}`.toLowerCase().includes(normalizedQuery);
+      const difficultyMatch = difficultyFilter === "all" || item.results.some((result) => result.uncertaintyLevel === difficultyFilter);
       const objectiveMatch = objectiveFilter === "all" || item.objective.id === objectiveFilter;
       return queryMatch && difficultyMatch && objectiveMatch;
     });
@@ -177,7 +143,7 @@ export function BountyHallPage() {
     return [...filtered].sort((left, right) => compareBounties(left, right, sortKey));
   }, [availableBounties, difficultyFilter, objectiveFilter, query, sortKey]);
 
-  const contribution = useMemo(() => contributionSummary(state, currentMember, submittedLootIds), [currentMember, state, submittedLootIds]);
+  const contribution = useMemo(() => contributionSummary(state, currentMember), [currentMember, state]);
   const hasFilters = query.trim() || difficultyFilter !== "all" || objectiveFilter !== "all";
 
   const clearFilters = () => {
@@ -187,32 +153,23 @@ export function BountyHallPage() {
   };
 
   const applyChallenge = async (item: BountyItem) => {
-    setProcessingBountyId(item.result.id);
-    const ok = await applyForBounty(item.result.id);
+    setProcessingBountyId(item.objective.id);
+    const ok = await applyForBounty(item.objective.id);
     setProcessingBountyId(null);
     if (ok) {
       setConfirmTarget(null);
-      setPreview((current) => (current?.result.id === item.result.id ? null : current));
+      setPreview((current) => (current?.objective.id === item.objective.id ? null : current));
     }
   };
 
   const acceptChallenge = async (item: BountyItem) => {
-    setProcessingBountyId(item.result.id);
-    const ok = await acceptBountyChallenge(item.result.id);
+    setProcessingBountyId(item.objective.id);
+    const ok = await acceptBountyChallenge(item.objective.id);
     setProcessingBountyId(null);
     if (ok) {
       setConfirmTarget(null);
-      setPreview((current) => (current?.result.id === item.result.id ? null : current));
+      setPreview((current) => (current?.objective.id === item.objective.id ? null : current));
       navigate("/tasks");
-    }
-  };
-
-  const declinePriority = async (item: BountyItem) => {
-    setProcessingBountyId(item.result.id);
-    const ok = await declinePriorityChallenge(item.result.id);
-    setProcessingBountyId(null);
-    if (ok) {
-      setPreview((current) => (current?.result.id === item.result.id ? null : current));
     }
   };
 
@@ -246,33 +203,11 @@ export function BountyHallPage() {
           <div className="grid gap-3">
             {recruitmentItems.map((item) => (
               <RecruitmentCard
-                key={item.result.id}
+                key={item.objective.id}
                 item={item}
                 now={now}
-                processing={processingBountyId === item.result.id}
+                processing={processingBountyId === item.objective.id}
                 onAccept={() => setConfirmTarget({ action: "accept", item })}
-                onPreview={() => setPreview(item)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {priorityItems.length > 0 && (
-        <section className="grid gap-3" aria-labelledby="priority-title">
-          <div className="bounty-section-heading">
-            <Star className="h-5 w-5" />
-            <h2 id="priority-title">优先挑战</h2>
-          </div>
-          <div className="grid gap-3">
-            {priorityItems.map((item) => (
-              <PriorityChallengeCard
-                key={item.result.id}
-                item={item}
-                now={now}
-                processing={processingBountyId === item.result.id}
-                onAccept={() => setConfirmTarget({ action: "accept", item })}
-                onDecline={() => declinePriority(item)}
                 onPreview={() => setPreview(item)}
               />
             ))}
@@ -312,10 +247,10 @@ export function BountyHallPage() {
           <div className="bounty-card-grid">
             {filteredBounties.map((item) => (
               <BountyCard
-                key={item.result.id}
+                key={item.objective.id}
                 item={item}
                 now={now}
-                processing={processingBountyId === item.result.id}
+                processing={processingBountyId === item.objective.id}
                 onApply={() => setConfirmTarget({ action: "apply", item })}
                 onPreview={() => setPreview(item)}
               />
@@ -333,18 +268,17 @@ export function BountyHallPage() {
         <LightBountyPreview
           item={preview}
           now={now}
-          processing={processingBountyId === preview.result.id}
-          action={preview.isRecruitment || preview.isPriorityChallenge ? "accept" : "apply"}
-          onAction={() => setConfirmTarget({ action: preview.isRecruitment || preview.isPriorityChallenge ? "accept" : "apply", item: preview })}
+          processing={processingBountyId === preview.objective.id}
+          action={preview.isRecruitment ? "accept" : "apply"}
+          onAction={() => setConfirmTarget({ action: preview.isRecruitment ? "accept" : "apply", item: preview })}
           onClose={() => setPreview(null)}
-          onDeclinePriority={preview.isPriorityChallenge ? () => declinePriority(preview) : undefined}
         />
       )}
 
       {confirmTarget && (
         <ChallengeConfirmModal
           item={confirmTarget}
-          processing={processingBountyId === confirmTarget.item.result.id}
+          processing={processingBountyId === confirmTarget.item.objective.id}
           onCancel={() => setConfirmTarget(null)}
           onConfirm={() => void (confirmTarget.action === "accept" ? acceptChallenge(confirmTarget.item) : applyChallenge(confirmTarget.item))}
         />
@@ -464,8 +398,8 @@ function RecruitmentCard({
             <Chip>{difficultyLabel(item.result)}</Chip>
             <Chip>{item.uncertaintyPoints} 分</Chip>
           </div>
-          <h3 className="mt-3 line-clamp-2">{item.result.title}</h3>
-          <p className="mt-2 truncate text-sm">{item.objective.title}</p>
+          <h3 className="mt-3 line-clamp-2">{item.objective.title}</h3>
+          <p className="mt-2 truncate text-sm">{resultSummary(item)}</p>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <small>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</small>
           </div>
@@ -474,50 +408,6 @@ function RecruitmentCard({
       <div className="bounty-card-footer">
         <BountyButton variant="secondary" onClick={onPreview}>
           查看口径
-        </BountyButton>
-        <BountyButton onClick={onAccept} disabled={processing}>
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          接受挑战
-        </BountyButton>
-      </div>
-    </BountyCardSurface>
-  );
-}
-
-function PriorityChallengeCard({
-  item,
-  now,
-  processing,
-  onAccept,
-  onDecline,
-  onPreview,
-}: {
-  item: BountyItem;
-  now: Date;
-  processing: boolean;
-  onAccept: () => void;
-  onDecline: () => void;
-  onPreview: () => void;
-}) {
-  return (
-    <BountyCardSurface priority>
-      <button className="bounty-card-click" onClick={onPreview}>
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip>{difficultyLabel(item.result)}</Chip>
-            <Chip>{item.uncertaintyPoints} 分</Chip>
-          </div>
-          <h3 className="mt-3 line-clamp-2">{item.result.title}</h3>
-          <p className="mt-2 truncate text-sm">{item.objective.title}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            <small>提出人：{item.definer || "未记录"}</small>
-            <small>{remainingDateTime(item.priorityExpiresAt, now)}</small>
-          </div>
-        </div>
-      </button>
-      <div className="bounty-card-footer">
-        <BountyButton variant="secondary" onClick={onDecline} disabled={processing}>
-          放弃
         </BountyButton>
         <BountyButton onClick={onAccept} disabled={processing}>
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
@@ -550,8 +440,8 @@ function BountyCard({
             <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
           </div>
 
-          <h3 className="mt-3 line-clamp-2">{item.result.title}</h3>
-          <p className="mt-2 truncate text-sm">{item.objective.title}</p>
+          <h3 className="mt-3 line-clamp-2">{item.objective.title}</h3>
+          <p className="mt-2 truncate text-sm">{resultSummary(item)}</p>
           {item.source === "memberProposed" && item.definer && <small className="mt-2 block truncate font-semibold">提出人：{item.definer}</small>}
 
           <div className="mt-4 inline-flex min-w-0 items-center gap-1.5 text-sm">
@@ -581,7 +471,6 @@ function LightBountyPreview({
   processing,
   onAction,
   onClose,
-  onDeclinePriority,
 }: {
   action: ChallengeAction;
   item: BountyItem;
@@ -589,7 +478,6 @@ function LightBountyPreview({
   processing: boolean;
   onAction: () => void;
   onClose: () => void;
-  onDeclinePriority?: () => void;
 }) {
   useEscape(onClose);
   const actionLabel = action === "accept" ? "接受挑战" : "申请挑战";
@@ -597,20 +485,13 @@ function LightBountyPreview({
   return (
     <BountyDialog
       onClose={onClose}
-      subtitle={item.objective.title}
-      title={item.result.title}
+      subtitle={resultSummary(item)}
+      title={item.objective.title}
       footer={
-        <>
-          {onDeclinePriority && (
-            <BountyButton variant="secondary" onClick={onDeclinePriority}>
-              放弃
-            </BountyButton>
-          )}
-          <BountyButton onClick={onAction} disabled={processing}>
-            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            {actionLabel}
-          </BountyButton>
-        </>
+        <BountyButton onClick={onAction} disabled={processing}>
+          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+          {actionLabel}
+        </BountyButton>
       }
     >
       <div className="flex flex-wrap gap-1.5">
@@ -676,8 +557,8 @@ function ChallengeConfirmModal({
     >
       <BountyCardSurface>
         <div className="p-4">
-          <h3 className="line-clamp-2">{item.item.result.title}</h3>
-          <p className="mt-2 truncate text-sm">{item.item.objective.title}</p>
+          <h3 className="line-clamp-2">{item.item.objective.title}</h3>
+          <p className="mt-2 truncate text-sm">{resultSummary(item.item)}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Chip>{difficultyLabel(item.item.result)}</Chip>
             <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
@@ -724,36 +605,17 @@ function compareByUrgency(left: BountyItem, right: BountyItem) {
   return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || left.result.title.localeCompare(right.result.title);
 }
 
-function compareByPriorityTime(left: BountyItem, right: BountyItem) {
-  const leftExpiresAt = left.priorityExpiresAt || "9999-12-31T23:59:59.999Z";
-  const rightExpiresAt = right.priorityExpiresAt || "9999-12-31T23:59:59.999Z";
-  return leftExpiresAt.localeCompare(rightExpiresAt) || compareByUrgency(left, right);
-}
-
-function isFutureTime(value: string, now: Date) {
-  const target = new Date(value);
-  return !Number.isNaN(target.getTime()) && target.getTime() > now.getTime();
-}
-
-function contributionSummary(state: OrfState, currentMember: string, submittedLootIds: Set<string>) {
+function contributionSummary(state: OrfState, currentMember: string) {
   let points = 0;
 
-  for (const result of state.results) {
-    if (!result.owner || isEmptyChallenger(result.owner)) continue;
-    if (result.owner !== currentMember) continue;
-    const objective = state.objectives.find((item) => item.id === result.objectiveId);
-    const actions = state.tasks.filter((task) => task.linkedResultId === result.id);
-    const status = bountyStatus(result, actions, objective ? state.automaticCompletions?.[objective.id]?.rets?.[result.id] : undefined, submittedLootIds.has(result.id));
-    if (status === "settled") {
-      points += uncertaintyPoints(result);
+  for (const objective of state.objectives) {
+    if (!objective.challengers.includes(currentMember)) continue;
+    if (objective.objectiveSettlementPoints != null) {
+      points += objective.objectiveSettlementPoints;
     }
   }
 
   return { points };
-}
-
-function uncertaintyPoints(result: Result) {
-  return result.uncertaintyLevel ? difficultyScores[result.uncertaintyLevel] : difficultyScores["进阶"];
 }
 
 function difficultyRank(result: Result) {
@@ -764,27 +626,9 @@ function difficultyLabel(result: Result) {
   return result.uncertaintyLevel ?? "进阶";
 }
 
-function isEmptyChallenger(owner: string) {
-  const value = owner.trim();
-  return value === "" || value === "User" || value === "未分配";
-}
-
-function remainingDateTime(value: string, now: Date) {
-  if (!value) return "未设置";
-
-  const target = new Date(value);
-  if (Number.isNaN(target.getTime())) return value;
-
-  const diffMinutes = Math.ceil((target.getTime() - now.getTime()) / 60000);
-  const absMinutes = Math.abs(diffMinutes);
-  const prefix = diffMinutes >= 0 ? "剩余" : "已超时";
-  const days = Math.floor(absMinutes / 1440);
-  const hours = Math.floor((absMinutes % 1440) / 60);
-  const minutes = absMinutes % 60;
-
-  if (days > 0) return `${prefix} ${days} 天 ${hours} 小时`;
-  if (hours > 0) return `${prefix} ${hours} 小时 ${minutes} 分钟`;
-  return `${prefix} ${minutes} 分钟`;
+function resultSummary(item: BountyItem) {
+  if (item.results.length <= 1) return item.result.title;
+  return `${item.results.length} 个悬赏指标 · ${item.result.title}`;
 }
 
 function currentCycle(objectives: Objective[]) {

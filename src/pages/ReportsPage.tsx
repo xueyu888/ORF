@@ -37,7 +37,7 @@ export function ReportsPage() {
   const rows = useMemo<LeaderboardRow[]>(() => {
     const owners = [
       ...state.users.map((user) => user.name),
-      ...state.results.map((result) => result.owner),
+      ...state.objectives.flatMap((objective) => objective.challengers),
     ];
     const memberNames = Array.from(new Set(owners.filter(Boolean)));
     const names = [...memberNames, ...fallbackMembers].filter((name, index, list) => list.indexOf(name) === index).slice(0, 5);
