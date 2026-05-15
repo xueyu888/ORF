@@ -1,6 +1,5 @@
 import {
   Check,
-  Clock,
   ExternalLink,
   Loader2,
   Send,
@@ -180,7 +179,8 @@ export function BountyHallPage() {
           <div className="bounty-page-eyebrow">当前周期 · {currentCycle(state.objectives)}</div>
           <h1 className="bounty-page-title">悬赏大厅</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="bounty-header-actions">
+          <CompactContribution points={contribution.points} />
           <BountyButton variant="secondary" onClick={() => navigate("/tasks")}>
             <Trophy className="h-4 w-4" />
             我的挑战
@@ -191,8 +191,6 @@ export function BountyHallPage() {
           </BountyButton>
         </div>
       </header>
-
-      <ContributionSummary points={contribution.points} />
 
       {recruitmentItems.length > 0 && (
         <section className="grid gap-3" aria-labelledby="recruitment-title">
@@ -287,31 +285,14 @@ export function BountyHallPage() {
   );
 }
 
-function ContributionSummary({ points }: { points: number }) {
+function CompactContribution({ points }: { points: number }) {
   return (
-    <BountyPanel title="我的贡献" count="积分">
-      <div className="bounty-contribution">
-        <SummaryMetric icon={Trophy} label="我的积分" value={formatPoints(points)} />
-        <BountyLinkButton to="/reports">
-          查看积分明细
-          <ExternalLink className="h-4 w-4" />
-        </BountyLinkButton>
-      </div>
-    </BountyPanel>
-  );
-}
-
-function SummaryMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <div className="bounty-emblem shrink-0">
-        <Icon className="h-5 w-5" />
-      </div>
-      <div className="min-w-0">
-        <div className="bounty-contribution-value">{value}</div>
-        <div className="bounty-contribution-label">{label}</div>
-      </div>
-    </div>
+    <BountyLinkButton className="bounty-contribution-compact" to="/reports">
+      <Trophy className="h-4 w-4" />
+      <span>我的积分</span>
+      <strong>{formatPoints(points)}</strong>
+      <ExternalLink className="h-4 w-4" />
+    </BountyLinkButton>
   );
 }
 
@@ -394,15 +375,16 @@ function RecruitmentCard({
     <BountyCardSurface priority>
       <button className="bounty-card-click" onClick={onPreview}>
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip>{difficultyLabel(item.result)}</Chip>
-            <Chip>{item.uncertaintyPoints} 分</Chip>
+          <div className="bounty-card-meta-row">
+            <div className="flex flex-wrap items-center gap-2">
+              <Chip>{difficultyLabel(item.result)}</Chip>
+              <Chip>{item.uncertaintyPoints} 分</Chip>
+            </div>
+            <span>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
           </div>
-          <h3 className="mt-3 line-clamp-2">{item.objective.title}</h3>
-          <p className="mt-2 truncate text-sm">{resultSummary(item)}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            <small>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</small>
-          </div>
+          <h3 className="bounty-card-target-title mt-3 line-clamp-3">{item.result.title}</h3>
+          <p className="bounty-card-objective mt-2 line-clamp-1 text-sm">归属目标：{item.objective.title}</p>
+          <ResultStack item={item} />
         </div>
       </button>
       <div className="bounty-card-footer">
@@ -435,19 +417,18 @@ function BountyCard({
     <BountyCardSurface>
       <button className="bounty-card-click" onClick={onPreview}>
         <div>
-          <div className="flex min-w-0 flex-wrap gap-1.5">
-            <Chip>{difficultyLabel(item.result)}</Chip>
-            <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
+          <div className="bounty-card-meta-row">
+            <div className="flex min-w-0 flex-wrap gap-1.5">
+              <Chip>{difficultyLabel(item.result)}</Chip>
+              <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
+            </div>
+            <span>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
           </div>
 
-          <h3 className="mt-3 line-clamp-2">{item.objective.title}</h3>
-          <p className="mt-2 truncate text-sm">{resultSummary(item)}</p>
+          <h3 className="bounty-card-target-title mt-3 line-clamp-3">{item.result.title}</h3>
+          <p className="bounty-card-objective mt-2 line-clamp-1 text-sm">归属目标：{item.objective.title}</p>
+          <ResultStack item={item} />
           {item.source === "memberProposed" && item.definer && <small className="mt-2 block truncate font-semibold">提出人：{item.definer}</small>}
-
-          <div className="mt-4 inline-flex min-w-0 items-center gap-1.5 text-sm">
-            <Clock className="h-4 w-4 shrink-0" />
-            <span className="truncate">{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
-          </div>
         </div>
       </button>
 
@@ -461,6 +442,24 @@ function BountyCard({
         </BountyButton>
       </div>
     </BountyCardSurface>
+  );
+}
+
+function ResultStack({ item }: { item: BountyItem }) {
+  if (item.results.length <= 1) return null;
+
+  const extraResults = item.results.slice(1, 4);
+  const remainingCount = item.results.length - 1 - extraResults.length;
+
+  return (
+    <div className="bounty-result-stack" aria-label="同一目标下的其他悬赏指标">
+      {extraResults.map((result) => (
+        <div key={result.id} className="bounty-result-stack-item">
+          {result.title}
+        </div>
+      ))}
+      {remainingCount > 0 && <div className="bounty-result-stack-more">另有 {remainingCount} 个悬赏指标</div>}
+    </div>
   );
 }
 

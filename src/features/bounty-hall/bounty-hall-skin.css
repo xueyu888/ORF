@@ -19,6 +19,7 @@
 .bounty-hall-page {
   position: relative;
   isolation: isolate;
+  align-content: start;
   overflow: hidden;
   min-height: calc(100vh - 144px);
   border: 1px solid rgba(255, 255, 255, 0.72);
@@ -81,11 +82,19 @@
   margin-top: 8px;
   color: #30445e;
   font-family: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
-  font-size: clamp(30px, 4vw, 46px);
+  font-size: clamp(30px, 4vw, 42px);
   font-weight: 900;
   letter-spacing: 0;
   line-height: 1.08;
   text-shadow: 0 2px 0 rgba(255, 255, 255, 0.74);
+}
+
+.bounty-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .bounty-section-heading {
@@ -159,7 +168,7 @@
 }
 
 .bounty-panel-body {
-  padding: 16px 18px;
+  padding: 14px 18px;
 }
 
 .bounty-contribution {
@@ -198,14 +207,14 @@
 
 .bounty-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr));
+  gap: 16px;
 }
 
 .bounty-card {
   position: relative;
   display: grid;
-  min-height: 224px;
+  min-height: 236px;
   overflow: hidden;
   border: 1px solid rgba(222, 193, 134, 0.78);
   border-radius: 18px;
@@ -233,7 +242,7 @@
   background: transparent;
   color: inherit;
   cursor: pointer;
-  padding: 18px 18px 12px;
+  padding: 20px 20px 14px;
   text-align: left;
 }
 
@@ -244,6 +253,76 @@
   font-size: 19px;
   font-weight: 950;
   line-height: 1.35;
+}
+
+.bounty-card-target-title {
+  max-width: min(100%, 760px);
+}
+
+.bounty-card-objective {
+  color: #68788c;
+  font-weight: 850;
+}
+
+.bounty-card-meta-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bounty-card-meta-row > span {
+  flex: 0 0 auto;
+  color: #607187;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 26px;
+  white-space: nowrap;
+}
+
+.bounty-result-stack {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  border: 1px solid rgba(203, 177, 121, 0.46);
+  border-radius: 14px;
+  background: rgba(255, 250, 236, 0.68);
+  padding: 10px 12px;
+}
+
+.bounty-result-stack-item,
+.bounty-result-stack-more {
+  position: relative;
+  min-width: 0;
+  padding-left: 14px;
+  color: #465872;
+  font-size: 13px;
+  font-weight: 850;
+  line-height: 1.45;
+}
+
+.bounty-result-stack-item {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.bounty-result-stack-item::before,
+.bounty-result-stack-more::before {
+  position: absolute;
+  top: 0.62em;
+  left: 1px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #5c97a8;
+  content: "";
+}
+
+.bounty-result-stack-more {
+  color: #7a6b4f;
 }
 
 .bounty-card-click p,
@@ -432,6 +511,17 @@
 .bounty-link-button {
   min-width: 0;
   padding: 0 16px;
+}
+
+.bounty-contribution-compact {
+  gap: 7px;
+  color: #526376;
+}
+
+.bounty-contribution-compact strong {
+  color: #24445f;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .bounty-clear-button {
