@@ -35,6 +35,7 @@
 | TODO | `/api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 确认挑战者 |
 | `PATCH` | `/api/objectives/:objectiveId/challenge` | 接受确认或征召，写入挑战者 |
 | `POST` | `/api/objectives/:objectiveId/loot` | 提交目标战利品 |
+| TODO | `/api/objectives/:objectiveId/review` | 验收目标，写入指标验收结果和目标结算字段 |
 | `POST` | `/api/results` | 创建悬赏指标 |
 | `PATCH` | `/api/results/:resultId` | 更新悬赏指标 |
 | `POST` | `/api/tasks` | 创建任务 |
@@ -65,6 +66,40 @@
 | `permissionRules` | 前端操作权限 |
 
 后端不返回任务推导完成结果。
+
+## 积分结算职责
+
+完整规则见 [积分结算规则.md](../rules/积分结算规则.md) 和 [贡献评价与积分分配规则.md](../rules/贡献评价与积分分配规则.md)。
+
+后端负责计算并返回目标级积分字段：
+
+```text
+objectiveBasePoints =
+  sum(result.uncertaintyScore)
+  where result.acceptedResult in (completed, falsified)
+
+objectiveSettlementPoints =
+  objectiveBasePoints × objective.completionMultiplier
+```
+
+个人积分在目标结算后计算：
+
+```text
+memberSettlementPoints =
+  objectiveSettlementPoints × contributionRatio(member)
+
+memberPoints =
+  memberSettlementPoints
+  + definitionPoints for accepted result definitions by member
+```
+
+结算约束：
+
+- `Result` 只提供目标总分来源，不直接分配给个人。
+- `Objective.challengers` 是目标级互评和个人积分分配范围。
+- 按时或延期只看 `Objective.lootSubmittedAt` 和 `Objective.finalDueAt`。
+- 悬赏指标定义分固定为 2 分，由后端根据 `Result.definer` 和 `Result.acceptedResult` 归属。
+- 前端只展示后端返回的结算字段，不自行计算个人贡献比例。
 
 ## 对象关系
 
@@ -118,6 +153,8 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `lootSubmittedAt` | `string \| null` | 战利品提交时间 |
 | `acceptedResult` | `"completed" \| "falsified" \| "overturned" \| "abandoned" \| "overdelivered" \| null` | 目标验收结果 |
 | `completionMultiplier` | `number \| null` | 完成系数 |
+| `objectiveBasePoints` | `number` | 目标总分 |
+| `objectiveSettlementPoints` | `number \| null` | 目标结算积分 |
 
 ### `Result`
 
@@ -130,6 +167,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 | `source` | `"managerDefined" \| "memberProposed"` | 来源 |
 | `definer` | `string` | 定义分归属 |
 | `uncertaintyLevel` | `UncertaintyLevel` | 目标总分来源 |
+| `uncertaintyScore` | `number` | 不确定性分 |
 | `baseline` / `current` / `target` | `number` | 指标进度展示 |
 | `unit` | `string` | 单位 |
 | `direction` | `MetricDirection` | 进度方向 |
