@@ -31,15 +31,6 @@
 | `DELETE` | `/api/tasks/:taskId` | 删除任务及子任务 |
 | `DELETE` | `/api/tasks/:taskId/checklist/:itemId` | 删除子任务 |
 
-已删除接口：
-
-| 路径 | 原因 |
-| --- | --- |
-| `/api/results/:resultId/challenge` | 挑战者不绑定指标 |
-| `/api/results/:resultId/challenge-applications` | 申请挑战在目标层级 |
-| `/api/results/:resultId/priority-decline` | 候选指标优先规则未定 |
-| `/api/results/:resultId/loot` | 战利品提交在目标层级 |
-
 ## 返回集合
 
 `GET /api/tasks-page` 返回：

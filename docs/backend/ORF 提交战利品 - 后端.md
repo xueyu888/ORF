@@ -30,5 +30,3 @@
 - 目标进入 `待验收`。
 - 任务和子任务状态不自动决定目标完成。
 - 后端返回更新后的数据，或要求前端重新拉取 `/api/tasks-page`。
-
-旧接口 `/api/results/:resultId/loot` 和 `targetType=result` 战利品契约删除。
