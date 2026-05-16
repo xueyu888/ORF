@@ -42,6 +42,13 @@ type ChallengeConfirmTarget = {
 };
 
 const difficultyOptions: DifficultyFilter[] = ["all", "入门", "进阶", "破局", "渡劫", "飞升"];
+const difficultyLabelsByRank: Record<number, UncertaintyLevel> = {
+  1: "入门",
+  2: "进阶",
+  3: "破局",
+  4: "渡劫",
+  5: "飞升",
+};
 
 export function BountyHallPage() {
   const {
@@ -175,7 +182,7 @@ export function BountyHallPage() {
         </section>
       )}
 
-      <section className="grid gap-4" aria-label="可申请挑战悬赏指标">
+      <section className="grid gap-4" aria-label="可申请挑战悬赏目标">
         <BountyPanel>
           <Toolbar
             difficultyFilter={difficultyFilter}
@@ -218,7 +225,7 @@ export function BountyHallPage() {
           </div>
         ) : (
           <BountyEmptyState
-            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的可申请悬赏指标" : "当前没有可申请挑战的悬赏指标"}
+            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的可申请悬赏目标" : "当前没有可申请挑战的悬赏目标"}
             description={loadingBounties ? "正在读取悬赏大厅专用接口。" : hasFilters ? "调整搜索或筛选条件后再查看。" : "新的未分配悬赏发布后会出现在这里；已提交的申请等待指挥官确认。"}
           />
         )}
@@ -286,10 +293,10 @@ function Toolbar({
   return (
     <div className="bounty-toolbar">
       <BountyTextInput
-        ariaLabel="搜索悬赏指标"
+        ariaLabel="搜索悬赏目标"
         value={query}
         onValueChange={onQueryChange}
-        placeholder="搜索悬赏指标标题或目标..."
+        placeholder="搜索悬赏目标或指标..."
       />
 
       <div className="bounty-toolbar-controls">
@@ -339,14 +346,14 @@ function RecruitmentCard({
         <div>
           <div className="bounty-card-meta-row">
             <div className="flex flex-wrap items-center gap-2">
-              <Chip>{difficultyLabel(item.result)}</Chip>
+              <Chip>{highestDifficultyLabel(item)}</Chip>
               <Chip>{item.uncertaintyPoints} 分</Chip>
             </div>
             <span>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
           </div>
-          <h3 className="bounty-card-target-title mt-3 line-clamp-3">{item.result.title}</h3>
-          <p className="bounty-card-objective mt-2 line-clamp-1 text-sm">归属目标：{item.objective.title}</p>
-          <ResultStack item={item} />
+          <h3 className="bounty-card-target-title mt-3 line-clamp-3">{item.objective.title}</h3>
+          <p className="bounty-card-description mt-2 line-clamp-2 text-sm">{item.objective.description}</p>
+          <ResultList item={item} />
         </div>
       </button>
       <div className="bounty-card-footer">
@@ -381,15 +388,15 @@ function BountyCard({
         <div>
           <div className="bounty-card-meta-row">
             <div className="flex min-w-0 flex-wrap gap-1.5">
-              <Chip>{difficultyLabel(item.result)}</Chip>
+              <Chip>{highestDifficultyLabel(item)}</Chip>
               <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
             </div>
             <span>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
           </div>
 
-          <h3 className="bounty-card-target-title mt-3 line-clamp-3">{item.result.title}</h3>
-          <p className="bounty-card-objective mt-2 line-clamp-1 text-sm">归属目标：{item.objective.title}</p>
-          <ResultStack item={item} />
+          <h3 className="bounty-card-target-title mt-3 line-clamp-3">{item.objective.title}</h3>
+          <p className="bounty-card-description mt-2 line-clamp-2 text-sm">{item.objective.description}</p>
+          <ResultList item={item} />
           {item.source === "memberProposed" && item.definer && <small className="mt-2 block truncate font-semibold">提出人：{item.definer}</small>}
         </div>
       </button>
@@ -407,20 +414,19 @@ function BountyCard({
   );
 }
 
-function ResultStack({ item }: { item: BountyItem }) {
-  if (item.results.length <= 1) return null;
-
-  const extraResults = item.results.slice(1, 4);
-  const remainingCount = item.results.length - 1 - extraResults.length;
+function ResultList({ item }: { item: BountyItem }) {
+  const visibleResults = item.results.slice(0, 3);
+  const remainingCount = item.results.length - visibleResults.length;
 
   return (
-    <div className="bounty-result-stack" aria-label="同一目标下的其他悬赏指标">
-      {extraResults.map((result) => (
-        <div key={result.id} className="bounty-result-stack-item">
+    <div className="bounty-result-list" aria-label="悬赏指标">
+      <div className="bounty-result-list-label">悬赏指标</div>
+      {visibleResults.map((result) => (
+        <div key={result.id} className="bounty-result-list-item">
           {result.title}
         </div>
       ))}
-      {remainingCount > 0 && <div className="bounty-result-stack-more">另有 {remainingCount} 个悬赏指标</div>}
+      {remainingCount > 0 && <div className="bounty-result-list-more">另有 {remainingCount} 个悬赏指标</div>}
     </div>
   );
 }
@@ -446,7 +452,7 @@ function LightBountyPreview({
   return (
     <BountyDialog
       onClose={onClose}
-      subtitle={resultSummary(item)}
+      subtitle={resultCountLabel(item)}
       title={item.objective.title}
       footer={
         <BountyButton onClick={onAction} disabled={processing}>
@@ -456,21 +462,26 @@ function LightBountyPreview({
       }
     >
       <div className="flex flex-wrap gap-1.5">
-        <Chip>{difficultyLabel(item.result)}</Chip>
+        <Chip>{highestDifficultyLabel(item)}</Chip>
         <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
       </div>
 
       <section className="grid gap-3">
-        <SectionTitle icon={Target}>悬赏口径</SectionTitle>
-        <InfoRow label="衡量要求" value={item.result.metricRequirement ?? item.result.description} />
-        <InfoRow label="完成标准" value={item.result.completionStandard ?? "未填写"} />
+        <SectionTitle icon={Target}>目标说明</SectionTitle>
+        <InfoRow label="说明" value={item.objective.description} />
+        <InfoRow label="成功定义" value={item.objective.successDefinition} />
         {item.definer && <InfoRow label="提出人" value={item.definer} />}
       </section>
 
       <section className="grid gap-3">
-        <SectionTitle icon={Trophy}>挑战判断</SectionTitle>
+        <SectionTitle icon={Trophy}>悬赏指标</SectionTitle>
+        <ResultDetailList results={item.results} />
+      </section>
+
+      <section className="grid gap-3">
+        <SectionTitle icon={Check}>挑战判断</SectionTitle>
         <div className="bounty-metric-grid">
-          <BountyMetricBox label="难度" value={difficultyLabel(item.result)} />
+          <BountyMetricBox label="最高难度" value={highestDifficultyLabel(item)} />
           <BountyMetricBox label="不确定性分" value={`${item.uncertaintyPoints}`} />
           <BountyMetricBox label="剩余时间" value={item.deadline ? remainingTime(item.deadline, now) : "未设置"} />
         </div>
@@ -519,9 +530,9 @@ function ChallengeConfirmModal({
       <BountyCardSurface>
         <div className="p-4">
           <h3 className="line-clamp-2">{item.item.objective.title}</h3>
-          <p className="mt-2 truncate text-sm">{resultSummary(item.item)}</p>
+          <p className="mt-2 truncate text-sm">{resultCountLabel(item.item)}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <Chip>{difficultyLabel(item.item.result)}</Chip>
+            <Chip>{highestDifficultyLabel(item.item)}</Chip>
             <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
           </div>
         </div>
@@ -549,6 +560,19 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ResultDetailList({ results }: { results: Result[] }) {
+  return (
+    <div className="bounty-result-detail-list">
+      {results.map((result) => (
+        <div key={result.id} className="bounty-result-detail-item">
+          <strong>{result.title}</strong>
+          <span>{result.metricRequirement ?? result.description}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" | "gold" | "warning" }) {
   return <BountyBadge tone={tone}>{children}</BountyBadge>;
 }
@@ -570,9 +594,12 @@ function difficultyLabel(result: Result) {
   return result.uncertaintyLevel ?? "进阶";
 }
 
-function resultSummary(item: BountyItem) {
-  if (item.results.length <= 1) return item.result.title;
-  return `${item.results.length} 个悬赏指标 · ${item.result.title}`;
+function highestDifficultyLabel(item: BountyItem) {
+  return difficultyLabelsByRank[item.difficultyRank] ?? difficultyLabel(item.result);
+}
+
+function resultCountLabel(item: BountyItem) {
+  return `${item.results.length} 个悬赏指标`;
 }
 
 function currentCycle(objectives: Objective[]) {

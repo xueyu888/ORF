@@ -259,9 +259,10 @@
   max-width: min(100%, 760px);
 }
 
-.bounty-card-objective {
+.bounty-card-description {
   color: #68788c;
-  font-weight: 850;
+  font-weight: 750;
+  line-height: 1.55;
 }
 
 .bounty-card-meta-row {
@@ -281,7 +282,7 @@
   white-space: nowrap;
 }
 
-.bounty-result-stack {
+.bounty-result-list {
   display: grid;
   gap: 6px;
   margin-top: 14px;
@@ -291,8 +292,15 @@
   padding: 10px 12px;
 }
 
-.bounty-result-stack-item,
-.bounty-result-stack-more {
+.bounty-result-list-label {
+  color: #8a6a30;
+  font-size: 12px;
+  font-weight: 950;
+  line-height: 1.2;
+}
+
+.bounty-result-list-item,
+.bounty-result-list-more {
   position: relative;
   min-width: 0;
   padding-left: 14px;
@@ -302,15 +310,15 @@
   line-height: 1.45;
 }
 
-.bounty-result-stack-item {
+.bounty-result-list-item {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
 
-.bounty-result-stack-item::before,
-.bounty-result-stack-more::before {
+.bounty-result-list-item::before,
+.bounty-result-list-more::before {
   position: absolute;
   top: 0.62em;
   left: 1px;
@@ -321,8 +329,36 @@
   content: "";
 }
 
-.bounty-result-stack-more {
+.bounty-result-list-more {
   color: #7a6b4f;
+}
+
+.bounty-result-detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bounty-result-detail-item {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(203, 177, 121, 0.46);
+  border-radius: 12px;
+  background: rgba(255, 250, 236, 0.68);
+  padding: 10px 12px;
+}
+
+.bounty-result-detail-item strong {
+  color: #21344f;
+  font-size: 14px;
+  font-weight: 950;
+  line-height: 1.35;
+}
+
+.bounty-result-detail-item span {
+  color: #526376;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.5;
 }
 
 .bounty-card-click p,
