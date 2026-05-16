@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, Clock3, MessageSquare, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, RotateCcw, Send, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -101,12 +101,9 @@ function ObjectivePanel({
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const isFrozen = group.objective.stage === "goalFrozen";
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
-  const showAdminActions =
+  const showApplicationReview =
     handlers.canManageFlow &&
-    (group.objective.flowStatus === "candidate" ||
-      group.objective.flowStatus === "reestimating" ||
-      group.objective.flowStatus === "frozen" ||
-      pendingApplications.length > 0);
+    pendingApplications.length > 0;
   const layoutKey = group.bounties
     .map((bounty) => {
       if (handlers.collapsedBountyIds.has(bounty.result.id)) return `${bounty.result.id}:closed`;
@@ -153,7 +150,7 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
-        <EmptySlot />
+        <ObjectiveFlowAction objective={group.objective} handlers={handlers} />
         <AvatarStack names={group.challengers} />
         <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
@@ -166,30 +163,16 @@ function ObjectivePanel({
         ) : null}
       </div>
 
-      {showAdminActions && (
-        <div className="flex flex-wrap items-center gap-2 border-t orf-border px-5 py-3 text-xs">
-          {group.objective.flowStatus === "candidate" && (
-            <button className="orf-control orf-secondary-action inline-flex h-8 items-center px-3 font-semibold" type="button" onClick={() => void handlers.onPublishObjective(group.objective.id)}>
-              发布悬赏
-            </button>
-          )}
-          {group.objective.flowStatus === "reestimating" && (
-            <button className="orf-control orf-primary-action inline-flex h-8 items-center px-3 font-semibold" type="button" onClick={() => void handlers.onFreezeObjective(group.objective.id)}>
-              重估完成并冻结
-            </button>
-          )}
-          {group.objective.flowStatus === "frozen" && (
-            <button className="orf-control orf-secondary-action inline-flex h-8 items-center px-3 font-semibold" type="button" onClick={() => void handlers.onReopenObjectiveReestimate(group.objective.id)}>
-              退回重估
-            </button>
-          )}
+      {showApplicationReview && (
+        <div className="orf-objective-admin-strip">
+          <span className="orf-objective-admin-strip-label">挑战申请</span>
           {pendingApplications.map((application) => (
-            <span key={application.id} className="inline-flex items-center gap-2 rounded-full border orf-border px-2 py-1">
+            <span key={application.id} className="orf-objective-application-pill">
               <span className="font-semibold orf-text-primary">{application.applicant}</span>
-              <button type="button" className="font-semibold text-[#0f766e]" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
+              <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
                 通过
               </button>
-              <button type="button" className="orf-danger-text font-semibold" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
+              <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
                 拒绝
               </button>
             </span>
@@ -211,6 +194,39 @@ function ObjectivePanel({
       </div>
     </section>
   );
+}
+
+function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode["objective"]; handlers: RowHandlers }) {
+  if (!handlers.canManageFlow) return <EmptySlot />;
+
+  if (objective.flowStatus === "candidate") {
+    return (
+      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="发布到悬赏大厅" onClick={() => void handlers.onPublishObjective(objective.id)}>
+        <Send className="h-3.5 w-3.5" />
+        发布
+      </button>
+    );
+  }
+
+  if (objective.flowStatus === "reestimating") {
+    return (
+      <button className="orf-flow-action-button orf-flow-action-primary" type="button" title="重估完成并冻结目标" onClick={() => void handlers.onFreezeObjective(objective.id)}>
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        冻结
+      </button>
+    );
+  }
+
+  if (objective.flowStatus === "frozen") {
+    return (
+      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="退回重估以调整指标" onClick={() => void handlers.onReopenObjectiveReestimate(objective.id)}>
+        <RotateCcw className="h-3.5 w-3.5" />
+        重估
+      </button>
+    );
+  }
+
+  return <EmptySlot />;
 }
 
 function BountyRow({
