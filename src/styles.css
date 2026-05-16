@@ -2785,6 +2785,22 @@ button:disabled {
   color: rgba(255, 248, 232, 0.62);
 }
 
+.orf-topbar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.orf-topbar-title-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #f6d58f;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.2));
+}
+
 .orf-surface-muted {
   background: var(--orf-bg-muted);
 }
