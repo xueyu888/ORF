@@ -11,6 +11,7 @@ const uncertaintyScores: Record<UncertaintyLevel, number> = {
 type ObjectiveChallengeFields = Pick<
   Objective,
   | "finalDueAt"
+  | "flowStatus"
   | "challengers"
   | "assignedChallengers"
   | "challengeApplications"
@@ -65,6 +66,18 @@ function uncertaintyScore(level: UncertaintyLevel | undefined) {
   return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
 }
 
+function inferFlowStatus(objective: LegacyObjective, challengers: string[], assignedChallengers: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
+  if (objective.flowStatus) return objective.flowStatus;
+  if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
+  if (objective.lootSubmittedAt) return "submitted";
+  if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
+  if (challengers.length > 0) return "reestimating";
+  if (assignedChallengers.length > 0) return "recruiting";
+  if (challengeApplications.some((application) => application.status === "pending")) return "applying";
+  if (objective.stage === "resultClaiming") return "open";
+  return "candidate";
+}
+
 function normalizeInitialState(state: LegacyInitialState): OrfState {
   const results: Result[] = state.results.map((item) => {
     const {
@@ -100,6 +113,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     return {
       ...objective,
       finalDueAt,
+      flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
       challengers,
       assignedChallengers,
       challengeApplications,
@@ -114,7 +128,14 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     };
   });
 
-  return { ...state, objectives, results };
+  return {
+    ...state,
+    users: state.users.map((user) => ({ ...user, status: user.status ?? "active" })),
+    objectives,
+    results,
+    objectiveLoot: state.objectiveLoot ?? [],
+    pointLedger: state.pointLedger ?? [],
+  };
 }
 
 const defaultPermissionRules: OrfState["permissionRules"] = [
@@ -130,9 +151,9 @@ const confidenceTrend = [
 
 const legacyInitialOrfState: LegacyInitialState = {
   users: [
-    { id: "user-alex", name: "Alex Chen", email: "alex@orf.local", role: "admin", lastLoginAt: "2026-05-05T09:42:00.000Z" },
-    { id: "user-mia", name: "Mia Zhang", email: "mia@orf.local", role: "member", lastLoginAt: "2026-05-04T18:10:00.000Z" },
-    { id: "user-ethan", name: "Ethan Liu", email: "ethan@orf.local", role: "member", lastLoginAt: "2026-05-03T14:25:00.000Z" },
+    { id: "user-alex", name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastLoginAt: "2026-05-05T09:42:00.000Z" },
+    { id: "user-mia", name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastLoginAt: "2026-05-04T18:10:00.000Z" },
+    { id: "user-ethan", name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastLoginAt: "2026-05-03T14:25:00.000Z" },
   ],
   currentUserId: "user-alex",
   permissionRules: defaultPermissionRules,
@@ -1303,6 +1324,8 @@ const legacyInitialOrfState: LegacyInitialState = {
     },
   ],
   comments: [],
+  objectiveLoot: [],
+  pointLedger: [],
   rules: {
     requireResultForTask: true,
     requireEvidenceForFeedback: true,

@@ -18,9 +18,9 @@ export const bountyStatusLabel: Record<BountyStatus, string> = {
 
 export function bountyStatus(result: Result, actions: Task[], objective?: Objective): BountyStatus {
   if (result.acceptedResult === "completed" || result.acceptedResult === "falsified") return "settled";
-  if (objective?.acceptedResult || objective?.objectiveSettlementPoints != null) return "settled";
-  if (objective?.lootSubmittedAt) return "review";
-  if ((objective?.challengers.length ?? 0) > 0) return "active";
+  if (objective?.flowStatus === "settled" || objective?.acceptedResult || objective?.objectiveSettlementPoints != null) return "settled";
+  if (objective?.flowStatus === "submitted" || objective?.lootSubmittedAt) return "review";
+  if (objective?.flowStatus === "reestimating" || objective?.flowStatus === "frozen" || (objective?.challengers.length ?? 0) > 0) return "active";
   return "open";
 }
 
@@ -33,19 +33,25 @@ export function objectiveComplete(objective: Objective) {
 }
 
 export function objectiveStatusLabel(objective: Objective) {
+  if (objective.flowStatus === "candidate") return "候选中";
+  if (objective.flowStatus === "open") return "可申请";
+  if (objective.flowStatus === "applying") return "申请中";
+  if (objective.flowStatus === "recruiting") return "征召中";
+  if (objective.flowStatus === "reestimating") return "重估中";
+  if (objective.flowStatus === "frozen") return "已冻结";
+  if (objective.flowStatus === "submitted") return "待验收";
+  if (objective.flowStatus === "settled") return "已结算";
+  if (objective.flowStatus === "closed") return "已关闭";
   if (objectiveComplete(objective)) return "已完成";
-  if (objective.lootSubmittedAt) return "待验收";
-  if (objective.challengers.length > 0) return "挑战中";
-  if (objective.challengeApplications.some((application) => application.status === "pending")) return "申请中";
-  if (objective.assignedChallengers.length > 0) return "征召中";
   if (objective.status === "At Risk" || objective.status === "Blocked") return "有风险";
   return "正常";
 }
 
 export function objectiveStatusTone(objective: Objective) {
-  if (objectiveComplete(objective)) return "done";
-  if (objective.lootSubmittedAt) return "review";
-  if (objective.challengers.length > 0 || objective.challengeApplications.some((application) => application.status === "pending")) return "active";
+  if (objective.flowStatus === "settled" || objectiveComplete(objective)) return "done";
+  if (objective.flowStatus === "submitted" || objective.lootSubmittedAt) return "review";
+  if (objective.flowStatus === "applying" || objective.flowStatus === "recruiting" || objective.flowStatus === "reestimating" || objective.flowStatus === "frozen") return "active";
+  if (objective.flowStatus === "candidate" || objective.flowStatus === "closed") return "open";
   if (objective.status === "At Risk" || objective.status === "Blocked") return "warning";
   return "success";
 }

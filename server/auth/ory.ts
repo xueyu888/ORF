@@ -8,6 +8,7 @@ export type AuthenticatedOrfUser = {
   name: string;
   email: string;
   role: "admin" | "member";
+  status: "pending" | "active" | "rejected" | "disabled";
   lastLoginAt: string | null;
 };
 
@@ -174,7 +175,10 @@ async function createDefaultTeamMembership(userId: string): Promise<Authenticate
   return "member";
 }
 
-async function upsertOrfUser(identity: OryIdentity, options: { recordLogin?: boolean } = {}): Promise<AuthenticatedOrfUser> {
+async function upsertOrfUser(
+  identity: OryIdentity,
+  options: { newUserStatus?: AuthenticatedOrfUser["status"]; recordLogin?: boolean } = {},
+): Promise<AuthenticatedOrfUser> {
   const email = identityEmail(identity);
   if (!email) {
     throw new Error("Ory identity does not include traits.email");
@@ -199,6 +203,7 @@ async function upsertOrfUser(identity: OryIdentity, options: { recordLogin?: boo
       name,
       email: existing.email ?? email,
       role,
+      status: existing.status ?? "active",
       lastLoginAt: lastLoginAt ?? existing.lastLoginAt,
     };
   }
@@ -209,12 +214,13 @@ async function upsertOrfUser(identity: OryIdentity, options: { recordLogin?: boo
     id,
     name,
     email,
+    status: options.newUserStatus ?? "pending",
     createdAt: new Date().toISOString().slice(0, 10),
     lastLoginAt: createdLastLoginAt,
   });
 
   const role = await createDefaultTeamMembership(id);
-  return { id, name, email, role, lastLoginAt: createdLastLoginAt };
+  return { id, name, email, role, status: options.newUserStatus ?? "pending", lastLoginAt: createdLastLoginAt };
 }
 
 export async function getAuthenticatedOrfUser(cookie: string | undefined): Promise<AuthenticatedOrfUser | null> {
@@ -350,7 +356,7 @@ export async function loginWithPassword(identifier: string, password: string) {
     throw new Error("Ory login did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { recordLogin: true });
+  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "active", recordLogin: true });
   return { sessionToken: auth.session_token, user };
 }
 
@@ -370,7 +376,7 @@ export async function registerWithPassword(input: { name: string; email: string;
     throw new Error("Ory registration did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { recordLogin: true });
+  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordLogin: true });
   return { sessionToken: auth.session_token, user };
 }
 

@@ -9,12 +9,17 @@ import type {
   Evidence,
   Feedback,
   FeedbackStatus,
+  LootResultClaim,
   MetricDirection,
   Objective,
+  ObjectiveAcceptedResult,
+  ObjectiveLoot,
   OrfStage,
   OrfState,
+  PointLedgerEntry,
   Priority,
   Result,
+  ResultAcceptedResult,
   Task,
   TaskStatus,
   UncertaintyLevel,
@@ -27,18 +32,21 @@ import {
   feedback,
   feedbackCauseCategories,
   objectives,
+  objectiveLoot,
+  pointLedger,
   results,
   resultTrendPoints,
   taskChecklistItems,
   tasks,
   teams,
+  users,
 } from "../db/schema";
 import { getPermissionRulesForTeam } from "./permissionRepository";
 import { getTeamUsers } from "./userRepository";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "permissionRules"
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "pointLedger" | "permissionRules"
 >;
 
 type CommentActor = {
@@ -75,6 +83,8 @@ const difficultyRanks: Record<UncertaintyLevel, number> = {
   渡劫: 4,
   飞升: 5,
 };
+const bountyHallFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting"]);
+const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled", "closed"]);
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
@@ -156,6 +166,29 @@ function uncertaintyScore(level: UncertaintyLevel | null) {
   return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
 }
 
+function isObjectiveTerminal(objective: Pick<Objective, "acceptedResult" | "flowStatus" | "lootSubmittedAt" | "objectiveSettlementPoints">) {
+  return terminalFlowStatuses.has(objective.flowStatus) || Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null);
+}
+
+function completionMultiplierFor(result: ObjectiveAcceptedResult, lootSubmittedAt: string | null, finalDueAt: string) {
+  if (result === "abandoned") return 0;
+  if (result === "overdelivered") return 1.5;
+  if (result === "overturned") return 1;
+  if (result !== "completed" && result !== "falsified") return 0;
+  if (!lootSubmittedAt || !finalDueAt) return 0;
+  return lootSubmittedAt.slice(0, 10) <= finalDueAt ? 1 : 0.5;
+}
+
+function normalizeContributionRatios(input: Array<{ member: string; ratio: number }>, challengers: string[]) {
+  const challengerSet = new Set(challengers);
+  const ratios = input
+    .map((item) => ({ member: item.member.trim(), ratio: Number(item.ratio) }))
+    .filter((item) => challengerSet.has(item.member) && Number.isFinite(item.ratio) && item.ratio >= 0);
+  const total = ratios.reduce((sum, item) => sum + item.ratio, 0);
+  if (ratios.length === 0 || total <= 0) return null;
+  return ratios.map((item) => ({ member: item.member, ratio: item.ratio / total }));
+}
+
 export async function getTaskManagementData(): Promise<TaskManagementData> {
   const [
     objectiveRows,
@@ -166,6 +199,8 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     evidenceRows,
     feedbackRows,
     causeRows,
+    objectiveLootRows,
+    pointLedgerRows,
     teamRows,
   ] = await Promise.all([
     db.select().from(objectives),
@@ -176,6 +211,8 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     db.select().from(evidence),
     db.select().from(feedback),
     db.select().from(feedbackCauseCategories),
+    db.select().from(objectiveLoot),
+    db.select().from(pointLedger),
     db.select({ id: teams.id }).from(teams),
   ]);
   const [commentThreadRows, commentMessageRows] = await getCommentRows();
@@ -308,6 +345,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       whyItMatters: objective.whyItMatters,
       cycle: objective.cycle,
       stage: objective.stage,
+      flowStatus: objective.flowStatus,
       status: objective.status,
       confidence: objective.confidence,
       progress: Math.max(0, Math.min(100, Math.round(objective.progress))),
@@ -332,6 +370,29 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       updatedAt: objective.updatedAt,
     };
   });
+  const objectiveLootItems: ObjectiveLoot[] = objectiveLootRows
+    .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
+    .map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      submittedBy: item.submittedBy,
+      body: item.body,
+      resultClaims: item.resultClaims,
+      selfTestReportUrl: item.selfTestReportUrl,
+      selfTestReportBody: item.selfTestReportBody,
+      submittedAt: item.submittedAt,
+    }));
+  const pointLedgerItems: PointLedgerEntry[] = pointLedgerRows
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      userId: item.userId,
+      memberName: item.memberName,
+      points: item.points,
+      reason: item.reason,
+      createdAt: item.createdAt,
+    }));
   const commentItems: CommentThread[] = [...commentThreadRows]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .map((thread) => ({
@@ -353,6 +414,8 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     evidence: evidenceItems,
     feedback: feedbackItems,
     comments: commentItems,
+    objectiveLoot: objectiveLootItems,
+    pointLedger: pointLedgerItems,
     permissionRules,
   };
 }
@@ -412,14 +475,21 @@ function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
 }
 
 function objectiveClosedForBountyHall(objective: Objective) {
-  return Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null);
+  return !bountyHallFlowStatuses.has(objective.flowStatus) || isObjectiveTerminal(objective);
 }
 
 function objectiveAcceptedForBountyHall(objective: Objective) {
-  return objective.challengers.length > 0;
+  return objective.challengers.length > 0 || objective.flowStatus === "reestimating" || objective.flowStatus === "frozen";
 }
 
 function contributionSummaryFor(data: TaskManagementData, member: string) {
+  const ledgerPoints = data.pointLedger
+    .filter((entry) => entry.memberName === member)
+    .reduce((sum, entry) => sum + entry.points, 0);
+  if (ledgerPoints > 0) {
+    return { points: ledgerPoints };
+  }
+
   return {
     points: data.objectives.reduce((sum, objective) => {
       if (!objective.challengers.includes(member)) return sum;
@@ -451,7 +521,7 @@ export async function getBountyHallData(member: string): Promise<BountyHallData>
     }];
   }).sort(compareBountyItems);
 
-  const availableItems = items.filter((item) => !item.isRecruitment && !item.hasCurrentApplication);
+  const availableItems = items.filter((item) => !item.isRecruitment);
   const objectiveOptionIds = new Set(availableItems.map((item) => item.objective.id));
 
   return {
@@ -496,6 +566,8 @@ export async function getMyChallengesData(member: string, includeAll = false): P
     evidence: data.evidence.filter((item) => resultIds.has(item.linkedResultId)),
     feedback: data.feedback.filter((item) => objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)),
     comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
+    objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
+    pointLedger: data.pointLedger.filter((item) => objectiveIds.has(item.objectiveId)),
     permissionRules: data.permissionRules,
   };
 }
@@ -546,6 +618,7 @@ export async function createObjective(input: CreateObjectiveInput, context: { te
     whyItMatters: input.whyItMatters,
     cycle: input.cycle,
     stage: "orfReestimate",
+    flowStatus: "candidate",
     status: "Draft",
     confidence: 50,
     progress: 0,
@@ -623,10 +696,12 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
 export type AcceptObjectiveChallengeOutcome =
   | { status: "accepted"; objective: Objective }
   | { status: "alreadyAccepted"; challengers: string[] }
+  | { status: "forbidden" }
   | { status: "invalidDueDate" }
+  | { status: "closed" }
   | { status: "notFound" };
 
-export async function acceptObjectiveChallenge(objectiveId: string, challenger: string): Promise<AcceptObjectiveChallengeOutcome> {
+export async function acceptObjectiveChallenge(objectiveId: string, challenger: string, actorId?: string): Promise<AcceptObjectiveChallengeOutcome> {
   const nextChallenger = challenger.trim();
   if (!nextChallenger) {
     return { status: "notFound" };
@@ -641,6 +716,16 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
   if (currentChallengers.includes(nextChallenger)) {
     return { status: "alreadyAccepted", challengers: currentChallengers };
   }
+  if (isObjectiveTerminal(objective)) {
+    return { status: "closed" };
+  }
+
+  const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+  const applications = objective.challengeApplications ?? [];
+  const hasApprovedApplication = applications.some((application) => application.applicant === nextChallenger && application.status === "approved");
+  if (!assignedChallengers.includes(nextChallenger) && !hasApprovedApplication) {
+    return { status: "forbidden" };
+  }
 
   const acceptedAt = nowIso();
   const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
@@ -652,15 +737,17 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     .update(objectives)
     .set({
       challengers: [...currentChallengers, nextChallenger],
-      assignedChallengers: uniqueMembers(objective.assignedChallengers ?? []).filter((member) => member !== nextChallenger),
+      assignedChallengers: assignedChallengers.filter((member) => member !== nextChallenger),
+      flowStatus: "reestimating",
+      stage: "orfReestimate",
       acceptedAt: objective.acceptedAt ?? acceptedAt,
       confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
-      challengeApplications: (objective.challengeApplications ?? []).map((application) =>
-        application.applicant === nextChallenger && application.status === "pending" ? { ...application, status: "approved", decidedAt: acceptedAt } : application,
+      challengeApplications: applications.map((application) =>
+        application.applicant === nextChallenger && application.status === "approved" ? { ...application, decidedAt: application.decidedAt ?? acceptedAt } : application,
       ),
       status: objective.status === "Draft" ? "On Track" : objective.status,
       updatedAt: today(),
-      updatedBy: objective.updatedBy,
+      updatedBy: actorId ?? objective.updatedBy,
     })
     .where(eq(objectives.id, objectiveId));
 
@@ -673,6 +760,7 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "applied"; objective: Objective }
   | { status: "alreadyApplied" }
   | { status: "alreadyAccepted"; challengers: string[] }
+  | { status: "closed" }
   | { status: "notFound" };
 
 export async function applyForObjectiveChallenge(objectiveId: string, applicant: string): Promise<ApplyObjectiveChallengeOutcome> {
@@ -689,6 +777,9 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
   const challengers = uniqueMembers(objective.challengers ?? []);
   if (challengers.includes(nextApplicant)) {
     return { status: "alreadyAccepted", challengers };
+  }
+  if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus)) {
+    return { status: "closed" };
   }
 
   const applications = objective.challengeApplications ?? [];
@@ -708,6 +799,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     .update(objectives)
     .set({
       challengeApplications: [application, ...applications],
+      flowStatus: objective.flowStatus === "recruiting" ? "recruiting" : "applying",
       updatedAt: today(),
     })
     .where(eq(objectives.id, objectiveId));
@@ -715,6 +807,178 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
   const data = await getTaskManagementData();
   const applied = data.objectives.find((item) => item.id === objectiveId);
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
+}
+
+export type ObjectiveFlowMutationOutcome =
+  | { status: "ok"; objective: Objective }
+  | { status: "invalid" }
+  | { status: "notFound" };
+
+async function objectiveOutcome(objectiveId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const data = await getTaskManagementData();
+  const objective = data.objectives.find((item) => item.id === objectiveId);
+  return objective ? { status: "ok", objective } : { status: "notFound" };
+}
+
+export async function publishObjective(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const updated = await db
+    .update(objectives)
+    .set({ flowStatus: "open", stage: "resultClaiming", status: "Draft", updatedAt: today(), updatedBy: actorId })
+    .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "candidate")))
+    .returning({ id: objectives.id });
+  if (updated.length === 0) return { status: "invalid" };
+  return objectiveOutcome(objectiveId);
+}
+
+export async function approveObjectiveChallengeApplication(
+  objectiveId: string,
+  applicationId: string,
+  actorId: string,
+): Promise<ObjectiveFlowMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) return { status: "notFound" };
+  if (isObjectiveTerminal(objective)) return { status: "invalid" };
+
+  const applications = objective.challengeApplications ?? [];
+  const application = applications.find((item) => item.id === applicationId && item.status === "pending");
+  if (!application) return { status: "notFound" };
+
+  const acceptedAt = nowIso();
+  const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
+  if (!nextConfirmationDueAt) return { status: "invalid" };
+
+  const challengers = uniqueMembers([...(objective.challengers ?? []), application.applicant]);
+  await db
+    .update(objectives)
+    .set({
+      challengers,
+      flowStatus: "reestimating",
+      stage: "orfReestimate",
+      acceptedAt: objective.acceptedAt ?? acceptedAt,
+      confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
+      challengeApplications: applications.map((item) =>
+        item.id === applicationId ? { ...item, status: "approved", decidedAt: acceptedAt, decidedBy: actorId } : item,
+      ),
+      status: objective.status === "Draft" ? "On Track" : objective.status,
+      updatedAt: today(),
+      updatedBy: actorId,
+    })
+    .where(eq(objectives.id, objectiveId));
+
+  return objectiveOutcome(objectiveId);
+}
+
+export async function rejectObjectiveChallengeApplication(
+  objectiveId: string,
+  applicationId: string,
+  actorId: string,
+): Promise<ObjectiveFlowMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) return { status: "notFound" };
+  const applications = objective.challengeApplications ?? [];
+  if (!applications.some((item) => item.id === applicationId && item.status === "pending")) return { status: "notFound" };
+  const nextApplications = applications.map((item) =>
+    item.id === applicationId ? { ...item, status: "declined" as const, decidedAt: nowIso(), decidedBy: actorId } : item,
+  );
+  const hasPending = nextApplications.some((item) => item.status === "pending");
+  const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+  await db
+    .update(objectives)
+    .set({
+      challengeApplications: nextApplications,
+      flowStatus: assignedChallengers.length > 0 ? "recruiting" : hasPending ? "applying" : "open",
+      updatedAt: today(),
+      updatedBy: actorId,
+    })
+    .where(eq(objectives.id, objectiveId));
+  return objectiveOutcome(objectiveId);
+}
+
+export async function recruitObjectiveChallengers(
+  objectiveId: string,
+  members: string[],
+  actorId: string,
+): Promise<ObjectiveFlowMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) return { status: "notFound" };
+  if (isObjectiveTerminal(objective) || objective.challengers.length > 0) return { status: "invalid" };
+  const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...members]);
+  if (assignedChallengers.length === 0) return { status: "invalid" };
+  await db
+    .update(objectives)
+    .set({ assignedChallengers, flowStatus: "recruiting", updatedAt: today(), updatedBy: actorId })
+    .where(eq(objectives.id, objectiveId));
+  return objectiveOutcome(objectiveId);
+}
+
+export async function declineObjectiveChallenge(objectiveId: string, member: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) return { status: "notFound" };
+  const nextAssigned = uniqueMembers(objective.assignedChallengers ?? []).filter((item) => item !== member);
+  const applications = (objective.challengeApplications ?? []).map((item) =>
+    item.applicant === member && item.status === "approved" ? { ...item, status: "declined" as const, decidedAt: nowIso(), decidedBy: actorId } : item,
+  );
+  await db
+    .update(objectives)
+    .set({
+      assignedChallengers: nextAssigned,
+      challengeApplications: applications,
+      flowStatus: nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
+      updatedAt: today(),
+      updatedBy: actorId,
+    })
+    .where(eq(objectives.id, objectiveId));
+  return objectiveOutcome(objectiveId);
+}
+
+export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const updated = await db
+    .update(objectives)
+    .set({ flowStatus: "frozen", stage: "goalFrozen", confirmedAt: nowIso(), updatedAt: today(), updatedBy: actorId })
+    .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "reestimating")))
+    .returning({ id: objectives.id });
+  if (updated.length === 0) return { status: "invalid" };
+  return objectiveOutcome(objectiveId);
+}
+
+export async function reopenObjectiveReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const updated = await db
+    .update(objectives)
+    .set({ flowStatus: "reestimating", stage: "orfReestimate", updatedAt: today(), updatedBy: actorId })
+    .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "frozen")))
+    .returning({ id: objectives.id });
+  if (updated.length === 0) return { status: "invalid" };
+  return objectiveOutcome(objectiveId);
+}
+
+export async function canEditResultDuringReestimate(resultId: string, member: string): Promise<boolean> {
+  const actorName = member.trim();
+  if (!actorName) return false;
+
+  const [row] = await db
+    .select({
+      flowStatus: objectives.flowStatus,
+      challengers: objectives.challengers,
+    })
+    .from(results)
+    .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+    .where(eq(results.id, resultId))
+    .limit(1);
+
+  return row?.flowStatus === "reestimating" && uniqueMembers(row.challengers ?? []).includes(actorName);
+}
+
+export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string): Promise<boolean> {
+  const actorName = member.trim();
+  if (!actorName) return false;
+
+  const [objective] = await db
+    .select({ flowStatus: objectives.flowStatus, challengers: objectives.challengers })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+
+  return objective?.flowStatus === "reestimating" && uniqueMembers(objective.challengers ?? []).includes(actorName);
 }
 
 export type CreateFeedbackInput = Pick<
@@ -1131,28 +1395,180 @@ export async function deleteCommentMessage(
   return threadRemoved ? { status: "ok" } : { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
 
-export async function submitObjectiveLootComment(objectiveId: string, body: string, actor: CommentActor): Promise<CommentMutationOutcome> {
+export interface SubmitObjectiveLootInput {
+  body: string;
+  resultClaims: LootResultClaim[];
+  selfTestReportUrl?: string | null;
+  selfTestReportBody?: string | null;
+}
+
+export type ObjectiveLootMutationOutcome =
+  | { status: "ok"; loot: ObjectiveLoot }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalid" }
+  | { status: "closed" };
+
+export async function submitObjectiveLoot(
+  objectiveId: string,
+  input: SubmitObjectiveLootInput,
+  actor: Pick<CommentActor, "id" | "name" | "role">,
+): Promise<ObjectiveLootMutationOutcome> {
+  const body = input.body.trim();
+  if (!body) {
+    return { status: "invalid" };
+  }
+
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) {
     return { status: "notFound" };
   }
 
-  const outcome = await createComment(
-    {
-      targetType: "objective",
-      targetId: objective.id,
-      targetTitle: objective.title,
-      body: `战利品提交：${body}`,
-    },
-    actor,
-  );
-  if (outcome.status !== "ok") {
-    return outcome;
+  if (objective.flowStatus !== "frozen") {
+    return { status: "closed" };
   }
 
-  await db.update(objectives).set({ lootSubmittedAt: nowIso(), updatedAt: today() }).where(eq(objectives.id, objectiveId));
+  if (!uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
+    return { status: "forbidden" };
+  }
 
-  return outcome;
+  const objectiveResults = await db.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
+  const resultIds = new Set(objectiveResults.map((result) => result.id));
+  const claimsByResult = new Map<string, LootResultClaim>();
+  for (const claim of input.resultClaims) {
+    if (!resultIds.has(claim.resultId)) continue;
+    claimsByResult.set(claim.resultId, {
+      resultId: claim.resultId,
+      claim: claim.claim,
+      evidenceText: claim.evidenceText.trim(),
+    });
+  }
+
+  if (claimsByResult.size !== resultIds.size) {
+    return { status: "invalid" };
+  }
+
+  const submittedAt = nowIso();
+  const lootId = makeId("loot");
+  await db.transaction(async (tx) => {
+    await tx.insert(objectiveLoot).values({
+      id: lootId,
+      teamId: objective.teamId,
+      objectiveId: objective.id,
+      submittedBy: actor.name,
+      body,
+      resultClaims: Array.from(claimsByResult.values()),
+      selfTestReportUrl: input.selfTestReportUrl?.trim() || null,
+      selfTestReportBody: input.selfTestReportBody?.trim() || null,
+      submittedAt,
+    });
+    await tx
+      .update(objectives)
+      .set({ lootSubmittedAt: submittedAt, flowStatus: "submitted", updatedAt: today(), updatedBy: actor.id })
+      .where(eq(objectives.id, objectiveId));
+  });
+
+  const data = await getTaskManagementData();
+  const loot = data.objectiveLoot.find((item) => item.id === lootId);
+  return loot ? { status: "ok", loot } : { status: "notFound" };
+}
+
+export interface ReviewObjectiveLootInput {
+  lootId?: string;
+  acceptedResult: ObjectiveAcceptedResult;
+  resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
+  contributionRatios?: Array<{ member: string; ratio: number }>;
+  reason?: string;
+}
+
+export async function reviewObjectiveLoot(
+  objectiveId: string,
+  input: ReviewObjectiveLootInput,
+  actorId: string,
+): Promise<ObjectiveFlowMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) return { status: "notFound" };
+  if (objective.flowStatus !== "submitted" || !objective.lootSubmittedAt) return { status: "invalid" };
+
+  const lootRows = await db
+    .select()
+    .from(objectiveLoot)
+    .where(eq(objectiveLoot.objectiveId, objectiveId));
+  const sortedLootRows = [...lootRows].sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
+  const loot = input.lootId ? sortedLootRows.find((item) => item.id === input.lootId) : sortedLootRows[0];
+  if (!loot) return { status: "notFound" };
+
+  const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
+  const resultIds = new Set(resultRows.map((result) => result.id));
+  const claimByResult = new Map(loot.resultClaims.map((claim) => [claim.resultId, claim]));
+  const reviewByResult = new Map(
+    (input.resultReviews ?? [])
+      .filter((review) => resultIds.has(review.resultId))
+      .map((review) => [review.resultId, review.acceptedResult]),
+  );
+
+  const acceptedResultFor = (resultId: string): ResultAcceptedResult => {
+    const reviewed = reviewByResult.get(resultId);
+    if (reviewed) return reviewed;
+    const claim = claimByResult.get(resultId)?.claim;
+    if (claim === "completed" || claim === "falsified") return claim;
+    return "failed";
+  };
+
+  const basePoints = resultRows.reduce((sum, result) => sum + (result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel)), 0);
+  const completionMultiplier = completionMultiplierFor(input.acceptedResult, loot.submittedAt, objective.finalDueAt);
+  const settlementPoints = Number((basePoints * completionMultiplier).toFixed(2));
+  const challengers = uniqueMembers(objective.challengers ?? []);
+  const normalizedRatios =
+    normalizeContributionRatios(input.contributionRatios ?? [], challengers) ??
+    (challengers.length > 0 ? challengers.map((member) => ({ member, ratio: 1 / challengers.length })) : []);
+  const memberRows = normalizedRatios.length > 0
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.name, normalizedRatios.map((item) => item.member)))
+    : [];
+  const userIdByName = new Map(memberRows.map((user) => [user.name, user.id]));
+  const createdAt = nowIso();
+  const reason = input.reason?.trim() || `目标结算：${objective.title}`;
+
+  await db.transaction(async (tx) => {
+    await Promise.all(
+      resultRows.map((result) =>
+        tx
+          .update(results)
+          .set({ acceptedResult: acceptedResultFor(result.id), updatedBy: actorId })
+          .where(eq(results.id, result.id)),
+      ),
+    );
+    await tx.delete(pointLedger).where(eq(pointLedger.objectiveId, objectiveId));
+    if (normalizedRatios.length > 0) {
+      await tx.insert(pointLedger).values(
+        normalizedRatios.map((item) => ({
+          id: makeId("points"),
+          teamId: objective.teamId,
+          objectiveId: objective.id,
+          userId: userIdByName.get(item.member) ?? null,
+          memberName: item.member,
+          points: Number((settlementPoints * item.ratio).toFixed(2)),
+          reason,
+          createdAt,
+        })),
+      );
+    }
+    await tx
+      .update(objectives)
+      .set({
+        flowStatus: "settled",
+        stage: "goalFrozen",
+        acceptedResult: input.acceptedResult,
+        completionMultiplier,
+        objectiveBasePoints: basePoints,
+        objectiveSettlementPoints: settlementPoints,
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId));
+  });
+
+  return objectiveOutcome(objectiveId);
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task | null> {

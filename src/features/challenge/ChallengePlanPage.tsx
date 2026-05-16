@@ -18,6 +18,7 @@ import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, Challe
 export function ChallengePlanPage() {
   const {
     addComment,
+    approveChallengeApplication,
     createTaskChecklistItem,
     currentUser,
     deleteCommentMessage,
@@ -30,6 +31,10 @@ export function ChallengePlanPage() {
     moveTaskChecklistItem,
     notify,
     openModal,
+    publishObjective,
+    freezeObjective,
+    rejectChallengeApplication,
+    reopenObjectiveReestimate,
     setTaskCompletion,
     state,
     updateCommentMessage,
@@ -118,6 +123,11 @@ export function ChallengePlanPage() {
   };
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
+    if (target.type === "bounty" && action === "edit") {
+      const objective = challengeState.objectives.find((item) => item.id === target.objectiveId);
+      if (objective?.flowStatus === "reestimating" && objective.challengers.includes(currentMember)) return true;
+    }
+
     if (canAccessTarget(challengeState, role, target, action)) return true;
     const key = permissionKeyForChallengeAction(resourceForTarget(target), action);
     if (key) notify(permissionDeniedMessage(key));
@@ -125,7 +135,9 @@ export function ChallengePlanPage() {
   };
 
   const addBounty = (objectiveId: string) => {
-    if (requirePermissionKey("result.create")) {
+    const objective = challengeState.objectives.find((item) => item.id === objectiveId);
+    const canAdjustDuringReestimate = objective?.flowStatus === "reestimating" && objective.challengers.includes(currentMember);
+    if (canAdjustDuringReestimate || requirePermissionKey("result.create")) {
       openModal({ type: "newResult", objectiveId });
     }
   };
@@ -277,14 +289,20 @@ export function ChallengePlanPage() {
           onAddAction: addAction,
           onAddBounty: addBounty,
           onAddSubAction: addSubAction,
+          onApproveApplication: approveChallengeApplication,
           onCancelEdit: () => setEditingTarget(null),
           onEditTarget: beginEdit,
+          onFreezeObjective: freezeObjective,
           onOpenActionChange: setOpenActionId,
+          onPublishObjective: publishObjective,
+          onRejectApplication: rejectChallengeApplication,
+          onReopenObjectiveReestimate: reopenObjectiveReestimate,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
           onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
           openActionId,
+          canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
         }}
         now={now}
         scope={scope}

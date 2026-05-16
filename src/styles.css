@@ -2285,6 +2285,19 @@ button:disabled {
   font-weight: 900;
 }
 
+.orf-user-status-pending {
+  border-color: rgba(215, 173, 95, 0.34);
+  background: rgba(255, 226, 160, 0.22);
+  color: #7a541b;
+}
+
+.orf-user-status-rejected,
+.orf-user-status-disabled {
+  border-color: rgba(220, 59, 80, 0.22);
+  background: rgba(220, 59, 80, 0.08);
+  color: #b42318;
+}
+
 .orf-user-last-login {
   color: #2f435c;
   font-size: 13px;

@@ -31,15 +31,21 @@ type RowHandlers = {
   commentCounts: Map<string, number>;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
+  canManageFlow: boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
   onActiveActionChange: (id: string | null) => void;
   onAddAction: (bounty: Result) => void;
   onAddBounty: (objectiveId: string) => void;
   onAddSubAction: (actionId: string, afterItemId?: string) => void;
+  onApproveApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCancelEdit: () => void;
   onEditTarget: (target: ChallengeTarget) => void;
+  onFreezeObjective: (objectiveId: string) => Promise<boolean>;
   onOpenActionChange: (id: string | null) => void;
+  onPublishObjective: (objectiveId: string) => Promise<boolean>;
+  onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
+  onReopenObjectiveReestimate: (objectiveId: string) => Promise<boolean>;
   onSaveTitle: (target: ChallengeTarget, title: string) => void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -94,6 +100,13 @@ function ObjectivePanel({
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const isFrozen = group.objective.stage === "goalFrozen";
+  const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
+  const showAdminActions =
+    handlers.canManageFlow &&
+    (group.objective.flowStatus === "candidate" ||
+      group.objective.flowStatus === "reestimating" ||
+      group.objective.flowStatus === "frozen" ||
+      pendingApplications.length > 0);
   const layoutKey = group.bounties
     .map((bounty) => {
       if (handlers.collapsedBountyIds.has(bounty.result.id)) return `${bounty.result.id}:closed`;
@@ -146,12 +159,43 @@ function ObjectivePanel({
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
-        {scope === "mine" ? (
+        {scope === "mine" && group.objective.flowStatus === "frozen" ? (
           <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/objectives/${group.objective.id}/loot`}>
             提交战利品
           </Link>
         ) : null}
       </div>
+
+      {showAdminActions && (
+        <div className="flex flex-wrap items-center gap-2 border-t orf-border px-5 py-3 text-xs">
+          {group.objective.flowStatus === "candidate" && (
+            <button className="orf-control orf-secondary-action inline-flex h-8 items-center px-3 font-semibold" type="button" onClick={() => void handlers.onPublishObjective(group.objective.id)}>
+              发布悬赏
+            </button>
+          )}
+          {group.objective.flowStatus === "reestimating" && (
+            <button className="orf-control orf-primary-action inline-flex h-8 items-center px-3 font-semibold" type="button" onClick={() => void handlers.onFreezeObjective(group.objective.id)}>
+              重估完成并冻结
+            </button>
+          )}
+          {group.objective.flowStatus === "frozen" && (
+            <button className="orf-control orf-secondary-action inline-flex h-8 items-center px-3 font-semibold" type="button" onClick={() => void handlers.onReopenObjectiveReestimate(group.objective.id)}>
+              退回重估
+            </button>
+          )}
+          {pendingApplications.map((application) => (
+            <span key={application.id} className="inline-flex items-center gap-2 rounded-full border orf-border px-2 py-1">
+              <span className="font-semibold orf-text-primary">{application.applicant}</span>
+              <button type="button" className="font-semibold text-[#0f766e]" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
+                通过
+              </button>
+              <button type="button" className="orf-danger-text font-semibold" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
+                拒绝
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="orf-objective-body">
         {group.bounties.map((bounty) => (

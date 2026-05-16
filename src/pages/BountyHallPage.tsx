@@ -399,8 +399,8 @@ function ChallengeConfirmModal({
   const title = item.action === "accept" ? "接受后会进入你的挑战页" : "提交后等待指挥官确认";
   const description =
     item.action === "accept"
-      ? "接受挑战后会成为当前挑战者；执行行动项、提交战利品和验收结算都在挑战页处理。"
-      : "申请挑战只表达负责意愿，不会直接成为挑战者；指挥官确认后，你再接受挑战并进入确认期。";
+      ? "接受挑战后会成为当前挑战者；目标进入重估，重估完成后由指挥官冻结。"
+      : "申请挑战只表达负责意愿，不会直接成为挑战者；指挥官确认后，目标进入重估。";
 
   return (
     <BountyDialog

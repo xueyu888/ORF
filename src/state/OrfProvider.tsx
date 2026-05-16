@@ -8,9 +8,12 @@ import type {
   CommentTargetType,
   Feedback,
   FeedbackStatus,
+  LootResultClaim,
+  ObjectiveAcceptedResult,
   OrfState,
   OrfUser,
   Result,
+  ResultAcceptedResult,
   Task,
   TaskStatus,
   BountySource,
@@ -21,6 +24,21 @@ type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "res
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
+type SubmitLootInput = {
+  objectiveId: string;
+  body: string;
+  resultClaims: LootResultClaim[];
+  selfTestReportUrl?: string | null;
+  selfTestReportBody?: string | null;
+  author?: string;
+};
+type ReviewObjectiveLootInput = {
+  lootId?: string;
+  acceptedResult: ObjectiveAcceptedResult;
+  resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
+  contributionRatios?: Array<{ member: string; ratio: number }>;
+  reason?: string;
+};
 
 interface ModalState {
   type: ModalType;
@@ -41,6 +59,7 @@ interface OrfContextValue {
   authReady: boolean;
   dataReady: boolean;
   isAuthenticated: boolean;
+  isApproved: boolean;
   isAdmin: boolean;
   modal: ModalState;
   toasts: ToastMessage[];
@@ -54,8 +73,16 @@ interface OrfContextValue {
   resetState: () => void;
   createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => void : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => void;
+  publishObjective: (objectiveId: string) => Promise<boolean>;
+  recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
+  approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
+  rejectChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   applyForBounty: (objectiveId: string) => Promise<boolean>;
   acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
+  declineBountyChallenge: (objectiveId: string) => Promise<boolean>;
+  freezeObjective: (objectiveId: string) => Promise<boolean>;
+  reopenObjectiveReestimate: (objectiveId: string) => Promise<boolean>;
+  reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -70,7 +97,7 @@ interface OrfContextValue {
   moveResult: OrfFlowStore["moveResult"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTaskChecklistItem: OrfFlowStore["moveTaskChecklistItem"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
-  submitLoot: OrfFlowStore["submitLoot"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => Promise<boolean> : never;
+  submitLoot: (input: SubmitLootInput) => Promise<boolean>;
   deleteObjective: (objectiveId: string) => void;
   deleteResult: (resultId: string) => void;
   deleteTask: (taskId: string) => void;
@@ -83,6 +110,9 @@ interface OrfContextValue {
   logout: () => void;
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
+  disableUser: (userId: string) => Promise<boolean>;
+  approveRegistrationRequest: (userId: string) => Promise<boolean>;
+  rejectRegistrationRequest: (userId: string) => Promise<boolean>;
   updateRolePermissionRules: (role: UserRole, rules: OrfState["permissionRules"]) => Promise<boolean>;
   addComment: (input: {
     targetType: CommentTargetType;
@@ -115,6 +145,8 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     evidence: data.evidence,
     feedback: data.feedback,
     comments: data.comments ?? state.comments ?? [],
+    objectiveLoot: data.objectiveLoot ?? state.objectiveLoot ?? [],
+    pointLedger: data.pointLedger ?? state.pointLedger ?? [],
     permissionRules: data.permissionRules,
   });
 }
@@ -318,6 +350,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
   const isAuthenticated = currentUser !== null;
+  const isApproved = currentUser?.status === "active";
   const isAdmin = currentUser?.role === "admin";
   const refreshAuthSession = useCallback(async () => {
     try {
@@ -386,7 +419,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   }, [refreshAuthSession]);
 
   useEffect(() => {
-    if (!authReady || !isAuthenticated) {
+    if (!authReady || !isAuthenticated || !isApproved) {
       return;
     }
 
@@ -427,7 +460,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, isAdmin, isAuthenticated]);
+  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, isAdmin, isAuthenticated, isApproved]);
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);
@@ -474,6 +507,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       authReady,
       dataReady,
       isAuthenticated,
+      isApproved,
       isAdmin,
       modal,
       toasts,
@@ -512,7 +546,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           source: input.source ?? "managerDefined",
           definer: input.definer ?? currentUser?.name ?? "",
         };
-        if (payload.source !== "memberProposed" && !hasPermission(currentUser, state.permissionRules, "result.create")) {
+        const objective = state.objectives.find((item) => item.id === payload.objectiveId);
+        const canAdjustDuringReestimate = Boolean(objective?.flowStatus === "reestimating" && currentUser?.name && objective.challengers.includes(currentUser.name));
+        if (payload.source !== "memberProposed" && !hasPermission(currentUser, state.permissionRules, "result.create") && !canAdjustDuringReestimate) {
           notify("没有新建悬赏指标权限");
           return;
         }
@@ -527,6 +563,57 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             notify(businessMutationFailureMessage(error, "悬赏指标创建失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
+      },
+      publishObjective: async (objectiveId) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/publish`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          notify("目标已发布到悬赏大厅");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "目标发布失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      recruitObjectiveChallengers: async (objectiveId, members) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/recruitments`, {
+            method: "POST",
+            body: JSON.stringify({ members }),
+          });
+          await refreshTaskManagementData();
+          notify("挑战者已征召");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "征召失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      approveChallengeApplication: async (objectiveId, applicationId) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications/${encodeURIComponent(applicationId)}/approve`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          notify("挑战申请已确认，目标进入重估");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "确认挑战申请失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      rejectChallengeApplication: async (objectiveId, applicationId) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications/${encodeURIComponent(applicationId)}/reject`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          notify("挑战申请已拒绝");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "拒绝挑战申请失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       applyForBounty: async (objectiveId) => {
         const applicant = currentUser?.name ?? "";
@@ -562,6 +649,57 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return true;
         } catch (error) {
           notify(bountyMutationFailureMessage(error, "接受挑战失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      declineBountyChallenge: async (objectiveId) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge/decline`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          notify("已拒绝征召");
+          return true;
+        } catch (error) {
+          notify(bountyMutationFailureMessage(error, "拒绝征召失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      freezeObjective: async (objectiveId) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/freeze`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          notify("目标已冻结");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "冻结目标失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      reopenObjectiveReestimate: async (objectiveId) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/reopen-reestimate`, { method: "PATCH" });
+          await refreshTaskManagementData();
+          notify("目标已回到重估");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "重新重估失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      reviewObjectiveLoot: async (objectiveId, input) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
+            method: "POST",
+            body: JSON.stringify(input),
+          });
+          await refreshTaskManagementData();
+          notify("战利品已验收结算");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "战利品验收失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
@@ -806,7 +944,12 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         try {
           await apiRequest(`/api/objectives/${encodeURIComponent(input.objectiveId)}/loot`, {
             method: "POST",
-            body: JSON.stringify({ body: input.body }),
+            body: JSON.stringify({
+              body: input.body,
+              resultClaims: input.resultClaims,
+              selfTestReportUrl: input.selfTestReportUrl,
+              selfTestReportBody: input.selfTestReportBody,
+            }),
           });
           await refreshTaskManagementData();
           notify("战利品已提交");
@@ -863,6 +1006,39 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return true;
         } catch (error) {
           notify(userMutationFailureMessage(error, "用户删除失败"));
+          void refreshUsers().catch(() => undefined);
+          return false;
+        }
+      },
+      disableUser: async (userId) => {
+        try {
+          const data = await apiJson<UsersResponse>(`/api/users/${encodeURIComponent(userId)}/disable`, { method: "PATCH" });
+          commit(mergeUsers(state, data), "用户已停用");
+          return true;
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "用户停用失败"));
+          void refreshUsers().catch(() => undefined);
+          return false;
+        }
+      },
+      approveRegistrationRequest: async (userId) => {
+        try {
+          const data = await apiJson<UsersResponse>(`/api/registration-requests/${encodeURIComponent(userId)}/approve`, { method: "PATCH" });
+          commit(mergeUsers(state, data), "注册申请已通过");
+          return true;
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "注册审核失败"));
+          void refreshUsers().catch(() => undefined);
+          return false;
+        }
+      },
+      rejectRegistrationRequest: async (userId) => {
+        try {
+          const data = await apiJson<UsersResponse>(`/api/registration-requests/${encodeURIComponent(userId)}/reject`, { method: "PATCH" });
+          commit(mergeUsers(state, data), "注册申请已拒绝");
+          return true;
+        } catch (error) {
+          notify(userMutationFailureMessage(error, "注册审核失败"));
           void refreshUsers().catch(() => undefined);
           return false;
         }
@@ -973,6 +1149,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       authenticateWithPassword,
       currentUser,
       isAdmin,
+      isApproved,
       isAuthenticated,
       modal,
       refreshPermissionRules,

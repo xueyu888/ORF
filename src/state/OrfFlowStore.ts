@@ -5,7 +5,14 @@ type Placement = "before" | "after";
 type MoveResultInput = { resultId: string; objectiveId: string; referenceResultId: string; placement: Placement };
 type MoveTaskInput = { taskId: string; toResultId: string; referenceTaskId?: string; placement?: Placement };
 type MoveSubtaskInput = { itemId: string; fromTaskId: string; toTaskId: string; referenceItemId?: string; placement?: Placement };
-type SubmitLootInput = { objectiveId: string; body: string; author?: string };
+type SubmitLootInput = {
+  objectiveId: string;
+  body: string;
+  author?: string;
+  resultClaims?: OrfState["objectiveLoot"][number]["resultClaims"];
+  selfTestReportUrl?: string | null;
+  selfTestReportBody?: string | null;
+};
 type LegacyResult = Result & {
   owner?: string;
   finalDueAt?: string;
@@ -208,6 +215,8 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   evalRuns: state.evalRuns.filter((item) => !targets.resultIds.has(item.linkedResultId)),
   scenarios: state.scenarios.filter((item) => !targets.objectiveIds.has(item.linkedObjectiveId)),
   failureSamples: state.failureSamples.filter((item) => !targets.resultIds.has(item.linkedResultId)),
+  objectiveLoot: state.objectiveLoot.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
+  pointLedger: state.pointLedger.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   comments: removeCommentsForTargets(state.comments, {
     objectiveIds: targets.objectiveIds,
     resultIds: targets.resultIds,
@@ -228,7 +237,21 @@ const emptyBusinessState = (): OrfState => ({
   scenarios: [],
   failureSamples: [],
   comments: [],
+  objectiveLoot: [],
+  pointLedger: [],
 });
+
+function inferFlowStatus(objective: Objective, assignedChallengers: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
+  if (objective.flowStatus) return objective.flowStatus;
+  if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
+  if (objective.lootSubmittedAt) return "submitted";
+  if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
+  if (objective.challengers?.length) return "reestimating";
+  if (assignedChallengers.length > 0) return "recruiting";
+  if (challengeApplications.some((application) => application.status === "pending")) return "applying";
+  if (objective.stage === "resultClaiming") return "open";
+  return "candidate";
+}
 
 export const normalizeState = (state: OrfState): OrfState => {
   const tasks = state.tasks.map((task) => ({
@@ -239,7 +262,7 @@ export const normalizeState = (state: OrfState): OrfState => {
 
   return {
     ...state,
-    users: state.users ?? cloneValue(initialOrfState.users),
+    users: (state.users ?? cloneValue(initialOrfState.users)).map((user) => ({ ...user, status: user.status ?? "active" })),
     currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
     comments: (state.comments ?? []).map((thread) => ({
       ...thread,
@@ -248,6 +271,8 @@ export const normalizeState = (state: OrfState): OrfState => {
     objectives: state.objectives.map((objective) => normalizeObjective(objective, legacyResults, tasks)),
     results: legacyResults.map(normalizeResult),
     tasks,
+    objectiveLoot: state.objectiveLoot ?? [],
+    pointLedger: state.pointLedger ?? [],
   };
 };
 
@@ -255,20 +280,23 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
   const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
   const typedResults = objectiveResults.map(normalizeResult);
   const acceptedResults = typedResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
+  const assignedChallengers = objective.assignedChallengers?.length
+    ? objective.assignedChallengers
+    : uniqueMembers(objectiveResults.map((result) => result.assignedChallenger));
+  const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
 
   return {
     ...objective,
     stage: objective.stage ?? "orfReestimate",
+    flowStatus: inferFlowStatus(objective, assignedChallengers, challengeApplications),
     finalDueAt:
       objective.finalDueAt ||
       latestDate(objectiveResults.map((result) => result.finalDueAt)) ||
       latestDate(tasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.dueDate)) ||
       addDays(objective.updatedAt, 14),
     challengers: objective.challengers?.length ? objective.challengers : uniqueMembers(objectiveResults.map((result) => result.owner)),
-    assignedChallengers: objective.assignedChallengers?.length
-      ? objective.assignedChallengers
-      : uniqueMembers(objectiveResults.map((result) => result.assignedChallenger)),
-    challengeApplications: objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []),
+    assignedChallengers,
+    challengeApplications,
     acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
     confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),
     confirmedAt: objective.confirmedAt ?? objectiveResults.find((result) => result.confirmedAt)?.confirmedAt ?? null,
@@ -322,6 +350,7 @@ export class OrfFlowStore {
       whyItMatters: input.whyItMatters,
       cycle: input.cycle,
       stage: "orfReestimate" as const,
+      flowStatus: "candidate" as const,
       status: "Draft" as const,
       confidence: 50,
       progress: 0,
@@ -653,6 +682,8 @@ export class OrfFlowStore {
               ...item,
               challengers: [...item.challengers, nextChallenger],
               assignedChallengers: item.assignedChallengers.filter((member) => member !== nextChallenger),
+              flowStatus: "reestimating",
+              stage: "orfReestimate",
               acceptedAt: item.acceptedAt ?? now,
               confirmationDueAt: item.confirmationDueAt ?? nextConfirmationDueAt,
               challengeApplications: (item.challengeApplications ?? []).map((application) =>
