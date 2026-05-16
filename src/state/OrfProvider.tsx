@@ -547,8 +547,17 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           definer: input.definer ?? currentUser?.name ?? "",
         };
         const objective = state.objectives.find((item) => item.id === payload.objectiveId);
-        const canAdjustDuringReestimate = Boolean(objective?.flowStatus === "reestimating" && currentUser?.name && objective.challengers.includes(currentUser.name));
-        if (payload.source !== "memberProposed" && !hasPermission(currentUser, state.permissionRules, "result.create") && !canAdjustDuringReestimate) {
+        const reestimateDueAt = objective?.confirmationDueAt ? new Date(objective.confirmationDueAt).getTime() : null;
+        const reestimateWindowOpen = reestimateDueAt == null || (Number.isFinite(reestimateDueAt) && Date.now() <= reestimateDueAt);
+        const canAdjustDuringReestimate = Boolean(
+          objective?.flowStatus === "reestimating" &&
+            currentUser?.name &&
+            objective.challengers.includes(currentUser.name) &&
+            reestimateWindowOpen,
+        );
+        const canCreateManagerDefined = payload.source !== "memberProposed" && hasPermission(currentUser, state.permissionRules, "result.create");
+        const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;
+        if (!canCreateManagerDefined && !canCreateMemberProposed) {
           notify("没有新建悬赏指标权限");
           return;
         }

@@ -4,7 +4,7 @@
 
 本文档说明 `tests/orfBackendFlow.test.ts` 的测试思路，用于验证真实数据库中的 ORF 后端业务流程是否能跑通。
 
-测试覆盖后端 repository 层和数据库写入，不覆盖 HTTP 路由、Ory 登录、Cookie 鉴权或前端 UI。HTTP 层权限如果和 repository 层能力不一致，需要单独补 API 测试。
+测试覆盖后端 repository 层、数据库写入，以及少量 Fastify `inject` API 权限测试。API 测试使用轻量 Ory `whoami` mock，只验证后端路由权限，不覆盖真实 Ory 服务、浏览器 Cookie 流程或前端 UI。
 
 `reestimating` 是当前代码里的既有状态枚举。作为英文不算最自然，业务含义是“重估 / 指标校准阶段”；测试继续使用该枚举，避免把命名迁移和流程测试混在一起。
 
@@ -13,8 +13,11 @@
 | 测试 | 入口 | 覆盖流程 |
 | --- | --- | --- |
 | 目标无指标可见性 | `published objective without concrete results is visible in the bounty hall` | 指挥官只发布 Objective，不预先定义具体 Result，挑战者仍应在悬赏大厅看到该目标 |
+| 征召无指标可见性 | `recruited objective without concrete results is visible as a recruitment item` | 指挥官只发布 Objective 后征召成员，被征召成员仍应看到征召项 |
 | 申请到结算 | `commander and challenger can complete the application-to-settlement ORF backend flow` | 指挥官发布悬赏，挑战者申请，指挥官通过，挑战者在重估期定义 / 调整指标，冻结，提交战利品，验收结算 |
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
+| API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
+| API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
 
 测试直接调用 `server/repositories/orfRepository.ts` 的公开函数。
 
@@ -35,7 +38,7 @@
 | `candidate` / `open` | Objective 是必填核心对象；指挥官可以创建参考指标，但悬赏大厅不应依赖已存在 Result |
 | `applying` / `recruiting` | 成员还不是正式挑战者，不能获得指标调整资格 |
 | `reestimating` | 申请被通过或征召被接受后，成员成为正式挑战者；挑战者可以定义 / 调整自己参与目标下的具体 Result |
-| 重估截止前 | 指标必须在 `confirmationDueAt` 截止前校准完毕；当前 repository 测试只验证状态资格，截止时间需要 HTTP 或更细 repository 契约补齐 |
+| 重估截止前 | 指标必须在 `confirmationDueAt` 截止前校准完毕；API 创建和编辑测试会验证过期后返回 `403` |
 | `frozen` | 指标冻结，挑战者不能继续调整；如需调整，应由指挥官退回 `reestimating` 后再改 |
 | `submitted` / `settled` | 进入提交或结算后，指标不再开放调整 |
 
@@ -90,6 +93,31 @@ flowchart TD
   O --> P[悬赏大厅不再展示该目标]
 ```
 
+## 规则清单
+
+| Rule | 规则 | 覆盖测试 |
+| --- | --- | --- |
+| ORF-BE-R001 | Objective 是悬赏流程的必填核心对象，指挥官必须先创建 Objective。 | 申请到结算、征召到接受 |
+| ORF-BE-R002 | 指挥官发布 Objective 时，Result 是可选参考指标，不是发布和展示的前置条件。 | 目标无指标可见性、征召无指标可见性 |
+| ORF-BE-R003 | 无 Result 的 `open` Objective 仍应出现在挑战者的 `availableItems` 中，`results=[]`、`result=null`、`uncertaintyPoints=0`。 | 目标无指标可见性 |
+| ORF-BE-R004 | 无 Result 的 `recruiting` Objective 仍应出现在被征召成员的 `recruitmentItems` 中。 | 征召无指标可见性 |
+| ORF-BE-R005 | 成员申请后仅进入 `applying`，在指挥官批准前不是正式挑战者，不能调整指标。 | 申请到结算 |
+| ORF-BE-R006 | 指挥官批准申请后，申请状态变为 `approved`，成员进入 `challengers`，Objective 进入 `reestimating`，并生成 `confirmationDueAt`。 | 申请到结算、API 创建指标权限、API 编辑指标权限 |
+| ORF-BE-R007 | 被征召成员接受挑战后，Objective 进入 `reestimating`，成员进入 `challengers`，并从 `assignedChallengers` 移除。 | 征召到接受 |
+| ORF-BE-R008 | `POST /api/results` 创建 `memberProposed` 指标时，当前 API 用户必须是该 Objective 的正式挑战者。 | API 创建指标权限 |
+| ORF-BE-R009 | `POST /api/results` 创建 `memberProposed` 指标时，后端必须把 `definer` 固定为当前 API 用户，不能接受请求体伪造的提出人。 | API 创建指标权限 |
+| ORF-BE-R010 | 旁观成员即使传 `source=memberProposed`，也不能给别人的 `reestimating` Objective 创建指标。 | API 创建指标权限 |
+| ORF-BE-R011 | `confirmationDueAt` 过期后，挑战者不能继续创建 `memberProposed` 指标。 | API 创建指标权限 |
+| ORF-BE-R012 | `PATCH /api/results/:resultId` 在申请通过前拒绝挑战者编辑。 | API 编辑指标权限 |
+| ORF-BE-R013 | `PATCH /api/results/:resultId` 在未过期 `reestimating` 阶段允许正式挑战者编辑。 | API 编辑指标权限 |
+| ORF-BE-R014 | `PATCH /api/results/:resultId` 在 `confirmationDueAt` 过期后拒绝挑战者编辑。 | API 编辑指标权限 |
+| ORF-BE-R015 | Objective 冻结后，挑战者不能继续创建或编辑指标。 | 申请到结算、API 编辑指标权限 |
+| ORF-BE-R016 | 非挑战者不能提交战利品。 | 申请到结算 |
+| ORF-BE-R017 | 挑战者提交战利品后，Objective 进入 `submitted`，我的挑战能看到该战利品。 | 申请到结算 |
+| ORF-BE-R018 | 指挥官验收战利品后，Objective 进入 `settled`，Result 的 `acceptedResult` 更新，积分流水写入挑战者。 | 申请到结算 |
+| ORF-BE-R019 | `settled` Objective 不再出现在悬赏大厅的 `availableItems` 或 `recruitmentItems`。 | 申请到结算 |
+| ORF-BE-R020 | API 注入测试必须关闭可选外部集成，避免流程测试触发 GitHub / Mattermost 网络请求。 | API 创建指标权限、API 编辑指标权限 |
+
 ## 关键断言
 
 ### 指挥官视角
@@ -119,9 +147,9 @@ flowchart TD
 
 ## 当前测试缺口
 
-- `createResult` repository 函数没有 actor 参数，因此 repository 测试无法直接证明“非挑战者不能伪造 `memberProposed` 指标”。
-- `/api/results` 的创建权限、`confirmationDueAt` 截止时间校验，应补 HTTP/API 层测试。
-- 如果 `published objective without concrete results is visible in the bounty hall` 失败，说明当前后端仍把 Result 当成悬赏大厅展示的前置条件。
+- 本文件用 Fastify `inject` 验证 API 权限，但不覆盖真实 Ory 服务、真实浏览器 Cookie、前端页面按钮显隐和端到端交互。
+- 当前 `PATCH /api/results/:resultId` 只覆盖标题编辑；如果后续增加指标口径、基线、目标值等编辑路由，需要追加同样的重估窗口测试。
+- 当前测试只覆盖单团队测试数据；如果后续支持多团队隔离，需要追加跨团队越权用例。
 
 ## 修改测试时机
 

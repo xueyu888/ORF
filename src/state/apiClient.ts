@@ -13,7 +13,7 @@ export type BountyHallItem = {
   hasCurrentApplication: boolean;
   isRecruitment: boolean;
   objective: Objective;
-  result: Result;
+  result: Result | null;
   results: Result[];
   source: BountySource;
 };

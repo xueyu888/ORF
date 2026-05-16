@@ -106,6 +106,12 @@ function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
   return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
 }
 
+function isReestimateWindowOpen(value: string | null | undefined) {
+  if (!value) return true;
+  const dueTime = new Date(value).getTime();
+  return Number.isFinite(dueTime) && Date.now() <= dueTime;
+}
+
 function addDays(value: string, days: number) {
   return addCalendarDays(value, days, value);
 }
@@ -450,7 +456,7 @@ export type BountyHallItem = {
   hasCurrentApplication: boolean;
   isRecruitment: boolean;
   objective: Objective;
-  result: Result;
+  result: Result | null;
   results: Result[];
   source: BountySource;
 };
@@ -466,10 +472,14 @@ function resultDifficultyRank(result: Result) {
   return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : difficultyRanks["进阶"];
 }
 
+function bountySortTitle(item: BountyHallItem) {
+  return item.result?.title ?? item.objective.title;
+}
+
 function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || left.result.title.localeCompare(right.result.title);
+  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
 function objectiveClosedForBountyHall(objective: Objective) {
@@ -501,21 +511,20 @@ export async function getBountyHallData(member: string): Promise<BountyHallData>
   const items = data.objectives.flatMap((objective) => {
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
-    if (!result) return [];
     if (objectiveAcceptedForBountyHall(objective) || objectiveClosedForBountyHall(objective)) return [];
 
     const pendingApplications = (objective.challengeApplications ?? []).filter((application) => application.status === "pending");
     return [{
       uncertaintyPoints: objectiveResults.reduce((sum, item) => sum + item.uncertaintyScore, 0),
       deadline: objective.finalDueAt,
-      definer: result.definer ?? "",
-      difficultyRank: Math.max(...objectiveResults.map(resultDifficultyRank)),
+      definer: result?.definer ?? "",
+      difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
       hasCurrentApplication: pendingApplications.some((application) => application.applicant === member),
       isRecruitment: objective.assignedChallengers.includes(member),
       objective,
-      result,
+      result: result ?? null,
       results: objectiveResults,
-      source: result.source ?? "managerDefined",
+      source: result?.source ?? "managerDefined",
     }];
   }).sort(compareBountyItems);
 
@@ -957,13 +966,14 @@ export async function canEditResultDuringReestimate(resultId: string, member: st
     .select({
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      confirmationDueAt: objectives.confirmationDueAt,
     })
     .from(results)
     .innerJoin(objectives, eq(objectives.id, results.objectiveId))
     .where(eq(results.id, resultId))
     .limit(1);
 
-  return row?.flowStatus === "reestimating" && uniqueMembers(row.challengers ?? []).includes(actorName);
+  return row?.flowStatus === "reestimating" && uniqueMembers(row.challengers ?? []).includes(actorName) && isReestimateWindowOpen(row.confirmationDueAt);
 }
 
 export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string): Promise<boolean> {
@@ -971,12 +981,12 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
   if (!actorName) return false;
 
   const [objective] = await db
-    .select({ flowStatus: objectives.flowStatus, challengers: objectives.challengers })
+    .select({ flowStatus: objectives.flowStatus, challengers: objectives.challengers, confirmationDueAt: objectives.confirmationDueAt })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
     .limit(1);
 
-  return objective?.flowStatus === "reestimating" && uniqueMembers(objective.challengers ?? []).includes(actorName);
+  return objective?.flowStatus === "reestimating" && uniqueMembers(objective.challengers ?? []).includes(actorName) && isReestimateWindowOpen(objective.confirmationDueAt);
 }
 
 export type CreateFeedbackInput = Pick<

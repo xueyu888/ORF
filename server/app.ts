@@ -486,8 +486,8 @@ function sendLootOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof
   return { loot: outcome.loot };
 }
 
-export async function buildServer() {
-  const app = Fastify({ logger: true });
+export async function buildServer(options: { logger?: boolean; registerOptionalIntegrations?: boolean } = {}) {
+  const app = Fastify({ logger: options.logger ?? true });
 
   await app.register(cors, {
     origin: corsOrigin(),
@@ -524,7 +524,9 @@ export async function buildServer() {
     service: "orf-api",
   }));
 
-  registerOptionalIntegrations(app);
+  if (options.registerOptionalIntegrations ?? true) {
+    registerOptionalIntegrations(app);
+  }
   registerAuthRoutes(app);
 
   app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
@@ -811,16 +813,19 @@ export async function buildServer() {
       return reply.code(404).send({ error: "Team not found" });
     }
     const permissionRules = await getPermissionRulesForTeam(teamId);
-    const allowed =
-      body.source === "memberProposed" ||
-      user.role === "admin" ||
-      hasRolePermission(user.role, permissionRules, "result.create") ||
-      await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name);
+    const source = body.source ?? "managerDefined";
+    const allowedByRole = user.role === "admin" || hasRolePermission(user.role, permissionRules, "result.create");
+    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name);
+    const allowed = source === "memberProposed" ? allowedByReestimate : allowedByRole;
     if (!allowed) {
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const result = await createResult(body);
+    const result = await createResult({
+      ...body,
+      source,
+      definer: source === "memberProposed" ? user.name : body.definer ?? user.name,
+    });
 
     if (!result) {
       return reply.code(404).send({ error: "Objective not found" });

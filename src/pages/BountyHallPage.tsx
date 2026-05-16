@@ -371,13 +371,17 @@ function BountyListRow({
 function ResultPreview({ item }: { item: BountyItem }) {
   return (
     <>
-      <span className="bounty-result-summary">{item.results.length} 个指标</span>
+      <span className="bounty-result-summary">{resultCountLabel(item)}</span>
       <div className="bounty-result-preview" aria-label="指标预览">
-        {item.results.map((result) => (
-          <div key={result.id} className="bounty-result-preview-item">
-            {result.metricRequirement ?? result.title}
-          </div>
-        ))}
+        {item.results.length > 0 ? (
+          item.results.map((result) => (
+            <div key={result.id} className="bounty-result-preview-item">
+              {result.metricRequirement ?? result.title}
+            </div>
+          ))
+        ) : (
+          <div className="bounty-result-preview-item">重估阶段校准</div>
+        )}
       </div>
     </>
   );
@@ -460,18 +464,18 @@ function searchableBountyText(item: BountyItem) {
 function compareBounties(left: BountyItem, right: BountyItem, sortKey: SortKey) {
   if (sortKey === "points") return right.uncertaintyPoints - left.uncertaintyPoints || compareByUrgency(left, right);
   if (sortKey === "difficulty") return right.difficultyRank - left.difficultyRank || compareByUrgency(left, right);
-  if (sortKey === "created") return right.objective.updatedAt.localeCompare(left.objective.updatedAt) || left.result.title.localeCompare(right.result.title);
+  if (sortKey === "created") return right.objective.updatedAt.localeCompare(left.objective.updatedAt) || bountySortTitle(left).localeCompare(bountySortTitle(right));
   return compareByUrgency(left, right);
 }
 
 function compareByUrgency(left: BountyItem, right: BountyItem) {
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || left.result.title.localeCompare(right.result.title);
+  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
 function difficultyLabel(result: BountyItem["result"]) {
-  return result.uncertaintyLevel ?? "进阶";
+  return result?.uncertaintyLevel ?? "待校准";
 }
 
 function highestDifficultyLabel(item: BountyItem) {
@@ -479,7 +483,11 @@ function highestDifficultyLabel(item: BountyItem) {
 }
 
 function resultCountLabel(item: BountyItem) {
-  return `${item.results.length} 个悬赏指标`;
+  return item.results.length > 0 ? `${item.results.length} 个悬赏指标` : "待定义指标";
+}
+
+function bountySortTitle(item: BountyItem) {
+  return item.result?.title ?? item.objective.title;
 }
 
 function currentCycle(objectives: Objective[]) {

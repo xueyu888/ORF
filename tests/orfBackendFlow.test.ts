@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import type { FastifyInstance } from "fastify";
 import { sql } from "drizzle-orm";
+import { buildServer } from "../server/app";
 import { closeDb, db } from "../server/db/client";
-import { teams, teamMembers, users } from "../server/db/schema";
+import { objectives, teams, teamMembers, users } from "../server/db/schema";
+import type { Result } from "../src/types/orf";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
@@ -22,6 +25,7 @@ import {
 
 const runId = `test-orf-flow-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const farFutureDueDate = "2999-12-31";
+const expiredConfirmationDueAt = "2000-01-01T00:00:00.000Z";
 
 before(async () => {
   await cleanupRun();
@@ -52,10 +56,39 @@ test("published objective without concrete results is visible in the bounty hall
   assert.equal(published.objective.flowStatus, "open");
 
   const hall = await getBountyHallData(fixture.challenger.name);
-  assert.ok(
-    hall.availableItems.some((item) => item.objective.id === objective.id),
-    "a published Objective should not require a commander-defined Result to be visible",
+  const item = hall.availableItems.find((item) => item.objective.id === objective.id);
+  assert.ok(item, "a published Objective should not require a commander-defined Result to be visible");
+  assert.equal(item.result, null);
+  assert.deepEqual(item.results, []);
+  assert.equal(item.uncertaintyPoints, 0);
+});
+
+test("recruited objective without concrete results is visible as a recruitment item", async () => {
+  const fixture = await createFixture("objective-only-recruitment");
+
+  const objective = await createObjective(
+    {
+      title: `${fixture.prefix} objective-only recruitment`,
+      whyItMatters: "Recruitment should not require commander-defined metrics before the member accepts.",
+      cycle: "2999-Q4",
+      boundary: "Test-only objective.",
+      finalDueAt: farFutureDueDate,
+    },
+    { teamId: fixture.teamId, userId: fixture.commander.id },
   );
+  assert.ok(objective);
+
+  assert.equal((await publishObjective(objective.id, fixture.commander.id)).status, "ok");
+  const recruited = await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id);
+  assert.equal(recruited.status, "ok");
+  assert.equal(recruited.objective.flowStatus, "recruiting");
+
+  const hall = await getBountyHallData(fixture.challenger.name);
+  const item = hall.recruitmentItems.find((item) => item.objective.id === objective.id);
+  assert.ok(item, "a recruited Objective should not require a commander-defined Result to be visible");
+  assert.equal(item.isRecruitment, true);
+  assert.equal(item.result, null);
+  assert.deepEqual(item.results, []);
 });
 
 test("commander and challenger can complete the application-to-settlement ORF backend flow", async () => {
@@ -279,6 +312,118 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   assert.equal(hallAfterAcceptance.availableItems.some((item) => item.objective.id === objective.id), false);
 });
 
+test("member-proposed result creation requires the API actor to be a challenger inside the reestimate window", async () => {
+  const fixture = await createFixture("api-create-result");
+
+  const objective = await createObjective(
+    {
+      title: `${fixture.prefix} API member result objective`,
+      whyItMatters: "API result creation must enforce the challenger reestimate window.",
+      cycle: "2999-Q4",
+      boundary: "Test-only objective.",
+      finalDueAt: farFutureDueDate,
+    },
+    { teamId: fixture.teamId, userId: fixture.commander.id },
+  );
+  assert.ok(objective);
+  assert.equal((await publishObjective(objective.id, fixture.commander.id)).status, "ok");
+
+  await withApiServer(fixture, async (app) => {
+    const beforeChallenge = await postResult(app, fixture.challenger, objective.id, {
+      title: `${fixture.prefix} forbidden before challenge`,
+      metricName: "Pre-challenge metric",
+      source: "memberProposed",
+    });
+    assert.equal(beforeChallenge.statusCode, 403);
+
+    const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+    assert.equal(applied.status, "applied");
+    const applicationId = applied.objective.challengeApplications.find((application) => application.applicant === fixture.challenger.name)?.id;
+    assert.ok(applicationId);
+    assert.equal((await approveObjectiveChallengeApplication(objective.id, applicationId, fixture.commander.id)).status, "ok");
+
+    const observerAttempt = await postResult(app, fixture.observer, objective.id, {
+      title: `${fixture.prefix} observer spoof`,
+      metricName: "Observer metric",
+      source: "memberProposed",
+    });
+    assert.equal(observerAttempt.statusCode, 403);
+
+    const allowed = await postResult(app, fixture.challenger, objective.id, {
+      title: `${fixture.prefix} allowed challenger metric`,
+      metricName: "Challenger metric",
+      source: "memberProposed",
+      definer: fixture.observer.name,
+    });
+    assert.equal(allowed.statusCode, 200);
+    const allowedPayload = allowed.json() as { result: Result };
+    assert.equal(allowedPayload.result.source, "memberProposed");
+    assert.equal(allowedPayload.result.definer, fixture.challenger.name);
+
+    await expireReestimateWindow(objective.id);
+    assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), false);
+
+    const expired = await postResult(app, fixture.challenger, objective.id, {
+      title: `${fixture.prefix} expired challenger metric`,
+      metricName: "Expired metric",
+      source: "memberProposed",
+    });
+    assert.equal(expired.statusCode, 403);
+  });
+});
+
+test("challenger result edits through the API close after reestimate expiry and freeze", async () => {
+  const fixture = await createFixture("api-edit-result");
+
+  const objective = await createObjective(
+    {
+      title: `${fixture.prefix} API edit objective`,
+      whyItMatters: "API result edits must follow the same reestimate window as result creation.",
+      cycle: "2999-Q4",
+      boundary: "Test-only objective.",
+      finalDueAt: farFutureDueDate,
+    },
+    { teamId: fixture.teamId, userId: fixture.commander.id },
+  );
+  assert.ok(objective);
+  const result = await createResult({
+    objectiveId: objective.id,
+    title: `${fixture.prefix} editable result`,
+    metricName: "Editable metric",
+    uncertaintyLevel: "入门",
+    definer: fixture.commander.name,
+  });
+  assert.ok(result);
+  assert.equal((await publishObjective(objective.id, fixture.commander.id)).status, "ok");
+
+  await withApiServer(fixture, async (app) => {
+    const beforeChallenge = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} edit before challenge`);
+    assert.equal(beforeChallenge.statusCode, 403);
+
+    const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+    assert.equal(applied.status, "applied");
+    const applicationId = applied.objective.challengeApplications.find((application) => application.applicant === fixture.challenger.name)?.id;
+    assert.ok(applicationId);
+    assert.equal((await approveObjectiveChallengeApplication(objective.id, applicationId, fixture.commander.id)).status, "ok");
+
+    const observerAttempt = await patchResultTitle(app, fixture.observer, result.id, `${fixture.prefix} observer edit`);
+    assert.equal(observerAttempt.statusCode, 403);
+
+    const edited = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} edited during reestimate`);
+    assert.equal(edited.statusCode, 200);
+
+    await expireReestimateWindow(objective.id);
+    const expired = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} expired edit`);
+    assert.equal(expired.statusCode, 403);
+
+    await reopenReestimateWindow(objective.id);
+    const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+    assert.equal(frozen.status, "ok");
+    const afterFreeze = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} frozen edit`);
+    assert.equal(afterFreeze.statusCode, 403);
+  });
+});
+
 async function createFixture(label: string) {
   const prefix = `${runId}-${label}`;
   const teamId = `${prefix}-team`;
@@ -311,6 +456,116 @@ async function createFixture(label: string) {
   ]);
 
   return { prefix, teamId, commander, challenger, observer };
+}
+
+type Fixture = Awaited<ReturnType<typeof createFixture>>;
+type FixtureUser = Fixture["commander"];
+
+async function withApiServer(fixture: Fixture, run: (app: FastifyInstance) => Promise<void>) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mockOryFetch(fixture, originalFetch);
+  const app = await buildServer({ logger: false, registerOptionalIntegrations: false });
+
+  try {
+    await run(app);
+  } finally {
+    await app.close();
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function mockOryFetch(fixture: Fixture, fallback: typeof fetch): typeof fetch {
+  const usersByToken = new Map([
+    [fixture.commander.id, fixture.commander],
+    [fixture.challenger.id, fixture.challenger],
+    [fixture.observer.id, fixture.observer],
+  ]);
+
+  return async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (!url.includes("/sessions/whoami")) {
+      return fallback(input, init);
+    }
+
+    const sessionToken = headerValue(init?.headers, "x-session-token");
+    const user = sessionToken ? usersByToken.get(sessionToken) : undefined;
+    if (!user) {
+      return new Response(JSON.stringify({ active: false }), { status: 401, headers: { "content-type": "application/json" } });
+    }
+
+    return new Response(
+      JSON.stringify({
+        active: true,
+        identity: {
+          id: user.id,
+          traits: {
+            email: user.email,
+            name: user.name,
+          },
+        },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+}
+
+function headerValue(headers: HeadersInit | undefined, name: string) {
+  if (!headers) return undefined;
+  if (headers instanceof Headers) return headers.get(name) ?? undefined;
+
+  const normalizedName = name.toLowerCase();
+  if (Array.isArray(headers)) {
+    return headers.find(([key]) => key.toLowerCase() === normalizedName)?.[1];
+  }
+
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === normalizedName);
+  return entry ? String(entry[1]) : undefined;
+}
+
+function apiCookie(user: FixtureUser) {
+  return `orf_ory_session=${encodeURIComponent(user.id)}`;
+}
+
+async function postResult(
+  app: FastifyInstance,
+  user: FixtureUser,
+  objectiveId: string,
+  input: Partial<Pick<Result, "title" | "metricName" | "source" | "definer">>,
+) {
+  return app.inject({
+    method: "POST",
+    url: "/api/results",
+    headers: { cookie: apiCookie(user) },
+    payload: {
+      objectiveId,
+      title: input.title ?? "API-created result",
+      metricName: input.metricName ?? "API metric",
+      baseline: 0,
+      current: 0,
+      target: 1,
+      unit: "case",
+      direction: "increase",
+      source: input.source,
+      definer: input.definer,
+    },
+  });
+}
+
+async function patchResultTitle(app: FastifyInstance, user: FixtureUser, resultId: string, title: string) {
+  return app.inject({
+    method: "PATCH",
+    url: `/api/results/${encodeURIComponent(resultId)}`,
+    headers: { cookie: apiCookie(user) },
+    payload: { title },
+  });
+}
+
+async function expireReestimateWindow(objectiveId: string) {
+  await db.update(objectives).set({ confirmationDueAt: expiredConfirmationDueAt }).where(sql`${objectives.id} = ${objectiveId}`);
+}
+
+async function reopenReestimateWindow(objectiveId: string) {
+  await db.update(objectives).set({ confirmationDueAt: "2999-01-01T00:00:00.000Z" }).where(sql`${objectives.id} = ${objectiveId}`);
 }
 
 async function cleanupRun() {

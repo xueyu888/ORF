@@ -7,7 +7,7 @@ import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission, type PermissionKey } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
-import type { Result } from "../../types/orf";
+import type { Objective, Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, canUsePermission, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
@@ -125,7 +125,7 @@ export function ChallengePlanPage() {
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
       const objective = challengeState.objectives.find((item) => item.id === target.objectiveId);
-      if (objective?.flowStatus === "reestimating" && objective.challengers.includes(currentMember)) return true;
+      if (canAdjustObjectiveDuringReestimate(objective, currentMember)) return true;
     }
 
     if (canAccessTarget(challengeState, role, target, action)) return true;
@@ -136,7 +136,7 @@ export function ChallengePlanPage() {
 
   const addBounty = (objectiveId: string) => {
     const objective = challengeState.objectives.find((item) => item.id === objectiveId);
-    const canAdjustDuringReestimate = objective?.flowStatus === "reestimating" && objective.challengers.includes(currentMember);
+    const canAdjustDuringReestimate = canAdjustObjectiveDuringReestimate(objective, currentMember);
     if (canAdjustDuringReestimate || requirePermissionKey("result.create")) {
       openModal({ type: "newResult", objectiveId });
     }
@@ -344,6 +344,13 @@ function useMinuteNow() {
   }, []);
 
   return now;
+}
+
+function canAdjustObjectiveDuringReestimate(objective: Objective | undefined, member: string) {
+  if (!objective || objective.flowStatus !== "reestimating" || !objective.challengers.includes(member)) return false;
+  if (!objective.confirmationDueAt) return true;
+  const dueTime = new Date(objective.confirmationDueAt).getTime();
+  return Number.isFinite(dueTime) && Date.now() <= dueTime;
 }
 
 function toggleSetItem<T>(items: Set<T>, item: T) {
