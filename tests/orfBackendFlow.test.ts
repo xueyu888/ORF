@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { buildServer } from "../server/app";
 import { closeDb, db } from "../server/db/client";
 import { objectives, teams, teamMembers, users } from "../server/db/schema";
-import type { Result } from "../src/types/orf";
+import type { ObjectiveAcceptedResult, Result, UncertaintyLevel } from "../src/types/orf";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
@@ -13,12 +13,15 @@ import {
   canEditObjectiveResultsDuringReestimate,
   createObjective,
   createResult,
+  declineObjectiveChallenge,
   freezeObjectiveAfterReestimate,
   getBountyHallData,
   getMyChallengesData,
   getTaskManagementData,
   publishObjective,
   recruitObjectiveChallengers,
+  rejectObjectiveChallengeApplication,
+  reopenObjectiveReestimate,
   reviewObjectiveLoot,
   submitObjectiveLoot,
 } from "../server/repositories/orfRepository";
@@ -424,6 +427,395 @@ test("challenger result edits through the API close after reestimate expiry and 
   });
 });
 
+test("recruitment is only allowed after an objective is published", async () => {
+  const fixture = await createFixture("recruit-before-publish");
+  const objective = await createTestObjective(fixture, "candidate recruitment guard");
+
+  const recruited = await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id);
+  assert.equal(recruited.status, "invalid");
+
+  const data = await getTaskManagementData();
+  const unchanged = data.objectives.find((item) => item.id === objective.id);
+  assert.equal(unchanged?.flowStatus, "candidate");
+  assert.deepEqual(unchanged?.assignedChallengers, []);
+});
+
+test("approving stale pending applications cannot mutate a frozen objective", async () => {
+  const fixture = await createFixture("approve-after-freeze");
+  const { objective, challengerApplicationId, observerApplicationId } = await createFrozenObjectiveWithPendingApplication(fixture);
+
+  assert.ok(challengerApplicationId);
+  const approvedAfterFreeze = await approveObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id);
+  assert.equal(approvedAfterFreeze.status, "invalid");
+
+  const data = await getTaskManagementData();
+  const unchanged = data.objectives.find((item) => item.id === objective.id);
+  assert.equal(unchanged?.flowStatus, "frozen");
+  assert.deepEqual(unchanged?.challengers, [fixture.challenger.name]);
+  assert.equal(
+    unchanged?.challengeApplications.find((application) => application.id === observerApplicationId)?.status,
+    "pending",
+  );
+});
+
+test("rejecting stale pending applications cannot reopen a frozen objective", async () => {
+  const fixture = await createFixture("reject-after-freeze");
+  const { objective, observerApplicationId } = await createFrozenObjectiveWithPendingApplication(fixture);
+
+  const rejectedAfterFreeze = await rejectObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id);
+  assert.equal(rejectedAfterFreeze.status, "invalid");
+
+  const data = await getTaskManagementData();
+  const unchanged = data.objectives.find((item) => item.id === objective.id);
+  assert.equal(unchanged?.flowStatus, "frozen");
+  assert.equal(
+    unchanged?.challengeApplications.find((application) => application.id === observerApplicationId)?.status,
+    "pending",
+  );
+});
+
+test("unassigned members cannot decline recruitment outside the recruiting state", async () => {
+  const fixture = await createFixture("decline-unassigned-guard");
+  const objective = await createPublishedObjective(fixture, "decline unassigned guard");
+
+  const unrelatedDecline = await declineObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+  assert.equal(unrelatedDecline.status, "invalid");
+
+  const data = await getTaskManagementData();
+  const unchanged = data.objectives.find((item) => item.id === objective.id);
+  assert.equal(unchanged?.flowStatus, "open");
+  assert.deepEqual(unchanged?.assignedChallengers, []);
+});
+
+test("assigned members can decline recruitment exactly once", async () => {
+  const fixture = await createFixture("decline-assigned-guard");
+  const objective = await createPublishedObjective(fixture, "decline assigned guard");
+
+  const recruited = await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id);
+  assert.equal(recruited.status, "ok");
+
+  const assignedDecline = await declineObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(assignedDecline.status, "ok");
+  assert.equal(assignedDecline.objective.flowStatus, "open");
+  assert.deepEqual(assignedDecline.objective.assignedChallengers, []);
+
+  const repeatedDecline = await declineObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(repeatedDecline.status, "invalid");
+});
+
+test("reopening a frozen objective restores the reestimate adjustment window", async () => {
+  const fixture = await createFixture("reopen-window");
+  const { objective } = await createApprovedObjectiveWithResult(fixture);
+
+  await expireReestimateWindow(objective.id);
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), false);
+
+  const reopened = await reopenObjectiveReestimate(objective.id, fixture.commander.id);
+  assert.equal(reopened.status, "ok");
+  assert.equal(reopened.objective.flowStatus, "reestimating");
+  assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), true);
+});
+
+test("freezing after reestimate requires at least one concrete result", async () => {
+  const fixture = await createFixture("freeze-without-result");
+  const objective = await createPublishedObjective(fixture, "no result freeze guard");
+  const application = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  assert.equal(application.status, "applied");
+  const applicationId = application.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  assert.ok(applicationId);
+  const approved = await approveObjectiveChallengeApplication(objective.id, applicationId, fixture.commander.id);
+  assert.equal(approved.status, "ok");
+
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "invalid");
+
+  const data = await getTaskManagementData();
+  assert.equal(data.objectives.find((item) => item.id === objective.id)?.flowStatus, "reestimating");
+});
+
+test("challenge application duplicate and closed-state guards are enforced", async () => {
+  const fixture = await createFixture("application-guards");
+  const { objective, applicationId } = await createApprovedObjectiveWithResult(fixture);
+
+  const alreadyAccepted = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  assert.equal(alreadyAccepted.status, "alreadyAccepted");
+
+  const observerApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
+  assert.equal(observerApplication.status, "closed");
+
+  const openObjective = await createPublishedObjective(fixture, "duplicate application guard");
+  const firstApply = await applyForObjectiveChallenge(openObjective.id, fixture.observer.name);
+  assert.equal(firstApply.status, "applied");
+  const duplicateApply = await applyForObjectiveChallenge(openObjective.id, fixture.observer.name);
+  assert.equal(duplicateApply.status, "alreadyApplied");
+
+  assert.ok(applicationId);
+});
+
+test("challenge acceptance guards duplicate, due-date, unauthorized, and closed states", async () => {
+  const fixture = await createFixture("acceptance-guards");
+  const objective = await createPublishedObjective(fixture, "acceptance guards");
+  assert.equal((await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id)).status, "ok");
+
+  const unauthorized = await acceptObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+  assert.equal(unauthorized.status, "forbidden");
+
+  const accepted = await acceptObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(accepted.status, "accepted");
+
+  const repeated = await acceptObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(repeated.status, "alreadyAccepted");
+
+  const dueDateFixture = await createFixture("acceptance-due-date");
+  const dueDateObjective = await createPublishedObjective(dueDateFixture, "too-close due date", "2000-01-01");
+  assert.equal((await recruitObjectiveChallengers(dueDateObjective.id, [dueDateFixture.challenger.name], dueDateFixture.commander.id)).status, "ok");
+  const tooClose = await acceptObjectiveChallenge(dueDateObjective.id, dueDateFixture.challenger.name, dueDateFixture.challenger.id);
+  assert.equal(tooClose.status, "invalidDueDate");
+
+  const settledFixture = await createFixture("acceptance-closed");
+  const { objective: settledObjective } = await createSettledObjective(settledFixture, "acceptance closed");
+  const closed = await acceptObjectiveChallenge(settledObjective.id, settledFixture.observer.name, settledFixture.observer.id);
+  assert.equal(closed.status, "closed");
+});
+
+test("freeze and reopen reject invalid source states", async () => {
+  const fixture = await createFixture("freeze-reopen-guards");
+  const candidate = await createTestObjective(fixture, "candidate freeze guard");
+  assert.equal((await freezeObjectiveAfterReestimate(candidate.id, fixture.commander.id)).status, "invalid");
+  assert.equal((await reopenObjectiveReestimate(candidate.id, fixture.commander.id)).status, "invalid");
+
+  const applying = await createPublishedObjective(fixture, "applying freeze guard");
+  assert.equal((await applyForObjectiveChallenge(applying.id, fixture.challenger.name)).status, "applied");
+  assert.equal((await freezeObjectiveAfterReestimate(applying.id, fixture.commander.id)).status, "invalid");
+
+  const { objective: approved } = await createApprovedObjectiveWithResult(fixture, "approved freeze guard");
+  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "invalid");
+  const frozen = await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  assert.equal((await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id)).status, "invalid");
+  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "ok");
+});
+
+test("loot submission rejects incomplete or out-of-state payloads", async () => {
+  const fixture = await createFixture("loot-guards");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture);
+
+  const beforeFreeze = await submitObjectiveLoot(
+    objective.id,
+    { body: "not frozen yet", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "too early" }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(beforeFreeze.status, "closed");
+
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+
+  const emptyBody = await submitObjectiveLoot(
+    objective.id,
+    { body: " ", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "empty body" }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(emptyBody.status, "invalid");
+
+  const otherObjective = await createPublishedObjective(fixture, "foreign result objective");
+  const foreignResult = await createTestResult(otherObjective.id, fixture.commander.name, "foreign result");
+  const foreignClaim = await submitObjectiveLoot(
+    objective.id,
+    { body: "claims a foreign result", resultClaims: [{ resultId: foreignResult.id, claim: "completed", evidenceText: "foreign" }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(foreignClaim.status, "invalid");
+
+  const missingClaim = await submitObjectiveLoot(
+    objective.id,
+    { body: "missing the objective result", resultClaims: [] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(missingClaim.status, "invalid");
+});
+
+test("review rejects invalid state and missing loot", async () => {
+  const fixture = await createFixture("review-guards");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture);
+
+  const beforeSubmission = await reviewObjectiveLoot(
+    objective.id,
+    { acceptedResult: "completed", resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    fixture.commander.id,
+  );
+  assert.equal(beforeSubmission.status, "invalid");
+
+  assert.equal((await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id)).status, "ok");
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    { body: "ready for review", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+
+  const missingLoot = await reviewObjectiveLoot(
+    objective.id,
+    { lootId: "missing-loot", acceptedResult: "completed", resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    fixture.commander.id,
+  );
+  assert.equal(missingLoot.status, "notFound");
+});
+
+test("settlement normalizes multi-challenger contribution ratios and supports overdelivery", async () => {
+  const fixture = await createFixture("settlement-ratios");
+  const objective = await createPublishedObjective(fixture, "multi challenger settlement");
+  const resultA = await createTestResult(objective.id, fixture.commander.name, "ratio result a", "入门");
+  const resultB = await createTestResult(objective.id, fixture.commander.name, "ratio result b", "进阶");
+
+  const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  const observerApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
+  assert.equal(challengerApplication.status, "applied");
+  assert.equal(observerApplication.status, "applied");
+  const challengerApplicationId = challengerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  const observerApplicationId = observerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.observer.name)?.id;
+  assert.ok(challengerApplicationId);
+  assert.ok(observerApplicationId);
+  assert.equal((await approveObjectiveChallengeApplication(objective.id, challengerApplicationId, fixture.commander.id)).status, "ok");
+  assert.equal((await approveObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id)).status, "ok");
+  assert.equal((await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id)).status, "ok");
+
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    {
+      body: "Both challengers delivered beyond the target.",
+      resultClaims: [
+        { resultId: resultA.id, claim: "completed", evidenceText: "A done" },
+        { resultId: resultB.id, claim: "completed", evidenceText: "B done" },
+      ],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+
+  const reviewed = await reviewObjectiveLoot(
+    objective.id,
+    {
+      acceptedResult: "overdelivered",
+      resultReviews: [
+        { resultId: resultA.id, acceptedResult: "completed" },
+        { resultId: resultB.id, acceptedResult: "completed" },
+      ],
+      contributionRatios: [
+        { member: fixture.challenger.name, ratio: 2 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    fixture.commander.id,
+  );
+  assert.equal(reviewed.status, "ok");
+  assert.equal(reviewed.objective.objectiveBasePoints, 40);
+  assert.equal(reviewed.objective.completionMultiplier, 1.5);
+  assert.equal(reviewed.objective.objectiveSettlementPoints, 60);
+
+  const data = await getTaskManagementData();
+  const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
+  assert.equal(ledger.length, 2);
+  assert.equal(ledger[0]?.memberName, fixture.challenger.name);
+  assert.equal(ledger[0]?.points, 40);
+  assert.equal(ledger[1]?.memberName, fixture.observer.name);
+  assert.equal(ledger[1]?.points, 20);
+});
+
+test("API flow commands enforce commander-only permissions and challenge list scope", async () => {
+  const fixture = await createFixture("api-flow-permissions");
+  const candidate = await createTestObjective(fixture, "api publish permission");
+  const objective = await createPublishedObjective(fixture, "api flow permission");
+  assert.equal((await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id)).status, "ok");
+  const reviewObjective = await createPublishedObjective(fixture, "api review permission");
+
+  await withApiServer(fixture, async (app) => {
+    const memberPublish = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
+    assert.equal(memberPublish.statusCode, 403);
+
+    const memberRecruit = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/recruitments`, {
+      members: [fixture.observer.name],
+    });
+    assert.equal(memberRecruit.statusCode, 403);
+
+    const application = await applyForObjectiveChallenge(reviewObjective.id, fixture.challenger.name);
+    assert.equal(application.status, "applied");
+    const applicationId = application.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+    assert.ok(applicationId);
+    const memberApprove = await apiInject(
+      app,
+      fixture.challenger,
+      "PATCH",
+      `/api/objectives/${encodeURIComponent(reviewObjective.id)}/challenge-applications/${encodeURIComponent(applicationId)}/approve`,
+    );
+    assert.equal(memberApprove.statusCode, 403);
+    const memberReject = await apiInject(
+      app,
+      fixture.challenger,
+      "PATCH",
+      `/api/objectives/${encodeURIComponent(reviewObjective.id)}/challenge-applications/${encodeURIComponent(applicationId)}/reject`,
+    );
+    assert.equal(memberReject.statusCode, 403);
+
+    const memberFreeze = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/freeze`);
+    assert.equal(memberFreeze.statusCode, 403);
+    const memberReopen = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/reopen-reestimate`);
+    assert.equal(memberReopen.statusCode, 403);
+    const memberReview = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/review`, {
+      acceptedResult: "completed",
+    });
+    assert.equal(memberReview.statusCode, 403);
+
+    const memberAllScope = await apiInject(app, fixture.challenger, "GET", "/api/my-challenges?scope=all");
+    assert.equal(memberAllScope.statusCode, 403);
+
+    const adminAllScope = await apiInject(app, fixture.commander, "GET", "/api/my-challenges?scope=all");
+    assert.equal(adminAllScope.statusCode, 200);
+  });
+});
+
+test("API result management routes keep privileged operations behind role permissions", async () => {
+  const fixture = await createFixture("api-result-permissions");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture);
+
+  await withApiServer(fixture, async (app) => {
+    const memberManagerDefined = await postResult(app, fixture.challenger, objective.id, {
+      title: `${fixture.prefix} member manager-defined metric`,
+      metricName: "Manager-defined attempt",
+      source: "managerDefined",
+    });
+    assert.equal(memberManagerDefined.statusCode, 403);
+
+    const adminManagerDefined = await postResult(app, fixture.commander, objective.id, {
+      title: `${fixture.prefix} admin manager-defined metric`,
+      metricName: "Admin metric",
+      source: "managerDefined",
+    });
+    assert.equal(adminManagerDefined.statusCode, 200);
+
+    const memberConfidence = await apiInject(app, fixture.challenger, "PATCH", `/api/results/${encodeURIComponent(result.id)}/confidence`, {
+      confidence: 80,
+    });
+    assert.equal(memberConfidence.statusCode, 403);
+
+    const memberUpdateProposal = await apiInject(app, fixture.challenger, "POST", `/api/results/${encodeURIComponent(result.id)}/update-proposal`, {
+      title: "unauthorized proposal",
+      reason: "member lacks result.edit",
+    });
+    assert.equal(memberUpdateProposal.statusCode, 403);
+
+    const memberOrder = await apiInject(app, fixture.challenger, "PATCH", `/api/results/${encodeURIComponent(result.id)}/order`, {
+      referenceResultId: result.id,
+      placement: "after",
+    });
+    assert.equal(memberOrder.statusCode, 403);
+
+    const memberDelete = await apiInject(app, fixture.challenger, "DELETE", `/api/results/${encodeURIComponent(result.id)}`);
+    assert.equal(memberDelete.statusCode, 403);
+  });
+});
+
 async function createFixture(label: string) {
   const prefix = `${runId}-${label}`;
   const teamId = `${prefix}-team`;
@@ -460,6 +852,106 @@ async function createFixture(label: string) {
 
 type Fixture = Awaited<ReturnType<typeof createFixture>>;
 type FixtureUser = Fixture["commander"];
+
+async function createTestObjective(fixture: Fixture, title: string, finalDueAt = farFutureDueDate) {
+  const objective = await createObjective(
+    {
+      title: `${fixture.prefix} ${title}`,
+      whyItMatters: "Test-only ORF backend flow objective.",
+      cycle: "2999-Q4",
+      boundary: "Test-only objective.",
+      finalDueAt,
+    },
+    { teamId: fixture.teamId, userId: fixture.commander.id },
+  );
+  assert.ok(objective);
+  return objective;
+}
+
+async function createPublishedObjective(fixture: Fixture, title: string, finalDueAt = farFutureDueDate) {
+  const objective = await createTestObjective(fixture, title, finalDueAt);
+  const published = await publishObjective(objective.id, fixture.commander.id);
+  assert.equal(published.status, "ok");
+  return published.objective;
+}
+
+async function createTestResult(
+  objectiveId: string,
+  definer: string,
+  title: string,
+  uncertaintyLevel: UncertaintyLevel = "进阶",
+) {
+  const result = await createResult({
+    objectiveId,
+    title,
+    metricName: `${title} metric`,
+    uncertaintyLevel,
+    baseline: 0,
+    current: 0,
+    target: 1,
+    unit: "case",
+    direction: "increase",
+    definer,
+  });
+  assert.ok(result);
+  return result;
+}
+
+async function createApprovedObjectiveWithResult(fixture: Fixture, title = "approved objective") {
+  const objective = await createPublishedObjective(fixture, title);
+  const result = await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} ${title} result`);
+  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  assert.equal(applied.status, "applied");
+  const applicationId = applied.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  assert.ok(applicationId);
+  const approved = await approveObjectiveChallengeApplication(objective.id, applicationId, fixture.commander.id);
+  assert.equal(approved.status, "ok");
+  return { objective: approved.objective, result, applicationId };
+}
+
+async function createFrozenObjectiveWithPendingApplication(fixture: Fixture) {
+  const objective = await createPublishedObjective(fixture, "frozen with pending application");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} frozen guard result`);
+
+  const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  const observerApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
+  assert.equal(challengerApplication.status, "applied");
+  assert.equal(observerApplication.status, "applied");
+  const challengerApplicationId = challengerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  const observerApplicationId = observerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.observer.name)?.id;
+  assert.ok(challengerApplicationId);
+  assert.ok(observerApplicationId);
+
+  const approved = await approveObjectiveChallengeApplication(objective.id, challengerApplicationId, fixture.commander.id);
+  assert.equal(approved.status, "ok");
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+
+  return { objective: frozen.objective, challengerApplicationId, observerApplicationId };
+}
+
+async function createSettledObjective(
+  fixture: Fixture,
+  title: string,
+  acceptedResult: ObjectiveAcceptedResult = "completed",
+) {
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, title);
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    { body: "Settled objective loot.", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+  const reviewed = await reviewObjectiveLoot(
+    objective.id,
+    { lootId: loot.loot.id, acceptedResult, resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    fixture.commander.id,
+  );
+  assert.equal(reviewed.status, "ok");
+  return { objective: reviewed.objective, result, loot: loot.loot };
+}
 
 async function withApiServer(fixture: Fixture, run: (app: FastifyInstance) => Promise<void>) {
   const originalFetch = globalThis.fetch;
@@ -524,6 +1016,21 @@ function headerValue(headers: HeadersInit | undefined, name: string) {
 
 function apiCookie(user: FixtureUser) {
   return `orf_ory_session=${encodeURIComponent(user.id)}`;
+}
+
+async function apiInject(
+  app: FastifyInstance,
+  user: FixtureUser,
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  url: string,
+  payload?: unknown,
+) {
+  return app.inject({
+    method,
+    url,
+    headers: { cookie: apiCookie(user) },
+    ...(payload === undefined ? {} : { payload }),
+  });
 }
 
 async function postResult(
