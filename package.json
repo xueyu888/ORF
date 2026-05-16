@@ -21,6 +21,7 @@
     "db:migrate": "tsx scripts/migrate-db.ts",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx scripts/seed.ts",
+    "db:seed:bounties": "tsx scripts/seed-bounty-hall.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "check": "npm run check:env && npm run build"

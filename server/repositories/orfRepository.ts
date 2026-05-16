@@ -415,6 +415,10 @@ function objectiveClosedForBountyHall(objective: Objective) {
   return Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null);
 }
 
+function objectiveAcceptedForBountyHall(objective: Objective) {
+  return objective.challengers.length > 0;
+}
+
 function contributionSummaryFor(data: TaskManagementData, member: string) {
   return {
     points: data.objectives.reduce((sum, objective) => {
@@ -430,7 +434,7 @@ export async function getBountyHallData(member: string): Promise<BountyHallData>
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
     if (!result) return [];
-    if (objective.challengers.includes(member) || objectiveClosedForBountyHall(objective)) return [];
+    if (objectiveAcceptedForBountyHall(objective) || objectiveClosedForBountyHall(objective)) return [];
 
     const pendingApplications = (objective.challengeApplications ?? []).filter((application) => application.status === "pending");
     return [{

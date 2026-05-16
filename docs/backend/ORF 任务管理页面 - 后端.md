@@ -230,7 +230,7 @@ type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 ## 约束
 
 - 我的挑战过滤：`currentUser in Objective.challengers`。
-- 悬赏大厅过滤：`currentUser not in Objective.challengers`，且目标未提交战利品、未验收、未结算。
+- 悬赏大厅过滤：`Objective.challengers.length = 0`，且目标未提交战利品、未验收、未结算。
 - `申请挑战` 和 `接受挑战` 仅在目标未关闭、未提交战利品、未验收、未结算时允许。
 - `提交战利品` 仅允许 `Objective.challengers` 中的成员执行；目标已关闭、已提交、已验收或已结算时拒绝。
 - 任务和子任务勾选状态不推导目标完成、指标完成或积分结算。
