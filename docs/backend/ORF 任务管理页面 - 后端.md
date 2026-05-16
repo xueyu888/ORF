@@ -23,7 +23,6 @@
 | `PATCH` | `/api/objectives/:objectiveId/challenge` | 被征召成员接受，写入挑战者并进入 `reestimating` |
 | `PATCH` | `/api/objectives/:objectiveId/challenge/decline` | 被征召成员拒绝 |
 | `PATCH` | `/api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结，进入 `frozen` |
-| `PATCH` | `/api/objectives/:objectiveId/reopen-reestimate` | 指挥官从冻结退回重估 |
 | `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品，进入 `submitted` |
 | `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收并结算，进入 `settled` |
 | `POST` | `/api/results` | 创建悬赏指标；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
@@ -121,6 +120,7 @@ type ObjectiveFlowStatus =
 - 指挥官按管理员权限处理。
 - 目标内容只能由指挥官修改。
 - 挑战者只能在未过期 `reestimating` 状态调整自己参与目标下的悬赏指标；超过 `confirmationDueAt` 或目标冻结后均不可调整。
+- 当前不开放退回重估；重估截止后停止调整，不续期。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
 - `申请挑战` 只表达意愿；指挥官通过后才写入 `Objective.challengers`。
 - `接受挑战` 只用于征召。

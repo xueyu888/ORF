@@ -85,6 +85,8 @@ const difficultyRanks: Record<UncertaintyLevel, number> = {
   飞升: 5,
 };
 const bountyHallFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting"]);
+const applicationReviewFlowStatuses = new Set<Objective["flowStatus"]>(["applying", "recruiting", "reestimating"]);
+const challengeAcceptanceFlowStatuses = new Set<Objective["flowStatus"]>(["recruiting", "reestimating"]);
 const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled", "closed"]);
 
 function optional<T>(value: T | null): T | undefined {
@@ -723,7 +725,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
   if (currentChallengers.includes(nextChallenger)) {
     return { status: "alreadyAccepted", challengers: currentChallengers };
   }
-  if (isObjectiveTerminal(objective)) {
+  if (isObjectiveTerminal(objective) || !challengeAcceptanceFlowStatuses.has(objective.flowStatus)) {
     return { status: "closed" };
   }
 
@@ -844,7 +846,7 @@ export async function approveObjectiveChallengeApplication(
 ): Promise<ObjectiveFlowMutationOutcome> {
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (isObjectiveTerminal(objective)) return { status: "invalid" };
+  if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
 
   const applications = objective.challengeApplications ?? [];
   const application = applications.find((item) => item.id === applicationId && item.status === "pending");
@@ -882,6 +884,7 @@ export async function rejectObjectiveChallengeApplication(
 ): Promise<ObjectiveFlowMutationOutcome> {
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
+  if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
   const applications = objective.challengeApplications ?? [];
   if (!applications.some((item) => item.id === applicationId && item.status === "pending")) return { status: "notFound" };
   const nextApplications = applications.map((item) =>
@@ -889,11 +892,12 @@ export async function rejectObjectiveChallengeApplication(
   );
   const hasPending = nextApplications.some((item) => item.status === "pending");
   const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+  const challengers = uniqueMembers(objective.challengers ?? []);
   await db
     .update(objectives)
     .set({
       challengeApplications: nextApplications,
-      flowStatus: assignedChallengers.length > 0 ? "recruiting" : hasPending ? "applying" : "open",
+      flowStatus: challengers.length > 0 ? "reestimating" : assignedChallengers.length > 0 ? "recruiting" : hasPending ? "applying" : "open",
       updatedAt: today(),
       updatedBy: actorId,
     })
@@ -908,7 +912,7 @@ export async function recruitObjectiveChallengers(
 ): Promise<ObjectiveFlowMutationOutcome> {
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (isObjectiveTerminal(objective) || objective.challengers.length > 0) return { status: "invalid" };
+  if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus) || objective.challengers.length > 0) return { status: "invalid" };
   const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...members]);
   if (assignedChallengers.length === 0) return { status: "invalid" };
   await db
@@ -919,12 +923,18 @@ export async function recruitObjectiveChallengers(
 }
 
 export async function declineObjectiveChallenge(objectiveId: string, member: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const nextMember = member.trim();
+  if (!nextMember) return { status: "invalid" };
+
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  const nextAssigned = uniqueMembers(objective.assignedChallengers ?? []).filter((item) => item !== member);
-  const applications = (objective.challengeApplications ?? []).map((item) =>
-    item.applicant === member && item.status === "approved" ? { ...item, status: "declined" as const, decidedAt: nowIso(), decidedBy: actorId } : item,
-  );
+  if (objective.flowStatus !== "recruiting") return { status: "invalid" };
+
+  const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+  if (!assignedChallengers.includes(nextMember)) return { status: "invalid" };
+
+  const nextAssigned = assignedChallengers.filter((item) => item !== nextMember);
+  const applications = objective.challengeApplications ?? [];
   await db
     .update(objectives)
     .set({
@@ -939,6 +949,9 @@ export async function declineObjectiveChallenge(objectiveId: string, member: str
 }
 
 export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const objectiveResults = await db.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId)).limit(1);
+  if (objectiveResults.length === 0) return { status: "invalid" };
+
   const updated = await db
     .update(objectives)
     .set({ flowStatus: "frozen", stage: "goalFrozen", confirmedAt: nowIso(), updatedAt: today(), updatedBy: actorId })
@@ -948,14 +961,9 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
   return objectiveOutcome(objectiveId);
 }
 
-export async function reopenObjectiveReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
-  const updated = await db
-    .update(objectives)
-    .set({ flowStatus: "reestimating", stage: "orfReestimate", updatedAt: today(), updatedBy: actorId })
-    .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "frozen")))
-    .returning({ id: objectives.id });
-  if (updated.length === 0) return { status: "invalid" };
-  return objectiveOutcome(objectiveId);
+export async function reopenObjectiveReestimate(_objectiveId: string, _actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  // Reestimate is a bounded adjustment window. Once it expires or the objective is frozen, this flow intentionally stays closed.
+  return { status: "invalid" };
 }
 
 export async function canEditResultDuringReestimate(resultId: string, member: string): Promise<boolean> {

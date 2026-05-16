@@ -81,7 +81,6 @@ interface OrfContextValue {
   acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
   declineBountyChallenge: (objectiveId: string) => Promise<boolean>;
   freezeObjective: (objectiveId: string) => Promise<boolean>;
-  reopenObjectiveReestimate: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
@@ -682,18 +681,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "冻结目标失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      reopenObjectiveReestimate: async (objectiveId) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/reopen-reestimate`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("目标已回到重估");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "重新重估失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

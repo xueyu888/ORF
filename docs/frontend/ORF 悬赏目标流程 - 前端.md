@@ -22,7 +22,7 @@
 | 工具栏 | 搜索、难度筛选、排序 |
 | 悬赏目标列表 | 目标行列表；征召目标置顶 |
 | 确认弹窗 | `申请挑战` 或 `接受挑战` 的二次确认 |
-| 管理动作 | 指挥官发布候选目标、审核申请、重估完成后冻结或退回重估 |
+| 管理动作 | 指挥官发布候选目标、审核申请、重估完成后冻结 |
 
 ## 悬赏目标列表
 
@@ -57,7 +57,7 @@
 | 申请中 | 显示在悬赏目标列表，操作为已申请 |
 | 征召中 | 显示在悬赏目标列表顶部，并显示 `征召令` |
 | 重估中 | 显示在我的挑战；挑战者可调整指标，指挥官可冻结 |
-| 已冻结 | 显示提交战利品入口；指挥官可退回重估 |
+| 已冻结 | 显示提交战利品入口；不再开放指标调整 |
 | 待验收 | 显示验收入口 |
 | 已结算 | 显示结算结果和积分 |
 
@@ -94,7 +94,6 @@
 | `PATCH /api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
 | `PATCH /api/objectives/:objectiveId/publish` | 指挥官发布候选目标 |
 | `PATCH /api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结 |
-| `PATCH /api/objectives/:objectiveId/reopen-reestimate` | 指挥官退回重估 |
 | `POST /api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
 | `POST /api/objectives/:objectiveId/review` | 指挥官验收并结算 |
 

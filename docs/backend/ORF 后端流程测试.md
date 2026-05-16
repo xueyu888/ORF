@@ -20,14 +20,15 @@
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
 | 发布前征召保护 | `recruitment is only allowed after an objective is published` | `candidate` 目标不能被征召，必须先发布 |
 | 冻结后旧申请保护 | `approving stale pending applications cannot mutate a frozen objective` / `rejecting stale pending applications cannot reopen a frozen objective` | 冻结后不能通过或拒绝旧申请来改写目标状态 |
+| 已接受后旧申请保护 | `rejecting remaining pending applications keeps an accepted objective in reestimate` | 目标已有挑战者后，继续拒绝剩余 pending application 不能把目标退回悬赏大厅 |
+| 冻结后旧征召保护 | `accepting stale recruitment cannot reopen a frozen objective` | 冻结后旧 assigned recruitment 不能再被接受并改写目标状态 |
 | 征召拒绝保护 | `unassigned members cannot decline recruitment outside the recruiting state` / `assigned members can decline recruitment exactly once` | 只有被征召成员能在征召期拒绝，重复拒绝无效 |
-| 退回重估窗口 | `reopening a frozen objective restores the reestimate adjustment window` | 退回 `reestimating` 后应恢复可调整指标的时间窗口 |
 | 冻结前指标保护 | `freezing after reestimate requires at least one concrete result` | 没有具体 Result 的目标不能冻结，避免后续无法提交战利品 |
 | 申请与接受守卫 | `challenge application duplicate and closed-state guards are enforced` / `challenge acceptance guards duplicate, due-date, unauthorized, and closed states` | 重复申请、已接受、非法接受、截止时间过近、已关闭状态都应被保护 |
-| 冻结/退回非法状态 | `freeze and reopen reject invalid source states` | 只有 `reestimating` 可冻结，只有 `frozen` 可退回重估 |
+| 冻结/退回保护 | `freeze rejects invalid source states and reopen requests stay disabled` | 只有 `reestimating` 且已有 Result 可冻结；当前不开放退回重估 |
 | 战利品与验收异常 | `loot submission rejects incomplete or out-of-state payloads` / `review rejects invalid state and missing loot` | 提交和验收的非法状态、漏 claim、外部 Result、缺失 loot 均应拒绝 |
 | 多挑战者结算 | `settlement normalizes multi-challenger contribution ratios and supports overdelivery` | 多挑战者贡献比例归一化，超预期完成按 1.5 倍结算 |
-| API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、退回、验收、全量挑战视图权限 |
+| API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、验收、全量挑战视图权限 |
 | API 指标管理权限 | `API result management routes keep privileged operations behind role permissions` | `managerDefined` 创建、confidence、update-proposal、排序、删除等高权限指标操作 |
 
 测试直接调用 `server/repositories/orfRepository.ts` 的公开函数。
@@ -50,7 +51,7 @@
 | `applying` / `recruiting` | 成员还不是正式挑战者，不能获得指标调整资格 |
 | `reestimating` | 申请被通过或征召被接受后，成员成为正式挑战者；挑战者可以定义 / 调整自己参与目标下的具体 Result |
 | 重估截止前 | 指标必须在 `confirmationDueAt` 截止前校准完毕；API 创建和编辑测试会验证过期后返回 `403` |
-| `frozen` | 指标冻结，挑战者不能继续调整；如需调整，应由指挥官退回 `reestimating` 后再改 |
+| `frozen` | 指标冻结，挑战者不能继续调整；当前不提供退回重估，`confirmationDueAt` 到期后也不续期 |
 | `submitted` / `settled` | 进入提交或结算后，指标不再开放调整 |
 
 ## 申请流程图
@@ -130,20 +131,20 @@ flowchart TD
 | ORF-BE-R020 | API 注入测试必须关闭可选外部集成，避免流程测试触发 GitHub / Mattermost 网络请求。 | API 创建指标权限、API 编辑指标权限 |
 | ORF-BE-R021 | 指挥官只能征召已发布目标，`candidate` 目标不能直接进入 `recruiting`。 | 发布前征召保护 |
 | ORF-BE-R022 | 目标冻结后，旧 pending application 不能再被批准，也不能把 `frozen` 改回 `reestimating`。 | 冻结后旧申请保护 |
-| ORF-BE-R023 | 目标冻结后，旧 pending application 不能再被拒绝，也不能把 `frozen` 改回 `open/applying/recruiting`。 | 冻结后旧申请保护 |
+| ORF-BE-R023 | 目标冻结后，旧 pending application 不能再被拒绝；目标已有挑战者后，拒绝剩余 pending application 也不能把 `reestimating` 改回 `open/applying/recruiting`。 | 冻结后旧申请保护、已接受后旧申请保护 |
 | ORF-BE-R024 | 未被征召成员不能调用拒绝征召；非 `recruiting` 状态下拒绝征召应无效。 | 征召拒绝保护 |
 | ORF-BE-R025 | 被征召成员成功拒绝后应从 `assignedChallengers` 移除；重复拒绝应无效。 | 征召拒绝保护 |
-| ORF-BE-R026 | 指挥官从 `frozen` 退回 `reestimating` 时，应重新打开或刷新重估调整窗口。 | 退回重估窗口 |
+| ORF-BE-R026 | 当前不开放从 `frozen` 退回 `reestimating`；退回请求应被拒绝，`confirmationDueAt` 不续期。 | 冻结/退回保护 |
 | ORF-BE-R027 | `reestimating` 目标冻结前必须至少有一个具体 Result。 | 冻结前指标保护 |
 | ORF-BE-R028 | 同一成员重复申请同一目标应返回 `alreadyApplied`；已成为挑战者后再次申请应返回 `alreadyAccepted`。 | 申请与接受守卫 |
 | ORF-BE-R029 | `reestimating/frozen/submitted/settled/closed` 等非悬赏大厅状态不接受新的挑战申请。 | 申请与接受守卫 |
-| ORF-BE-R030 | 未被征召成员不能接受挑战；重复接受应返回 `alreadyAccepted`；目标截止时间过近应返回 `invalidDueDate`；终态目标应返回 `closed`。 | 申请与接受守卫 |
-| ORF-BE-R031 | 只有 `reestimating` 可冻结；只有 `frozen` 可退回重估。 | 冻结/退回非法状态 |
+| ORF-BE-R030 | 未被征召成员不能接受挑战；重复接受应返回 `alreadyAccepted`；目标截止时间过近应返回 `invalidDueDate`；冻结或终态目标应返回 `closed`。 | 申请与接受守卫、冻结后旧征召保护 |
+| ORF-BE-R031 | 只有 `reestimating` 可冻结；冻结后不允许退回重估。 | 冻结/退回保护 |
 | ORF-BE-R032 | 战利品只能在 `frozen` 提交；空 body、漏 claim、claim 其他目标 Result 都应拒绝。 | 战利品与验收异常 |
 | ORF-BE-R033 | 只有 `submitted` 目标可验收；指定不存在的 loot 应返回 `notFound`。 | 战利品与验收异常 |
 | ORF-BE-R034 | 多挑战者结算时，只接受目标挑战者贡献比例，并按有效比例归一化。 | 多挑战者结算 |
 | ORF-BE-R035 | `overdelivered` 目标结果按 1.5 倍目标基础分结算。 | 多挑战者结算 |
-| ORF-BE-R036 | 发布、征召、申请审核、冻结、退回重估、验收均应保持指挥官权限边界。 | API 流程权限 |
+| ORF-BE-R036 | 发布、征召、申请审核、冻结、验收均应保持指挥官权限边界。 | API 流程权限 |
 | ORF-BE-R037 | `/api/my-challenges?scope=all` 只能由指挥官读取。 | API 流程权限 |
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
 
@@ -157,7 +158,7 @@ flowchart TD
 | 可选参考指标 | 如果指挥官创建 Result，返回指标存在，不确定性分按难度计算 |
 | 发布目标 | `publishObjective` 返回 `ok`，`flowStatus=open`；即使没有 Result，也应进入悬赏大厅 |
 | 审核申请 | 申请状态变为 `approved`，目标进入 `reestimating` |
-| 冻结目标 | `flowStatus=frozen`，挑战者指标调整资格变为 `false` |
+| 冻结目标 | 已有 Result 的 `reestimating` 目标可进入 `flowStatus=frozen`，挑战者指标调整资格变为 `false` |
 | 验收战利品 | `flowStatus=settled`，`acceptedResult=completed`，写入基础分和结算分 |
 | 积分流水 | `pointLedger` 写入挑战者、用户 ID、积分和结算原因 |
 
@@ -170,6 +171,7 @@ flowchart TD
 | 进入挑战前 | `canEditObjectiveResultsDuringReestimate` 返回 `false` |
 | 进入挑战 | 申请通过或接受征召后，`/api/my-challenges` 返回该目标；指标可以在此阶段由挑战者补充 |
 | 编辑资格 | `canEditObjectiveResultsDuringReestimate` 只对 `reestimating` 下的正式挑战者返回 `true` |
+| 重估截止后 | `confirmationDueAt` 过期后不能继续创建或编辑指标，且不通过退回重估续期 |
 | 冻结后 | `canEditObjectiveResultsDuringReestimate` 返回 `false` |
 | 提交战利品 | 非挑战者返回 `forbidden`，挑战者提交返回 `ok` |
 | 结算后 | 目标不再出现在悬赏大厅 |
@@ -180,17 +182,17 @@ flowchart TD
 - 当前 `PATCH /api/results/:resultId` 只覆盖标题编辑；如果后续增加指标口径、基线、目标值等编辑路由，需要追加同样的重估窗口测试。
 - 当前测试只覆盖单团队测试数据；如果后续支持多团队隔离，需要追加跨团队越权用例。
 
-## 当前已暴露的后端差异
+## 回归保护项
 
-以下测试表达的是期望规则，当前实现尚未全部满足：
+以下测试用于锁住高风险和中风险流程边界：
 
-- `recruitment is only allowed after an objective is published`：当前 `candidate` 目标可直接征召。
-- `approving stale pending applications cannot mutate a frozen objective`：当前冻结后仍可批准旧 pending application。
-- `rejecting stale pending applications cannot reopen a frozen objective`：当前冻结后拒绝旧 pending application 会改写目标状态。
-- `unassigned members cannot decline recruitment outside the recruiting state`：当前未被征召成员也会得到 `ok`。
-- `assigned members can decline recruitment exactly once`：当前重复拒绝仍返回 `ok`。
-- `reopening a frozen objective restores the reestimate adjustment window`：当前退回重估不会刷新过期的 `confirmationDueAt`。
-- `freezing after reestimate requires at least one concrete result`：当前无 Result 目标也能冻结。
+- `candidate` 目标不能直接征召，必须先发布。
+- 冻结后旧 pending application 不能再被批准或拒绝，避免改写 `frozen` 状态。
+- 已进入 `reestimating` 的目标拒绝剩余 pending application 时，不能回到悬赏大厅状态。
+- 冻结后旧 assigned recruitment 不能再接受，避免改写 `frozen` 状态。
+- 拒绝征召只允许真正被征召成员在 `recruiting` 阶段执行，重复拒绝无效。
+- 当前不开放退回重估；重估截止后不续期，冻结后也不返回 `reestimating`。
+- `reestimating` 目标至少有一个具体 Result 后才能冻结。
 
 ## 修改测试时机
 
@@ -201,7 +203,7 @@ flowchart TD
 - 我的挑战过滤条件变化。
 - 指挥官是否必须提供参考指标的规则变化。
 - 挑战者在重估期定义 / 调整指标的权限规则变化。
-- 重估截止时间、冻结、退回重估的规则变化。
+- 重估截止时间和冻结规则变化。
 - 战利品提交权限变化。
 - 验收结算积分计算变化。
 

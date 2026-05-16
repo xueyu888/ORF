@@ -419,7 +419,7 @@ test("challenger result edits through the API close after reestimate expiry and 
     const expired = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} expired edit`);
     assert.equal(expired.statusCode, 403);
 
-    await reopenReestimateWindow(objective.id);
+    await setFutureReestimateWindow(objective.id);
     const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
     assert.equal(frozen.status, "ok");
     const afterFreeze = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} frozen edit`);
@@ -474,6 +474,56 @@ test("rejecting stale pending applications cannot reopen a frozen objective", as
   );
 });
 
+test("rejecting remaining pending applications keeps an accepted objective in reestimate", async () => {
+  const fixture = await createFixture("reject-pending-after-accept");
+  const objective = await createPublishedObjective(fixture, "reject remaining pending guard");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} active reject guard result`);
+
+  const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  const observerApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
+  assert.equal(challengerApplication.status, "applied");
+  assert.equal(observerApplication.status, "applied");
+  const challengerApplicationId = challengerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  const observerApplicationId = observerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.observer.name)?.id;
+  assert.ok(challengerApplicationId);
+  assert.ok(observerApplicationId);
+
+  const approved = await approveObjectiveChallengeApplication(objective.id, challengerApplicationId, fixture.commander.id);
+  assert.equal(approved.status, "ok");
+  assert.equal(approved.objective.flowStatus, "reestimating");
+
+  const rejected = await rejectObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id);
+  assert.equal(rejected.status, "ok");
+  assert.equal(rejected.objective.flowStatus, "reestimating");
+  assert.deepEqual(rejected.objective.challengers, [fixture.challenger.name]);
+  assert.equal(
+    rejected.objective.challengeApplications.find((application) => application.id === observerApplicationId)?.status,
+    "declined",
+  );
+});
+
+test("accepting stale recruitment cannot reopen a frozen objective", async () => {
+  const fixture = await createFixture("accept-after-freeze");
+  const objective = await createPublishedObjective(fixture, "accept after freeze guard");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} stale recruitment guard result`);
+
+  const recruited = await recruitObjectiveChallengers(objective.id, [fixture.challenger.name, fixture.observer.name], fixture.commander.id);
+  assert.equal(recruited.status, "ok");
+
+  const accepted = await acceptObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(accepted.status, "accepted");
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+
+  const staleAccept = await acceptObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+  assert.equal(staleAccept.status, "closed");
+
+  const data = await getTaskManagementData();
+  const unchanged = data.objectives.find((item) => item.id === objective.id);
+  assert.equal(unchanged?.flowStatus, "frozen");
+  assert.deepEqual(unchanged?.challengers, [fixture.challenger.name]);
+});
+
 test("unassigned members cannot decline recruitment outside the recruiting state", async () => {
   const fixture = await createFixture("decline-unassigned-guard");
   const objective = await createPublishedObjective(fixture, "decline unassigned guard");
@@ -501,21 +551,6 @@ test("assigned members can decline recruitment exactly once", async () => {
 
   const repeatedDecline = await declineObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
   assert.equal(repeatedDecline.status, "invalid");
-});
-
-test("reopening a frozen objective restores the reestimate adjustment window", async () => {
-  const fixture = await createFixture("reopen-window");
-  const { objective } = await createApprovedObjectiveWithResult(fixture);
-
-  await expireReestimateWindow(objective.id);
-  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
-  assert.equal(frozen.status, "ok");
-  assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), false);
-
-  const reopened = await reopenObjectiveReestimate(objective.id, fixture.commander.id);
-  assert.equal(reopened.status, "ok");
-  assert.equal(reopened.objective.flowStatus, "reestimating");
-  assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), true);
 });
 
 test("freezing after reestimate requires at least one concrete result", async () => {
@@ -580,8 +615,8 @@ test("challenge acceptance guards duplicate, due-date, unauthorized, and closed 
   assert.equal(closed.status, "closed");
 });
 
-test("freeze and reopen reject invalid source states", async () => {
-  const fixture = await createFixture("freeze-reopen-guards");
+test("freeze rejects invalid source states and reopen requests stay disabled", async () => {
+  const fixture = await createFixture("freeze-reopen-disabled-guards");
   const candidate = await createTestObjective(fixture, "candidate freeze guard");
   assert.equal((await freezeObjectiveAfterReestimate(candidate.id, fixture.commander.id)).status, "invalid");
   assert.equal((await reopenObjectiveReestimate(candidate.id, fixture.commander.id)).status, "invalid");
@@ -595,7 +630,7 @@ test("freeze and reopen reject invalid source states", async () => {
   const frozen = await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id);
   assert.equal(frozen.status, "ok");
   assert.equal((await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id)).status, "invalid");
-  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "ok");
+  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "invalid");
 });
 
 test("loot submission rejects incomplete or out-of-state payloads", async () => {
@@ -762,6 +797,8 @@ test("API flow commands enforce commander-only permissions and challenge list sc
     assert.equal(memberFreeze.statusCode, 403);
     const memberReopen = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/reopen-reestimate`);
     assert.equal(memberReopen.statusCode, 403);
+    const commanderReopen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/reopen-reestimate`);
+    assert.equal(commanderReopen.statusCode, 409);
     const memberReview = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/review`, {
       acceptedResult: "completed",
     });
@@ -1071,7 +1108,7 @@ async function expireReestimateWindow(objectiveId: string) {
   await db.update(objectives).set({ confirmationDueAt: expiredConfirmationDueAt }).where(sql`${objectives.id} = ${objectiveId}`);
 }
 
-async function reopenReestimateWindow(objectiveId: string) {
+async function setFutureReestimateWindow(objectiveId: string) {
   await db.update(objectives).set({ confirmationDueAt: "2999-01-01T00:00:00.000Z" }).where(sql`${objectives.id} = ${objectiveId}`);
 }
 

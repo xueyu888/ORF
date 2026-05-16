@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, MessageSquare, RotateCcw, Send, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -45,7 +45,6 @@ type RowHandlers = {
   onOpenActionChange: (id: string | null) => void;
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
-  onReopenObjectiveReestimate: (objectiveId: string) => Promise<boolean>;
   onSaveTitle: (target: ChallengeTarget, title: string) => void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -213,15 +212,6 @@ function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode
       <button className="orf-flow-action-button orf-flow-action-primary" type="button" title="重估完成并冻结目标" onClick={() => void handlers.onFreezeObjective(objective.id)}>
         <CheckCircle2 className="h-3.5 w-3.5" />
         冻结
-      </button>
-    );
-  }
-
-  if (objective.flowStatus === "frozen") {
-    return (
-      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="退回重估以调整指标" onClick={() => void handlers.onReopenObjectiveReestimate(objective.id)}>
-        <RotateCcw className="h-3.5 w-3.5" />
-        重估
       </button>
     );
   }
