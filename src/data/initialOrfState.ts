@@ -1,4 +1,5 @@
 import type { ChallengeApplication, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
+import { addCalendarDays } from "../utils/date";
 
 const uncertaintyScores: Record<UncertaintyLevel, number> = {
   入门: 10,
@@ -43,10 +44,7 @@ type LegacyInitialState = Omit<OrfState, "objectives" | "results"> & {
 };
 
 function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addCalendarDays(value, days, value);
 }
 
 function latestDate(values: Array<string | undefined | null>) {

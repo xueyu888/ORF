@@ -43,6 +43,7 @@ import {
 } from "../db/schema";
 import { getPermissionRulesForTeam } from "./permissionRepository";
 import { getTeamUsers } from "./userRepository";
+import { addCalendarDays, localDateString } from "../../src/utils/date";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -64,7 +65,7 @@ type CommentMutationOutcome =
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDateString(new Date());
 const nowIso = () => new Date().toISOString();
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
@@ -106,10 +107,7 @@ function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
 }
 
 function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addCalendarDays(value, days, value);
 }
 
 function isMissingCommentStorageError(error: unknown) {

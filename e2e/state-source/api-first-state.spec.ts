@@ -32,12 +32,16 @@ test("does not show bundled business data when task data API fails", async ({ pa
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({ status: 503, json: { error: "task data unavailable" } });
   });
+  await page.route("**/api/bounties", async (route) => {
+    await route.fulfill({ status: 503, json: { error: "bounty data unavailable" } });
+  });
 
   await page.goto("/bounties");
 
   await expect(page.getByRole("heading", { name: "悬赏大厅" })).toBeVisible();
   await expect(page.getByText("RAG 检索 Recall@5 达到 85%")).toHaveCount(0);
-  await expect(page.getByText("当前没有可申请挑战的悬赏指标")).toBeVisible();
+  await expect(page.getByText("悬赏目标 0 条")).toBeVisible();
+  await expect(page.getByText("当前没有可申请或待接受的悬赏目标")).toBeVisible();
 });
 
 test("ignores stale business data in legacy localStorage", async ({ page }) => {
@@ -47,12 +51,16 @@ test("ignores stale business data in legacy localStorage", async ({ page }) => {
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({ status: 503, json: { error: "task data unavailable" } });
   });
+  await page.route("**/api/bounties", async (route) => {
+    await route.fulfill({ status: 503, json: { error: "bounty data unavailable" } });
+  });
 
   await page.goto("/bounties");
 
   await expect(page.getByRole("heading", { name: "悬赏大厅" })).toBeVisible();
   await expect(page.getByText("RAG 检索 Recall@5 达到 85%")).toHaveCount(0);
-  await expect(page.getByText("当前没有可申请挑战的悬赏指标")).toBeVisible();
+  await expect(page.getByText("悬赏目标 0 条")).toBeVisible();
+  await expect(page.getByText("当前没有可申请或待接受的悬赏目标")).toBeVisible();
 });
 
 test("keeps task status unchanged until the API write succeeds and refreshed data arrives", async ({ page }) => {

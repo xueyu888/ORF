@@ -1,4 +1,5 @@
 import type { Evidence, Feedback, Result, Task } from "../../../types/orf";
+import { addCalendarDays } from "../../../utils/date";
 
 export function bountyUpdatedAt(result: Result, actions: Task[], feedback: Feedback[], evidence: Evidence[]) {
   return latestDate([
@@ -33,8 +34,5 @@ export function latestDate(values: Array<string | undefined>) {
 }
 
 export function addDays(value: string, days: number) {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addCalendarDays(value, days);
 }

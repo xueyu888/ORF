@@ -1,5 +1,6 @@
 import { initialOrfState } from "../data/initialOrfState";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus, UncertaintyLevel } from "../types/orf";
+import { addCalendarDays, localDateString } from "../utils/date";
 
 type Placement = "before" | "after";
 type MoveResultInput = { resultId: string; objectiveId: string; referenceResultId: string; placement: Placement };
@@ -29,7 +30,7 @@ const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(stat
 const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const currentTime = () => new Date().toISOString();
-const currentDate = () => currentTime().slice(0, 10);
+const currentDate = () => localDateString(new Date());
 const currentUserName = (state: OrfState) => state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
 const latestDate = (values: Array<string | undefined | null>) => values.filter(Boolean).sort().at(-1) ?? "";
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
@@ -43,10 +44,7 @@ const uncertaintyScores: Record<UncertaintyLevel, number> = {
 };
 
 const addDays = (value: string, days: number) => {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "";
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addCalendarDays(value, days);
 };
 
 const confirmationDueAt = (finalDueAt: string | undefined, acceptedAt: string) => {
@@ -342,7 +340,7 @@ export class OrfFlowStore {
 
   createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt">>): OrfState {
     const id = `obj-${Date.now()}`;
-    const now = new Date().toISOString().slice(0, 10);
+    const now = currentDate();
     const objective = {
       id,
       title: input.title,
@@ -415,7 +413,7 @@ export class OrfFlowStore {
       results: [result, ...state.results],
       objectives: state.objectives.map((objective) =>
         objective.id === input.objectiveId
-          ? { ...objective, resultIds: [result.id, ...objective.resultIds], updatedAt: new Date().toISOString().slice(0, 10) }
+          ? { ...objective, resultIds: [result.id, ...objective.resultIds], updatedAt: currentDate() }
           : objective,
       ),
     };
@@ -428,7 +426,7 @@ export class OrfFlowStore {
     }
 
     const id = `fb-${Date.now()}`;
-    const now = new Date().toISOString().slice(0, 10);
+    const now = currentDate();
     const owner = input.owner || currentUserName(state);
     const feedback: Feedback = {
       id,
@@ -466,7 +464,7 @@ export class OrfFlowStore {
     }
 
     const nextNumber = 128 + state.tasks.length + 1;
-    const now = new Date().toISOString().slice(0, 10);
+    const now = currentDate();
     const task: Task = {
       id: input.id ?? `ORF-${nextNumber}`,
       title: input.title,
@@ -500,13 +498,13 @@ export class OrfFlowStore {
     return {
       ...state,
       tasks: state.tasks.map((task) =>
-        task.id === taskId ? { ...task, status, updatedAt: new Date().toISOString().slice(0, 10) } : task,
+        task.id === taskId ? { ...task, status, updatedAt: currentDate() } : task,
       ),
     };
   }
 
   setTaskCompletion(state: OrfState, taskId: string, done: boolean): OrfState {
-    const now = new Date().toISOString().slice(0, 10);
+    const now = currentDate();
 
     return {
       ...state,
@@ -524,7 +522,7 @@ export class OrfFlowStore {
   }
 
   updateTaskChecklistItem(state: OrfState, taskId: string, itemId: string, done: boolean): OrfState {
-    const now = new Date().toISOString().slice(0, 10);
+    const now = currentDate();
 
     return {
       ...state,
@@ -1106,7 +1104,7 @@ export class OrfFlowStore {
       return state;
     }
 
-    const now = new Date().toISOString().slice(0, 10);
+    const now = currentDate();
     return {
       ...state,
       results: state.results.map((item) => (item.id === resultId ? { ...item, title, updatedAt: now } : item)),
