@@ -35,6 +35,18 @@ ORF 是一个基于 ORF 思想设计的项目管理工具。它在产品理念�
 npm install
 ```
 
+首次运行 Playwright E2E 测试前，需要安装 Chromium 测试浏览器：
+
+```bash
+npx playwright install chromium
+```
+
+如果在 Linux/WSL 环境中运行，首次安装还需要补齐 Chromium 系统依赖：
+
+```bash
+sudo npx playwright install-deps chromium
+```
+
 ### 2) 配置并验证数据库
 
 ```bash
