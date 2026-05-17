@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { and, eq, sql } from "drizzle-orm";
 import { closeDb, db } from "../../server/db/client";
 import { teamMembers, teams, users } from "../../server/db/schema";
@@ -34,6 +34,19 @@ type BrowserSession = {
   };
 };
 
+type BrowserAuthStorageState = {
+  localStorageAuthKeys: string[];
+  sessionStorageAuthKeys: string[];
+};
+
+type LoginActionResult = {
+  ok: boolean;
+  status: number;
+  body: BrowserSession["body"];
+};
+
+type LoginTestState = Awaited<ReturnType<typeof setupLoginState>>;
+
 test.describe("登录测试用例", () => {
   test.afterAll(async () => {
     await closeDb();
@@ -43,81 +56,104 @@ test.describe("登录测试用例", () => {
     const setup = await setupLoginState();
 
     try {
-      await clearBrowserState(page);
-      await context.clearCookies();
-      await page.goto("/auth");
+      await setupLoginPage(context, page);
+      await assertS0(context, page, setup);
 
-      const emailInput = page.getByLabel("Email");
-      const passwordInput = page.getByRole("textbox", { name: "Password" });
-      const signInButton = page.getByRole("button", { name: "Sign In" });
+      const loginAction = await performLoginAction(page);
 
-      await expect(page).toHaveURL(/\/auth$/);
-      await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-      await expect(emailInput).toBeVisible();
-      await expect(emailInput).toHaveValue("");
-      await expect(passwordInput).toBeVisible();
-      await expect(passwordInput).toHaveValue("");
-      await expect(signInButton).toBeVisible();
-      await expect(signInButton).toBeEnabled();
-      await expect(await readBrowserSession(page)).toMatchObject({
-        status: 200,
-        body: { authenticated: false },
-      });
-      await expect.poll(() => hasSessionCookie(context)).toBe(false);
-      await expect.poll(() => findOryIdentityByEmail(TEST_EMAIL)).not.toBeNull();
-      await expect.poll(() => readOrfMembership(setup.userId, setup.teamId)).toMatchObject({
-        email: TEST_EMAIL,
-        role: "member",
-      });
-
-      await emailInput.fill(TEST_EMAIL);
-      await passwordInput.fill(TEST_PASSWORD);
-      const loginResponsePromise = page.waitForResponse(
-        (response) => response.url().endsWith("/api/auth/login") && response.request().method() === "POST",
-      );
-      await signInButton.click();
-      const loginResponse = await loginResponsePromise;
-      expect(loginResponse.ok()).toBe(true);
-      await expect(loginResponse.json()).resolves.toMatchObject({
-        authenticated: true,
-        user: { email: TEST_EMAIL, role: "member" },
-      });
-
-      await expect(page).toHaveURL(/\/bounties$/);
-      await expect.poll(() => hasSessionCookie(context)).toBe(true);
-      await expect(await readBrowserSession(page)).toMatchObject({
-        status: 200,
-        body: {
-          authenticated: true,
-          user: { email: TEST_EMAIL, role: "member" },
-        },
-      });
-      await expect(page.getByLabel("主导航")).toBeVisible();
-      await expect(page.getByLabel("当前用户")).toBeVisible();
-      await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
-      await expect(page.getByRole("button", { name: "Sign In" })).toHaveCount(0);
-      await expect.poll(() => readOrfMembership(setup.userId, setup.teamId)).toMatchObject({
-        email: TEST_EMAIL,
-        role: "member",
-      });
+      await assertS1(context, page, setup, loginAction);
     } finally {
       await cleanLoginState(page, setup);
-      await expect(await readBrowserSession(page)).toMatchObject({
-        status: 200,
-        body: { authenticated: false },
-      });
-      await expect.poll(() => hasSessionCookie(context)).toBe(false);
-      await page.goto("/bounties");
-      await expect(page).toHaveURL(/\/auth$/);
-      await expect.poll(() => findOryIdentityByEmail(TEST_EMAIL)).not.toBeNull();
-      await expect.poll(() => readOrfMembership(setup.userId, setup.teamId)).toMatchObject({
-        email: TEST_EMAIL,
-        role: "member",
-        lastLoginAt: setup.previousLastLoginAt,
-      });
+      await assertB(context, page, setup);
     }
   });
 });
+
+async function setupLoginPage(context: BrowserContext, page: Page) {
+  await clearBrowserState(page);
+  await context.clearCookies();
+  await page.goto("/auth");
+  await expect(page.getByRole("button", { name: "Sign In" })).toBeEnabled();
+}
+
+async function assertB(context: BrowserContext, page: Page, setup: LoginTestState) {
+  await page.goto("/bounties");
+  await expect(page).toHaveURL(/\/auth$/);
+  await expect.poll(() => readBrowserSession(page)).toMatchObject({
+    status: 200,
+    body: { authenticated: false, user: null },
+  });
+  await expect.poll(() => hasSessionCookie(context)).toBe(false);
+  await expect.poll(() => readBrowserAuthStorageState(page)).toEqual({
+    localStorageAuthKeys: [],
+    sessionStorageAuthKeys: [],
+  });
+  await assertTestIdentityExists();
+  await assertOrfMemberMatches(setup, { lastLoginAt: setup.previousLastLoginAt });
+}
+
+async function assertS0(context: BrowserContext, page: Page, setup: LoginTestState) {
+  const emailInput = page.getByLabel("Email");
+  const passwordInput = page.getByLabel("Password", { exact: true });
+  const signInButton = page.getByRole("button", { name: "Sign In" });
+
+  await expect(page).toHaveURL(/\/auth$/);
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(emailInput).toBeVisible();
+  await expect(emailInput).toHaveValue("");
+  await expect(passwordInput).toBeVisible();
+  await expect(passwordInput).toHaveValue("");
+  await expect(signInButton).toBeVisible();
+  await expect(signInButton).toBeEnabled();
+  await expect.poll(() => readBrowserSession(page)).toMatchObject({
+    status: 200,
+    body: { authenticated: false, user: null },
+  });
+  await expect.poll(() => hasSessionCookie(context)).toBe(false);
+  await assertTestIdentityExists();
+  await assertOrfMemberMatches(setup);
+}
+
+async function performLoginAction(page: Page): Promise<LoginActionResult> {
+  const loginResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith("/api/auth/login") && response.request().method() === "POST",
+  );
+
+  await page.getByLabel("Email").fill(TEST_EMAIL);
+  await page.getByLabel("Password", { exact: true }).fill(TEST_PASSWORD);
+  await page.getByRole("button", { name: "Sign In" }).click();
+
+  const loginResponse = await loginResponsePromise;
+  return {
+    ok: loginResponse.ok(),
+    status: loginResponse.status(),
+    body: (await loginResponse.json()) as BrowserSession["body"],
+  };
+}
+
+async function assertS1(context: BrowserContext, page: Page, setup: LoginTestState, loginAction: LoginActionResult) {
+  expect(loginAction.ok).toBe(true);
+  expect(loginAction.status).toBe(200);
+  expect(loginAction.body).toMatchObject({
+    authenticated: true,
+    user: { email: TEST_EMAIL, role: "member" },
+  });
+
+  await expect(page).toHaveURL(/\/bounties$/);
+  await expect.poll(() => hasSessionCookie(context)).toBe(true);
+  await expect.poll(() => readBrowserSession(page)).toMatchObject({
+    status: 200,
+    body: {
+      authenticated: true,
+      user: { email: TEST_EMAIL, role: "member" },
+    },
+  });
+  await expect(page.getByLabel("主导航")).toBeVisible();
+  await expect(page.getByLabel("当前用户")).toBeVisible();
+  await expect(page.getByRole("button", { name: "退出登录" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign In" })).toHaveCount(0);
+  await assertOrfMemberMatches(setup);
+}
 
 async function setupLoginState() {
   const identity = await upsertOryIdentity();
@@ -180,9 +216,33 @@ async function readBrowserSession(page: Page): Promise<BrowserSession> {
   });
 }
 
-async function hasSessionCookie(context: Parameters<Parameters<typeof test>[1]>[0]["context"]) {
+async function readBrowserAuthStorageState(page: Page): Promise<BrowserAuthStorageState> {
+  return page.evaluate(() => ({
+    localStorageAuthKeys: Object.keys(window.localStorage).filter((key) => /auth|session|token|ory/i.test(key)),
+    sessionStorageAuthKeys: Object.keys(window.sessionStorage).filter((key) => /auth|session|token|ory/i.test(key)),
+  }));
+}
+
+async function hasSessionCookie(context: BrowserContext) {
   const cookies = await context.cookies();
   return cookies.some((cookie) => cookie.name === ORF_SESSION_COOKIE && cookie.value.length > 0);
+}
+
+async function assertTestIdentityExists() {
+  await expect.poll(async () => (await findOryIdentityByEmail(TEST_EMAIL))?.traits?.email ?? null).toBe(TEST_EMAIL);
+}
+
+async function assertOrfMemberMatches(setup: LoginTestState, options: { lastLoginAt?: string | null } = {}) {
+  const expected: { email: string; role: string; lastLoginAt?: string | null } = {
+    email: TEST_EMAIL,
+    role: "member",
+  };
+
+  if ("lastLoginAt" in options) {
+    expected.lastLoginAt = options.lastLoginAt;
+  }
+
+  await expect.poll(() => readOrfMembership(setup.userId, setup.teamId)).toMatchObject(expected);
 }
 
 async function findOryIdentityByEmail(email: string) {
