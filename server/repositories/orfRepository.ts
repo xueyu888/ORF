@@ -45,6 +45,7 @@ import {
   resultTrendPoints,
   taskChecklistItems,
   tasks,
+  teamMembers,
   teams,
   users,
 } from "../db/schema";
@@ -2032,9 +2033,22 @@ export async function reviewObjectiveLoot(
       ? contributionSummary.ratios
       : normalizeContributionRatios(resolutionRatios, challengers);
   if (!normalizedRatios || normalizedRatios.length === 0) return { status: "invalid" };
-  const memberRows = normalizedRatios.length > 0
-    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.name, normalizedRatios.map((item) => item.member)))
-    : [];
+  const memberRows =
+    normalizedRatios.length > 0
+      ? await db
+          .select({ id: users.id, name: users.name })
+          .from(teamMembers)
+          .innerJoin(users, eq(teamMembers.userId, users.id))
+          .where(
+            and(
+              eq(teamMembers.teamId, objective.teamId),
+              inArray(
+                users.name,
+                normalizedRatios.map((item) => item.member),
+              ),
+            ),
+          )
+      : [];
   const userIdByName = new Map(memberRows.map((user) => [user.name, user.id]));
   const createdAt = nowIso();
   const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || `目标结算：${objective.title}`;

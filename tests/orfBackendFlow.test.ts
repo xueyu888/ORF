@@ -872,6 +872,36 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   assert.equal(ledger[1]?.points, 20);
 });
 
+test("settlement resolves point ledger user ids within the objective team", async () => {
+  const owner = await createFixture("settlement-user-scope-owner");
+  const intruder = await createFixture("settlement-user-scope-intruder");
+  await db.update(users).set({ name: owner.challenger.name }).where(eq(users.id, intruder.challenger.id));
+
+  const { objective, result } = await createApprovedObjectiveWithResult(owner, "team-scoped ledger objective");
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, owner.commander.id);
+  assert.equal(frozen.status, "ok");
+
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    { body: "Completed with a same-name user in another team.", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }] },
+    { id: owner.challenger.id, name: owner.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+
+  const reviewed = await reviewObjectiveLoot(
+    objective.id,
+    { lootId: loot.loot.id, resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    owner.commander.id,
+  );
+  assert.equal(reviewed.status, "ok");
+
+  const data = await getTaskManagementData({ teamId: owner.teamId });
+  const ledger = data.pointLedger.find((entry) => entry.objectiveId === objective.id && entry.memberName === owner.challenger.name);
+  assert.ok(ledger);
+  assert.equal(ledger.userId, owner.challenger.id);
+  assert.notEqual(ledger.userId, intruder.challenger.id);
+});
+
 test("settlement resolution collapses duplicate member ratios before writing point ledger", async () => {
   const fixture = await createFixture("settlement-resolution-duplicates");
   const objective = await createPublishedObjective(fixture, "duplicate resolution ratios");
