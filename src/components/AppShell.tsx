@@ -7,7 +7,7 @@ import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
 import { Toasts } from "./Toasts";
 import { hasPermission } from "../config/permissions";
-import { canCreateFeedbackFromResults } from "../features/feedback/model/feedbackCapabilities";
+import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 
 const titleMap: Record<string, string> = {
@@ -44,7 +44,7 @@ export function AppShell() {
   const { currentUser, openModal, state } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
-  const canCreateFeedback = canCreateFeedbackFromResults(state.results);
+  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const isBountyHall = location.pathname.startsWith("/bounties");
 
   useEffect(() => {

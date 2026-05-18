@@ -5,16 +5,16 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { FeedbackCard } from "../components/SharedCards";
 import { Button, Card, StatusBadge } from "../components/ui";
-import { canCreateFeedbackFromResults } from "../features/feedback/model/feedbackCapabilities";
+import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackStatus, Impact } from "../types/orf";
 
 export function FeedbackInboxPage() {
-  const { state, openModal } = useOrf();
+  const { currentUser, state, openModal } = useOrf();
   const [cause, setCause] = useState("All");
   const [status, setStatus] = useState<"All" | FeedbackStatus>("All");
   const [impact, setImpact] = useState<"All" | Impact>("All");
-  const canCreateFeedback = canCreateFeedbackFromResults(state.results);
+  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
 
   const feedback = useMemo(
     () =>

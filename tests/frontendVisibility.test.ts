@@ -34,14 +34,20 @@ test("visual settings are only visible to administrators", () => {
   assert.equal(canShowFrontendPath(memberUser, "/settings"), false);
 });
 
-test("feedback creation page actions use visible result availability", () => {
+test("feedback creation page actions use visible objective participation", () => {
   for (const file of [
     path.resolve("src/components/AppShell.tsx"),
     path.resolve("src/pages/FeedbackInboxPage.tsx"),
     path.resolve("src/pages/ObjectiveDetailPage.tsx"),
   ]) {
-    assert.match(readFileSync(file, "utf8"), /canCreateFeedbackFromResults/, `${file} must hide feedback creation without visible results`);
+    assert.match(readFileSync(file, "utf8"), /canCreateFeedback(FromVisibleState|ForObjective)/, `${file} must hide feedback creation without objective participation`);
   }
+
+  assert.match(
+    readFileSync(path.resolve("src/pages/ResultDetailPage.tsx"), "utf8"),
+    /canCreateFeedbackForResult/,
+    "Result detail must hide feedback creation without objective participation",
+  );
 });
 
 test("frontend visibility rules are only accessed through the shared helpers", () => {

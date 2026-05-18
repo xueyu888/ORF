@@ -747,6 +747,7 @@ test.describe("ORF high-level audit coverage", () => {
     await page.goto(`/objectives/${objective.id}/results/${result.id}`);
     await expect(page.getByRole("heading", { name: result.title })).toBeVisible();
     await attachAuditScreenshot(page, testInfo, "audit-result-detail-non-challenger");
+    await expect.soft(page.getByRole("button", { name: "新建反馈" })).toHaveCount(0);
     await expect.soft(page.getByRole("button", { name: "创建行动项" })).toHaveCount(0);
     await expect.soft(page.getByRole("button", { name: "提出指标更新" })).toHaveCount(0);
     await expect.soft(page.getByRole("slider")).toHaveCount(0);
@@ -2005,6 +2006,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto(`/objectives/${objective.id}/results/${result.id}`);
     await expect(page.getByRole("link", { name: "提交目标战利品" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "新建反馈" })).toHaveCount(0);
   });
 
   test("objective detail metric entry follows reestimate proposal contract", async ({ page }) => {

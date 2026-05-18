@@ -8,7 +8,7 @@ import { DecisionLog, FeedbackCard, IntegrityCheck, ResultCard, TaskRow } from "
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { metricCreationActionForObjective } from "../features/challenge/model/orfFlowCapabilities";
 import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";
-import { canCreateFeedbackFromResults, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
+import { canCreateFeedbackForObjective, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackStatus, TaskStatus } from "../types/orf";
 import { feedbackStatusLabel } from "../utils/labels";
@@ -46,7 +46,7 @@ export function ObjectiveDetailPage() {
     currentUser,
     permissionRules: state.permissionRules,
   });
-  const canCreateFeedback = canCreateFeedbackFromResults(results);
+  const canCreateFeedback = canCreateFeedbackForObjective(objective, currentUser, results);
 
   return (
     <PageScaffold

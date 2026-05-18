@@ -11,7 +11,12 @@ import {
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
-import { canCreateFeedbackFromResults, canManageFeedbackStatus } from "../src/features/feedback/model/feedbackCapabilities";
+import {
+  canCreateFeedbackForObjective,
+  canCreateFeedbackFromResults,
+  canCreateFeedbackFromVisibleState,
+  canManageFeedbackStatus,
+} from "../src/features/feedback/model/feedbackCapabilities";
 import type { CommentThread, Evidence, Feedback, Objective, OrfState, Result, Task } from "../src/types/orf";
 
 const date = "2026-05-14";
@@ -115,6 +120,20 @@ test("feedback status controls are limited to admins, creators, and owners", () 
 test("feedback creation entry requires at least one visible result", () => {
   assert.equal(canCreateFeedbackFromResults([]), false);
   assert.equal(canCreateFeedbackFromResults([result({ id: "res-visible" })]), true);
+});
+
+test("feedback creation entry is limited to admins and objective challengers", () => {
+  const objectiveItem = objective({ id: "obj-feedback-access", challengers: ["Kai Wang"], resultIds: ["res-visible"] });
+  const resultItem = result({ id: "res-visible", objectiveId: objectiveItem.id });
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const observer = { id: "user-observer", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
+
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, admin, [resultItem]), true);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, [resultItem]), true);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, observer, [resultItem]), false);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, []), false);
+  assert.equal(canCreateFeedbackFromVisibleState({ objectives: [objectiveItem], results: [resultItem] }, observer), false);
 });
 
 test("drag and drop rules block cross-objective bounty moves and self drops", () => {

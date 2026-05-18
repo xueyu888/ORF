@@ -6,6 +6,7 @@ import { PageScaffold } from "../components/PageScaffold";
 import { FeedbackCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
+import { canCreateFeedbackForResult } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { TaskStatus } from "../types/orf";
 import { metricValue, resultProgress } from "../utils/format";
@@ -32,12 +33,13 @@ export function ResultDetailPage() {
     currentUser,
     permissionRules: state.permissionRules,
   });
+  const canCreateFeedback = canCreateFeedbackForResult(objective, currentUser, result);
 
   return (
     <PageScaffold
       title={result.title}
       subtitle={`目标 / 指标 · ${objective?.title ?? ""}`}
-      action={<div className="flex flex-wrap gap-2">{capabilities.canSubmitLoot && <Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/objectives/${result.objectiveId}/loot`}><Send className="h-4 w-4" />提交目标战利品</Link>}<Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button>{capabilities.canCreateTask && <Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button>}{capabilities.canProposeUpdate && <Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出指标更新</Button>}</div>}
+      action={<div className="flex flex-wrap gap-2">{capabilities.canSubmitLoot && <Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/objectives/${result.objectiveId}/loot`}><Send className="h-4 w-4" />提交目标战利品</Link>}{canCreateFeedback && <Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button>}{capabilities.canCreateTask && <Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button>}{capabilities.canProposeUpdate && <Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出指标更新</Button>}</div>}
     >
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="grid gap-4">
