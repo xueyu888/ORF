@@ -1217,6 +1217,8 @@ test("member can submit loot only after frozen objective and returns to challeng
 
   await page.goto(`/objectives/${objective.id}/loot`);
   await expect(page.getByRole("heading", { name: "提交战利品" })).toBeVisible();
+  await expect(page.getByPlaceholder("记录自测覆盖、复核结论或风险说明")).toBeVisible();
+  await expect(page.getByText("文件编辑器接入后")).toHaveCount(0);
 
   await page.getByLabel("完成说明").fill("提交前端 E2E 验证战利品。");
   await page.getByPlaceholder("证据、数据或链接").fill("E2E evidence link");

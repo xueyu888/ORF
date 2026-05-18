@@ -287,7 +287,7 @@ export function LootSubmitPage() {
                 ))}
               </div>
               <Field label="自测报告">
-                <textarea className="orf-input min-h-24 px-3 py-2 text-sm" placeholder="先粘贴自测摘要；文件编辑器接入后再支持报告文件。" value={selfTestReportBody} onChange={(event) => setSelfTestReportBody(event.target.value)} />
+                <textarea className="orf-input min-h-24 px-3 py-2 text-sm" placeholder="记录自测覆盖、复核结论或风险说明" value={selfTestReportBody} onChange={(event) => setSelfTestReportBody(event.target.value)} />
               </Field>
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
