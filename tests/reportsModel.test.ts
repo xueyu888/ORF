@@ -23,6 +23,7 @@ test("leaderboard quarter and year filters use the latest ledger period", () => 
     objective({ id: "obj-old", challengers: ["Ava"], updatedAt: "2999-01-20" }),
     objective({ id: "obj-q2-a", challengers: ["Ava"], updatedAt: "2999-04-03" }),
     objective({ id: "obj-q2-b", challengers: ["Bo"], updatedAt: "2999-05-21" }),
+    objective({ id: "obj-future", challengers: ["Ava"], flowStatus: "open", acceptedResult: null, updatedAt: "2999-08-01" }),
   ];
 
   assert.deepEqual(buildLeaderboardRows(state, "quarter").map((row) => [row.memberName, row.points]), [["Bo", 50], ["Ava", 30]]);

@@ -21,10 +21,10 @@ function toDateKey(date: Date) {
 }
 
 function latestDate(entries: PointLedgerEntry[], objectives: Objective[]) {
-  const dates = [
-    ...entries.map((entry) => dateOnly(entry.createdAt)),
-    ...objectives.map((objective) => dateOnly(objective.updatedAt) ?? dateOnly(objective.createdAt)),
-  ].filter((value): value is string => Boolean(value));
+  const ledgerDates = entries.map((entry) => dateOnly(entry.createdAt)).filter((value): value is string => Boolean(value));
+  const dates = ledgerDates.length > 0
+    ? ledgerDates
+    : objectives.map((objective) => dateOnly(objective.updatedAt) ?? dateOnly(objective.createdAt)).filter((value): value is string => Boolean(value));
 
   return dates.sort().at(-1) ?? new Date().toISOString().slice(0, 10);
 }
