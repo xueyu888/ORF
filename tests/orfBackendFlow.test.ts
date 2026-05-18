@@ -1147,6 +1147,32 @@ test("API user deletion reports missing team members instead of a successful no-
   });
 });
 
+test("API user management rejects duplicate display names inside a team", async () => {
+  const fixture = await createFixture("api-user-duplicate-name");
+
+  await withApiServer(fixture, async (app) => {
+    const duplicateCreate = await apiInject(app, fixture.commander, "POST", "/api/users", {
+      name: ` ${fixture.challenger.name} `,
+      email: `${fixture.prefix}-duplicate-name@orf.test`,
+      role: "member",
+    });
+    assert.equal(duplicateCreate.statusCode, 409);
+
+    const duplicateUpdate = await apiInject(app, fixture.commander, "PATCH", `/api/users/${encodeURIComponent(fixture.observer.id)}`, {
+      name: fixture.challenger.name,
+      email: fixture.observer.email,
+      role: "member",
+    });
+    assert.equal(duplicateUpdate.statusCode, 409);
+
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const names = (userList.json() as { users: Array<{ name: string }> }).users.map((user) => user.name);
+    assert.equal(names.filter((name) => name === fixture.challenger.name).length, 1);
+    assert.equal(names.includes(fixture.observer.name), true);
+  });
+});
+
 test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
   const fixture = await createFixture("api-read-boundary");
   const { objective } = await createSettledObjective(fixture, "scoped settled objective");

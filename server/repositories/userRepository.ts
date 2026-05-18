@@ -64,6 +64,23 @@ async function assertMembershipExists(teamId: string, userId: string) {
   }
 }
 
+async function assertUniqueTeamUserName(teamId: string, userId: string | null, name: string) {
+  const normalizedName = name.toLowerCase();
+  const nameFilter = userId
+    ? and(eq(teamMembers.teamId, teamId), sql`lower(${users.name}) = ${normalizedName}`, ne(users.id, userId))
+    : and(eq(teamMembers.teamId, teamId), sql`lower(${users.name}) = ${normalizedName}`);
+  const [nameOwner] = await db
+    .select({ id: users.id })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(nameFilter)
+    .limit(1);
+
+  if (nameOwner) {
+    throw Object.assign(new Error("Name already exists"), { statusCode: 409 });
+  }
+}
+
 function assertCanChangeRole(actorUserId: string, userId: string, nextRole: UserRole) {
   if (actorUserId === userId && nextRole !== "admin") {
     throw Object.assign(new Error("Admin cannot demote self"), { statusCode: 409 });
@@ -145,6 +162,8 @@ export async function createTeamUser(teamId: string, actorUserId: string, input:
     }
   }
 
+  await assertUniqueTeamUserName(teamId, matchedUser?.id ?? null, normalized.name);
+
   await db.transaction(async (tx) => {
     const existingUser = matchedUser ?? (await tx.select().from(users).where(sql`lower(${users.email}) = ${normalized.email}`).limit(1))[0];
     const userId = existingUser?.id ?? (await nextUserId(normalized.email));
@@ -195,6 +214,8 @@ async function updateTeamUserRecord(teamId: string, userId: string, normalized: 
   if (emailOwner) {
     throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
   }
+
+  await assertUniqueTeamUserName(teamId, userId, normalized.name);
 
   await db.transaction(async (tx) => {
     await tx.update(users).set({ name: normalized.name, email: normalized.email }).where(eq(users.id, userId));
