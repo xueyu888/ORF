@@ -402,6 +402,34 @@ test("commander can add recruitment while an objective is already reestimating",
   assert.deepEqual(observerAccepted.objective.challengers, [fixture.challenger.name, fixture.observer.name]);
 });
 
+test("recruitment API only accepts active team members", async () => {
+  const fixture = await createFixture("recruit-active-member-guard");
+  const objective = await createPublishedObjective(fixture, "active member recruitment guard");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} active member recruitment guard result`);
+  await db.update(users).set({ status: "disabled" }).where(eq(users.id, fixture.observer.id));
+
+  await withApiServer(fixture, async (app) => {
+    const disabledRecruit = await apiInject(app, fixture.commander, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/recruitments`, {
+      members: [fixture.observer.name],
+    });
+    assert.equal(disabledRecruit.statusCode, 409);
+
+    const missingRecruit = await apiInject(app, fixture.commander, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/recruitments`, {
+      members: [`${fixture.prefix} Missing Member`],
+    });
+    assert.equal(missingRecruit.statusCode, 409);
+
+    const activeRecruit = await apiInject(app, fixture.commander, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/recruitments`, {
+      members: [fixture.challenger.name],
+    });
+    assert.equal(activeRecruit.statusCode, 200);
+  });
+
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const refreshed = data.objectives.find((item) => item.id === objective.id);
+  assert.deepEqual(refreshed?.assignedChallengers, [fixture.challenger.name]);
+});
+
 test("member-proposed result creation requires the API actor to be a challenger inside the reestimate window", async () => {
   const fixture = await createFixture("api-create-result");
 

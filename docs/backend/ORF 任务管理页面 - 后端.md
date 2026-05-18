@@ -136,6 +136,7 @@ type ObjectiveFlowStatus =
 - 当前不开放退回重估；重估截止后停止调整，不续期。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
 - `申请挑战` 只表达意愿；指挥官通过后才写入 `Objective.challengers`。
+- `征召挑战` 的成员必须是当前团队内 `active` 用户；停用、待审核、拒绝或不存在的姓名不能写入 `Objective.assignedChallengers`。
 - `接受挑战` 只用于征召。
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。
 - `验收结算` 仅允许指挥官在 `submitted` 状态执行。

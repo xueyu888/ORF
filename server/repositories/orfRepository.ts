@@ -996,6 +996,14 @@ export async function recruitObjectiveChallengers(
   if (isObjectiveTerminal(objective) || !challengeRecruitmentFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
   const currentChallengers = uniqueMembers(objective.challengers ?? []);
   const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
+  if (recruitMembers.length === 0) return { status: "invalid" };
+  const activeMemberRows = await db
+    .select({ name: users.name })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, objective.teamId), eq(users.status, "active"), inArray(users.name, recruitMembers)));
+  const activeMemberNames = new Set(activeMemberRows.map((member) => member.name));
+  if (recruitMembers.some((member) => !activeMemberNames.has(member))) return { status: "invalid" };
   const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
   if (assignedChallengers.length === 0) return { status: "invalid" };
   await db
