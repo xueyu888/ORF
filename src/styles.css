@@ -3945,8 +3945,8 @@ button:disabled {
 .reports-leaderboard-head,
 .reports-leaderboard-row {
   display: grid;
-  grid-template-columns: 78px 72px 88px minmax(220px, 1fr) 92px 96px;
-  min-width: 670px;
+  grid-template-columns: 78px 72px minmax(170px, 220px) minmax(220px, 1fr) 92px 96px;
+  min-width: 760px;
   align-items: center;
 }
 
@@ -3980,7 +3980,7 @@ button:disabled {
 }
 
 .reports-leaderboard-empty {
-  min-width: 670px;
+  min-width: 760px;
   border: 1px dashed rgba(209, 161, 80, 0.5);
   border-radius: 8px;
   background: rgba(255, 252, 242, 0.74);
@@ -4000,6 +4000,12 @@ button:disabled {
   height: 100%;
   align-items: center;
   justify-content: center;
+}
+
+.reports-member-cell {
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0 12px;
 }
 
 .reports-change-cell,
@@ -4102,6 +4108,7 @@ button:disabled {
 
 .reports-member-avatar {
   display: grid;
+  flex: 0 0 auto;
   width: 46px;
   height: 46px;
   place-items: center;
@@ -4111,6 +4118,16 @@ button:disabled {
   font-size: 14px;
   font-weight: 900;
   box-shadow: 0 0 0 3px #fff8df, inset 0 8px 16px rgba(255, 255, 255, 0.25), 0 8px 14px rgba(83, 72, 54, 0.16);
+}
+
+.reports-member-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #5f4522;
+  font-size: 14px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reports-bar-cell {

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { BountyHallData } from "../../src/state/apiClient";
-import type { Evidence, Feedback, Objective, OrfState, Result, Task } from "../../src/types/orf";
+import type { Evidence, Feedback, Objective, OrfState, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 
 function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
   return {
@@ -144,6 +144,42 @@ test("reports page shows an empty leaderboard state without point ledger", async
 
   await expect(page.getByRole("heading", { name: "ORF 飞升战力榜" })).toBeVisible();
   await expect(page.getByText("暂无积分记录")).toBeVisible();
+});
+
+test("reports leaderboard shows visible member names from point ledger", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-report-member-name",
+    title: "真实排行榜成员目标",
+    flowStatus: "settled",
+    acceptedResult: "completed",
+    challengers: ["Ava Visible"],
+    updatedAt: "2999-04-02",
+  };
+  const ledger: PointLedgerEntry = {
+    id: "ledger-report-member-name",
+    objectiveId: objective.id,
+    memberName: "Ava Visible",
+    points: 42,
+    reason: "完成目标",
+    createdAt: "2999-04-03",
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: {
+        ...taskManagementDataWith({ objectives: [objective], results: [], tasks: [], feedback: [] }),
+        pointLedger: [ledger],
+      },
+    });
+  });
+
+  await page.goto("/reports");
+
+  const row = page.locator(".reports-leaderboard-row", { hasText: "Ava Visible" });
+  await expect(row).toBeVisible();
+  await expect(row.locator(".reports-member-name")).toHaveText("Ava Visible");
+  await expect(row.locator(".reports-points-cell")).toHaveText("42.0");
 });
 
 test("command menu does not expose the auth route inside the authenticated app", async ({ page }) => {

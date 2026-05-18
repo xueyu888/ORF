@@ -112,6 +112,7 @@ function LeaderboardRowItem({ maxPoints, row }: { maxPoints: number; row: Leader
         <div className="reports-member-avatar" style={avatarStyleForName(row.memberName)} title={row.memberName} aria-label={row.memberName}>
           {initials(row.memberName)}
         </div>
+        <span className="reports-member-name">{row.memberName}</span>
       </div>
       <div className="reports-bar-cell" role="cell">
         <div className="reports-points-track" aria-label={`${row.points} 积分`}>

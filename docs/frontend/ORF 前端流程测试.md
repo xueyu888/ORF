@@ -397,6 +397,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - `/bounties` 的当前周期概览必须从大厅 API 返回的目标周期推导；空数据时显示暂无周期，多周期时不能只取第一条目标。
 - `/bounties` 中没有 Result 的 Objective 必须显示“待定义指标”；不能把普通待定义状态描述成已进入重估。
 - `/reports` 没有 `pointLedger` 时必须显示明确的排行榜空态；不能只渲染一个空表。
+- `/reports` 排行榜必须可见展示成员姓名；不能只把成员名放在头像 `title` 或 `aria-label` 中。
 
 ## 修改测试时机
 
