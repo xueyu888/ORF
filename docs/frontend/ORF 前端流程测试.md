@@ -316,28 +316,33 @@ flowchart TD
 
 测试里的时间不等真实分钟。每次流程 mutation 都推进一段业务时间戳；重估窗口使用固定未来 `confirmationDueAt` 保持开放，截止前 / 截止后 / 冻结后的边界由专门守卫测试用固定过去或未来时间验证。
 
-## 真实系统联调用例
+## 真实系统上线仿真套件
 
-真实系统联调测试文件是 `e2e/challenges/orf-real-system-flow.spec.ts`。运行时需要显式打开：
+真实系统测试拆分为独立的上线仿真套件，文件在 `e2e/challenges/orf-real-*.spec.ts`，公共测试能力只放在 `e2e/challenges/helpers/`。运行时需要显式打开：
 
 ```bash
-ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-system-flow.spec.ts --reporter=line --output="test-results/manual-real-system-$(date +%Y%m%d-%H%M%S)"
+ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=line --output="test-results/manual-real-system-suite-$(date +%Y%m%d-%H%M%S)"
 ```
 
-测试数据使用唯一前缀 `真实联调 real-e2e-*` 写入真实数据库，默认保留，便于在悬赏大厅、挑战页、统计页面直接查看。
+测试数据使用唯一 `real-e2e-*` 前缀写入真实数据库，默认保留，便于在悬赏大厅、挑战页、统计页面直接查看；只有设置 `ORF_REAL_E2E_CLEANUP=1` 时才清理本次 run 的数据。
 
-| 用例 | 角色和流程 | 时间处理 | 必须验证 |
-| --- | --- | --- | --- |
-| RS-01 两轮申请结算 | 1 个指挥官、2 个挑战者、1 个观察成员；连续创建两轮目标，发布、双人申请、双人审批、挑战者提指标、冻结、提交战利品、双人匿名互评、验收结算 | 使用远未来截止日，让两轮流程在测试内快速完成 | `/bounties` 下架已结算目标；观察成员 `/tasks` 看不到非本人挑战；`/reports` 两个挑战者累计积分 |
-| RS-02 重估时间加速 | 指挥官发布并审批挑战者进入重估；测试直接把数据库 `confirmationDueAt` 改到 `2000-01-01T00:00:00.000Z` 模拟时间流逝 | 不等真实时间，直接推进业务截止时间 | 挑战者刷新 `/tasks` 后不应再看到“提出指标” |
-| RS-03 征召连续接受 | 指挥官通过 UI 创建、发布目标，并在挑战工作台打开“征召挑战者”弹窗选择两个成员；两个挑战者分别在 `/bounties` 接受征召 | 立即执行征召和接受，不等时间 | 指挥官侧有可见征召入口；第一个挑战者接受后，第二个已征召挑战者仍能看到征召令并接受 |
+| 文件 | 场景 | 必须验证 |
+| --- | --- | --- |
+| `orf-real-golden-flow.spec.ts` | 两个周期、两轮目标、两个挑战者，从发布、申请、审批、重估、冻结、战利品、匿名互评到验收结算 | 已结算目标从 `/bounties` 下架；观察成员 `/tasks` 看不到非本人挑战；`/reports` 累计积分正确 |
+| `orf-real-multi-state-dashboard.spec.ts` | 同时制造 candidate / open / applying / recruiting / reestimating / frozen / submitted / settled | 指挥官 `/tasks` 可总控；挑战者 `/tasks` 只看自己的目标；`/bounties` 只展示普通可申请目标和当前用户自己的征召令 |
+| `orf-real-recruitment.spec.ts` | 指挥官征召 A/B/C，A 和 B 连续接受，C 拒绝，观察者越权接受 | A 接受后 B 仍能看到征召令；最终 challengers 只包含 A/B；越权接受返回 403 |
+| `orf-real-reestimate-window.spec.ts` | 多挑战者在重估窗口内提出 / 编辑指标、加任务、加子任务，然后时间加速到窗口过期并冻结 | 窗口内可操作；过期后按钮不可见且 API 403；冻结后仍不可编辑指标 |
+| `orf-real-time-acceleration.spec.ts` | 不等待真实时间，直接推进重估截止和最终截止 | 准时、逾期、超额、放弃的 multiplier 与积分一致 |
+| `orf-real-settlement-ledger.spec.ts` | 三挑战者匿名互评、缺评时指挥官汇总确认、结算入账 | `objectiveBasePoints`、`objectiveSettlementPoints`、`pointLedger`、`/reports` 展示一致 |
+| `orf-real-race-and-stale-ui.spec.ts` | 旧页面、重复点击、重复提交、重复结算 | 旧页面按钮不能越过后端状态机；重复战利品和重复 ledger 不产生脏数据 |
 
-截至 2026-05-18 本次修复后的真实联调：
+测试分层必须保持正交：
 
-- RS-01 已跑通：两轮申请、双人审批、双人匿名互评、验收结算后，两个挑战者在 `/reports` 均出现累计积分；观察成员不出现在本轮积分榜中。
-- RS-02 已跑通：测试把 `confirmationDueAt` 加速到 `2000-01-01T00:00:00.000Z` 后，挑战者刷新 `/tasks` 不再看到“提出指标”入口。
-- RS-03 已跑通：指挥官通过真实 UI 发起双人征召，第一个挑战者接受后目标进入 `reestimating`，第二个挑战者仍能在 `/bounties` 看到征召令并接受。
-- 本次通过截图和真实数据保留在 `test-results/manual-real-system-fix-full-20260518-180200`；修复前暴露问题的截图仍保留在 `test-results/manual-real-system-20260518-172335` 和 `test-results/manual-real-system-recruitment-20260518-172420`。
+- `realSystemHarness.ts` 只负责启动真实 Fastify API、Fake Ory、真实数据库种子和多浏览器上下文。
+- `realScenarioDsl.ts` 只封装用户动作，不写业务判定。
+- `realClock.ts` 只推进测试业务时间，不等待真实时间。
+- `realAssertions.ts` 只做页面和数据库不变量断言。
+- 产品代码不能 import 或依赖任何 `e2e/challenges/helpers/*`，也不能为了测试新增生产运行路径。
 
 ## 守卫场景索引
 
@@ -365,6 +370,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-system-flow.spec.ts -
 
 - route mock E2E 使用 Playwright `route.fulfill` 构造 Objective / Result，避免依赖外部状态。
 - real-system E2E 不 `fulfill` 业务 API；它写入真实数据库，并且默认不清理数据。
+- real-system E2E helper 只允许存在于 `e2e/challenges/helpers/`；测试可以调用真实 API、真实 repository 和测试数据库，产品代码不能依赖测试 helper。
 - 用例内显式构造 Objective / Result，只保留当前断言需要的字段和状态。
 - 页面断言优先基于用户可见文案、按钮和链接，少量使用稳定 class 定位目标面板。
 - 每个测试开始清空 localStorage，避免 legacy 本地状态污染 API 优先契约。
@@ -387,7 +393,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-system-flow.spec.ts -
 ```bash
 npm test
 npx playwright test e2e/challenges/orf-frontend-flow.spec.ts
-ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-system-flow.spec.ts --reporter=line --output="test-results/manual-real-system-$(date +%Y%m%d-%H%M%S)"
+ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=line --output="test-results/manual-real-system-suite-$(date +%Y%m%d-%H%M%S)"
 npm run test:e2e
 npm run build
 ```
