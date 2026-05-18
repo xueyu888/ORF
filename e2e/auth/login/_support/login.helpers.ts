@@ -1,7 +1,7 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../server/db/client";
-import { teamMembers, teams, users } from "../../../server/db/schema";
+import { closeDb, db } from "../../../../server/db/client";
+import { teamMembers, teams, users } from "../../../../server/db/schema";
 import {
   ORF_SESSION_COOKIE,
   ORY_ADMIN_URL,

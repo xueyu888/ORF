@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/state-case.types";
-import type { LoginCaseData, TestContext } from "./login.context";
+import type { LoginCaseData, TestContext } from "./_support/login.context";
 import {
   clearBrowserState,
   ensureTestTeam,
@@ -16,7 +16,7 @@ import {
   revokeIdentitySessions,
   upsertOrfMember,
   upsertOryIdentity,
-} from "./login.helpers";
+} from "./_support/login.helpers";
 
 type CapturedResponse = {
   ok: boolean;
