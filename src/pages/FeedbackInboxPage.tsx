@@ -18,8 +18,8 @@ export function FeedbackInboxPage() {
   const [impact, setImpact] = useState<"All" | Impact>("All");
   const visibleObjectiveIds = useMemo(() => visibleObjectiveIdsForUser(state.objectives, currentUser), [currentUser, state.objectives]);
   const visibleObjectives = useMemo(() => visibleObjectivesForUser(state.objectives, currentUser), [currentUser, state.objectives]);
-  const visibleResults = useMemo(() => filterResultsForVisibleObjectives(state.results, visibleObjectiveIds), [state.results, visibleObjectiveIds]);
-  const visibleFeedback = useMemo(() => filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds), [state.feedback, visibleObjectiveIds]);
+  const visibleResults = useMemo(() => filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser), [currentUser, state.results, visibleObjectiveIds]);
+  const visibleFeedback = useMemo(() => filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser), [currentUser, state.feedback, visibleObjectiveIds]);
   const canCreateFeedback = canCreateFeedbackFromVisibleState({ objectives: visibleObjectives, results: visibleResults }, currentUser);
   const insights = useMemo(() => summarizeFeedbackInsights(visibleFeedback), [visibleFeedback]);
 

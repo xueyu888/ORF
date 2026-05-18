@@ -20,10 +20,10 @@ export function DashboardPage() {
   const { currentUser, state } = useOrf();
   const visibleObjectiveIds = visibleObjectiveIdsForUser(state.objectives, currentUser);
   const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
-  const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds);
-  const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds);
-  const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds);
-  const visibleDecisions = state.decisions.filter((decision) => visibleObjectiveIds.has(decision.linkedObjectiveId));
+  const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser);
+  const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser);
+  const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds, currentUser);
+  const visibleDecisions = currentUser?.role === "admin" ? state.decisions : state.decisions.filter((decision) => visibleObjectiveIds.has(decision.linkedObjectiveId));
   const summary = summarizeDashboardState(
     {
       feedback: visibleFeedback,

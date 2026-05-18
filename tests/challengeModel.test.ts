@@ -153,8 +153,10 @@ test("objective visibility scopes member-facing records to current challengers",
 
   assert.equal(canViewObjectiveRecord(mine, challenger), true);
   assert.equal(canViewObjectiveRecord(other, challenger), false);
+  assert.equal(canViewObjectiveRecord(undefined, admin), true);
   assert.deepEqual(visibleObjectivesForUser([mine, other], challenger).map((item) => item.id), ["obj-mine"]);
   assert.deepEqual([...visibleObjectiveIdsForUser([mine, other], admin)].sort(), ["obj-mine", "obj-other"]);
+  assert.deepEqual(filterFeedbackForVisibleObjectives([feedback({ id: "fb-orphan", linkedObjectiveId: "obj-missing" })], memberVisibleIds, admin).map((item) => item.id), ["fb-orphan"]);
   assert.deepEqual(
     filterResultsForVisibleObjectives([result({ id: "res-mine", objectiveId: "obj-mine" }), result({ id: "res-other", objectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
     ["res-mine"],

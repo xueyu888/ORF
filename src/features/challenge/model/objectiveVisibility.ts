@@ -1,8 +1,9 @@
 import type { Feedback, Objective, OrfUser, Result, Task } from "../../../types/orf";
 
 export function canViewObjectiveRecord(objective: Objective | undefined, currentUser: OrfUser | null | undefined) {
-  if (!objective || !currentUser) return false;
+  if (!currentUser) return false;
   if (currentUser.role === "admin") return true;
+  if (!objective) return false;
   return objective.challengers.includes(currentUser.name);
 }
 
@@ -15,14 +16,17 @@ export function visibleObjectiveIdsForUser(objectives: readonly Objective[], cur
   return new Set(visibleObjectivesForUser(objectives, currentUser).map((objective) => objective.id));
 }
 
-export function filterResultsForVisibleObjectives(results: readonly Result[], visibleObjectiveIds: ReadonlySet<string>) {
+export function filterResultsForVisibleObjectives(results: readonly Result[], visibleObjectiveIds: ReadonlySet<string>, currentUser?: OrfUser | null) {
+  if (currentUser?.role === "admin") return [...results];
   return results.filter((result) => visibleObjectiveIds.has(result.objectiveId));
 }
 
-export function filterTasksForVisibleObjectives(tasks: readonly Task[], visibleObjectiveIds: ReadonlySet<string>) {
+export function filterTasksForVisibleObjectives(tasks: readonly Task[], visibleObjectiveIds: ReadonlySet<string>, currentUser?: OrfUser | null) {
+  if (currentUser?.role === "admin") return [...tasks];
   return tasks.filter((task) => visibleObjectiveIds.has(task.linkedObjectiveId));
 }
 
-export function filterFeedbackForVisibleObjectives(feedback: readonly Feedback[], visibleObjectiveIds: ReadonlySet<string>) {
+export function filterFeedbackForVisibleObjectives(feedback: readonly Feedback[], visibleObjectiveIds: ReadonlySet<string>, currentUser?: OrfUser | null) {
+  if (currentUser?.role === "admin") return [...feedback];
   return feedback.filter((item) => visibleObjectiveIds.has(item.linkedObjectiveId));
 }

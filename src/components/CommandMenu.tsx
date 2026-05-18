@@ -23,9 +23,9 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
   const items = useMemo(() => {
     const visibleObjectiveIds = visibleObjectiveIdsForUser(state.objectives, currentUser);
     const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
-    const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds);
-    const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds);
-    const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds);
+    const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser);
+    const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds, currentUser);
+    const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser);
     const pageItems = quickPages
       .filter((item) => canShowFrontendPath(currentUser, item.path))
       .map((item) => ({ label: item.label, path: item.path, type: "Page" }));
