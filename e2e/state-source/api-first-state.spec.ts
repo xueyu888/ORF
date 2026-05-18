@@ -372,3 +372,48 @@ test("strategy map shows an empty state when the API has no strategy records", a
   await expect(page.getByText("建立可靠的 AI 应用交付能力")).toHaveCount(0);
   await expect(page.getByText("评估优先")).toHaveCount(0);
 });
+
+test("objectives page derives cycle filters from API objectives", async ({ page }) => {
+  const q1Objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-cycle-q1",
+    title: "真实 Q1 目标",
+    cycle: "2999 Q1",
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const q2Objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-cycle-q2",
+    title: "真实 Q2 目标",
+    cycle: "2999 Q2",
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [q1Objective, q2Objective],
+        results: [],
+        tasks: [],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto("/objectives");
+
+  await expect(page.getByRole("heading", { name: "目标" })).toBeVisible();
+  await expect(page.getByText("2026 Q2")).toHaveCount(0);
+  await expect(page.getByText("2026 Q3 Draft")).toHaveCount(0);
+  await expect(page.getByText("真实 Q1 目标")).toBeVisible();
+  await expect(page.getByText("真实 Q2 目标")).toBeVisible();
+
+  await page.locator("select").nth(1).selectOption("2999 Q2");
+
+  await expect(page.getByText("真实 Q2 目标")).toBeVisible();
+  await expect(page.getByText("真实 Q1 目标")).toHaveCount(0);
+});

@@ -5,24 +5,21 @@ import { PageScaffold } from "../components/PageScaffold";
 import { ObjectiveCard } from "../components/SharedCards";
 import { Button, Card, EmptyState, ProgressBar, StatusBadge } from "../components/ui";
 import { hasPermission } from "../config/permissions";
+import { filterObjectives, objectiveCycleOptions, type ObjectiveStatusFilter } from "../features/objectives/model/objectiveFilters";
 import { useOrf } from "../state/OrfProvider";
-import type { WorkStatus } from "../types/orf";
 
 export function ObjectivesPage() {
   const { currentUser, state, openModal } = useOrf();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<"All" | WorkStatus>("All");
+  const [status, setStatus] = useState<ObjectiveStatusFilter>("All");
+  const [cycle, setCycle] = useState("All");
   const [view, setView] = useState<"Cards" | "Table">("Cards");
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
+  const cycles = useMemo(() => objectiveCycleOptions(state.objectives), [state.objectives]);
 
   const objectives = useMemo(
-    () =>
-      state.objectives.filter((objective) => {
-        const queryMatch = `${objective.title} ${objective.description}`.toLowerCase().includes(query.toLowerCase());
-        const statusMatch = status === "All" || objective.status === status;
-        return queryMatch && statusMatch;
-      }),
-    [query, state.objectives, status],
+    () => filterObjectives(state.objectives, { cycle, query, status }),
+    [cycle, query, state.objectives, status],
   );
 
   return (
@@ -33,10 +30,13 @@ export function ObjectivesPage() {
     >
       <Card className="flex flex-wrap items-center gap-3 orf-card-padding">
         <input className="orf-input h-9 max-w-xs px-3 text-sm" placeholder="搜索目标..." value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select className="orf-input h-9 max-w-40 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as "All" | WorkStatus)}>
+        <select className="orf-input h-9 max-w-40 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as ObjectiveStatusFilter)}>
           {["All", "On Track", "At Risk", "Blocked", "Draft"].map((item) => <option key={item} value={item}>{item === "All" ? "全部状态" : item === "On Track" ? "正常" : item === "At Risk" ? "有风险" : item === "Blocked" ? "阻塞" : "草稿"}</option>)}
         </select>
-        <select className="orf-input h-9 max-w-40 px-3 text-sm"><option>2026 Q2</option><option>2026 Q3 Draft</option></select>
+        <select className="orf-input h-9 max-w-40 px-3 text-sm" value={cycle} onChange={(event) => setCycle(event.target.value)}>
+          <option value="All">全部周期</option>
+          {cycles.map((item) => <option key={item} value={item}>{item}</option>)}
+        </select>
         <div className="ml-auto flex rounded-md border orf-border p-1">
           {(["Cards", "Table"] as const).map((item) => (
             <button key={item} onClick={() => setView(item)} className={`rounded px-3 py-1 text-xs ${view === item ? "orf-selected orf-text-primary" : "orf-text-secondary orf-hover-text"}`}>{item === "Cards" ? "卡片" : "表格"}</button>

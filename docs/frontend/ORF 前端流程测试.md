@@ -380,6 +380,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - 新建反馈入口必须同时满足“存在可见指标”和“当前用户是指挥官或该目标挑战者”；不能只因为页面拿到了指标数据就向观察者展示反馈创建入口。
 - `/feedback` 的原因筛选、图表和洞察面板必须从当前 API 返回的 `Feedback` 集合推导；不能展示演示原因分类、固定最高频问题或固定响应时间。
 - `/strategy-map` 必须从当前 API 返回的 Objective / Result / Task 生成目标组合、周期、目标、指标和行动项节点；空数据时展示空态，不能显示演示北极星、战略支柱或固定行动项进度。
+- `/objectives` 的周期筛选必须从当前 API 返回的 `Objective.cycle` 推导并真正参与过滤；不能显示固定演示周期。
 
 ## 修改测试时机
 
