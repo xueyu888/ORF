@@ -225,7 +225,7 @@ function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string 
         </span>
         <div className="grid min-w-0 gap-1">
           <div className="text-base font-semibold text-[#475467]">待定义指标</div>
-          <div className="text-xs orf-text-muted">进入重估后，挑战者可以提出指标。</div>
+          <div className="text-xs orf-text-muted">当前目标还没有指标。</div>
         </div>
       </HierarchyCell>
     </div>
