@@ -2210,6 +2210,121 @@ test.describe("ORF frontend guard coverage", () => {
     await expect.poll(() => applyCount).toBe(1);
   });
 
+  test("double click on recruitment dialog does not duplicate requests", async ({ page }) => {
+    const objective = objectiveFixture({ id: "obj-ui-recruit-double-click", title: "前端测试 防重复征召目标", flowStatus: "open", resultIds: ["res-ui-recruit-double-click"] });
+    const result = resultFixture({ id: "res-ui-recruit-double-click", objectiveId: objective.id, title: "前端测试 防重复征召指标" });
+    const data = taskManagementData({ objectives: [objective], results: [result] });
+    const deferred = createDeferred<void>();
+    let recruitCount = 0;
+
+    await mockOrfApp(page, adminUser, data, {
+      allChallenges: () => data,
+      onRecruit: async () => {
+        recruitCount += 1;
+        await deferred.promise;
+      },
+      tasks: () => data,
+    });
+
+    await page.goto("/tasks");
+    const panel = objectivePanel(page, objective.title);
+    await panel.hover();
+    await panel.getByRole("button", { name: "征召" }).click();
+    await page.getByRole("checkbox").first().check();
+    const submitButton = page.getByRole("dialog").getByRole("button", { name: "发送征召" });
+    await submitButton.click();
+    await submitButton.click({ force: true });
+    deferred.resolve();
+
+    await expect.poll(() => recruitCount).toBe(1);
+  });
+
+  test("double click on loot submit does not duplicate requests", async ({ page }) => {
+    const objective = objectiveFixture({
+      id: "obj-ui-loot-double-click",
+      title: "前端测试 防重复战利品目标",
+      flowStatus: "frozen",
+      stage: "goalFrozen",
+      challengers: [memberUser.name],
+      resultIds: ["res-ui-loot-double-click"],
+    });
+    const result = resultFixture({ id: "res-ui-loot-double-click", objectiveId: objective.id, title: "前端测试 防重复战利品指标" });
+    const data = taskManagementData({ objectives: [objective], results: [result] });
+    const deferred = createDeferred<void>();
+    let submitCount = 0;
+
+    await mockOrfApp(page, memberUser, data, {
+      mineChallenges: () => data,
+      onSubmitLoot: async () => {
+        submitCount += 1;
+        await deferred.promise;
+      },
+      tasks: () => data,
+    });
+
+    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.getByLabel("完成说明").fill("重复点击提交说明");
+    await page.getByPlaceholder("证据、数据或链接").fill("duplicate click evidence");
+    const submitButton = page.getByRole("button", { name: "提交" });
+    await submitButton.click();
+    await submitButton.click({ force: true });
+    deferred.resolve();
+
+    await expect.poll(() => submitCount).toBe(1);
+  });
+
+  test("double click on peer review does not duplicate requests", async ({ page }) => {
+    const objective = submittedObjectiveFixture("obj-ui-peer-review-double-click", "前端测试 防重复互评目标", [memberUser.name, observerUser.name], ["res-ui-peer-review-double-click"]);
+    const result = resultFixture({ id: "res-ui-peer-review-double-click", objectiveId: objective.id, title: "前端测试 防重复互评指标" });
+    const loot = objectiveLootFixture({ id: "loot-ui-peer-review-double-click", objectiveId: objective.id, submittedBy: memberUser.name, body: "防重复互评战利品", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "evidence" }] });
+    const data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot] });
+    const deferred = createDeferred<void>();
+    let reviewCount = 0;
+
+    await mockOrfApp(page, memberUser, data, {
+      mineChallenges: () => data,
+      onSubmitContributionReview: async () => {
+        reviewCount += 1;
+        await deferred.promise;
+      },
+      tasks: () => data,
+    });
+
+    await page.goto(`/objectives/${objective.id}/loot`);
+    const submitButton = page.getByRole("button", { name: "提交匿名互评" });
+    await submitButton.click();
+    await submitButton.click({ force: true });
+    deferred.resolve();
+
+    await expect.poll(() => reviewCount).toBe(1);
+  });
+
+  test("double click on loot review does not duplicate requests", async ({ page }) => {
+    const objective = submittedObjectiveFixture("obj-ui-loot-review-double-click", "前端测试 防重复验收目标", [memberUser.name], ["res-ui-loot-review-double-click"]);
+    const result = resultFixture({ id: "res-ui-loot-review-double-click", objectiveId: objective.id, title: "前端测试 防重复验收指标" });
+    const loot = objectiveLootFixture({ id: "loot-ui-loot-review-double-click", objectiveId: objective.id, submittedBy: memberUser.name, body: "防重复验收战利品", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "evidence" }] });
+    const data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot] });
+    const deferred = createDeferred<void>();
+    let reviewCount = 0;
+
+    await mockOrfApp(page, adminUser, data, {
+      allChallenges: () => data,
+      onReviewLoot: async () => {
+        reviewCount += 1;
+        await deferred.promise;
+      },
+      tasks: () => data,
+    });
+
+    await page.goto(`/objectives/${objective.id}/loot`);
+    const submitButton = page.getByRole("button", { name: "验收并结算" });
+    await submitButton.click();
+    await submitButton.click({ force: true });
+    deferred.resolve();
+
+    await expect.poll(() => reviewCount).toBe(1);
+  });
+
   test("browser back after ORF mutation keeps refreshed API state", async ({ page }) => {
     const objective = objectiveFixture({ id: "obj-ui-browser-back", title: "前端测试 浏览器返回目标", flowStatus: "open", resultIds: ["res-ui-browser-back"] });
     const result = resultFixture({ id: "res-ui-browser-back", objectiveId: objective.id, title: "前端测试 浏览器返回指标" });
@@ -2262,6 +2377,7 @@ async function mockOrfApp(
     onFreeze?: () => Promise<void | MockMutationResult> | void | MockMutationResult;
     onPublish?: () => Promise<void | MockMutationResult> | void | MockMutationResult;
     onReject?: (applicationId: string) => Promise<void | MockMutationResult> | void | MockMutationResult;
+    onRecruit?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onReviewLoot?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onSubmitContributionReview?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onSubmitLoot?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
@@ -2354,6 +2470,14 @@ async function mockOrfApp(
     }
 
     await fulfillMutation(route, options.onApply?.());
+  });
+  await page.route("**/api/objectives/*/recruitments", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+
+    await fulfillMutation(route, options.onRecruit?.(route.request().postDataJSON()));
   });
   await page.route("**/api/objectives/*/freeze", async (route) => {
     if (route.request().method() !== "PATCH") {

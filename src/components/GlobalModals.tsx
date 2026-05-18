@@ -59,6 +59,7 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
       )
     : [];
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   if (!objective) return null;
 
@@ -72,12 +73,16 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
     <ModalFrame title="征召挑战者">
       <form
         className="grid gap-4"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          if (selectedMembers.length === 0) return;
-          void recruitObjectiveChallengers(objective.id, selectedMembers).then((ok) => {
+          if (selectedMembers.length === 0 || submitting) return;
+          setSubmitting(true);
+          try {
+            const ok = await recruitObjectiveChallengers(objective.id, selectedMembers);
             if (ok) closeModal();
-          });
+          } finally {
+            setSubmitting(false);
+          }
         }}
       >
         <div className="orf-surface-muted rounded-lg border orf-border p-3 text-sm">
@@ -97,7 +102,7 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
           ))}
           {candidates.length === 0 && <div className="rounded-lg border orf-border px-3 py-6 text-center text-sm orf-text-secondary">没有可征召的成员。</div>}
         </div>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button disabled={selectedMembers.length === 0} type="submit">发送征召</Button></div>
+        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button disabled={selectedMembers.length === 0 || submitting} type="submit">发送征召</Button></div>
       </form>
     </ModalFrame>
   );

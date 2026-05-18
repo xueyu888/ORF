@@ -39,6 +39,7 @@ export function LootSubmitPage() {
   const [resolutionReason, setResolutionReason] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [submittingAction, setSubmittingAction] = useState<"loot" | "peerReview" | "review" | null>(null);
 
   useEffect(() => {
     setClaims((current) => {
@@ -77,8 +78,9 @@ export function LootSubmitPage() {
   const hasCurrentPeerReview = contributionReviews.some((item) => item.reviewer === currentMember);
   const objectiveReviewResult = objectiveAcceptedResultFromReviews(results.map((result) => resultReviews[result.id] ?? "completed"));
 
-  const submit = () => {
+  const submit = async () => {
     const value = body.trim();
+    if (submittingAction) return;
     if (!canSubmit) {
       setError("目标冻结后，挑战者才能提交战利品");
       return;
@@ -103,18 +105,23 @@ export function LootSubmitPage() {
       return;
     }
 
-    void submitLoot({
-      objectiveId: objective.id,
-      body: value,
-      author: currentUser?.name,
-      selfTestReportBody: selfTestReportBody.trim() || null,
-      resultClaims,
-    }).then((ok) => {
+    setSubmittingAction("loot");
+    try {
+      const ok = await submitLoot({
+        objectiveId: objective.id,
+        body: value,
+        author: currentUser?.name,
+        selfTestReportBody: selfTestReportBody.trim() || null,
+        resultClaims,
+      });
       if (ok) navigate("/tasks");
-    });
+    } finally {
+      setSubmittingAction(null);
+    }
   };
 
-  const review = () => {
+  const review = async () => {
+    if (submittingAction) return;
     if (!canReview || !latestLoot) {
       setError("只有指挥官能验收已提交的战利品");
       return;
@@ -132,29 +139,38 @@ export function LootSubmitPage() {
       return;
     }
 
-    void reviewObjectiveLoot(objective.id, {
-      lootId: latestLoot.id,
-      reason: reason.trim() || undefined,
-      resultReviews: results.map((result) => ({
-        resultId: result.id,
-        acceptedResult: resultReviews[result.id] ?? "completed",
-      })),
-      contributionResolution,
-    }).then((ok) => {
+    setSubmittingAction("review");
+    try {
+      const ok = await reviewObjectiveLoot(objective.id, {
+        lootId: latestLoot.id,
+        reason: reason.trim() || undefined,
+        resultReviews: results.map((result) => ({
+          resultId: result.id,
+          acceptedResult: resultReviews[result.id] ?? "completed",
+        })),
+        contributionResolution,
+      });
       if (ok) navigate("/reports");
-    });
+    } finally {
+      setSubmittingAction(null);
+    }
   };
 
-  const submitPeerReview = () => {
+  const submitPeerReview = async () => {
+    if (submittingAction) return;
     const allocations = ratioInputsToAllocations(contributionInputs, objective.challengers);
     if (!canPeerReview || allocations.length !== objective.challengers.length) {
       setError("请完成匿名互评");
       return;
     }
 
-    void submitContributionReview(objective.id, allocations).then((ok) => {
+    setSubmittingAction("peerReview");
+    try {
+      const ok = await submitContributionReview(objective.id, allocations);
       if (ok) navigate("/tasks");
-    });
+    } finally {
+      setSubmittingAction(null);
+    }
   };
 
   return (
@@ -193,7 +209,7 @@ export function LootSubmitPage() {
               className="grid gap-5"
               onSubmit={(event) => {
                 event.preventDefault();
-                review();
+                void review();
               }}
             >
               <div className="grid gap-3">
@@ -233,7 +249,7 @@ export function LootSubmitPage() {
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
-                <Button type="submit">验收并结算</Button>
+                <Button type="submit" disabled={submittingAction === "review"}>验收并结算</Button>
               </div>
             </form>
           </Card>
@@ -243,7 +259,7 @@ export function LootSubmitPage() {
               className="grid gap-5"
               onSubmit={(event) => {
                 event.preventDefault();
-                submitPeerReview();
+                void submitPeerReview();
               }}
             >
               <div className="text-sm orf-text-secondary">
@@ -259,7 +275,7 @@ export function LootSubmitPage() {
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
-                <Button type="submit">提交匿名互评</Button>
+                <Button type="submit" disabled={submittingAction === "peerReview"}>提交匿名互评</Button>
               </div>
             </form>
           </Card>
@@ -269,7 +285,7 @@ export function LootSubmitPage() {
               className="grid gap-5"
               onSubmit={(event) => {
                 event.preventDefault();
-                submit();
+                void submit();
               }}
             >
               <Field label="完成说明">
@@ -292,7 +308,7 @@ export function LootSubmitPage() {
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
-                <Button type="submit" disabled={!canSubmit}>
+                <Button type="submit" disabled={!canSubmit || submittingAction === "loot"}>
                   <Send className="h-4 w-4" />
                   提交
                 </Button>
