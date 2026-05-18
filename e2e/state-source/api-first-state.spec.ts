@@ -938,6 +938,85 @@ test("creation modals start from live context without demo business defaults", a
   await expect(page.getByText("反馈显示当前指标需要更清晰的可验证边界。")).toHaveCount(0);
 });
 
+test("creation modals reject whitespace-only required values before API writes", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-modal-validation",
+    title: "真实弹窗校验目标",
+    flowStatus: "reestimating",
+    stage: "orfReestimate",
+    resultIds: ["result-modal-validation"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-modal-validation",
+    objectiveId: objective.id,
+    title: "真实弹窗校验指标",
+  };
+  const taskData = taskManagementDataWith({
+    objectives: [objective],
+    results: [result],
+    tasks: [],
+    feedback: [],
+  });
+  const writeRequests: string[] = [];
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  for (const pattern of [/\/api\/objectives$/, /\/api\/results$/, /\/api\/feedback$/, /\/api\/tasks$/, /\/api\/results\/[^/]+\/proposals$/]) {
+    await page.route(pattern, async (route) => {
+      writeRequests.push(route.request().url());
+      await route.fulfill({ status: 500, json: { error: "write should not be called" } });
+    });
+  }
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+  await page.getByLabel("目标标题").fill("   ");
+  await page.getByLabel("为什么重要").fill("   ");
+  await page.getByLabel("边界 / 不做什么").fill("   ");
+  await page.getByRole("button", { name: "保存目标" }).click();
+  await expect(page.getByText("请填写所有必填字段")).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  const panel = page.locator(".orf-objective-panel", { hasText: objective.title });
+  await panel.hover();
+  await panel.getByRole("button", { name: "新增指标" }).click();
+  await page.getByLabel("指标标题").fill("   ");
+  await page.getByLabel("衡量指标").fill("   ");
+  await page.getByRole("button", { name: "保存指标" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.getByRole("button", { name: "新建反馈" }).click();
+  await page.getByLabel("现象").fill("   ");
+  await page.getByLabel("建议调整").fill("   ");
+  await page.getByRole("button", { name: "保存反馈" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
+  await page.getByRole("button", { name: "创建行动项" }).click();
+  await page.getByLabel("行动项标题").fill("   ");
+  await page.getByRole("button", { name: "保存行动项" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.getByRole("button", { name: "提出指标更新" }).click();
+  await page.getByLabel("修改原因").fill("   ");
+  await page.getByRole("button", { name: "记录更新" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  await expect.poll(() => writeRequests).toEqual([]);
+});
+
 test("feedback detail recommendation actions are real commands", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,

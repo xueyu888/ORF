@@ -13,7 +13,15 @@ function ModalFrame({ title, children }: { title: string; children: ReactNode })
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[9vh]" onMouseDown={closeModal}>
-      <div ref={drag.ref} style={drag.style} className="orf-card orf-draggable-floating w-full max-w-xl rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        ref={drag.ref}
+        style={drag.style}
+        aria-label={title}
+        aria-modal="true"
+        className="orf-card orf-draggable-floating w-full max-w-xl rounded-xl"
+        onMouseDown={(event) => event.stopPropagation()}
+        role="dialog"
+      >
         <div className="orf-drag-handle flex items-center justify-between border-b orf-border px-5 py-4" {...drag.handleProps}>
           <div className="orf-text-primary text-sm font-semibold">{title}</div>
           <button onClick={closeModal} className="orf-text-muted orf-hover-text">
@@ -107,8 +115,12 @@ function defaultCycleLabel() {
   return `${date.getFullYear()} Q${quarter}`;
 }
 
+function hasBlankRequiredValues(values: string[]) {
+  return values.some((value) => value.trim().length === 0);
+}
+
 function NewObjectiveModal() {
-  const { createObjective, closeModal } = useOrf();
+  const { createObjective, closeModal, notify } = useOrf();
   const [title, setTitle] = useState("");
   const [whyItMatters, setWhyItMatters] = useState("");
   const [cycle, setCycle] = useState(() => defaultCycleLabel());
@@ -121,6 +133,10 @@ function NewObjectiveModal() {
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (hasBlankRequiredValues([title, whyItMatters, cycle, boundary])) {
+            notify("请填写所有必填字段");
+            return;
+          }
           createObjective({
             title: title.trim(),
             whyItMatters: whyItMatters.trim(),
@@ -145,7 +161,7 @@ function NewObjectiveModal() {
 }
 
 function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveId?: string; source?: "managerDefined" | "memberProposed" }) {
-  const { state, createResult, closeModal } = useOrf();
+  const { state, createResult, closeModal, notify } = useOrf();
   const [selectedObjectiveId, setSelectedObjectiveId] = useState(objectiveId ?? state.objectives[0]?.id ?? "");
   const [title, setTitle] = useState("");
   const [metricName, setMetricName] = useState("");
@@ -156,6 +172,10 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (hasBlankRequiredValues([selectedObjectiveId, title, metricName])) {
+            notify("请填写所有必填字段");
+            return;
+          }
           createResult({ objectiveId: selectedObjectiveId, title: title.trim(), metricName: metricName.trim(), source });
           closeModal();
         }}
@@ -170,7 +190,7 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
 }
 
 function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; resultId?: string }) {
-  const { state, createFeedback, closeModal, currentUser } = useOrf();
+  const { state, createFeedback, closeModal, currentUser, notify } = useOrf();
   const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
   const resultOptions = objectiveId ? state.results.filter((result) => result.objectiveId === objectiveId) : state.results;
   const initialResultId = resultId && resultOptions.some((result) => result.id === resultId) ? resultId : resultOptions[0]?.id ?? state.results[0]?.id ?? "";
@@ -189,7 +209,12 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (hasBlankRequiredValues([phenomenon, linkedResultId, cause, suggestedAdjustment, owner])) {
+            notify("请填写所有必填字段");
+            return;
+          }
           if (!selectedResult) {
+            notify("请选择关联指标");
             return;
           }
 
@@ -224,7 +249,7 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
 }
 
 function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: string; resultId?: string; feedbackId?: string }) {
-  const { state, createTask, closeModal, currentUser } = useOrf();
+  const { state, createTask, closeModal, currentUser, notify } = useOrf();
   const defaultAssignee = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
   const linkedFeedback = state.feedback.find((item) => item.id === feedbackId);
   const resultOptions = objectiveId ? state.results.filter((result) => result.objectiveId === objectiveId) : state.results;
@@ -243,7 +268,12 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (hasBlankRequiredValues([title, linkedResultId])) {
+            notify("请填写所有必填字段");
+            return;
+          }
           if (!selectedResult) {
+            notify("请选择关联指标");
             return;
           }
 
@@ -273,7 +303,7 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
 }
 
 function ResultUpdateModal({ resultId, feedbackId }: { resultId?: string; feedbackId?: string }) {
-  const { state, proposeResultUpdate, closeModal } = useOrf();
+  const { state, proposeResultUpdate, closeModal, notify } = useOrf();
   const result = state.results.find((item) => item.id === resultId) ?? state.results[0];
   const feedback = feedbackId ? state.feedback.find((item) => item.id === feedbackId) : undefined;
   const [title, setTitle] = useState(result?.title ?? "");
@@ -287,6 +317,10 @@ function ResultUpdateModal({ resultId, feedbackId }: { resultId?: string; feedba
         className="grid gap-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (hasBlankRequiredValues([title, reason])) {
+            notify("请填写所有必填字段");
+            return;
+          }
           proposeResultUpdate(result.id, title.trim(), reason.trim(), feedbackId);
           closeModal();
         }}
