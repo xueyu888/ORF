@@ -292,113 +292,45 @@ flowchart TD
 | 指挥官验收结算 | 选择每个指标验收结论；目标结果由指标结论汇总；使用匿名互评贡献结果，有分歧时先处理分歧；成功后跳转统计页，排行榜显示积分变化 | 调用验收 mutation；成功后刷新 point ledger 和统计页数据 |
 | 任意 mutation 失败 | 原页面、原状态、原按钮保持可见，显示错误提示 | 禁止乐观更新；失败后不能本地伪造新状态 |
 
-## 覆盖状态
+## 上线式联动主流程
 
-| 状态 | 含义 |
-| --- | --- |
-| 已覆盖 | 已有自动化测试，当前除已标注 bug 外应保持通过 |
-| 已暴露 | 已有自动化测试，当前会失败，用于提醒需要改前端实现 |
-| 待补 | 已明确规则和目标测试名，但本轮还未落成自动化测试 |
+前端流程测试不维护静态覆盖数字。当前有效性以测试文件和 CI 结果为准，本文只定义真实用户链路、守卫场景和风险边界，避免文档用静态数字伪造确定性。
 
-当前规则总账：
+主链路用 `real user launch flow links commander and challengers from publish to settlement` 表达上线后的用户行为：一个指挥官和两个挑战者在不同浏览器页面里共享同一份后端状态，从发布悬赏目标一直联动到积分结算。
 
-- 已覆盖：20 条，`ORF-FE-R001`、`ORF-FE-R002`、`ORF-FE-R004` 到 `ORF-FE-R021`。
-- 已暴露：0 条。
-- 待补：39 条，`ORF-FE-R022` 到 `ORF-FE-R060`。
-
-## 已覆盖规则
-
-| Rule | 规则 | 覆盖测试 |
-| --- | --- | --- |
-| ORF-FE-R001 | 目标树必须保留无 Result 的 Objective，不能因为悬赏目标尚未定义指标而从 `/tasks` 工作台消失。 | `buildChallengeTree keeps resultless ORF objectives visible` |
-| ORF-FE-R002 | 前端状态文案必须和 `Objective.flowStatus` 对齐：候选、申请、征召、重估、冻结、待验收、已结算。 | `bounty and objective statuses follow the ORF frontend flow` |
-| ORF-FE-R004 | 指挥官在 `/tasks` 工作台只能看到当前状态允许的流程按钮：`candidate` 提醒中可发布，`reestimating` 主体中可冻结。 | `commander challenge page exposes only valid ORF flow actions` |
-| ORF-FE-R005 | `applying` 目标有 pending application 时，指挥官能看到申请审核条和通过 / 拒绝按钮。 | `commander challenge page exposes only valid ORF flow actions` |
-| ORF-FE-R006 | `frozen` 目标不展示退回重估入口。 | `commander challenge page exposes only valid ORF flow actions` / `member challenge page stays scoped to own challenges and hides commander flow actions` |
-| ORF-FE-R007 | 成员在 `/tasks` 工作台默认只展示自己正式参与的悬赏目标，不展示其他挑战者的目标，也不展示仅已申请待确认的目标。 | `member challenge page stays scoped to own challenges and hides commander flow actions` |
-| ORF-FE-R008 | 成员在 `/tasks` 工作台不展示发布、冻结、申请审核等指挥官流程按钮。 | `member challenge page stays scoped to own challenges and hides commander flow actions` |
-| ORF-FE-R009 | 成员只在自己的 `frozen` 悬赏目标上看到提交目标战利品入口，`reestimating` 目标不显示提交入口。 | `member challenge page stays scoped to own challenges and hides commander flow actions` |
-| ORF-FE-R010 | 悬赏大厅申请挑战后，前端必须等待 API 成功和刷新数据，再显示已申请状态并禁用重复申请。 | `bounty hall apply action waits for API success and refreshed bounty data` |
-| ORF-FE-R011 | 任务状态等业务写操作失败时，前端不能乐观改状态；成功后必须以刷新数据为准。 | `keeps task status unchanged until the API write succeeds and refreshed data arrives` |
-| ORF-FE-R012 | API 获取业务数据失败时，页面不能展示 bundled seed 或 legacy localStorage 里的旧业务数据。 | `does not show bundled business data when task data API fails` / `ignores stale business data in legacy localStorage` |
-| ORF-FE-R013 | 成员在悬赏大厅接受征召后，必须等待 API 成功和刷新数据，再跳转到 `/tasks` 工作台并显示目标进入 `reestimating`。 | `bounty hall recruitment accept moves the member into reestimate after refreshed data` |
-| ORF-FE-R014 | 指挥官通过挑战申请后，申请条必须消失，目标必须按刷新数据显示 `reestimating`，并出现冻结入口。 | `commander approval moves applying objective into reestimate from refreshed data` |
-| ORF-FE-R015 | 指挥官拒绝剩余 pending application 时，只清掉被拒绝申请；如果目标已有已接受挑战者，前端不能把目标误显示回可申请状态。 | `commander rejection clears pending application without reopening accepted challenges` |
-| ORF-FE-R016 | 指挥官冻结重估目标后，必须等待刷新数据再显示 `frozen`；冻结后不能再出现冻结或退回重估入口。 | `commander freeze waits for refreshed frozen data and removes reopen affordances` |
-| ORF-FE-R017 | 冻结 API 失败时，前端必须保持 `reestimating` 和冻结按钮，并展示后端错误，不能乐观显示已冻结。 | `commander freeze failure keeps reestimate state from refreshed API data` |
-| ORF-FE-R018 | 成员只能在自己的 `frozen` 目标提交战利品；提交成功刷新后回到 `/tasks` 工作台，目标显示待验收，并移除重复提交入口。 | `member can submit loot only after frozen objective and returns to challenges after refresh` |
-| ORF-FE-R019 | 指挥官验收已提交战利品后，必须等待刷新数据再跳转统计页，并能看到结算积分进入排行榜。 | `commander reviews submitted loot and sees settled points after refreshed data` |
-| ORF-FE-R020 | 成员在自己的 `reestimating` 目标且未过 `confirmationDueAt` 时，提出指标必须走 `memberProposed` 指标提交流程，编辑已有指标必须走保存 / 更新流程，不能误走指挥官定义指标流程。 | `member reestimate metric proposal uses the member-proposed interaction contract` |
-| ORF-FE-R021 | 指挥官发布候选目标后，必须等待刷新数据再显示 `open/可申请`，并且成员能在悬赏大厅看到该目标和申请入口。 | `commander publishes a candidate objective and the bounty hall exposes it after refresh` |
-
-## 已暴露规则
-
-| Rule | 规则 | 覆盖测试 | 当前结果 |
+| 阶段 | 指挥官行为 | 挑战者行为 | 必须看到的用户结果 |
 | --- | --- | --- | --- |
-| 暂无 | 暂无 | 暂无 | 暂无 |
+| 待发布 | 在 `/tasks` 看到候选目标并点击发布 | 暂无入口 | 目标从“候选中”变成“可申请” |
+| 申请 | 在 `/tasks` 等待申请进入审核条 | 两个挑战者分别在 `/bounties` 点击申请并确认 | 申请者看到“已申请”且按钮禁用；指挥官看到两名申请人 |
+| 审核 | 依次通过两个申请 | 刷新 `/tasks` 进入我的挑战 | 目标显示“重估中”，挑战者列表包含两人 |
+| 重估 | 等待挑战者校准指标 | 挑战者点击“提出指标”，提交 `memberProposed` 指标 | 指标出现在目标树；另一名挑战者刷新后也能看到 |
+| 冻结 | 点击“冻结” | 在我的挑战看到提交入口 | 目标显示“已冻结”，冻结入口消失 |
+| 提交 | 等待战利品 | 挑战者提交目标级战利品 | 提交者回到 `/tasks`，目标显示“待验收” |
+| 匿名互评 | 等待双方互评完成 | 两个挑战者分别进入战利品页提交贡献比例 | 验收页显示匿名互评贡献结果，不展示手填贡献权重 |
+| 验收结算 | 验收指标并结算 | 查看积分结果 | 跳转 `/reports`，排行榜显示按贡献比例写入的积分 |
 
-## 待补覆盖矩阵
+测试里的时间不等真实分钟。每次流程 mutation 都推进一段业务时间戳；重估窗口使用固定未来 `confirmationDueAt` 保持开放，截止前 / 截止后 / 冻结后的边界由专门守卫测试用固定过去或未来时间验证。
 
-| 分类 | 优先级 | 待补重点 |
-| --- | --- | --- |
-| 失败路径 | P0 | 所有 ORF mutation 失败时都不能乐观更新；必须显示错误并按刷新数据回落 |
-| 权限边界 | P0 | 直接打开深链页面时也必须保持角色和挑战者边界，不只依赖按钮隐藏 |
-| 时间边界 | P0 | 重估截止前、截止后、冻结后三个时间点的指标入口必须分明 |
-| 表单交互 | P1 | 空内容、缺指标、缺 loot、取消弹窗、重复提交等人机交互必须可验证 |
-| 多人挑战 | P1 | 多挑战者的我的挑战、提交、指标验收、匿名互评贡献结果、分歧处理、排行榜积分必须一致 |
-| 深链路 | P1 | `/objectives/:id/loot`、Objective detail、Result detail 等入口必须和 `/tasks` 工作台规则一致 |
-| UI 状态 | P1 | loading、empty、API error、processing disabled、toast 都要有可见断言 |
-| 数据一致性 | P0 | mutation 成功但刷新返回旧数据时，页面必须相信刷新数据，不得自己制造成功状态 |
-| 回归入口 | P2 | 其他页面复用的入口不能绕过 ORF 主流程规则 |
-| 交互细节 | P2 | 弹窗关闭、重复点击、浏览器返回、toast 关闭等细节防回归 |
+## 守卫场景索引
 
-## 待补规则清单
+| 场景 | 测试重点 |
+| --- | --- |
+| 主流程 | 多页面、多角色、同一后端状态，从发布、申请、审核、重估、冻结、提交、匿名互评到结算 |
+| 单步成功 | 发布、申请、接受征召、审批、拒绝、冻结、提交战利品、验收结算都必须等待 API 成功和刷新数据 |
+| 失败回退 | mutation 失败时保持原页面、原状态、原按钮，并展示后端错误 |
+| 权限边界 | 成员不能看到指挥官动作；非挑战者不能提交；非指挥官不能验收；深链页面也必须守住边界 |
+| 时间边界 | 只有正式挑战者能在重估截止前提出 / 编辑指标；截止后和冻结后入口关闭 |
+| 表单交互 | 空战利品、无指标、无 latest loot、取消弹窗、关闭 modal、重复点击都不能产生伪状态 |
+| 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
+| 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
+| UI 状态 | loading、empty、API error、processing disabled、toast dismiss 都要有可见断言 |
+| 数据一致性 | mutation 成功但刷新旧数据或刷新失败时，前端不能靠本地推断制造成功状态 |
 
-| Rule | 分类 | 优先级 | 规则 | 目标测试 |
-| --- | --- | --- | --- | --- |
-| ORF-FE-R022 | 失败路径 | P0 | 发布候选目标失败时，`/tasks` 工作台仍显示 `candidate` 和发布按钮，并展示后端错误。 | `commander publish failure keeps candidate state` |
-| ORF-FE-R023 | 失败路径 | P0 | 申请挑战失败时，悬赏大厅不能显示已申请，确认弹窗应保留或展示错误。 | `bounty hall apply failure keeps apply action available` |
-| ORF-FE-R024 | 失败路径 | P0 | 接受征召失败时，成员不能跳转到 `/tasks` 工作台，征召令仍保持可接受状态。 | `recruitment accept failure keeps recruitment item visible` |
-| ORF-FE-R025 | 失败路径 | P0 | 指挥官通过申请失败时，申请条不能消失，目标不能显示 `reestimating`。 | `application approval failure keeps pending review strip` |
-| ORF-FE-R026 | 失败路径 | P0 | 指挥官拒绝申请失败时，pending application 不能从申请条里消失。 | `application rejection failure keeps pending applicant visible` |
-| ORF-FE-R027 | 失败路径 | P0 | 提交战利品失败时，页面不能跳回 `/tasks` 工作台，目标不能显示待验收。 | `loot submit failure stays on form and keeps frozen state` |
-| ORF-FE-R028 | 失败路径 | P0 | 验收结算失败时，页面不能跳到统计页，排行榜不能出现新积分。 | `loot review failure stays on review form without points` |
-| ORF-FE-R029 | 失败路径 | P1 | 成员提出指标失败时，modal 或 toast 应明确失败，目标不能新增指标。 | `member proposed metric failure does not append result` |
-| ORF-FE-R030 | 权限边界 | P0 | 非指挥官直接打开已提交目标的验收页时，不能看到验收按钮，提交应被禁用或提示无权限。 | `member direct review page cannot settle submitted loot` |
-| ORF-FE-R031 | 权限边界 | P0 | 非挑战者直接打开冻结目标的战利品提交页时，提交按钮必须不可用。 | `observer direct loot page cannot submit frozen objective` |
-| ORF-FE-R032 | 权限边界 | P0 | 成员即使构造全量挑战数据，也不能看到发布、审核、冻结、验收等指挥官入口。 | `member never sees commander flow actions with full data` |
-| ORF-FE-R033 | 权限边界 | P0 | 指挥官可以进入验收，但不能以非挑战者身份提交战利品。 | `commander cannot submit loot unless also challenger` |
-| ORF-FE-R034 | 权限边界 | P1 | 只有当前用户是目标挑战者时，`/tasks` 工作台和深链页才展示提交战利品入口。 | `loot entry is visible only to current challenger` |
-| ORF-FE-R035 | 时间边界 | P0 | `confirmationDueAt` 之前，正式挑战者可打开提出指标入口，也可编辑已有指标；新增提交使用 `source=memberProposed`。 | `member can propose metric before reestimate deadline` |
-| ORF-FE-R036 | 时间边界 | P0 | `confirmationDueAt` 之后，正式挑战者不能打开提出指标入口，已有指标也不能编辑，且不会发出新增或保存请求。 | `member cannot propose metric after reestimate deadline` |
-| ORF-FE-R037 | 时间边界 | P0 | 目标冻结后，挑战者不能继续新增或编辑指标。 | `member cannot edit metrics after objective frozen` |
-| ORF-FE-R038 | 时间边界 | P1 | `candidate/open/applying/recruiting` 阶段，成员没有提出指标入口，也不能编辑指标。 | `member metric proposal is limited to active reestimate` |
-| ORF-FE-R039 | 表单交互 | P1 | 战利品完成说明为空时，前端应阻止提交并显示“请填写完成说明”。 | `loot form requires body before submit` |
-| ORF-FE-R040 | 表单交互 | P1 | 冻结目标没有任何 Result 时，战利品页应阻止提交并提示没有可验收指标。 | `loot form rejects frozen objective without results` |
-| ORF-FE-R041 | 表单交互 | P1 | 验收页没有 latest loot 时，指挥官不能提交验收。 | `review page rejects submitted objective without latest loot` |
-| ORF-FE-R042 | 表单交互 | P1 | 申请和接受确认弹窗点击取消时，不应调用任何 mutation API。 | `challenge confirm cancel does not call mutation API` |
-| ORF-FE-R043 | 表单交互 | P2 | 提出指标或编辑指标 modal 关闭后，不应留下半完成表单或误提交。 | `member proposed metric modal close does not mutate data` |
-| ORF-FE-R044 | 多人挑战 | P1 | 多个挑战者的 `frozen` 目标，两个挑战者都能在自己的 `/tasks` 工作台看到提交入口。 | `multiple challengers see their own frozen loot entry` |
-| ORF-FE-R045 | 多人挑战 | P1 | 多挑战者战利品提交后，指挥官验收页应展示匿名互评贡献结果，不应展示手填贡献权重输入。 | `review form uses peer review contribution results` |
-| ORF-FE-R046 | 多人挑战 | P1 | 多挑战者结算后，排行榜应按匿名互评贡献结果显示多成员积分。 | `multi challenger settlement updates leaderboard by peer review ratios` |
-| ORF-FE-R047 | 多人挑战 | P2 | 匿名互评贡献结果和分歧处理只应包含目标挑战者，不应出现旁观成员。 | `review peer contribution excludes non challengers` |
-| ORF-FE-R048 | 深链路 | P1 | `/objectives/:id/loot` 对 `frozen` 且当前用户是挑战者时显示提交页。 | `loot deep link opens submit form for frozen challenger` |
-| ORF-FE-R049 | 深链路 | P1 | `/objectives/:id/loot` 对 `submitted` 且当前用户是指挥官时显示验收页。 | `loot deep link opens review form for commander on submitted objective` |
-| ORF-FE-R050 | 深链路 | P1 | `/objectives/:id/loot` 对不存在目标应回到 `/tasks` 工作台，不能空白或崩溃。 | `loot deep link redirects missing objective to challenges` |
-| ORF-FE-R051 | 深链路 | P1 | Result detail 的“提交目标战利品”入口必须遵守目标状态和挑战者身份。 | `result detail loot entry follows objective flow permissions` |
-| ORF-FE-R052 | 回归入口 | P2 | Objective detail 的“新增指标 / 定义指标”入口不能让成员绕过 `memberProposed` 重估规则。 | `objective detail metric entry follows reestimate proposal contract` |
-| ORF-FE-R053 | UI 状态 | P1 | 悬赏大厅加载时显示 loading empty state，加载完成无数据时显示空态。 | `bounty hall renders loading and empty states` |
-| ORF-FE-R054 | UI 状态 | P1 | 悬赏大厅 API 失败时，不展示 seed 或旧数据，并显示可理解空态。 | `bounty hall api failure does not show stale business data` |
-| ORF-FE-R055 | UI 状态 | P1 | mutation 进行中按钮应 disabled 或显示处理中，避免重复点击。 | `challenge mutation button is disabled while processing` |
-| ORF-FE-R056 | UI 状态 | P2 | 后端错误 toast 应可见，关闭后从页面移除。 | `business error toast can be dismissed` |
-| ORF-FE-R057 | 数据一致性 | P0 | mutation 成功但刷新返回旧状态时，页面必须展示旧状态，不得乐观显示成功状态。 | `successful mutation still trusts stale refresh response` |
-| ORF-FE-R058 | 数据一致性 | P0 | mutation 成功但刷新失败时，页面不能靠本地推断进入成功状态，应提示刷新失败或保留旧状态。 | `mutation success with refresh failure does not fabricate new state` |
-| ORF-FE-R059 | 数据一致性 | P1 | 同一按钮连续点击不能产生重复申请、重复接受、重复提交或重复验收。 | `double click on ORF mutation does not duplicate requests` |
-| ORF-FE-R060 | 交互细节 | P2 | 浏览器返回后，页面应从 API 数据恢复当前状态，不回到旧本地状态。 | `browser back after ORF mutation keeps refreshed API state` |
+## 风险边界
 
-## 当前暴露的问题
-
-- 暂无。成员重估期“提出指标 / 编辑指标”入口已按 `memberProposed` 契约纳入覆盖规则，后续改动需继续用该测试守住入口语义。
+- 这些 E2E 使用 Playwright route mock API，验证的是浏览器用户路径、刷新契约、权限显隐和页面跳转，不替代真实数据库、真实 Ory Cookie 和真实网络环境的上线验收。
+- 当前主流程用手动刷新 / 页面跳转模拟用户查看最新状态；如果后续引入 websocket 或轮询，需要新增实时同步断言。
+- 当前主流程覆盖目标级战利品和无分歧匿名互评；互评分歧处理、异常提交和越权访问由守卫测试分开验证。
 
 ## 测试数据原则
 
@@ -427,10 +359,4 @@ npm test
 npx playwright test e2e/challenges/orf-frontend-flow.spec.ts
 npm run test:e2e
 npm run build
-```
-
-在修复当前成员提出指标 / 编辑指标入口前，可以用下面命令验证其他 ORF 前端流程是否全绿：
-
-```bash
-npx playwright test e2e/challenges/orf-frontend-flow.spec.ts --grep-invert "member reestimate metric proposal"
 ```
