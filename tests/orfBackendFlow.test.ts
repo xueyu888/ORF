@@ -1392,6 +1392,82 @@ test("API user management rejects duplicate display names inside a team", async 
   });
 });
 
+test("API user management normalizes email whitespace before validation", async () => {
+  const fixture = await createFixture("api-user-normalize-email");
+  const email = `${fixture.prefix}-trimmed-member@orf.test`;
+  const name = `${fixture.prefix} Trimmed Member`;
+
+  await withApiServer(fixture, async (app) => {
+    const created = await apiInject(app, fixture.commander, "POST", "/api/users", {
+      name: ` ${name} `,
+      email: ` ${email.toUpperCase()} `,
+      role: "member",
+    });
+    assert.equal(created.statusCode, 200);
+
+    const userList = created.json() as { users: Array<{ name: string; email: string }> };
+    const stored = userList.users.find((user) => user.email === email);
+    assert.ok(stored);
+    assert.equal(stored.name, name);
+  });
+});
+
+test("auth API normalizes login credentials at the route boundary", async () => {
+  const fixture = await createFixture("auth-route-login-normalize");
+  const email = `${fixture.prefix}-external-login@orf.test`;
+  const identity = {
+    id: `${fixture.prefix}-external-identity`,
+    traits: { email, name: "External Login User" },
+  };
+
+  await withMockOryPasswordFlow("login", identity, async (bodies) => {
+    const app = await buildServer({ logger: false, registerOptionalIntegrations: false });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { email: ` ${email.toUpperCase()} `, password: "password" },
+      });
+      assert.equal(response.statusCode, 200);
+    } finally {
+      await app.close();
+    }
+
+    const loginBody = bodies.at(-1) as { identifier?: string; password?: string };
+    assert.equal(loginBody.identifier, email);
+    assert.equal(loginBody.password, "password");
+  });
+});
+
+test("auth API normalizes registration traits at the route boundary", async () => {
+  const fixture = await createFixture("auth-route-registration-normalize");
+  const email = `${fixture.prefix}-registration@orf.test`;
+  const name = "External Registration User";
+  const identity = {
+    id: `${fixture.prefix}-registration-identity`,
+    traits: { email, name },
+  };
+
+  await withMockOryPasswordFlow("registration", identity, async (bodies) => {
+    const app = await buildServer({ logger: false, registerOptionalIntegrations: false });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/registration",
+        payload: { name: ` ${name} `, email: ` ${email.toUpperCase()} `, password: "password123" },
+      });
+      assert.equal(response.statusCode, 200);
+    } finally {
+      await app.close();
+    }
+
+    const registrationBody = bodies.at(-1) as { traits?: { email?: string; name?: { first?: string } }; password?: string };
+    assert.equal(registrationBody.traits?.email, email);
+    assert.equal(registrationBody.traits?.name?.first, name);
+    assert.equal(registrationBody.password, "password123");
+  });
+});
+
 test("password login does not auto-approve first-time ORF users", async () => {
   const fixture = await createFixture("auth-login-new-user-pending");
   const email = `${fixture.prefix}-external-login@orf.test`;
@@ -2303,14 +2379,27 @@ async function withApiServerForFixtures(fixtures: Fixture[], run: (app: FastifyI
 }
 
 async function withMockOryLogin(identity: { id: string; traits: Record<string, unknown> }, run: () => Promise<void>) {
+  await withMockOryPasswordFlow("login", identity, async () => {
+    await run();
+  });
+}
+
+async function withMockOryPasswordFlow(
+  flowType: "login" | "registration",
+  identity: { id: string; traits: Record<string, unknown> },
+  run: (submittedBodies: unknown[]) => Promise<void>,
+) {
   const originalFetch = globalThis.fetch;
-  const actionUrl = "https://ory.test/self-service/login?flow=test";
+  const actionUrl = `https://ory.test/self-service/${flowType}?flow=test`;
+  const submittedBodies: unknown[] = [];
+
   globalThis.fetch = (async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    if (url.includes("/self-service/login/api")) {
+    if (url.includes(`/self-service/${flowType}/api`)) {
       return new Response(JSON.stringify({ ui: { action: actionUrl } }), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (url === actionUrl && init?.method === "POST") {
+      submittedBodies.push(init.body ? JSON.parse(String(init.body)) : null);
       return new Response(
         JSON.stringify({
           session_token: `session-${identity.id}`,
@@ -2327,7 +2416,7 @@ async function withMockOryLogin(identity: { id: string; traits: Record<string, u
   }) satisfies typeof fetch;
 
   try {
-    await run();
+    await run(submittedBodies);
   } finally {
     globalThis.fetch = originalFetch;
   }

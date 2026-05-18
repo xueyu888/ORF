@@ -5,13 +5,15 @@ import { env } from "../env";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
 import { ORF_SESSION_COOKIE, OryAuthFlowError, getAuthenticatedOrfUser, loginWithPassword, registerWithPassword, revokeApiSession } from "./ory";
 
+const emailBodySchema = z.string().trim().email().transform((value) => value.toLowerCase());
+
 const loginBodySchema = z.object({
-  email: z.string().email(),
+  email: emailBodySchema,
   password: z.string().min(1),
 });
 
 const registrationBodySchema = loginBodySchema.extend({
-  name: z.string().min(1),
+  name: z.string().trim().min(1),
 });
 
 function authCookie(sessionToken: string) {

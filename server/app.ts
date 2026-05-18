@@ -111,7 +111,7 @@ const objectiveAcceptedResultSchema = z.enum(["completed", "falsified", "overtur
 const resultAcceptedResultSchema = z.enum(["unreviewed", "completed", "falsified", "failed"]);
 const userBodySchema = z.object({
   name: z.string().trim().min(1),
-  email: z.string().email().transform((value) => value.toLowerCase()),
+  email: z.string().trim().email().transform((value) => value.toLowerCase()),
   role: userRoleSchema,
 });
 const requiredTextSchema = z.string().trim().min(1);
