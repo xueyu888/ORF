@@ -1,7 +1,17 @@
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { OrfUser, UserRole } from "../../src/types/orf";
 import { db } from "../db/client";
-import { teamMembers, users } from "../db/schema";
+import {
+  feedback,
+  objectiveContributionReviews,
+  objectiveLoot,
+  objectives,
+  pointLedger,
+  results,
+  tasks,
+  teamMembers,
+  users,
+} from "../db/schema";
 
 export type UserInput = {
   name: string;
@@ -78,6 +88,85 @@ async function assertUniqueTeamUserName(teamId: string, userId: string | null, n
 
   if (nameOwner) {
     throw Object.assign(new Error("Name already exists"), { statusCode: 409 });
+  }
+}
+
+async function isReferencedByOrfRecords(teamId: string, name: string) {
+  const objectiveRows = await db
+    .select({
+      challengers: objectives.challengers,
+      assignedChallengers: objectives.assignedChallengers,
+      challengeApplications: objectives.challengeApplications,
+    })
+    .from(objectives)
+    .where(eq(objectives.teamId, teamId));
+  if (
+    objectiveRows.some(
+      (objective) =>
+        (objective.challengers ?? []).includes(name) ||
+        (objective.assignedChallengers ?? []).includes(name) ||
+        (objective.challengeApplications ?? []).some((application) => application.applicant === name),
+    )
+  ) {
+    return true;
+  }
+
+  const contributionRows = await db
+    .select({
+      reviewer: objectiveContributionReviews.reviewer,
+      allocations: objectiveContributionReviews.allocations,
+    })
+    .from(objectiveContributionReviews)
+    .where(eq(objectiveContributionReviews.teamId, teamId));
+  if (
+    contributionRows.some(
+      (review) =>
+        review.reviewer === name ||
+        (review.allocations ?? []).some((allocation) => allocation.member === name),
+    )
+  ) {
+    return true;
+  }
+
+  const [resultRef, taskRef, feedbackRef, lootRef, ledgerRef] = await Promise.all([
+    db
+      .select({ id: results.id })
+      .from(results)
+      .where(and(eq(results.teamId, teamId), eq(results.definer, name)))
+      .limit(1),
+    db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.teamId, teamId), eq(tasks.assignee, name)))
+      .limit(1),
+    db
+      .select({ id: feedback.id })
+      .from(feedback)
+      .where(and(eq(feedback.teamId, teamId), eq(feedback.owner, name)))
+      .limit(1),
+    db
+      .select({ id: objectiveLoot.id })
+      .from(objectiveLoot)
+      .where(and(eq(objectiveLoot.teamId, teamId), eq(objectiveLoot.submittedBy, name)))
+      .limit(1),
+    db
+      .select({ id: pointLedger.id })
+      .from(pointLedger)
+      .where(and(eq(pointLedger.teamId, teamId), eq(pointLedger.memberName, name)))
+      .limit(1),
+  ]);
+
+  return [resultRef, taskRef, feedbackRef, lootRef, ledgerRef].some((rows) => rows.length > 0);
+}
+
+async function assertCanRenameUser(teamId: string, userId: string, nextName: string) {
+  const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user || user.name === nextName) {
+    return;
+  }
+
+  if (await isReferencedByOrfRecords(teamId, user.name)) {
+    throw Object.assign(new Error("User name is referenced by ORF records"), { statusCode: 409 });
   }
 }
 
@@ -215,6 +304,7 @@ async function updateTeamUserRecord(teamId: string, userId: string, normalized: 
     throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
   }
 
+  await assertCanRenameUser(teamId, userId, normalized.name);
   await assertUniqueTeamUserName(teamId, userId, normalized.name);
 
   await db.transaction(async (tx) => {

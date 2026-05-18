@@ -1173,6 +1173,28 @@ test("API user management rejects duplicate display names inside a team", async 
   });
 });
 
+test("API user management prevents renaming members referenced by ORF records", async () => {
+  const fixture = await createFixture("api-user-rename-reference");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "rename referenced challenger objective");
+
+  await withApiServer(fixture, async (app) => {
+    const rename = await apiInject(app, fixture.commander, "PATCH", `/api/users/${encodeURIComponent(fixture.challenger.id)}`, {
+      name: `${fixture.prefix} Renamed Challenger`,
+      email: fixture.challenger.email,
+      role: "member",
+    });
+    assert.equal(rename.statusCode, 409);
+
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const renamedUser = (userList.json() as { users: Array<{ id: string; name: string }> }).users.find((user) => user.id === fixture.challenger.id);
+    assert.equal(renamedUser?.name, fixture.challenger.name);
+
+    const myChallenges = await getMyChallengesData(fixture.challenger.name);
+    assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
 test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
   const fixture = await createFixture("api-read-boundary");
   const { objective } = await createSettledObjective(fixture, "scoped settled objective");

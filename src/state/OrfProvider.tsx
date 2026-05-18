@@ -252,6 +252,14 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
         return "管理员不能将自己降级为成员";
       }
 
+      if (error.message === "Name already exists") {
+        return "同一团队内已存在同名成员";
+      }
+
+      if (error.message === "User name is referenced by ORF records") {
+        return "该成员已被 ORF 业务记录引用，不能改名";
+      }
+
       return error.message;
     }
 
