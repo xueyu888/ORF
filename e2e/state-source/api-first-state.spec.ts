@@ -478,3 +478,60 @@ test("result detail derives linked records and quality checks from API relations
   await expect(quality.locator("div.flex", { hasText: "有行动项支撑" }).getByText("通过")).toBeVisible();
   await expect(quality.locator("div.flex", { hasText: "口径清楚" }).getByText("待补")).toBeVisible();
 });
+
+test("tasks page cycle filter is functional and API-derived", async ({ page }) => {
+  const q1Objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-task-q1",
+    title: "真实挑战 Q1",
+    cycle: "2999 Q1",
+    resultIds: ["result-task-q1"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const q2Objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-task-q2",
+    title: "真实挑战 Q2",
+    cycle: "2999 Q2",
+    resultIds: ["result-task-q2"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const q1Result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-task-q1",
+    objectiveId: q1Objective.id,
+    title: "真实挑战指标 Q1",
+  };
+  const q2Result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-task-q2",
+    objectiveId: q2Objective.id,
+    title: "真实挑战指标 Q2",
+  };
+  const taskData = taskManagementDataWith({
+    objectives: [q1Objective, q2Objective],
+    results: [q1Result, q2Result],
+    tasks: [],
+    feedback: [],
+  });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+
+  await page.goto("/tasks");
+
+  await expect(page.getByRole("button", { name: "筛选" })).toHaveCount(0);
+  await expect(page.getByText("真实挑战 Q1")).toBeVisible();
+  await expect(page.getByText("真实挑战 Q2")).toBeVisible();
+
+  await page.getByLabel("挑战周期").selectOption("2999 Q2");
+
+  await expect(page.getByText("真实挑战 Q2")).toBeVisible();
+  await expect(page.getByText("真实挑战 Q1")).toHaveCount(0);
+});

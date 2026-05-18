@@ -11,6 +11,7 @@ import type { Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
+import { challengeCycleOptions, filterChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
 import { canMutateObjectiveWorkItems, canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
@@ -48,6 +49,8 @@ export function ChallengePlanPage() {
   const currentMember = currentUser?.name ?? "User";
   const canShowAllChallenges = canShowFrontend(currentUser, "challenge.scope.all");
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
+  const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
@@ -114,7 +117,15 @@ export function ChallengePlanPage() {
       ),
     [challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
   );
+  const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
+  const filteredGroups = useMemo(() => filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter }), [cycleFilter, groups, statusFilter]);
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
+
+  useEffect(() => {
+    if (cycleFilter !== "all" && !cycleOptions.includes(cycleFilter)) {
+      setCycleFilter("all");
+    }
+  }, [cycleFilter, cycleOptions]);
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
@@ -321,11 +332,20 @@ export function ChallengePlanPage() {
         setOpenActionId(null);
       }}
     >
-      {showAll && <TeamDashboard groups={groups} />}
-      <ChallengeToolbar canShowAll={canShowAllChallenges} onScopeChange={setScope} scope={scope} />
+      {showAll && <TeamDashboard groups={filteredGroups} />}
+      <ChallengeToolbar
+        canShowAll={canShowAllChallenges}
+        cycle={cycleFilter}
+        cycleOptions={cycleOptions}
+        onCycleChange={setCycleFilter}
+        onScopeChange={setScope}
+        onStatusChange={setStatusFilter}
+        scope={scope}
+        status={statusFilter}
+      />
       <ChallengeTree
         emptyText={showAll ? "当前还没有挑战内容。" : "当前没有与你的挑战目标相关的内容。"}
-        groups={groups}
+        groups={filteredGroups}
         handlers={{
           activeActionId,
           collapsedActionIds,
