@@ -703,6 +703,20 @@ test("challenge application duplicate and closed-state guards are enforced", asy
   const duplicateApply = await applyForObjectiveChallenge(openObjective.id, fixture.observer.name);
   assert.equal(duplicateApply.status, "alreadyApplied");
 
+  const concurrentObjective = await createPublishedObjective(fixture, "concurrent application guard");
+  const concurrentApplications = await Promise.all([
+    applyForObjectiveChallenge(concurrentObjective.id, fixture.challenger.name),
+    applyForObjectiveChallenge(concurrentObjective.id, fixture.observer.name),
+  ]);
+  assert.deepEqual(concurrentApplications.map((outcome) => outcome.status).sort(), ["applied", "applied"]);
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const pendingApplicants = data.objectives
+    .find((item) => item.id === concurrentObjective.id)
+    ?.challengeApplications.filter((application) => application.status === "pending")
+    .map((application) => application.applicant)
+    .sort();
+  assert.deepEqual(pendingApplicants, [fixture.challenger.name, fixture.observer.name].sort());
+
   assert.ok(applicationId);
 });
 

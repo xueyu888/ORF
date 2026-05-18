@@ -874,42 +874,50 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     return { status: "notFound" };
   }
 
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) {
-    return { status: "notFound" };
+  const appliedResult = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) {
+      return { status: "notFound" as const };
+    }
+
+    const challengers = uniqueMembers(objective.challengers ?? []);
+    if (challengers.includes(nextApplicant)) {
+      return { status: "alreadyAccepted" as const, challengers };
+    }
+    if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus)) {
+      return { status: "closed" as const };
+    }
+
+    const applications = objective.challengeApplications ?? [];
+    if (applications.some((application) => application.applicant === nextApplicant && application.status === "pending")) {
+      return { status: "alreadyApplied" as const };
+    }
+
+    const application: ChallengeApplication = {
+      id: makeId("challenge-application"),
+      applicant: nextApplicant,
+      status: "pending",
+      createdAt: nowIso(),
+      decidedAt: null,
+    };
+
+    await tx
+      .update(objectives)
+      .set({
+        challengeApplications: [application, ...applications],
+        flowStatus: objective.flowStatus === "recruiting" ? "recruiting" : "applying",
+        updatedAt: today(),
+      })
+      .where(eq(objectives.id, objectiveId));
+
+    return { status: "applied" as const, teamId: objective.teamId };
+  });
+
+  if (appliedResult.status !== "applied") {
+    return appliedResult;
   }
 
-  const challengers = uniqueMembers(objective.challengers ?? []);
-  if (challengers.includes(nextApplicant)) {
-    return { status: "alreadyAccepted", challengers };
-  }
-  if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus)) {
-    return { status: "closed" };
-  }
-
-  const applications = objective.challengeApplications ?? [];
-  if (applications.some((application) => application.applicant === nextApplicant && application.status === "pending")) {
-    return { status: "alreadyApplied" };
-  }
-
-  const application: ChallengeApplication = {
-    id: makeId("challenge-application"),
-    applicant: nextApplicant,
-    status: "pending",
-    createdAt: nowIso(),
-    decidedAt: null,
-  };
-
-  await db
-    .update(objectives)
-    .set({
-      challengeApplications: [application, ...applications],
-      flowStatus: objective.flowStatus === "recruiting" ? "recruiting" : "applying",
-      updatedAt: today(),
-    })
-    .where(eq(objectives.id, objectiveId));
-
-  const data = await getTaskManagementData({ teamId: objective.teamId });
+  const data = await getTaskManagementData({ teamId: appliedResult.teamId });
   const applied = data.objectives.find((item) => item.id === objectiveId);
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
