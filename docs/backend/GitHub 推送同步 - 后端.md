@@ -52,6 +52,7 @@
 - Content type: `application/json`
 - Secret: 填写 `.env` 中的 `GITHUB_WEBHOOK_SECRET`
 - Which events: `Just the push event`
+- ORF 在验签前最多缓冲 1 MiB webhook payload，超过上限直接返回 413，避免异常大请求占用内存。
 
 如果要用 webhook 实时接收 issue opened/reopened 事件，新增第二个 webhook：
 

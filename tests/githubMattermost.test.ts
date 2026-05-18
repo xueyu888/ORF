@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { buildServer } from "../server/app";
 import {
   formatGitHubCommitSyncMessage,
   formatGitHubIssuesMessage,
@@ -84,4 +85,45 @@ test("formats GitHub issues for Mattermost", () => {
   assert.match(message, /Found 1 currently open issue/);
   assert.match(message, /\[#3\]\(https:\/\/github.com\/xueyu888\/ORF\/issues\/3\)/);
   assert.match(message, /Missing bounty owner field - wuyuzhi-dd, opened 2026-05-14/);
+});
+
+test("GitHub webhook rejects oversized payloads before signature processing", async () => {
+  const previousEnv = {
+    GITHUB_WEBHOOK_SECRET: process.env.GITHUB_WEBHOOK_SECRET,
+    MATTERMOST_CHANNEL_ID: process.env.MATTERMOST_CHANNEL_ID,
+    MATTERMOST_LOGIN_ID: process.env.MATTERMOST_LOGIN_ID,
+    MATTERMOST_PASSWORD: process.env.MATTERMOST_PASSWORD,
+    MATTERMOST_URL: process.env.MATTERMOST_URL,
+  };
+
+  process.env.GITHUB_WEBHOOK_SECRET = "test-webhook-secret-value";
+  process.env.MATTERMOST_CHANNEL_ID = "channel-id";
+  process.env.MATTERMOST_LOGIN_ID = "bot@example.com";
+  process.env.MATTERMOST_PASSWORD = "password";
+  process.env.MATTERMOST_URL = "https://mattermost.example.com";
+
+  const app = await buildServer({ logger: false, registerOptionalIntegrations: true });
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/webhooks/github/push",
+      headers: {
+        "content-type": "application/json",
+        "x-github-event": "push",
+      },
+      payload: Buffer.alloc(1024 * 1024 + 1, "x"),
+    });
+
+    assert.equal(response.statusCode, 413);
+    assert.match(response.body, /payload is too large/);
+  } finally {
+    await app.close();
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 });
