@@ -2,12 +2,36 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { frontendVisibilityByPath, frontendVisibilityTable } from "../src/config/frontendVisibility";
+import { canShowFrontend, canShowFrontendPath, frontendVisibilityByPath, frontendVisibilityTable } from "../src/config/frontendVisibility";
+import type { OrfUser } from "../src/types/orf";
+
+const adminUser: OrfUser = {
+  id: "visibility-admin",
+  name: "Visibility Admin",
+  email: "visibility-admin@orf.test",
+  role: "admin",
+  status: "active",
+};
+
+const memberUser: OrfUser = {
+  id: "visibility-member",
+  name: "Visibility Member",
+  email: "visibility-member@orf.test",
+  role: "member",
+  status: "active",
+};
 
 test("frontend visibility path mappings reference configured keys", () => {
   for (const [routePath, key] of Object.entries(frontendVisibilityByPath)) {
     assert.ok(frontendVisibilityTable[key], `${routePath} references missing frontend visibility key ${key}`);
   }
+});
+
+test("visual settings are only visible to administrators", () => {
+  assert.equal(canShowFrontend(adminUser, "nav.settings"), true);
+  assert.equal(canShowFrontend(memberUser, "nav.settings"), false);
+  assert.equal(canShowFrontendPath(adminUser, "/settings"), true);
+  assert.equal(canShowFrontendPath(memberUser, "/settings"), false);
 });
 
 test("frontend visibility rules are only accessed through the shared helpers", () => {

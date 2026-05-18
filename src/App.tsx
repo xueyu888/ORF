@@ -59,7 +59,14 @@ export function App() {
             </RequireFrontendVisibility>
           }
         />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route
+          path="settings"
+          element={
+            <RequireFrontendVisibility visibilityKey="page.settings">
+              <SettingsPage />
+            </RequireFrontendVisibility>
+          }
+        />
         <Route path="*" element={<Navigate to="/bounties" replace />} />
       </Route>
     </Routes>

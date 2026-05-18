@@ -1057,6 +1057,34 @@ test("API result management routes keep privileged operations behind role permis
   });
 });
 
+test("API visual settings write routes are administrator-only", async () => {
+  const fixture = await createFixture("api-settings-permissions");
+
+  await withApiServer(fixture, async (app) => {
+    const memberList = await apiInject(app, fixture.challenger, "GET", "/api/settings/visual/backgrounds?scene=login_background");
+    assert.equal(memberList.statusCode, 200);
+
+    const memberUpload = await apiInject(app, fixture.challenger, "POST", "/api/settings/visual/backgrounds");
+    assert.equal(memberUpload.statusCode, 403);
+
+    const backgroundId = encodeURIComponent("login_background/default/orf-login-sky-adventure.png");
+    const memberDefault = await apiInject(app, fixture.challenger, "PUT", `/api/settings/visual/backgrounds/${backgroundId}/default`);
+    assert.equal(memberDefault.statusCode, 403);
+
+    const memberConfig = await apiInject(app, fixture.challenger, "PUT", "/api/settings/visual/background-config", {
+      scene: "login_background",
+      config: {
+        mode: "switchable",
+        fixedBackgroundId: null,
+        switchTrigger: "on_open",
+        switchOrder: "sequential",
+        switchIntervalMinutes: 1,
+      },
+    });
+    assert.equal(memberConfig.statusCode, 403);
+  });
+});
+
 test("API result and submitted objective mutations are locked by lifecycle state", async () => {
   const fixture = await createFixture("api-lifecycle-locks");
 
@@ -1379,7 +1407,7 @@ function apiCookie(user: FixtureUser) {
 async function apiInject(
   app: FastifyInstance,
   user: FixtureUser,
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   url: string,
   payload?: unknown,
 ) {

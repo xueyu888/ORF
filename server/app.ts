@@ -684,6 +684,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.post("/api/settings/visual/backgrounds", async (request, reply) => {
+    if (!(await requireAdminContext(request, reply))) {
+      return reply;
+    }
+
     try {
       let scene: z.infer<typeof backgroundSceneSchema> | null = null;
       let file: { fileName: string; mimeType: string; buffer: Buffer } | null = null;
@@ -720,6 +724,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.put("/api/settings/visual/backgrounds/:id/default", async (request, reply) => {
+    if (!(await requireAdminContext(request, reply))) {
+      return reply;
+    }
+
     try {
       const params = visualBackgroundParamsSchema.parse(request.params);
       return {
@@ -734,6 +742,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.put("/api/settings/visual/background-config", async (request, reply) => {
+    if (!(await requireAdminContext(request, reply))) {
+      return reply;
+    }
+
     try {
       const body = visualBackgroundConfigBodySchema.parse(request.body);
       return {
