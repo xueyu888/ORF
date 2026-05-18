@@ -206,16 +206,7 @@ async function updateTeamUserRecord(teamId: string, userId: string, normalized: 
 
 export async function deleteTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
   assertCanDeleteUser(actorUserId, userId);
-
-  const [membership] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
-    .limit(1);
-
-  if (!membership) {
-    return getTeamUsers(teamId);
-  }
+  await assertMembershipExists(teamId, userId);
 
   await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
   return getTeamUsers(teamId);

@@ -999,6 +999,18 @@ test("API objective creation rejects malformed final due dates", async () => {
   });
 });
 
+test("API user deletion reports missing team members instead of a successful no-op", async () => {
+  const fixture = await createFixture("api-user-delete-missing");
+
+  await withApiServer(fixture, async (app) => {
+    const missingDelete = await apiInject(app, fixture.commander, "DELETE", `/api/users/${encodeURIComponent(`${fixture.prefix}-missing-user`)}`);
+    assert.equal(missingDelete.statusCode, 404);
+
+    const existingDelete = await apiInject(app, fixture.commander, "DELETE", `/api/users/${encodeURIComponent(fixture.observer.id)}`);
+    assert.equal(existingDelete.statusCode, 200);
+  });
+});
+
 test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
   const fixture = await createFixture("api-read-boundary");
   const { objective } = await createSettledObjective(fixture, "scoped settled objective");
