@@ -2,15 +2,21 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 export const ORY_ADMIN_URL = (process.env.ORY_ADMIN_URL ?? "http://127.0.0.1:4434").replace(/\/+$/, "");
 export const ORF_SESSION_COOKIE = "orf_ory_session";
-export const TEST_EMAIL = "orf-login-e2e@orf.local";
-export const TEST_PASSWORD = "OrfLoginE2E!2026";
-export const TEST_NAME = "ORF Login E2E";
-export const TEST_USER_ID = "user-orf-login-e2e";
-export const TEST_TEAM_ID = "team-orf-login-e2e";
 
 export type TestContext = {
   context: BrowserContext;
   page: Page;
+};
+
+export type TeamRole = "admin" | "member" | "readonly" | "supervisor";
+
+export type LoginCaseData = {
+  email: string;
+  password: string;
+  name: string;
+  userId: string;
+  teamId: string;
+  role: TeamRole;
 };
 
 export type OryIdentity = {

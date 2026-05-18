@@ -5,13 +5,9 @@ import { teamMembers, teams, users } from "../../../server/db/schema";
 import {
   ORF_SESSION_COOKIE,
   ORY_ADMIN_URL,
-  TEST_EMAIL,
-  TEST_NAME,
-  TEST_PASSWORD,
-  TEST_TEAM_ID,
-  TEST_USER_ID,
   type BrowserAuthStorageState,
   type BrowserSession,
+  type LoginCaseData,
   type OryIdentity,
 } from "./login.context";
 
@@ -103,20 +99,20 @@ export async function findOryIdentityByEmail(email: string) {
   return identities.find((identity) => identity.traits?.email?.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
-export async function upsertOryIdentity() {
-  const existing = await findOryIdentityByEmail(TEST_EMAIL);
+export async function upsertOryIdentity(data: Pick<LoginCaseData, "email" | "name" | "password">) {
+  const existing = await findOryIdentityByEmail(data.email);
   const body = {
     schema_id: existing?.schema_id ?? "default",
     traits: {
-      email: TEST_EMAIL,
+      email: data.email,
       name: {
-        first: TEST_NAME,
+        first: data.name,
       },
     },
     credentials: {
       password: {
         config: {
-          password: TEST_PASSWORD,
+          password: data.password,
         },
       },
     },
@@ -147,8 +143,8 @@ export async function revokeIdentitySessions(identityId: string) {
   }
 }
 
-export async function ensureTestTeam() {
-  const [existingTeam] = await db.select({ id: teams.id }).from(teams).limit(1);
+export async function ensureTestTeam(teamId: string) {
+  const [existingTeam] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).limit(1);
   if (existingTeam) {
     return existingTeam.id;
   }
@@ -156,36 +152,39 @@ export async function ensureTestTeam() {
   await db
     .insert(teams)
     .values({
-      id: TEST_TEAM_ID,
+      id: teamId,
       name: "登录测试团队",
       createdAt: today(),
     })
     .onConflictDoNothing();
-  return TEST_TEAM_ID;
+  return teamId;
 }
 
-export async function upsertOrfMember(teamId: string) {
+export async function upsertOrfMember(
+  teamId: string,
+  data: Pick<LoginCaseData, "email" | "name" | "role" | "userId">,
+) {
   const [existingByEmail] = await db
     .select({ id: users.id, lastLoginAt: users.lastLoginAt })
     .from(users)
-    .where(sql`lower(${users.email}) = ${TEST_EMAIL}`)
+    .where(sql`lower(${users.email}) = ${data.email.toLowerCase()}`)
     .limit(1);
   const [existingById] = await db
     .select({ id: users.id, lastLoginAt: users.lastLoginAt })
     .from(users)
-    .where(eq(users.id, TEST_USER_ID))
+    .where(eq(users.id, data.userId))
     .limit(1);
   const existing = existingByEmail ?? existingById;
-  const userId = existing?.id ?? TEST_USER_ID;
+  const userId = existing?.id ?? data.userId;
   const previousLastLoginAt = existing?.lastLoginAt ?? null;
 
   if (existing) {
-    await db.update(users).set({ name: TEST_NAME, email: TEST_EMAIL }).where(eq(users.id, userId));
+    await db.update(users).set({ name: data.name, email: data.email }).where(eq(users.id, userId));
   } else {
     await db.insert(users).values({
       id: userId,
-      name: TEST_NAME,
-      email: TEST_EMAIL,
+      name: data.name,
+      email: data.email,
       createdAt: today(),
       lastLoginAt: null,
     });
@@ -193,10 +192,10 @@ export async function upsertOrfMember(teamId: string) {
 
   await db
     .insert(teamMembers)
-    .values({ teamId, userId, role: "member" })
+    .values({ teamId, userId, role: data.role })
     .onConflictDoUpdate({
       target: [teamMembers.teamId, teamMembers.userId],
-      set: { role: "member" },
+      set: { role: data.role },
     });
 
   return { id: userId, previousLastLoginAt };
