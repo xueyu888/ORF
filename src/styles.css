@@ -1479,7 +1479,7 @@ button:disabled {
   padding: 14px;
 }
 
-.orf-settings-nav button {
+.orf-settings-nav :where(button, .orf-settings-nav-item) {
   display: inline-flex;
   min-height: 48px;
   align-items: center;
@@ -5854,6 +5854,7 @@ a.orf-row-loot-action,
 .orf-scope-tab,
 .orf-permission-view-tabs button,
 .orf-permission-view-tabs a,
+.orf-settings-nav-item,
 .orf-settings-nav button,
 .orf-settings-upload-button,
 .orf-settings-default-button,
@@ -5881,6 +5882,7 @@ a.orf-row-loot-action,
 .orf-permission-view-tabs,
 .orf-permission-view-tabs button,
 .orf-permission-view-tabs a,
+.orf-settings-nav-item,
 .orf-settings-nav button,
 .orf-settings-upload-button,
 .orf-settings-default-button,
