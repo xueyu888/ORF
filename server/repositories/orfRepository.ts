@@ -1680,6 +1680,16 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   const targetTitle = target.title;
   const createdAt = nowIso();
   const threadId = await db.transaction(async (tx) => {
+    const [lockedObjective] = await tx
+      .select({ id: objectives.id })
+      .from(objectives)
+      .where(eq(objectives.id, target.objectiveId))
+      .limit(1)
+      .for("update");
+    if (!lockedObjective) {
+      return null;
+    }
+
     if (input.parentMessageId) {
       const [parent] = await tx
         .select({ threadId: commentMessages.threadId })

@@ -1736,6 +1736,40 @@ test("task and comment API writes require objective participation", async () => 
   });
 });
 
+test("concurrent comments on the same target share one open thread", async () => {
+  const fixture = await createFixture("api-comment-thread-race");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "concurrent comment target");
+
+  await withApiServer(fixture, async (app) => {
+    const [firstComment, secondComment] = await Promise.all([
+      apiInject(app, fixture.challenger, "POST", "/api/comments", {
+        targetType: "objective",
+        targetId: objective.id,
+        targetTitle: "spoofed concurrent title",
+        body: "concurrent root comment A",
+      }),
+      apiInject(app, fixture.commander, "POST", "/api/comments", {
+        targetType: "objective",
+        targetId: objective.id,
+        targetTitle: "spoofed concurrent title",
+        body: "concurrent root comment B",
+      }),
+    ]);
+
+    assert.equal(firstComment.statusCode, 200);
+    assert.equal(secondComment.statusCode, 200);
+  });
+
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const threads = data.comments.filter((thread) => thread.targetType === "objective" && thread.targetId === objective.id && thread.status === "open");
+  assert.equal(threads.length, 1);
+  assert.equal(threads[0]?.targetTitle, objective.title);
+  assert.deepEqual(
+    threads[0]?.messages.map((message) => message.body).sort(),
+    ["concurrent root comment A", "concurrent root comment B"],
+  );
+});
+
 test("feedback creation is scoped to administrators and objective challengers", async () => {
   const fixture = await createFixture("api-feedback-create-boundary");
   const { result } = await createApprovedObjectiveWithResult(fixture);

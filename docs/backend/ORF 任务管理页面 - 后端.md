@@ -140,6 +140,7 @@ type ObjectiveFlowStatus =
 - 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 只能作为兼容字段，不能覆盖真实标题。
 - 评论回复的 `replyToMessageId` 必须属于同一评论线程，`replyToAuthor` 由后端用真实消息作者回填，不能信任客户端提交值。
 - 删除评论消息时必须同步清理仍保留消息中的 `replyToMessageId` / `replyToAuthor`，不能留下指向已删除消息的断链回复。
+- 并发给同一目标下的目标、指标、任务或子任务新增评论时，必须锁住目标后再查找或创建 open thread，避免同一目标生成多个打开中的根评论线程。
 - `申请挑战` 只表达意愿；指挥官通过后才写入 `Objective.challengers`。
 - 多名成员同时申请同一目标时，后端必须用行级锁保护 `challengeApplications` 的读改写，不能让后一次写入覆盖前一次申请。
 - 审批申请、征召、接受征召和拒绝征召都会同时读改写 `Objective.challengers` / `Objective.assignedChallengers` / `Objective.challengeApplications`，必须在同一行级锁事务内完成。
