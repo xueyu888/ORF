@@ -1858,6 +1858,10 @@ export async function deleteCommentMessage(
           or(eq(commentMessages.id, messageId), eq(commentMessages.parentMessageId, messageId)),
         ),
       );
+    await tx
+      .update(commentMessages)
+      .set({ replyToMessageId: null, replyToAuthor: null })
+      .where(and(eq(commentMessages.threadId, threadId), eq(commentMessages.replyToMessageId, messageId)));
 
     const [remaining] = await tx.select({ id: commentMessages.id }).from(commentMessages).where(eq(commentMessages.threadId, threadId)).limit(1);
     if (!remaining) {

@@ -1130,7 +1130,13 @@ export class OrfFlowStore {
           return [thread];
         }
 
-        const messages = thread.messages.filter((message) => message.id !== messageId && message.parentMessageId !== messageId);
+        const messages = thread.messages
+          .filter((message) => message.id !== messageId && message.parentMessageId !== messageId)
+          .map((message) =>
+            message.replyToMessageId === messageId
+              ? { ...message, replyToMessageId: undefined, replyToAuthor: undefined }
+              : message,
+          );
         if (messages.length === 0) {
           return [];
         }

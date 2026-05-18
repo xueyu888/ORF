@@ -265,6 +265,43 @@ test("checklist mutations keep task status and subtask comments consistent", () 
   assert.equal(deleted.tasks[0]?.status, "Todo");
 });
 
+test("deleteCommentMessage clears reply references to deleted messages", () => {
+  const current = state({
+    comments: [
+      {
+        id: "thread-a",
+        targetType: "objective",
+        targetId: "obj-a",
+        targetTitle: "Objective A",
+        status: "open",
+        createdBy: "user-kai",
+        createdAt: date,
+        updatedAt: date,
+        messages: [
+          { id: "msg-root", author: "Kai Wang", body: "Root", createdAt: date },
+          { id: "msg-reply", author: "Kai Wang", body: "Reply", createdAt: date, parentMessageId: "msg-root" },
+          {
+            id: "msg-nested",
+            author: "Nora Li",
+            body: "Nested",
+            createdAt: date,
+            parentMessageId: "msg-root",
+            replyToMessageId: "msg-reply",
+            replyToAuthor: "Kai Wang",
+          },
+        ],
+      },
+    ],
+  });
+
+  const next = store.deleteCommentMessage(current, "thread-a", "msg-reply");
+  const messages = next.comments[0]?.messages ?? [];
+
+  assert.deepEqual(messages.map((message) => message.id), ["msg-root", "msg-nested"]);
+  assert.equal(messages.find((message) => message.id === "msg-nested")?.replyToMessageId, undefined);
+  assert.equal(messages.find((message) => message.id === "msg-nested")?.replyToAuthor, undefined);
+});
+
 test("acceptBountyChallenge confirms a recruited member and approves their pending application", () => {
   const current = state({
     objectives: [

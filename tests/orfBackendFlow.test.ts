@@ -1542,8 +1542,34 @@ test("task and comment API writes require objective participation", async () => 
     };
     assert.equal(replyPayload.commentThread.targetTitle, objective.title);
     const replyMessage = replyPayload.commentThread.messages.find((message) => message.body === "reply keeps server title");
+    assert.ok(replyMessage?.id);
     assert.equal(replyMessage?.replyToMessageId, rootMessageId);
     assert.equal(replyMessage?.replyToAuthor, fixture.challenger.name);
+
+    const nestedReply = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: "nested reply survives without dangling pointer",
+      parentMessageId: rootMessageId,
+      replyToMessageId: replyMessage.id,
+      replyToAuthor: "spoofed nested author",
+    });
+    assert.equal(nestedReply.statusCode, 200);
+
+    const deleteReply = await apiInject(
+      app,
+      fixture.challenger,
+      "DELETE",
+      `/api/comments/${encodeURIComponent(challengerCommentPayload.commentThread.id)}/messages/${encodeURIComponent(replyMessage.id)}`,
+    );
+    assert.equal(deleteReply.statusCode, 200);
+    const deleteReplyPayload = deleteReply.json() as {
+      commentThread: { messages: Array<{ body: string; replyToMessageId?: string; replyToAuthor?: string }> };
+    };
+    const nestedAfterDelete = deleteReplyPayload.commentThread.messages.find((message) => message.body === "nested reply survives without dangling pointer");
+    assert.equal(nestedAfterDelete?.replyToMessageId, undefined);
+    assert.equal(nestedAfterDelete?.replyToAuthor, undefined);
 
     const brokenReply = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
       targetType: "objective",

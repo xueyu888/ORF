@@ -165,6 +165,7 @@ flowchart TD
 | ORF-BE-R051 | 密码登录不能把首次进入 ORF 的 Ory identity 自动审批为 `active`，也不能用 Ory traits 覆盖已存在 ORF 用户的显示名。 | 用户身份引用保护 |
 | ORF-BE-R052 | 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 不能伪造评论归属。 | 评论数据一致性 |
 | ORF-BE-R053 | 评论回复只能引用同一线程内真实存在的消息，`replyToAuthor` 必须由后端按真实作者回填。 | 评论数据一致性 |
+| ORF-BE-R054 | 删除被回复的评论消息后，保留下来的消息不能继续引用已删除的 `replyToMessageId`。 | 评论数据一致性 |
 
 ## 关键断言
 

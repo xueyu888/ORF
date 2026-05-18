@@ -139,6 +139,7 @@ type ObjectiveFlowStatus =
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
 - 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 只能作为兼容字段，不能覆盖真实标题。
 - 评论回复的 `replyToMessageId` 必须属于同一评论线程，`replyToAuthor` 由后端用真实消息作者回填，不能信任客户端提交值。
+- 删除评论消息时必须同步清理仍保留消息中的 `replyToMessageId` / `replyToAuthor`，不能留下指向已删除消息的断链回复。
 - `申请挑战` 只表达意愿；指挥官通过后才写入 `Objective.challengers`。
 - `征召挑战` 的成员必须是当前团队内 `active` 用户；停用、待审核、拒绝或不存在的姓名不能写入 `Objective.assignedChallengers`。
 - `接受挑战` 只用于征召。
