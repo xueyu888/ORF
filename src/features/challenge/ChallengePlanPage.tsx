@@ -124,7 +124,14 @@ export function ChallengePlanPage() {
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
       const objective = challengeState.objectives.find((item) => item.id === target.objectiveId);
+      if (isObjectiveResultLocked(objective)) {
+        notify("指标已冻结，不能编辑");
+        return false;
+      }
+      if (role === "admin") return true;
       if (canAdjustObjectiveDuringReestimate(objective, currentMember)) return true;
+      notify("没有编辑指标权限");
+      return false;
     }
 
     if (canAccessTarget(challengeState, role, target, action)) return true;
@@ -136,8 +143,13 @@ export function ChallengePlanPage() {
   const addBounty = (objectiveId: string) => {
     const objective = challengeState.objectives.find((item) => item.id === objectiveId);
     const canAdjustDuringReestimate = canAdjustObjectiveDuringReestimate(objective, currentMember);
-    if (canAdjustDuringReestimate || requirePermissionKey("result.create")) {
-      openModal({ type: "newResult", objectiveId });
+    if (canAdjustDuringReestimate) {
+      openModal({ type: "newResult", objectiveId, source: "memberProposed" });
+      return;
+    }
+
+    if (requirePermissionKey("result.create")) {
+      openModal({ type: "newResult", objectiveId, source: "managerDefined" });
     }
   };
 
@@ -301,6 +313,7 @@ export function ChallengePlanPage() {
           onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
           openActionId,
           canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
+          currentMember,
         }}
         now={now}
         scope={scope}
@@ -349,6 +362,10 @@ function canAdjustObjectiveDuringReestimate(objective: Objective | undefined, me
   if (!objective.confirmationDueAt) return true;
   const dueTime = new Date(objective.confirmationDueAt).getTime();
   return Number.isFinite(dueTime) && Date.now() <= dueTime;
+}
+
+function isObjectiveResultLocked(objective: Objective | undefined) {
+  return objective?.flowStatus === "frozen" || objective?.flowStatus === "submitted" || objective?.flowStatus === "settled" || objective?.flowStatus === "closed";
 }
 
 function toggleSetItem<T>(items: Set<T>, item: T) {

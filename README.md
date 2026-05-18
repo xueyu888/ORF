@@ -40,7 +40,11 @@ npm install
 ```bash
 cp .env.example .env
 node scripts/verify-db.mjs
+npm run db:migrate
+npm run db:seed
 ```
+
+`db:seed` 会写入悬赏大厅、我的挑战、冻结提交、待验收和已结算等演示状态，便于本地检查完整 ORF 流程界面。
 
 ### 3) 启动后端
 

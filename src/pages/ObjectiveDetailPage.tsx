@@ -8,7 +8,7 @@ import { DecisionLog, FeedbackCard, IntegrityCheck, ResultCard, TaskRow } from "
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { hasPermission } from "../config/permissions";
 import { useOrf } from "../state/OrfProvider";
-import type { FeedbackStatus, TaskStatus } from "../types/orf";
+import type { FeedbackStatus, Objective, TaskStatus } from "../types/orf";
 import { feedbackStatusLabel } from "../utils/labels";
 
 const tabs = ["Overview", "Results", "Tasks", "Feedback", "Decisions", "Evaluation"] as const;
@@ -36,13 +36,14 @@ export function ObjectiveDetailPage() {
   const feedback = state.feedback.filter((item) => item.linkedObjectiveId === objective.id);
   const decisions = state.decisions.filter((decision) => decision.linkedObjectiveId === objective.id);
   const atRiskCount = results.filter((result) => result.status === "At Risk").length;
-  const canCreateResult = hasPermission(currentUser, state.permissionRules, "result.create");
+  const canCreateResult = hasPermission(currentUser, state.permissionRules, "result.create") && !objectiveResultLocked(objective.flowStatus);
+  const canProposeResult = canProposeMetric(objective, currentUser?.name ?? "");
 
   return (
     <PageScaffold
       title={objective.title}
       subtitle={objective.description}
-      action={<div className="flex gap-2">{canCreateResult && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id })}><Plus className="h-4 w-4" />新建悬赏指标</Button>}<Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button><Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
+      action={<div className="flex gap-2">{canCreateResult && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id, source: "managerDefined" })}><Plus className="h-4 w-4" />新增指标</Button>}{!canCreateResult && canProposeResult && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id, source: "memberProposed" })}><Plus className="h-4 w-4" />提出指标</Button>}<Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button><Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
     >
       <Card className="orf-card-padding">
         <div className="flex flex-wrap items-center gap-3">
@@ -134,4 +135,15 @@ export function ObjectiveDetailPage() {
       )}
     </PageScaffold>
   );
+}
+
+function objectiveResultLocked(flowStatus: Objective["flowStatus"]) {
+  return flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed";
+}
+
+function canProposeMetric(objective: Objective, member: string) {
+  if (objective.flowStatus !== "reestimating" || !objective.challengers.includes(member)) return false;
+  if (!objective.confirmationDueAt) return true;
+  const dueTime = new Date(objective.confirmationDueAt).getTime();
+  return Number.isFinite(dueTime) && Date.now() <= dueTime;
 }

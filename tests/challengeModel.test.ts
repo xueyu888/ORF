@@ -46,6 +46,30 @@ test("buildChallengeTree filters objectives and preserves objective result order
   assert.deepEqual(tree[0]?.bounties[1]?.actions.map((item) => item.id), ["task-a"]);
 });
 
+test("buildChallengeTree keeps resultless ORF objectives visible", () => {
+  const candidate = objective({ id: "obj-candidate", title: "Candidate objective", flowStatus: "candidate", resultIds: [] });
+  const reestimating = objective({
+    id: "obj-reestimating-empty",
+    title: "Reestimating objective without results",
+    flowStatus: "reestimating",
+    challengers: ["Kai Wang"],
+    resultIds: [],
+  });
+
+  const tree = buildChallengeTree({
+    objectives: [candidate, reestimating],
+    results: [],
+    tasks: [],
+    feedback: [],
+    evidence: [],
+  });
+
+  assert.deepEqual(tree.map((group) => group.objective.id), ["obj-candidate", "obj-reestimating-empty"]);
+  assert.deepEqual(tree.map((group) => group.bounties.length), [0, 0]);
+  assert.equal(objectiveStatusLabel(tree[0]!.objective), "候选中");
+  assert.equal(objectiveStatusLabel(tree[1]!.objective), "重估中");
+});
+
 test("summarizeDashboard counts settled, review, unassigned, and average objective progress", () => {
   const groups = buildChallengeTree({
     objectives: [
@@ -147,6 +171,21 @@ test("date and status helpers keep challenge display boundaries stable", () => {
   assert.equal(subActionVisualStatus(action, action.checklist[1]!, 1), "active");
 });
 
+test("bounty and objective statuses follow the ORF frontend flow", () => {
+  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "open" })), "open");
+  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "reestimating", challengers: ["Kai Wang"] })), "active");
+  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "frozen", challengers: ["Kai Wang"] })), "active");
+  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "submitted", challengers: ["Kai Wang"] })), "review");
+  assert.equal(bountyStatus(result({ acceptedResult: "completed" }), [], objective({ flowStatus: "settled", challengers: ["Kai Wang"] })), "settled");
+
+  assert.equal(objectiveStatusLabel(objective({ flowStatus: "candidate" })), "候选中");
+  assert.equal(objectiveStatusLabel(objective({ flowStatus: "applying" })), "申请中");
+  assert.equal(objectiveStatusLabel(objective({ flowStatus: "recruiting" })), "征召中");
+  assert.equal(objectiveStatusLabel(objective({ flowStatus: "frozen" })), "已冻结");
+  assert.equal(objectiveStatusLabel(objective({ flowStatus: "submitted" })), "待验收");
+  assert.equal(objectiveStatusLabel(objective({ flowStatus: "settled" })), "已结算");
+});
+
 test("challenge permission helpers map target resources to configured permissions", () => {
   const current = state({
     permissionRules: [{ role: "member", permissions: ["result.edit", "task.delete"] }],
@@ -156,7 +195,7 @@ test("challenge permission helpers map target resources to configured permission
   assert.equal(canAccessTarget(current, "member", { type: "bounty", id: "res-a", title: "Bounty", objectiveId: "obj-a" }, "delete"), false);
   assert.equal(canAccessTarget(current, "admin", { type: "objective", id: "obj-a", title: "Objective" }, "delete"), true);
   assert.equal(canAccessDragItem(current, "member", { type: "action", id: "task-a", bountyId: "res-a", objectiveId: "obj-a" }), true);
-  assert.equal(permissionDeniedMessage("result.delete"), "没有删除悬赏指标权限");
+  assert.equal(permissionDeniedMessage("result.delete"), "没有删除指标权限");
 });
 
 function state(overrides: Partial<OrfState> = {}): OrfState {
@@ -175,6 +214,7 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     failureSamples: [],
     comments: [],
     objectiveLoot: [],
+    objectiveContributionReviews: [],
     pointLedger: [],
     causeCategories: [],
     rules: {

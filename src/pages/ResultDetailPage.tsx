@@ -11,7 +11,7 @@ import { metricValue, resultProgress } from "../utils/format";
 
 export function ResultDetailPage() {
   const { resultId } = useParams();
-  const { dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
+  const { currentUser, dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
   const result = state.results.find((item) => item.id === resultId);
   if (!result) {
     return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载悬赏数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
@@ -26,12 +26,13 @@ export function ResultDetailPage() {
   const sampleSet = result.sampleSet ?? "指挥官提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
   const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";
   const uncertaintyLevel = result.uncertaintyLevel ?? "进阶";
+  const canSubmitLoot = objective?.flowStatus === "frozen" && objective.challengers.includes(currentUser?.name ?? "");
 
   return (
     <PageScaffold
       title={result.title}
-      subtitle={`目标 / 悬赏 · ${objective?.title ?? ""}`}
-      action={<div className="flex flex-wrap gap-2"><Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/objectives/${result.objectiveId}/loot`}><Send className="h-4 w-4" />提交目标战利品</Link><Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出悬赏指标更新</Button></div>}
+      subtitle={`目标 / 指标 · ${objective?.title ?? ""}`}
+      action={<div className="flex flex-wrap gap-2">{canSubmitLoot && <Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/objectives/${result.objectiveId}/loot`}><Send className="h-4 w-4" />提交目标战利品</Link>}<Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出指标更新</Button></div>}
     >
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="grid gap-4">
@@ -70,7 +71,7 @@ export function ResultDetailPage() {
         </div>
         <aside className="grid content-start gap-4">
           <Card className="orf-card-padding">
-            <div className="text-sm font-semibold orf-text-primary">悬赏口径</div>
+            <div className="text-sm font-semibold orf-text-primary">指标口径</div>
             <div className="mt-3 grid gap-3 text-sm orf-text-secondary">
               <p><span className="orf-text-primary">衡量要求：</span>{metricRequirement}</p>
               <p><span className="orf-text-primary">统计对象：</span>{statisticalObject}</p>

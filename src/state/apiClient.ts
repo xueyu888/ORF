@@ -1,6 +1,9 @@
 import type { BountySource, Objective, OrfState, OrfUser, Result } from "../types/orf";
 
-export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "pointLedger" | "permissionRules">;
+export type TaskManagementData = Pick<
+  OrfState,
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveContributionReviews" | "pointLedger" | "permissionRules"
+>;
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;

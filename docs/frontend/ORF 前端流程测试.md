@@ -20,7 +20,7 @@
 
 | 角色 | 前端必须验证 |
 | --- | --- |
-| 指挥官 | 在 `/tasks` 悬赏目标挑战工作台看到全部正式挑战目标，并看到候选发布、申请审核、征召等待等轻量待办提醒；不能看到退回重估入口 |
+| 指挥官 | 在 `/tasks` 悬赏目标挑战工作台看到全部正式挑战目标，并看到候选发布、申请审核、征召等待等轻量待办提醒；可新增和编辑未冻结目标下的指标；不能看到退回重估入口 |
 | 挑战者 | 在 `/tasks` 只看到自己已经正式参与的悬赏目标；接受征召或申请通过后进入重估；重估截止前可提出指标、编辑已有指标；冻结后可提交目标战利品；不能看到指挥官流程按钮 |
 | 旁观成员 | 在 `/bounties` 悬赏大厅能申请公开悬赏目标；申请成功后需要刷新为已申请并禁用重复申请；申请未通过前不进入 `/tasks` |
 
@@ -199,7 +199,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A1[指挥官在目标下看到指标区域] --> A2[点击定义指标 / 新增指标]
+  A1[指挥官在目标下看到指标区域] --> A2[点击定义指标 / 新增指标<br/>或编辑已有指标]
   A2 --> A3[指标出现在目标树下]
   B1[挑战者打开重估中的我的目标] --> B2{是否在重估截止前?}
   B2 -->|是| B3[看到提出指标入口<br/>已有指标显示编辑入口]
@@ -213,9 +213,9 @@ flowchart TD
 指标断言重点：
 
 - 目标才叫“悬赏目标”，`Result` 统一叫“指标”。
-- 指挥官动作可以叫“定义指标 / 新增指标”。
+- 指挥官动作可以叫“定义指标 / 新增指标”，也可以编辑未冻结目标下已有指标。
 - 挑战者动作分为“提出指标”和“编辑指标”：提出是新增指标，编辑是修改已有指标。
-- 重估截止后或目标冻结后，不能编辑指标；前端应隐藏或禁用编辑入口。
+- 挑战者在重估截止后不能提出或编辑指标；目标冻结后，指挥官和挑战者都不能继续编辑指标。
 - 不再使用“新增悬赏”“新增悬赏指标”“提交悬赏指标”这类文案。
 - 技术层面新增指标时仍用 `source=memberProposed` 区分挑战者提出的指标；编辑已有指标应走保存 / 更新流程，不能误走指挥官定义指标流程。
 
@@ -302,8 +302,8 @@ flowchart TD
 
 当前规则总账：
 
-- 已覆盖：19 条，`ORF-FE-R001`、`ORF-FE-R002`、`ORF-FE-R004` 到 `ORF-FE-R019`，以及 `ORF-FE-R021`。
-- 已暴露：1 条，`ORF-FE-R020`。
+- 已覆盖：20 条，`ORF-FE-R001`、`ORF-FE-R002`、`ORF-FE-R004` 到 `ORF-FE-R021`。
+- 已暴露：0 条。
 - 待补：39 条，`ORF-FE-R022` 到 `ORF-FE-R060`。
 
 ## 已覆盖规则
@@ -328,13 +328,14 @@ flowchart TD
 | ORF-FE-R017 | 冻结 API 失败时，前端必须保持 `reestimating` 和冻结按钮，并展示后端错误，不能乐观显示已冻结。 | `commander freeze failure keeps reestimate state from refreshed API data` |
 | ORF-FE-R018 | 成员只能在自己的 `frozen` 目标提交战利品；提交成功刷新后回到 `/tasks` 工作台，目标显示待验收，并移除重复提交入口。 | `member can submit loot only after frozen objective and returns to challenges after refresh` |
 | ORF-FE-R019 | 指挥官验收已提交战利品后，必须等待刷新数据再跳转统计页，并能看到结算积分进入排行榜。 | `commander reviews submitted loot and sees settled points after refreshed data` |
+| ORF-FE-R020 | 成员在自己的 `reestimating` 目标且未过 `confirmationDueAt` 时，提出指标必须走 `memberProposed` 指标提交流程，编辑已有指标必须走保存 / 更新流程，不能误走指挥官定义指标流程。 | `member reestimate metric proposal uses the member-proposed interaction contract` |
 | ORF-FE-R021 | 指挥官发布候选目标后，必须等待刷新数据再显示 `open/可申请`，并且成员能在悬赏大厅看到该目标和申请入口。 | `commander publishes a candidate objective and the bounty hall exposes it after refresh` |
 
 ## 已暴露规则
 
 | Rule | 规则 | 覆盖测试 | 当前结果 |
 | --- | --- | --- | --- |
-| ORF-FE-R020 | 成员在自己的 `reestimating` 目标且未过 `confirmationDueAt` 时，提出指标必须走 `memberProposed` 指标提交流程，编辑已有指标必须走保存 / 更新流程，不能误走指挥官定义指标流程。 | `member reestimate metric proposal uses the member-proposed interaction contract` | 失败 |
+| 暂无 | 暂无 | 暂无 | 暂无 |
 
 ## 待补覆盖矩阵
 
@@ -397,8 +398,7 @@ flowchart TD
 
 ## 当前暴露的问题
 
-- `member reestimate metric proposal uses the member-proposed interaction contract` 当前会失败：成员在重估阶段点击当前实现里的旧入口后，页面打开的是指挥官定义指标流程，不是挑战者的“提出指标 / 编辑指标”流程，因此不会按 `source=memberProposed` 提交新增指标，也不能明确验证已有指标编辑。
-- 该问题属于前端交互入口未接到已有 `memberProposed` modal 契约；本轮只写测试，不修改开发代码。
+- 暂无。成员重估期“提出指标 / 编辑指标”入口已按 `memberProposed` 契约纳入覆盖规则，后续改动需继续用该测试守住入口语义。
 
 ## 测试数据原则
 

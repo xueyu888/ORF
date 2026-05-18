@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | 目标无指标可见性 | `published objective without concrete results is visible in the bounty hall` | 指挥官只发布 Objective，不预先定义具体 Result，挑战者仍应在悬赏大厅看到该目标 |
 | 征召无指标可见性 | `recruited objective without concrete results is visible as a recruitment item` | 指挥官只发布 Objective 后征召成员，被征召成员仍应看到征召项 |
-| 申请到结算 | `commander and challenger can complete the application-to-settlement ORF backend flow` | 指挥官发布悬赏，挑战者申请，指挥官通过，挑战者在重估期定义 / 调整指标，冻结，提交战利品，验收结算 |
+| 申请到结算 | `commander and challenger can complete the application-to-settlement ORF backend flow` | 指挥官发布悬赏，挑战者申请，指挥官通过，挑战者在重估期提出 / 编辑指标，冻结，提交战利品，验收结算 |
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
 | API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
@@ -27,7 +27,7 @@
 | 申请与接受守卫 | `challenge application duplicate and closed-state guards are enforced` / `challenge acceptance guards duplicate, due-date, unauthorized, and closed states` | 重复申请、已接受、非法接受、截止时间过近、已关闭状态都应被保护 |
 | 冻结/退回保护 | `freeze rejects invalid source states and reopen requests stay disabled` | 只有 `reestimating` 且已有 Result 可冻结；当前不开放退回重估 |
 | 战利品与验收异常 | `loot submission rejects incomplete or out-of-state payloads` / `review rejects invalid state and missing loot` | 提交和验收的非法状态、漏 claim、外部 Result、缺失 loot 均应拒绝 |
-| 多挑战者结算 | `settlement normalizes multi-challenger contribution ratios and supports overdelivery` | 多挑战者贡献比例归一化，超预期完成按 1.5 倍结算 |
+| 多挑战者结算 | `settlement normalizes multi-challenger contribution ratios and supports overdelivery` | 多挑战者贡献比例来自匿名互评并归一化，超预期完成按 1.5 倍结算 |
 | API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、验收、全量挑战视图权限 |
 | API 指标管理权限 | `API result management routes keep privileged operations behind role permissions` | `managerDefined` 创建、confidence、update-proposal、排序、删除等高权限指标操作 |
 
@@ -38,7 +38,7 @@
 | 角色 | 测试身份 | 用途 |
 | --- | --- | --- |
 | 指挥官 | `commander` | 必须创建 Objective、发布、审核申请、征召、冻结、验收；可以提供参考 Result，但不强制定义具体指标 |
-| 挑战者 | `challenger` | 查看悬赏、申请、接受征召、在 `reestimating` 定义 / 调整具体 Result、查看我的挑战、提交战利品 |
+| 挑战者 | `challenger` | 查看悬赏、申请、接受征召、在 `reestimating` 提出 / 编辑具体 Result、查看我的挑战、提交战利品、参与匿名互评 |
 | 旁观成员 | `observer` | 验证未被授权成员不能接受征召或提交战利品 |
 
 每个测试创建独立的 `team`、`users` 和 `team_members`，ID 使用 `test-orf-flow-*` 前缀。测试结束后删除该前缀下的测试数据。
@@ -48,11 +48,11 @@
 | 阶段 | 指标规则 |
 | --- | --- |
 | `candidate` / `open` | Objective 是必填核心对象；指挥官可以创建参考指标，但悬赏大厅不应依赖已存在 Result |
-| `applying` / `recruiting` | 成员还不是正式挑战者，不能获得指标调整资格 |
-| `reestimating` | 申请被通过或征召被接受后，成员成为正式挑战者；挑战者可以定义 / 调整自己参与目标下的具体 Result |
+| `applying` / `recruiting` | 成员还不是正式挑战者，不能提出或编辑指标 |
+| `reestimating` | 申请被通过或征召被接受后，成员成为正式挑战者；挑战者可以提出 / 编辑自己参与目标下的具体 Result |
 | 重估截止前 | 指标必须在 `confirmationDueAt` 截止前校准完毕；API 创建和编辑测试会验证过期后返回 `403` |
-| `frozen` | 指标冻结，挑战者不能继续调整；当前不提供退回重估，`confirmationDueAt` 到期后也不续期 |
-| `submitted` / `settled` | 进入提交或结算后，指标不再开放调整 |
+| `frozen` | 指标冻结，指挥官和挑战者都不能继续编辑；当前不提供退回重估，`confirmationDueAt` 到期后也不续期 |
+| `submitted` / `settled` | 进入提交或结算后，指标不再开放提出或编辑 |
 
 ## 申请流程图
 
@@ -68,7 +68,7 @@ flowchart TD
   G --> H[指挥官通过申请]
   H --> I[Objective.flowStatus = reestimating]
   I --> J[Objective.challengers 包含挑战者]
-  J --> K[挑战者定义 / 调整具体 Result]
+  J --> K[挑战者提出 / 编辑具体 Result]
   K --> L[挑战者在 /api/my-challenges 可见目标和指标]
   L --> M[指挥官冻结目标]
   M --> N[Objective.flowStatus = frozen]
@@ -113,7 +113,7 @@ flowchart TD
 | ORF-BE-R002 | 指挥官发布 Objective 时，Result 是可选参考指标，不是发布和展示的前置条件。 | 目标无指标可见性、征召无指标可见性 |
 | ORF-BE-R003 | 无 Result 的 `open` Objective 仍应出现在挑战者的 `availableItems` 中，`results=[]`、`result=null`、`uncertaintyPoints=0`。 | 目标无指标可见性 |
 | ORF-BE-R004 | 无 Result 的 `recruiting` Objective 仍应出现在被征召成员的 `recruitmentItems` 中。 | 征召无指标可见性 |
-| ORF-BE-R005 | 成员申请后仅进入 `applying`，在指挥官批准前不是正式挑战者，不能调整指标。 | 申请到结算 |
+| ORF-BE-R005 | 成员申请后仅进入 `applying`，在指挥官批准前不是正式挑战者，不能提出或编辑指标。 | 申请到结算 |
 | ORF-BE-R006 | 指挥官批准申请后，申请状态变为 `approved`，成员进入 `challengers`，Objective 进入 `reestimating`，并生成 `confirmationDueAt`。 | 申请到结算、API 创建指标权限、API 编辑指标权限 |
 | ORF-BE-R007 | 被征召成员接受挑战后，Objective 进入 `reestimating`，成员进入 `challengers`，并从 `assignedChallengers` 移除。 | 征召到接受 |
 | ORF-BE-R008 | `POST /api/results` 创建 `memberProposed` 指标时，当前 API 用户必须是该 Objective 的正式挑战者。 | API 创建指标权限 |
@@ -126,7 +126,7 @@ flowchart TD
 | ORF-BE-R015 | Objective 冻结后，挑战者不能继续创建或编辑指标。 | 申请到结算、API 编辑指标权限 |
 | ORF-BE-R016 | 非挑战者不能提交战利品。 | 申请到结算 |
 | ORF-BE-R017 | 挑战者提交战利品后，Objective 进入 `submitted`，我的挑战能看到该战利品。 | 申请到结算 |
-| ORF-BE-R018 | 指挥官验收战利品后，Objective 进入 `settled`，Result 的 `acceptedResult` 更新，积分流水写入挑战者。 | 申请到结算 |
+| ORF-BE-R018 | 指挥官按每个指标验收战利品后，Objective 进入 `settled`，Result 的 `acceptedResult` 更新，积分流水按匿名互评贡献结果写入挑战者。 | 申请到结算 |
 | ORF-BE-R019 | `settled` Objective 不再出现在悬赏大厅的 `availableItems` 或 `recruitmentItems`。 | 申请到结算 |
 | ORF-BE-R020 | API 注入测试必须关闭可选外部集成，避免流程测试触发 GitHub / Mattermost 网络请求。 | API 创建指标权限、API 编辑指标权限 |
 | ORF-BE-R021 | 指挥官只能征召已发布目标，`candidate` 目标不能直接进入 `recruiting`。 | 发布前征召保护 |
@@ -142,7 +142,7 @@ flowchart TD
 | ORF-BE-R031 | 只有 `reestimating` 可冻结；冻结后不允许退回重估。 | 冻结/退回保护 |
 | ORF-BE-R032 | 战利品只能在 `frozen` 提交；空 body、漏 claim、claim 其他目标 Result 都应拒绝。 | 战利品与验收异常 |
 | ORF-BE-R033 | 只有 `submitted` 目标可验收；指定不存在的 loot 应返回 `notFound`。 | 战利品与验收异常 |
-| ORF-BE-R034 | 多挑战者结算时，只接受目标挑战者贡献比例，并按有效比例归一化。 | 多挑战者结算 |
+| ORF-BE-R034 | 多挑战者结算时，贡献比例来自目标挑战者匿名互评；无缺评和分歧时直接使用汇总比例，缺评或分歧时由指挥官处理后再结算。 | 多挑战者结算 |
 | ORF-BE-R035 | `overdelivered` 目标结果按 1.5 倍目标基础分结算。 | 多挑战者结算 |
 | ORF-BE-R036 | 发布、征召、申请审核、冻结、验收均应保持指挥官权限边界。 | API 流程权限 |
 | ORF-BE-R037 | `/api/my-challenges?scope=all` 只能由指挥官读取。 | API 流程权限 |
@@ -159,7 +159,7 @@ flowchart TD
 | 发布目标 | `publishObjective` 返回 `ok`，`flowStatus=open`；即使没有 Result，也应进入悬赏大厅 |
 | 审核申请 | 申请状态变为 `approved`，目标进入 `reestimating` |
 | 冻结目标 | 已有 Result 的 `reestimating` 目标可进入 `flowStatus=frozen`，挑战者指标调整资格变为 `false` |
-| 验收战利品 | `flowStatus=settled`，`acceptedResult=completed`，写入基础分和结算分 |
+| 验收战利品 | 每个指标写入验收结论，目标结果由指标结论汇总，`flowStatus=settled`，写入基础分和结算分 |
 | 积分流水 | `pointLedger` 写入挑战者、用户 ID、积分和结算原因 |
 
 ### 挑战者视角
@@ -169,7 +169,7 @@ flowchart TD
 | 悬赏大厅 | 发布后目标出现在 `availableItems`，不依赖指挥官是否已定义具体 Result |
 | 申请挑战 | 申请后目标 `flowStatus=applying`，当前用户标记 `hasCurrentApplication=true` |
 | 进入挑战前 | `canEditObjectiveResultsDuringReestimate` 返回 `false` |
-| 进入挑战 | 申请通过或接受征召后，`/api/my-challenges` 返回该目标；指标可以在此阶段由挑战者补充 |
+| 进入挑战 | 申请通过或接受征召后，`/api/my-challenges` 返回该目标；指标可以在此阶段由挑战者提出或编辑 |
 | 编辑资格 | `canEditObjectiveResultsDuringReestimate` 只对 `reestimating` 下的正式挑战者返回 `true` |
 | 重估截止后 | `confirmationDueAt` 过期后不能继续创建或编辑指标，且不通过退回重估续期 |
 | 冻结后 | `canEditObjectiveResultsDuringReestimate` 返回 `false` |
@@ -202,7 +202,7 @@ flowchart TD
 - 悬赏大厅展示条件变化。
 - 我的挑战过滤条件变化。
 - 指挥官是否必须提供参考指标的规则变化。
-- 挑战者在重估期定义 / 调整指标的权限规则变化。
+- 挑战者在重估期提出 / 编辑指标的权限规则变化。
 - 重估截止时间和冻结规则变化。
 - 战利品提交权限变化。
 - 验收结算积分计算变化。

@@ -49,6 +49,7 @@ import {
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
   setTaskCompletion,
+  submitObjectiveContributionReview,
   submitObjectiveLoot,
   updateCommentMessage,
   updateCommentThreadStatus,
@@ -237,16 +238,25 @@ const submitLootBodySchema = z.object({
 });
 const reviewLootBodySchema = z.object({
   lootId: z.string().min(1).optional(),
-  acceptedResult: objectiveAcceptedResultSchema,
+  acceptedResult: objectiveAcceptedResultSchema.optional(),
   resultReviews: z.array(z.object({
     resultId: z.string().min(1),
     acceptedResult: resultAcceptedResultSchema,
   })).optional(),
-  contributionRatios: z.array(z.object({
+  contributionResolution: z.object({
+    ratios: z.array(z.object({
+      member: z.string().trim().min(1),
+      ratio: z.number().min(0),
+    })).min(1),
+    reason: z.string().trim().min(1),
+  }).optional(),
+  reason: z.string().trim().optional(),
+});
+const contributionReviewBodySchema = z.object({
+  allocations: z.array(z.object({
     member: z.string().trim().min(1),
     ratio: z.number().min(0),
-  })).optional(),
-  reason: z.string().trim().optional(),
+  })).min(1),
 });
 
 function corsOrigin() {
@@ -484,6 +494,26 @@ function sendLootOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof
   }
 
   return { loot: outcome.loot };
+}
+
+function sendContributionReviewOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof submitObjectiveContributionReview>>) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Objective not found" });
+  }
+
+  if (outcome.status === "forbidden") {
+    return reply.code(403).send({ error: "Only challengers can submit contribution reviews" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Contribution review is incomplete" });
+  }
+
+  if (outcome.status === "closed") {
+    return reply.code(409).send({ error: "Objective must be submitted before contribution review" });
+  }
+
+  return { review: outcome.review };
 }
 
 export async function buildServer(options: { logger?: boolean; registerOptionalIntegrations?: boolean } = {}) {
@@ -1137,6 +1167,17 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const body = submitLootBodySchema.parse(request.body);
     return sendLootOutcome(reply, await submitObjectiveLoot(params.objectiveId, body, user));
+  });
+
+  app.post("/api/objectives/:objectiveId/contribution-reviews", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const body = contributionReviewBodySchema.parse(request.body);
+    return sendContributionReviewOutcome(reply, await submitObjectiveContributionReview(params.objectiveId, body, user));
   });
 
   app.patch("/api/tasks/:taskId", async (request, reply) => {

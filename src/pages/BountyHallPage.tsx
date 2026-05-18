@@ -483,7 +483,7 @@ function highestDifficultyLabel(item: BountyItem) {
 }
 
 function resultCountLabel(item: BountyItem) {
-  return item.results.length > 0 ? `${item.results.length} 个悬赏指标` : "待定义指标";
+  return item.results.length > 0 ? `${item.results.length} 个指标` : "待定义指标";
 }
 
 function bountySortTitle(item: BountyItem) {

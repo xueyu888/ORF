@@ -9,7 +9,6 @@ import type {
   Feedback,
   FeedbackStatus,
   LootResultClaim,
-  ObjectiveAcceptedResult,
   OrfState,
   OrfUser,
   Result,
@@ -17,6 +16,7 @@ import type {
   Task,
   TaskStatus,
   BountySource,
+  ContributionAllocation,
   UserRole,
 } from "../types/orf";
 
@@ -34,9 +34,8 @@ type SubmitLootInput = {
 };
 type ReviewObjectiveLootInput = {
   lootId?: string;
-  acceptedResult: ObjectiveAcceptedResult;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
-  contributionRatios?: Array<{ member: string; ratio: number }>;
+  contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   reason?: string;
 };
 
@@ -82,6 +81,7 @@ interface OrfContextValue {
   declineBountyChallenge: (objectiveId: string) => Promise<boolean>;
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
+  submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -145,6 +145,7 @@ function mergeTaskManagementData(state: OrfState, data: TaskManagementData): Orf
     feedback: data.feedback,
     comments: data.comments ?? state.comments ?? [],
     objectiveLoot: data.objectiveLoot ?? state.objectiveLoot ?? [],
+    objectiveContributionReviews: data.objectiveContributionReviews ?? state.objectiveContributionReviews ?? [],
     pointLedger: data.pointLedger ?? state.pointLedger ?? [],
     permissionRules: data.permissionRules,
   });
@@ -265,7 +266,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 403) {
-      return "你没有接受这个悬赏指标的权限";
+      return "你没有接受这个悬赏目标的权限";
     }
 
     if (error.status === 404) {
@@ -273,7 +274,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
-      return "这个悬赏指标已经有挑战者";
+      return "这个悬赏目标已经有挑战者";
     }
 
     return error.message || fallback;
@@ -557,7 +558,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         const canCreateManagerDefined = payload.source !== "memberProposed" && hasPermission(currentUser, state.permissionRules, "result.create");
         const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;
         if (!canCreateManagerDefined && !canCreateMemberProposed) {
-          notify("没有新建悬赏指标权限");
+          notify("没有新增指标权限");
           return;
         }
 
@@ -566,9 +567,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify(payload),
         })
           .then(refreshTaskManagementData)
-          .then(() => notify(payload.source === "memberProposed" ? "候选悬赏指标已提交，等待指挥官采纳" : "悬赏指标已创建"))
+          .then(() => notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建"))
           .catch((error) => {
-            notify(businessMutationFailureMessage(error, "悬赏指标创建失败"));
+            notify(businessMutationFailureMessage(error, "指标创建失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
@@ -700,6 +701,21 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
+      submitContributionReview: async (objectiveId, allocations) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/contribution-reviews`, {
+            method: "POST",
+            body: JSON.stringify({ allocations }),
+          });
+          await refreshTaskManagementData();
+          notify("匿名互评已提交");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "匿名互评提交失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
       createFeedback: (input) => {
         void apiRequest("/api/feedback", {
           method: "POST",
@@ -798,9 +814,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ title }),
         })
           .then(refreshTaskManagementData)
-          .then(() => notify("悬赏指标已更新"))
+          .then(() => notify("指标已更新"))
           .catch((error) => {
-            notify(businessMutationFailureMessage(error, "悬赏指标更新失败"));
+            notify(businessMutationFailureMessage(error, "指标更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
@@ -846,9 +862,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ referenceResultId: input.referenceResultId, placement: input.placement }),
         })
           .then(refreshTaskManagementData)
-          .then(() => notify("悬赏指标位置已更新"))
+          .then(() => notify("指标位置已更新"))
           .catch((error) => {
-            notify(businessMutationFailureMessage(error, "悬赏指标位置更新失败"));
+            notify(businessMutationFailureMessage(error, "指标位置更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
@@ -888,9 +904,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       deleteResult: (resultId) => {
         void apiRequest(`/api/results/${encodeURIComponent(resultId)}`, { method: "DELETE" })
           .then(refreshTaskManagementData)
-          .then(() => notify("悬赏指标已删除"))
+          .then(() => notify("指标已删除"))
           .catch((error) => {
-            notify(businessMutationFailureMessage(error, "悬赏指标删除失败"));
+            notify(businessMutationFailureMessage(error, "指标删除失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
@@ -1130,9 +1146,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ title, reason, feedbackId }),
         })
           .then(refreshTaskManagementData)
-          .then(() => notify("悬赏指标更新已记录"))
+          .then(() => notify("指标更新已记录"))
           .catch((error) => {
-            notify(businessMutationFailureMessage(error, "悬赏指标更新记录失败"));
+            notify(businessMutationFailureMessage(error, "指标更新记录失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },

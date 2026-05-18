@@ -32,6 +32,7 @@ type RowHandlers = {
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
   canManageFlow: boolean;
+  currentMember: string;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
   onActiveActionChange: (id: string | null) => void;
@@ -127,7 +128,7 @@ function ObjectivePanel({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel="新增悬赏"
+          addLabel={objectiveAddLabel(group.objective, handlers)}
           left={rowActionLeft.objective}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -219,6 +220,19 @@ function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode
   return <EmptySlot />;
 }
 
+function objectiveAddLabel(objective: ObjectiveNode["objective"], handlers: RowHandlers) {
+  if (handlers.canManageFlow) return "新增指标";
+  if (canProposeMetric(objective, handlers.currentMember)) return "提出指标";
+  return "提出指标";
+}
+
+function canProposeMetric(objective: ObjectiveNode["objective"], member: string) {
+  if (objective.flowStatus !== "reestimating" || !objective.challengers.includes(member)) return false;
+  if (!objective.confirmationDueAt) return true;
+  const dueTime = new Date(objective.confirmationDueAt).getTime();
+  return Number.isFinite(dueTime) && Date.now() <= dueTime;
+}
+
 function BountyRow({
   bounty,
   handlers,
@@ -281,7 +295,7 @@ function BountyRow({
             activeActionId={handlers.activeActionId}
             className="absolute top-1/2 -translate-y-1/2"
             expanded={open}
-            label={open ? "折叠悬赏" : "展开悬赏"}
+            label={open ? "折叠指标" : "展开指标"}
             left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1]}
             onActiveActionChange={handlers.onActiveActionChange}
             onOpenActionChange={handlers.onOpenActionChange}
@@ -301,7 +315,7 @@ function BountyRow({
           </span>
           {isSameTarget(handlers.editingTarget, target) ? (
             <InlineTitleEditor
-              ariaLabel="编辑悬赏指标标题"
+              ariaLabel="编辑指标标题"
               className="orf-result-title text-base font-semibold"
               onCancel={handlers.onCancelEdit}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}

@@ -113,6 +113,19 @@ export interface PointLedgerEntry {
   createdAt: string;
 }
 
+export interface ContributionAllocation {
+  member: string;
+  ratio: number;
+}
+
+export interface ObjectiveContributionReview {
+  id: string;
+  objectiveId: string;
+  reviewer: string;
+  allocations: ContributionAllocation[];
+  submittedAt: string;
+}
+
 export interface Result {
   id: string;
   objectiveId: string;
@@ -289,6 +302,7 @@ export interface OrfState {
   failureSamples: FailureSample[];
   comments: CommentThread[];
   objectiveLoot: ObjectiveLoot[];
+  objectiveContributionReviews: ObjectiveContributionReview[];
   pointLedger: PointLedgerEntry[];
   causeCategories: string[];
   rules: OrfRules;

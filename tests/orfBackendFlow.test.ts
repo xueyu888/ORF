@@ -23,6 +23,7 @@ import {
   rejectObjectiveChallengeApplication,
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
+  submitObjectiveContributionReview,
   submitObjectiveLoot,
 } from "../server/repositories/orfRepository";
 
@@ -222,12 +223,10 @@ test("commander and challenger can complete the application-to-settlement ORF ba
     objective.id,
     {
       lootId: loot.loot.id,
-      acceptedResult: "completed",
       resultReviews: [
         { resultId: result.id, acceptedResult: "completed" },
         { resultId: challengerResult.id, acceptedResult: "completed" },
       ],
-      contributionRatios: [{ member: fixture.challenger.name, ratio: 1 }],
       reason: "Backend ORF flow integration test settlement.",
     },
     fixture.commander.id,
@@ -729,6 +728,29 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   );
   assert.equal(loot.status, "ok");
 
+  const challengerReview = await submitObjectiveContributionReview(
+    objective.id,
+    {
+      allocations: [
+        { member: fixture.challenger.name, ratio: 2 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(challengerReview.status, "ok");
+  const observerReview = await submitObjectiveContributionReview(
+    objective.id,
+    {
+      allocations: [
+        { member: fixture.challenger.name, ratio: 2 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
+  );
+  assert.equal(observerReview.status, "ok");
+
   const reviewed = await reviewObjectiveLoot(
     objective.id,
     {
@@ -736,10 +758,6 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
       resultReviews: [
         { resultId: resultA.id, acceptedResult: "completed" },
         { resultId: resultB.id, acceptedResult: "completed" },
-      ],
-      contributionRatios: [
-        { member: fixture.challenger.name, ratio: 2 },
-        { member: fixture.observer.name, ratio: 1 },
       ],
     },
     fixture.commander.id,
@@ -750,6 +768,7 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   assert.equal(reviewed.objective.objectiveSettlementPoints, 60);
 
   const data = await getTaskManagementData();
+  assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 2);
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
   assert.equal(ledger.length, 2);
   assert.equal(ledger[0]?.memberName, fixture.challenger.name);

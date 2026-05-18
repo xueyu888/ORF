@@ -3,6 +3,7 @@ import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, seria
 import type {
   BountySource,
   ChallengeApplication,
+  ContributionAllocation,
   LootResultClaim,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
@@ -118,6 +119,19 @@ export const objectiveLoot = pgTable("objective_loot", {
   resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
   selfTestReportUrl: text("self_test_report_url"),
   selfTestReportBody: text("self_test_report_body"),
+  submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
+});
+
+export const objectiveContributionReviews = pgTable("objective_contribution_reviews", {
+  id: text("id").primaryKey(),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  objectiveId: text("objective_id")
+    .notNull()
+    .references(() => objectives.id, { onDelete: "cascade" }),
+  reviewer: text("reviewer").notNull(),
+  allocations: jsonb("allocations").$type<ContributionAllocation[]>().notNull().default([]),
   submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
 });
 

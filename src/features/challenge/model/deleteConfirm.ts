@@ -6,13 +6,13 @@ export function deleteConfirmMessage(target: ChallengeTarget, state: OrfState) {
     const bounties = state.results.filter((result) => result.objectiveId === target.id);
     const actions = state.tasks.filter((action) => action.linkedObjectiveId === target.id);
     const subActionCount = actions.reduce((count, action) => count + action.checklist.length, 0);
-    return `删除目标「${target.title}」会同时删除 ${bounties.length} 个悬赏、${actions.length} 个行动项和 ${subActionCount} 个子行动项。是否确认？`;
+    return `删除目标「${target.title}」会同时删除 ${bounties.length} 个指标、${actions.length} 个行动项和 ${subActionCount} 个子行动项。是否确认？`;
   }
 
   if (target.type === "bounty") {
     const actions = state.tasks.filter((action) => action.linkedResultId === target.id);
     const subActionCount = actions.reduce((count, action) => count + action.checklist.length, 0);
-    return `删除悬赏指标「${target.title}」会同时删除 ${actions.length} 个行动项和 ${subActionCount} 个子行动项。是否确认？`;
+    return `删除指标「${target.title}」会同时删除 ${actions.length} 个行动项和 ${subActionCount} 个子行动项。是否确认？`;
   }
 
   if (target.type === "action") {

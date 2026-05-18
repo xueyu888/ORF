@@ -6,6 +6,7 @@ import {
   feedback,
   feedbackCauseCategories,
   objectives,
+  objectiveContributionReviews,
   objectiveLoot,
   pointLedger,
   results,
@@ -71,6 +72,7 @@ async function seed() {
     await tx.delete(commentMessages);
     await tx.delete(commentThreads);
     await tx.delete(pointLedger);
+    await tx.delete(objectiveContributionReviews);
     await tx.delete(objectiveLoot);
     await tx.delete(evidence);
     await tx.delete(feedbackCauseCategories);
@@ -96,15 +98,21 @@ async function seed() {
       })),
     );
 
-    const userRows: SeedUser[] = collectUserNames().map((name) => ({
-      id: userIdForName(name),
-      name,
-      email: emailForName(name),
-      status: "active",
-      createdAt: "2026-04-01",
-      lastLoginAt: "2026-05-01T11:06:00.000Z",
-    }));
-    userRows.push(bootstrapAdmin);
+    const userRowsById = new Map<string, SeedUser>(
+      collectUserNames().map((name) => [
+        userIdForName(name),
+        {
+          id: userIdForName(name),
+          name,
+          email: emailForName(name),
+          status: "active",
+          createdAt: "2026-04-01",
+          lastLoginAt: "2026-05-01T11:06:00.000Z",
+        },
+      ]),
+    );
+    userRowsById.set(bootstrapAdmin.id, bootstrapAdmin);
+    const userRows = Array.from(userRowsById.values());
 
     if (userRows.length > 0) {
       await tx.insert(users).values(userRows);
@@ -187,6 +195,50 @@ async function seed() {
     );
     if (trendRows.length > 0) {
       await tx.insert(resultTrendPoints).values(trendRows);
+    }
+
+    if (initialOrfState.objectiveLoot.length > 0) {
+      await tx.insert(objectiveLoot).values(
+        initialOrfState.objectiveLoot.map((loot) => ({
+          id: loot.id,
+          teamId: team.id,
+          objectiveId: loot.objectiveId,
+          submittedBy: loot.submittedBy,
+          body: loot.body,
+          resultClaims: loot.resultClaims,
+          selfTestReportUrl: loot.selfTestReportUrl ?? null,
+          selfTestReportBody: loot.selfTestReportBody ?? null,
+          submittedAt: loot.submittedAt,
+        })),
+      );
+    }
+
+    if (initialOrfState.objectiveContributionReviews.length > 0) {
+      await tx.insert(objectiveContributionReviews).values(
+        initialOrfState.objectiveContributionReviews.map((review) => ({
+          id: review.id,
+          teamId: team.id,
+          objectiveId: review.objectiveId,
+          reviewer: review.reviewer,
+          allocations: review.allocations,
+          submittedAt: review.submittedAt,
+        })),
+      );
+    }
+
+    if (initialOrfState.pointLedger.length > 0) {
+      await tx.insert(pointLedger).values(
+        initialOrfState.pointLedger.map((entry) => ({
+          id: entry.id,
+          teamId: team.id,
+          objectiveId: entry.objectiveId,
+          userId: entry.userId ?? userIdForName(entry.memberName),
+          memberName: entry.memberName,
+          points: entry.points,
+          reason: entry.reason,
+          createdAt: entry.createdAt,
+        })),
+      );
     }
 
     await tx.insert(tasks).values(
