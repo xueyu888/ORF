@@ -182,6 +182,7 @@ function assertObjectiveShape(data: Awaited<ReturnType<RealSystemHarness["taskDa
   if (objective.flowStatus === "settled") {
     expect(loot.length, `${objective.title} settled objectiveLoot`).toBe(1);
     expect(ledger.length, `${objective.title} settled pointLedger`).toBeGreaterThan(0);
+    expect(new Set(ledger.map((entry) => entry.memberName)).size, `${objective.title} pointLedger members should be unique`).toBe(ledger.length);
     const ledgerTotal = Number(ledger.reduce((sum, entry) => sum + entry.points, 0).toFixed(2));
     expect(ledgerTotal, `${objective.title} pointLedger total`).toBe(objective.objectiveSettlementPoints ?? 0);
     for (const entry of ledger) {

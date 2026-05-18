@@ -865,6 +865,59 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   assert.equal(ledger[1]?.points, 20);
 });
 
+test("settlement resolution collapses duplicate member ratios before writing point ledger", async () => {
+  const fixture = await createFixture("settlement-resolution-duplicates");
+  const objective = await createPublishedObjective(fixture, "duplicate resolution ratios");
+  const result = await createTestResult(objective.id, fixture.commander.name, "duplicate ratio result", "进阶");
+
+  const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  const observerApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
+  assert.equal(challengerApplication.status, "applied");
+  assert.equal(observerApplication.status, "applied");
+  const challengerApplicationId = challengerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  const observerApplicationId = observerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.observer.name)?.id;
+  assert.ok(challengerApplicationId);
+  assert.ok(observerApplicationId);
+  assert.equal((await approveObjectiveChallengeApplication(objective.id, challengerApplicationId, fixture.commander.id)).status, "ok");
+  assert.equal((await approveObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id)).status, "ok");
+  assert.equal((await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id)).status, "ok");
+
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    {
+      body: "Duplicate resolution ratios should still produce one ledger row per challenger.",
+      resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+
+  const reviewed = await reviewObjectiveLoot(
+    objective.id,
+    {
+      contributionResolution: {
+        ratios: [
+          { member: fixture.challenger.name, ratio: 1 },
+          { member: fixture.challenger.name, ratio: 3 },
+          { member: fixture.observer.name, ratio: 1 },
+        ],
+        reason: "Resolve duplicate contribution input.",
+      },
+    },
+    fixture.commander.id,
+  );
+  assert.equal(reviewed.status, "ok");
+
+  const data = await getTaskManagementData();
+  const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
+  assert.equal(ledger.length, 2);
+  assert.equal(new Set(ledger.map((entry) => entry.memberName)).size, 2);
+  assert.equal(ledger[0]?.memberName, fixture.challenger.name);
+  assert.equal(ledger[0]?.points, 24);
+  assert.equal(ledger[1]?.memberName, fixture.observer.name);
+  assert.equal(ledger[1]?.points, 6);
+});
+
 test("API flow commands enforce commander-only permissions and challenge list scope", async () => {
   const fixture = await createFixture("api-flow-permissions");
   const candidate = await createTestObjective(fixture, "api publish permission");
