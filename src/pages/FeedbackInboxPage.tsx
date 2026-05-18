@@ -5,6 +5,7 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { FeedbackCard } from "../components/SharedCards";
 import { Button, Card, StatusBadge } from "../components/ui";
+import { canCreateFeedbackFromResults } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackStatus, Impact } from "../types/orf";
 
@@ -13,6 +14,7 @@ export function FeedbackInboxPage() {
   const [cause, setCause] = useState("All");
   const [status, setStatus] = useState<"All" | FeedbackStatus>("All");
   const [impact, setImpact] = useState<"All" | Impact>("All");
+  const canCreateFeedback = canCreateFeedbackFromResults(state.results);
 
   const feedback = useMemo(
     () =>
@@ -34,7 +36,7 @@ export function FeedbackInboxPage() {
     <PageScaffold
       title="反馈收件箱"
       subtitle="收集信号、归类原因，并反向更新指标。"
-      action={<Button onClick={() => openModal({ type: "newFeedback" })}><Plus className="h-4 w-4" />新建反馈</Button>}
+      action={canCreateFeedback ? <Button onClick={() => openModal({ type: "newFeedback" })}><Plus className="h-4 w-4" />新建反馈</Button> : null}
     >
       <Card className="flex flex-wrap items-center gap-3 orf-card-padding">
         <select className="orf-input h-9 max-w-48 px-3 text-sm" value={cause} onChange={(event) => setCause(event.target.value)}><option value="All">全部原因</option>{state.causeCategories.map((item) => <option key={item}>{item}</option>)}</select>
