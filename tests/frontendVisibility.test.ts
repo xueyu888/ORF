@@ -50,6 +50,19 @@ test("feedback creation page actions use visible objective participation", () =>
   );
 });
 
+test("detail pages do not keep inert placeholder action buttons", () => {
+  assert.doesNotMatch(
+    readFileSync(path.resolve("src/pages/ObjectiveDetailPage.tsx"), "utf8"),
+    /MoreHorizontal/,
+    "Objective detail must not render a placeholder more-actions button without behavior",
+  );
+  assert.doesNotMatch(
+    readFileSync(path.resolve("src/pages/FeedbackDetailPage.tsx"), "utf8"),
+    /补充回归样本/,
+    "Feedback detail must not render recommendation buttons that do not trigger a product action",
+  );
+});
+
 test("frontend visibility rules are only accessed through the shared helpers", () => {
   const files = sourceFiles(path.resolve("src")).filter(
     (file) => !file.endsWith(path.join("src", "config", "frontendVisibility.ts")) && !file.endsWith(path.join("src", "state", "OrfProvider.tsx")),

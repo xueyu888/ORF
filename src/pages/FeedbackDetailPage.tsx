@@ -23,6 +23,20 @@ export function FeedbackDetailPage() {
     permissionRules: state.permissionRules,
   });
   const canUpdateStatus = canManageFeedbackStatus(feedback, currentUser);
+  const recommendedActions = [
+    capabilities.canCreateTask
+      ? {
+          label: "创建执行行动项",
+          onClick: () => openModal({ type: "newTask" as const, objectiveId: feedback.linkedObjectiveId, resultId: feedback.linkedResultId, feedbackId: feedback.id }),
+        }
+      : null,
+    capabilities.canProposeUpdate
+      ? {
+          label: "更新指标表述",
+          onClick: () => openModal({ type: "resultUpdate" as const, resultId: feedback.linkedResultId, feedbackId: feedback.id }),
+        }
+      : null,
+  ].filter((item): item is { label: string; onClick: () => void } => item !== null);
 
   return (
     <PageScaffold
@@ -41,7 +55,7 @@ export function FeedbackDetailPage() {
         <aside className="grid content-start gap-4">
           <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">关联目标</div><div className="mt-3 text-sm orf-text-secondary">{objective?.title}</div></Card>
           <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">关联指标</div><div className="mt-3 text-sm orf-text-secondary">{result?.title}</div></Card>
-          <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">推荐动作</div><div className="mt-3 grid gap-2 text-sm orf-text-secondary"><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">创建执行行动项</button><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">更新指标表述</button><button className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted">补充回归样本</button></div></Card>
+          <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">推荐动作</div><div className="mt-3 grid gap-2 text-sm orf-text-secondary">{recommendedActions.map((item) => <button key={item.label} className="rounded-md orf-surface-muted p-3 text-left orf-hover-muted" type="button" onClick={item.onClick}>{item.label}</button>)}{recommendedActions.length === 0 && <div className="rounded-md orf-surface-muted p-3 text-sm orf-text-muted">当前没有可执行推荐动作。</div>}</div></Card>
         </aside>
       </div>
     </PageScaffold>

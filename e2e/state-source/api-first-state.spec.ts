@@ -535,3 +535,46 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
   await expect(page.getByText("真实挑战 Q2")).toBeVisible();
   await expect(page.getByText("真实挑战 Q1")).toHaveCount(0);
 });
+
+test("feedback detail recommendation actions are real commands", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-feedback-actions",
+    title: "真实反馈动作目标",
+    resultIds: ["result-feedback-actions"],
+    feedbackIds: ["feedback-actions-live"],
+    taskIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-feedback-actions",
+    objectiveId: objective.id,
+    title: "真实反馈动作指标",
+    feedbackIds: ["feedback-actions-live"],
+  };
+  const feedback: Feedback = {
+    ...initialOrfState.feedback[0]!,
+    id: "feedback-actions-live",
+    phenomenon: "真实反馈动作",
+    linkedObjectiveId: objective.id,
+    linkedResultId: result.id,
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [],
+        feedback: [feedback],
+      }),
+    });
+  });
+
+  await page.goto(`/feedback/${feedback.id}`);
+
+  await expect(page.getByRole("heading", { name: feedback.id })).toBeVisible();
+  await expect(page.getByText("补充回归样本")).toHaveCount(0);
+  await page.getByRole("button", { name: "创建执行行动项" }).click();
+  await expect(page.getByText("新建行动项")).toBeVisible();
+});

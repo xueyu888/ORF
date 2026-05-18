@@ -1,4 +1,4 @@
-import { MoreHorizontal, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
@@ -52,7 +52,7 @@ export function ObjectiveDetailPage() {
     <PageScaffold
       title={objective.title}
       subtitle={objective.description}
-      action={<div className="flex gap-2">{metricAction && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id, source: metricAction.source })}><Plus className="h-4 w-4" />{metricAction.label}</Button>}{canCreateFeedback && <Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button>}<Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
+      action={<div className="flex gap-2">{metricAction && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id, source: metricAction.source })}><Plus className="h-4 w-4" />{metricAction.label}</Button>}{canCreateFeedback && <Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button>}</div>}
     >
       <Card className="orf-card-padding">
         <div className="flex flex-wrap items-center gap-3">
