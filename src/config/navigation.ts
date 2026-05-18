@@ -7,7 +7,6 @@ import {
   Settings,
   Trophy,
   UsersRound,
-  UserRound,
 } from "lucide-react";
 
 export const navItems = [
@@ -22,6 +21,5 @@ export const navItems = [
 
 export const quickPages = [
   ...navItems,
-  { label: "注册登录", path: "/auth", icon: UserRound },
   { label: "新建目标", path: "/objectives", icon: Flag },
 ];

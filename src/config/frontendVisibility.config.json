@@ -27,10 +27,6 @@
     "label": "侧边栏设置入口",
     "audience": ["admin"]
   },
-  "command.auth": {
-    "label": "命令菜单注册登录入口",
-    "audience": "all"
-  },
   "command.objectives": {
     "label": "命令菜单目标入口",
     "audience": "all"

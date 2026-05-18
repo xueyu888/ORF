@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { canShowFrontend, canShowFrontendPath, frontendVisibilityByPath, frontendVisibilityTable } from "../src/config/frontendVisibility";
+import { quickPages } from "../src/config/navigation";
 import type { OrfUser } from "../src/types/orf";
 
 const adminUser: OrfUser = {
@@ -32,6 +33,14 @@ test("visual settings are only visible to administrators", () => {
   assert.equal(canShowFrontend(memberUser, "nav.settings"), false);
   assert.equal(canShowFrontendPath(adminUser, "/settings"), true);
   assert.equal(canShowFrontendPath(memberUser, "/settings"), false);
+});
+
+test("authenticated command pages do not include the auth route", () => {
+  assert.equal(
+    quickPages.some((item) => item.path === "/auth"),
+    false,
+    "The logged-in command menu must not expose the login/register route",
+  );
 });
 
 test("feedback creation page actions use visible objective participation", () => {

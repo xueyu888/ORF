@@ -105,6 +105,20 @@ test("reports page shows an empty leaderboard state without point ledger", async
   await expect(page.getByText("暂无积分记录")).toBeVisible();
 });
 
+test("command menu does not expose the auth route inside the authenticated app", async ({ page }) => {
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." }).click();
+
+  const menu = page.locator(".orf-draggable-floating");
+  await expect(menu).toBeVisible();
+  await expect(menu.getByText("悬赏大厅")).toBeVisible();
+  await expect(menu.getByText("注册登录")).toHaveCount(0);
+});
+
 test("ignores stale business data in legacy localStorage", async ({ page }) => {
   await page.addInitScript((state) => {
     window.localStorage.setItem("orf-flow-state-v3", JSON.stringify(state));
