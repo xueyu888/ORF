@@ -872,6 +872,72 @@ test("tasks page labels resultless objectives as pending metrics", async ({ page
   await expect(page.getByText("悬赏指标")).toHaveCount(0);
 });
 
+test("creation modals start from live context without demo business defaults", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-modal-defaults",
+    title: "真实弹窗默认值目标",
+    flowStatus: "reestimating",
+    stage: "orfReestimate",
+    resultIds: ["result-modal-defaults"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-modal-defaults",
+    objectiveId: objective.id,
+    title: "真实弹窗默认值指标",
+  };
+  const taskData = taskManagementDataWith({
+    objectives: [objective],
+    results: [result],
+    tasks: [],
+    feedback: [],
+  });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+  await expect(page.getByLabel("目标标题")).toHaveValue("");
+  await expect(page.getByLabel("为什么重要")).toHaveValue("");
+  await expect(page.getByLabel("边界 / 不做什么")).toHaveValue("");
+  await expect(page.getByText("降低权限策略问答中的幻觉率")).toHaveCount(0);
+  await page.getByRole("button", { name: "取消" }).click();
+
+  const panel = page.locator(".orf-objective-panel", { hasText: objective.title });
+  await panel.hover();
+  await panel.getByRole("button", { name: "新增指标" }).click();
+  await expect(page.getByLabel("指标标题")).toHaveValue("");
+  await expect(page.getByLabel("衡量指标")).toHaveValue("");
+  await expect(page.getByText("权限策略回答幻觉率降低到 3%")).toHaveCount(0);
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.getByRole("button", { name: "新建反馈" }).click();
+  await expect(page.getByLabel("现象")).toHaveValue("");
+  await expect(page.getByLabel("建议调整")).toHaveValue("");
+  await expect(page.getByLabel("影响")).toHaveValue("Medium");
+  await expect(page.getByText("线上回答引用了过期的权限策略文档。")).toHaveCount(0);
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
+  await page.getByRole("button", { name: "创建行动项" }).click();
+  await expect(page.getByLabel("行动项标题")).toHaveValue("");
+  await expect(page.getByLabel("说明")).toHaveValue("");
+  await expect(page.getByText("为 RAG 检索增加版本感知过滤")).toHaveCount(0);
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.getByRole("button", { name: "提出指标更新" }).click();
+  await expect(page.getByLabel("修改原因")).toHaveValue("");
+  await expect(page.getByText("反馈显示当前指标需要更清晰的可验证边界。")).toHaveCount(0);
+});
+
 test("feedback detail recommendation actions are real commands", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,

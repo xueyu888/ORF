@@ -1520,6 +1520,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await expect(page.getByText("提出指标")).toBeVisible();
     await page.getByLabel("指标标题").fill("前端测试 不应出现的候选指标");
+    await page.getByLabel("衡量指标").fill("候选指标");
     await page.getByRole("button", { name: "提交指标" }).click();
     await expect(page.getByText("proposed metric rejected")).toBeVisible();
     await expect(panel.getByText("前端测试 不应出现的候选指标")).toHaveCount(0);
@@ -1655,6 +1656,7 @@ test.describe("ORF frontend guard coverage", () => {
     await panel.getByRole("button", { name: "提出指标" }).click();
     await expect(page.getByText("提出指标")).toBeVisible();
     await page.getByLabel("指标标题").fill("前端测试 截止前候选指标");
+    await page.getByLabel("衡量指标").fill("候选指标");
     await page.getByRole("button", { name: "提交指标" }).click();
 
     await expect.poll(() => payload).toMatchObject({ source: "memberProposed" });
