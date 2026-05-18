@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page, type Response } from "@playwright/test";
-import type { OperatorRegistry, StepParams } from "../../_framework/state-case.types";
+import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import type { LoginCaseData, TestContext } from "./_support/login.context";
 import {
   clearBrowserState,

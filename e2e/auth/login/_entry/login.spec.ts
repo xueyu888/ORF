@@ -1,5 +1,5 @@
 import { test } from "@playwright/test";
-import { runStateCase } from "../../../_framework/state-case.runner";
+import { runStateCase } from "../../../_framework/runner";
 import { loginSuccessCase } from "../login.case";
 import { loginOperators } from "../login.operators";
 import type { TestContext } from "../_support/login.context";

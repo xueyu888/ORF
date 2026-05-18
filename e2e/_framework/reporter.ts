@@ -80,7 +80,7 @@ type ResultJson = {
   cases: CaseReport[];
 };
 
-export default class StateCaseMarkdownReporter implements Reporter {
+export default class StateCaseReporter implements Reporter {
   private total = 0;
   private cases: InternalCaseReport[] = [];
 

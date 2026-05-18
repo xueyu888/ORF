@@ -8,7 +8,7 @@ import type {
   StateCaseRuntime,
   StepParams,
   StepSpec,
-} from "./state-case.types";
+} from "./types";
 
 const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
 

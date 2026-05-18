@@ -11,7 +11,7 @@ export default defineConfig({
   },
   reporter: [
     ["list", { printSteps: true }],
-    ["./e2e/_framework/state-case-markdown.reporter.ts"],
+    ["./e2e/_framework/reporter.ts"],
   ],
   fullyParallel: true,
   use: {

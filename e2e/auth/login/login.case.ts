@@ -1,4 +1,4 @@
-import { STATE_CASE_MODEL, type StateCaseSpec } from "../../_framework/state-case.types";
+import { STATE_CASE_MODEL, type StateCaseSpec } from "../../_framework/types";
 import type { LoginCaseData } from "./_support/login.context";
 
 export const loginSuccessCase = {
