@@ -123,7 +123,7 @@ function NewObjectiveModal() {
         <Field label="为什么重要"><textarea className="orf-input min-h-24 px-3 py-2" value={whyItMatters} onChange={(event) => setWhyItMatters(event.target.value)} /></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="周期"><input className="orf-input px-3 py-2" value={cycle} onChange={(event) => setCycle(event.target.value)} /></Field>
-          <Field label="最终截止时间"><input className="orf-input px-3 py-2" type="date" value={finalDueAt} onChange={(event) => setFinalDueAt(event.target.value)} /></Field>
+          <Field label="最终截止时间"><input className="orf-input px-3 py-2" type="date" value={finalDueAt} onChange={(event) => setFinalDueAt(event.target.value)} required /></Field>
         </div>
         <Field label="边界 / 不做什么"><textarea className="orf-input min-h-20 px-3 py-2" value={boundary} onChange={(event) => setBoundary(event.target.value)} /></Field>
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit">保存目标</Button></div>

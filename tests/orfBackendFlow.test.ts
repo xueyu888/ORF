@@ -982,6 +982,23 @@ test("API flow commands enforce commander-only permissions and challenge list sc
   });
 });
 
+test("API objective creation rejects malformed final due dates", async () => {
+  const fixture = await createFixture("api-objective-date-validation");
+
+  await withApiServer(fixture, async (app) => {
+    for (const finalDueAt of ["", "not-a-date", "2999-02-31"]) {
+      const response = await apiInject(app, fixture.commander, "POST", "/api/objectives", {
+        title: `${fixture.prefix} invalid due date ${finalDueAt || "empty"}`,
+        whyItMatters: "Invalid dates must not reach the database date column.",
+        cycle: "2999-Q4",
+        boundary: "Test-only objective.",
+        finalDueAt,
+      });
+      assert.equal(response.statusCode, 400);
+    }
+  });
+});
+
 test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
   const fixture = await createFixture("api-read-boundary");
   const { objective } = await createSettledObjective(fixture, "scoped settled objective");

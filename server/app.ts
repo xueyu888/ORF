@@ -93,6 +93,7 @@ import {
   setDefaultVisualBackground,
   visualBackgroundError,
 } from "./settings/visualBackgrounds";
+import { isDateOnlyString } from "../src/utils/date";
 
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
 const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
@@ -131,6 +132,7 @@ const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
 const permissionRoleParamsSchema = z.object({ role: userRoleSchema });
+const dateOnlySchema = z.string().refine(isDateOnlyString, { message: "Invalid date" });
 const placementSchema = z.enum(["before", "after"]);
 const permissionRuleSchema = z.object({
   role: editablePermissionRoleSchema,
@@ -176,7 +178,7 @@ const createObjectiveBodySchema = z.object({
   whyItMatters: z.string().trim().min(1),
   cycle: z.string().trim().min(1),
   boundary: z.string().trim().min(1),
-  finalDueAt: z.string().optional(),
+  finalDueAt: dateOnlySchema.optional(),
 });
 const createFeedbackBodySchema = z.object({
   phenomenon: z.string().trim().min(1),
