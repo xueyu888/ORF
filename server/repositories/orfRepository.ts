@@ -397,7 +397,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
 
   const objectiveItems: Objective[] = objectiveRows.map((objective) => {
     const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
-    const acceptedResults = objectiveResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
+    const objectiveBasePoints = objectiveResults.reduce((sum, result) => sum + result.uncertaintyScore, 0);
 
     return {
       id: objective.id,
@@ -425,7 +425,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       lootSubmittedAt: objective.lootSubmittedAt,
       acceptedResult: objective.acceptedResult,
       completionMultiplier: objective.completionMultiplier,
-      objectiveBasePoints: objective.objectiveBasePoints || acceptedResults.reduce((sum, result) => sum + result.uncertaintyScore, 0),
+      objectiveBasePoints,
       objectiveSettlementPoints: objective.objectiveSettlementPoints,
       createdAt: objective.createdAt,
       updatedAt: objective.updatedAt,
