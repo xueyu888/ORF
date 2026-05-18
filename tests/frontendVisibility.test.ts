@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
+import { breadcrumb } from "../src/components/appShellBreadcrumb";
 import { canShowFrontend, canShowFrontendPath, frontendVisibilityByPath, frontendVisibilityTable } from "../src/config/frontendVisibility";
 import { quickPages } from "../src/config/navigation";
 import type { OrfUser } from "../src/types/orf";
@@ -40,6 +41,16 @@ test("authenticated command pages do not include the auth route", () => {
     quickPages.some((item) => item.path === "/auth"),
     false,
     "The logged-in command menu must not expose the login/register route",
+  );
+});
+
+test("app shell breadcrumb labels objective loot deep links", () => {
+  assert.equal(breadcrumb("/objectives/objective-1/loot"), "目标战利品");
+  assert.equal(breadcrumb("/objectives/objective-1/loot/"), "目标战利品");
+  assert.doesNotMatch(
+    readFileSync(path.resolve("src/components/AppShell.tsx"), "utf8"),
+    /\/tasks\/bounties/,
+    "AppShell must not keep obsolete bounty-task loot routes in topbar labels",
   );
 });
 

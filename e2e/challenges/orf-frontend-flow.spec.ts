@@ -2027,6 +2027,7 @@ test.describe("ORF frontend guard coverage", () => {
     await mockOrfApp(page, memberUser, data, { tasks: () => data });
 
     await page.goto(`/objectives/${objective.id}/loot`);
+    await expect(page.getByRole("heading", { name: "目标战利品" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "提交战利品" })).toBeVisible();
     await expect(page.getByRole("button", { name: "提交" })).toBeEnabled();
   });
