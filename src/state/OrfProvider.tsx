@@ -260,6 +260,10 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
         return "该成员已被 ORF 业务记录引用，不能改名";
       }
 
+      if (error.message === "User is referenced by ORF records") {
+        return "该成员已被 ORF 业务记录引用，不能删除，请改为停用";
+      }
+
       return error.message;
     }
 

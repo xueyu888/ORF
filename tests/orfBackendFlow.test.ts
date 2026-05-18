@@ -1195,6 +1195,24 @@ test("API user management prevents renaming members referenced by ORF records", 
   });
 });
 
+test("API user deletion rejects members referenced by ORF records", async () => {
+  const fixture = await createFixture("api-user-delete-reference");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "delete referenced challenger objective");
+
+  await withApiServer(fixture, async (app) => {
+    const deletion = await apiInject(app, fixture.commander, "DELETE", `/api/users/${encodeURIComponent(fixture.challenger.id)}`);
+    assert.equal(deletion.statusCode, 409);
+
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const userIds = (userList.json() as { users: Array<{ id: string }> }).users.map((user) => user.id);
+    assert.equal(userIds.includes(fixture.challenger.id), true);
+
+    const myChallenges = await getMyChallengesData(fixture.challenger.name);
+    assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
 test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
   const fixture = await createFixture("api-read-boundary");
   const { objective } = await createSettledObjective(fixture, "scoped settled objective");

@@ -176,9 +176,14 @@ function assertCanChangeRole(actorUserId: string, userId: string, nextRole: User
   }
 }
 
-function assertCanDeleteUser(actorUserId: string, userId: string) {
+async function assertCanDeleteUser(teamId: string, actorUserId: string, userId: string) {
   if (actorUserId === userId) {
     throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
+  }
+
+  const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
+  if (user && (await isReferencedByOrfRecords(teamId, user.name))) {
+    throw Object.assign(new Error("User is referenced by ORF records"), { statusCode: 409 });
   }
 }
 
@@ -316,8 +321,8 @@ async function updateTeamUserRecord(teamId: string, userId: string, normalized: 
 }
 
 export async function deleteTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
-  assertCanDeleteUser(actorUserId, userId);
   await assertMembershipExists(teamId, userId);
+  await assertCanDeleteUser(teamId, actorUserId, userId);
 
   await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
   return getTeamUsers(teamId);
@@ -336,8 +341,10 @@ export async function rejectRegistrationRequest(teamId: string, userId: string):
 }
 
 export async function disableTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
-  assertCanDeleteUser(actorUserId, userId);
   await assertMembershipExists(teamId, userId);
+  if (actorUserId === userId) {
+    throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
+  }
   await db.update(users).set({ status: "disabled" }).where(eq(users.id, userId));
   return getTeamUsers(teamId);
 }
