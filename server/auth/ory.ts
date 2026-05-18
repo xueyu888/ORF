@@ -192,13 +192,13 @@ async function upsertOrfUser(
     throw new Error("Ory identity does not include traits.email");
   }
 
-  const name = identityName(identity, email);
+  const identityDisplayName = identityName(identity, email);
   const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
   const lastLoginAt = options.recordLogin ? new Date().toISOString() : undefined;
 
   if (existing) {
-    if (existing.name !== name || lastLoginAt) {
-      await db.update(users).set({ name, ...(lastLoginAt ? { lastLoginAt } : {}) }).where(sql`${users.id} = ${existing.id}`);
+    if (lastLoginAt) {
+      await db.update(users).set({ lastLoginAt }).where(sql`${users.id} = ${existing.id}`);
     }
 
     const role = await existingTeamRole(existing.id);
@@ -208,7 +208,7 @@ async function upsertOrfUser(
 
     return {
       id: existing.id,
-      name,
+      name: existing.name,
       email: existing.email ?? email,
       role,
       status: existing.status ?? "active",
@@ -220,7 +220,7 @@ async function upsertOrfUser(
   const createdLastLoginAt = lastLoginAt ?? null;
   await db.insert(users).values({
     id,
-    name,
+    name: identityDisplayName,
     email,
     status: options.newUserStatus ?? "pending",
     createdAt: new Date().toISOString().slice(0, 10),
@@ -228,7 +228,7 @@ async function upsertOrfUser(
   });
 
   const role = await createDefaultTeamMembership(id);
-  return { id, name, email, role, status: options.newUserStatus ?? "pending", lastLoginAt: createdLastLoginAt };
+  return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastLoginAt: createdLastLoginAt };
 }
 
 export async function getAuthenticatedOrfUser(cookie: string | undefined): Promise<AuthenticatedOrfUser | null> {
@@ -364,7 +364,7 @@ export async function loginWithPassword(identifier: string, password: string) {
     throw new Error("Ory login did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "active", recordLogin: true });
+  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordLogin: true });
   return { sessionToken: auth.session_token, user };
 }
 

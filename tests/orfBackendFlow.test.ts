@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { and, eq, sql } from "drizzle-orm";
 import { buildServer } from "../server/app";
+import { loginWithPassword } from "../server/auth/ory";
 import { closeDb, db } from "../server/db/client";
 import { objectives, teams, teamMembers, users } from "../server/db/schema";
 import type { ObjectiveAcceptedResult, Result, UncertaintyLevel } from "../src/types/orf";
@@ -1236,6 +1237,44 @@ test("API user management rejects duplicate display names inside a team", async 
   });
 });
 
+test("password login does not auto-approve first-time ORF users", async () => {
+  const fixture = await createFixture("auth-login-new-user-pending");
+  const email = `${fixture.prefix}-external-login@orf.test`;
+  const identity = {
+    id: `${fixture.prefix}-external-identity`,
+    traits: { email, name: "External Login User" },
+  };
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(email, "password");
+    assert.equal(auth.user.status, "pending");
+    assert.equal(auth.user.role, "member");
+  });
+
+  const [created] = await db.select({ status: users.status }).from(users).where(eq(users.email, email)).limit(1);
+  assert.equal(created?.status, "pending");
+});
+
+test("password login preserves existing ORF display names", async () => {
+  const fixture = await createFixture("auth-login-name-preserve");
+  const identity = {
+    id: fixture.challenger.id,
+    traits: {
+      email: fixture.challenger.email,
+      name: `${fixture.prefix} Ory Renamed Challenger`,
+    },
+  };
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(fixture.challenger.email, "password");
+    assert.equal(auth.user.name, fixture.challenger.name);
+    assert.equal(auth.user.status, "active");
+  });
+
+  const [stored] = await db.select({ name: users.name }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+  assert.equal(stored?.name, fixture.challenger.name);
+});
+
 test("API user management prevents renaming members referenced by ORF records", async () => {
   const fixture = await createFixture("api-user-rename-reference");
   const { objective } = await createApprovedObjectiveWithResult(fixture, "rename referenced challenger objective");
@@ -1968,6 +2007,37 @@ async function withApiServerForFixtures(fixtures: Fixture[], run: (app: FastifyI
     await run(app);
   } finally {
     await app.close();
+    globalThis.fetch = originalFetch;
+  }
+}
+
+async function withMockOryLogin(identity: { id: string; traits: Record<string, unknown> }, run: () => Promise<void>) {
+  const originalFetch = globalThis.fetch;
+  const actionUrl = "https://ory.test/self-service/login?flow=test";
+  globalThis.fetch = (async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes("/self-service/login/api")) {
+      return new Response(JSON.stringify({ ui: { action: actionUrl } }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url === actionUrl && init?.method === "POST") {
+      return new Response(
+        JSON.stringify({
+          session_token: `session-${identity.id}`,
+          session: {
+            active: true,
+            identity,
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }
+
+    return originalFetch(input, init);
+  }) satisfies typeof fetch;
+
+  try {
+    await run();
+  } finally {
     globalThis.fetch = originalFetch;
   }
 }

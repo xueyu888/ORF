@@ -162,6 +162,7 @@ flowchart TD
 | ORF-BE-R048 | 征召 API 只能写入当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名必须被拒绝，不能进入 `assignedChallengers`。 | 征召成员边界 |
 | ORF-BE-R049 | 反馈创建只能把 `owner` 指向当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为可处理人。 | 反馈处理人边界 |
 | ORF-BE-R050 | 行动项并发创建必须生成不重复的 `ORF-*` ID；不能只依赖毫秒级时间戳作为主键。 | API 输入归一化 |
+| ORF-BE-R051 | 密码登录不能把首次进入 ORF 的 Ory identity 自动审批为 `active`，也不能用 Ory traits 覆盖已存在 ORF 用户的显示名。 | 用户身份引用保护 |
 
 ## 关键断言
 
