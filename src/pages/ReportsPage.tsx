@@ -21,35 +21,48 @@ const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "全部时间", value: "all" },
 ];
 
-const fallbackMembers = ["Alex Chen", "Mia Zhang", "Ethan Liu", "Nora Patel", "Kai Wang"];
-const baseRows = [
-  { completionRate: 92, points: 169.5, rankChange: 2 },
-  { completionRate: 80, points: 132.0, rankChange: -1 },
-  { completionRate: 75, points: 98.0, rankChange: 0 },
-  { completionRate: 68, points: 84.5, rankChange: 1 },
-  { completionRate: 61, points: 73.0, rankChange: -2 },
-];
-
 export function ReportsPage() {
   const { state } = useOrf();
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
 
   const rows = useMemo<LeaderboardRow[]>(() => {
-    const owners = [
-      ...state.users.map((user) => user.name),
-      ...state.objectives.flatMap((objective) => objective.challengers),
-    ];
-    const memberNames = Array.from(new Set(owners.filter(Boolean)));
-    const names = [...memberNames, ...fallbackMembers].filter((name, index, list) => list.indexOf(name) === index).slice(0, 5);
+    const pointsByMember = new Map<string, number>();
+    for (const entry of state.pointLedger) {
+      pointsByMember.set(entry.memberName, (pointsByMember.get(entry.memberName) ?? 0) + entry.points);
+    }
 
-    return names.map((memberName, index) => ({
-      ...baseRows[index],
-      memberName,
-      rank: index + 1,
-    }));
-  }, [state.objectives, state.results, state.users]);
+    const objectiveCounts = new Map<string, { completed: number; total: number }>();
+    for (const objective of state.objectives) {
+      for (const challenger of objective.challengers) {
+        const current = objectiveCounts.get(challenger) ?? { completed: 0, total: 0 };
+        current.total += 1;
+        if (objective.flowStatus === "settled" && objective.acceptedResult !== "abandoned") {
+          current.completed += 1;
+        }
+        objectiveCounts.set(challenger, current);
+      }
+    }
 
-  const maxPoints = Math.max(...rows.map((row) => row.points));
+    const memberNames = Array.from(new Set([...state.users.map((user) => user.name), ...pointsByMember.keys(), ...objectiveCounts.keys()])).filter(Boolean);
+    return memberNames
+      .map((memberName) => {
+        const counts = objectiveCounts.get(memberName) ?? { completed: 0, total: 0 };
+        return {
+          completionRate: counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0,
+          memberName,
+          points: pointsByMember.get(memberName) ?? 0,
+          rankChange: 0,
+        };
+      })
+      .sort((left, right) => right.points - left.points || right.completionRate - left.completionRate || left.memberName.localeCompare(right.memberName))
+      .slice(0, 10)
+      .map((row, index) => ({
+        ...row,
+        rank: index + 1,
+      }));
+  }, [state.objectives, state.pointLedger, state.users]);
+
+  const maxPoints = Math.max(1, ...rows.map((row) => row.points));
 
   return (
     <section className="reports-scoreboard-page" aria-labelledby="reports-scoreboard-title">

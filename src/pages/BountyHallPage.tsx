@@ -1,16 +1,13 @@
 import {
+  CalendarCheck,
   Check,
-  Clock,
-  ExternalLink,
+  ClipboardList,
   Loader2,
   Send,
   ShieldAlert,
-  Target,
-  Trophy,
-  X,
   type LucideIcon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
 import {
@@ -19,32 +16,17 @@ import {
   BountyCardSurface,
   BountyDialog,
   BountyEmptyState,
-  BountyIconButton,
-  BountyInfoLine,
-  BountyLinkButton,
-  BountyMetricBox,
-  BountyPanel,
   BountySelect,
   BountyTextInput,
 } from "../features/bounty-hall/BountyHallSkin";
 import { useOrf } from "../state/OrfProvider";
-import type { BountySource, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
+import { getBountyHallData, type BountyHallData, type BountyHallItem } from "../state/apiClient";
+import type { Objective, UncertaintyLevel } from "../types/orf";
 
 type DifficultyFilter = "all" | UncertaintyLevel;
 type SortKey = "deadline" | "points" | "difficulty" | "created";
 
-type BountyItem = {
-  uncertaintyPoints: number;
-  deadline: string;
-  definer: string;
-  difficultyRank: number;
-  hasCurrentApplication: boolean;
-  isRecruitment: boolean;
-  objective: Objective;
-  result: Result;
-  results: Result[];
-  source: BountySource;
-};
+type BountyItem = BountyHallItem;
 
 type ChallengeAction = "apply" | "accept";
 type ChallengeConfirmTarget = {
@@ -52,104 +34,81 @@ type ChallengeConfirmTarget = {
   item: BountyItem;
 };
 
-const difficultyRanks: Record<UncertaintyLevel, number> = {
-  入门: 1,
-  进阶: 2,
-  破局: 3,
-  渡劫: 4,
-  飞升: 5,
-};
-
 const difficultyOptions: DifficultyFilter[] = ["all", "入门", "进阶", "破局", "渡劫", "飞升"];
+const difficultyLabelsByRank: Record<number, UncertaintyLevel> = {
+  1: "入门",
+  2: "进阶",
+  3: "破局",
+  4: "渡劫",
+  5: "飞升",
+};
 
 export function BountyHallPage() {
   const {
     acceptBountyChallenge,
     applyForBounty,
-    currentUser,
-    openModal,
-    state,
   } = useOrf();
   const navigate = useNavigate();
-  const currentMember = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? "User";
+  const [bountyData, setBountyData] = useState<BountyHallData | null>(null);
+  const [loadingBounties, setLoadingBounties] = useState(true);
   const [query, setQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>("all");
-  const [objectiveFilter, setObjectiveFilter] = useState("all");
   const [sortKey, setSortKey] = useState<SortKey>("deadline");
-  const [preview, setPreview] = useState<BountyItem | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
 
-  const allBounties = useMemo(
-    () =>
-      state.objectives.flatMap((objective) => {
-        const results = state.results.filter((result) => result.objectiveId === objective.id);
-        const result = results[0];
-        if (!result) return [];
-        if (objective.challengers.includes(currentMember) || objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null) return [];
+  const loadBountyData = useCallback(async () => {
+    setLoadingBounties(true);
+    try {
+      setBountyData(await getBountyHallData());
+    } catch {
+      setBountyData(null);
+    } finally {
+      setLoadingBounties(false);
+    }
+  }, []);
 
-        const challengeApplications = objective.challengeApplications ?? [];
-        const pendingApplications = challengeApplications.filter((application) => application.status === "pending");
-        const source = result.source ?? "managerDefined";
-        const definer = result.definer ?? "";
-        return [
-          {
-            uncertaintyPoints: results.reduce((sum, item) => sum + item.uncertaintyScore, 0),
-            deadline: objective.finalDueAt,
-            definer,
-            difficultyRank: Math.max(...results.map(difficultyRank)),
-            hasCurrentApplication: pendingApplications.some((application) => application.applicant === currentMember),
-            isRecruitment: objective.assignedChallengers.includes(currentMember),
-            objective,
-            result,
-            results,
-            source,
-          },
-        ];
-      }),
-    [currentMember, state.objectives, state.results],
-  );
+  useEffect(() => {
+    void loadBountyData();
+  }, [loadBountyData]);
 
   const recruitmentItems = useMemo(
-    () => allBounties.filter((item) => item.isRecruitment).sort(compareByUrgency),
-    [allBounties],
+    () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),
+    [bountyData],
   );
 
-  const availableBounties = useMemo(
-    () =>
-      allBounties.filter(
-        (item) => !item.isRecruitment && !item.hasCurrentApplication,
-      ),
-    [allBounties],
-  );
+  const availableBounties = bountyData?.availableItems ?? [];
+  const objectiveOptions = bountyData?.objectiveOptions ?? [];
+  const hallItems = useMemo(() => {
+    const seen = new Set<string>();
+    return [...recruitmentItems, ...availableBounties].filter((item) => {
+      if (seen.has(item.objective.id)) return false;
+      seen.add(item.objective.id);
+      return true;
+    });
+  }, [availableBounties, recruitmentItems]);
+  const pageObjectives = useMemo(() => {
+    const objectives = hallItems.map((item) => item.objective);
+    return objectives.length > 0 ? objectives : objectiveOptions;
+  }, [hallItems, objectiveOptions]);
 
-  const objectiveOptions = useMemo(() => {
-    const ids = new Set(availableBounties.map((item) => item.objective.id));
-    return state.objectives.filter((objective) => ids.has(objective.id));
-  }, [availableBounties, state.objectives]);
-
-  const filteredBounties = useMemo(() => {
+  const filteredHallItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    const filtered = availableBounties.filter((item) => {
-      const queryMatch =
-        !normalizedQuery ||
-        `${item.objective.title} ${item.results.map((result) => result.title).join(" ")}`.toLowerCase().includes(normalizedQuery);
+    const filtered = hallItems.filter((item) => {
+      const queryMatch = !normalizedQuery || searchableBountyText(item).includes(normalizedQuery);
       const difficultyMatch = difficultyFilter === "all" || item.results.some((result) => result.uncertaintyLevel === difficultyFilter);
-      const objectiveMatch = objectiveFilter === "all" || item.objective.id === objectiveFilter;
-      return queryMatch && difficultyMatch && objectiveMatch;
+      return queryMatch && difficultyMatch;
     });
 
-    return [...filtered].sort((left, right) => compareBounties(left, right, sortKey));
-  }, [availableBounties, difficultyFilter, objectiveFilter, query, sortKey]);
+    return [...filtered].sort((left, right) => compareHallItems(left, right, sortKey));
+  }, [difficultyFilter, hallItems, query, sortKey]);
 
-  const contribution = useMemo(() => contributionSummary(state, currentMember), [currentMember, state]);
-  const hasFilters = query.trim() || difficultyFilter !== "all" || objectiveFilter !== "all";
+  const hasFilters = query.trim() || difficultyFilter !== "all";
 
   const clearFilters = () => {
     setQuery("");
     setDifficultyFilter("all");
-    setObjectiveFilter("all");
   };
 
   const applyChallenge = async (item: BountyItem) => {
@@ -157,8 +116,8 @@ export function BountyHallPage() {
     const ok = await applyForBounty(item.objective.id);
     setProcessingBountyId(null);
     if (ok) {
+      await loadBountyData();
       setConfirmTarget(null);
-      setPreview((current) => (current?.objective.id === item.objective.id ? null : current));
     }
   };
 
@@ -167,74 +126,35 @@ export function BountyHallPage() {
     const ok = await acceptBountyChallenge(item.objective.id);
     setProcessingBountyId(null);
     if (ok) {
+      await loadBountyData();
       setConfirmTarget(null);
-      setPreview((current) => (current?.objective.id === item.objective.id ? null : current));
       navigate("/tasks");
     }
   };
 
   return (
     <div className="bounty-hall-page grid gap-5">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="bounty-page-eyebrow">当前周期 · {currentCycle(state.objectives)}</div>
-          <h1 className="bounty-page-title">悬赏大厅</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <BountyButton variant="secondary" onClick={() => navigate("/tasks")}>
-            <Trophy className="h-4 w-4" />
-            我的挑战
-          </BountyButton>
-          <BountyButton variant="secondary" onClick={() => openModal({ type: "newResult", source: "memberProposed" })}>
-            <Send className="h-4 w-4" />
-            提出候选悬赏指标
-          </BountyButton>
-        </div>
-      </header>
+      <BountyOverview
+        availableCount={availableBounties.length}
+        cycle={currentCycle(pageObjectives)}
+        recruitmentCount={recruitmentItems.length}
+      />
 
-      <ContributionSummary points={contribution.points} />
-
-      {recruitmentItems.length > 0 && (
-        <section className="grid gap-3" aria-labelledby="recruitment-title">
-          <div className="bounty-section-heading">
-            <ShieldAlert className="h-5 w-5" />
-            <h2 id="recruitment-title">征召令</h2>
-          </div>
-          <div className="grid gap-3">
-            {recruitmentItems.map((item) => (
-              <RecruitmentCard
-                key={item.objective.id}
-                item={item}
-                now={now}
-                processing={processingBountyId === item.objective.id}
-                onAccept={() => setConfirmTarget({ action: "accept", item })}
-                onPreview={() => setPreview(item)}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="grid gap-4" aria-label="可申请挑战悬赏指标">
-        <BountyPanel>
+      <section className="grid gap-4" aria-label="悬赏目标列表">
+        <div className="bounty-toolbar-panel">
           <Toolbar
             difficultyFilter={difficultyFilter}
-            hasFilters={Boolean(hasFilters)}
-            objectiveFilter={objectiveFilter}
-            objectiveOptions={objectiveOptions}
             query={query}
             sortKey={sortKey}
-            onClear={clearFilters}
             onDifficultyChange={setDifficultyFilter}
-            onObjectiveChange={setObjectiveFilter}
             onQueryChange={setQuery}
             onSortChange={setSortKey}
           />
-        </BountyPanel>
+        </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="bounty-list-summary">
           <div className="bounty-list-count">
-            当前可申请 <span>{filteredBounties.length}</span> 条
+            悬赏目标 <span>{filteredHallItems.length}</span> 条
           </div>
           {hasFilters && (
             <button className="bounty-clear-button" onClick={clearFilters}>
@@ -243,37 +163,20 @@ export function BountyHallPage() {
           )}
         </div>
 
-        {filteredBounties.length > 0 ? (
-          <div className="bounty-card-grid">
-            {filteredBounties.map((item) => (
-              <BountyCard
-                key={item.objective.id}
-                item={item}
-                now={now}
-                processing={processingBountyId === item.objective.id}
-                onApply={() => setConfirmTarget({ action: "apply", item })}
-                onPreview={() => setPreview(item)}
-              />
-            ))}
-          </div>
+        {filteredHallItems.length > 0 ? (
+          <BountyObjectiveList
+            items={filteredHallItems}
+            now={now}
+            processingBountyId={processingBountyId}
+            onAction={(item) => setConfirmTarget({ action: item.isRecruitment ? "accept" : "apply", item })}
+          />
         ) : (
           <BountyEmptyState
-            title={hasFilters ? "没有符合条件的可申请悬赏指标" : "当前没有可申请挑战的悬赏指标"}
-            description={hasFilters ? "调整搜索或筛选条件后再查看。" : "新的未分配悬赏发布后会出现在这里；已提交的申请等待指挥官确认。"}
+            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的悬赏目标" : "当前没有可申请或待接受的悬赏目标"}
+            description={loadingBounties ? "正在读取悬赏大厅专用接口。" : hasFilters ? "调整搜索或筛选条件后再查看。" : "新的未分配悬赏发布后会出现在这里；征召目标会自动置顶。"}
           />
         )}
       </section>
-
-      {preview && (
-        <LightBountyPreview
-          item={preview}
-          now={now}
-          processing={processingBountyId === preview.objective.id}
-          action={preview.isRecruitment ? "accept" : "apply"}
-          onAction={() => setConfirmTarget({ action: preview.isRecruitment ? "accept" : "apply", item: preview })}
-          onClose={() => setPreview(null)}
-        />
-      )}
 
       {confirmTarget && (
         <ChallengeConfirmModal
@@ -287,29 +190,48 @@ export function BountyHallPage() {
   );
 }
 
-function ContributionSummary({ points }: { points: number }) {
+function BountyOverview({
+  availableCount,
+  cycle,
+  recruitmentCount,
+}: {
+  availableCount: number;
+  cycle: string;
+  recruitmentCount: number;
+}) {
   return (
-    <BountyPanel title="我的贡献" count="积分">
-      <div className="bounty-contribution">
-        <SummaryMetric icon={Trophy} label="我的积分" value={formatPoints(points)} />
-        <BountyLinkButton to="/reports">
-          查看积分明细
-          <ExternalLink className="h-4 w-4" />
-        </BountyLinkButton>
+    <section className="bounty-overview-band" aria-label="悬赏大厅概览">
+      <div className="bounty-cycle-pill">
+        <CalendarCheck className="h-5 w-5" />
+        <span>当前周期 · {cycle}</span>
       </div>
-    </BountyPanel>
+      <div className="bounty-stat-grid">
+        <BountyStatCard icon={ClipboardList} label="可申请" tone="blue" value={availableCount} />
+        <BountyStatCard icon={ShieldAlert} label="征召" tone="gold" value={recruitmentCount} />
+      </div>
+    </section>
   );
 }
 
-function SummaryMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function BountyStatCard({
+  icon: Icon,
+  label,
+  tone,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  tone: "blue" | "gold" | "cyan" | "orange";
+  value: number | string;
+}) {
   return (
-    <div className="flex min-w-0 items-center gap-3">
-      <div className="bounty-emblem shrink-0">
-        <Icon className="h-5 w-5" />
+    <div className={`bounty-stat-card bounty-stat-card-${tone}`}>
+      <div className="bounty-stat-icon">
+        <Icon aria-hidden="true" />
       </div>
-      <div className="min-w-0">
-        <div className="bounty-contribution-value">{value}</div>
-        <div className="bounty-contribution-label">{label}</div>
+      <div className="bounty-stat-copy">
+        <span>{label}</span>
+        <strong>{value}</strong>
       </div>
     </div>
   );
@@ -317,36 +239,26 @@ function SummaryMetric({ icon: Icon, label, value }: { icon: LucideIcon; label: 
 
 function Toolbar({
   difficultyFilter,
-  hasFilters,
-  objectiveFilter,
-  objectiveOptions,
   query,
   sortKey,
-  onClear,
   onDifficultyChange,
-  onObjectiveChange,
   onQueryChange,
   onSortChange,
 }: {
   difficultyFilter: DifficultyFilter;
-  hasFilters: boolean;
-  objectiveFilter: string;
-  objectiveOptions: Objective[];
   query: string;
   sortKey: SortKey;
-  onClear: () => void;
   onDifficultyChange: (value: DifficultyFilter) => void;
-  onObjectiveChange: (value: string) => void;
   onQueryChange: (value: string) => void;
   onSortChange: (value: SortKey) => void;
 }) {
   return (
     <div className="bounty-toolbar">
       <BountyTextInput
-        ariaLabel="搜索悬赏指标"
+        ariaLabel="搜索悬赏目标"
         value={query}
         onValueChange={onQueryChange}
-        placeholder="搜索悬赏指标标题或目标..."
+        placeholder="搜索悬赏目标或指标..."
       />
 
       <div className="bounty-toolbar-controls">
@@ -357,164 +269,121 @@ function Toolbar({
             </option>
           ))}
         </BountySelect>
-        <BountySelect label="目标" value={objectiveFilter} onChange={onObjectiveChange}>
-          <option value="all">全部目标</option>
-          {objectiveOptions.map((objective) => (
-            <option key={objective.id} value={objective.id}>
-              {objective.title}
-            </option>
-          ))}
-        </BountySelect>
         <BountySelect label="排序" value={sortKey} onChange={(value) => onSortChange(value as SortKey)}>
           <option value="deadline">截止时间</option>
           <option value="points">不确定性分</option>
           <option value="difficulty">难度</option>
           <option value="created">发布时间</option>
         </BountySelect>
-        {hasFilters && <BountyIconButton icon={X} label="清空筛选" onClick={onClear} />}
       </div>
     </div>
   );
 }
 
-function RecruitmentCard({
-  item,
+function BountyObjectiveList({
+  items,
   now,
-  processing,
-  onAccept,
-  onPreview,
+  processingBountyId,
+  onAction,
 }: {
-  item: BountyItem;
+  items: BountyItem[];
   now: Date;
-  processing: boolean;
-  onAccept: () => void;
-  onPreview: () => void;
+  processingBountyId: string | null;
+  onAction: (item: BountyItem) => void;
 }) {
   return (
-    <BountyCardSurface priority>
-      <button className="bounty-card-click" onClick={onPreview}>
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip>{difficultyLabel(item.result)}</Chip>
-            <Chip>{item.uncertaintyPoints} 分</Chip>
-          </div>
-          <h3 className="mt-3 line-clamp-2">{item.objective.title}</h3>
-          <p className="mt-2 truncate text-sm">{resultSummary(item)}</p>
-          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            <small>{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</small>
-          </div>
-        </div>
-      </button>
-      <div className="bounty-card-footer">
-        <BountyButton variant="secondary" onClick={onPreview}>
-          查看口径
-        </BountyButton>
-        <BountyButton onClick={onAccept} disabled={processing}>
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-          接受挑战
-        </BountyButton>
+    <div className="bounty-list-table" role="table" aria-label="悬赏目标">
+      <div className="bounty-list-head" role="row">
+        <span>奖励</span>
+        <span>悬赏目标</span>
+        <span>指标</span>
+        <span>剩余时间</span>
+        <span>操作</span>
       </div>
-    </BountyCardSurface>
+      {items.map((item) => (
+        <BountyListRow
+          key={item.objective.id}
+          item={item}
+          now={now}
+          processing={processingBountyId === item.objective.id}
+          onAction={() => onAction(item)}
+        />
+      ))}
+    </div>
   );
 }
 
-function BountyCard({
-  item,
-  now,
-  processing,
-  onApply,
-  onPreview,
-}: {
-  item: BountyItem;
-  now: Date;
-  processing: boolean;
-  onApply: () => void;
-  onPreview: () => void;
-}) {
-  return (
-    <BountyCardSurface>
-      <button className="bounty-card-click" onClick={onPreview}>
-        <div>
-          <div className="flex min-w-0 flex-wrap gap-1.5">
-            <Chip>{difficultyLabel(item.result)}</Chip>
-            <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
-          </div>
-
-          <h3 className="mt-3 line-clamp-2">{item.objective.title}</h3>
-          <p className="mt-2 truncate text-sm">{resultSummary(item)}</p>
-          {item.source === "memberProposed" && item.definer && <small className="mt-2 block truncate font-semibold">提出人：{item.definer}</small>}
-
-          <div className="mt-4 inline-flex min-w-0 items-center gap-1.5 text-sm">
-            <Clock className="h-4 w-4 shrink-0" />
-            <span className="truncate">{item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}</span>
-          </div>
-        </div>
-      </button>
-
-      <div className="bounty-card-footer">
-        <BountyButton variant="secondary" onClick={onPreview}>
-          查看口径
-        </BountyButton>
-        <BountyButton onClick={onApply} disabled={processing}>
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          申请挑战
-        </BountyButton>
-      </div>
-    </BountyCardSurface>
-  );
-}
-
-function LightBountyPreview({
-  action,
+function BountyListRow({
   item,
   now,
   processing,
   onAction,
-  onClose,
 }: {
-  action: ChallengeAction;
   item: BountyItem;
   now: Date;
   processing: boolean;
   onAction: () => void;
-  onClose: () => void;
 }) {
-  useEscape(onClose);
-  const actionLabel = action === "accept" ? "接受挑战" : "申请挑战";
+  const actionLabel = item.isRecruitment ? "接受挑战" : item.hasCurrentApplication ? "已申请" : "申请挑战";
+  const actionDisabled = processing || (!item.isRecruitment && item.hasCurrentApplication);
 
   return (
-    <BountyDialog
-      onClose={onClose}
-      subtitle={resultSummary(item)}
-      title={item.objective.title}
-      footer={
-        <BountyButton onClick={onAction} disabled={processing}>
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          {actionLabel}
-        </BountyButton>
-      }
+    <article
+      className={`bounty-list-row${item.isRecruitment ? " bounty-list-row-priority" : ""}`}
+      tabIndex={0}
+      aria-label={`${item.objective.title}，移入或聚焦后显示完整信息`}
     >
-      <div className="flex flex-wrap gap-1.5">
-        <Chip>{difficultyLabel(item.result)}</Chip>
+      <div className="bounty-row-reward" data-label="奖励">
+        {item.isRecruitment && (
+          <Chip tone="warning">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            征召令
+          </Chip>
+        )}
+        <Chip tone={item.isRecruitment ? "accent" : "neutral"}>{highestDifficultyLabel(item)}</Chip>
         <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
       </div>
-
-      <section className="grid gap-3">
-        <SectionTitle icon={Target}>悬赏口径</SectionTitle>
-        <InfoRow label="衡量要求" value={item.result.metricRequirement ?? item.result.description} />
-        <InfoRow label="完成标准" value={item.result.completionStandard ?? "未填写"} />
-        {item.definer && <InfoRow label="提出人" value={item.definer} />}
-      </section>
-
-      <section className="grid gap-3">
-        <SectionTitle icon={Trophy}>挑战判断</SectionTitle>
-        <div className="bounty-metric-grid">
-          <BountyMetricBox label="难度" value={difficultyLabel(item.result)} />
-          <BountyMetricBox label="不确定性分" value={`${item.uncertaintyPoints}`} />
-          <BountyMetricBox label="剩余时间" value={item.deadline ? remainingTime(item.deadline, now) : "未设置"} />
+      <div className="bounty-row-main" data-label="悬赏目标">
+        <div className="bounty-row-title">
+          <h3>{item.objective.title}</h3>
+          <div className="bounty-row-revealed">
+            <p>{item.objective.description}</p>
+            {item.source === "memberProposed" && item.definer && <span className="bounty-row-definer">提出人：{item.definer}</span>}
+          </div>
         </div>
-      </section>
-    </BountyDialog>
+      </div>
+      <div className="bounty-row-results" data-label="指标">
+        <ResultPreview item={item} />
+      </div>
+      <div className="bounty-row-time" data-label="剩余时间">
+        {item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}
+      </div>
+      <div className="bounty-row-actions" data-label="操作" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+        <BountyButton variant={!item.isRecruitment && item.hasCurrentApplication ? "secondary" : "primary"} onClick={onAction} disabled={actionDisabled}>
+          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : item.isRecruitment ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+          {actionLabel}
+        </BountyButton>
+      </div>
+    </article>
+  );
+}
+
+function ResultPreview({ item }: { item: BountyItem }) {
+  return (
+    <>
+      <span className="bounty-result-summary">{resultCountLabel(item)}</span>
+      <div className="bounty-result-preview" aria-label="指标预览">
+        {item.results.length > 0 ? (
+          item.results.map((result) => (
+            <div key={result.id} className="bounty-result-preview-item">
+              {result.metricRequirement ?? result.title}
+            </div>
+          ))
+        ) : (
+          <div className="bounty-result-preview-item">重估阶段校准</div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -534,8 +403,8 @@ function ChallengeConfirmModal({
   const title = item.action === "accept" ? "接受后会进入你的挑战页" : "提交后等待指挥官确认";
   const description =
     item.action === "accept"
-      ? "接受挑战后会成为当前挑战者；执行行动项、提交战利品和验收结算都在挑战页处理。"
-      : "申请挑战只表达负责意愿，不会直接成为挑战者；指挥官确认后，你再接受挑战并进入确认期。";
+      ? "接受挑战后会成为当前挑战者；目标进入重估，重估完成后由指挥官冻结。"
+      : "申请挑战只表达负责意愿，不会直接成为挑战者；指挥官确认后，目标进入重估。";
 
   return (
     <BountyDialog
@@ -558,9 +427,9 @@ function ChallengeConfirmModal({
       <BountyCardSurface>
         <div className="p-4">
           <h3 className="line-clamp-2">{item.item.objective.title}</h3>
-          <p className="mt-2 truncate text-sm">{resultSummary(item.item)}</p>
+          <p className="mt-2 truncate text-sm">{resultCountLabel(item.item)}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
-            <Chip>{difficultyLabel(item.item.result)}</Chip>
+            <Chip>{highestDifficultyLabel(item.item)}</Chip>
             <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
           </div>
         </div>
@@ -570,73 +439,59 @@ function ChallengeConfirmModal({
   );
 }
 
-function SectionTitle({ children, icon: Icon }: { children: ReactNode; icon: LucideIcon }) {
-  return (
-    <div className="flex items-center gap-2 text-sm font-bold text-[#526376]">
-      <Icon className="h-4 w-4 text-[#2e8fa6]" />
-      {children}
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <BountyInfoLine>
-      <span>{label}</span>
-      <div>{value}</div>
-    </BountyInfoLine>
-  );
-}
-
 function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" | "gold" | "warning" }) {
   return <BountyBadge tone={tone}>{children}</BountyBadge>;
+}
+
+function compareHallItems(left: BountyItem, right: BountyItem, sortKey: SortKey) {
+  if (left.isRecruitment !== right.isRecruitment) return left.isRecruitment ? -1 : 1;
+  return compareBounties(left, right, sortKey);
+}
+
+function searchableBountyText(item: BountyItem) {
+  return [
+    item.objective.title,
+    item.objective.description,
+    item.objective.successDefinition,
+    item.definer,
+    ...item.results.flatMap((result) => [result.title, result.description, result.metricRequirement]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function compareBounties(left: BountyItem, right: BountyItem, sortKey: SortKey) {
   if (sortKey === "points") return right.uncertaintyPoints - left.uncertaintyPoints || compareByUrgency(left, right);
   if (sortKey === "difficulty") return right.difficultyRank - left.difficultyRank || compareByUrgency(left, right);
-  if (sortKey === "created") return right.objective.updatedAt.localeCompare(left.objective.updatedAt) || left.result.title.localeCompare(right.result.title);
+  if (sortKey === "created") return right.objective.updatedAt.localeCompare(left.objective.updatedAt) || bountySortTitle(left).localeCompare(bountySortTitle(right));
   return compareByUrgency(left, right);
 }
 
 function compareByUrgency(left: BountyItem, right: BountyItem) {
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || left.result.title.localeCompare(right.result.title);
+  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
-function contributionSummary(state: OrfState, currentMember: string) {
-  let points = 0;
-
-  for (const objective of state.objectives) {
-    if (!objective.challengers.includes(currentMember)) continue;
-    if (objective.objectiveSettlementPoints != null) {
-      points += objective.objectiveSettlementPoints;
-    }
-  }
-
-  return { points };
+function difficultyLabel(result: BountyItem["result"]) {
+  return result?.uncertaintyLevel ?? "待校准";
 }
 
-function difficultyRank(result: Result) {
-  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : difficultyRanks["进阶"];
+function highestDifficultyLabel(item: BountyItem) {
+  return difficultyLabelsByRank[item.difficultyRank] ?? difficultyLabel(item.result);
 }
 
-function difficultyLabel(result: Result) {
-  return result.uncertaintyLevel ?? "进阶";
+function resultCountLabel(item: BountyItem) {
+  return item.results.length > 0 ? `${item.results.length} 个悬赏指标` : "待定义指标";
 }
 
-function resultSummary(item: BountyItem) {
-  if (item.results.length <= 1) return item.result.title;
-  return `${item.results.length} 个悬赏指标 · ${item.result.title}`;
+function bountySortTitle(item: BountyItem) {
+  return item.result?.title ?? item.objective.title;
 }
 
 function currentCycle(objectives: Objective[]) {
   return objectives[0]?.cycle ?? "全部周期";
-}
-
-function formatPoints(value: number) {
-  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
 }
 
 function useMinuteNow() {

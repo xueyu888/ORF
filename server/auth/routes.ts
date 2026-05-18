@@ -48,6 +48,10 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
   if (!user) {
     return reply.code(401).send({ error: "Unauthorized" });
   }
+
+  if (user.status !== "active") {
+    return reply.code(403).send({ error: "User is not approved", status: user.status });
+  }
 }
 
 export function registerAuthRoutes(app: FastifyInstance) {

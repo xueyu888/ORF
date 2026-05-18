@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission, type PermissionKey } from "../../config/permissions";
+import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
-import type { Result } from "../../types/orf";
+import type { Objective, Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, canUsePermission, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
@@ -17,6 +18,7 @@ import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, Challe
 export function ChallengePlanPage() {
   const {
     addComment,
+    approveChallengeApplication,
     createTaskChecklistItem,
     currentUser,
     deleteCommentMessage,
@@ -29,6 +31,9 @@ export function ChallengePlanPage() {
     moveTaskChecklistItem,
     notify,
     openModal,
+    publishObjective,
+    freezeObjective,
+    rejectChallengeApplication,
     setTaskCompletion,
     state,
     updateCommentMessage,
@@ -50,6 +55,7 @@ export function ChallengePlanPage() {
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
   const now = useMinuteNow();
 
   useEffect(() => {
@@ -83,37 +89,54 @@ export function ChallengePlanPage() {
     [currentMember, state.objectives],
   );
   const showAll = canShowAllChallenges && scope === "all";
+  const loadChallengeData = useCallback(async () => {
+    setChallengeData(await getMyChallengesData(showAll ? "all" : "mine"));
+  }, [showAll]);
+
+  useEffect(() => {
+    void loadChallengeData().catch(() => setChallengeData(null));
+  }, [loadChallengeData, state.comments, state.objectives, state.results, state.tasks]);
+
+  const sourceData = challengeData ?? state;
+  const challengeState = useMemo(() => ({ ...state, ...sourceData }), [sourceData, state]);
   const groups = useMemo(
     () =>
       buildChallengeTree(
         {
-          evidence: state.evidence,
-          feedback: state.feedback,
-          objectives: state.objectives,
-          results: state.results,
-          tasks: state.tasks,
+          evidence: challengeState.evidence,
+          feedback: challengeState.feedback,
+          objectives: challengeState.objectives,
+          results: challengeState.results,
+          tasks: challengeState.tasks,
         },
-        showAll ? undefined : objectiveIdsInMyChallenges,
+        challengeData || showAll ? undefined : objectiveIdsInMyChallenges,
       ),
-    [objectiveIdsInMyChallenges, showAll, state.evidence, state.feedback, state.objectives, state.results, state.tasks],
+    [challengeData, challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, objectiveIdsInMyChallenges, showAll],
   );
-  const commentCounts = useMemo(() => commentCountsByTarget(state.comments), [state.comments]);
+  const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
 
   const requirePermissionKey = (key: PermissionKey) => {
-    if (canUsePermission(state, role, key)) return true;
+    if (canUsePermission(challengeState, role, key)) return true;
     notify(permissionDeniedMessage(key));
     return false;
   };
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
-    if (canAccessTarget(state, role, target, action)) return true;
+    if (target.type === "bounty" && action === "edit") {
+      const objective = challengeState.objectives.find((item) => item.id === target.objectiveId);
+      if (canAdjustObjectiveDuringReestimate(objective, currentMember)) return true;
+    }
+
+    if (canAccessTarget(challengeState, role, target, action)) return true;
     const key = permissionKeyForChallengeAction(resourceForTarget(target), action);
     if (key) notify(permissionDeniedMessage(key));
     return false;
   };
 
   const addBounty = (objectiveId: string) => {
-    if (requirePermissionKey("result.create")) {
+    const objective = challengeState.objectives.find((item) => item.id === objectiveId);
+    const canAdjustDuringReestimate = canAdjustObjectiveDuringReestimate(objective, currentMember);
+    if (canAdjustDuringReestimate || requirePermissionKey("result.create")) {
       openModal({ type: "newResult", objectiveId });
     }
   };
@@ -123,7 +146,7 @@ export function ChallengePlanPage() {
   };
 
   const addSubAction = (actionId: string, afterItemId?: string) => {
-    const action = state.tasks.find((item) => item.id === actionId);
+    const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
     createTaskChecklistItem(actionId, afterItemId);
     setCollapsedActionIds((items) => withoutItem(items, actionId));
@@ -151,7 +174,7 @@ export function ChallengePlanPage() {
 
   const deleteTarget = (target: ChallengeTarget) => {
     if (!requireTargetPermission(target, "delete")) return;
-    if (!window.confirm(deleteConfirmMessage(target, state))) return;
+    if (!window.confirm(deleteConfirmMessage(target, challengeState))) return;
 
     if (target.type === "objective") deleteObjective(target.id);
     if (target.type === "bounty") deleteResult(target.id);
@@ -177,13 +200,13 @@ export function ChallengePlanPage() {
   };
 
   const setActionDone = (actionId: string, done: boolean) => {
-    const action = state.tasks.find((item) => item.id === actionId);
+    const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
     setTaskCompletion(actionId, done);
   };
 
   const setSubActionDone = (actionId: string, itemId: string, done: boolean) => {
-    const action = state.tasks.find((item) => item.id === actionId);
+    const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
     updateTaskChecklistItem(actionId, itemId, done);
   };
@@ -203,7 +226,7 @@ export function ChallengePlanPage() {
     onDropTargetChange: setDropTarget,
     onDrop: (target: DropTarget) => {
       if (!dragItem) return;
-      if (!canAccessDragItem(state, role, dragItem)) {
+      if (!canAccessDragItem(challengeState, role, dragItem)) {
         const key = permissionKeyForChallengeAction(resourceForDragItem(dragItem), "edit");
         if (key) notify(permissionDeniedMessage(key));
         setDragItem(null);
@@ -265,14 +288,19 @@ export function ChallengePlanPage() {
           onAddAction: addAction,
           onAddBounty: addBounty,
           onAddSubAction: addSubAction,
+          onApproveApplication: approveChallengeApplication,
           onCancelEdit: () => setEditingTarget(null),
           onEditTarget: beginEdit,
+          onFreezeObjective: freezeObjective,
           onOpenActionChange: setOpenActionId,
+          onPublishObjective: publishObjective,
+          onRejectApplication: rejectChallengeApplication,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
           onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
           openActionId,
+          canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
         }}
         now={now}
         scope={scope}
@@ -283,7 +311,7 @@ export function ChallengePlanPage() {
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
           targetTitle={commentTarget.title}
-          threads={state.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}
+          threads={challengeState.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}
           onAddComment={(body, replyInput?: CommentReplyInput) =>
             addComment({
               targetType: commentTarget.type,
@@ -314,6 +342,13 @@ function useMinuteNow() {
   }, []);
 
   return now;
+}
+
+function canAdjustObjectiveDuringReestimate(objective: Objective | undefined, member: string) {
+  if (!objective || objective.flowStatus !== "reestimating" || !objective.challengers.includes(member)) return false;
+  if (!objective.confirmationDueAt) return true;
+  const dueTime = new Date(objective.confirmationDueAt).getTime();
+  return Number.isFinite(dueTime) && Date.now() <= dueTime;
 }
 
 function toggleSetItem<T>(items: Set<T>, item: T) {

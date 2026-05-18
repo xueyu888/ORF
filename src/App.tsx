@@ -67,17 +67,25 @@ export function App() {
 }
 
 function AuthRoute() {
-  const { authReady, isAuthenticated } = useOrf();
-  return authReady && isAuthenticated ? <Navigate to="/bounties" replace /> : <AuthPage />;
+  const { authReady, isAuthenticated, isApproved } = useOrf();
+  return authReady && isAuthenticated && isApproved ? <Navigate to="/bounties" replace /> : <AuthPage />;
 }
 
 function RequireAuth() {
-  const { authReady, isAuthenticated } = useOrf();
+  const { authReady, currentUser, isAuthenticated, isApproved, logout } = useOrf();
   if (!authReady) {
     return <AuthLoadingScreen />;
   }
 
-  return isAuthenticated ? <AppShell /> : <Navigate to="/auth" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (!isApproved) {
+    return <ApprovalPendingScreen status={currentUser?.status ?? "pending"} onLogout={logout} />;
+  }
+
+  return <AppShell />;
 }
 
 function AuthLoadingScreen() {
@@ -89,6 +97,28 @@ function AuthLoadingScreen() {
           <div className="orf-auth-loading-title">正在连接认证服务</div>
           <div className="orf-auth-loading-copy">如果这里停留过久，请确认后端服务已启动。</div>
         </div>
+      </div>
+    </main>
+  );
+}
+
+function ApprovalPendingScreen({ onLogout, status }: { onLogout: () => void; status: string }) {
+  const copy = status === "rejected"
+    ? "你的注册申请未通过。请联系管理员确认后再重新申请。"
+    : status === "disabled"
+      ? "你的账号已停用。请联系管理员恢复访问。"
+      : "你的注册申请已提交，等待管理员审核通过后即可进入 ORF。";
+
+  return (
+    <main className="orf-auth-loading-page" role="status" aria-live="polite">
+      <div className="orf-auth-loading-panel">
+        <div>
+          <div className="orf-auth-loading-title">等待注册审核</div>
+          <div className="orf-auth-loading-copy">{copy}</div>
+        </div>
+        <button className="orf-control orf-secondary-action mt-4 inline-flex justify-center border px-4 py-2 text-sm font-medium" type="button" onClick={onLogout}>
+          退出登录
+        </button>
       </div>
     </main>
   );

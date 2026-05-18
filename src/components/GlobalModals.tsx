@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackSource, Impact, Priority } from "../types/orf";
+import { localDateString } from "../utils/date";
 import { Button, Field } from "./ui";
 
 function ModalFrame({ title, children }: { title: string; children: ReactNode }) {
@@ -39,7 +40,7 @@ export function GlobalModals() {
 function defaultFinalDueAt() {
   const date = new Date();
   date.setDate(date.getDate() + 14);
-  return date.toISOString().slice(0, 10);
+  return localDateString(date);
 }
 
 function NewObjectiveModal() {

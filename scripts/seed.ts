@@ -6,6 +6,8 @@ import {
   feedback,
   feedbackCauseCategories,
   objectives,
+  objectiveLoot,
+  pointLedger,
   results,
   resultTrendPoints,
   rolePermissions,
@@ -23,19 +25,21 @@ const team = {
   name: "AI 应用团队",
   createdAt: "2026-04-01",
 };
-const bootstrapAdmin = {
-  id: "user-xueyu",
-  name: "xueyu",
-  email: "xueyu@qq.com",
-  createdAt: "2026-04-01",
-  lastLoginAt: "2026-05-05T09:42:00.000Z",
-};
 type SeedUser = {
   id: string;
   name: string;
   email: string;
+  status: "active";
   createdAt: string;
   lastLoginAt: string | null;
+};
+const bootstrapAdmin: SeedUser = {
+  id: "user-xueyu",
+  name: "xueyu",
+  email: "xueyu@qq.com",
+  status: "active",
+  createdAt: "2026-04-01",
+  lastLoginAt: "2026-05-05T09:42:00.000Z",
 };
 
 function userIdForName(name: string) {
@@ -66,6 +70,8 @@ async function seed() {
   await db.transaction(async (tx) => {
     await tx.delete(commentMessages);
     await tx.delete(commentThreads);
+    await tx.delete(pointLedger);
+    await tx.delete(objectiveLoot);
     await tx.delete(evidence);
     await tx.delete(feedbackCauseCategories);
     await tx.delete(feedback);
@@ -94,6 +100,7 @@ async function seed() {
       id: userIdForName(name),
       name,
       email: emailForName(name),
+      status: "active",
       createdAt: "2026-04-01",
       lastLoginAt: "2026-05-01T11:06:00.000Z",
     }));
@@ -113,6 +120,7 @@ async function seed() {
         whyItMatters: objective.whyItMatters,
         cycle: objective.cycle,
         stage: objective.stage,
+        flowStatus: objective.flowStatus,
         status: objective.status,
         confidence: objective.confidence,
         progress: objective.progress,

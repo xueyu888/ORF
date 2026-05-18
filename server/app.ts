@@ -19,6 +19,9 @@ import type { PermissionKey } from "../src/config/permissions";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
+  approveObjectiveChallengeApplication,
+  canEditObjectiveResultsDuringReestimate,
+  canEditResultDuringReestimate,
   createComment,
   createChecklistItem,
   createFeedback,
@@ -30,14 +33,23 @@ import {
   deleteObjective,
   deleteResult,
   deleteTask,
+  declineObjectiveChallenge,
+  freezeObjectiveAfterReestimate,
+  getBountyHallData,
+  getMyChallengesData,
   getOrfStateSnapshot,
   getTaskManagementData,
   moveChecklistItem,
   moveResult,
   moveTask,
+  publishObjective,
   proposeResultUpdate,
+  recruitObjectiveChallengers,
+  rejectObjectiveChallengeApplication,
+  reopenObjectiveReestimate,
+  reviewObjectiveLoot,
   setTaskCompletion,
-  submitObjectiveLootComment,
+  submitObjectiveLoot,
   updateCommentMessage,
   updateCommentThreadStatus,
   updateChecklistItemLabel,
@@ -50,7 +62,16 @@ import {
   updateTaskTitle,
   updateTaskStatus,
 } from "./repositories/orfRepository";
-import { createTeamUser, deleteTeamUser, getTeamUsers, updateTeamUser } from "./repositories/userRepository";
+import {
+  approveRegistrationRequest,
+  createTeamUser,
+  deleteTeamUser,
+  disableTeamUser,
+  getRegistrationRequests,
+  getTeamUsers,
+  rejectRegistrationRequest,
+  updateTeamUser,
+} from "./repositories/userRepository";
 import {
   backgroundSceneConfigSchema,
   backgroundSceneSchema,
@@ -73,6 +94,9 @@ const feedbackStatusSchema = z.enum(["New", "Reviewing", "Action Created", "Resu
 const userRoleSchema = z.enum(["admin", "member"]);
 const commentTargetTypeSchema = z.enum(["objective", "result", "task", "subtask"]);
 const commentStatusSchema = z.enum(["open", "resolved"]);
+const lootResultClaimStatusSchema = z.enum(["completed", "falsified", "notClaimed"]);
+const objectiveAcceptedResultSchema = z.enum(["completed", "falsified", "overturned", "abandoned", "overdelivered"]);
+const resultAcceptedResultSchema = z.enum(["unreviewed", "completed", "falsified", "failed"]);
 const userBodySchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().email().transform((value) => value.toLowerCase()),
@@ -90,6 +114,7 @@ const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
+const applicationParamsSchema = objectiveParamsSchema.extend({ applicationId: z.string().min(1) });
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
@@ -102,6 +127,9 @@ const permissionRuleSchema = z.object({
 });
 const updateRolePermissionsBodySchema = z.object({
   permissionRules: z.array(permissionRuleSchema),
+});
+const myChallengesQuerySchema = z.object({
+  scope: z.enum(["mine", "all"]).default("mine"),
 });
 const visualBackgroundQuerySchema = z.object({
   scene: backgroundSceneSchema,
@@ -194,7 +222,32 @@ const createCommentBodySchema = z.object({
 });
 const updateCommentStatusBodySchema = z.object({ status: commentStatusSchema });
 const updateCommentMessageBodySchema = z.object({ body: z.string().trim().min(1) });
-const submitLootBodySchema = z.object({ body: z.string().trim().min(1) });
+const recruitBodySchema = z.object({
+  members: z.array(z.string().trim().min(1)).min(1),
+});
+const submitLootBodySchema = z.object({
+  body: z.string().trim().min(1),
+  resultClaims: z.array(z.object({
+    resultId: z.string().min(1),
+    claim: lootResultClaimStatusSchema,
+    evidenceText: z.string().trim(),
+  })).min(1),
+  selfTestReportUrl: z.string().trim().optional().nullable(),
+  selfTestReportBody: z.string().trim().optional().nullable(),
+});
+const reviewLootBodySchema = z.object({
+  lootId: z.string().min(1).optional(),
+  acceptedResult: objectiveAcceptedResultSchema,
+  resultReviews: z.array(z.object({
+    resultId: z.string().min(1),
+    acceptedResult: resultAcceptedResultSchema,
+  })).optional(),
+  contributionRatios: z.array(z.object({
+    member: z.string().trim().min(1),
+    ratio: z.number().min(0),
+  })).optional(),
+  reason: z.string().trim().optional(),
+});
 
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
@@ -334,6 +387,33 @@ async function requireWritePermission(
   return true;
 }
 
+async function requireResultEditContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  if (user.role === "admin") {
+    return { user };
+  }
+
+  const teamId = await getPrimaryTeamIdForUser(user.id);
+  if (!teamId) {
+    reply.code(404).send({ error: "Team not found" });
+    return null;
+  }
+
+  const permissionRules = await getPermissionRulesForTeam(teamId);
+  const allowedByRole = hasRolePermission(user.role, permissionRules, "result.edit");
+  const allowedByReestimate = await canEditResultDuringReestimate(resultId, user.name);
+  if (!allowedByRole && !allowedByReestimate) {
+    reply.code(403).send({ error: "Forbidden" });
+    return null;
+  }
+
+  return { user };
+}
+
 async function requireAuthenticatedForWrite(request: FastifyRequest, reply: FastifyReply) {
   return Boolean(await requireApiUser(request, reply));
 }
@@ -374,8 +454,40 @@ function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typ
   return { ok: true, commentThread: outcome.thread ?? null };
 }
 
-export async function buildServer() {
-  const app = Fastify({ logger: true });
+function sendObjectiveFlowOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof publishObjective>>) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Objective not found" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(409).send({ error: "Objective status does not allow this operation" });
+  }
+
+  return { objective: outcome.objective };
+}
+
+function sendLootOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof submitObjectiveLoot>>) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Objective not found" });
+  }
+
+  if (outcome.status === "forbidden") {
+    return reply.code(403).send({ error: "Only challengers can submit loot" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Loot submission is incomplete" });
+  }
+
+  if (outcome.status === "closed") {
+    return reply.code(409).send({ error: "Objective must be frozen before loot submission" });
+  }
+
+  return { loot: outcome.loot };
+}
+
+export async function buildServer(options: { logger?: boolean; registerOptionalIntegrations?: boolean } = {}) {
+  const app = Fastify({ logger: options.logger ?? true });
 
   await app.register(cors, {
     origin: corsOrigin(),
@@ -412,7 +524,9 @@ export async function buildServer() {
     service: "orf-api",
   }));
 
-  registerOptionalIntegrations(app);
+  if (options.registerOptionalIntegrations ?? true) {
+    registerOptionalIntegrations(app);
+  }
   registerAuthRoutes(app);
 
   app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
@@ -506,6 +620,27 @@ export async function buildServer() {
   });
 
   app.get("/api/tasks-page", async () => getTaskManagementData());
+  app.get("/api/bounties", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    return getBountyHallData(user.name);
+  });
+  app.get("/api/my-challenges", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const query = myChallengesQuerySchema.parse(request.query);
+    if (query.scope === "all" && user.role !== "admin") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    return getMyChallengesData(user.name, query.scope === "all");
+  });
   app.get("/api/orf-state", async () => getOrfStateSnapshot());
 
   app.post("/api/comments", async (request, reply) => {
@@ -559,6 +694,15 @@ export async function buildServer() {
     return { users: await getTeamUsers(teamId) };
   });
 
+  app.get("/api/registration-requests", async (request, reply) => {
+    const teamId = await requireAdminTeamId(request, reply);
+    if (!teamId) {
+      return reply;
+    }
+
+    return { users: await getRegistrationRequests(teamId) };
+  });
+
   app.post("/api/users", async (request, reply) => {
     const context = await requireAdminContext(request, reply);
     if (!context) {
@@ -578,6 +722,36 @@ export async function buildServer() {
     const params = userParamsSchema.parse(request.params);
     const body = userBodySchema.parse(request.body);
     return { users: await updateTeamUser(context.teamId, context.user.id, params.userId, body) };
+  });
+
+  app.patch("/api/users/:userId/disable", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = userParamsSchema.parse(request.params);
+    return { users: await disableTeamUser(context.teamId, context.user.id, params.userId) };
+  });
+
+  app.patch("/api/registration-requests/:userId/approve", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = userParamsSchema.parse(request.params);
+    return { users: await approveRegistrationRequest(context.teamId, params.userId) };
+  });
+
+  app.patch("/api/registration-requests/:userId/reject", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = userParamsSchema.parse(request.params);
+    return { users: await rejectRegistrationRequest(context.teamId, params.userId) };
   });
 
   app.delete("/api/users/:userId", async (request, reply) => {
@@ -630,14 +804,28 @@ export async function buildServer() {
 
   app.post("/api/results", async (request, reply) => {
     const body = createResultBodySchema.parse(request.body);
-    const allowed = body.source === "memberProposed"
-      ? await requireAuthenticatedForWrite(request, reply)
-      : await requireWritePermission(request, reply, "result.create");
-    if (!allowed) {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
       return reply;
     }
+    const teamId = await getPrimaryTeamIdForUser(user.id);
+    if (!teamId) {
+      return reply.code(404).send({ error: "Team not found" });
+    }
+    const permissionRules = await getPermissionRulesForTeam(teamId);
+    const source = body.source ?? "managerDefined";
+    const allowedByRole = user.role === "admin" || hasRolePermission(user.role, permissionRules, "result.create");
+    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name);
+    const allowed = source === "memberProposed" ? allowedByReestimate : allowedByRole;
+    if (!allowed) {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
 
-    const result = await createResult(body);
+    const result = await createResult({
+      ...body,
+      source,
+      definer: source === "memberProposed" ? user.name : body.definer ?? user.name,
+    });
 
     if (!result) {
       return reply.code(404).send({ error: "Objective not found" });
@@ -713,7 +901,7 @@ export async function buildServer() {
   app.patch("/api/objectives/:objectiveId", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "objective.edit"))) {
+    if (!(await requireAdminContext(request, reply))) {
       return reply;
     }
 
@@ -729,7 +917,7 @@ export async function buildServer() {
   app.patch("/api/objectives/:objectiveId/stage", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
     const body = objectiveStageBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "objective.edit"))) {
+    if (!(await requireAdminContext(request, reply))) {
       return reply;
     }
 
@@ -742,10 +930,88 @@ export async function buildServer() {
     return { ok: true };
   });
 
+  app.patch("/api/objectives/:objectiveId/publish", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = objectiveParamsSchema.parse(request.params);
+    return sendObjectiveFlowOutcome(reply, await publishObjective(params.objectiveId, context.user.id));
+  });
+
+  app.post("/api/objectives/:objectiveId/recruitments", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = recruitBodySchema.parse(request.body);
+    return sendObjectiveFlowOutcome(reply, await recruitObjectiveChallengers(params.objectiveId, body.members, context.user.id));
+  });
+
+  app.patch("/api/objectives/:objectiveId/challenge-applications/:applicationId/approve", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = applicationParamsSchema.parse(request.params);
+    return sendObjectiveFlowOutcome(
+      reply,
+      await approveObjectiveChallengeApplication(params.objectiveId, params.applicationId, context.user.id),
+    );
+  });
+
+  app.patch("/api/objectives/:objectiveId/challenge-applications/:applicationId/reject", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = applicationParamsSchema.parse(request.params);
+    return sendObjectiveFlowOutcome(
+      reply,
+      await rejectObjectiveChallengeApplication(params.objectiveId, params.applicationId, context.user.id),
+    );
+  });
+
+  app.patch("/api/objectives/:objectiveId/freeze", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = objectiveParamsSchema.parse(request.params);
+    return sendObjectiveFlowOutcome(reply, await freezeObjectiveAfterReestimate(params.objectiveId, context.user.id));
+  });
+
+  app.patch("/api/objectives/:objectiveId/reopen-reestimate", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = objectiveParamsSchema.parse(request.params);
+    return sendObjectiveFlowOutcome(reply, await reopenObjectiveReestimate(params.objectiveId, context.user.id));
+  });
+
+  app.post("/api/objectives/:objectiveId/review", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = reviewLootBodySchema.parse(request.body);
+    return sendObjectiveFlowOutcome(reply, await reviewObjectiveLoot(params.objectiveId, body, context.user.id));
+  });
+
   app.patch("/api/results/:resultId", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "result.edit"))) {
+    if (!(await requireResultEditContext(request, reply, params.resultId))) {
       return reply;
     }
 
@@ -802,10 +1068,18 @@ export async function buildServer() {
       return reply;
     }
 
-    const outcome = await acceptObjectiveChallenge(params.objectiveId, user.name);
+    const outcome = await acceptObjectiveChallenge(params.objectiveId, user.name, user.id);
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Objective not found" });
+    }
+
+    if (outcome.status === "forbidden") {
+      return reply.code(403).send({ error: "This objective was not recruited for the current user" });
+    }
+
+    if (outcome.status === "closed") {
+      return reply.code(409).send({ error: "Objective is not open for challenge acceptance" });
     }
 
     if (outcome.status === "alreadyAccepted") {
@@ -817,6 +1091,16 @@ export async function buildServer() {
     }
 
     return { objective: outcome.objective };
+  });
+
+  app.patch("/api/objectives/:objectiveId/challenge/decline", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    return sendObjectiveFlowOutcome(reply, await declineObjectiveChallenge(params.objectiveId, user.name, user.id));
   });
 
   app.post("/api/objectives/:objectiveId/challenge-applications", async (request, reply) => {
@@ -837,6 +1121,9 @@ export async function buildServer() {
     if (outcome.status === "alreadyApplied") {
       return reply.code(409).send({ error: "Challenge application already exists" });
     }
+    if (outcome.status === "closed") {
+      return reply.code(409).send({ error: "Objective is not open for challenge applications" });
+    }
 
     return { objective: outcome.objective };
   });
@@ -849,7 +1136,7 @@ export async function buildServer() {
     }
 
     const body = submitLootBodySchema.parse(request.body);
-    return sendCommentOutcome(reply, await submitObjectiveLootComment(params.objectiveId, body.body, user));
+    return sendLootOutcome(reply, await submitObjectiveLoot(params.objectiveId, body, user));
   });
 
   app.patch("/api/tasks/:taskId", async (request, reply) => {

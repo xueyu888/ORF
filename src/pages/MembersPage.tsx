@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { ChevronDown, Edit3, Plus, Search, Trash2, X } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfUser, UserRole } from "../types/orf";
@@ -22,6 +22,13 @@ const roleLabel: Record<UserRole, string> = {
   member: "成员",
 };
 
+const userStatusLabel: Record<OrfUser["status"], string> = {
+  pending: "待审核",
+  active: "启用",
+  rejected: "已拒绝",
+  disabled: "已停用",
+};
+
 function formatLastLoginAt(value: string | null | undefined) {
   if (!value) {
     return "未登录";
@@ -41,12 +48,20 @@ function formatLastLoginAt(value: string | null | undefined) {
 }
 
 export function MembersPage() {
-  const { state, currentUser, createUser, updateUser, deleteUser } = useOrf();
+  const {
+    approveRegistrationRequest,
+    createUser,
+    currentUser,
+    disableUser,
+    rejectRegistrationRequest,
+    state,
+    updateUser,
+  } = useOrf();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [dialog, setDialog] = useState<UserDialogState>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [processingUserId, setProcessingUserId] = useState<string | null>(null);
   const currentUserId = currentUser?.id ?? state.currentUserId;
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
   const isCurrentUser = (user: OrfUser) => user.id === currentUserId;
@@ -85,18 +100,42 @@ export function MembersPage() {
     }
   };
 
-  const handleDelete = async (user: OrfUser) => {
-    if (isCurrentUser(user) || deletingUserId) {
+  const handleApprove = async (user: OrfUser) => {
+    if (processingUserId) {
       return;
     }
 
-    if (!window.confirm(`删除用户「${user.name}」？`)) {
+    setProcessingUserId(user.id);
+    await approveRegistrationRequest(user.id);
+    setProcessingUserId(null);
+  };
+
+  const handleReject = async (user: OrfUser) => {
+    if (processingUserId) {
       return;
     }
 
-    setDeletingUserId(user.id);
-    await deleteUser(user.id);
-    setDeletingUserId(null);
+    if (!window.confirm(`拒绝「${user.name}」的注册申请？`)) {
+      return;
+    }
+
+    setProcessingUserId(user.id);
+    await rejectRegistrationRequest(user.id);
+    setProcessingUserId(null);
+  };
+
+  const handleDisable = async (user: OrfUser) => {
+    if (isCurrentUser(user) || processingUserId) {
+      return;
+    }
+
+    if (!window.confirm(`停用用户「${user.name}」？`)) {
+      return;
+    }
+
+    setProcessingUserId(user.id);
+    await disableUser(user.id);
+    setProcessingUserId(null);
   };
 
   return (
@@ -170,7 +209,7 @@ export function MembersPage() {
                       </span>
                     </td>
                     <td>
-                      <span className="orf-user-status">启用</span>
+                      <span className={clsx("orf-user-status", `orf-user-status-${user.status}`)}>{userStatusLabel[user.status]}</span>
                     </td>
                     <td>
                       <span className="orf-user-last-login">{formatLastLoginAt(user.lastLoginAt)}</span>
@@ -181,16 +220,29 @@ export function MembersPage() {
                           <Edit3 className="h-4 w-4" />
                           编辑
                         </button>
-                        <button
-                          type="button"
-                          className="orf-user-delete-action"
-                          disabled={isCurrentUser(user) || deletingUserId === user.id}
-                          title={isCurrentUser(user) ? "不能删除自己" : "删除"}
-                          onClick={() => void handleDelete(user)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          删除
-                        </button>
+                        {user.status === "pending" ? (
+                          <>
+                            <button type="button" disabled={processingUserId === user.id} onClick={() => void handleApprove(user)}>
+                              <CheckCircle2 className="h-4 w-4" />
+                              通过
+                            </button>
+                            <button type="button" className="orf-user-delete-action" disabled={processingUserId === user.id} onClick={() => void handleReject(user)}>
+                              <XCircle className="h-4 w-4" />
+                              拒绝
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="orf-user-delete-action"
+                            disabled={isCurrentUser(user) || processingUserId === user.id || user.status === "disabled"}
+                            title={isCurrentUser(user) ? "不能停用自己" : "停用"}
+                            onClick={() => void handleDisable(user)}
+                          >
+                            <Ban className="h-4 w-4" />
+                            停用
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -87,9 +87,9 @@ export function BountyIconButton({
   );
 }
 
-export function BountyLinkButton({ children, to }: { children: ReactNode; to: string }) {
+export function BountyLinkButton({ children, className, to }: { children: ReactNode; className?: string; to: string }) {
   return (
-    <Link className="bounty-link-button" to={to}>
+    <Link className={clsx("bounty-link-button", className)} to={to}>
       {children}
     </Link>
   );

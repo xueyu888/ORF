@@ -41,7 +41,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const { authReady, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
+  const { authReady, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
   const [mode, setMode] = useState<AuthMode>("login");
   const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
   const [configuredHeroOptions, setConfiguredHeroOptions] = useState<AuthHeroOption[]>([]);
@@ -53,10 +53,10 @@ export function AuthPage() {
   const [authError, setAuthError] = useState("");
 
   useEffect(() => {
-    if (authReady && isAuthenticated) {
+    if (authReady && isAuthenticated && isApproved) {
       navigate("/tasks");
     }
-  }, [authReady, isAuthenticated, navigate]);
+  }, [authReady, isApproved, isAuthenticated, navigate]);
 
   useEffect(() => {
     let cancelled = false;

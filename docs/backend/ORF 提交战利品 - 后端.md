@@ -2,36 +2,79 @@
 
 ## 接口
 
-| 方法 | 路径 |
-| --- | --- |
-| `POST` | `/api/objectives/:objectiveId/loot` |
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
+| `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收战利品并结算积分 |
 
-请求体：
+## 提交请求体
 
 ```json
-{ "body": "完成说明" }
+{
+  "body": "目标完成说明",
+  "resultClaims": [
+    {
+      "resultId": "res-1",
+      "claim": "completed",
+      "evidenceText": "证据说明或链接"
+    }
+  ],
+  "selfTestReportBody": "自测摘要",
+  "selfTestReportUrl": null
+}
 ```
 
+`claim` 可取：
+
+- `completed`：主张该指标完成。
+- `falsified`：主张该指标被有效证伪。
+- `notClaimed`：不主张该指标完成或证伪。
+
+自测报告文件化能力依赖编辑器接入，当前先保存 `selfTestReportBody` 文本摘要。
+
 ## 保存字段
+
+战利品保存到 `objectiveLoot`：
 
 | 字段 | 说明 |
 | --- | --- |
 | `objectiveId` | 当前悬赏目标 ID |
-| `body` | 战利品说明 |
-| `submittedBy` | 提交人 |
-| `lootSubmittedAt` | 提交时间，用于判断按时或延期 |
+| `submittedBy` | 提交人姓名 |
+| `body` | 目标完成说明 |
+| `resultClaims` | 每个悬赏指标的主张和证据 |
+| `selfTestReportBody` | 自测摘要 |
+| `selfTestReportUrl` | 自测报告文件 URL，占位 |
+| `submittedAt` | 提交时间 |
 
-战利品必须说明目标下哪些悬赏指标已完成或被证伪，以及对应证据。
+提交成功后同步更新 `Objective.lootSubmittedAt`，并将 `Objective.flowStatus` 从 `frozen` 改为 `submitted`。
+
+## 验收请求体
+
+```json
+{
+  "lootId": "loot-1",
+  "acceptedResult": "completed",
+  "resultReviews": [
+    { "resultId": "res-1", "acceptedResult": "completed" }
+  ],
+  "contributionRatios": [
+    { "member": "Kai Wang", "ratio": 1 }
+  ],
+  "reason": "验收说明"
+}
+```
+
+验收成功后：
+
+- 写入 `Result.acceptedResult`。
+- 写入目标结算字段。
+- 按贡献权重生成 `pointLedger`。
+- 将 `Objective.flowStatus` 改为 `settled`。
 
 ## 约束
 
 - 只有 `Objective.challengers` 中的成员可提交。
-- 已关闭、已提交、已验收或已结算的目标不能提交。
-
-## 状态
-
-提交成功后：
-
-- 目标进入 `待验收`。
+- 只有 `frozen` 目标可提交战利品。
+- 只有指挥官可验收。
+- 只有 `submitted` 目标可验收。
 - 任务和子任务状态不自动决定目标完成。
-- 后端返回更新后的数据，或要求前端重新拉取 `/api/tasks-page`。

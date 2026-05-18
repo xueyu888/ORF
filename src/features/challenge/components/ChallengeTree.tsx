@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, Clock3, MessageSquare, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -31,15 +31,20 @@ type RowHandlers = {
   commentCounts: Map<string, number>;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
+  canManageFlow: boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
   onActiveActionChange: (id: string | null) => void;
   onAddAction: (bounty: Result) => void;
   onAddBounty: (objectiveId: string) => void;
   onAddSubAction: (actionId: string, afterItemId?: string) => void;
+  onApproveApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCancelEdit: () => void;
   onEditTarget: (target: ChallengeTarget) => void;
+  onFreezeObjective: (objectiveId: string) => Promise<boolean>;
   onOpenActionChange: (id: string | null) => void;
+  onPublishObjective: (objectiveId: string) => Promise<boolean>;
+  onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onSaveTitle: (target: ChallengeTarget, title: string) => void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -94,6 +99,10 @@ function ObjectivePanel({
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const isFrozen = group.objective.stage === "goalFrozen";
+  const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
+  const showApplicationReview =
+    handlers.canManageFlow &&
+    pendingApplications.length > 0;
   const layoutKey = group.bounties
     .map((bounty) => {
       if (handlers.collapsedBountyIds.has(bounty.result.id)) return `${bounty.result.id}:closed`;
@@ -140,18 +149,35 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
-        <EmptySlot />
+        <ObjectiveFlowAction objective={group.objective} handlers={handlers} />
         <AvatarStack names={group.challengers} />
         <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
-        {scope === "mine" ? (
+        {scope === "mine" && group.objective.flowStatus === "frozen" ? (
           <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/objectives/${group.objective.id}/loot`}>
             提交战利品
           </Link>
         ) : null}
       </div>
+
+      {showApplicationReview && (
+        <div className="orf-objective-admin-strip">
+          <span className="orf-objective-admin-strip-label">挑战申请</span>
+          {pendingApplications.map((application) => (
+            <span key={application.id} className="orf-objective-application-pill">
+              <span className="font-semibold orf-text-primary">{application.applicant}</span>
+              <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
+                通过
+              </button>
+              <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
+                拒绝
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="orf-objective-body">
         {group.bounties.map((bounty) => (
@@ -167,6 +193,30 @@ function ObjectivePanel({
       </div>
     </section>
   );
+}
+
+function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode["objective"]; handlers: RowHandlers }) {
+  if (!handlers.canManageFlow) return <EmptySlot />;
+
+  if (objective.flowStatus === "candidate") {
+    return (
+      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="发布到悬赏大厅" onClick={() => void handlers.onPublishObjective(objective.id)}>
+        <Send className="h-3.5 w-3.5" />
+        发布
+      </button>
+    );
+  }
+
+  if (objective.flowStatus === "reestimating") {
+    return (
+      <button className="orf-flow-action-button orf-flow-action-primary" type="button" title="重估完成并冻结目标" onClick={() => void handlers.onFreezeObjective(objective.id)}>
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        冻结
+      </button>
+    );
+  }
+
+  return <EmptySlot />;
 }
 
 function BountyRow({

@@ -115,7 +115,7 @@ export function GenshinUIKitPreviewPage() {
                 <GiField label="搜索">
                   <div className="gk-kit-search-field">
                     <Search className="gk-kit-search-field__icon" />
-                    <GiInput placeholder="搜索悬赏指标标题或目标..." />
+                    <GiInput placeholder="搜索悬赏目标或指标..." />
                   </div>
                 </GiField>
                 <GiField label="难度">

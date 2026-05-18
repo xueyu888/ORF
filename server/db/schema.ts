@@ -1,6 +1,15 @@
 import { sql } from "drizzle-orm";
 import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp } from "drizzle-orm/pg-core";
-import type { BountySource, ChallengeApplication, ObjectiveAcceptedResult, OrfStage, ResultAcceptedResult } from "../../src/types/orf";
+import type {
+  BountySource,
+  ChallengeApplication,
+  LootResultClaim,
+  ObjectiveAcceptedResult,
+  ObjectiveFlowStatus,
+  OrfStage,
+  ResultAcceptedResult,
+  UserStatus,
+} from "../../src/types/orf";
 
 export const workStatusEnum = pgEnum("work_status", ["On Track", "At Risk", "Blocked", "Draft"]);
 export const taskStatusEnum = pgEnum("task_status", ["Backlog", "Todo", "In Progress", "In Review", "Done"]);
@@ -25,6 +34,7 @@ export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email"),
+  status: text("status").$type<UserStatus>().notNull().default("active"),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   lastLoginAt: timestamp("last_login_at", { mode: "string", withTimezone: true }),
 });
@@ -71,6 +81,7 @@ export const objectives = pgTable("objectives", {
   whyItMatters: text("why_it_matters").notNull(),
   cycle: text("cycle").notNull(),
   stage: text("stage").$type<OrfStage>().notNull().default("orfReestimate"),
+  flowStatus: text("flow_status").$type<ObjectiveFlowStatus>().notNull().default("candidate"),
   status: workStatusEnum("status").notNull(),
   confidence: integer("confidence").notNull(),
   progress: integer("progress").notNull(),
@@ -92,6 +103,37 @@ export const objectives = pgTable("objectives", {
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
   createdBy: text("created_by").references(() => users.id),
   updatedBy: text("updated_by").references(() => users.id),
+});
+
+export const objectiveLoot = pgTable("objective_loot", {
+  id: text("id").primaryKey(),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  objectiveId: text("objective_id")
+    .notNull()
+    .references(() => objectives.id, { onDelete: "cascade" }),
+  submittedBy: text("submitted_by").notNull(),
+  body: text("body").notNull(),
+  resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
+  selfTestReportUrl: text("self_test_report_url"),
+  selfTestReportBody: text("self_test_report_body"),
+  submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
+});
+
+export const pointLedger = pgTable("point_ledger", {
+  id: text("id").primaryKey(),
+  teamId: text("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  objectiveId: text("objective_id")
+    .notNull()
+    .references(() => objectives.id, { onDelete: "cascade" }),
+  userId: text("user_id").references(() => users.id),
+  memberName: text("member_name").notNull(),
+  points: real("points").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
 });
 
 export const results = pgTable("results", {

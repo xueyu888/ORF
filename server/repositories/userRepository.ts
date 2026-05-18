@@ -83,6 +83,7 @@ export async function getTeamUsers(teamId: string): Promise<OrfUser[]> {
       name: users.name,
       email: users.email,
       role: teamMembers.role,
+      status: users.status,
       lastLoginAt: users.lastLoginAt,
     })
     .from(teamMembers)
@@ -95,6 +96,32 @@ export async function getTeamUsers(teamId: string): Promise<OrfUser[]> {
     name: row.name,
     email: row.email ?? "",
     role: normalizeRole(row.role),
+    status: row.status ?? "active",
+    lastLoginAt: row.lastLoginAt,
+  }));
+}
+
+export async function getRegistrationRequests(teamId: string): Promise<OrfUser[]> {
+  const rows = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: teamMembers.role,
+      status: users.status,
+      lastLoginAt: users.lastLoginAt,
+    })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, teamId), eq(users.status, "pending")))
+    .orderBy(asc(users.createdAt), asc(users.name));
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email ?? "",
+    role: normalizeRole(row.role),
+    status: row.status ?? "pending",
     lastLoginAt: row.lastLoginAt,
   }));
 }
@@ -123,12 +150,13 @@ export async function createTeamUser(teamId: string, actorUserId: string, input:
     const userId = existingUser?.id ?? (await nextUserId(normalized.email));
 
     if (existingUser) {
-      await tx.update(users).set({ name: normalized.name, email: normalized.email }).where(eq(users.id, userId));
+      await tx.update(users).set({ name: normalized.name, email: normalized.email, status: "active" }).where(eq(users.id, userId));
     } else {
       await tx.insert(users).values({
         id: userId,
         name: normalized.name,
         email: normalized.email,
+        status: "active",
         createdAt: today(),
       });
     }
@@ -190,5 +218,24 @@ export async function deleteTeamUser(teamId: string, actorUserId: string, userId
   }
 
   await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+  return getTeamUsers(teamId);
+}
+
+export async function approveRegistrationRequest(teamId: string, userId: string): Promise<OrfUser[]> {
+  await assertMembershipExists(teamId, userId);
+  await db.update(users).set({ status: "active" }).where(eq(users.id, userId));
+  return getTeamUsers(teamId);
+}
+
+export async function rejectRegistrationRequest(teamId: string, userId: string): Promise<OrfUser[]> {
+  await assertMembershipExists(teamId, userId);
+  await db.update(users).set({ status: "rejected" }).where(eq(users.id, userId));
+  return getTeamUsers(teamId);
+}
+
+export async function disableTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
+  assertCanDeleteUser(actorUserId, userId);
+  await assertMembershipExists(teamId, userId);
+  await db.update(users).set({ status: "disabled" }).where(eq(users.id, userId));
   return getTeamUsers(teamId);
 }

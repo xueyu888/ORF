@@ -1,9 +1,29 @@
-import type { OrfState, OrfUser } from "../types/orf";
+import type { BountySource, Objective, OrfState, OrfUser, Result } from "../types/orf";
 
-export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "permissionRules">;
+export type TaskManagementData = Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "pointLedger" | "permissionRules">;
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
+export type RegistrationRequestsResponse = { users: OrfUser[] };
+export type BountyHallItem = {
+  uncertaintyPoints: number;
+  deadline: string;
+  definer: string;
+  difficultyRank: number;
+  hasCurrentApplication: boolean;
+  isRecruitment: boolean;
+  objective: Objective;
+  result: Result | null;
+  results: Result[];
+  source: BountySource;
+};
+export type BountyHallData = {
+  recruitmentItems: BountyHallItem[];
+  availableItems: BountyHallItem[];
+  objectiveOptions: Objective[];
+  contribution: { points: number };
+};
+export type MyChallengesScope = "mine" | "all";
 export type VisualBackgroundScene = "login_background" | "sidebar_background";
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
@@ -95,6 +115,15 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function apiRequest(path: string, init?: RequestInit): Promise<void> {
   await apiJson<unknown>(path, init);
+}
+
+export async function getBountyHallData() {
+  return apiJson<BountyHallData>("/api/bounties");
+}
+
+export async function getMyChallengesData(scope: MyChallengesScope) {
+  const query = new URLSearchParams({ scope });
+  return apiJson<TaskManagementData>(`/api/my-challenges?${query.toString()}`);
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
