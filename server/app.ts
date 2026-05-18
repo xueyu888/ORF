@@ -22,6 +22,7 @@ import {
   applyForObjectiveChallenge,
   approveObjectiveChallengeApplication,
   canDeleteObjective,
+  canCreateFeedbackForResult,
   canEditObjectiveResultsDuringReestimate,
   canEditResultDuringReestimate,
   canMutateObjectiveResults,
@@ -1019,6 +1020,14 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const body = createFeedbackBodySchema.parse(request.body);
+    const feedbackAccess = await canCreateFeedbackForResult(body.linkedResultId, user);
+    if (feedbackAccess === "notFound") {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+    if (feedbackAccess === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
     const item = await createFeedback(body, user.id);
 
     if (!item) {

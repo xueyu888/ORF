@@ -975,6 +975,39 @@ test("task and comment API writes require objective participation", async () => 
   });
 });
 
+test("feedback creation is scoped to administrators and objective challengers", async () => {
+  const fixture = await createFixture("api-feedback-create-boundary");
+  const { result } = await createApprovedObjectiveWithResult(fixture);
+
+  await withApiServer(fixture, async (app) => {
+    const feedbackPayload = {
+      phenomenon: `${fixture.prefix} scoped feedback creation`,
+      causeCategories: ["Quality"],
+      impact: "High",
+      linkedResultId: result.id,
+      suggestedAdjustment: "Keep feedback creation scoped to visible challenge data.",
+      source: "Team review",
+      owner: fixture.challenger.name,
+    };
+
+    const observerAttempt = await apiInject(app, fixture.observer, "POST", "/api/feedback", feedbackPayload);
+    assert.equal(observerAttempt.statusCode, 403);
+
+    const challengerAttempt = await apiInject(app, fixture.challenger, "POST", "/api/feedback", feedbackPayload);
+    assert.equal(challengerAttempt.statusCode, 200);
+
+    const adminAttempt = await apiInject(app, fixture.commander, "POST", "/api/feedback", {
+      ...feedbackPayload,
+      phenomenon: `${fixture.prefix} admin feedback creation`,
+      owner: fixture.commander.name,
+    });
+    assert.equal(adminAttempt.statusCode, 200);
+
+    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    assert.equal(data.feedback.filter((item) => item.linkedResultId === result.id).length, 2);
+  });
+});
+
 test("feedback status API writes require an administrator, creator, or owner", async () => {
   const fixture = await createFixture("api-feedback-status-boundary");
   const { result } = await createApprovedObjectiveWithResult(fixture);

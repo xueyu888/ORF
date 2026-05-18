@@ -28,7 +28,7 @@
 | `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算，进入 `settled` |
 | `POST` | `/api/results` | 创建指标；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
 | `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
-| `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner` |
+| `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner`；仅管理员或目标挑战者可对目标下指标创建 |
 | `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
 | `POST` | `/api/tasks` | 创建任务 |
 | `PATCH` | `/api/tasks/:taskId` | 更新任务 |
@@ -125,6 +125,7 @@ type ObjectiveFlowStatus =
 - 指挥官可以编辑未冻结目标下指标。
 - 挑战者只能在未过期 `reestimating` 状态提出或编辑自己参与目标下的指标；超过 `confirmationDueAt` 或目标冻结后均不可调整。
 - 反馈状态只能由管理员、反馈创建人或 `owner` 指定处理人更新；普通成员不能关闭或改写他人反馈状态。
+- 反馈创建遵循目标可见边界；普通成员只能给自己参与目标下的指标创建反馈，不能通过猜测指标 ID 写入别人的目标。
 - 当前不开放退回重估；重估截止后停止调整，不续期。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
 - `申请挑战` 只表达意愿；指挥官通过后才写入 `Objective.challengers`。

@@ -1137,6 +1137,30 @@ export type CreateFeedbackInput = Pick<
   "phenomenon" | "causeCategories" | "impact" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner"
 >;
 
+export async function canCreateFeedbackForResult(
+  resultId: string,
+  actor: Pick<CommentActor, "name" | "role">,
+): Promise<ObjectiveWorkItemMutationOutcome> {
+  const [target] = await db
+    .select({ objectiveId: results.objectiveId, challengers: objectives.challengers })
+    .from(results)
+    .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+    .where(eq(results.id, resultId))
+    .limit(1);
+  if (!target) {
+    return "notFound";
+  }
+
+  if (actor.role === "admin") {
+    return "allowed";
+  }
+
+  const member = actor.name.trim();
+  return member && uniqueMembers(target.challengers ?? []).includes(member)
+    ? "allowed"
+    : "forbidden";
+}
+
 export async function createFeedback(input: CreateFeedbackInput, actorId: string): Promise<Feedback | null> {
   const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
   if (!result) {
