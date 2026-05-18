@@ -1,10 +1,11 @@
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, StatusBadge } from "../components/ui";
 import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";
+import { canCreateFeedbackForResult } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 
 export function AIEvaluationPage() {
-  const { state, openModal } = useOrf();
+  const { currentUser, state, openModal } = useOrf();
   const metrics = evaluationMetricCards(summarizeEvalRuns(state.evalRuns));
 
   return (
@@ -21,7 +22,13 @@ export function AIEvaluationPage() {
       <div className="grid gap-4 lg:grid-cols-5">{state.scenarios.map((scenario) => <Card key={scenario.id} interactive className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">{scenario.title}</div><div className="mt-3 text-2xl font-semibold orf-text-primary">{scenario.qualityScore}</div><div className="text-xs orf-text-muted">质量分</div><div className="mt-3 text-xs orf-text-secondary">主要失败原因：{scenario.topFailureCause}</div><div className="mt-1 text-xs orf-text-muted">{scenario.openFeedbackCount} 条开放反馈</div></Card>)}</div>
       <Card className="orf-card-padding">
         <div className="mb-3 text-sm font-semibold orf-text-primary">失败样本</div>
-        <div className="grid gap-3">{state.failureSamples.map((sample) => <div key={sample.id} className="rounded-lg border orf-border orf-surface-muted p-4"><div className="text-sm font-semibold orf-text-primary">{sample.question}</div><div className="mt-3 grid gap-3 lg:grid-cols-3"><p className="text-sm orf-text-secondary"><span className="orf-text-primary">模型回答：</span>{sample.modelAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">期望答案：</span>{sample.expectedAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">判定原因：</span>{sample.reason}</p></div><Button className="mt-4" variant="secondary" onClick={() => openModal({ type: "newFeedback", resultId: sample.linkedResultId })}>创建反馈</Button></div>)}</div>
+        <div className="grid gap-3">{state.failureSamples.map((sample) => {
+          const result = state.results.find((item) => item.id === sample.linkedResultId);
+          const objective = result ? state.objectives.find((item) => item.id === result.objectiveId) : undefined;
+          const canCreateFeedback = canCreateFeedbackForResult(objective, currentUser, result);
+
+          return <div key={sample.id} className="rounded-lg border orf-border orf-surface-muted p-4"><div className="text-sm font-semibold orf-text-primary">{sample.question}</div><div className="mt-3 grid gap-3 lg:grid-cols-3"><p className="text-sm orf-text-secondary"><span className="orf-text-primary">模型回答：</span>{sample.modelAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">期望答案：</span>{sample.expectedAnswer}</p><p className="text-sm orf-text-secondary"><span className="orf-text-primary">判定原因：</span>{sample.reason}</p></div>{canCreateFeedback && <Button className="mt-4" variant="secondary" onClick={() => openModal({ type: "newFeedback", objectiveId: result?.objectiveId, resultId: sample.linkedResultId })}>创建反馈</Button>}</div>;
+        })}{state.failureSamples.length === 0 && <div className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-muted">暂无失败样本。</div>}</div>
       </Card>
     </PageScaffold>
   );

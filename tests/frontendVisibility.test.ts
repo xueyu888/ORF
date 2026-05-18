@@ -48,6 +48,11 @@ test("feedback creation page actions use visible objective participation", () =>
     /canCreateFeedbackForResult/,
     "Result detail must hide feedback creation without objective participation",
   );
+  assert.match(
+    readFileSync(path.resolve("src/pages/AIEvaluationPage.tsx"), "utf8"),
+    /canCreateFeedbackForResult/,
+    "AI evaluation failure samples must hide feedback creation without objective participation",
+  );
 });
 
 test("detail pages do not keep inert placeholder action buttons", () => {

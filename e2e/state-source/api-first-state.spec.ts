@@ -181,6 +181,7 @@ test("AI evaluation summary does not render hardcoded metrics without eval runs"
 
   await expect(page.getByRole("heading", { name: "AI 评估" })).toBeVisible();
   await expect(page.getByText("暂无评估运行。")).toBeVisible();
+  await expect(page.getByText("暂无失败样本。")).toBeVisible();
   await expect(page.getByText("4.2s")).toHaveCount(0);
   await expect(page.getByText("$0.038")).toHaveCount(0);
   await expect(page.getByText("82%")).toHaveCount(0);
