@@ -7,6 +7,7 @@ import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, IntegrityCheck, ResultCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { metricCreationActionForObjective } from "../features/challenge/model/orfFlowCapabilities";
+import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";
 import { canCreateFeedbackForObjective, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
@@ -58,6 +59,10 @@ export function ObjectiveDetailPage() {
 
   if (!objective) {
     return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载目标数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+  }
+
+  if (!canViewObjectiveRecord(objective, currentUser)) {
+    return <Navigate to="/tasks" replace />;
   }
 
   const results = state.results.filter((result) => result.objectiveId === objective.id);

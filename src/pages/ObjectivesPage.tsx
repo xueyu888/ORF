@@ -5,6 +5,7 @@ import { PageScaffold } from "../components/PageScaffold";
 import { ObjectiveCard } from "../components/SharedCards";
 import { Button, Card, EmptyState, ProgressBar, StatusBadge } from "../components/ui";
 import { hasPermission } from "../config/permissions";
+import { visibleObjectiveIdsForUser, visibleObjectivesForUser } from "../features/challenge/model/objectiveVisibility";
 import { filterObjectives, objectiveCycleOptions, type ObjectiveStatusFilter } from "../features/objectives/model/objectiveFilters";
 import { useOrf } from "../state/OrfProvider";
 
@@ -15,11 +16,13 @@ export function ObjectivesPage() {
   const [cycle, setCycle] = useState("All");
   const [view, setView] = useState<"Cards" | "Table">("Cards");
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
-  const cycles = useMemo(() => objectiveCycleOptions(state.objectives), [state.objectives]);
+  const visibleObjectives = useMemo(() => visibleObjectivesForUser(state.objectives, currentUser), [currentUser, state.objectives]);
+  const visibleObjectiveIds = useMemo(() => visibleObjectiveIdsForUser(state.objectives, currentUser), [currentUser, state.objectives]);
+  const cycles = useMemo(() => objectiveCycleOptions(visibleObjectives), [visibleObjectives]);
 
   const objectives = useMemo(
-    () => filterObjectives(state.objectives, { cycle, query, status }),
-    [cycle, query, state.objectives, status],
+    () => filterObjectives(visibleObjectives, { cycle, query, status }),
+    [cycle, query, status, visibleObjectives],
   );
 
   return (
@@ -53,7 +56,7 @@ export function ObjectivesPage() {
               key={objective.id}
               objective={objective}
               results={state.results.filter((result) => objective.resultIds.includes(result.id))}
-              feedback={state.feedback.filter((feedback) => objective.feedbackIds.includes(feedback.id))}
+              feedback={state.feedback.filter((feedback) => visibleObjectiveIds.has(feedback.linkedObjectiveId) && objective.feedbackIds.includes(feedback.id))}
             />
           ))}
         </div>

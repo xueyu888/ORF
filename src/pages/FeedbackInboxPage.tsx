@@ -5,6 +5,7 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { FeedbackCard } from "../components/SharedCards";
 import { Button, Card, StatusBadge } from "../components/ui";
+import { filterFeedbackForVisibleObjectives, filterResultsForVisibleObjectives, visibleObjectiveIdsForUser, visibleObjectivesForUser } from "../features/challenge/model/objectiveVisibility";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { formatAverageResponseHours, summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
 import { useOrf } from "../state/OrfProvider";
@@ -15,18 +16,22 @@ export function FeedbackInboxPage() {
   const [cause, setCause] = useState("All");
   const [status, setStatus] = useState<"All" | FeedbackStatus>("All");
   const [impact, setImpact] = useState<"All" | Impact>("All");
-  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
-  const insights = useMemo(() => summarizeFeedbackInsights(state.feedback), [state.feedback]);
+  const visibleObjectiveIds = useMemo(() => visibleObjectiveIdsForUser(state.objectives, currentUser), [currentUser, state.objectives]);
+  const visibleObjectives = useMemo(() => visibleObjectivesForUser(state.objectives, currentUser), [currentUser, state.objectives]);
+  const visibleResults = useMemo(() => filterResultsForVisibleObjectives(state.results, visibleObjectiveIds), [state.results, visibleObjectiveIds]);
+  const visibleFeedback = useMemo(() => filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds), [state.feedback, visibleObjectiveIds]);
+  const canCreateFeedback = canCreateFeedbackFromVisibleState({ objectives: visibleObjectives, results: visibleResults }, currentUser);
+  const insights = useMemo(() => summarizeFeedbackInsights(visibleFeedback), [visibleFeedback]);
 
   const feedback = useMemo(
     () =>
-      state.feedback.filter((item) => {
+      visibleFeedback.filter((item) => {
         const causeMatch = cause === "All" || item.causeCategories.includes(cause);
         const statusMatch = status === "All" || item.status === status;
         const impactMatch = impact === "All" || item.impact === impact;
         return causeMatch && statusMatch && impactMatch;
       }),
-    [cause, impact, state.feedback, status],
+    [cause, impact, status, visibleFeedback],
   );
 
   const chart = insights.causeChart.slice(0, 8).map((item) => ({
@@ -48,7 +53,7 @@ export function FeedbackInboxPage() {
       </Card>
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <div className="grid gap-3">
-          {feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={state.results.find((result) => result.id === item.linkedResultId)?.title} />)}
+          {feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={visibleResults.find((result) => result.id === item.linkedResultId)?.title} />)}
           {feedback.length === 0 && <Card className="orf-card-padding text-sm orf-text-secondary">暂无匹配反馈。</Card>}
         </div>
         <Card className="orf-card-padding">

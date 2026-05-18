@@ -2,6 +2,7 @@ import { Navigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, StatusBadge } from "../components/ui";
 import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
+import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import { evidenceTypeLabel } from "../utils/labels";
@@ -19,6 +20,10 @@ export function FeedbackDetailPage() {
   }
 
   const objective = state.objectives.find((item) => item.id === feedback.linkedObjectiveId);
+  if (!canViewObjectiveRecord(objective, currentUser)) {
+    return <Navigate to="/tasks" replace />;
+  }
+
   const result = state.results.find((item) => item.id === feedback.linkedResultId);
   const evidence = state.evidence.filter((item) => feedback.evidenceIds.includes(item.id));
   const capabilities = resultDetailCapabilities({

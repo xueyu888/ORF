@@ -5,13 +5,34 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, MetricCard, ObjectiveCard } from "../components/SharedCards";
 import { Card } from "../components/ui";
+import {
+  filterFeedbackForVisibleObjectives,
+  filterResultsForVisibleObjectives,
+  filterTasksForVisibleObjectives,
+  visibleObjectiveIdsForUser,
+  visibleObjectivesForUser,
+} from "../features/challenge/model/objectiveVisibility";
 import { summarizeDashboardState } from "../features/dashboard/model/dashboardSummary";
 import { useOrf } from "../state/OrfProvider";
 import { taskStatusLabel } from "../utils/labels";
 
 export function DashboardPage() {
   const { currentUser, state } = useOrf();
-  const summary = summarizeDashboardState(state, currentUser);
+  const visibleObjectiveIds = visibleObjectiveIdsForUser(state.objectives, currentUser);
+  const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
+  const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds);
+  const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds);
+  const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds);
+  const visibleDecisions = state.decisions.filter((decision) => visibleObjectiveIds.has(decision.linkedObjectiveId));
+  const summary = summarizeDashboardState(
+    {
+      feedback: visibleFeedback,
+      objectives: visibleObjectives,
+      results: visibleResults,
+      tasks: visibleTasks,
+    },
+    currentUser,
+  );
 
   return (
     <PageScaffold
@@ -20,10 +41,10 @@ export function DashboardPage() {
       action={<div className="orf-control border orf-secondary-action px-3 py-2 text-sm font-medium">{summary.latestCycle ?? "暂无周期"}</div>}
     >
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="进行中的目标" value={`${summary.activeObjectives.length}`} delta={`${state.objectives.length} 个目标总数`} icon={Target} />
+        <MetricCard title="进行中的目标" value={`${summary.activeObjectives.length}`} delta={`${visibleObjectives.length} 个目标总数`} icon={Target} />
         <MetricCard title="有风险的指标" value={`${summary.atRiskResults.length}`} delta="来自当前指标状态" icon={AlertTriangle} />
         <MetricCard title="待处理反馈" value={`${summary.pendingFeedback.length}`} delta={`${summary.highImpactFeedback.length} 个高影响信号`} icon={MessageSquare} />
-        <MetricCard title="工程信心" value={`${summary.averageConfidence}%`} delta={`${state.objectives.length} 个目标样本`} icon={Gauge} />
+        <MetricCard title="工程信心" value={`${summary.averageConfidence}%`} delta={`${visibleObjectives.length} 个目标样本`} icon={Gauge} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[2fr_1fr]">
@@ -36,12 +57,12 @@ export function DashboardPage() {
             <Link className="text-sm orf-accent-text orf-hover-text" to="/objectives">查看全部</Link>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
-            {state.objectives.map((objective) => (
+            {visibleObjectives.map((objective) => (
               <ObjectiveCard
                 key={objective.id}
                 objective={objective}
-                results={state.results.filter((result) => objective.resultIds.includes(result.id))}
-                feedback={state.feedback.filter((feedback) => objective.feedbackIds.includes(feedback.id))}
+                results={visibleResults.filter((result) => objective.resultIds.includes(result.id))}
+                feedback={visibleFeedback.filter((feedback) => objective.feedbackIds.includes(feedback.id))}
               />
             ))}
           </div>
@@ -77,7 +98,7 @@ export function DashboardPage() {
             )}
           </ChartFrame>
         </Card>
-        <DecisionLog decisions={state.decisions.slice(0, 3)} />
+        <DecisionLog decisions={visibleDecisions.slice(0, 3)} />
       </section>
 
       <Card className="orf-card-padding">

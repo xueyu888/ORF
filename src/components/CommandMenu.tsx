@@ -3,6 +3,13 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { quickPages } from "../config/navigation";
+import {
+  filterFeedbackForVisibleObjectives,
+  filterResultsForVisibleObjectives,
+  filterTasksForVisibleObjectives,
+  visibleObjectiveIdsForUser,
+  visibleObjectivesForUser,
+} from "../features/challenge/model/objectiveVisibility";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import { commandTypeLabel } from "../utils/labels";
@@ -14,13 +21,18 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
 
   const items = useMemo(() => {
+    const visibleObjectiveIds = visibleObjectiveIdsForUser(state.objectives, currentUser);
+    const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
+    const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds);
+    const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds);
+    const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds);
     const pageItems = quickPages
       .filter((item) => canShowFrontendPath(currentUser, item.path))
       .map((item) => ({ label: item.label, path: item.path, type: "Page" }));
-    const objectiveItems = state.objectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
-    const resultItems = state.results.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));
-    const taskItems = state.tasks.map((item) => ({ label: `${item.id} ${item.title}`, path: "/tasks", type: "Task" }));
-    const feedbackItems = state.feedback.map((item) => ({ label: item.phenomenon, path: `/feedback/${item.id}`, type: "Feedback" }));
+    const objectiveItems = visibleObjectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
+    const resultItems = visibleResults.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));
+    const taskItems = visibleTasks.map((item) => ({ label: `${item.id} ${item.title}`, path: "/tasks", type: "Task" }));
+    const feedbackItems = visibleFeedback.map((item) => ({ label: item.phenomenon, path: `/feedback/${item.id}`, type: "Feedback" }));
 
     return [...pageItems, ...objectiveItems, ...resultItems, ...taskItems, ...feedbackItems].filter((item) =>
       `${item.label} ${item.type}`.toLowerCase().includes(query.toLowerCase()),

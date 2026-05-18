@@ -6,6 +6,7 @@ import { PageScaffold } from "../components/PageScaffold";
 import { FeedbackCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
+import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { canCreateFeedbackForResult } from "../features/feedback/model/feedbackCapabilities";
 import { buildResultQualityChecks } from "../features/results/model/resultQuality";
 import { useOrf } from "../state/OrfProvider";
@@ -25,6 +26,10 @@ export function ResultDetailPage() {
   }
 
   const objective = state.objectives.find((item) => item.id === result.objectiveId);
+  if (!canViewObjectiveRecord(objective, currentUser)) {
+    return <Navigate to="/tasks" replace />;
+  }
+
   const tasks = state.tasks.filter((task) => task.linkedResultId === result.id);
   const feedback = state.feedback.filter((item) => item.linkedResultId === result.id);
   const metricRequirement = result.metricRequirement?.trim() || "待补充";

@@ -730,9 +730,18 @@ test.describe("ORF high-level audit coverage", () => {
     await expect.soft(objectivePanel(page, mine.title).getByRole("link", { name: "提交战利品" })).toBeVisible();
     await expect.soft(page.getByText(leaked.title)).toHaveCount(0);
     await expect.soft(objectivePanel(page, leaked.title).getByRole("link", { name: "提交战利品" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." }).click();
+    await page.getByPlaceholder("搜索页面、目标、指标、行动项、反馈...").fill("泄漏");
+    await expect.soft(page.getByText(leaked.title)).toHaveCount(0);
+    await expect.soft(page.getByText("审计 他人的指标")).toHaveCount(0);
+
+    await page.goto("/objectives");
+    await expect.soft(page.getByRole("link", { name: new RegExp(mine.title) }).first()).toBeVisible();
+    await expect.soft(page.getByRole("link", { name: new RegExp(leaked.title) })).toHaveCount(0);
   });
 
-  test("result detail deep link does not expose privileged mutations to non-challengers", async ({ page }, testInfo) => {
+  test("result detail deep link does not expose non-challenger records", async ({ page }, testInfo) => {
     const objective = objectiveFixture({
       id: "obj-ui-audit-result-detail-guard",
       title: "审计 详情页越权目标",
@@ -745,12 +754,10 @@ test.describe("ORF high-level audit coverage", () => {
     await mockOrfApp(page, observerUser, data, { tasks: () => data });
 
     await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-    await expect(page.getByRole("heading", { name: result.title })).toBeVisible();
     await attachAuditScreenshot(page, testInfo, "audit-result-detail-non-challenger");
-    await expect.soft(page.getByRole("button", { name: "新建反馈" })).toHaveCount(0);
-    await expect.soft(page.getByRole("button", { name: "创建行动项" })).toHaveCount(0);
-    await expect.soft(page.getByRole("button", { name: "提出指标更新" })).toHaveCount(0);
-    await expect.soft(page.getByRole("slider")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/tasks$/);
+    await expect.soft(page.getByText(result.title)).toHaveCount(0);
+    await expect.soft(page.getByText(objective.title)).toHaveCount(0);
   });
 
   test("mobile challenge workbench has no page-level horizontal overflow", async ({ page }, testInfo) => {
@@ -1566,8 +1573,9 @@ test.describe("ORF frontend guard coverage", () => {
     await mockOrfApp(page, observerUser, data, { tasks: () => data });
 
     await page.goto(`/objectives/${objective.id}/loot`);
-    await expect(page.getByRole("heading", { name: "提交战利品" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "提交" })).toBeDisabled();
+    await expect(page).toHaveURL(/\/tasks$/);
+    await expect(page.getByText(objective.title)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "提交" })).toHaveCount(0);
   });
 
   test("member never sees commander flow actions with full data", async ({ page }) => {

@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field } from "../components/ui";
 import { equalRatios, summarizeContributionReviews } from "../features/challenge/model/contributionReview";
+import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
 import type { ContributionAllocation, LootResultClaimStatus, ResultAcceptedResult } from "../types/orf";
 
@@ -65,6 +66,10 @@ export function LootSubmitPage() {
 
   if (!objective) {
     return dataReady ? <Navigate to="/tasks" replace /> : <PageScaffold title="加载中" subtitle="正在加载目标数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+  }
+
+  if (!canViewObjectiveRecord(objective, currentUser)) {
+    return <Navigate to="/tasks" replace />;
   }
 
   const currentMember = currentUser?.name ?? "";

@@ -12,6 +12,14 @@ import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
 import {
+  canViewObjectiveRecord,
+  filterFeedbackForVisibleObjectives,
+  filterResultsForVisibleObjectives,
+  filterTasksForVisibleObjectives,
+  visibleObjectiveIdsForUser,
+  visibleObjectivesForUser,
+} from "../src/features/challenge/model/objectiveVisibility";
+import {
   canCreateFeedbackForObjective,
   canCreateFeedbackFromResults,
   canCreateFeedbackFromVisibleState,
@@ -134,6 +142,31 @@ test("feedback creation entry is limited to admins and objective challengers", (
   assert.equal(canCreateFeedbackForObjective(objectiveItem, observer, [resultItem]), false);
   assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, []), false);
   assert.equal(canCreateFeedbackFromVisibleState({ objectives: [objectiveItem], results: [resultItem] }, observer), false);
+});
+
+test("objective visibility scopes member-facing records to current challengers", () => {
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const mine = objective({ id: "obj-mine", challengers: [challenger.name] });
+  const other = objective({ id: "obj-other", challengers: ["Other Member"] });
+  const memberVisibleIds = visibleObjectiveIdsForUser([mine, other], challenger);
+
+  assert.equal(canViewObjectiveRecord(mine, challenger), true);
+  assert.equal(canViewObjectiveRecord(other, challenger), false);
+  assert.deepEqual(visibleObjectivesForUser([mine, other], challenger).map((item) => item.id), ["obj-mine"]);
+  assert.deepEqual([...visibleObjectiveIdsForUser([mine, other], admin)].sort(), ["obj-mine", "obj-other"]);
+  assert.deepEqual(
+    filterResultsForVisibleObjectives([result({ id: "res-mine", objectiveId: "obj-mine" }), result({ id: "res-other", objectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
+    ["res-mine"],
+  );
+  assert.deepEqual(
+    filterTasksForVisibleObjectives([task({ id: "task-mine", linkedObjectiveId: "obj-mine" }), task({ id: "task-other", linkedObjectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
+    ["task-mine"],
+  );
+  assert.deepEqual(
+    filterFeedbackForVisibleObjectives([feedback({ id: "fb-mine", linkedObjectiveId: "obj-mine" }), feedback({ id: "fb-other", linkedObjectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
+    ["fb-mine"],
+  );
 });
 
 test("drag and drop rules block cross-objective bounty moves and self drops", () => {
