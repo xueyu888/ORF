@@ -69,7 +69,7 @@ export function GenshinUIKitPreviewPage() {
             <GiButton icon={<Trophy className="h-4 w-4" />} variant="secondary">
               我的挑战
             </GiButton>
-            <GiButton icon={<Send className="h-4 w-4" />}>提出候选悬赏指标</GiButton>
+            <GiButton icon={<Send className="h-4 w-4" />}>提出指标</GiButton>
           </>
         }
         eyebrow="ORF Game UI Kit"
@@ -244,7 +244,7 @@ export function GenshinUIKitPreviewPage() {
               <GiEmptyState
                 action={<GiButton variant="secondary">重置筛选</GiButton>}
                 description="调整搜索或筛选条件后再查看。"
-                title="没有符合条件的悬赏指标"
+                title="没有符合条件的指标"
               />
             </div>
           </GiPanel>

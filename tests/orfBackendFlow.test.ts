@@ -23,6 +23,7 @@ import {
   rejectObjectiveChallengeApplication,
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
+  submitObjectiveContributionReview,
   submitObjectiveLoot,
 } from "../server/repositories/orfRepository";
 
@@ -222,12 +223,10 @@ test("commander and challenger can complete the application-to-settlement ORF ba
     objective.id,
     {
       lootId: loot.loot.id,
-      acceptedResult: "completed",
       resultReviews: [
         { resultId: result.id, acceptedResult: "completed" },
         { resultId: challengerResult.id, acceptedResult: "completed" },
       ],
-      contributionRatios: [{ member: fixture.challenger.name, ratio: 1 }],
       reason: "Backend ORF flow integration test settlement.",
     },
     fixture.commander.id,
@@ -313,6 +312,64 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   const hallAfterAcceptance = await getBountyHallData(fixture.challenger.name);
   assert.equal(hallAfterAcceptance.recruitmentItems.some((item) => item.objective.id === objective.id), false);
   assert.equal(hallAfterAcceptance.availableItems.some((item) => item.objective.id === objective.id), false);
+});
+
+test("multi-member recruitment remains visible until every assigned challenger responds", async () => {
+  const fixture = await createFixture("multi-recruitment");
+  const objective = await createPublishedObjective(fixture, "multi recruitment objective");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} multi recruitment result`);
+
+  const recruited = await recruitObjectiveChallengers(
+    objective.id,
+    [fixture.challenger.name, fixture.observer.name],
+    fixture.commander.id,
+  );
+  assert.equal(recruited.status, "ok");
+  assert.equal(recruited.objective.flowStatus, "recruiting");
+  assert.deepEqual(recruited.objective.assignedChallengers, [fixture.challenger.name, fixture.observer.name]);
+
+  const accepted = await acceptObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(accepted.status, "accepted");
+  assert.equal(accepted.objective.flowStatus, "reestimating");
+  assert.deepEqual(accepted.objective.challengers, [fixture.challenger.name]);
+  assert.deepEqual(accepted.objective.assignedChallengers, [fixture.observer.name]);
+
+  const observerHall = await getBountyHallData(fixture.observer.name);
+  const observerRecruitment = observerHall.recruitmentItems.find((item) => item.objective.id === objective.id);
+  assert.ok(observerRecruitment, "remaining assigned challenger should still see the recruitment while the objective is reestimating");
+  assert.equal(observerRecruitment.isRecruitment, true);
+  assert.equal(observerRecruitment.objective.flowStatus, "reestimating");
+
+  const observerAccepted = await acceptObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+  assert.equal(observerAccepted.status, "accepted");
+  assert.deepEqual(observerAccepted.objective.challengers, [fixture.challenger.name, fixture.observer.name]);
+  assert.deepEqual(observerAccepted.objective.assignedChallengers, []);
+
+  const hallAfterAllAccepted = await getBountyHallData(fixture.observer.name);
+  assert.equal(hallAfterAllAccepted.recruitmentItems.some((item) => item.objective.id === objective.id), false);
+  assert.equal(hallAfterAllAccepted.availableItems.some((item) => item.objective.id === objective.id), false);
+});
+
+test("commander can add recruitment while an objective is already reestimating", async () => {
+  const fixture = await createFixture("recruit-during-reestimate");
+  const objective = await createPublishedObjective(fixture, "recruit during reestimate objective");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} recruit during reestimate result`);
+
+  assert.equal((await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id)).status, "ok");
+  assert.equal((await acceptObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id)).status, "accepted");
+
+  const additionalRecruitment = await recruitObjectiveChallengers(objective.id, [fixture.observer.name], fixture.commander.id);
+  assert.equal(additionalRecruitment.status, "ok");
+  assert.equal(additionalRecruitment.objective.flowStatus, "reestimating");
+  assert.deepEqual(additionalRecruitment.objective.challengers, [fixture.challenger.name]);
+  assert.deepEqual(additionalRecruitment.objective.assignedChallengers, [fixture.observer.name]);
+
+  const observerHall = await getBountyHallData(fixture.observer.name);
+  assert.ok(observerHall.recruitmentItems.some((item) => item.objective.id === objective.id));
+
+  const observerAccepted = await acceptObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+  assert.equal(observerAccepted.status, "accepted");
+  assert.deepEqual(observerAccepted.objective.challengers, [fixture.challenger.name, fixture.observer.name]);
 });
 
 test("member-proposed result creation requires the API actor to be a challenger inside the reestimate window", async () => {
@@ -729,6 +786,29 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   );
   assert.equal(loot.status, "ok");
 
+  const challengerReview = await submitObjectiveContributionReview(
+    objective.id,
+    {
+      allocations: [
+        { member: fixture.challenger.name, ratio: 2 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(challengerReview.status, "ok");
+  const observerReview = await submitObjectiveContributionReview(
+    objective.id,
+    {
+      allocations: [
+        { member: fixture.challenger.name, ratio: 2 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
+  );
+  assert.equal(observerReview.status, "ok");
+
   const reviewed = await reviewObjectiveLoot(
     objective.id,
     {
@@ -736,10 +816,6 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
       resultReviews: [
         { resultId: resultA.id, acceptedResult: "completed" },
         { resultId: resultB.id, acceptedResult: "completed" },
-      ],
-      contributionRatios: [
-        { member: fixture.challenger.name, ratio: 2 },
-        { member: fixture.observer.name, ratio: 1 },
       ],
     },
     fixture.commander.id,
@@ -750,6 +826,7 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   assert.equal(reviewed.objective.objectiveSettlementPoints, 60);
 
   const data = await getTaskManagementData();
+  assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 2);
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
   assert.equal(ledger.length, 2);
   assert.equal(ledger[0]?.memberName, fixture.challenger.name);

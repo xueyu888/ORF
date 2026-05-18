@@ -5,7 +5,8 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
-| `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收战利品并结算积分 |
+| `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 挑战者提交匿名互评贡献比例 |
+| `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算积分 |
 
 ## 提交请求体
 
@@ -41,7 +42,7 @@
 | `objectiveId` | 当前悬赏目标 ID |
 | `submittedBy` | 提交人姓名 |
 | `body` | 目标完成说明 |
-| `resultClaims` | 每个悬赏指标的主张和证据 |
+| `resultClaims` | 每个指标的主张和证据 |
 | `selfTestReportBody` | 自测摘要 |
 | `selfTestReportUrl` | 自测报告文件 URL，占位 |
 | `submittedAt` | 提交时间 |
@@ -53,22 +54,28 @@
 ```json
 {
   "lootId": "loot-1",
-  "acceptedResult": "completed",
   "resultReviews": [
     { "resultId": "res-1", "acceptedResult": "completed" }
   ],
-  "contributionRatios": [
-    { "member": "Kai Wang", "ratio": 1 }
-  ],
+  "contributionResolution": null,
   "reason": "验收说明"
+}
+```
+
+`contributionResolution` 只在匿名互评缺评、分歧或申诉时填写：
+
+```json
+{
+  "ratios": [{ "member": "Kai Wang", "ratio": 1 }],
+  "reason": "处理互评分歧"
 }
 ```
 
 验收成功后：
 
 - 写入 `Result.acceptedResult`。
-- 写入目标结算字段。
-- 按贡献权重生成 `pointLedger`。
+- 按指标验收结论汇总并写入目标结算字段。
+- 按匿名互评结果或分歧处理结果生成 `pointLedger`。
 - 将 `Objective.flowStatus` 改为 `settled`。
 
 ## 约束
@@ -77,4 +84,5 @@
 - 只有 `frozen` 目标可提交战利品。
 - 只有指挥官可验收。
 - 只有 `submitted` 目标可验收。
+- 多挑战者结算必须有可用匿名互评汇总，或有指挥官分歧处理结果。
 - 任务和子任务状态不自动决定目标完成。

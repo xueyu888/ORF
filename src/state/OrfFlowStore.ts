@@ -214,6 +214,7 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   scenarios: state.scenarios.filter((item) => !targets.objectiveIds.has(item.linkedObjectiveId)),
   failureSamples: state.failureSamples.filter((item) => !targets.resultIds.has(item.linkedResultId)),
   objectiveLoot: state.objectiveLoot.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
+  objectiveContributionReviews: state.objectiveContributionReviews.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   pointLedger: state.pointLedger.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   comments: removeCommentsForTargets(state.comments, {
     objectiveIds: targets.objectiveIds,
@@ -236,6 +237,7 @@ const emptyBusinessState = (): OrfState => ({
   failureSamples: [],
   comments: [],
   objectiveLoot: [],
+  objectiveContributionReviews: [],
   pointLedger: [],
 });
 
@@ -270,6 +272,7 @@ export const normalizeState = (state: OrfState): OrfState => {
     results: legacyResults.map(normalizeResult),
     tasks,
     objectiveLoot: state.objectiveLoot ?? [],
+    objectiveContributionReviews: state.objectiveContributionReviews ?? [],
     pointLedger: state.pointLedger ?? [],
   };
 };
@@ -1111,7 +1114,7 @@ export class OrfFlowStore {
       decisions: [
         {
           id: `dec-${Date.now()}`,
-          title: `更新悬赏指标：${title}`,
+          title: `更新指标：${title}`,
           reason,
           evidence: feedbackId ? `关联反馈 ${feedbackId}` : "手动 ORF 复盘",
           owner: currentUserName(state),

@@ -93,6 +93,7 @@ async function seedBountyHall() {
             whyItMatters: objective.whyItMatters,
             cycle: objective.cycle,
             stage: objective.stage,
+            flowStatus: objective.flowStatus,
             status: objective.status,
             confidence: objective.confidence,
             progress: objective.progress,

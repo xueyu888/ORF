@@ -10,7 +10,7 @@ Canonical icons and visual assets for ORF hierarchy rows and app surfaces. Runti
 | Asset | Meaning |
 | --- | --- |
 | `objective-flag.svg` | Objective object icon. |
-| `metric-square.svg` | Result / 悬赏指标 object icon. Use color to express bounty metric status. |
+| `metric-square.svg` | Result / 指标 object icon. |
 | `completion-circle-empty.svg` | Task / subtask incomplete checkbox. |
 | `completion-circle-done.svg` | Task / subtask complete checkbox. |
 | `sidebar-energy-bg.png` | Sidebar atmospheric background. |

@@ -5,13 +5,14 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { FeedbackCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
+import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { TaskStatus } from "../types/orf";
 import { metricValue, resultProgress } from "../utils/format";
 
 export function ResultDetailPage() {
   const { resultId } = useParams();
-  const { dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
+  const { currentUser, dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
   const result = state.results.find((item) => item.id === resultId);
   if (!result) {
     return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载悬赏数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
@@ -26,12 +27,17 @@ export function ResultDetailPage() {
   const sampleSet = result.sampleSet ?? "指挥官提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
   const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";
   const uncertaintyLevel = result.uncertaintyLevel ?? "进阶";
+  const capabilities = resultDetailCapabilities({
+    objective,
+    currentUser,
+    permissionRules: state.permissionRules,
+  });
 
   return (
     <PageScaffold
       title={result.title}
-      subtitle={`目标 / 悬赏 · ${objective?.title ?? ""}`}
-      action={<div className="flex flex-wrap gap-2"><Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/objectives/${result.objectiveId}/loot`}><Send className="h-4 w-4" />提交目标战利品</Link><Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出悬赏指标更新</Button></div>}
+      subtitle={`目标 / 指标 · ${objective?.title ?? ""}`}
+      action={<div className="flex flex-wrap gap-2">{capabilities.canSubmitLoot && <Link className="orf-control orf-primary-action inline-flex items-center gap-2 px-3 py-2 text-sm font-medium" to={`/objectives/${result.objectiveId}/loot`}><Send className="h-4 w-4" />提交目标战利品</Link>}<Button onClick={() => openModal({ type: "newFeedback", objectiveId: result.objectiveId, resultId: result.id })}>新建反馈</Button>{capabilities.canCreateTask && <Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: result.objectiveId, resultId: result.id })}>创建行动项</Button>}{capabilities.canProposeUpdate && <Button onClick={() => openModal({ type: "resultUpdate", resultId: result.id })}>提出指标更新</Button>}</div>}
     >
       <section className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="grid gap-4">
@@ -70,7 +76,7 @@ export function ResultDetailPage() {
         </div>
         <aside className="grid content-start gap-4">
           <Card className="orf-card-padding">
-            <div className="text-sm font-semibold orf-text-primary">悬赏口径</div>
+            <div className="text-sm font-semibold orf-text-primary">指标口径</div>
             <div className="mt-3 grid gap-3 text-sm orf-text-secondary">
               <p><span className="orf-text-primary">衡量要求：</span>{metricRequirement}</p>
               <p><span className="orf-text-primary">统计对象：</span>{statisticalObject}</p>
@@ -87,11 +93,13 @@ export function ResultDetailPage() {
               {["可度量", "有战利品入口", "已关联目标", "反馈已更新", "有行动项支撑", "口径清楚", "无模糊词"].map((item) => <div key={item} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item}</span><span className="orf-success-text">通过</span></div>)}
             </div>
           </Card>
-          <Card className="orf-card-padding">
-            <div className="text-sm font-semibold orf-text-primary">信心</div>
-            <input className="mt-4 w-full" type="range" min="0" max="100" value={result.confidence} onChange={(event) => updateResultConfidence(result.id, Number(event.target.value))} />
-            <div className="mt-2 text-sm orf-text-secondary">{result.confidence}%</div>
-          </Card>
+          {capabilities.canEditConfidence && (
+            <Card className="orf-card-padding">
+              <div className="text-sm font-semibold orf-text-primary">信心</div>
+              <input className="mt-4 w-full" type="range" min="0" max="100" value={result.confidence} onChange={(event) => updateResultConfidence(result.id, Number(event.target.value))} />
+              <div className="mt-2 text-sm orf-text-secondary">{result.confidence}%</div>
+            </Card>
+          )}
         </aside>
       </section>
     </PageScaffold>

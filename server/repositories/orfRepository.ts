@@ -5,6 +5,7 @@ import type {
   ChallengeApplication,
   CommentStatus,
   CommentTargetType,
+  ContributionAllocation,
   CommentThread,
   Evidence,
   Feedback,
@@ -14,6 +15,7 @@ import type {
   Objective,
   ObjectiveAcceptedResult,
   ObjectiveLoot,
+  ObjectiveContributionReview,
   OrfStage,
   OrfState,
   PointLedgerEntry,
@@ -24,6 +26,10 @@ import type {
   TaskStatus,
   UncertaintyLevel,
 } from "../../src/types/orf";
+import {
+  normalizeContributionAllocations,
+  summarizeContributionReviews,
+} from "../../src/features/challenge/model/contributionReview";
 import { db } from "../db/client";
 import {
   commentMessages,
@@ -33,6 +39,7 @@ import {
   feedbackCauseCategories,
   objectives,
   objectiveLoot,
+  objectiveContributionReviews,
   pointLedger,
   results,
   resultTrendPoints,
@@ -47,7 +54,7 @@ import { addCalendarDays, localDateString } from "../../src/utils/date";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "pointLedger" | "permissionRules"
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveContributionReviews" | "pointLedger" | "permissionRules"
 >;
 
 type CommentActor = {
@@ -87,6 +94,7 @@ const difficultyRanks: Record<UncertaintyLevel, number> = {
 const bountyHallFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting"]);
 const applicationReviewFlowStatuses = new Set<Objective["flowStatus"]>(["applying", "recruiting", "reestimating"]);
 const challengeAcceptanceFlowStatuses = new Set<Objective["flowStatus"]>(["recruiting", "reestimating"]);
+const challengeRecruitmentFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting", "reestimating"]);
 const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled", "closed"]);
 
 function optional<T>(value: T | null): T | undefined {
@@ -195,6 +203,13 @@ function normalizeContributionRatios(input: Array<{ member: string; ratio: numbe
   return ratios.map((item) => ({ member: item.member, ratio: item.ratio / total }));
 }
 
+function objectiveAcceptedResultFromReviews(reviews: ResultAcceptedResult[]): ObjectiveAcceptedResult {
+  if (reviews.length === 0) return "abandoned";
+  if (reviews.every((review) => review === "completed")) return "completed";
+  if (reviews.every((review) => review === "falsified")) return "falsified";
+  return "abandoned";
+}
+
 export async function getTaskManagementData(): Promise<TaskManagementData> {
   const [
     objectiveRows,
@@ -206,6 +221,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     feedbackRows,
     causeRows,
     objectiveLootRows,
+    objectiveContributionReviewRows,
     pointLedgerRows,
     teamRows,
   ] = await Promise.all([
@@ -218,6 +234,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     db.select().from(feedback),
     db.select().from(feedbackCauseCategories),
     db.select().from(objectiveLoot),
+    db.select().from(objectiveContributionReviews),
     db.select().from(pointLedger),
     db.select({ id: teams.id }).from(teams),
   ]);
@@ -388,6 +405,15 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
       selfTestReportBody: item.selfTestReportBody,
       submittedAt: item.submittedAt,
     }));
+  const objectiveContributionReviewItems: ObjectiveContributionReview[] = objectiveContributionReviewRows
+    .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
+    .map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      reviewer: item.reviewer,
+      allocations: item.allocations,
+      submittedAt: item.submittedAt,
+    }));
   const pointLedgerItems: PointLedgerEntry[] = pointLedgerRows
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map((item) => ({
@@ -421,6 +447,7 @@ export async function getTaskManagementData(): Promise<TaskManagementData> {
     feedback: feedbackItems,
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
+    objectiveContributionReviews: objectiveContributionReviewItems,
     pointLedger: pointLedgerItems,
     permissionRules,
   };
@@ -513,7 +540,9 @@ export async function getBountyHallData(member: string): Promise<BountyHallData>
   const items = data.objectives.flatMap((objective) => {
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
-    if (objectiveAcceptedForBountyHall(objective) || objectiveClosedForBountyHall(objective)) return [];
+    const isRecruitment = objective.assignedChallengers.includes(member) && challengeAcceptanceFlowStatuses.has(objective.flowStatus);
+    if (objectiveClosedForBountyHall(objective) && !isRecruitment) return [];
+    if (objectiveAcceptedForBountyHall(objective) && !isRecruitment) return [];
 
     const pendingApplications = (objective.challengeApplications ?? []).filter((application) => application.status === "pending");
     return [{
@@ -522,7 +551,7 @@ export async function getBountyHallData(member: string): Promise<BountyHallData>
       definer: result?.definer ?? "",
       difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
       hasCurrentApplication: pendingApplications.some((application) => application.applicant === member),
-      isRecruitment: objective.assignedChallengers.includes(member),
+      isRecruitment,
       objective,
       result: result ?? null,
       results: objectiveResults,
@@ -576,6 +605,7 @@ export async function getMyChallengesData(member: string, includeAll = false): P
     feedback: data.feedback.filter((item) => objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)),
     comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveContributionReviews: data.objectiveContributionReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger.filter((item) => objectiveIds.has(item.objectiveId)),
     permissionRules: data.permissionRules,
   };
@@ -912,12 +942,19 @@ export async function recruitObjectiveChallengers(
 ): Promise<ObjectiveFlowMutationOutcome> {
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus) || objective.challengers.length > 0) return { status: "invalid" };
-  const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...members]);
+  if (isObjectiveTerminal(objective) || !challengeRecruitmentFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
+  const currentChallengers = uniqueMembers(objective.challengers ?? []);
+  const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
+  const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
   if (assignedChallengers.length === 0) return { status: "invalid" };
   await db
     .update(objectives)
-    .set({ assignedChallengers, flowStatus: "recruiting", updatedAt: today(), updatedBy: actorId })
+    .set({
+      assignedChallengers,
+      flowStatus: currentChallengers.length > 0 || objective.flowStatus === "reestimating" ? "reestimating" : "recruiting",
+      updatedAt: today(),
+      updatedBy: actorId,
+    })
     .where(eq(objectives.id, objectiveId));
   return objectiveOutcome(objectiveId);
 }
@@ -928,19 +965,20 @@ export async function declineObjectiveChallenge(objectiveId: string, member: str
 
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (objective.flowStatus !== "recruiting") return { status: "invalid" };
+  if (!challengeAcceptanceFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
 
   const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
   if (!assignedChallengers.includes(nextMember)) return { status: "invalid" };
 
   const nextAssigned = assignedChallengers.filter((item) => item !== nextMember);
   const applications = objective.challengeApplications ?? [];
+  const challengers = uniqueMembers(objective.challengers ?? []);
   await db
     .update(objectives)
     .set({
       assignedChallengers: nextAssigned,
       challengeApplications: applications,
-      flowStatus: nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
+      flowStatus: challengers.length > 0 ? "reestimating" : nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
       updatedAt: today(),
       updatedBy: actorId,
     })
@@ -1112,7 +1150,7 @@ export async function proposeResultUpdate(
       threadId,
       authorUserId: actor.id,
       author: actor.name,
-      body: `悬赏指标更新：${nextTitle}\n原因：${reason}`,
+      body: `指标更新：${nextTitle}\n原因：${reason}`,
       createdAt: now,
       parentMessageId: null,
       replyToMessageId: null,
@@ -1425,6 +1463,13 @@ export type ObjectiveLootMutationOutcome =
   | { status: "invalid" }
   | { status: "closed" };
 
+export type ObjectiveContributionReviewMutationOutcome =
+  | { status: "ok"; review: ObjectiveContributionReview }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalid" }
+  | { status: "closed" };
+
 export async function submitObjectiveLoot(
   objectiveId: string,
   input: SubmitObjectiveLootInput,
@@ -1489,10 +1534,51 @@ export async function submitObjectiveLoot(
   return loot ? { status: "ok", loot } : { status: "notFound" };
 }
 
+export async function submitObjectiveContributionReview(
+  objectiveId: string,
+  input: { allocations: ContributionAllocation[] },
+  actor: Pick<CommentActor, "id" | "name" | "role">,
+): Promise<ObjectiveContributionReviewMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) {
+    return { status: "notFound" };
+  }
+
+  if (objective.flowStatus !== "submitted") {
+    return { status: "closed" };
+  }
+
+  const challengers = uniqueMembers(objective.challengers ?? []);
+  if (!challengers.includes(actor.name)) {
+    return { status: "forbidden" };
+  }
+
+  const allocations = normalizeContributionAllocations(input.allocations, challengers);
+  if (allocations.length !== challengers.length) {
+    return { status: "invalid" };
+  }
+
+  const reviewId = makeId("contribution-review");
+  const submittedAt = nowIso();
+  await db.insert(objectiveContributionReviews).values({
+    id: reviewId,
+    teamId: objective.teamId,
+    objectiveId: objective.id,
+    reviewer: actor.name,
+    allocations,
+    submittedAt,
+  });
+
+  const data = await getTaskManagementData();
+  const review = data.objectiveContributionReviews.find((item) => item.id === reviewId);
+  return review ? { status: "ok", review } : { status: "notFound" };
+}
+
 export interface ReviewObjectiveLootInput {
   lootId?: string;
-  acceptedResult: ObjectiveAcceptedResult;
+  acceptedResult?: ObjectiveAcceptedResult;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
+  contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   contributionRatios?: Array<{ member: string; ratio: number }>;
   reason?: string;
 }
@@ -1531,19 +1617,38 @@ export async function reviewObjectiveLoot(
     return "failed";
   };
 
+  const acceptedResults = resultRows.map((result) => acceptedResultFor(result.id));
+  const objectiveAcceptedResult = input.acceptedResult ?? objectiveAcceptedResultFromReviews(acceptedResults);
   const basePoints = resultRows.reduce((sum, result) => sum + (result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel)), 0);
-  const completionMultiplier = completionMultiplierFor(input.acceptedResult, loot.submittedAt, objective.finalDueAt);
+  const completionMultiplier = completionMultiplierFor(objectiveAcceptedResult, loot.submittedAt, objective.finalDueAt);
   const settlementPoints = Number((basePoints * completionMultiplier).toFixed(2));
   const challengers = uniqueMembers(objective.challengers ?? []);
+  const contributionReviews = await db
+    .select()
+    .from(objectiveContributionReviews)
+    .where(eq(objectiveContributionReviews.objectiveId, objectiveId));
+  const contributionSummary = summarizeContributionReviews(
+    challengers,
+    contributionReviews.map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      reviewer: item.reviewer,
+      allocations: item.allocations,
+      submittedAt: item.submittedAt,
+    })),
+  );
+  const resolutionRatios = input.contributionResolution?.ratios ?? input.contributionRatios ?? [];
   const normalizedRatios =
-    normalizeContributionRatios(input.contributionRatios ?? [], challengers) ??
-    (challengers.length > 0 ? challengers.map((member) => ({ member, ratio: 1 / challengers.length })) : []);
+    contributionSummary.status === "ready"
+      ? contributionSummary.ratios
+      : normalizeContributionRatios(resolutionRatios, challengers);
+  if (!normalizedRatios || normalizedRatios.length === 0) return { status: "invalid" };
   const memberRows = normalizedRatios.length > 0
     ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.name, normalizedRatios.map((item) => item.member)))
     : [];
   const userIdByName = new Map(memberRows.map((user) => [user.name, user.id]));
   const createdAt = nowIso();
-  const reason = input.reason?.trim() || `目标结算：${objective.title}`;
+  const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || `目标结算：${objective.title}`;
 
   await db.transaction(async (tx) => {
     await Promise.all(
@@ -1574,7 +1679,7 @@ export async function reviewObjectiveLoot(
       .set({
         flowStatus: "settled",
         stage: "goalFrozen",
-        acceptedResult: input.acceptedResult,
+        acceptedResult: objectiveAcceptedResult,
         completionMultiplier,
         objectiveBasePoints: basePoints,
         objectiveSettlementPoints: settlementPoints,
