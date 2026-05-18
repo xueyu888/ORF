@@ -1520,7 +1520,11 @@ test("task and comment API writes require objective participation", async () => 
       body: "challenger can comment",
     });
     assert.equal(challengerComment.statusCode, 200);
-    const challengerCommentPayload = challengerComment.json() as { commentThread: { id: string; targetTitle: string; messages: Array<{ id: string }> } };
+    const challengerCommentPayload = challengerComment.json() as {
+      commentThread: { id: string; targetTitle: string; messages: Array<{ id: string; author: string; body: string; replyToMessageId?: string; replyToAuthor?: string }> };
+    };
+    const rootMessageId = challengerCommentPayload.commentThread.messages[0]?.id;
+    assert.ok(rootMessageId);
     assert.equal(challengerCommentPayload.commentThread.targetTitle, objective.title);
 
     const replyComment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
@@ -1528,10 +1532,29 @@ test("task and comment API writes require objective participation", async () => 
       targetId: objective.id,
       targetTitle: "spoofed reply title",
       body: "reply keeps server title",
-      parentMessageId: challengerCommentPayload.commentThread.messages[0]?.id,
+      parentMessageId: rootMessageId,
+      replyToMessageId: rootMessageId,
+      replyToAuthor: "spoofed author",
     });
     assert.equal(replyComment.statusCode, 200);
-    assert.equal((replyComment.json() as { commentThread: { targetTitle: string } }).commentThread.targetTitle, objective.title);
+    const replyPayload = replyComment.json() as {
+      commentThread: { targetTitle: string; messages: Array<{ id: string; body: string; replyToMessageId?: string; replyToAuthor?: string }> };
+    };
+    assert.equal(replyPayload.commentThread.targetTitle, objective.title);
+    const replyMessage = replyPayload.commentThread.messages.find((message) => message.body === "reply keeps server title");
+    assert.equal(replyMessage?.replyToMessageId, rootMessageId);
+    assert.equal(replyMessage?.replyToAuthor, fixture.challenger.name);
+
+    const brokenReply = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: "broken reply target should fail",
+      parentMessageId: rootMessageId,
+      replyToMessageId: `${fixture.prefix}-missing-message`,
+      replyToAuthor: "Ghost",
+    });
+    assert.equal(brokenReply.statusCode, 404);
   });
 });
 

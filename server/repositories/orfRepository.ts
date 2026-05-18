@@ -1653,6 +1653,21 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         return null;
       }
 
+      let replyToMessageId: string | null = null;
+      let replyToAuthor: string | null = null;
+      if (input.replyToMessageId) {
+        const [replyTarget] = await tx
+          .select({ id: commentMessages.id, author: commentMessages.author })
+          .from(commentMessages)
+          .where(and(eq(commentMessages.threadId, parent.threadId), eq(commentMessages.id, input.replyToMessageId)))
+          .limit(1);
+        if (!replyTarget) {
+          return null;
+        }
+        replyToMessageId = replyTarget.id;
+        replyToAuthor = replyTarget.author;
+      }
+
       const messageRows = await tx
         .select({ sortOrder: commentMessages.sortOrder })
         .from(commentMessages)
@@ -1667,8 +1682,8 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         body,
         createdAt,
         parentMessageId: input.parentMessageId,
-        replyToMessageId: input.replyToMessageId ?? null,
-        replyToAuthor: input.replyToAuthor ?? null,
+        replyToMessageId,
+        replyToAuthor,
         sortOrder,
       });
       await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
