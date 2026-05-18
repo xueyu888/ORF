@@ -19,7 +19,18 @@ export function AIEvaluationPage() {
         {state.evalRuns.map((run) => <div key={run.id} className="orf-table-row grid grid-cols-[120px_1fr_150px_150px_130px_120px_90px_110px_100px_100px_110px] items-center gap-3 px-4 py-3 text-sm"><span className="font-mono text-xs orf-text-muted">{run.id}</span><span>{run.scenario}</span><span className="orf-text-secondary">{run.dataset}</span><span className="orf-text-secondary">{run.model}</span><span>{run.promptVersion}</span><span>{run.ragVersion}</span><span>{run.accuracy}%</span><span>{run.hallucination}%</span><span>{run.latency}s</span><span>${run.cost}</span><StatusBadge status={run.status} /></div>)}
         {state.evalRuns.length === 0 && <div className="px-4 py-6 text-sm orf-text-muted">暂无评估运行。</div>}
       </Card>
-      <div className="grid gap-4 lg:grid-cols-5">{state.scenarios.map((scenario) => <Card key={scenario.id} interactive className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">{scenario.title}</div><div className="mt-3 text-2xl font-semibold orf-text-primary">{scenario.qualityScore}</div><div className="text-xs orf-text-muted">质量分</div><div className="mt-3 text-xs orf-text-secondary">主要失败原因：{scenario.topFailureCause}</div><div className="mt-1 text-xs orf-text-muted">{scenario.openFeedbackCount} 条开放反馈</div></Card>)}</div>
+      <div className="grid gap-4 lg:grid-cols-5">
+        {state.scenarios.map((scenario) => (
+          <Card key={scenario.id} interactive className="orf-card-padding">
+            <div className="text-sm font-semibold orf-text-primary">{scenario.title}</div>
+            <div className="mt-3 text-2xl font-semibold orf-text-primary">{scenario.qualityScore}</div>
+            <div className="text-xs orf-text-muted">质量分</div>
+            <div className="mt-3 text-xs orf-text-secondary">主要失败原因：{scenario.topFailureCause}</div>
+            <div className="mt-1 text-xs orf-text-muted">{scenario.openFeedbackCount} 条开放反馈</div>
+          </Card>
+        ))}
+        {state.scenarios.length === 0 && <Card className="orf-card-padding text-sm orf-text-muted lg:col-span-5">暂无评估场景。</Card>}
+      </div>
       <Card className="orf-card-padding">
         <div className="mb-3 text-sm font-semibold orf-text-primary">失败样本</div>
         <div className="grid gap-3">{state.failureSamples.map((sample) => {
