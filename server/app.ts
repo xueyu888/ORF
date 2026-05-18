@@ -1346,7 +1346,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     );
 
     if (!updated) {
-      return reply.code(404).send({ error: "Result not found" });
+      return reply.code(404).send({ error: "Result or feedback not found" });
     }
 
     return { ok: true };

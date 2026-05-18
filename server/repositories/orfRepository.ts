@@ -1298,6 +1298,17 @@ export async function proposeResultUpdate(
       return false;
     }
 
+    if (input.feedbackId) {
+      const [linkedFeedback] = await tx
+        .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
+        .from(feedback)
+        .where(eq(feedback.id, input.feedbackId))
+        .limit(1);
+      if (!linkedFeedback || linkedFeedback.teamId !== result.teamId || linkedFeedback.linkedResultId !== result.id) {
+        return false;
+      }
+    }
+
     const updated = await tx
       .update(results)
       .set({ title: nextTitle, updatedBy: actor.id })

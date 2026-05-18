@@ -31,6 +31,7 @@
 | 战利品与验收异常 | `loot submission rejects incomplete or out-of-state payloads` / `review rejects invalid state and missing loot` | 提交和验收的非法状态、漏 claim、外部 Result、缺失 loot 均应拒绝 |
 | 多挑战者结算 | `settlement normalizes multi-challenger contribution ratios and supports overdelivery` | 多挑战者贡献比例来自匿名互评并归一化，超预期完成按 1.5 倍结算 |
 | API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、验收、全量挑战视图权限 |
+| API 跨团队写保护 | `API mutations enforce team boundaries even for administrators` | 管理员不能通过其他团队的目标、指标、评论或反馈 ID 改写跨团队数据 |
 | API 指标管理权限 | `API result management routes keep privileged operations behind role permissions` | `managerDefined` 创建、confidence、update-proposal、排序、删除等高权限指标操作 |
 
 测试直接调用 `server/repositories/orfRepository.ts` 的公开函数。
@@ -151,6 +152,7 @@ flowchart TD
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
 | ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`。 | API 输入归一化 |
 | ORF-BE-R040 | `Objective.stage` 是兼容字段，旧接口不能写入与 `flowStatus` 冲突的阶段；生命周期状态只能由 ORF 流程接口推进。 | API stage 兼容保护 |
+| ORF-BE-R041 | 指标更新提案携带的 `feedbackId` 必须和当前指标同团队、同指标；合法指标请求不能连带改写其他团队或其他指标的反馈。 | API 跨团队写保护 |
 
 ## 关键断言
 

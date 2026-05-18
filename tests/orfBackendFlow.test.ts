@@ -1158,6 +1158,8 @@ test("API mutations enforce team boundaries even for administrators", async () =
   const candidate = await createTestObjective(owner, "cross-team candidate");
   const objective = await createPublishedObjective(owner, "cross-team published objective");
   const result = await createTestResult(objective.id, owner.commander.name, `${owner.prefix} cross-team result`);
+  const intruderObjective = await createPublishedObjective(intruder, "intruder update proposal objective");
+  const intruderOwnedResult = await createTestResult(intruderObjective.id, intruder.commander.name, `${intruder.prefix} update proposal result`);
 
   await withApiServerForFixtures([owner, intruder], async (app) => {
     const intruderPublish = await apiInject(app, intruder.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
@@ -1190,6 +1192,27 @@ test("API mutations enforce team boundaries even for administrators", async () =
       body: "cross-team admin should not comment",
     });
     assert.equal(intruderComment.statusCode, 404);
+
+    const ownerFeedback = await apiInject(app, owner.commander, "POST", "/api/feedback", {
+      phenomenon: `${owner.prefix} cross-team feedback target`,
+      causeCategories: ["Quality"],
+      impact: "High",
+      linkedResultId: result.id,
+      suggestedAdjustment: "Cross-team update proposals must not mutate this feedback.",
+      source: "Team review",
+      owner: owner.commander.name,
+    });
+    assert.equal(ownerFeedback.statusCode, 200);
+    const ownerFeedbackId = (ownerFeedback.json() as { feedback: { id: string } }).feedback.id;
+
+    const intruderUpdateProposal = await apiInject(app, intruder.commander, "POST", `/api/results/${encodeURIComponent(intruderOwnedResult.id)}/update-proposal`, {
+      title: `${intruder.prefix} scoped proposal`,
+      reason: "Attempt to update another team's feedback status.",
+      feedbackId: ownerFeedbackId,
+    });
+    assert.equal(intruderUpdateProposal.statusCode, 404);
+    const ownerData = await getTaskManagementData({ teamId: owner.teamId });
+    assert.equal(ownerData.feedback.find((item) => item.id === ownerFeedbackId)?.status, "New");
 
     const ownerPublish = await apiInject(app, owner.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
     assert.equal(ownerPublish.statusCode, 200);
