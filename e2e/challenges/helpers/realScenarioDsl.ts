@@ -25,12 +25,14 @@ export class RealScenarioDsl {
   async createCandidateObjective(page: Page, title: string, options: { cycle?: string; finalDueAt?: string } = {}) {
     await this.openTasks(page);
     await page.getByRole("button", { name: "新建目标" }).click();
-    await page.getByLabel("目标标题").fill(title);
-    await page.getByLabel("为什么重要").fill(`${title} 需要真实系统联调验证。`);
-    await page.getByLabel("周期").fill(options.cycle ?? "2999 Q4");
-    await page.getByLabel("最终截止时间").fill(options.finalDueAt ?? realFutureDueDate);
-    await page.getByLabel("边界 / 不做什么").fill("只验证 ORF 流程，不改开发代码。");
-    await page.getByRole("button", { name: "保存目标" }).click();
+    const dialog = page.getByRole("dialog", { name: "新建目标" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("目标标题").fill(title);
+    await dialog.getByLabel("为什么重要").fill(`${title} 需要真实系统联调验证。`);
+    await dialog.getByRole("textbox", { name: "周期" }).fill(options.cycle ?? "2999 Q4");
+    await dialog.getByLabel("最终截止时间").fill(options.finalDueAt ?? realFutureDueDate);
+    await dialog.getByLabel("边界 / 不做什么").fill("只验证 ORF 流程，不改开发代码。");
+    await dialog.getByRole("button", { name: "保存目标" }).click();
     await expect(objectivePanel(page, title)).toBeVisible();
     return this.real.objectiveIdByTitle(title);
   }
@@ -39,9 +41,11 @@ export class RealScenarioDsl {
     const panel = objectivePanel(page, objectiveTitle);
     await panel.hover();
     await panel.getByLabel("新增指标").click();
-    await page.getByLabel("指标标题").fill(metricTitle);
-    await page.getByLabel("衡量指标").fill(metricName);
-    await page.getByRole("button", { name: "保存指标" }).click();
+    const dialog = page.getByRole("dialog", { name: "新增指标" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("指标标题").fill(metricTitle);
+    await dialog.getByLabel("衡量指标").fill(metricName);
+    await dialog.getByRole("button", { name: "保存指标" }).click();
     await expect(panel).toContainText(metricTitle);
     return this.real.resultIdByTitle(metricTitle);
   }
@@ -91,12 +95,16 @@ export class RealScenarioDsl {
     const panel = objectivePanel(page, title);
     await panel.hover();
     await panel.getByRole("button", { name: "征召" }).click();
-    await expect(page.getByText("征召挑战者")).toBeVisible();
+    const dialog = page.getByRole("dialog", { name: "征召挑战者" });
+    await expect(dialog).toBeVisible();
     for (const member of members) {
-      await page.locator("label").filter({ hasText: member }).getByRole("checkbox").check();
+      const checkbox = dialog.getByRole("checkbox", { name: `征召 ${member}` });
+      await checkbox.click({ force: true, timeout: 5_000 });
+      await expect(checkbox, `${member} should be selected for recruitment`).toBeChecked();
     }
-    await page.getByRole("button", { name: "发送征召" }).click();
-    await expect(page.getByText("征召挑战者")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "发送征召" })).toBeEnabled();
+    await dialog.getByRole("button", { name: "发送征召" }).click();
+    await expect(dialog).toHaveCount(0);
     await expect(panel).toContainText("征召中");
   }
 
@@ -118,9 +126,11 @@ export class RealScenarioDsl {
     await expect(panel).toContainText("重估中");
     await panel.hover();
     await panel.getByLabel("提出指标").click();
-    await page.getByLabel("指标标题").fill(metricTitle);
-    await page.getByLabel("衡量指标").fill(metricName);
-    await page.getByRole("button", { name: "提交指标" }).click();
+    const dialog = page.getByRole("dialog", { name: "提出指标" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("指标标题").fill(metricTitle);
+    await dialog.getByLabel("衡量指标").fill(metricName);
+    await dialog.getByRole("button", { name: "提交指标" }).click();
     await expect(panel).toContainText(metricTitle);
     return this.real.resultIdByTitle(metricTitle);
   }

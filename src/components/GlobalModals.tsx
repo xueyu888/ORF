@@ -18,7 +18,7 @@ function ModalFrame({ title, children }: { title: string; children: ReactNode })
         style={drag.style}
         aria-label={title}
         aria-modal="true"
-        className="orf-card orf-draggable-floating w-full max-w-xl rounded-xl"
+        className="orf-card orf-draggable-floating flex max-h-[82vh] w-full max-w-xl flex-col overflow-hidden rounded-xl"
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >
@@ -28,7 +28,7 @@ function ModalFrame({ title, children }: { title: string; children: ReactNode })
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+        <div className="min-h-0 overflow-y-auto p-5">{children}</div>
       </div>
     </div>
   );
@@ -97,7 +97,7 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
                 <span className="font-medium orf-text-primary">{user.name}</span>
                 <span className="ml-2 orf-text-muted">{user.email}</span>
               </span>
-              <input checked={selectedMembers.includes(user.name)} onChange={() => toggleMember(user.name)} type="checkbox" />
+              <input aria-label={`征召 ${user.name}`} checked={selectedMembers.includes(user.name)} onChange={() => toggleMember(user.name)} type="checkbox" />
             </label>
           ))}
           {candidates.length === 0 && <div className="rounded-lg border orf-border px-3 py-6 text-center text-sm orf-text-secondary">没有可征召的成员。</div>}

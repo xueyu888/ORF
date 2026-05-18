@@ -339,7 +339,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 测试分层必须保持正交：
 
 - `realSystemHarness.ts` 只负责启动真实 Fastify API、Fake Ory、真实数据库种子和多浏览器上下文。
-- `realScenarioDsl.ts` 只封装用户动作，不写业务判定。
+- `realScenarioDsl.ts` 只封装用户动作，不写业务判定；所有弹窗表单操作必须先定位到对应 `dialog`，避免页面级筛选器或同名控件污染真实流程测试。
 - `realClock.ts` 只推进测试业务时间，不等待真实时间。
 - `realAssertions.ts` 只做页面和数据库不变量断言。
 - 产品代码不能 import 或依赖任何 `e2e/challenges/helpers/*`，也不能为了测试新增生产运行路径。
@@ -358,6 +358,8 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
 | 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss 都要有可见断言 |
+| 可访问控件名 | 征召、申请、提出指标、提交战利品和验收等关键流程控件必须有稳定可访问名称，真实流程测试按控件语义定位，不依赖 CSS 或拼接文本 |
+| 弹窗长列表 | 新建、征召、指标和反馈等全局弹窗必须限制在视口内，内容区可滚动，长候选人列表不能把提交按钮或后续选项挤出可操作区域 |
 | 数据一致性 | mutation 成功但刷新旧数据或刷新失败时，前端不能靠本地推断制造成功状态 |
 | 本地回退状态 | 本地 store 生成 Objective、Result、Feedback、子任务和决策 ID 时必须带单调计数和随机后缀；同一毫秒内连续操作不能产生重复 ID，即使伪随机数重复也不能撞 ID |
 
