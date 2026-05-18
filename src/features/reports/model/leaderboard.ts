@@ -11,6 +11,10 @@ export type LeaderboardRow = {
 };
 
 type LeaderboardState = Pick<OrfState, "objectives" | "pointLedger" | "users">;
+type DateBounds = {
+  end: string;
+  start: string;
+};
 
 function dateOnly(value: string | null | undefined) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
@@ -29,7 +33,7 @@ function latestDate(entries: PointLedgerEntry[], objectives: Objective[]) {
   return dates.sort().at(-1) ?? new Date().toISOString().slice(0, 10);
 }
 
-function rangeBounds(range: TimeRange, anchorDate: string) {
+function rangeBounds(range: TimeRange, anchorDate: string): DateBounds | null {
   if (range === "all") {
     return null;
   }
@@ -52,6 +56,28 @@ function rangeBounds(range: TimeRange, anchorDate: string) {
   };
 }
 
+function previousRangeBounds(range: TimeRange, anchorDate: string): DateBounds | null {
+  const currentBounds = rangeBounds(range, anchorDate);
+  if (!currentBounds) {
+    return null;
+  }
+
+  const start = new Date(`${currentBounds.start}T00:00:00.000Z`);
+  const end = new Date(`${currentBounds.end}T00:00:00.000Z`);
+  if (range === "year") {
+    start.setUTCFullYear(start.getUTCFullYear() - 1);
+    end.setUTCFullYear(end.getUTCFullYear() - 1);
+  } else {
+    start.setUTCMonth(start.getUTCMonth() - 3);
+    end.setUTCMonth(end.getUTCMonth() - 3);
+  }
+
+  return {
+    start: toDateKey(start),
+    end: toDateKey(end),
+  };
+}
+
 function isInRange(value: string | null | undefined, range: TimeRange, anchorDate: string) {
   const key = dateOnly(value);
   if (!key) {
@@ -62,15 +88,16 @@ function isInRange(value: string | null | undefined, range: TimeRange, anchorDat
   return !bounds || (key >= bounds.start && key < bounds.end);
 }
 
+function isInBounds(value: string | null | undefined, bounds: DateBounds) {
+  const key = dateOnly(value);
+  return Boolean(key && key >= bounds.start && key < bounds.end);
+}
+
 function memberNames(users: OrfUser[], pointsByMember: Map<string, number>, objectiveCounts: Map<string, { completed: number; total: number }>) {
   return Array.from(new Set([...users.map((user) => user.name), ...pointsByMember.keys(), ...objectiveCounts.keys()])).filter(Boolean);
 }
 
-export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange): LeaderboardRow[] {
-  const anchorDate = latestDate(state.pointLedger, state.objectives);
-  const ledger = state.pointLedger.filter((entry) => isInRange(entry.createdAt, timeRange, anchorDate));
-  const objectives = state.objectives.filter((objective) => isInRange(objective.updatedAt ?? objective.createdAt, timeRange, anchorDate));
-
+function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objectives: Objective[]) {
   const pointsByMember = new Map<string, number>();
   for (const entry of ledger) {
     pointsByMember.set(entry.memberName, (pointsByMember.get(entry.memberName) ?? 0) + entry.points);
@@ -88,7 +115,7 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
     }
   }
 
-  return memberNames(state.users, pointsByMember, objectiveCounts)
+  return memberNames(users, pointsByMember, objectiveCounts)
     .map((memberName) => {
       const counts = objectiveCounts.get(memberName) ?? { completed: 0, total: 0 };
       const points = pointsByMember.get(memberName) ?? 0;
@@ -106,4 +133,31 @@ export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRan
       ...row,
       rank: index + 1,
     }));
+}
+
+export function buildLeaderboardRows(state: LeaderboardState, timeRange: TimeRange): LeaderboardRow[] {
+  const anchorDate = latestDate(state.pointLedger, state.objectives);
+  const ledger = state.pointLedger.filter((entry) => isInRange(entry.createdAt, timeRange, anchorDate));
+  const objectives = state.objectives.filter((objective) => isInRange(objective.updatedAt ?? objective.createdAt, timeRange, anchorDate));
+  const currentRows = buildPeriodRows(state.users, ledger, objectives);
+  const previousBounds = previousRangeBounds(timeRange, anchorDate);
+
+  if (!previousBounds) {
+    return currentRows;
+  }
+
+  const previousRows = buildPeriodRows(
+    state.users,
+    state.pointLedger.filter((entry) => isInBounds(entry.createdAt, previousBounds)),
+    state.objectives.filter((objective) => isInBounds(objective.updatedAt ?? objective.createdAt, previousBounds)),
+  );
+  const previousRanks = new Map(previousRows.map((row) => [row.memberName, row.rank]));
+
+  return currentRows.map((row) => {
+    const previousRank = previousRanks.get(row.memberName);
+    return {
+      ...row,
+      rankChange: previousRank ? previousRank - row.rank : 0,
+    };
+  });
 }

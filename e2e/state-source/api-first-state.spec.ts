@@ -183,6 +183,29 @@ test("reports leaderboard shows visible member names from point ledger", async (
   await expect(row.locator(".reports-points-cell")).toHaveText("42.0");
 });
 
+test("reports leaderboard renders rank changes from the previous quarter", async ({ page }) => {
+  const ledger: PointLedgerEntry[] = [
+    { id: "ledger-report-rank-q1-ava", objectiveId: "objective-report-rank", memberName: "Ava Change", points: 90, reason: "Q1", createdAt: "2999-01-10" },
+    { id: "ledger-report-rank-q1-bo", objectiveId: "objective-report-rank", memberName: "Bo Change", points: 40, reason: "Q1", createdAt: "2999-01-11" },
+    { id: "ledger-report-rank-q2-ava", objectiveId: "objective-report-rank", memberName: "Ava Change", points: 60, reason: "Q2", createdAt: "2999-04-10" },
+    { id: "ledger-report-rank-q2-bo", objectiveId: "objective-report-rank", memberName: "Bo Change", points: 80, reason: "Q2", createdAt: "2999-04-11" },
+  ];
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: {
+        ...taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }),
+        pointLedger: ledger,
+      },
+    });
+  });
+
+  await page.goto("/reports");
+
+  await expect(page.locator(".reports-leaderboard-row", { hasText: "Bo Change" }).locator(".reports-change-cell")).toHaveText("1↑");
+  await expect(page.locator(".reports-leaderboard-row", { hasText: "Ava Change" }).locator(".reports-change-cell")).toHaveText("1↓");
+});
+
 test("command menu does not expose the auth route inside the authenticated app", async ({ page }) => {
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });

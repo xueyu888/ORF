@@ -7,6 +7,7 @@ const baseState = (): Pick<OrfState, "objectives" | "pointLedger" | "users"> => 
   users: [
     { id: "user-a", name: "Ava", email: "ava@example.com", role: "member", status: "active" },
     { id: "user-b", name: "Bo", email: "bo@example.com", role: "member", status: "active" },
+    { id: "user-c", name: "Cy", email: "cy@example.com", role: "member", status: "active" },
   ],
   objectives: [],
   pointLedger: [],
@@ -29,6 +30,29 @@ test("leaderboard quarter and year filters use the latest ledger period", () => 
   assert.deepEqual(buildLeaderboardRows(state, "quarter").map((row) => [row.memberName, row.points]), [["Bo", 50], ["Ava", 30]]);
   assert.deepEqual(buildLeaderboardRows(state, "year").map((row) => [row.memberName, row.points]), [["Bo", 50], ["Ava", 40]]);
   assert.deepEqual(buildLeaderboardRows(state, "all").map((row) => [row.memberName, row.points]), [["Bo", 50], ["Ava", 40]]);
+});
+
+test("leaderboard rank changes compare with the previous matching period", () => {
+  const state = baseState();
+  state.pointLedger = [
+    ledger({ id: "points-q1-a", memberName: "Ava", points: 90, createdAt: "2999-01-15" }),
+    ledger({ id: "points-q1-b", memberName: "Bo", points: 40, createdAt: "2999-01-16" }),
+    ledger({ id: "points-q1-c", memberName: "Cy", points: 10, createdAt: "2999-01-17" }),
+    ledger({ id: "points-q2-a", memberName: "Ava", points: 60, createdAt: "2999-04-15" }),
+    ledger({ id: "points-q2-b", memberName: "Bo", points: 80, createdAt: "2999-04-16" }),
+    ledger({ id: "points-q2-c", memberName: "Cy", points: 5, createdAt: "2999-04-17" }),
+  ];
+
+  assert.deepEqual(buildLeaderboardRows(state, "quarter").map((row) => [row.memberName, row.rank, row.rankChange]), [
+    ["Bo", 1, 1],
+    ["Ava", 2, -1],
+    ["Cy", 3, 0],
+  ]);
+  assert.deepEqual(buildLeaderboardRows(state, "all").map((row) => [row.memberName, row.rankChange]), [
+    ["Ava", 0],
+    ["Bo", 0],
+    ["Cy", 0],
+  ]);
 });
 
 function ledger(overrides: Partial<PointLedgerEntry>): PointLedgerEntry {
