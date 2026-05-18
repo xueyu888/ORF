@@ -319,6 +319,11 @@ async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
     return null;
   }
 
+  if (user.status !== "active") {
+    reply.code(403).send({ error: "User is not approved", status: user.status });
+    return null;
+  }
+
   if (user.role !== "admin") {
     reply.code(403).send({ error: "Forbidden" });
     return null;
@@ -336,6 +341,11 @@ async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
 
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
+    return null;
+  }
+
+  if (user.status !== "active") {
+    reply.code(403).send({ error: "User is not approved", status: user.status });
     return null;
   }
 
@@ -714,6 +724,13 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
     try {
       const params = visualBackgroundStaticParamsSchema.parse(request.params);
+      if (params.scene !== "login_background") {
+        const user = await requireApiUser(request, reply);
+        if (!user) {
+          return reply;
+        }
+      }
+
       const file = await getVisualBackgroundFile(params.scene, params.scope, params.fileName);
       reply.header("Content-Type", file.mimeType);
       return reply.send(file.stream);

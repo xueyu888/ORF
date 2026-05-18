@@ -1740,6 +1740,47 @@ test("API visual settings write routes are administrator-only", async () => {
   });
 });
 
+test("visual background read routes only expose login assets publicly", async () => {
+  const fixture = await createFixture("visual-background-read-scope");
+
+  await withApiServer(fixture, async (app) => {
+    const publicLoginList = await app.inject({
+      method: "GET",
+      url: "/api/settings/visual/backgrounds?scene=login_background",
+    });
+    assert.equal(publicLoginList.statusCode, 200);
+
+    const publicSidebarList = await app.inject({
+      method: "GET",
+      url: "/api/settings/visual/backgrounds?scene=sidebar_background",
+    });
+    assert.equal(publicSidebarList.statusCode, 401);
+
+    const memberSidebarList = await apiInject(app, fixture.challenger, "GET", "/api/settings/visual/backgrounds?scene=sidebar_background");
+    assert.equal(memberSidebarList.statusCode, 200);
+
+    const publicLoginFile = await app.inject({
+      method: "GET",
+      url: "/settings/backgrounds/login_background/default/orf-login-sky-adventure.png",
+    });
+    assert.equal(publicLoginFile.statusCode, 200);
+
+    const publicSidebarFile = await app.inject({
+      method: "GET",
+      url: "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png",
+    });
+    assert.equal(publicSidebarFile.statusCode, 401);
+
+    const memberSidebarFile = await apiInject(
+      app,
+      fixture.challenger,
+      "GET",
+      "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png",
+    );
+    assert.equal(memberSidebarFile.statusCode, 200);
+  });
+});
+
 test("API result and submitted objective mutations are locked by lifecycle state", async () => {
   const fixture = await createFixture("api-lifecycle-locks");
 

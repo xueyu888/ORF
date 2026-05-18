@@ -40,8 +40,13 @@ export function authDependencyUnavailablePayload(error: unknown) {
 }
 
 export async function requireAuthenticatedApi(request: FastifyRequest, reply: FastifyReply) {
-  const pathname = new URL(request.url, "http://orf.local").pathname;
-  if (request.method === "GET" && pathname === "/api/settings/visual/backgrounds") {
+  const requestUrl = new URL(request.url, "http://orf.local");
+  const pathname = requestUrl.pathname;
+  if (
+    request.method === "GET" &&
+    pathname === "/api/settings/visual/backgrounds" &&
+    requestUrl.searchParams.get("scene") === "login_background"
+  ) {
     return;
   }
 
