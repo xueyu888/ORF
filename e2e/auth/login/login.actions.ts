@@ -19,13 +19,8 @@ import {
 export async function setup(ctx: TestContext): Promise<SetupState> {
   const setupState = await setupLoginState();
 
-  try {
-    await setupLoginPage(ctx);
-    return setupState;
-  } catch (error) {
-    await clean(ctx, setupState).catch(() => undefined);
-    throw error;
-  }
+  await setupLoginPage(ctx);
+  return setupState;
 }
 
 export async function action(ctx: TestContext, _setupState: SetupState): Promise<ActionResult> {
