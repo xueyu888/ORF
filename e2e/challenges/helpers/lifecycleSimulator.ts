@@ -1,4 +1,4 @@
-import { test as base, type Page, type TestInfo } from "@playwright/test";
+import { expect, test as base, type Page, type TestInfo } from "@playwright/test";
 import type { ObjectiveFlowStatus } from "../../../src/types/orf";
 import { RealClock } from "./realClock";
 import { RealScenarioDsl } from "./realScenarioDsl";
@@ -190,6 +190,9 @@ export class LifecycleSimulator {
       try {
         await action();
         await this.refreshLogState(log, meta);
+        if (meta.expectedState) {
+          expect(log.actualState, expectedStateFailureMessage(log)).toBe(meta.expectedState);
+        }
         if (!options.skipInvariants) {
           await assertLifecycleInvariants(this.world.real, this.world.invariantContext(), {
             includeApiVisibility: options.includeApiVisibility ?? true,
@@ -211,7 +214,11 @@ export class LifecycleSimulator {
   }
 
   async fillReadOnlySteps() {
-    const actions = [
+    await this.fillMutationSteps();
+  }
+
+  async fillMutationSteps() {
+    const readActions = [
       async () => {
         const actor = this.world.rng.pick(["member1", "member2", "member3", "member4", "observer"] as const);
         await this.runStep({ action: "seeded-read-open-tasks", actor }, async () => {
@@ -232,8 +239,149 @@ export class LifecycleSimulator {
     ];
 
     while (this.stepIndex < this.world.targetSteps) {
-      await this.world.rng.pick(actions)();
+      const mutationActions = await this.seededMutationActions();
+      await this.world.rng.pick(mutationActions.length > 0 ? mutationActions : readActions)();
     }
+  }
+
+  private async seededMutationActions(): Promise<Array<() => Promise<void>>> {
+    const data = await this.world.real.taskData();
+    const objectiveKeyById = new Map(
+      [...this.world.objectives.entries()]
+        .filter(([, record]) => record.id)
+        .map(([key, record]) => [record.id!, key]),
+    );
+    const trackedObjectives = data.objectives.filter((objective) => objectiveKeyById.has(objective.id));
+    const resultMutationStatuses = new Set<ObjectiveFlowStatus>(["candidate", "open", "applying", "recruiting", "reestimating"]);
+    const workItemMutationStatuses = new Set<ObjectiveFlowStatus>(["reestimating", "frozen"]);
+    const commentMutationStatuses = new Set<ObjectiveFlowStatus>(["reestimating", "frozen", "submitted"]);
+    const actions: Array<() => Promise<void>> = [];
+
+    for (const objective of trackedObjectives) {
+      const objectiveKey = objectiveKeyById.get(objective.id);
+      if (!objectiveKey) continue;
+      const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
+      const objectiveTasks = data.tasks.filter((task) => task.linkedObjectiveId === objective.id);
+      const expectedState = objective.flowStatus;
+      const nextStep = this.stepIndex + 1;
+
+      if (resultMutationStatuses.has(objective.flowStatus)) {
+        actions.push(async () => {
+          await this.runStep({ action: "seeded-mutation-admin-add-metric", actor: "commander", expectedState, objectiveKey }, async () => {
+            const title = `${objective.title} 随机指标 ${nextStep}`;
+            const response = await this.world.real.apiAs<{ result: { id: string } }>(this.world.users.commander, "/api/results", {
+              body: JSON.stringify({
+                objectiveId: objective.id,
+                title,
+                metricName: `${title} metric`,
+                baseline: 0,
+                current: 0,
+                target: 1,
+                unit: "case",
+                direction: "increase",
+                source: "managerDefined",
+              }),
+              method: "POST",
+            });
+            expect(response.status, `seeded admin metric create ${objective.title}`).toBe(200);
+            this.world.recordResult(objectiveKey, response.body.result.id);
+          }, { includeApiVisibility: false });
+        });
+
+        const editableResult = objectiveResults[0];
+        if (editableResult) {
+          actions.push(async () => {
+            await this.runStep({ action: "seeded-mutation-admin-edit-metric", actor: "commander", expectedState, objectiveKey }, async () => {
+              const response = await this.world.dsl.editMetric(this.world.users.commander, editableResult.id, `${editableResult.title} 随机修订 ${nextStep}`);
+              expect(response.status, `seeded admin metric edit ${objective.title}`).toBe(200);
+            }, { includeApiVisibility: false });
+          });
+        }
+
+        if (objectiveResults.length >= 2) {
+          actions.push(async () => {
+            await this.runStep({ action: "seeded-mutation-admin-reorder-metric", actor: "commander", expectedState, objectiveKey }, async () => {
+              const response = await this.world.real.apiAs(this.world.users.commander, `/api/results/${encodeURIComponent(objectiveResults[0]!.id)}/order`, {
+                body: JSON.stringify({ referenceResultId: objectiveResults[1]!.id, placement: "after" }),
+                method: "PATCH",
+              });
+              expect(response.status, `seeded admin metric reorder ${objective.title}`).toBe(200);
+            }, { includeApiVisibility: false });
+          });
+        }
+      }
+
+      if (objective.flowStatus === "reestimating" && objective.challengers.length > 0 && this.isReestimateWindowOpen(objective.confirmationDueAt)) {
+        const actor = this.actorForMemberName(this.world.rng.pick(objective.challengers));
+        if (actor) {
+          actions.push(async () => {
+            await this.runStep({ action: "seeded-mutation-member-propose-metric", actor, expectedState, objectiveKey }, async () => {
+              const title = `${objective.title} 随机成员指标 ${nextStep}`;
+              const response = await this.world.real.apiAs<{ result: { id: string } }>(this.world.users[actor], "/api/results", {
+                body: JSON.stringify({
+                  objectiveId: objective.id,
+                  title,
+                  metricName: `${title} metric`,
+                  source: "memberProposed",
+                }),
+                method: "POST",
+              });
+              expect(response.status, `seeded member metric create ${objective.title}`).toBe(200);
+              this.world.recordResult(objectiveKey, response.body.result.id);
+            }, { includeApiVisibility: false });
+          });
+        }
+      }
+
+      if (workItemMutationStatuses.has(objective.flowStatus) && objectiveResults.length > 0) {
+        const actor = this.actorForMemberName(objective.challengers[0] ?? "") ?? "commander";
+        actions.push(async () => {
+          await this.runStep({ action: "seeded-mutation-add-task", actor, expectedState, objectiveKey }, async () => {
+            await this.world.dsl.addTask(this.world.users[actor], objective.id, objectiveResults[0]!.id, `${objective.title} 随机行动项 ${nextStep}`);
+          }, { includeApiVisibility: false });
+        });
+
+        const task = objectiveTasks[0];
+        if (task) {
+          actions.push(async () => {
+            await this.runStep({ action: "seeded-mutation-add-subtask", actor, expectedState, objectiveKey }, async () => {
+              await this.world.dsl.addSubtask(this.world.users[actor], task.id, `${objective.title} 随机子行动项 ${nextStep}`);
+            }, { includeApiVisibility: false });
+          });
+        }
+      }
+
+      if (commentMutationStatuses.has(objective.flowStatus)) {
+        const actor = this.actorForMemberName(objective.challengers[0] ?? "") ?? "commander";
+        actions.push(async () => {
+          await this.runStep({ action: "seeded-mutation-add-comment", actor, expectedState, objectiveKey }, async () => {
+            const response = await this.world.real.apiAs(this.world.users[actor], "/api/comments", {
+              body: JSON.stringify({
+                targetType: "objective",
+                targetId: objective.id,
+                targetTitle: objective.title,
+                body: `${objective.title} 随机评论 ${nextStep}`,
+              }),
+              method: "POST",
+            });
+            expect(response.status, `seeded comment create ${objective.title}`).toBe(200);
+          }, { includeApiVisibility: false });
+        });
+      }
+    }
+
+    return actions;
+  }
+
+  private actorForMemberName(memberName: string): LifecycleActor | null {
+    const entry = Object.entries(this.world.users).find(([, user]) => user.name === memberName);
+    return entry ? (entry[0] as LifecycleActor) : null;
+  }
+
+  private isReestimateWindowOpen(confirmationDueAt?: string | null) {
+    if (!confirmationDueAt) return true;
+    const dueAt = new Date(confirmationDueAt).getTime();
+    return Number.isFinite(dueAt) && Date.now() <= dueAt;
   }
 
   private createLog(meta: LifecycleStepMeta): LifecycleStepLog {
@@ -349,6 +497,17 @@ function parseLifecycleSteps() {
   const raw = process.env.ORF_LIFECYCLE_STEPS ?? "80";
   const parsed = Number.parseInt(raw, 10);
   return Math.max(80, Number.isFinite(parsed) ? parsed : 80);
+}
+
+function expectedStateFailureMessage(log: LifecycleStepLog) {
+  return [
+    `ORF lifecycle expectedState mismatch: seed=${log.seed}`,
+    `step=${log.stepIndex}`,
+    `actor=${log.actor}`,
+    `action=${log.action}`,
+    `objectiveTitle=${log.objectiveTitle ?? "n/a"}`,
+    `objectiveId=${log.objectiveId ?? "n/a"}`,
+  ].join(" ");
 }
 
 function withLifecycleContext(error: unknown, log: LifecycleStepLog) {

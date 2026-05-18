@@ -470,7 +470,7 @@ test.describe("ORF real lifecycle simulation", () => {
         await expect(leaderboardRow(world.page("commander"), world.users.observer.name)).toHaveCount(0);
       });
 
-      await simulator.fillReadOnlySteps();
+      await simulator.fillMutationSteps();
 
       await testInfo.attach("orf-lifecycle-complete-step-log", {
         body: Buffer.from(JSON.stringify(world.stepLogs, null, 2)),

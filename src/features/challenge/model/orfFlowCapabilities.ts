@@ -31,6 +31,11 @@ const objectiveRecruitableStatuses = new Set([
   "reestimating",
 ]);
 
+const objectiveWorkItemMutationStatuses = new Set([
+  "reestimating",
+  "frozen",
+]);
+
 export const objectiveSettlementStatuses = new Set(["settled", "closed"]);
 
 export function isObjectiveResultLocked(objective: Objective | undefined): boolean {
@@ -75,6 +80,10 @@ export function canProposeObjectiveMetric(
       objective.challengers.includes(memberName) &&
       isReestimateWindowOpen(objective, now),
   );
+}
+
+export function canMutateObjectiveWorkItems(objective: Objective | undefined): boolean {
+  return Boolean(objective && objectiveWorkItemMutationStatuses.has(objective.flowStatus));
 }
 
 export function metricCreationActionForObjective({
@@ -229,8 +238,8 @@ export function resultDetailCapabilities({
 
   return {
     canSubmitLoot: canSubmitObjectiveLoot(objective, currentUser),
-    canCreateTask: canEditResult || isAssignedChallenger,
-    canProposeUpdate: canEditResult,
-    canEditConfidence: canEditResult,
+    canCreateTask: canMutateObjectiveWorkItems(objective) && (canEditResult || isAssignedChallenger),
+    canProposeUpdate: canEditResult && !isObjectiveResultLocked(objective),
+    canEditConfidence: canEditResult && !isObjectiveResultLocked(objective),
   };
 }

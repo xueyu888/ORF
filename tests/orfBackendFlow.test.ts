@@ -1057,6 +1057,123 @@ test("API result management routes keep privileged operations behind role permis
   });
 });
 
+test("API result and submitted objective mutations are locked by lifecycle state", async () => {
+  const fixture = await createFixture("api-lifecycle-locks");
+
+  const { objective: frozenObjective, result: frozenResult } = await createApprovedObjectiveWithResult(fixture, "locked frozen objective");
+  await createTestResult(frozenObjective.id, fixture.commander.name, `${fixture.prefix} locked frozen reference result`);
+  assert.equal((await freezeObjectiveAfterReestimate(frozenObjective.id, fixture.commander.id)).status, "ok");
+
+  const { objective: submittedObjective, result: submittedResult } = await createApprovedObjectiveWithResult(fixture, "locked submitted objective");
+  assert.equal((await freezeObjectiveAfterReestimate(submittedObjective.id, fixture.commander.id)).status, "ok");
+  const submittedLoot = await submitObjectiveLoot(
+    submittedObjective.id,
+    { body: "Submitted lock loot.", resultClaims: [{ resultId: submittedResult.id, claim: "completed", evidenceText: "done" }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(submittedLoot.status, "ok");
+
+  const { objective: settlementObjective, result: settledResult } = await createApprovedObjectiveWithResult(fixture, "locked settled objective");
+  const settledReferenceResult = await createTestResult(settlementObjective.id, fixture.commander.name, `${fixture.prefix} locked settled reference result`);
+  assert.equal((await freezeObjectiveAfterReestimate(settlementObjective.id, fixture.commander.id)).status, "ok");
+  const settledLoot = await submitObjectiveLoot(
+    settlementObjective.id,
+    {
+      body: "Settlement lock loot.",
+      resultClaims: [
+        { resultId: settledResult.id, claim: "completed", evidenceText: "done" },
+        { resultId: settledReferenceResult.id, claim: "completed", evidenceText: "done" },
+      ],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(settledLoot.status, "ok");
+  const settled = await reviewObjectiveLoot(
+    settlementObjective.id,
+    {
+      lootId: settledLoot.loot.id,
+      resultReviews: [
+        { resultId: settledResult.id, acceptedResult: "completed" },
+        { resultId: settledReferenceResult.id, acceptedResult: "completed" },
+      ],
+      reason: "Settlement lock review.",
+    },
+    fixture.commander.id,
+  );
+  assert.equal(settled.status, "ok");
+
+  await withApiServer(fixture, async (app) => {
+    const frozenCreate = await postResult(app, fixture.commander, frozenObjective.id, {
+      title: `${fixture.prefix} should not create after freeze`,
+      metricName: "Locked metric",
+      source: "managerDefined",
+    });
+    assert.equal(frozenCreate.statusCode, 409);
+
+    const frozenPatch = await patchResultTitle(app, fixture.commander, frozenResult.id, `${fixture.prefix} should not patch after freeze`);
+    assert.equal(frozenPatch.statusCode, 409);
+
+    const frozenConfidence = await apiInject(app, fixture.commander, "PATCH", `/api/results/${encodeURIComponent(frozenResult.id)}/confidence`, {
+      confidence: 90,
+    });
+    assert.equal(frozenConfidence.statusCode, 409);
+
+    const frozenProposal = await apiInject(app, fixture.commander, "POST", `/api/results/${encodeURIComponent(frozenResult.id)}/update-proposal`, {
+      title: "locked proposal",
+      reason: "frozen metrics are immutable",
+    });
+    assert.equal(frozenProposal.statusCode, 409);
+
+    const frozenDelete = await apiInject(app, fixture.commander, "DELETE", `/api/results/${encodeURIComponent(frozenResult.id)}`);
+    assert.equal(frozenDelete.statusCode, 409);
+
+    const submittedDeleteResult = await apiInject(app, fixture.commander, "DELETE", `/api/results/${encodeURIComponent(submittedResult.id)}`);
+    assert.equal(submittedDeleteResult.statusCode, 409);
+
+    const submittedDeleteObjective = await apiInject(app, fixture.commander, "DELETE", `/api/objectives/${encodeURIComponent(submittedObjective.id)}`);
+    assert.equal(submittedDeleteObjective.statusCode, 409);
+
+    const submittedTask = await apiInject(app, fixture.commander, "POST", "/api/tasks", {
+      title: "submitted should not accept new tasks",
+      linkedObjectiveId: submittedObjective.id,
+      linkedResultId: submittedResult.id,
+    });
+    assert.equal(submittedTask.statusCode, 403);
+
+    const submittedComment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: submittedObjective.id,
+      targetTitle: submittedObjective.title,
+      body: "submitted comments remain open",
+    });
+    assert.equal(submittedComment.statusCode, 200);
+
+    const settledReorder = await apiInject(app, fixture.commander, "PATCH", `/api/results/${encodeURIComponent(settledResult.id)}/order`, {
+      referenceResultId: settledReferenceResult.id,
+      placement: "after",
+    });
+    assert.equal(settledReorder.statusCode, 409);
+
+    const settledComment = await apiInject(app, fixture.commander, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: settlementObjective.id,
+      targetTitle: settlementObjective.title,
+      body: "settled should be read only",
+    });
+    assert.equal(settledComment.statusCode, 403);
+
+    const settledDeleteObjective = await apiInject(app, fixture.commander, "DELETE", `/api/objectives/${encodeURIComponent(settlementObjective.id)}`);
+    assert.equal(settledDeleteObjective.statusCode, 409);
+  });
+
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  assert.ok(data.results.some((result) => result.id === submittedResult.id), "submitted result should survive rejected delete");
+  assert.ok(data.results.some((result) => result.id === settledResult.id), "settled result should survive rejected reorder/delete attempts");
+  assert.ok(data.pointLedger.some((entry) => entry.objectiveId === settlementObjective.id), "settlement ledger should survive locked mutations");
+  assert.equal(data.objectives.find((objective) => objective.id === submittedObjective.id)?.flowStatus, "submitted");
+  assert.equal(data.objectives.find((objective) => objective.id === settlementObjective.id)?.flowStatus, "settled");
+});
+
 async function createFixture(label: string) {
   const prefix = `${runId}-${label}`;
   const teamId = `${prefix}-team`;

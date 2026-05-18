@@ -99,7 +99,11 @@ const bountyHallFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applyi
 const applicationReviewFlowStatuses = new Set<Objective["flowStatus"]>(["applying", "recruiting", "reestimating"]);
 const challengeAcceptanceFlowStatuses = new Set<Objective["flowStatus"]>(["recruiting", "reestimating"]);
 const challengeRecruitmentFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting", "reestimating"]);
-const workItemMutationFlowStatuses = new Set<Objective["flowStatus"]>(["reestimating", "frozen", "submitted"]);
+const resultMutationFlowStatuses = new Set<Objective["flowStatus"]>(["candidate", "open", "applying", "recruiting", "reestimating"]);
+const workItemMutationFlowStatuses = new Set<Objective["flowStatus"]>(["reestimating", "frozen"]);
+const commentLockedFlowStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);
+const memberCommentFlowStatuses = new Set<Objective["flowStatus"]>(["reestimating", "frozen", "submitted"]);
+const objectiveDeleteLockedFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled"]);
 const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled", "closed"]);
 
 function optional<T>(value: T | null): T | undefined {
@@ -1079,6 +1083,57 @@ export async function canEditResultDuringReestimate(resultId: string, member: st
   return row?.flowStatus === "reestimating" && uniqueMembers(row.challengers ?? []).includes(actorName) && isReestimateWindowOpen(row.confirmationDueAt);
 }
 
+export type ObjectiveStateMutationAccess =
+  | { status: "allowed"; flowStatus: Objective["flowStatus"] }
+  | { status: "locked"; flowStatus: Objective["flowStatus"] }
+  | { status: "notFound" };
+
+export async function canMutateObjectiveResults(objectiveId: string): Promise<ObjectiveStateMutationAccess> {
+  const [objective] = await db
+    .select({ flowStatus: objectives.flowStatus })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+  if (!objective) {
+    return { status: "notFound" };
+  }
+
+  return resultMutationFlowStatuses.has(objective.flowStatus)
+    ? { status: "allowed", flowStatus: objective.flowStatus }
+    : { status: "locked", flowStatus: objective.flowStatus };
+}
+
+export async function canMutateResult(resultId: string): Promise<ObjectiveStateMutationAccess> {
+  const [row] = await db
+    .select({ flowStatus: objectives.flowStatus })
+    .from(results)
+    .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+    .where(eq(results.id, resultId))
+    .limit(1);
+  if (!row) {
+    return { status: "notFound" };
+  }
+
+  return resultMutationFlowStatuses.has(row.flowStatus)
+    ? { status: "allowed", flowStatus: row.flowStatus }
+    : { status: "locked", flowStatus: row.flowStatus };
+}
+
+export async function canDeleteObjective(objectiveId: string): Promise<ObjectiveStateMutationAccess> {
+  const [objective] = await db
+    .select({ flowStatus: objectives.flowStatus })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+  if (!objective) {
+    return { status: "notFound" };
+  }
+
+  return objectiveDeleteLockedFlowStatuses.has(objective.flowStatus)
+    ? { status: "locked", flowStatus: objective.flowStatus }
+    : { status: "allowed", flowStatus: objective.flowStatus };
+}
+
 export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string): Promise<boolean> {
   const actorName = member.trim();
   if (!actorName) return false;
@@ -1284,13 +1339,44 @@ export async function canMutateObjectiveWorkItem(
     return "notFound";
   }
 
+  if (!workItemMutationFlowStatuses.has(objective.flowStatus)) {
+    return "forbidden";
+  }
+
   if (actor.role === "admin") {
     return "allowed";
   }
 
   const member = actor.name.trim();
+  return member && uniqueMembers(objective.challengers ?? []).includes(member)
+    ? "allowed"
+    : "forbidden";
+}
+
+async function canMutateObjectiveComment(
+  actor: CommentActor,
+  objectiveId: string,
+): Promise<ObjectiveWorkItemMutationOutcome> {
+  const [objective] = await db
+    .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+  if (!objective) {
+    return "notFound";
+  }
+
+  if (commentLockedFlowStatuses.has(objective.flowStatus)) {
+    return "forbidden";
+  }
+
+  if (actor.role === "admin" || actor.canManageAllComments === true) {
+    return "allowed";
+  }
+
+  const member = actor.name.trim();
   return member &&
-    workItemMutationFlowStatuses.has(objective.flowStatus) &&
+    memberCommentFlowStatuses.has(objective.flowStatus) &&
     uniqueMembers(objective.challengers ?? []).includes(member)
     ? "allowed"
     : "forbidden";
@@ -1377,7 +1463,10 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveWorkItem(actor, target.objectiveId);
+  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  if (access === "notFound") {
+    return { status: "notFound" };
+  }
   if (access === "forbidden") {
     return { status: "forbidden" };
   }
@@ -1487,6 +1576,15 @@ export async function updateCommentThreadStatus(
     return { status: "notFound" };
   }
 
+  const target = await resolveCommentTarget(thread.targetType, thread.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
+  }
+
   if (!canManageComment(actor, thread.createdBy)) {
     return { status: "forbidden" };
   }
@@ -1504,6 +1602,19 @@ export async function updateCommentMessage(
   const nextBody = body.trim();
   if (!nextBody) {
     return { status: "invalid" };
+  }
+
+  const [thread] = await db.select().from(commentThreads).where(eq(commentThreads.id, threadId)).limit(1);
+  if (!thread) {
+    return { status: "notFound" };
+  }
+  const target = await resolveCommentTarget(thread.targetType, thread.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
 
   const [message] = await db
@@ -1536,6 +1647,19 @@ export async function deleteCommentMessage(
   messageId: string,
   actor: CommentActor,
 ): Promise<CommentMutationOutcome> {
+  const [thread] = await db.select().from(commentThreads).where(eq(commentThreads.id, threadId)).limit(1);
+  if (!thread) {
+    return { status: "notFound" };
+  }
+  const target = await resolveCommentTarget(thread.targetType, thread.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
+  }
+
   const [message] = await db
     .select({ authorUserId: commentMessages.authorUserId })
     .from(commentMessages)
@@ -1996,8 +2120,11 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
 
 export async function deleteObjective(objectiveId: string): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+    const [objective] = await tx.select({ flowStatus: objectives.flowStatus, id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
     if (!objective) {
+      return false;
+    }
+    if (objectiveDeleteLockedFlowStatuses.has(objective.flowStatus)) {
       return false;
     }
 
@@ -2029,8 +2156,16 @@ export async function deleteObjective(objectiveId: string): Promise<boolean> {
 
 export async function deleteResult(resultId: string): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const [result] = await tx.select({ id: results.id }).from(results).where(eq(results.id, resultId)).limit(1);
+    const [result] = await tx
+      .select({ flowStatus: objectives.flowStatus, id: results.id })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1);
     if (!result) {
+      return false;
+    }
+    if (!resultMutationFlowStatuses.has(result.flowStatus)) {
       return false;
     }
 

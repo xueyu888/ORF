@@ -20,8 +20,11 @@ import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
   approveObjectiveChallengeApplication,
+  canDeleteObjective,
   canEditObjectiveResultsDuringReestimate,
   canEditResultDuringReestimate,
+  canMutateObjectiveResults,
+  canMutateResult,
   canMutateObjectiveWorkItem,
   createComment,
   createChecklistItem,
@@ -424,6 +427,54 @@ async function requireResultEditContext(request: FastifyRequest, reply: FastifyR
   }
 
   return { user };
+}
+
+function sendObjectiveResultLock(reply: FastifyReply, access: Awaited<ReturnType<typeof canMutateResult>>): boolean {
+  if (access.status === "notFound") {
+    reply.code(404).send({ error: "Result not found" });
+    return false;
+  }
+
+  if (access.status === "locked") {
+    reply.code(409).send({ error: "Objective results are locked for this lifecycle state", flowStatus: access.flowStatus });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireObjectiveResultsUnlocked(reply: FastifyReply, objectiveId: string) {
+  const access = await canMutateObjectiveResults(objectiveId);
+  if (access.status === "notFound") {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+
+  if (access.status === "locked") {
+    reply.code(409).send({ error: "Objective results are locked for this lifecycle state", flowStatus: access.flowStatus });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireResultUnlocked(reply: FastifyReply, resultId: string) {
+  return sendObjectiveResultLock(reply, await canMutateResult(resultId));
+}
+
+async function requireObjectiveDeleteUnlocked(reply: FastifyReply, objectiveId: string) {
+  const access = await canDeleteObjective(objectiveId);
+  if (access.status === "notFound") {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+
+  if (access.status === "locked") {
+    reply.code(409).send({ error: "Objective cannot be deleted after submission or settlement", flowStatus: access.flowStatus });
+    return false;
+  }
+
+  return true;
 }
 
 async function requireAuthenticatedForWrite(request: FastifyRequest, reply: FastifyReply) {
@@ -926,6 +977,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!allowed) {
       return reply.code(403).send({ error: "Forbidden" });
     }
+    if (!(await requireObjectiveResultsUnlocked(reply, body.objectiveId))) {
+      return reply;
+    }
 
     const result = await createResult({
       ...body,
@@ -1120,6 +1174,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!(await requireResultEditContext(request, reply, params.resultId))) {
       return reply;
     }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
 
     const updated = await updateResultTitle(params.resultId, body.title);
 
@@ -1137,6 +1194,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
 
     const updated = await updateResultConfidence(params.resultId, body.confidence, context.user.id);
 
@@ -1152,6 +1212,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const body = resultUpdateProposalBodySchema.parse(request.body);
     const context = await requireWriteContext(request, reply, "result.edit");
     if (!context) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
       return reply;
     }
 
@@ -1342,6 +1405,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!(await requireWritePermission(request, reply, "result.edit"))) {
       return reply;
     }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
 
     const updated = await moveResult(params.resultId, body.referenceResultId, body.placement);
 
@@ -1405,6 +1471,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!(await requireWritePermission(request, reply, "objective.delete"))) {
       return reply;
     }
+    if (!(await requireObjectiveDeleteUnlocked(reply, params.objectiveId))) {
+      return reply;
+    }
 
     const deleted = await deleteObjective(params.objectiveId);
 
@@ -1418,6 +1487,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.delete("/api/results/:resultId", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     if (!(await requireWritePermission(request, reply, "result.delete"))) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
       return reply;
     }
 

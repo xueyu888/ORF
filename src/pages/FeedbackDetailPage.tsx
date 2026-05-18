@@ -1,12 +1,13 @@
 import { Navigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, StatusBadge } from "../components/ui";
+import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import { evidenceTypeLabel } from "../utils/labels";
 
 export function FeedbackDetailPage() {
   const { feedbackId } = useParams();
-  const { dataReady, state, openModal, updateFeedbackStatus } = useOrf();
+  const { currentUser, dataReady, state, openModal, updateFeedbackStatus } = useOrf();
   const feedback = state.feedback.find((item) => item.id === feedbackId);
   if (!feedback) {
     return dataReady ? <Navigate to="/feedback" replace /> : <PageScaffold title="加载中" subtitle="正在加载反馈数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
@@ -15,12 +16,17 @@ export function FeedbackDetailPage() {
   const objective = state.objectives.find((item) => item.id === feedback.linkedObjectiveId);
   const result = state.results.find((item) => item.id === feedback.linkedResultId);
   const evidence = state.evidence.filter((item) => feedback.evidenceIds.includes(item.id));
+  const capabilities = resultDetailCapabilities({
+    objective,
+    currentUser,
+    permissionRules: state.permissionRules,
+  });
 
   return (
     <PageScaffold
       title={feedback.id}
       subtitle={feedback.phenomenon}
-      action={<div className="flex gap-2"><Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: feedback.linkedObjectiveId, resultId: feedback.linkedResultId, feedbackId: feedback.id })}>创建行动项</Button><Button onClick={() => openModal({ type: "resultUpdate", resultId: feedback.linkedResultId, feedbackId: feedback.id })}>提出指标更新</Button><Button variant="secondary" onClick={() => updateFeedbackStatus(feedback.id, "Closed")}>标记为已知边界</Button></div>}
+      action={<div className="flex gap-2">{capabilities.canCreateTask && <Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: feedback.linkedObjectiveId, resultId: feedback.linkedResultId, feedbackId: feedback.id })}>创建行动项</Button>}{capabilities.canProposeUpdate && <Button onClick={() => openModal({ type: "resultUpdate", resultId: feedback.linkedResultId, feedbackId: feedback.id })}>提出指标更新</Button>}<Button variant="secondary" onClick={() => updateFeedbackStatus(feedback.id, "Closed")}>标记为已知边界</Button></div>}
     >
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="grid gap-4">
