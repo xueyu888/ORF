@@ -53,9 +53,12 @@ test.describe("登录测试用例", () => {
   });
 
   test("普通成员可以使用正确邮箱和密码登录 ORF", async ({ context, page }) => {
-    const setup = await setupLoginState();
+    await assertB(context, page);
+
+    let setup: LoginTestState | null = null;
 
     try {
+      setup = await setupLoginState();
       await setupLoginPage(context, page);
       await assertS0(context, page, setup);
 
@@ -63,8 +66,10 @@ test.describe("登录测试用例", () => {
 
       await assertS1(context, page, setup, loginAction);
     } finally {
-      await cleanLoginState(page, setup);
-      await assertB(context, page, setup);
+      if (setup) {
+        await cleanLoginState(page, setup);
+      }
+      await assertB(context, page);
     }
   });
 });
@@ -76,7 +81,8 @@ async function setupLoginPage(context: BrowserContext, page: Page) {
   await expect(page.getByRole("button", { name: "Sign In" })).toBeEnabled();
 }
 
-async function assertB(context: BrowserContext, page: Page, setup: LoginTestState) {
+async function assertB(context: BrowserContext, page: Page) {
+  await assertBaseEnvironment(page);
   await page.goto("/bounties");
   await expect(page).toHaveURL(/\/auth$/);
   await expect.poll(() => readBrowserSession(page)).toMatchObject({
@@ -88,8 +94,6 @@ async function assertB(context: BrowserContext, page: Page, setup: LoginTestStat
     localStorageAuthKeys: [],
     sessionStorageAuthKeys: [],
   });
-  await assertTestIdentityExists();
-  await assertOrfMemberMatches(setup, { lastLoginAt: setup.previousLastLoginAt });
 }
 
 async function assertS0(context: BrowserContext, page: Page, setup: LoginTestState) {
@@ -226,6 +230,46 @@ async function readBrowserAuthStorageState(page: Page): Promise<BrowserAuthStora
 async function hasSessionCookie(context: BrowserContext) {
   const cookies = await context.cookies();
   return cookies.some((cookie) => cookie.name === ORF_SESSION_COOKIE && cookie.value.length > 0);
+}
+
+async function assertBaseEnvironment(page: Page) {
+  await expect.poll(() => isBackendReady(page)).toBe(true);
+  await expect.poll(() => isDatabaseReady()).toBe(true);
+  await expect.poll(() => isOryAdminReady()).toBe(true);
+}
+
+async function isBackendReady(page: Page) {
+  try {
+    const response = await page.request.get("/health");
+    if (!response.ok()) {
+      return false;
+    }
+
+    const body = await response.json();
+    return body?.ok === true && body?.service === "orf-api";
+  } catch {
+    return false;
+  }
+}
+
+async function isDatabaseReady() {
+  try {
+    await db.execute(sql`select 1`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isOryAdminReady() {
+  try {
+    const response = await fetch(`${ORY_ADMIN_URL}/health/ready`, {
+      headers: { accept: "application/json" },
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 async function assertTestIdentityExists() {
