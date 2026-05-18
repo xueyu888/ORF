@@ -207,7 +207,7 @@ function persistAuthenticatedUser(user: OrfUser, setState: (update: (current: Or
   });
 }
 
-function authFailureMessage(error: unknown, action: "login" | "registration") {
+export function authFailureMessage(error: unknown, action: "login" | "registration") {
   if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
     return "认证服务暂时不可用，请联系管理员。";
   }
@@ -226,7 +226,7 @@ function authFailureMessage(error: unknown, action: "login" | "registration") {
     }
 
     if (error.status === 502 || error.status === 503 || error.status === 504) {
-      return "认证服务暂时不可用，请联系管理员。";
+      return error.message || "认证服务暂时不可用，请联系管理员。";
     }
   }
 
