@@ -18,6 +18,7 @@
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
 | API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
+| API 输入归一化 | `API work item creation trims labels and prevents blank persisted titles` | 指标、任务、子任务创建接口会 trim 用户输入，拒绝空白必填标题，选填空白字段回落默认值，非法日期返回 400 |
 | 发布前征召保护 | `recruitment is only allowed after an objective is published` | `candidate` 目标不能被征召，必须先发布 |
 | 冻结后旧申请保护 | `approving stale pending applications cannot mutate a frozen objective` / `rejecting stale pending applications cannot reopen a frozen objective` | 冻结后不能通过或拒绝旧申请来改写目标状态 |
 | 已接受后旧申请保护 | `rejecting remaining pending applications keeps an accepted objective in reestimate` | 目标已有挑战者后，继续拒绝剩余 pending application 不能把目标退回悬赏大厅 |
@@ -147,6 +148,7 @@ flowchart TD
 | ORF-BE-R036 | 发布、征召、申请审核、冻结、验收均应保持指挥官权限边界。 | API 流程权限 |
 | ORF-BE-R037 | `/api/my-challenges?scope=all` 只能由指挥官读取。 | API 流程权限 |
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
+| ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`。 | API 输入归一化 |
 
 ## 关键断言
 

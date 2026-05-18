@@ -114,12 +114,14 @@ const userBodySchema = z.object({
   email: z.string().email().transform((value) => value.toLowerCase()),
   role: userRoleSchema,
 });
+const requiredTextSchema = z.string().trim().min(1);
+const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
 const editablePermissionRoleSchema = z.enum(["member"]);
 const objectiveStageSchema = z.enum(["goalSetting", "resultClaiming", "orfReestimate", "goalFrozen"]);
 const permissionKeySchema = z.enum(permissionKeys);
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
-const titleBodySchema = z.object({ title: z.string().trim().min(1) });
-const labelBodySchema = z.object({ label: z.string().trim().min(1) });
+const titleBodySchema = z.object({ title: requiredTextSchema });
+const labelBodySchema = z.object({ label: requiredTextSchema });
 const completionBodySchema = z.object({ done: z.boolean() });
 const objectiveStageBodySchema = z.object({ stage: objectiveStageSchema });
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
@@ -132,7 +134,8 @@ const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
 const permissionRoleParamsSchema = z.object({ role: userRoleSchema });
-const dateOnlySchema = z.string().refine(isDateOnlyString, { message: "Invalid date" });
+const dateOnlySchema = z.string().trim().refine(isDateOnlyString, { message: "Invalid date" });
+const optionalDateOnlySchema = z.string().trim().transform((value) => value || undefined).pipe(dateOnlySchema.optional()).optional();
 const placementSchema = z.enum(["before", "after"]);
 const permissionRuleSchema = z.object({
   role: editablePermissionRoleSchema,
@@ -160,18 +163,18 @@ const visualBackgroundStaticParamsSchema = z.object({
   fileName: z.string().min(1),
 });
 const createResultBodySchema = z.object({
-  objectiveId: z.string().min(1),
-  title: z.string().min(1),
-  metricName: z.string().min(1),
-  description: z.string().optional(),
+  objectiveId: requiredTextSchema,
+  title: requiredTextSchema,
+  metricName: requiredTextSchema,
+  description: optionalTextSchema,
   baseline: z.number().optional(),
   current: z.number().optional(),
   target: z.number().optional(),
-  unit: z.string().optional(),
+  unit: optionalTextSchema,
   direction: metricDirectionSchema.optional(),
   uncertaintyLevel: uncertaintyLevelSchema.optional(),
   source: bountySourceSchema.optional(),
-  definer: z.string().optional(),
+  definer: optionalTextSchema,
 });
 const createObjectiveBodySchema = z.object({
   title: z.string().trim().min(1),
@@ -197,31 +200,31 @@ const resultUpdateProposalBodySchema = z.object({
   feedbackId: z.string().min(1).optional(),
 });
 const createTaskBodySchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  assignee: z.string().optional(),
+  title: requiredTextSchema,
+  description: optionalTextSchema,
+  assignee: optionalTextSchema,
   priority: prioritySchema.optional(),
-  linkedObjectiveId: z.string().optional(),
-  linkedResultId: z.string().min(1),
-  dueDate: z.string().optional(),
-  feedbackOriginId: z.string().optional(),
+  linkedObjectiveId: optionalTextSchema,
+  linkedResultId: requiredTextSchema,
+  dueDate: optionalDateOnlySchema,
+  feedbackOriginId: optionalTextSchema,
 });
 const createChecklistItemBodySchema = z.object({
-  label: z.string().optional(),
-  afterItemId: z.string().optional(),
+  label: optionalTextSchema,
+  afterItemId: optionalTextSchema,
 });
 const moveResultBodySchema = z.object({
-  referenceResultId: z.string().min(1),
+  referenceResultId: requiredTextSchema,
   placement: placementSchema.default("after"),
 });
 const moveTaskBodySchema = z.object({
-  toResultId: z.string().min(1),
-  referenceTaskId: z.string().optional(),
+  toResultId: requiredTextSchema,
+  referenceTaskId: optionalTextSchema,
   placement: placementSchema.optional(),
 });
 const moveChecklistBodySchema = z.object({
-  toTaskId: z.string().min(1),
-  referenceItemId: z.string().optional(),
+  toTaskId: requiredTextSchema,
+  referenceItemId: optionalTextSchema,
   placement: placementSchema.optional(),
 });
 const createCommentBodySchema = z.object({

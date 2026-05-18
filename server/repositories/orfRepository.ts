@@ -50,7 +50,7 @@ import {
 } from "../db/schema";
 import { getPermissionRulesForTeam } from "./permissionRepository";
 import { getTeamUsers } from "./userRepository";
-import { addCalendarDays, localDateString } from "../../src/utils/date";
+import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -732,6 +732,12 @@ export interface CreateChecklistItemInput {
 }
 
 export async function createResult(input: CreateResultInput): Promise<Result | null> {
+  const title = input.title.trim();
+  const metricName = input.metricName.trim();
+  if (!title || !metricName) {
+    return null;
+  }
+
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1);
   if (!objective) {
     return null;
@@ -745,10 +751,10 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     id,
     teamId: objective.teamId,
     objectiveId: objective.id,
-    title: input.title,
-    description: input.description ?? "由 ORF Flow 规划创建的指标。",
-    metricName: input.metricName,
-    metricRequirement: `${input.metricName}：写清统计对象和完成标准后进入执行。`,
+    title,
+    description: input.description?.trim() || "由 ORF Flow 规划创建的指标。",
+    metricName,
+    metricRequirement: `${metricName}：写清统计对象和完成标准后进入执行。`,
     statisticalObject: null,
     completionStandard: null,
     sampleSet: null,
@@ -757,12 +763,12 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     baseline: input.baseline ?? 0,
     current: input.current ?? 0,
     target: input.target ?? 100,
-    unit: input.unit ?? "%",
+    unit: input.unit?.trim() || "%",
     direction: input.direction ?? "increase",
     status: "Draft",
     confidence: 50,
     source: input.source ?? "managerDefined",
-    definer: input.definer ?? "",
+    definer: input.definer?.trim() || "",
     uncertaintyScore: uncertaintyScore(input.uncertaintyLevel ?? null),
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
@@ -2071,6 +2077,16 @@ export async function reviewObjectiveLoot(
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task | null> {
+  const title = input.title.trim();
+  if (!title) {
+    return null;
+  }
+
+  const dueDate = input.dueDate?.trim();
+  if (dueDate && !isDateOnlyString(dueDate)) {
+    return null;
+  }
+
   const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
   if (!result) {
     return null;
@@ -2084,15 +2100,15 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
   await db.insert(tasks).values({
     id,
     teamId: result.teamId,
-    title: input.title,
-    description: input.description ?? "执行支撑关联指标的下一步动作。",
+    title,
+    description: input.description?.trim() || "执行支撑关联指标的下一步动作。",
     status: "Todo",
     priority: input.priority ?? "Medium",
-    assignee: input.assignee || "User",
+    assignee: input.assignee?.trim() || "User",
     linkedObjectiveId: result.objectiveId,
     linkedResultId: result.id,
     feedbackOriginId: input.feedbackOriginId ?? null,
-    dueDate: input.dueDate ?? now,
+    dueDate: dueDate ?? now,
     tags: ["ORF"],
     createdAt: now,
     updatedAt: now,
@@ -2124,7 +2140,7 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
     await tx.insert(taskChecklistItems).values({
       id,
       taskId,
-      label: input.label ?? "新子任务",
+      label: input.label?.trim() || "新子任务",
       done: false,
       sortOrder: insertIndex,
       updatedAt: today(),

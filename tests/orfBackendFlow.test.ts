@@ -999,6 +999,81 @@ test("API objective creation rejects malformed final due dates", async () => {
   });
 });
 
+test("API work item creation trims labels and prevents blank persisted titles", async () => {
+  const fixture = await createFixture("api-work-item-input");
+  const publishedObjective = await createPublishedObjective(fixture, "input validation objective");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "input validation work item objective");
+
+  await withApiServer(fixture, async (app) => {
+    const blankResultTitle = await apiInject(app, fixture.commander, "POST", "/api/results", {
+      objectiveId: publishedObjective.id,
+      title: "   ",
+      metricName: "valid metric",
+    });
+    assert.equal(blankResultTitle.statusCode, 400);
+
+    const blankResultMetric = await apiInject(app, fixture.commander, "POST", "/api/results", {
+      objectiveId: publishedObjective.id,
+      title: "valid title",
+      metricName: "   ",
+    });
+    assert.equal(blankResultMetric.statusCode, 400);
+
+    const trimmedResult = await apiInject(app, fixture.commander, "POST", "/api/results", {
+      objectiveId: publishedObjective.id,
+      title: "  trimmed result title  ",
+      metricName: "  trimmed metric name  ",
+      description: "   ",
+      unit: "   ",
+    });
+    assert.equal(trimmedResult.statusCode, 200, trimmedResult.body);
+    const trimmedResultPayload = trimmedResult.json() as { result: Result };
+    assert.equal(trimmedResultPayload.result.title, "trimmed result title");
+    assert.equal(trimmedResultPayload.result.metricName, "trimmed metric name");
+    assert.equal(trimmedResultPayload.result.description, "由 ORF Flow 规划创建的指标。");
+    assert.equal(trimmedResultPayload.result.unit, "%");
+
+    const blankTaskTitle = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: "   ",
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    });
+    assert.equal(blankTaskTitle.statusCode, 400);
+
+    const invalidTaskDueDate = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: "valid task title",
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+      dueDate: "2999-02-31",
+    });
+    assert.equal(invalidTaskDueDate.statusCode, 400);
+
+    const trimmedTask = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: "  trimmed action title  ",
+      description: "   ",
+      assignee: "   ",
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+      dueDate: "2999-02-28",
+    });
+    assert.equal(trimmedTask.statusCode, 200);
+    const trimmedTaskPayload = trimmedTask.json() as { task: { id: string; title: string; description: string; assignee: string; dueDate: string } };
+    assert.equal(trimmedTaskPayload.task.title, "trimmed action title");
+    assert.equal(trimmedTaskPayload.task.description, "执行支撑关联指标的下一步动作。");
+    assert.equal(trimmedTaskPayload.task.assignee, "User");
+    assert.equal(trimmedTaskPayload.task.dueDate, "2999-02-28");
+
+    const defaultLabel = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(trimmedTaskPayload.task.id)}/checklist`, {
+      label: "   ",
+    });
+    assert.equal(defaultLabel.statusCode, 200);
+
+    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    const storedTask = data.tasks.find((item) => item.id === trimmedTaskPayload.task.id);
+    assert.equal(storedTask?.checklist[0]?.label, "新子任务");
+  });
+});
+
 test("API user deletion reports missing team members instead of a successful no-op", async () => {
   const fixture = await createFixture("api-user-delete-missing");
 
