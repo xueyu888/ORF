@@ -143,6 +143,7 @@ type ObjectiveFlowStatus =
 - `申请挑战` 只表达意愿；指挥官通过后才写入 `Objective.challengers`。
 - 多名成员同时申请同一目标时，后端必须用行级锁保护 `challengeApplications` 的读改写，不能让后一次写入覆盖前一次申请。
 - 审批申请、征召、接受征召和拒绝征召都会同时读改写 `Objective.challengers` / `Objective.assignedChallengers` / `Objective.challengeApplications`，必须在同一行级锁事务内完成。
+- 并发新增或移动指标、任务、子任务时，后端必须锁住对应父级目标、指标或任务后再计算 `sortOrder`，避免重复排序号导致页面顺序不稳定。
 - `征召挑战` 的成员必须是当前团队内 `active` 用户；停用、待审核、拒绝或不存在的姓名不能写入 `Objective.assignedChallengers`。
 - `接受挑战` 只用于征召。
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。

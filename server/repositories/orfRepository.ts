@@ -757,45 +757,53 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     return null;
   }
 
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1);
-  if (!objective) {
+  const created = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
+    if (!objective) {
+      return null;
+    }
+
+    const siblingRows = await tx.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, input.objectiveId));
+    const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+    const id = makeId("res");
+
+    await tx.insert(results).values({
+      id,
+      teamId: objective.teamId,
+      objectiveId: objective.id,
+      title,
+      description: input.description?.trim() || "由 ORF Flow 规划创建的指标。",
+      metricName,
+      metricRequirement: `${metricName}：写清统计对象和完成标准后进入执行。`,
+      statisticalObject: null,
+      completionStandard: null,
+      sampleSet: null,
+      measurementScope: null,
+      uncertaintyLevel: input.uncertaintyLevel ?? null,
+      baseline: input.baseline ?? 0,
+      current: input.current ?? 0,
+      target: input.target ?? 100,
+      unit: input.unit?.trim() || "%",
+      direction: input.direction ?? "increase",
+      status: "Draft",
+      confidence: 50,
+      source: input.source ?? "managerDefined",
+      definer: input.definer?.trim() || "",
+      uncertaintyScore: uncertaintyScore(input.uncertaintyLevel ?? null),
+      acceptedResult: "unreviewed",
+      reviewCadence: "Weekly",
+      sortOrder,
+    });
+
+    return { id, teamId: objective.teamId };
+  });
+
+  if (!created) {
     return null;
   }
 
-  const siblingRows = await db.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, input.objectiveId));
-  const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
-  const id = makeId("res");
-
-  await db.insert(results).values({
-    id,
-    teamId: objective.teamId,
-    objectiveId: objective.id,
-    title,
-    description: input.description?.trim() || "由 ORF Flow 规划创建的指标。",
-    metricName,
-    metricRequirement: `${metricName}：写清统计对象和完成标准后进入执行。`,
-    statisticalObject: null,
-    completionStandard: null,
-    sampleSet: null,
-    measurementScope: null,
-    uncertaintyLevel: input.uncertaintyLevel ?? null,
-    baseline: input.baseline ?? 0,
-    current: input.current ?? 0,
-    target: input.target ?? 100,
-    unit: input.unit?.trim() || "%",
-    direction: input.direction ?? "increase",
-    status: "Draft",
-    confidence: 50,
-    source: input.source ?? "managerDefined",
-    definer: input.definer?.trim() || "",
-    uncertaintyScore: uncertaintyScore(input.uncertaintyLevel ?? null),
-    acceptedResult: "unreviewed",
-    reviewCadence: "Weekly",
-    sortOrder,
-  });
-
-  const data = await getTaskManagementData({ teamId: objective.teamId });
-  return data.results.find((result) => result.id === id) ?? null;
+  const data = await getTaskManagementData({ teamId: created.teamId });
+  return data.results.find((result) => result.id === created.id) ?? null;
 }
 
 export type AcceptObjectiveChallengeOutcome =
@@ -2200,53 +2208,61 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     return null;
   }
 
-  const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
-  if (!result) {
+  const created = await db.transaction(async (tx) => {
+    const [result] = await tx.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1).for("update");
+    if (!result) {
+      return null;
+    }
+
+    const feedbackOriginId = input.feedbackOriginId?.trim() || null;
+    if (feedbackOriginId) {
+      const [originFeedback] = await tx
+        .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
+        .from(feedback)
+        .where(eq(feedback.id, feedbackOriginId))
+        .limit(1);
+      if (!originFeedback || originFeedback.teamId !== result.teamId || originFeedback.linkedResultId !== result.id) {
+        return null;
+      }
+    }
+
+    const siblingRows = await tx.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedResultId, result.id));
+    const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
+    const id = makeId("ORF");
+    const now = today();
+
+    await tx.insert(tasks).values({
+      id,
+      teamId: result.teamId,
+      title,
+      description: input.description?.trim() || "执行支撑关联指标的下一步动作。",
+      status: "Todo",
+      priority: input.priority ?? "Medium",
+      assignee: input.assignee?.trim() || "User",
+      linkedObjectiveId: result.objectiveId,
+      linkedResultId: result.id,
+      feedbackOriginId,
+      dueDate: dueDate ?? now,
+      tags: ["ORF"],
+      createdAt: now,
+      updatedAt: now,
+      sortOrder,
+    });
+
+    return { id, teamId: result.teamId };
+  });
+
+  if (!created) {
     return null;
   }
 
-  const feedbackOriginId = input.feedbackOriginId?.trim() || null;
-  if (feedbackOriginId) {
-    const [originFeedback] = await db
-      .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
-      .from(feedback)
-      .where(eq(feedback.id, feedbackOriginId))
-      .limit(1);
-    if (!originFeedback || originFeedback.teamId !== result.teamId || originFeedback.linkedResultId !== result.id) {
-      return null;
-    }
-  }
-
-  const siblingRows = await db.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedResultId, result.id));
-  const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
-  const id = makeId("ORF");
-  const now = today();
-
-  await db.insert(tasks).values({
-    id,
-    teamId: result.teamId,
-    title,
-    description: input.description?.trim() || "执行支撑关联指标的下一步动作。",
-    status: "Todo",
-    priority: input.priority ?? "Medium",
-    assignee: input.assignee?.trim() || "User",
-    linkedObjectiveId: result.objectiveId,
-    linkedResultId: result.id,
-    feedbackOriginId,
-    dueDate: dueDate ?? now,
-    tags: ["ORF"],
-    createdAt: now,
-    updatedAt: now,
-    sortOrder,
-  });
-
-  const data = await getTaskManagementData({ teamId: result.teamId });
-  return data.tasks.find((task) => task.id === id) ?? null;
+  const data = await getTaskManagementData({ teamId: created.teamId });
+  return data.tasks.find((task) => task.id === created.id) ?? null;
 }
 
 export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
       return false;
     }
@@ -2490,7 +2506,7 @@ export async function deleteTask(taskId: string): Promise<boolean> {
 
 export async function deleteChecklistItem(taskId: string, itemId: string): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
       return false;
     }
@@ -2524,6 +2540,10 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
     if (!moving || !reference || moving.objectiveId !== reference.objectiveId || moving.id === reference.id) {
       return false;
     }
+    const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, moving.objectiveId)).limit(1).for("update");
+    if (!objective) {
+      return false;
+    }
 
     const rows = await tx
       .select({ id: results.id })
@@ -2546,6 +2566,15 @@ export async function moveTask(taskId: string, input: { toResultId: string; refe
     if (!task || !targetResult) {
       return false;
     }
+    const affectedResultIds = Array.from(new Set([task.linkedResultId, targetResult.id])).sort();
+    const lockedResults = await tx
+      .select({ id: results.id })
+      .from(results)
+      .where(inArray(results.id, affectedResultIds))
+      .for("update");
+    if (lockedResults.length !== affectedResultIds.length) {
+      return false;
+    }
     if (input.referenceTaskId) {
       const [referenceTask] = await tx.select().from(tasks).where(eq(tasks.id, input.referenceTaskId)).limit(1);
       if (!referenceTask || referenceTask.linkedResultId !== targetResult.id || referenceTask.id === task.id) {
@@ -2558,7 +2587,6 @@ export async function moveTask(taskId: string, input: { toResultId: string; refe
       .set({ linkedResultId: targetResult.id, linkedObjectiveId: targetResult.objectiveId, updatedAt: today() })
       .where(eq(tasks.id, taskId));
 
-    const affectedResultIds = Array.from(new Set([task.linkedResultId, targetResult.id]));
     for (const resultId of affectedResultIds) {
       const rows = await tx
         .select({ id: tasks.id })
@@ -2598,6 +2626,15 @@ export async function moveChecklistItem(
     if (!item || !targetTask || !sourceTask) {
       return false;
     }
+    const affectedTaskIds = Array.from(new Set([taskId, input.toTaskId])).sort();
+    const lockedTasks = await tx
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(inArray(tasks.id, affectedTaskIds))
+      .for("update");
+    if (lockedTasks.length !== affectedTaskIds.length) {
+      return false;
+    }
     if (input.referenceItemId) {
       const [referenceItem] = await tx.select().from(taskChecklistItems).where(eq(taskChecklistItems.id, input.referenceItemId)).limit(1);
       if (!referenceItem || referenceItem.taskId !== input.toTaskId || referenceItem.id === itemId) {
@@ -2607,7 +2644,6 @@ export async function moveChecklistItem(
 
     await tx.update(taskChecklistItems).set({ taskId: input.toTaskId, updatedAt: today() }).where(eq(taskChecklistItems.id, itemId));
 
-    const affectedTaskIds = Array.from(new Set([taskId, input.toTaskId]));
     for (const currentTaskId of affectedTaskIds) {
       const rows = await tx
         .select({ id: taskChecklistItems.id, done: taskChecklistItems.done })

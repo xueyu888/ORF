@@ -5,13 +5,14 @@ import { and, eq, sql } from "drizzle-orm";
 import { buildServer } from "../server/app";
 import { loginWithPassword } from "../server/auth/ory";
 import { closeDb, db } from "../server/db/client";
-import { objectives, teams, teamMembers, users } from "../server/db/schema";
+import { objectives, results as resultRows, taskChecklistItems, tasks as taskRows, teams, teamMembers, users } from "../server/db/schema";
 import type { ObjectiveAcceptedResult, Result, UncertaintyLevel } from "../src/types/orf";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
   approveObjectiveChallengeApplication,
   canEditObjectiveResultsDuringReestimate,
+  createChecklistItem,
   createObjective,
   createResult,
   createTask,
@@ -1265,6 +1266,61 @@ test("task creation generates collision-resistant ids under concurrent writes", 
 
   const data = await getTaskManagementData({ teamId: fixture.teamId });
   assert.equal(data.tasks.filter((task) => task.linkedResultId === result.id).length, 2);
+});
+
+test("concurrent result, task, and checklist creation reserve stable sort orders", async () => {
+  const fixture = await createFixture("concurrent-sort-orders");
+  const objective = await createPublishedObjective(fixture, "concurrent sort order objective");
+  const expectedSortOrders = Array.from({ length: 8 }, (_item, index) => index);
+
+  const createdResults = await Promise.all(
+    expectedSortOrders.map((index) =>
+      createResult({
+        objectiveId: objective.id,
+        title: `${fixture.prefix} concurrent result ${index}`,
+        metricName: `Concurrent metric ${index}`,
+        uncertaintyLevel: "入门",
+        definer: fixture.commander.name,
+      }),
+    ),
+  );
+  assert.equal(createdResults.every(Boolean), true);
+  const storedResults = await db
+    .select({ id: resultRows.id, sortOrder: resultRows.sortOrder })
+    .from(resultRows)
+    .where(eq(resultRows.objectiveId, objective.id));
+  assert.deepEqual(storedResults.map((row) => row.sortOrder).sort((left, right) => left - right), expectedSortOrders);
+
+  const workResult = createdResults[0];
+  assert.ok(workResult);
+  const createdTasks = await Promise.all(
+    expectedSortOrders.map((index) =>
+      createTask({
+        title: `${fixture.prefix} concurrent task ${index}`,
+        linkedResultId: workResult.id,
+        linkedObjectiveId: objective.id,
+        assignee: fixture.challenger.name,
+      }),
+    ),
+  );
+  assert.equal(createdTasks.every(Boolean), true);
+  const storedTasks = await db
+    .select({ id: taskRows.id, sortOrder: taskRows.sortOrder })
+    .from(taskRows)
+    .where(eq(taskRows.linkedResultId, workResult.id));
+  assert.deepEqual(storedTasks.map((row) => row.sortOrder).sort((left, right) => left - right), expectedSortOrders);
+
+  const checklistTask = createdTasks[0];
+  assert.ok(checklistTask);
+  const checklistCreates = await Promise.all(
+    expectedSortOrders.map((index) => createChecklistItem(checklistTask.id, { label: `${fixture.prefix} concurrent checklist ${index}` })),
+  );
+  assert.deepEqual(checklistCreates, expectedSortOrders.map(() => true));
+  const storedChecklist = await db
+    .select({ id: taskChecklistItems.id, sortOrder: taskChecklistItems.sortOrder })
+    .from(taskChecklistItems)
+    .where(eq(taskChecklistItems.taskId, checklistTask.id));
+  assert.deepEqual(storedChecklist.map((row) => row.sortOrder).sort((left, right) => left - right), expectedSortOrders);
 });
 
 test("API objective stage updates cannot violate lifecycle compatibility", async () => {
