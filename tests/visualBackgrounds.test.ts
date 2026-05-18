@@ -1,6 +1,21 @@
 import assert from "node:assert/strict";
+import { readdir, unlink } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
-import { isSupportedVisualBackgroundImage, parseBackgroundId } from "../server/settings/visualBackgrounds";
+import { isSupportedVisualBackgroundImage, parseBackgroundId, saveUploadedVisualBackground } from "../server/settings/visualBackgrounds";
+
+const uploadRacePrefix = "orf-race-upload";
+const userLoginBackgroundDir = path.join(process.cwd(), "public", "settings", "backgrounds", "login_background", "user");
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+async function cleanupRaceUploads() {
+  const entries = await readdir(userLoginBackgroundDir).catch(() => []);
+  await Promise.all(
+    entries
+      .filter((entry) => entry.startsWith(uploadRacePrefix))
+      .map((entry) => unlink(path.join(userLoginBackgroundDir, entry)).catch(() => undefined)),
+  );
+}
 
 test("visual background uploads require real image signatures", () => {
   assert.equal(isSupportedVisualBackgroundImage("image/png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), true);
@@ -18,4 +33,26 @@ test("visual background uploads reject spoofed image MIME types", () => {
 
 test("visual background ids reject malformed encodings without server errors", () => {
   assert.throws(() => parseBackgroundId("login_background/default/%E0%A4%A"), /background not found/);
+});
+
+test("concurrent visual background uploads reserve unique file ids", async () => {
+  await cleanupRaceUploads();
+
+  try {
+    const uploads = Array.from({ length: 24 }, (_, index) =>
+      saveUploadedVisualBackground({
+        scene: "login_background",
+        fileName: `${uploadRacePrefix}.png`,
+        mimeType: "image/png",
+        buffer: Buffer.concat([pngSignature, Buffer.from([index])]),
+      }),
+    );
+    const images = await Promise.all(uploads);
+    const ids = images.map((image) => image.id);
+
+    assert.equal(new Set(ids).size, images.length);
+    assert.ok(ids.every((id) => id.startsWith(`login_background/user/${uploadRacePrefix}`)));
+  } finally {
+    await cleanupRaceUploads();
+  }
 });

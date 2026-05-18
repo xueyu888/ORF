@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -174,26 +175,39 @@ function sanitizeFileName(fileName: string, mimeType: string) {
   return `${safeBase || "background"}${extension || ".png"}`;
 }
 
-async function pathExists(filePath: string) {
-  try {
-    await stat(filePath);
-    return true;
-  } catch {
-    return false;
+function uploadFileNameCandidate(fileName: string, attempt: number) {
+  if (attempt === 0) {
+    return fileName;
   }
+
+  const parsed = path.parse(fileName);
+  return `${parsed.name}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}${parsed.ext}`;
 }
 
-async function uniqueFileName(directory: string, fileName: string) {
-  const parsed = path.parse(fileName);
-  let candidate = fileName;
-  let index = 0;
+function isFileExistsError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "EEXIST";
+}
 
-  while (await pathExists(path.join(directory, candidate))) {
-    index += 1;
-    candidate = `${parsed.name}-${Date.now().toString(36)}-${index}${parsed.ext}`;
+async function writeUniqueUploadFile(directory: string, fileName: string, buffer: Buffer) {
+  const maxAttempts = 20;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const candidate = uploadFileNameCandidate(fileName, attempt);
+    const filePath = path.join(directory, candidate);
+
+    try {
+      await writeFile(filePath, buffer, { flag: "wx" });
+      return { fileName: candidate, filePath };
+    } catch (error) {
+      if (isFileExistsError(error)) {
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  return candidate;
+  throw new Error("file already exists");
 }
 
 async function ensureBackgroundDirectories() {
@@ -350,10 +364,7 @@ export async function saveUploadedVisualBackground(input: { scene: BackgroundSce
 
   const directory = sceneDir(input.scene, "user");
   await mkdir(directory, { recursive: true });
-  const fileName = await uniqueFileName(directory, sanitizeFileName(input.fileName, input.mimeType));
-  const filePath = path.join(directory, fileName);
-
-  await writeFile(filePath, input.buffer);
+  const { fileName, filePath } = await writeUniqueUploadFile(directory, sanitizeFileName(input.fileName, input.mimeType), input.buffer);
 
   const fileStat = await stat(filePath);
   const fileKey = `${input.scene}/user/${fileName}`;
