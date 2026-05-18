@@ -80,6 +80,13 @@ export function MembersPage() {
 
   const openAddDialog = () => setDialog({ mode: "add", name: "", email: "", role: "member" });
   const openEditDialog = (user: OrfUser) => setDialog({ mode: "edit", userId: user.id, name: user.name, email: user.email, role: user.role });
+  const closeDialog = () => {
+    if (submitting) {
+      return;
+    }
+
+    setDialog(null);
+  };
 
   const handleDialogSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -103,8 +110,12 @@ export function MembersPage() {
     }
 
     setSubmitting(true);
-    const ok = dialog.mode === "edit" && dialog.userId ? await updateUser(dialog.userId, normalizedInput) : await createUser(normalizedInput);
-    setSubmitting(false);
+    let ok = false;
+    try {
+      ok = dialog.mode === "edit" && dialog.userId ? await updateUser(dialog.userId, normalizedInput) : await createUser(normalizedInput);
+    } finally {
+      setSubmitting(false);
+    }
 
     if (ok) {
       setDialog(null);
@@ -267,7 +278,7 @@ export function MembersPage() {
       </section>
 
       {dialog && (
-        <div className="orf-user-dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
+        <div className="orf-user-dialog-backdrop" role="presentation" onMouseDown={closeDialog}>
           <form
             className="orf-user-dialog"
             role="dialog"
@@ -278,27 +289,27 @@ export function MembersPage() {
           >
             <div className="orf-user-dialog-header">
               <h2 id="orf-user-dialog-title">{dialog.mode === "edit" ? "编辑用户" : "新增用户"}</h2>
-              <button type="button" aria-label="关闭" onClick={() => setDialog(null)}>
+              <button type="button" aria-label="关闭" disabled={submitting} onClick={closeDialog}>
                 <X className="h-5 w-5" />
               </button>
             </div>
             <label>
               <span>姓名</span>
-              <input value={dialog.name} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} autoFocus required />
+              <input value={dialog.name} disabled={submitting} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} autoFocus required />
             </label>
             <label>
               <span>邮箱</span>
-              <input type="email" value={dialog.email} onChange={(event) => setDialog({ ...dialog, email: event.target.value })} required />
+              <input type="email" value={dialog.email} disabled={submitting} onChange={(event) => setDialog({ ...dialog, email: event.target.value })} required />
             </label>
             <label>
               <span>角色</span>
-              <select value={dialog.role} disabled={isEditingCurrentAdmin} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
+              <select value={dialog.role} disabled={submitting || isEditingCurrentAdmin} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
                 <option value="admin">管理员</option>
                 <option value="member">成员</option>
               </select>
             </label>
             <div className="orf-user-dialog-actions">
-              <button type="button" disabled={submitting} onClick={() => setDialog(null)}>
+              <button type="button" disabled={submitting} onClick={closeDialog}>
                 取消
               </button>
               <button type="submit" disabled={submitting}>
