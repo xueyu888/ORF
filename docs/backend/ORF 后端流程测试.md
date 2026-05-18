@@ -161,6 +161,7 @@ flowchart TD
 | ORF-BE-R047 | `POST /api/users` 对已有邮箱的 upsert 不能绕过成员改名引用保护；它必须和 `PATCH /api/users/:userId` 使用同一身份规则。 | 用户身份引用保护 |
 | ORF-BE-R048 | 征召 API 只能写入当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名必须被拒绝，不能进入 `assignedChallengers`。 | 征召成员边界 |
 | ORF-BE-R049 | 反馈创建只能把 `owner` 指向当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为可处理人。 | 反馈处理人边界 |
+| ORF-BE-R050 | 行动项并发创建必须生成不重复的 `ORF-*` ID；不能只依赖毫秒级时间戳作为主键。 | API 输入归一化 |
 
 ## 关键断言
 

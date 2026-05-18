@@ -13,6 +13,7 @@ import {
   canEditObjectiveResultsDuringReestimate,
   createObjective,
   createResult,
+  createTask,
   declineObjectiveChallenge,
   freezeObjectiveAfterReestimate,
   getBountyHallData,
@@ -1130,6 +1131,40 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     const storedTask = data.tasks.find((item) => item.id === trimmedTaskPayload.task.id);
     assert.equal(storedTask?.checklist[0]?.label, "新子任务");
   });
+});
+
+test("task creation generates collision-resistant ids under concurrent writes", async () => {
+  const fixture = await createFixture("task-id-collision");
+  const { result } = await createApprovedObjectiveWithResult(fixture, "concurrent task id objective");
+  const fixedNow = Date.now();
+  const originalNow = Date.now;
+  Date.now = () => fixedNow;
+
+  try {
+    const [firstTask, secondTask] = await Promise.all([
+      createTask({
+        title: `${fixture.prefix} concurrent task A`,
+        linkedResultId: result.id,
+        linkedObjectiveId: result.objectiveId,
+        assignee: fixture.challenger.name,
+      }),
+      createTask({
+        title: `${fixture.prefix} concurrent task B`,
+        linkedResultId: result.id,
+        linkedObjectiveId: result.objectiveId,
+        assignee: fixture.challenger.name,
+      }),
+    ]);
+
+    assert.ok(firstTask);
+    assert.ok(secondTask);
+    assert.notEqual(firstTask.id, secondTask.id);
+  } finally {
+    Date.now = originalNow;
+  }
+
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  assert.equal(data.tasks.filter((task) => task.linkedResultId === result.id).length, 2);
 });
 
 test("API objective stage updates cannot violate lifecycle compatibility", async () => {

@@ -2157,7 +2157,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
 
   const siblingRows = await db.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedResultId, result.id));
   const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
-  const id = `ORF-${Date.now()}`;
+  const id = makeId("ORF");
   const now = today();
 
   await db.insert(tasks).values({
