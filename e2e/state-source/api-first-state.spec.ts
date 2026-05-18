@@ -148,6 +148,8 @@ test("dashboard renders only API-derived state without demo offsets", async ({ p
   await page.goto("/dashboard");
 
   await expect(page.getByRole("heading", { name: "ORF 仪表盘" })).toBeVisible();
+  await expect(page.getByText("暂无周期")).toBeVisible();
+  await expect(page.getByText("2026 Q2")).toHaveCount(0);
   const metricSection = page.locator("section").first();
   await expect(metricSection.locator(".orf-card-padding", { hasText: "待处理反馈" }).locator(".text-3xl")).toHaveText("1");
   await expect(metricSection.locator(".orf-card-padding", { hasText: "工程信心" }).locator(".text-3xl")).toHaveText("0%");

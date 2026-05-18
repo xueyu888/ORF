@@ -10,14 +10,15 @@ test("summarizeDashboardState returns zero confidence for an empty objective lis
   assert.equal(Number.isNaN(summary.averageConfidence), false);
   assert.deepEqual(summary.activeObjectives, []);
   assert.deepEqual(summary.causeChart, []);
+  assert.equal(summary.latestCycle, null);
 });
 
 test("summarizeDashboardState derives metrics from live state without demo offsets", () => {
   const summary = summarizeDashboardState({
     objectives: [
-      objective({ id: "objective-active", flowStatus: "reestimating", confidence: 80 }),
-      objective({ id: "objective-settled", flowStatus: "settled", confidence: 40 }),
-      objective({ id: "objective-closed", flowStatus: "closed", confidence: 100 }),
+      objective({ id: "objective-active", flowStatus: "reestimating", confidence: 80, cycle: "2999 Q1" }),
+      objective({ id: "objective-settled", flowStatus: "settled", confidence: 40, cycle: "2999 Q3" }),
+      objective({ id: "objective-closed", flowStatus: "closed", confidence: 100, cycle: "2999 Q2" }),
     ],
     results: [
       result({ id: "result-risk", status: "At Risk" }),
@@ -40,6 +41,7 @@ test("summarizeDashboardState derives metrics from live state without demo offse
     { cause: "Prompt 问题", count: 2 },
     { cause: "检索问题", count: 1 },
   ]);
+  assert.equal(summary.latestCycle, "2999 Q3");
 });
 
 test("summarizeDashboardState returns only current user's open tasks", () => {

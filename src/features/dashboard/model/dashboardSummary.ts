@@ -10,6 +10,7 @@ export interface DashboardSummary {
   highImpactFeedback: Feedback[];
   averageConfidence: number;
   causeChart: Array<{ cause: string; count: number }>;
+  latestCycle: string | null;
   myOpenTasks: Task[];
 }
 
@@ -32,6 +33,7 @@ export function summarizeDashboardState(state: DashboardSummaryInput, currentUse
     causeChart: [...causeCounts.entries()]
       .map(([cause, count]) => ({ cause, count }))
       .sort((left, right) => right.count - left.count || left.cause.localeCompare(right.cause)),
+    latestCycle: latestObjectiveCycle(state.objectives),
     myOpenTasks: currentUser
       ? state.tasks.filter((task) => task.assignee === currentUser.name && task.status !== "Done")
       : [],
@@ -44,6 +46,11 @@ function averageObjectiveConfidence(objectives: Objective[]) {
   }
 
   return Math.round(objectives.reduce((sum, objective) => sum + objective.confidence, 0) / objectives.length);
+}
+
+function latestObjectiveCycle(objectives: Objective[]) {
+  const cycles = objectives.map((objective) => objective.cycle.trim()).filter(Boolean).sort((left, right) => left.localeCompare(right));
+  return cycles.at(-1) ?? null;
 }
 
 interface DashboardSummaryInput {

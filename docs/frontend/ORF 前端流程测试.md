@@ -382,6 +382,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - `/strategy-map` 必须从当前 API 返回的 Objective / Result / Task 生成目标组合、周期、目标、指标和行动项节点；空数据时展示空态，不能显示演示北极星、战略支柱或固定行动项进度。
 - `/objectives` 的周期筛选必须从当前 API 返回的 `Objective.cycle` 推导并真正参与过滤；不能显示固定演示周期。
 - 指标详情页的关联行动项、反馈历史和 ORF 质量检查必须从当前 API 关系推导；质量检查不能无条件显示“通过”，也不能只依赖 Result 内的冗余 id 列表。
+- `/dashboard` 的周期标记必须从当前 Objective 集合推导；没有目标时显示空周期，不能显示固定演示周期或无行为按钮。
 
 ## 修改测试时机
 
