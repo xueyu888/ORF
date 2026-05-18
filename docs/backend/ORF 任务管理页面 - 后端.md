@@ -80,7 +80,7 @@ type ObjectiveFlowStatus =
   | "closed";
 ```
 
-`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/settled` 对应 `goalFrozen`。
+`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/settled` 对应 `goalFrozen`。旧的 stage 更新接口不能写入与当前 `flowStatus` 冲突的阶段；业务流转必须走发布、申请、征召、冻结、提交和验收接口。
 
 ## 战利品与结算
 

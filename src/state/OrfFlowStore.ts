@@ -75,6 +75,15 @@ const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStat
   const completedCount = checklist.filter((item) => item.done).length;
   return completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 };
+
+const isStageCompatibleWithFlowStatus = (
+  flowStatus: OrfState["objectives"][number]["flowStatus"],
+  stage: OrfState["objectives"][number]["stage"],
+) => {
+  if (flowStatus === "reestimating") return stage === "orfReestimate";
+  if (flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed") return stage === "goalFrozen";
+  return stage !== "goalFrozen";
+};
 const moveByReference = <T extends { id: string }>(items: T[], movingId: string, referenceId: string, placement: Placement): T[] => {
   const moving = items.find((item) => item.id === movingId);
   if (!moving || movingId === referenceId) {
@@ -605,6 +614,11 @@ export class OrfFlowStore {
   }
 
   updateObjectiveStage(state: OrfState, objectiveId: string, stage: OrfState["objectives"][number]["stage"]): OrfState {
+    const objective = state.objectives.find((item) => item.id === objectiveId);
+    if (!objective || !isStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
+      return state;
+    }
+
     const now = currentDate();
     return {
       ...state,

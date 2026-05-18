@@ -1179,7 +1179,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const updated = await updateObjectiveStage(params.objectiveId, body.stage);
 
     if (!updated) {
-      return reply.code(404).send({ error: "Objective not found" });
+      return reply.code(409).send({ error: "Objective stage is incompatible with the current lifecycle state" });
     }
 
     return { ok: true };

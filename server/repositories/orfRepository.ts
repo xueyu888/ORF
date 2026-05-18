@@ -2180,8 +2180,29 @@ export async function updateObjectiveTitle(objectiveId: string, title: string): 
 }
 
 export async function updateObjectiveStage(objectiveId: string, stage: OrfStage): Promise<boolean> {
+  const [objective] = await db
+    .select({ flowStatus: objectives.flowStatus })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+  if (!objective || !isStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
+    return false;
+  }
+
   const updated = await db.update(objectives).set({ stage, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
   return updated.length > 0;
+}
+
+function isStageCompatibleWithFlowStatus(flowStatus: Objective["flowStatus"], stage: OrfStage) {
+  if (flowStatus === "reestimating") {
+    return stage === "orfReestimate";
+  }
+
+  if (flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed") {
+    return stage === "goalFrozen";
+  }
+
+  return stage !== "goalFrozen";
 }
 
 export async function updateResultTitle(resultId: string, title: string): Promise<boolean> {

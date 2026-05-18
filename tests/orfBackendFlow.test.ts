@@ -1074,6 +1074,37 @@ test("API work item creation trims labels and prevents blank persisted titles", 
   });
 });
 
+test("API objective stage updates cannot violate lifecycle compatibility", async () => {
+  const fixture = await createFixture("api-stage-compatibility");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "stage compatibility objective");
+
+  await withApiServer(fixture, async (app) => {
+    const frozenStageOnReestimating = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
+      stage: "goalFrozen",
+    });
+    assert.equal(frozenStageOnReestimating.statusCode, 409);
+
+    let data = await getTaskManagementData({ teamId: fixture.teamId });
+    assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "orfReestimate");
+
+    const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+    assert.equal(frozen.status, "ok");
+
+    const reestimateStageOnFrozen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
+      stage: "orfReestimate",
+    });
+    assert.equal(reestimateStageOnFrozen.statusCode, 409);
+
+    const currentStageOnFrozen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
+      stage: "goalFrozen",
+    });
+    assert.equal(currentStageOnFrozen.statusCode, 200);
+
+    data = await getTaskManagementData({ teamId: fixture.teamId });
+    assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "goalFrozen");
+  });
+});
+
 test("API user deletion reports missing team members instead of a successful no-op", async () => {
   const fixture = await createFixture("api-user-delete-missing");
 
