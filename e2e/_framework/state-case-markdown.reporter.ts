@@ -13,13 +13,23 @@ import type {
 const STATE_CASE_ID_ANNOTATION = "state-case-id";
 const STATE_CASE_TITLE_ANNOTATION = "state-case-title";
 const STATE_CASE_STAGES = new Set(["B", "Setup", "S0", "Action", "S1", "Clean", "B after Clean"]);
+const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
 
 type StageStatus = "passed" | "failed";
 type CaseStatus = TestResult["status"];
+type ScreenshotMoment = "on-failure" | "after-failure";
 
 type ReportError = {
   message: string;
   stack?: string;
+};
+
+type ScreenshotReport = {
+  name: string;
+  stage: string;
+  moment: ScreenshotMoment;
+  label: string;
+  path: string;
 };
 
 type StageReport = {
@@ -27,6 +37,7 @@ type StageReport = {
   status: StageStatus;
   durationMs: number;
   error?: ReportError;
+  screenshots?: ScreenshotReport[];
 };
 
 type CaseReport = {
@@ -37,6 +48,20 @@ type CaseReport = {
   failedStage?: string;
   error?: ReportError;
   stages: StageReport[];
+  screenshots?: ScreenshotReport[];
+};
+
+type RawScreenshotAttachment = {
+  name: string;
+  contentType: string;
+  stage: string;
+  moment: ScreenshotMoment;
+  body?: Buffer;
+  sourcePath?: string;
+};
+
+type InternalCaseReport = Omit<CaseReport, "screenshots"> & {
+  screenshotAttachments: RawScreenshotAttachment[];
 };
 
 type ResultJson = {
@@ -57,7 +82,7 @@ type ResultJson = {
 
 export default class StateCaseMarkdownReporter implements Reporter {
   private total = 0;
-  private cases: CaseReport[] = [];
+  private cases: InternalCaseReport[] = [];
 
   onBegin(_config: unknown, suite: Suite) {
     this.total = suite.allTests().length;
@@ -77,6 +102,7 @@ export default class StateCaseMarkdownReporter implements Reporter {
       ...(failedStage ? { failedStage } : {}),
       ...(result.error ? { error: serializeError(result.error) } : {}),
       stages,
+      screenshotAttachments: collectScreenshotAttachments(result),
     });
   }
 
@@ -88,7 +114,14 @@ export default class StateCaseMarkdownReporter implements Reporter {
     const startedAt = result.startTime;
     const endedAt = new Date(result.startTime.getTime() + result.duration);
     const reportDir = path.join(process.cwd(), "test-reports", formatDirectoryName(startedAt));
-    const sortedCases = [...this.cases].sort((left, right) => left.id.localeCompare(right.id));
+    const sortedInternalCases = [...this.cases].sort((left, right) => left.id.localeCompare(right.id));
+    const sortedCases: CaseReport[] = [];
+
+    await fs.promises.mkdir(reportDir, { recursive: true });
+    for (const [index, testCase] of sortedInternalCases.entries()) {
+      sortedCases.push(await materializeCaseReport(reportDir, testCase, index));
+    }
+
     const failedCases = sortedCases.filter((testCase) =>
       ["failed", "timedOut", "interrupted"].includes(testCase.status),
     );
@@ -109,7 +142,6 @@ export default class StateCaseMarkdownReporter implements Reporter {
       cases: sortedCases,
     };
 
-    await fs.promises.mkdir(reportDir, { recursive: true });
     await fs.promises.writeFile(path.join(reportDir, "result.json"), `${JSON.stringify(resultJson, null, 2)}\n`);
     await fs.promises.writeFile(path.join(reportDir, "summary.md"), renderSummary(resultJson, startedAt));
   }
@@ -134,14 +166,110 @@ function flattenSteps(steps: TestStep[]): TestStep[] {
   return steps.flatMap((step) => [step, ...flattenSteps(step.steps)]);
 }
 
+function collectScreenshotAttachments(result: TestResult): RawScreenshotAttachment[] {
+  const attachments = [...result.attachments, ...flattenSteps(result.steps).flatMap((step) => step.attachments)];
+  const screenshots = new Map<string, RawScreenshotAttachment>();
+
+  for (const attachment of attachments) {
+    const metadata = parseScreenshotAttachmentName(attachment.name);
+    if (!metadata || screenshots.has(attachment.name)) {
+      continue;
+    }
+
+    screenshots.set(attachment.name, {
+      name: attachment.name,
+      contentType: attachment.contentType,
+      stage: metadata.stage,
+      moment: metadata.moment,
+      ...(attachment.body ? { body: attachment.body } : {}),
+      ...(attachment.path ? { sourcePath: attachment.path } : {}),
+    });
+  }
+
+  return [...screenshots.values()];
+}
+
+function parseScreenshotAttachmentName(name: string): { stage: string; moment: ScreenshotMoment } | null {
+  const [prefix, moment, ...stageParts] = name.split(":");
+  if (prefix !== SCREENSHOT_ATTACHMENT_PREFIX || !isScreenshotMoment(moment) || stageParts.length === 0) {
+    return null;
+  }
+
+  return {
+    moment,
+    stage: stageParts.join(":"),
+  };
+}
+
+function isScreenshotMoment(value: string): value is ScreenshotMoment {
+  return value === "on-failure" || value === "after-failure";
+}
+
+async function materializeCaseReport(
+  reportDir: string,
+  testCase: InternalCaseReport,
+  caseIndex: number,
+): Promise<CaseReport> {
+  const { screenshotAttachments, ...caseReport } = testCase;
+  const screenshots = await writeScreenshots(reportDir, caseReport, screenshotAttachments, caseIndex);
+  const stages = caseReport.stages.map((stage) => {
+    const stageScreenshots = screenshots.filter((screenshot) => screenshot.stage === stage.name);
+    return stageScreenshots.length ? { ...stage, screenshots: stageScreenshots } : stage;
+  });
+
+  return {
+    ...caseReport,
+    stages,
+    ...(screenshots.length ? { screenshots } : {}),
+  };
+}
+
+async function writeScreenshots(
+  reportDir: string,
+  testCase: Omit<InternalCaseReport, "screenshotAttachments">,
+  attachments: RawScreenshotAttachment[],
+  caseIndex: number,
+): Promise<ScreenshotReport[]> {
+  if (attachments.length === 0) {
+    return [];
+  }
+
+  const attachmentDir = path.join(reportDir, "attachments", `${caseIndex + 1}-${sanitizeFileName(testCase.id)}`);
+  await fs.promises.mkdir(attachmentDir, { recursive: true });
+
+  const screenshots: ScreenshotReport[] = [];
+  for (const [attachmentIndex, attachment] of attachments.entries()) {
+    const fileName = `${attachmentIndex + 1}-${sanitizeFileName(attachment.stage)}-${attachment.moment}.png`;
+    const targetPath = path.join(attachmentDir, fileName);
+
+    if (attachment.body) {
+      await fs.promises.writeFile(targetPath, attachment.body);
+    } else if (attachment.sourcePath) {
+      await fs.promises.copyFile(attachment.sourcePath, targetPath);
+    } else {
+      continue;
+    }
+
+    screenshots.push({
+      name: attachment.name,
+      stage: attachment.stage,
+      moment: attachment.moment,
+      label: screenshotMomentLabel(attachment.moment),
+      path: toPosixPath(path.relative(reportDir, targetPath)),
+    });
+  }
+
+  return screenshots;
+}
+
 function annotation(result: TestResult, type: string) {
   return result.annotations.find((item) => item.type === type)?.description;
 }
 
 function serializeError(error: TestError): ReportError {
   return {
-    message: error.message ?? error.value ?? "Unknown error",
-    ...(error.stack ? { stack: error.stack } : {}),
+    message: stripAnsi(error.message ?? error.value ?? "Unknown error"),
+    ...(error.stack ? { stack: stripAnsi(error.stack) } : {}),
   };
 }
 
@@ -210,6 +338,10 @@ function renderFailedCase(testCase: CaseReport) {
     testCase.error?.message ?? "未记录",
     "```",
     "",
+    "**失败截图：**",
+    "",
+    renderScreenshots(testCase.screenshots ?? []),
+    "",
     "**阶段结果：**",
     "",
     "| 阶段 | 结果 | 耗时 | 错误 |",
@@ -221,6 +353,20 @@ function renderFailedCase(testCase: CaseReport) {
         )} | ${escapeTableCell(stage.error?.message ?? "")} |`,
     ),
   ].join("\n");
+}
+
+function renderScreenshots(screenshots: ScreenshotReport[]) {
+  if (screenshots.length === 0) {
+    return "未记录";
+  }
+
+  return screenshots
+    .map((screenshot) => `- ${screenshot.label}（${screenshot.stage}）：[${screenshot.path}](${screenshot.path})`)
+    .join("\n");
+}
+
+function screenshotMomentLabel(moment: ScreenshotMoment) {
+  return moment === "on-failure" ? "失败时截图" : "失败后截图";
 }
 
 function translateStageStatus(status: StageStatus) {
@@ -273,4 +419,16 @@ function padMilliseconds(value: number) {
 
 function escapeTableCell(value: string) {
   return value.replaceAll("|", "\\|").replaceAll("\n", "<br>");
+}
+
+function sanitizeFileName(value: string) {
+  return value.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "case";
+}
+
+function toPosixPath(value: string) {
+  return value.split(path.sep).join("/");
+}
+
+function stripAnsi(value: string) {
+  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
 }
