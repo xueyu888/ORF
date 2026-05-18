@@ -71,8 +71,8 @@ interface OrfContextValue {
   notify: (message: string) => void;
   removeToast: (id: string) => void;
   resetState: () => void;
-  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => void : never;
-  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => void;
+  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<boolean> : never;
+  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<boolean>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
@@ -83,8 +83,8 @@ interface OrfContextValue {
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
-  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
+  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => Promise<boolean>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
@@ -127,7 +127,7 @@ interface OrfContextValue {
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
-  proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => void;
+  proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => Promise<boolean>;
 }
 
 const OrfContext = createContext<OrfContextValue | null>(null);
@@ -550,24 +550,27 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           .then(() => notify("数据已从后端重新加载"))
           .catch((error) => notify(businessMutationFailureMessage(error, "重新加载数据失败")));
       },
-      createObjective: (input) => {
+      createObjective: async (input) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");
-          return;
+          return false;
         }
 
-        void apiRequest("/api/objectives", {
-          method: "POST",
-          body: JSON.stringify(input),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("目标已创建"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "目标创建失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+        try {
+          await apiRequest("/api/objectives", {
+            method: "POST",
+            body: JSON.stringify(input),
           });
+          await refreshTaskManagementData();
+          notify("目标已创建");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "目标创建失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
-      createResult: (input) => {
+      createResult: async (input) => {
         const payload = {
           ...input,
           source: input.source ?? "managerDefined",
@@ -586,19 +589,22 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;
         if (!canCreateManagerDefined && !canCreateMemberProposed) {
           notify("没有新增指标权限");
-          return;
+          return false;
         }
 
-        void apiRequest("/api/results", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "指标创建失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+        try {
+          await apiRequest("/api/results", {
+            method: "POST",
+            body: JSON.stringify(payload),
           });
+          await refreshTaskManagementData();
+          notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标创建失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       publishObjective: async (objectiveId) => {
         try {
@@ -749,37 +755,43 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      createFeedback: (input) => {
-        void apiRequest("/api/feedback", {
-          method: "POST",
-          body: JSON.stringify({
-            phenomenon: input.phenomenon,
-            causeCategories: input.causeCategories,
-            impact: input.impact,
-            linkedResultId: input.linkedResultId,
-            suggestedAdjustment: input.suggestedAdjustment,
-            source: input.source,
-            owner: input.owner,
-          }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("反馈已捕获"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "反馈保存失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      createFeedback: async (input) => {
+        try {
+          await apiRequest("/api/feedback", {
+            method: "POST",
+            body: JSON.stringify({
+              phenomenon: input.phenomenon,
+              causeCategories: input.causeCategories,
+              impact: input.impact,
+              linkedResultId: input.linkedResultId,
+              suggestedAdjustment: input.suggestedAdjustment,
+              source: input.source,
+              owner: input.owner,
+            }),
           });
+          await refreshTaskManagementData();
+          notify("反馈已捕获");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "反馈保存失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
-      createTask: (input) => {
-        void apiRequest("/api/tasks", {
-          method: "POST",
-          body: JSON.stringify(input),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("行动项已创建"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "行动项创建失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      createTask: async (input) => {
+        try {
+          await apiRequest("/api/tasks", {
+            method: "POST",
+            body: JSON.stringify(input),
           });
+          await refreshTaskManagementData();
+          notify("行动项已创建");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "行动项创建失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       updateTaskStatus: (taskId, status) => {
         void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/status`, {
@@ -1173,17 +1185,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      proposeResultUpdate: (resultId, title, reason, feedbackId) => {
-        void apiRequest(`/api/results/${encodeURIComponent(resultId)}/update-proposal`, {
-          method: "POST",
-          body: JSON.stringify({ title, reason, feedbackId }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("指标更新已记录"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "指标更新记录失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      proposeResultUpdate: async (resultId, title, reason, feedbackId) => {
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/update-proposal`, {
+            method: "POST",
+            body: JSON.stringify({ title, reason, feedbackId }),
           });
+          await refreshTaskManagementData();
+          notify("指标更新已记录");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标更新记录失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
     }),
     [

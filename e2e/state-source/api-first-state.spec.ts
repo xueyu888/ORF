@@ -1077,6 +1077,100 @@ test("creation modals reject whitespace-only required values before API writes",
   await expect.poll(() => writeRequests).toEqual([]);
 });
 
+test("creation modals stay open when API writes fail", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-modal-write-failure",
+    title: "真实弹窗失败目标",
+    flowStatus: "reestimating",
+    stage: "orfReestimate",
+    resultIds: ["result-modal-write-failure"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-modal-write-failure",
+    objectiveId: objective.id,
+    title: "真实弹窗失败指标",
+  };
+  const taskData = taskManagementDataWith({
+    objectives: [objective],
+    results: [result],
+    tasks: [],
+    feedback: [],
+  });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route(/\/api\/objectives$/, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "objective rejected" } });
+  });
+  await page.route(/\/api\/results$/, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "result rejected" } });
+  });
+  await page.route(/\/api\/feedback$/, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "feedback rejected" } });
+  });
+  await page.route(/\/api\/tasks$/, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "task rejected" } });
+  });
+  await page.route(/\/api\/results\/[^/]+\/update-proposal$/, async (route) => {
+    await route.fulfill({ status: 500, json: { error: "proposal rejected" } });
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+  await page.getByLabel("目标标题").fill("失败后仍保留的目标");
+  await page.getByLabel("为什么重要").fill("失败时不能关闭弹窗");
+  await page.getByLabel("边界 / 不做什么").fill("不丢失用户输入");
+  await page.getByRole("button", { name: "保存目标" }).click();
+  await expect(page.getByRole("dialog", { name: "新建目标" })).toBeVisible();
+  await expect(page.getByLabel("目标标题")).toHaveValue("失败后仍保留的目标");
+  await expect(page.getByText("objective rejected")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  const panel = page.locator(".orf-objective-panel", { hasText: objective.title });
+  await panel.hover();
+  await panel.getByRole("button", { name: "新增指标" }).click();
+  await page.getByLabel("指标标题").fill("失败后仍保留的指标");
+  await page.getByLabel("衡量指标").fill("失败率");
+  await page.getByRole("button", { name: "保存指标" }).click();
+  await expect(page.getByRole("dialog", { name: "新增指标" })).toBeVisible();
+  await expect(page.getByLabel("指标标题")).toHaveValue("失败后仍保留的指标");
+  await expect(page.getByText("result rejected")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.getByRole("button", { name: "新建反馈" }).click();
+  await page.getByLabel("现象").fill("失败后仍保留的反馈");
+  await page.getByLabel("建议调整").fill("保留反馈内容");
+  await page.getByRole("button", { name: "保存反馈" }).click();
+  await expect(page.getByRole("dialog", { name: "新建反馈" })).toBeVisible();
+  await expect(page.getByLabel("现象")).toHaveValue("失败后仍保留的反馈");
+  await expect(page.getByText("feedback rejected")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
+  await page.getByRole("button", { name: "创建行动项" }).click();
+  await page.getByLabel("行动项标题").fill("失败后仍保留的行动项");
+  await page.getByRole("button", { name: "保存行动项" }).click();
+  await expect(page.getByRole("dialog", { name: "新建行动项" })).toBeVisible();
+  await expect(page.getByLabel("行动项标题")).toHaveValue("失败后仍保留的行动项");
+  await expect(page.getByText("task rejected")).toBeVisible();
+  await page.getByRole("button", { name: "取消" }).click();
+
+  await page.getByRole("button", { name: "提出指标更新" }).click();
+  await page.getByLabel("修改原因").fill("失败后仍保留的原因");
+  await page.getByRole("button", { name: "记录更新" }).click();
+  await expect(page.getByRole("dialog", { name: "提出指标更新" })).toBeVisible();
+  await expect(page.getByLabel("修改原因")).toHaveValue("失败后仍保留的原因");
+  await expect(page.getByText("proposal rejected")).toBeVisible();
+});
+
 test("feedback detail recommendation actions are real commands", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,
