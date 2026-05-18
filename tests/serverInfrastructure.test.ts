@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "../server/auth/errors";
 import { createPgPoolConfig } from "../server/db/connectionOptions";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../server/db/errors";
 
@@ -29,4 +30,11 @@ test("database unavailable errors are classified for 503 responses", () => {
   assert.equal(isDatabaseUnavailableError(new Error("remaining connection slots are reserved")), true);
   assert.deepEqual(databaseUnavailablePayload(), { error: "数据服务暂时不可用，请稍后重试。" });
   assert.equal(isDatabaseUnavailableError(new Error("invalid input syntax for type uuid")), false);
+});
+
+test("auth service unavailable errors are classified for 503 responses", () => {
+  assert.equal(isAuthServiceUnavailableError(new Error("Ory login failed with 503")), true);
+  assert.equal(isAuthServiceUnavailableError(new Error("fetch failed: ECONNREFUSED 127.0.0.1:4433")), true);
+  assert.deepEqual(authServiceUnavailablePayload(), { error: "认证服务暂时不可用，请稍后重试。" });
+  assert.equal(isAuthServiceUnavailableError(new Error("Ory login failed with 401")), false);
 });

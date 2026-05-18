@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { databaseUnavailablePayload, errorMessage, isDatabaseUnavailableError } from "../db/errors";
+import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
 import { env } from "../env";
+import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
 import { ORF_SESSION_COOKIE, OryAuthFlowError, getAuthenticatedOrfUser, loginWithPassword, registerWithPassword, revokeApiSession } from "./ory";
 
 const loginBodySchema = z.object({
@@ -26,11 +27,6 @@ function serializeSessionCookie(value: string, maxAge: number) {
   return `${ORF_SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
-function isAuthServiceUnavailable(error: unknown) {
-  const message = errorMessage(error);
-  return /\b5\d\d\b/.test(message) || /AbortError|TimeoutError|timeout|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(message);
-}
-
 export async function requireAuthenticatedApi(request: FastifyRequest, reply: FastifyReply) {
   const pathname = new URL(request.url, "http://orf.local").pathname;
   if (request.method === "GET" && pathname === "/api/settings/visual/backgrounds") {
@@ -43,8 +39,8 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
 
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
     request.log.warn(error, "Ory session check failed");
-    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailable(error)) {
-      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : { error: "认证服务暂时不可用，请稍后重试。" });
+    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
+      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
       return undefined;
     }
     return null;
@@ -58,6 +54,8 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
     return reply.code(401).send({ error: "Unauthorized" });
   }
 
+  (request as FastifyRequest & { orfUser?: typeof user }).orfUser = user;
+
   if (user.status !== "active") {
     return reply.code(403).send({ error: "User is not approved", status: user.status });
   }
@@ -67,8 +65,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
   app.get("/api/auth/session", async (request, reply) => {
     const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
       request.log.warn(error, "Ory session check failed");
-      if (isDatabaseUnavailableError(error) || isAuthServiceUnavailable(error)) {
-        reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : { error: "认证服务暂时不可用，请稍后重试。" });
+      if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
+        reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
         return undefined;
       }
       return null;
@@ -90,8 +88,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return { authenticated: true, user: auth.user };
     } catch (error) {
       request.log.warn(error, "Ory password login failed");
-      if (isAuthServiceUnavailable(error)) {
-        return reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : { error: "认证服务暂时不可用，请稍后重试。" });
+      if (isAuthServiceUnavailableError(error)) {
+        return reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
       }
       return reply.code(401).send({ error: "Invalid email or password" });
     }
@@ -106,8 +104,8 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return { authenticated: true, user: auth.user };
     } catch (error) {
       request.log.warn(error, "Ory password registration failed");
-      if (isAuthServiceUnavailable(error)) {
-        return reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : { error: "认证服务暂时不可用，请稍后重试。" });
+      if (isAuthServiceUnavailableError(error)) {
+        return reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
       }
       if (error instanceof OryAuthFlowError) {
         return reply.code(400).send({ error: error.message, field: error.field });

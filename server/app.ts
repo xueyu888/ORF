@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import { getAuthenticatedOrfUser } from "./auth/ory";
+import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./auth/errors";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/errors";
 import { env } from "./env";
@@ -266,6 +267,9 @@ const contributionReviewBodySchema = z.object({
   })).min(1),
 });
 
+type AuthenticatedOrfUser = NonNullable<Awaited<ReturnType<typeof getAuthenticatedOrfUser>>>;
+type RequestWithOrfUser = FastifyRequest & { orfUser?: AuthenticatedOrfUser | null };
+
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
@@ -274,11 +278,34 @@ function corsOrigin() {
   return env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
 }
 
-async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
+async function getRequestOrfUser(request: FastifyRequest, reply: FastifyReply, logMessage: string) {
+  const requestWithUser = request as RequestWithOrfUser;
+  if (requestWithUser.orfUser !== undefined) {
+    return requestWithUser.orfUser;
+  }
+
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, "Ory admin session check failed");
+    request.log.warn(error, logMessage);
+    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
+      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
+      return undefined;
+    }
     return null;
   });
+
+  if (user !== undefined) {
+    requestWithUser.orfUser = user;
+  }
+
+  return user;
+}
+
+async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
+  const user = await getRequestOrfUser(request, reply, "Ory admin session check failed");
+
+  if (user === undefined) {
+    return null;
+  }
 
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
@@ -294,10 +321,11 @@ async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
 }
 
 async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
-  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, "Ory API session check failed");
+  const user = await getRequestOrfUser(request, reply, "Ory API session check failed");
+
+  if (user === undefined) {
     return null;
-  });
+  }
 
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
@@ -342,10 +370,11 @@ async function requireWriteContext(
   reply: FastifyReply,
   permission: PermissionKey,
 ) {
-  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, "Ory permission session check failed");
+  const user = await getRequestOrfUser(request, reply, "Ory permission session check failed");
+
+  if (user === undefined) {
     return null;
-  });
+  }
 
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
