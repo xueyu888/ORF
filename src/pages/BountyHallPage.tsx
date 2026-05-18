@@ -381,7 +381,7 @@ function ResultPreview({ item }: { item: BountyItem }) {
             </div>
           ))
         ) : (
-          <div className="bounty-result-preview-item">重估阶段校准</div>
+          <div className="bounty-result-preview-item">待定义指标</div>
         )}
       </div>
     </>

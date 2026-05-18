@@ -94,6 +94,47 @@ test("bounty hall summarizes cycles from API objectives", async ({ page }) => {
   await expect(page.getByText("当前周期 · 2999 Q1")).toHaveCount(0);
 });
 
+test("bounty hall labels resultless objectives as pending metrics", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-bounty-resultless",
+    title: "真实待定义指标悬赏",
+    resultIds: [],
+  };
+  const bounties: BountyHallData = {
+    availableItems: [
+      {
+        uncertaintyPoints: 0,
+        deadline: objective.finalDueAt,
+        definer: "",
+        difficultyRank: 0,
+        hasCurrentApplication: false,
+        isRecruitment: false,
+        objective,
+        result: null,
+        results: [],
+        source: "managerDefined",
+      },
+    ],
+    recruitmentItems: [],
+    objectiveOptions: [objective],
+    contribution: { points: 0 },
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/bounties", async (route) => {
+    await route.fulfill({ json: bounties });
+  });
+
+  await page.goto("/bounties");
+
+  await expect(page.getByText("真实待定义指标悬赏")).toBeVisible();
+  await expect(page.locator(".bounty-result-preview").getByText("待定义指标", { exact: true })).toBeVisible();
+  await expect(page.getByText("重估阶段校准")).toHaveCount(0);
+});
+
 test("reports page shows an empty leaderboard state without point ledger", async ({ page }) => {
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
