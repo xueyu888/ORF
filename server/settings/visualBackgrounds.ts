@@ -302,7 +302,13 @@ export async function listVisualBackgrounds(scene: BackgroundScene) {
 }
 
 export function parseBackgroundId(id: string): ParsedBackgroundId {
-  const decodedId = decodeURIComponent(id);
+  let decodedId: string;
+  try {
+    decodedId = decodeURIComponent(id);
+  } catch {
+    throw new Error("background not found");
+  }
+
   const [sceneRaw, scopeRaw, ...fileNameParts] = decodedId.split("/");
   const scene = backgroundSceneSchema.parse(sceneRaw);
   const scope = z.enum(backgroundScopes).parse(scopeRaw);

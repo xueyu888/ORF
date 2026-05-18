@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isSupportedVisualBackgroundImage } from "../server/settings/visualBackgrounds";
+import { isSupportedVisualBackgroundImage, parseBackgroundId } from "../server/settings/visualBackgrounds";
 
 test("visual background uploads require real image signatures", () => {
   assert.equal(isSupportedVisualBackgroundImage("image/png", Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), true);
@@ -14,4 +14,8 @@ test("visual background uploads reject spoofed image MIME types", () => {
   assert.equal(isSupportedVisualBackgroundImage("image/png", Buffer.from("<script>alert(1)</script>", "utf8")), false);
   assert.equal(isSupportedVisualBackgroundImage("image/svg+xml", Buffer.from("<svg />", "utf8")), false);
   assert.equal(isSupportedVisualBackgroundImage("image/webp", Buffer.from("not a webp", "utf8")), false);
+});
+
+test("visual background ids reject malformed encodings without server errors", () => {
+  assert.throws(() => parseBackgroundId("login_background/default/%E0%A4%A"), /background not found/);
 });
