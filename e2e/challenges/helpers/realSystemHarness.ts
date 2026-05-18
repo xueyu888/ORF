@@ -24,6 +24,12 @@ export type RealFixture = {
   challengerC: RealUser;
   commander: RealUser;
   disabledMember: RealUser;
+  member1: RealUser;
+  member2: RealUser;
+  member3: RealUser;
+  member4: RealUser;
+  member5: RealUser;
+  member6: RealUser;
   observer: RealUser;
   rejectedApplicant: RealUser;
   reluctantMember: RealUser;
@@ -216,6 +222,12 @@ function createFixture(workerIndex: number): RealFixture {
     challengerC: user("challenger-c", "挑战者C", "member"),
     commander: user("commander", "指挥官", "admin"),
     disabledMember: user("disabled", "禁用成员", "member", "disabled"),
+    member1: user("member-1", "成员1", "member"),
+    member2: user("member-2", "成员2", "member"),
+    member3: user("member-3", "成员3", "member"),
+    member4: user("member-4", "成员4", "member"),
+    member5: user("member-5", "成员5", "member"),
+    member6: user("member-6", "成员6", "member"),
     observer: user("observer", "观察成员", "member"),
     rejectedApplicant: user("rejected-applicant", "被拒申请人", "member"),
     reluctantMember: user("reluctant", "拒绝征召人", "member"),
