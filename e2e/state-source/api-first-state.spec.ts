@@ -302,3 +302,73 @@ test("feedback inbox derives insights from API feedback instead of bundled categ
   await expect(page.getByText("真实已关闭反馈")).toBeVisible();
   await expect(page.getByText("真实高影响反馈")).toHaveCount(0);
 });
+
+test("strategy map renders only API-derived strategy nodes", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-strategy-live",
+    title: "真实策略目标",
+    cycle: "2999 Q3",
+    progress: 80,
+    challengers: ["真实挑战者"],
+    resultIds: ["result-strategy-live"],
+    taskIds: ["task-strategy-live"],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-strategy-live",
+    objectiveId: objective.id,
+    title: "真实策略指标",
+    confidence: 70,
+  };
+  const task: Task = {
+    ...initialOrfState.tasks[0]!,
+    id: "task-strategy-live",
+    title: "真实策略行动项",
+    linkedObjectiveId: objective.id,
+    linkedResultId: result.id,
+    status: "In Review",
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [task],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto("/strategy-map");
+
+  await expect(page.getByRole("heading", { name: "策略地图" })).toBeVisible();
+  await expect(page.getByText("建立可靠的 AI 应用交付能力")).toHaveCount(0);
+  await expect(page.getByText("评估优先")).toHaveCount(0);
+  await expect(page.getByText("真实策略目标")).toBeVisible();
+  await expect(page.getByText("真实策略指标")).toBeVisible();
+  await page.getByRole("button", { name: /真实策略行动项/ }).click();
+  await expect(page.locator(".orf-card-padding").last().getByText("80%")).toBeVisible();
+  await expect(page.getByText("45%")).toHaveCount(0);
+});
+
+test("strategy map shows an empty state when the API has no strategy records", async ({ page }) => {
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [],
+        results: [],
+        tasks: [],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto("/strategy-map");
+
+  await expect(page.getByRole("heading", { name: "策略地图" })).toBeVisible();
+  await expect(page.getByText("暂无策略地图数据")).toBeVisible();
+  await expect(page.getByText("建立可靠的 AI 应用交付能力")).toHaveCount(0);
+  await expect(page.getByText("评估优先")).toHaveCount(0);
+});
