@@ -782,6 +782,7 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
     id: "objective-task-q1",
     title: "真实挑战 Q1",
     cycle: "2999 Q1",
+    flowStatus: "open",
     resultIds: ["result-task-q1"],
     taskIds: [],
     feedbackIds: [],
@@ -791,6 +792,7 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
     id: "objective-task-q2",
     title: "真实挑战 Q2",
     cycle: "2999 Q2",
+    flowStatus: "open",
     resultIds: ["result-task-q2"],
     taskIds: [],
     feedbackIds: [],
@@ -831,6 +833,11 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
 
   await expect(page.getByText("真实挑战 Q2")).toBeVisible();
   await expect(page.getByText("真实挑战 Q1")).toHaveCount(0);
+
+  await page.getByLabel("挑战状态").selectOption("settled");
+
+  await expect(page.getByText("没有符合筛选条件的挑战目标。")).toBeVisible();
+  await expect(page.getByText("当前还没有挑战内容。")).toHaveCount(0);
 });
 
 test("feedback detail recommendation actions are real commands", async ({ page }) => {

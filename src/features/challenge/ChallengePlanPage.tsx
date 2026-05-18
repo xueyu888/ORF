@@ -120,6 +120,12 @@ export function ChallengePlanPage() {
   const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
   const filteredGroups = useMemo(() => filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter }), [cycleFilter, groups, statusFilter]);
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
+  const hasActiveFilters = cycleFilter !== "all" || statusFilter !== "all";
+  const emptyText = hasActiveFilters
+    ? "没有符合筛选条件的挑战目标。"
+    : showAll
+      ? "当前还没有挑战内容。"
+      : "当前没有与你的挑战目标相关的内容。";
 
   useEffect(() => {
     if (cycleFilter !== "all" && !cycleOptions.includes(cycleFilter)) {
@@ -344,7 +350,7 @@ export function ChallengePlanPage() {
         status={statusFilter}
       />
       <ChallengeTree
-        emptyText={showAll ? "当前还没有挑战内容。" : "当前没有与你的挑战目标相关的内容。"}
+        emptyText={emptyText}
         groups={filteredGroups}
         handlers={{
           activeActionId,
