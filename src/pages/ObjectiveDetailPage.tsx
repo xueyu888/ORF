@@ -46,6 +46,10 @@ function relatedAiSystemLabels(linkedEvidence: Evidence[], evalRuns: EvalRun[]) 
   ]).slice(0, 8);
 }
 
+function EmptyPanel({ label }: { label: string }) {
+  return <div className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-muted">{label}</div>;
+}
+
 export function ObjectiveDetailPage() {
   const { objectiveId } = useParams();
   const { currentUser, dataReady, state, openModal, updateTaskStatus, updateFeedbackStatus } = useOrf();
@@ -65,7 +69,8 @@ export function ObjectiveDetailPage() {
   const linkedEvidence = state.evidence.filter((item) => resultIds.has(item.linkedResultId));
   const relatedAiSystems = relatedAiSystemLabels(linkedEvidence, evalRuns);
   const evaluationMetrics = evaluationMetricCards(summarizeEvalRuns(evalRuns));
-  const atRiskCount = results.filter((result) => result.status === "At Risk").length;
+  const atRiskResults = results.filter((result) => result.status === "At Risk");
+  const atRiskCount = atRiskResults.length;
   const metricAction = metricCreationActionForObjective({
     objective,
     currentUser,
@@ -128,17 +133,29 @@ export function ObjectiveDetailPage() {
             </Card>
             <div className="grid gap-4 lg:grid-cols-2">
               {results.map((result) => <ResultCard key={result.id} result={result} />)}
+              {results.length === 0 && <EmptyPanel label="暂无指标。" />}
             </div>
             <Card className="orf-card-padding">
               <div className="mb-3 text-sm font-semibold orf-text-primary">反馈时间线</div>
               <div className="grid gap-3">
                 {feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={results.find((result) => result.id === item.linkedResultId)?.title} />)}
+                {feedback.length === 0 && <EmptyPanel label="暂无反馈记录。" />}
               </div>
             </Card>
           </div>
           <div className="grid content-start gap-4">
             <IntegrityCheck hasFeedback={feedback.length > 0} hasTasks={tasks.length > 0} resultRiskCount={atRiskCount} />
-            <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">开放风险</div><div className="mt-3 grid gap-2">{results.filter((result) => result.status === "At Risk").map((result) => <Link key={result.id} to={`/objectives/${objective.id}/results/${result.id}`} className="orf-warning-text rounded-md orf-surface-muted p-3 text-sm">{result.title}</Link>)}</div></Card>
+            <Card className="orf-card-padding">
+              <div className="text-sm font-semibold orf-text-primary">开放风险</div>
+              <div className="mt-3 grid gap-2">
+                {atRiskResults.map((result) => (
+                  <Link key={result.id} to={`/objectives/${objective.id}/results/${result.id}`} className="orf-warning-text rounded-md orf-surface-muted p-3 text-sm">
+                    {result.title}
+                  </Link>
+                ))}
+                {atRiskResults.length === 0 && <EmptyPanel label="暂无开放风险。" />}
+              </div>
+            </Card>
             <Card className="orf-card-padding">
               <div className="text-sm font-semibold orf-text-primary">相关 AI 系统</div>
               {relatedAiSystems.length > 0 ? (
@@ -160,12 +177,39 @@ export function ObjectiveDetailPage() {
               <span className="orf-text-primary">{result.title}</span><span className="orf-text-secondary">{result.metricName}</span><span>{result.baseline}{result.unit}</span><span>{result.current}{result.unit}</span><span>{result.target}{result.unit}</span><StatusBadge status={result.status} /><span>{result.confidence}%</span><span>{result.definer || "未记录"}</span>
             </Link>
           ))}
+          {results.length === 0 && <div className="p-4"><EmptyPanel label="暂无指标。" /></div>}
         </Card>
       )}
 
-      {tab === "Tasks" && <Card className="overflow-hidden">{tasks.map((task) => <TaskRow key={task.id} task={task} resultTitle={results.find((result) => result.id === task.linkedResultId)?.title} onStatusChange={(status: TaskStatus) => updateTaskStatus(task.id, status)} />)}</Card>}
+      {tab === "Tasks" && (
+        <Card className="overflow-hidden">
+          {tasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              resultTitle={results.find((result) => result.id === task.linkedResultId)?.title}
+              onStatusChange={(status: TaskStatus) => updateTaskStatus(task.id, status)}
+            />
+          ))}
+          {tasks.length === 0 && <div className="p-4"><EmptyPanel label="暂无行动项。" /></div>}
+        </Card>
+      )}
 
-      {tab === "Feedback" && <Card className="grid gap-3 orf-card-padding">{feedback.map((item) => <div key={item.id} className="grid gap-2"><FeedbackCard feedback={item} resultTitle={results.find((result) => result.id === item.linkedResultId)?.title} />{canManageFeedbackStatus(item, currentUser) && <select className="orf-input max-w-48 px-2 py-1 text-xs" value={item.status} onChange={(event) => updateFeedbackStatus(item.id, event.target.value as FeedbackStatus)}>{(["New", "Reviewing", "Action Created", "Result Updated", "Closed"] as FeedbackStatus[]).map((status) => <option key={status} value={status}>{feedbackStatusLabel[status]}</option>)}</select>}</div>)}</Card>}
+      {tab === "Feedback" && (
+        <Card className="grid gap-3 orf-card-padding">
+          {feedback.map((item) => (
+            <div key={item.id} className="grid gap-2">
+              <FeedbackCard feedback={item} resultTitle={results.find((result) => result.id === item.linkedResultId)?.title} />
+              {canManageFeedbackStatus(item, currentUser) && (
+                <select className="orf-input max-w-48 px-2 py-1 text-xs" value={item.status} onChange={(event) => updateFeedbackStatus(item.id, event.target.value as FeedbackStatus)}>
+                  {(["New", "Reviewing", "Action Created", "Result Updated", "Closed"] as FeedbackStatus[]).map((status) => <option key={status} value={status}>{feedbackStatusLabel[status]}</option>)}
+                </select>
+              )}
+            </div>
+          ))}
+          {feedback.length === 0 && <EmptyPanel label="暂无反馈。" />}
+        </Card>
+      )}
 
       {tab === "Decisions" && <DecisionLog decisions={decisions} />}
 

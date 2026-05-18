@@ -148,6 +148,7 @@ export function DecisionLog({ decisions }: { decisions: { title: string; owner: 
             <div className="mt-2 text-xs orf-text-muted">{decision.date} · {decision.owner}</div>
           </div>
         ))}
+        {decisions.length === 0 && <div className="rounded-md border orf-border orf-surface-muted p-3 text-sm orf-text-muted">暂无决策记录。</div>}
       </div>
     </Card>
   );

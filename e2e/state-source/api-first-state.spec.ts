@@ -394,6 +394,47 @@ test("objective overview derives related AI systems from linked evidence", async
   await expect(page.getByText("权限审计")).toHaveCount(0);
 });
 
+test("objective detail tabs show explicit empty states for empty live records", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-detail-empty-states",
+    title: "真实详情空态目标",
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [],
+        tasks: [],
+        evidence: [],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto(`/objectives/${objective.id}`);
+
+  await expect(page.getByText("暂无指标。")).toBeVisible();
+  await expect(page.getByText("暂无反馈记录。")).toBeVisible();
+  await expect(page.getByText("暂无开放风险。")).toBeVisible();
+
+  await page.getByRole("button", { name: "指标", exact: true }).click();
+  await expect(page.getByText("暂无指标。")).toBeVisible();
+
+  await page.getByRole("button", { name: "行动项", exact: true }).click();
+  await expect(page.getByText("暂无行动项。")).toBeVisible();
+
+  await page.getByRole("button", { name: "反馈", exact: true }).click();
+  await expect(page.getByText("暂无反馈。", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "决策", exact: true }).click();
+  await expect(page.getByText("暂无决策记录。")).toBeVisible();
+});
+
 test("feedback inbox derives insights from API feedback instead of bundled categories", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,
