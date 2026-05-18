@@ -387,6 +387,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - 详情页不能保留无行为占位按钮；反馈详情的推荐动作必须触发现有产品命令，目标详情不能展示没有菜单实现的 More 按钮。
 - `/ai-evaluation` 失败样本里的反馈创建入口必须复用目标参与权限；没有失败样本时要显示空态，不能展示空白卡片。
 - `/bounties` 的当前周期概览必须从大厅 API 返回的目标周期推导；空数据时显示暂无周期，多周期时不能只取第一条目标。
+- `/reports` 没有 `pointLedger` 时必须显示明确的排行榜空态；不能只渲染一个空表。
 
 ## 修改测试时机
 

@@ -82,6 +82,7 @@ export function ReportsPage() {
             {rows.map((row) => (
               <LeaderboardRowItem key={row.memberName} maxPoints={maxPoints} row={row} />
             ))}
+            {rows.length === 0 && <div className="reports-leaderboard-empty" role="row"><div role="cell">暂无积分记录</div></div>}
           </div>
         </div>
       </div>

@@ -94,6 +94,17 @@ test("bounty hall summarizes cycles from API objectives", async ({ page }) => {
   await expect(page.getByText("当前周期 · 2999 Q1")).toHaveCount(0);
 });
 
+test("reports page shows an empty leaderboard state without point ledger", async ({ page }) => {
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
+  });
+
+  await page.goto("/reports");
+
+  await expect(page.getByRole("heading", { name: "ORF 飞升战力榜" })).toBeVisible();
+  await expect(page.getByText("暂无积分记录")).toBeVisible();
+});
+
 test("ignores stale business data in legacy localStorage", async ({ page }) => {
   await page.addInitScript((state) => {
     window.localStorage.setItem("orf-flow-state-v3", JSON.stringify(state));
