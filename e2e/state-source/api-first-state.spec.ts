@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
+import type { BountyHallData } from "../../src/state/apiClient";
 import type { Feedback, Objective, OrfState, Result, Task } from "../../src/types/orf";
 
 function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
@@ -53,8 +54,44 @@ test("does not show bundled business data when task data API fails", async ({ pa
 
   await expect(page.getByRole("heading", { name: "悬赏大厅" })).toBeVisible();
   await expect(page.getByText("RAG 检索 Recall@5 达到 85%")).toHaveCount(0);
+  await expect(page.getByText("当前周期 · 暂无周期")).toBeVisible();
+  await expect(page.getByText("当前周期 · 全部周期")).toHaveCount(0);
   await expect(page.getByText("悬赏目标 0 条")).toBeVisible();
   await expect(page.getByText("当前没有可申请或待接受的悬赏目标")).toBeVisible();
+});
+
+test("bounty hall summarizes cycles from API objectives", async ({ page }) => {
+  const q1Objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-bounty-q1",
+    title: "真实大厅 Q1",
+    cycle: "2999 Q1",
+  };
+  const q2Objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-bounty-q2",
+    title: "真实大厅 Q2",
+    cycle: "2999 Q2",
+  };
+  const bounties: BountyHallData = {
+    availableItems: [],
+    recruitmentItems: [],
+    objectiveOptions: [q1Objective, q2Objective],
+    contribution: { points: 0 },
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/bounties", async (route) => {
+    await route.fulfill({ json: bounties });
+  });
+
+  await page.goto("/bounties");
+
+  await expect(page.getByRole("heading", { name: "悬赏大厅" })).toBeVisible();
+  await expect(page.getByText("当前周期 · 2999 Q2 等 2 个周期")).toBeVisible();
+  await expect(page.getByText("当前周期 · 2999 Q1")).toHaveCount(0);
 });
 
 test("ignores stale business data in legacy localStorage", async ({ page }) => {
