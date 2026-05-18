@@ -895,7 +895,10 @@ export async function publishObjective(objectiveId: string, actorId: string): Pr
     .set({ flowStatus: "open", stage: "resultClaiming", status: "Draft", updatedAt: today(), updatedBy: actorId })
     .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "candidate")))
     .returning({ id: objectives.id, teamId: objectives.teamId });
-  if (updated.length === 0) return { status: "invalid" };
+  if (updated.length === 0) {
+    const [existing] = await db.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+    return existing ? { status: "invalid" } : { status: "notFound" };
+  }
   return objectiveOutcome(objectiveId, updated[0]?.teamId);
 }
 

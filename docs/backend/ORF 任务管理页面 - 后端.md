@@ -39,6 +39,8 @@
 | `PATCH` | `/api/registration-requests/:userId/reject` | 拒绝注册申请 |
 | `PATCH` | `/api/users/:userId/disable` | 停用用户 |
 
+不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
+
 ## 返回集合
 
 `GET /api/tasks-page` 和 `GET /api/my-challenges` 返回：

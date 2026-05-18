@@ -846,6 +846,9 @@ test("API flow commands enforce commander-only permissions and challenge list sc
     const memberPublish = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
     assert.equal(memberPublish.statusCode, 403);
 
+    const missingPublish = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(`${fixture.prefix}-missing`)}/publish`);
+    assert.equal(missingPublish.statusCode, 404);
+
     const memberRecruit = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/recruitments`, {
       members: [fixture.observer.name],
     });
