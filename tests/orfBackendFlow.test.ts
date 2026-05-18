@@ -145,7 +145,7 @@ test("commander and challenger can complete the application-to-settlement ORF ba
     objectiveId: objective.id,
     title: `${fixture.prefix} application result`,
     metricName: "Flow completion",
-    description: "A test-only bounty result.",
+    description: "A test-only metric.",
     uncertaintyLevel: "破局",
     baseline: 0,
     current: 0,
