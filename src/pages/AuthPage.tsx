@@ -116,7 +116,9 @@ export function AuthPage() {
     }
 
     setAuthError("");
-    const validationMessage = validateAuthInput(mode, { name, email, password });
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const validationMessage = validateAuthInput(mode, { name: normalizedName, email: normalizedEmail, password });
     if (validationMessage) {
       setAuthError(validationMessage);
       notify(validationMessage);
@@ -126,8 +128,8 @@ export function AuthPage() {
     setSubmitting(true);
     const result =
       mode === "login"
-        ? await loginWithPassword(email, password)
-        : await registerWithPassword({ name, email, password });
+        ? await loginWithPassword(normalizedEmail, password)
+        : await registerWithPassword({ name: normalizedName, email: normalizedEmail, password });
     setSubmitting(false);
 
     if (!result.ok) {
