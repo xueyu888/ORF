@@ -1856,10 +1856,15 @@ export async function submitObjectiveLoot(
   const claimsByResult = new Map<string, LootResultClaim>();
   for (const claim of input.resultClaims) {
     if (!resultIds.has(claim.resultId)) continue;
+    const evidenceText = claim.evidenceText.trim();
+    if (claim.claim !== "notClaimed" && !evidenceText) {
+      return { status: "invalid" };
+    }
+
     claimsByResult.set(claim.resultId, {
       resultId: claim.resultId,
       claim: claim.claim,
-      evidenceText: claim.evidenceText.trim(),
+      evidenceText,
     });
   }
 

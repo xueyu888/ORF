@@ -92,16 +92,23 @@ export function LootSubmitPage() {
       return;
     }
 
+    const resultClaims = results.map((result) => ({
+      resultId: result.id,
+      claim: claims[result.id]?.claim ?? "completed",
+      evidenceText: claims[result.id]?.evidenceText?.trim() ?? "",
+    }));
+    const missingEvidence = resultClaims.find((claim) => claim.claim !== "notClaimed" && !claim.evidenceText);
+    if (missingEvidence) {
+      setError("请填写每个已声明指标的证据、数据或链接");
+      return;
+    }
+
     void submitLoot({
       objectiveId: objective.id,
       body: value,
       author: currentUser?.name,
       selfTestReportBody: selfTestReportBody.trim() || null,
-      resultClaims: results.map((result) => ({
-        resultId: result.id,
-        claim: claims[result.id]?.claim ?? "notClaimed",
-        evidenceText: claims[result.id]?.evidenceText ?? "",
-      })),
+      resultClaims,
     }).then((ok) => {
       if (ok) navigate("/tasks");
     });

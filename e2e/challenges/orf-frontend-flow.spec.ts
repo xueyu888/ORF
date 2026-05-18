@@ -1760,6 +1760,26 @@ test.describe("ORF frontend guard coverage", () => {
     await expect.poll(() => postCount).toBe(0);
   });
 
+  test("loot form requires evidence for claimed results before submit", async ({ page }) => {
+    const objective = objectiveFixture({ id: "obj-ui-loot-empty-evidence", title: "前端测试 空证据战利品目标", flowStatus: "frozen", stage: "goalFrozen", challengers: [memberUser.name], resultIds: ["res-ui-loot-empty-evidence"] });
+    const result = resultFixture({ id: "res-ui-loot-empty-evidence", objectiveId: objective.id, title: "前端测试 空证据战利品指标" });
+    let postCount = 0;
+    const data = taskManagementData({ objectives: [objective], results: [result] });
+
+    await mockOrfApp(page, memberUser, data, {
+      onSubmitLoot: () => {
+        postCount += 1;
+      },
+      tasks: () => data,
+    });
+
+    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.getByLabel("完成说明").fill("提交前端 E2E 验证战利品。");
+    await page.getByRole("button", { name: "提交" }).click();
+    await expect(page.getByText("请填写每个已声明指标的证据、数据或链接")).toBeVisible();
+    await expect.poll(() => postCount).toBe(0);
+  });
+
   test("loot form rejects frozen objective without results", async ({ page }) => {
     const objective = objectiveFixture({ id: "obj-ui-loot-no-results", title: "前端测试 无指标战利品目标", flowStatus: "frozen", stage: "goalFrozen", challengers: [memberUser.name], resultIds: [] });
     let postCount = 0;

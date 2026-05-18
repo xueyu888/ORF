@@ -741,6 +741,13 @@ test("loot submission rejects incomplete or out-of-state payloads", async () => 
   );
   assert.equal(emptyBody.status, "invalid");
 
+  const emptyEvidence = await submitObjectiveLoot(
+    objective.id,
+    { body: "missing evidence", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "  " }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(emptyEvidence.status, "invalid");
+
   const otherObjective = await createPublishedObjective(fixture, "foreign result objective");
   const foreignResult = await createTestResult(otherObjective.id, fixture.commander.name, "foreign result");
   const foreignClaim = await submitObjectiveLoot(
