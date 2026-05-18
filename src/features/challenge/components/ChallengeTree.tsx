@@ -204,8 +204,31 @@ function ObjectivePanel({
             scope={scope}
           />
         ))}
+        {group.bounties.length === 0 && <ObjectiveMetricEmptyState parentAnchorId={anchorId} />}
       </div>
     </section>
+  );
+}
+
+function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string }) {
+  return (
+    <div className="orf-objective-metric-empty">
+      <HierarchyCell depth={1}>
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center"
+          data-hierarchy-anchor={`empty:${parentAnchorId}`}
+          data-hierarchy-branch-end-offset="0"
+          data-hierarchy-branch-target={`empty:${parentAnchorId}`}
+          data-hierarchy-parent={parentAnchorId}
+        >
+          <MetricSquareIcon tone="todo" />
+        </span>
+        <div className="grid min-w-0 gap-1">
+          <div className="text-base font-semibold text-[#475467]">待定义指标</div>
+          <div className="text-xs orf-text-muted">进入重估后，挑战者可以提出指标。</div>
+        </div>
+      </HierarchyCell>
+    </div>
   );
 }
 

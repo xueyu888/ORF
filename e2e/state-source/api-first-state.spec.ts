@@ -840,6 +840,38 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
   await expect(page.getByText("当前还没有挑战内容。")).toHaveCount(0);
 });
 
+test("tasks page labels resultless objectives as pending metrics", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-task-resultless",
+    title: "真实待定义挑战目标",
+    cycle: "2999 Q4",
+    flowStatus: "reestimating",
+    resultIds: [],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const taskData = taskManagementDataWith({
+    objectives: [objective],
+    results: [],
+    tasks: [],
+    feedback: [],
+  });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+
+  await page.goto("/tasks");
+
+  await expect(page.getByText("真实待定义挑战目标")).toBeVisible();
+  await expect(page.getByText("待定义指标", { exact: true })).toBeVisible();
+  await expect(page.getByText("悬赏指标")).toHaveCount(0);
+});
+
 test("feedback detail recommendation actions are real commands", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,
