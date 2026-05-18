@@ -53,6 +53,7 @@ export function MembersPage() {
     createUser,
     currentUser,
     disableUser,
+    notify,
     rejectRegistrationRequest,
     state,
     updateUser,
@@ -90,9 +91,19 @@ export function MembersPage() {
       return;
     }
 
+    const normalizedInput = {
+      name: dialog.name.trim(),
+      email: dialog.email.trim().toLowerCase(),
+      role: dialog.role,
+    };
+
+    if (!normalizedInput.name || !normalizedInput.email) {
+      notify("请填写姓名和邮箱");
+      return;
+    }
+
     setSubmitting(true);
-    const input = { name: dialog.name, email: dialog.email, role: dialog.role };
-    const ok = dialog.mode === "edit" && dialog.userId ? await updateUser(dialog.userId, input) : await createUser(input);
+    const ok = dialog.mode === "edit" && dialog.userId ? await updateUser(dialog.userId, normalizedInput) : await createUser(normalizedInput);
     setSubmitting(false);
 
     if (ok) {
@@ -257,9 +268,16 @@ export function MembersPage() {
 
       {dialog && (
         <div className="orf-user-dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
-          <form className="orf-user-dialog" onSubmit={(event) => void handleDialogSubmit(event)} onMouseDown={(event) => event.stopPropagation()}>
+          <form
+            className="orf-user-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="orf-user-dialog-title"
+            onSubmit={(event) => void handleDialogSubmit(event)}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
             <div className="orf-user-dialog-header">
-              <h2>{dialog.mode === "edit" ? "编辑用户" : "新增用户"}</h2>
+              <h2 id="orf-user-dialog-title">{dialog.mode === "edit" ? "编辑用户" : "新增用户"}</h2>
               <button type="button" aria-label="关闭" onClick={() => setDialog(null)}>
                 <X className="h-5 w-5" />
               </button>
