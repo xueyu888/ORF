@@ -128,6 +128,36 @@ function extensionFromMimeType(mimeType: string) {
   }
 }
 
+export function isSupportedVisualBackgroundImage(mimeType: string, buffer: Buffer) {
+  if (!allowedMimeTypes.has(mimeType)) {
+    return false;
+  }
+
+  if (mimeType === "image/jpeg") {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+
+  if (mimeType === "image/png") {
+    return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+
+  if (mimeType === "image/gif") {
+    const signature = buffer.subarray(0, 6).toString("ascii");
+    return signature === "GIF87a" || signature === "GIF89a";
+  }
+
+  if (mimeType === "image/webp") {
+    return buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+
+  if (mimeType === "image/avif") {
+    const brands = buffer.subarray(8, Math.min(buffer.length, 64)).toString("ascii");
+    return buffer.length >= 16 && buffer.subarray(4, 8).toString("ascii") === "ftyp" && (brands.includes("avif") || brands.includes("avis"));
+  }
+
+  return false;
+}
+
 function sanitizeFileName(fileName: string, mimeType: string) {
   const parsed = path.parse(fileName);
   const fallbackExtension = extensionFromMimeType(mimeType);
@@ -304,7 +334,7 @@ export async function getVisualBackgroundFile(scene: BackgroundScene, scope: Bac
 }
 
 export async function saveUploadedVisualBackground(input: { scene: BackgroundScene; fileName: string; mimeType: string; buffer: Buffer }) {
-  if (!allowedMimeTypes.has(input.mimeType)) {
+  if (!isSupportedVisualBackgroundImage(input.mimeType, input.buffer)) {
     throw new Error("invalid file type");
   }
 
