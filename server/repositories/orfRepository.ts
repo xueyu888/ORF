@@ -246,41 +246,24 @@ function objectiveAcceptedResultFromReviews(reviews: ResultAcceptedResult[]): Ob
 
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
   const teamId = scope.teamId?.trim();
-  const [
-    objectiveRows,
-    resultRows,
-    taskRows,
-    evidenceRows,
-    feedbackRows,
-    objectiveLootRows,
-    objectiveContributionReviewRows,
-    pointLedgerRows,
-    teamRows,
-  ] = await Promise.all([
-    teamId ? db.select().from(objectives).where(eq(objectives.teamId, teamId)) : db.select().from(objectives),
-    teamId ? db.select().from(results).where(eq(results.teamId, teamId)) : db.select().from(results),
-    teamId ? db.select().from(tasks).where(eq(tasks.teamId, teamId)) : db.select().from(tasks),
-    teamId ? db.select().from(evidence).where(eq(evidence.teamId, teamId)) : db.select().from(evidence),
-    teamId ? db.select().from(feedback).where(eq(feedback.teamId, teamId)) : db.select().from(feedback),
-    teamId ? db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, teamId)) : db.select().from(objectiveLoot),
-    teamId ? db.select().from(objectiveContributionReviews).where(eq(objectiveContributionReviews.teamId, teamId)) : db.select().from(objectiveContributionReviews),
-    teamId ? db.select().from(pointLedger).where(eq(pointLedger.teamId, teamId)) : db.select().from(pointLedger),
-    teamId ? db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)) : db.select({ id: teams.id }).from(teams),
-  ]);
+  const objectiveRows = teamId ? await db.select().from(objectives).where(eq(objectives.teamId, teamId)) : await db.select().from(objectives);
+  const resultRows = teamId ? await db.select().from(results).where(eq(results.teamId, teamId)) : await db.select().from(results);
+  const taskRows = teamId ? await db.select().from(tasks).where(eq(tasks.teamId, teamId)) : await db.select().from(tasks);
+  const evidenceRows = teamId ? await db.select().from(evidence).where(eq(evidence.teamId, teamId)) : await db.select().from(evidence);
+  const feedbackRows = teamId ? await db.select().from(feedback).where(eq(feedback.teamId, teamId)) : await db.select().from(feedback);
+  const objectiveLootRows = teamId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, teamId)) : await db.select().from(objectiveLoot);
+  const objectiveContributionReviewRows = teamId
+    ? await db.select().from(objectiveContributionReviews).where(eq(objectiveContributionReviews.teamId, teamId))
+    : await db.select().from(objectiveContributionReviews);
+  const pointLedgerRows = teamId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, teamId)) : await db.select().from(pointLedger);
+  const teamRows = teamId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)) : await db.select({ id: teams.id }).from(teams);
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
   const feedbackIds = feedbackRows.map((item) => item.id);
-  const [
-    trendRows,
-    checklistRows,
-    causeRows,
-    [commentThreadRows, commentMessageRows],
-  ] = await Promise.all([
-    getResultTrendRows(resultIds),
-    getChecklistRows(taskIds),
-    getFeedbackCauseRows(feedbackIds),
-    getCommentRows({ teamId }),
-  ]);
+  const trendRows = await getResultTrendRows(resultIds);
+  const checklistRows = await getChecklistRows(taskIds);
+  const causeRows = await getFeedbackCauseRows(feedbackIds);
+  const [commentThreadRows, commentMessageRows] = await getCommentRows({ teamId });
   const permissionRules = teamRows[0] ? await getPermissionRulesForTeam(teamRows[0].id) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();

@@ -14,6 +14,13 @@ type PostgresCredentials = {
   ssl?: boolean | "require" | "allow" | "prefer" | "verify-full" | ConnectionOptions;
 };
 
+type PgPoolTuning = {
+  max?: number;
+  connectionTimeoutMillis?: number;
+  queryTimeoutMillis?: number;
+  idleTimeoutMillis?: number;
+};
+
 const SSL_QUERY_KEYS = ["sslmode", "sslcert", "sslkey", "sslrootcert"] as const;
 
 function decodeValue(value: string): string | undefined {
@@ -95,7 +102,7 @@ function parsePostgresUrl(connectionString: string) {
   };
 }
 
-export function createPgPoolConfig(connectionString: string): PoolConfig {
+export function createPgPoolConfig(connectionString: string, tuning: PgPoolTuning = {}): PoolConfig {
   const parsed = parsePostgresUrl(connectionString);
   const cleanUrl = new URL(parsed.url);
 
@@ -106,6 +113,11 @@ export function createPgPoolConfig(connectionString: string): PoolConfig {
   return {
     connectionString: cleanUrl.toString(),
     ssl: parsed.ssl,
+    max: tuning.max,
+    connectionTimeoutMillis: tuning.connectionTimeoutMillis,
+    query_timeout: tuning.queryTimeoutMillis,
+    statement_timeout: tuning.queryTimeoutMillis,
+    idleTimeoutMillis: tuning.idleTimeoutMillis,
   };
 }
 

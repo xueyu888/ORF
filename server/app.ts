@@ -5,6 +5,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import { getAuthenticatedOrfUser } from "./auth/ory";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
+import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/errors";
 import { env } from "./env";
 import { registerOptionalIntegrations } from "./integrations";
 import {
@@ -639,6 +640,11 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
         : undefined;
     if (statusCode && statusCode >= 400 && statusCode < 500) {
       return reply.code(statusCode).send({ error: error instanceof Error ? error.message : "Bad Request" });
+    }
+
+    if (isDatabaseUnavailableError(error)) {
+      app.log.error(error);
+      return reply.code(503).send(databaseUnavailablePayload());
     }
 
     app.log.error(error);
