@@ -21,7 +21,7 @@ gf-foundation-ui-kit.zip
 .artifacts/
 .playwright-mcp/
 playwright-report/
-test-results/
+test-reports/
 ory/.runtime/
 
 public/settings/backgrounds/*/user/*

@@ -9,9 +9,9 @@ test.describe("登录测试用例", () => {
     await closeLoginTestDb();
   });
 
-  test(loginSuccessCase.title, async ({ context, page }) => {
+  test(loginSuccessCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 
-    await runStateCase(loginSuccessCase, ctx);
+    await runStateCase(loginSuccessCase, ctx, testInfo);
   });
 });

@@ -4,10 +4,16 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
 
 export default defineConfig({
   testDir: "./e2e",
+  outputDir: ".artifacts/playwright-test-results",
   timeout: 30_000,
   expect: {
     timeout: 5_000,
   },
+  reporter: [
+    ["list", { printSteps: true }],
+    ["html", { open: "never", outputFolder: "playwright-report" }],
+    ["./e2e/_framework/state-case-markdown.reporter.ts"],
+  ],
   fullyParallel: true,
   use: {
     baseURL,
