@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
@@ -65,6 +65,7 @@ const backgroundsRoot = path.join(settingsRoot, "backgrounds");
 const userSettingsDir = path.join(settingsRoot, "user");
 const userSettingsPath = path.join(userSettingsDir, "settings.json");
 const userSettingsExamplePath = path.join(userSettingsDir, "settings.json.example");
+let settingsMutationQueue: Promise<void> = Promise.resolve();
 
 const emptySettings = (): SettingsFile => ({
   visual: {
@@ -260,9 +261,26 @@ async function readUserSettings() {
 
 async function writeUserSettings(settings: SettingsFile) {
   await mkdir(userSettingsDir, { recursive: true });
-  const tempPath = `${userSettingsPath}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
-  await rename(tempPath, userSettingsPath);
+  const tempPath = `${userSettingsPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
+
+  try {
+    await writeFile(tempPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    await rename(tempPath, userSettingsPath);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function updateUserSettings<T>(mutator: (settings: SettingsFile) => T | Promise<T>) {
+  const mutation = settingsMutationQueue.then(async () => {
+    const settings = await readUserSettings();
+    const result = await mutator(settings);
+    await writeUserSettings(settings);
+    return result;
+  });
+  settingsMutationQueue = mutation.then(() => undefined, () => undefined);
+  return mutation;
 }
 
 async function scanBackgroundScope(scene: BackgroundScene, scope: BackgroundScope) {
@@ -405,36 +423,36 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
     fixedBackgroundId = `${fixedBackground.scene}/${fixedBackground.scope}/${fixedBackground.fileName}`;
   }
 
-  const settings = await readUserSettings();
-  settings.visual.backgrounds[scene] = {
-    ...config,
-    fixedBackgroundId,
-  };
-  await writeUserSettings(settings);
+  return updateUserSettings((settings) => {
+    settings.visual.backgrounds[scene] = {
+      ...config,
+      fixedBackgroundId,
+    };
 
-  return {
-    scene,
-    config: settings.visual.backgrounds[scene],
-  };
+    return {
+      scene,
+      config: settings.visual.backgrounds[scene],
+    };
+  });
 }
 
 export async function setDefaultVisualBackground(id: string) {
   const parsed = await assertBackgroundExists(id);
 
-  const settings = await readUserSettings();
-  settings.visual.backgrounds[parsed.scene] = {
-    ...settings.visual.backgrounds[parsed.scene],
-    mode: "fixed",
-    fixedBackgroundId: `${parsed.scene}/${parsed.scope}/${parsed.fileName}`,
-  };
-  await writeUserSettings(settings);
+  return updateUserSettings((settings) => {
+    settings.visual.backgrounds[parsed.scene] = {
+      ...settings.visual.backgrounds[parsed.scene],
+      mode: "fixed",
+      fixedBackgroundId: `${parsed.scene}/${parsed.scope}/${parsed.fileName}`,
+    };
 
-  return {
-    id: settings.visual.backgrounds[parsed.scene].fixedBackgroundId,
-    scene: parsed.scene,
-    config: settings.visual.backgrounds[parsed.scene],
-    isDefault: true,
-  };
+    return {
+      id: settings.visual.backgrounds[parsed.scene].fixedBackgroundId,
+      scene: parsed.scene,
+      config: settings.visual.backgrounds[parsed.scene],
+      isDefault: true,
+    };
+  });
 }
 
 export function visualBackgroundError(error: unknown) {
