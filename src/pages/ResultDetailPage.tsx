@@ -23,7 +23,7 @@ export function ResultDetailPage() {
   const feedback = state.feedback.filter((item) => result.feedbackIds.includes(item.id));
   const metricRequirement = result.metricRequirement ?? `${result.metricName}：${result.description}`;
   const statisticalObject = result.statisticalObject ?? "当前指标关联的标准评估集、线上日志样本和结构化反馈";
-  const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有战利品说明支持`;
+  const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有目标战利品说明支持`;
   const sampleSet = result.sampleSet ?? "指挥官提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
   const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";
   const uncertaintyLevel = result.uncertaintyLevel ?? "进阶";
@@ -90,7 +90,7 @@ export function ResultDetailPage() {
           <Card className="orf-card-padding">
             <div className="text-sm font-semibold orf-text-primary">ORF 质量检查</div>
             <div className="mt-3 grid gap-2 text-xs">
-              {["可度量", "有战利品入口", "已关联目标", "反馈已更新", "有行动项支撑", "口径清楚", "无模糊词"].map((item) => <div key={item} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item}</span><span className="orf-success-text">通过</span></div>)}
+              {["可度量", "有目标战利品入口", "已关联目标", "反馈已更新", "有行动项支撑", "口径清楚", "无模糊词"].map((item) => <div key={item} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item}</span><span className="orf-success-text">通过</span></div>)}
             </div>
           </Card>
           {capabilities.canEditConfidence && (

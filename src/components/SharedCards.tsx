@@ -68,7 +68,7 @@ export function ResultCard({ result }: { result: Result }) {
         </div>
         <div className="mt-4"><ProgressBar value={resultProgress(result)} /></div>
         <div className="mt-4 flex items-center justify-between text-xs orf-text-muted">
-          <span>{result.evidenceIds.length} 个战利品</span>
+          <span>{result.evidenceIds.length} 个证据</span>
           <span>{result.feedbackIds.length} 条反馈</span>
           <span>{result.taskIds.length} 个行动项</span>
         </div>

@@ -6,7 +6,7 @@ import {
   commentCountFor,
   commentCountsByTarget,
   commentTargetForChallengeTarget,
-  submittedLootIdsFromComments,
+  submittedLootObjectiveIdsFromComments,
 } from "../src/features/challenge/model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
@@ -149,11 +149,12 @@ test("drag and drop rules block cross-objective bounty moves and self drops", ()
   );
 });
 
-test("comment helpers map challenge targets, count only messages, and detect loot comments", () => {
+test("comment helpers map challenge targets, count only messages, and detect objective loot comments", () => {
   const threads: CommentThread[] = [
     comment("thread-result", "result", "res-a", ["one", "two"]),
     comment("thread-result-empty", "result", "res-b", []),
-    comment("thread-loot", "result", "res-loot", ["战利品提交：done"]),
+    comment("thread-result-legacy-loot", "result", "res-legacy-loot", ["战利品提交：old"]),
+    comment("thread-loot", "objective", "obj-loot", ["战利品提交：done"]),
     comment("thread-task", "task", "task-a", ["task comment"]),
   ];
   const counts = commentCountsByTarget(threads);
@@ -166,7 +167,7 @@ test("comment helpers map challenge targets, count only messages, and detect loo
   assert.equal(commentCountFor(counts, "result", "res-a"), 2);
   assert.equal(commentCountFor(counts, "result", "res-b"), 0);
   assert.equal(commentCountFor(counts, "task", "task-a"), 1);
-  assert.deepEqual([...submittedLootIdsFromComments(threads)], ["res-loot"]);
+  assert.deepEqual([...submittedLootObjectiveIdsFromComments(threads)], ["obj-loot"]);
 });
 
 test("date and status helpers keep challenge display boundaries stable", () => {
