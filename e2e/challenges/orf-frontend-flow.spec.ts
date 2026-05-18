@@ -1,7 +1,7 @@
 import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { BountyHallData, BountyHallItem, TaskManagementData } from "../../src/state/apiClient";
-import type { ContributionAllocation, Objective, ObjectiveContributionReview, ObjectiveLoot, OrfUser, PointLedgerEntry, Result, Task } from "../../src/types/orf";
+import type { CommentThread, ContributionAllocation, Objective, ObjectiveContributionReview, ObjectiveLoot, OrfUser, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 
 const adminUser = initialOrfState.users.find((user) => user.role === "admin")!;
 const memberUser = initialOrfState.users.find((user) => user.name === "Mia Zhang")!;
@@ -1821,6 +1821,57 @@ test.describe("ORF frontend guard coverage", () => {
     await expect.poll(() => reviewCount).toBe(0);
   });
 
+  test("comment panel hides zero-reply drilldown affordances", async ({ page }) => {
+    const objective = objectiveFixture({ id: "obj-ui-comment-replies", title: "前端测试 评论回复目标", flowStatus: "reestimating", stage: "orfReestimate", challengers: [memberUser.name], resultIds: ["res-ui-comment-replies"] });
+    const result = resultFixture({ id: "res-ui-comment-replies", objectiveId: objective.id, title: "前端测试 评论回复指标" });
+    const comments: CommentThread[] = [
+      {
+        id: "thread-ui-comment-replies",
+        targetType: "objective",
+        targetId: objective.id,
+        targetTitle: objective.title,
+        status: "open",
+        createdBy: memberUser.id,
+        createdAt: "2026-05-18T10:00:00.000Z",
+        updatedAt: "2026-05-18T10:03:00.000Z",
+        messages: [
+          {
+            id: "msg-ui-comment-no-replies",
+            author: memberUser.name,
+            body: "这条评论没有回复",
+            createdAt: "2026-05-18T10:00:00.000Z",
+          },
+          {
+            id: "msg-ui-comment-root-with-reply",
+            author: memberUser.name,
+            body: "这条评论有回复",
+            createdAt: "2026-05-18T10:01:00.000Z",
+          },
+          {
+            id: "msg-ui-comment-reply",
+            author: adminUser.name,
+            body: "这是一条回复",
+            parentMessageId: "msg-ui-comment-root-with-reply",
+            createdAt: "2026-05-18T10:02:00.000Z",
+          },
+        ],
+      },
+    ];
+    const data = taskManagementData({ objectives: [objective], results: [result], comments });
+
+    await mockOrfApp(page, memberUser, data, {
+      mineChallenges: () => data,
+      tasks: () => data,
+    });
+
+    await page.goto("/tasks");
+    await objectivePanel(page, objective.title).getByRole("button", { name: "打开 3 条评论" }).click();
+
+    await expect(page.getByText("这条评论没有回复")).toBeVisible();
+    await expect(page.getByRole("button", { name: "共 0 条回复" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "共 1 条回复" })).toBeVisible();
+  });
+
   test("challenge confirm cancel does not call mutation API", async ({ page }) => {
     const applyObjective = objectiveFixture({ id: "obj-ui-cancel-apply", title: "前端测试 取消申请目标", flowStatus: "open", resultIds: ["res-ui-cancel-apply"] });
     const acceptObjective = objectiveFixture({ id: "obj-ui-cancel-accept", title: "前端测试 取消接受目标", flowStatus: "recruiting", assignedChallengers: [memberUser.name], resultIds: ["res-ui-cancel-accept"] });
@@ -2380,6 +2431,7 @@ function taskManagementData(input: {
   objectives: Objective[];
   results: Result[];
   tasks?: Task[];
+  comments?: CommentThread[];
   objectiveLoot?: ObjectiveLoot[];
   objectiveContributionReviews?: ObjectiveContributionReview[];
   pointLedger?: PointLedgerEntry[];
@@ -2390,7 +2442,7 @@ function taskManagementData(input: {
     tasks: input.tasks ?? [],
     evidence: [],
     feedback: [],
-    comments: [],
+    comments: input.comments ?? [],
     objectiveLoot: input.objectiveLoot ?? [],
     objectiveContributionReviews: input.objectiveContributionReviews ?? [],
     pointLedger: input.pointLedger ?? [],
