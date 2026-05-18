@@ -358,7 +358,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss 都要有可见断言 |
 | 数据一致性 | mutation 成功但刷新旧数据或刷新失败时，前端不能靠本地推断制造成功状态 |
-| 本地回退状态 | 本地 store 生成 Objective、Result、Feedback、子任务和决策 ID 时必须带随机后缀，同一毫秒内连续操作不能产生重复 ID |
+| 本地回退状态 | 本地 store 生成 Objective、Result、Feedback、子任务和决策 ID 时必须带单调计数和随机后缀；同一毫秒内连续操作不能产生重复 ID，即使伪随机数重复也不能撞 ID |
 
 ## 风险边界
 

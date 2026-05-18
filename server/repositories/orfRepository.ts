@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
@@ -80,7 +81,12 @@ type CommentMessageRow = typeof commentMessages.$inferSelect;
 
 const today = () => localDateString(new Date());
 const nowIso = () => new Date().toISOString();
-const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+let idCounter = 0;
+const nextIdCounter = () => {
+  idCounter = (idCounter + 1) % Number.MAX_SAFE_INTEGER;
+  return idCounter.toString(36);
+};
+const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomUUID()}`;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
 const uncertaintyScores: Record<UncertaintyLevel, number> = {

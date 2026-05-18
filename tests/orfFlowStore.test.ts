@@ -96,12 +96,8 @@ test("local store generated ids stay unique within one millisecond", () => {
   });
   const originalNow = Date.now;
   const originalRandom = Math.random;
-  let randomOffset = 0;
   Date.now = () => 4102444800000;
-  Math.random = () => {
-    randomOffset += 0.000001;
-    return randomOffset;
-  };
+  Math.random = () => 0.123456;
 
   try {
     const withObjectives = store.createObjective(

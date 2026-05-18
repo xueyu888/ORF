@@ -28,7 +28,25 @@ type LegacyResult = Result & {
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
 const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+let idCounter = 0;
+const nextIdCounter = () => {
+  idCounter = (idCounter + 1) % Number.MAX_SAFE_INTEGER;
+  return idCounter.toString(36);
+};
+const randomIdSegment = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const bytes = new Uint32Array(4);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(8, "0")).join("");
+  }
+
+  return Math.random().toString(16).slice(2);
+};
+const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomIdSegment()}`;
 const currentTime = () => new Date().toISOString();
 const currentDate = () => localDateString(new Date());
 const currentUserName = (state: OrfState) => state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";

@@ -1139,7 +1139,9 @@ test("task creation generates collision-resistant ids under concurrent writes", 
   const { result } = await createApprovedObjectiveWithResult(fixture, "concurrent task id objective");
   const fixedNow = Date.now();
   const originalNow = Date.now;
+  const originalRandom = Math.random;
   Date.now = () => fixedNow;
+  Math.random = () => 0.123456;
 
   try {
     const [firstTask, secondTask] = await Promise.all([
@@ -1162,6 +1164,7 @@ test("task creation generates collision-resistant ids under concurrent writes", 
     assert.notEqual(firstTask.id, secondTask.id);
   } finally {
     Date.now = originalNow;
+    Math.random = originalRandom;
   }
 
   const data = await getTaskManagementData({ teamId: fixture.teamId });
