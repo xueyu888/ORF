@@ -787,3 +787,39 @@ test("feedback detail recommendation actions are real commands", async ({ page }
   await page.getByRole("button", { name: "创建执行行动项" }).click();
   await expect(page.getByText("新建行动项")).toBeVisible();
 });
+
+test("feedback detail shows explicit empty states for sparse live records", async ({ page }) => {
+  const feedback: Feedback = {
+    ...initialOrfState.feedback[0]!,
+    id: "feedback-empty-detail",
+    phenomenon: "真实空态反馈",
+    evidenceIds: [],
+    causeCategories: [],
+    linkedObjectiveId: "objective-missing-for-feedback",
+    linkedResultId: "result-missing-for-feedback",
+    suggestedAdjustment: "",
+    activity: [],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [],
+        results: [],
+        tasks: [],
+        evidence: [],
+        feedback: [feedback],
+      }),
+    });
+  });
+
+  await page.goto(`/feedback/${feedback.id}`);
+
+  await expect(page.getByRole("heading", { name: feedback.id })).toBeVisible();
+  await expect(page.getByText("暂无佐证材料。")).toBeVisible();
+  await expect(page.getByText("暂无原因分类。")).toBeVisible();
+  await expect(page.getByText("暂无建议调整。")).toBeVisible();
+  await expect(page.getByText("暂无活动记录。")).toBeVisible();
+  await expect(page.getByText("未找到关联目标")).toBeVisible();
+  await expect(page.getByText("未找到关联指标")).toBeVisible();
+});
