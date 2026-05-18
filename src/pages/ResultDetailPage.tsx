@@ -12,6 +12,10 @@ import { useOrf } from "../state/OrfProvider";
 import type { TaskStatus } from "../types/orf";
 import { metricValue, resultProgress } from "../utils/format";
 
+function EmptyPanel({ label }: { label: string }) {
+  return <div className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-muted">{label}</div>;
+}
+
 export function ResultDetailPage() {
   const { resultId } = useParams();
   const { currentUser, dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
@@ -23,12 +27,13 @@ export function ResultDetailPage() {
   const objective = state.objectives.find((item) => item.id === result.objectiveId);
   const tasks = state.tasks.filter((task) => task.linkedResultId === result.id);
   const feedback = state.feedback.filter((item) => item.linkedResultId === result.id);
-  const metricRequirement = result.metricRequirement ?? `${result.metricName}：${result.description}`;
-  const statisticalObject = result.statisticalObject ?? "当前指标关联的标准评估集、线上日志样本和结构化反馈";
-  const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有目标战利品说明支持`;
-  const sampleSet = result.sampleSet ?? "指挥官提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
-  const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";
-  const uncertaintyLevel = result.uncertaintyLevel ?? "进阶";
+  const metricRequirement = result.metricRequirement?.trim() || "待补充";
+  const statisticalObject = result.statisticalObject?.trim() || "待补充";
+  const completionStandard = result.completionStandard?.trim() || "待补充";
+  const sampleSet = result.sampleSet?.trim() || "待补充";
+  const measurementScope = result.measurementScope?.trim() || "待补充";
+  const uncertaintyLevel = result.uncertaintyLevel?.trim() || "待补充";
+  const reviewCadence = result.reviewCadence === "Weekly" ? "每周" : result.reviewCadence === "Biweekly" ? "每两周" : result.reviewCadence || "待补充";
   const capabilities = resultDetailCapabilities({
     objective,
     currentUser,
@@ -55,27 +60,35 @@ export function ResultDetailPage() {
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs orf-text-muted"><span>基线 {metricValue(result.baseline, result.unit)}</span><span>目标 {metricValue(result.target, result.unit)}</span><span>{result.direction === "increase" ? "越高越好" : "越低越好"}</span></div>
                 <div className="mt-4"><ProgressBar value={resultProgress(result)} /></div>
               </div>
-              <ChartFrame className="h-64 min-w-0">
-                {({ width, height }) => (
-                  <LineChart width={width} height={height} data={result.trend}>
-                    <XAxis dataKey="date" tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} />
-                    <YAxis tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: "var(--orf-bg-elevated)", border: "1px solid var(--orf-border)", color: "var(--orf-text-primary)" }} />
-                    <Line type="monotone" dataKey="value" stroke="var(--orf-success-text)" strokeWidth={2} />
-                  </LineChart>
-                )}
-              </ChartFrame>
+              {result.trend.length > 0 ? (
+                <ChartFrame className="h-64 min-w-0">
+                  {({ width, height }) => (
+                    <LineChart width={width} height={height} data={result.trend}>
+                      <XAxis dataKey="date" tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} />
+                      <YAxis tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} />
+                      <Tooltip contentStyle={{ background: "var(--orf-bg-elevated)", border: "1px solid var(--orf-border)", color: "var(--orf-text-primary)" }} />
+                      <Line type="monotone" dataKey="value" stroke="var(--orf-success-text)" strokeWidth={2} />
+                    </LineChart>
+                  )}
+                </ChartFrame>
+              ) : (
+                <EmptyPanel label="暂无趋势数据。" />
+              )}
             </div>
           </Card>
 
           <Card className="overflow-hidden">
             <div className="border-b orf-border p-4 text-sm font-semibold orf-text-primary">关联行动项</div>
             {tasks.map((task) => <TaskRow key={task.id} task={task} resultTitle={result.title} onStatusChange={(status: TaskStatus) => updateTaskStatus(task.id, status)} />)}
+            {tasks.length === 0 && <div className="p-4"><EmptyPanel label="暂无关联行动项。" /></div>}
           </Card>
 
           <Card className="orf-card-padding">
             <div className="mb-3 text-sm font-semibold orf-text-primary">反馈历史</div>
-            <div className="grid gap-3">{feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={result.title} />)}</div>
+            <div className="grid gap-3">
+              {feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={result.title} />)}
+              {feedback.length === 0 && <EmptyPanel label="暂无反馈历史。" />}
+            </div>
           </Card>
         </div>
         <aside className="grid content-start gap-4">
@@ -88,7 +101,7 @@ export function ResultDetailPage() {
               <p><span className="orf-text-primary">标准样本集：</span>{sampleSet}</p>
               <p><span className="orf-text-primary">测量范围：</span>{measurementScope}</p>
               <p><span className="orf-text-primary">不确定性等级：</span><span className="orf-badge-accent ml-1 inline-flex orf-status-tag border px-2 py-0.5 text-xs">{uncertaintyLevel}</span></p>
-              <p><span className="orf-text-primary">复盘节奏：</span>{result.reviewCadence === "Weekly" ? "每周" : "每两周"}</p>
+              <p><span className="orf-text-primary">复盘节奏：</span>{reviewCadence}</p>
             </div>
           </Card>
           <Card className="orf-card-padding">

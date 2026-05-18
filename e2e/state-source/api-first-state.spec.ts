@@ -688,6 +688,53 @@ test("result detail derives linked records and quality checks from API relations
   await expect(quality.locator("div.flex", { hasText: "口径清楚" }).getByText("待补")).toBeVisible();
 });
 
+test("result detail shows empty states instead of inferred criteria for sparse live records", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-result-empty-detail",
+    title: "真实空态指标目标",
+    resultIds: ["result-empty-detail"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-empty-detail",
+    objectiveId: objective.id,
+    title: "真实空态指标",
+    metricRequirement: "",
+    statisticalObject: "",
+    completionStandard: "",
+    sampleSet: "",
+    measurementScope: "",
+    taskIds: [],
+    feedbackIds: [],
+    trend: [],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
+
+  await expect(page.getByRole("heading", { name: "真实空态指标" })).toBeVisible();
+  await expect(page.getByText("暂无趋势数据。")).toBeVisible();
+  await expect(page.getByText("暂无关联行动项。")).toBeVisible();
+  await expect(page.getByText("暂无反馈历史。")).toBeVisible();
+  await expect(page.getByText("待补充")).toHaveCount(5);
+  await expect(page.getByText("标准评估集")).toHaveCount(0);
+  await expect(page.getByText("固定测试环境")).toHaveCount(0);
+  await expect(page.getByText("目标战利品说明支持")).toHaveCount(0);
+});
+
 test("tasks page cycle filter is functional and API-derived", async ({ page }) => {
   const q1Objective: Objective = {
     ...initialOrfState.objectives[0]!,
