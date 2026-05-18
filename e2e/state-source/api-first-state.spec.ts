@@ -417,3 +417,62 @@ test("objectives page derives cycle filters from API objectives", async ({ page 
   await expect(page.getByText("真实 Q2 目标")).toBeVisible();
   await expect(page.getByText("真实 Q1 目标")).toHaveCount(0);
 });
+
+test("result detail derives linked records and quality checks from API relations", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-result-quality",
+    title: "真实质量目标",
+    resultIds: ["result-quality-live"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-quality-live",
+    objectiveId: objective.id,
+    title: "真实质量指标",
+    metricRequirement: "",
+    statisticalObject: "",
+    completionStandard: "",
+    sampleSet: "",
+    measurementScope: "",
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const task: Task = {
+    ...initialOrfState.tasks[0]!,
+    id: "task-quality-live",
+    title: "真实关联行动项",
+    linkedObjectiveId: objective.id,
+    linkedResultId: result.id,
+  };
+  const feedback: Feedback = {
+    ...initialOrfState.feedback[0]!,
+    id: "feedback-quality-live",
+    phenomenon: "真实关联反馈",
+    linkedObjectiveId: objective.id,
+    linkedResultId: result.id,
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [task],
+        feedback: [feedback],
+      }),
+    });
+  });
+
+  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
+
+  await expect(page.getByRole("heading", { name: "真实质量指标" })).toBeVisible();
+  await expect(page.getByText("真实关联行动项")).toBeVisible();
+  await expect(page.getByText("真实关联反馈")).toBeVisible();
+  const quality = page.locator(".orf-card-padding", { hasText: "ORF 质量检查" });
+  await expect(quality.locator("div.flex", { hasText: "反馈已更新" }).getByText("通过")).toBeVisible();
+  await expect(quality.locator("div.flex", { hasText: "有行动项支撑" }).getByText("通过")).toBeVisible();
+  await expect(quality.locator("div.flex", { hasText: "口径清楚" }).getByText("待补")).toBeVisible();
+});

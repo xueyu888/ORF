@@ -7,6 +7,7 @@ import { FeedbackCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
 import { canCreateFeedbackForResult } from "../features/feedback/model/feedbackCapabilities";
+import { buildResultQualityChecks } from "../features/results/model/resultQuality";
 import { useOrf } from "../state/OrfProvider";
 import type { TaskStatus } from "../types/orf";
 import { metricValue, resultProgress } from "../utils/format";
@@ -20,8 +21,8 @@ export function ResultDetailPage() {
   }
 
   const objective = state.objectives.find((item) => item.id === result.objectiveId);
-  const tasks = state.tasks.filter((task) => result.taskIds.includes(task.id));
-  const feedback = state.feedback.filter((item) => result.feedbackIds.includes(item.id));
+  const tasks = state.tasks.filter((task) => task.linkedResultId === result.id);
+  const feedback = state.feedback.filter((item) => item.linkedResultId === result.id);
   const metricRequirement = result.metricRequirement ?? `${result.metricName}：${result.description}`;
   const statisticalObject = result.statisticalObject ?? "当前指标关联的标准评估集、线上日志样本和结构化反馈";
   const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有目标战利品说明支持`;
@@ -34,6 +35,7 @@ export function ResultDetailPage() {
     permissionRules: state.permissionRules,
   });
   const canCreateFeedback = canCreateFeedbackForResult(objective, currentUser, result);
+  const qualityChecks = buildResultQualityChecks({ feedback, objective, result, tasks });
 
   return (
     <PageScaffold
@@ -92,7 +94,7 @@ export function ResultDetailPage() {
           <Card className="orf-card-padding">
             <div className="text-sm font-semibold orf-text-primary">ORF 质量检查</div>
             <div className="mt-3 grid gap-2 text-xs">
-              {["可度量", "有目标战利品入口", "已关联目标", "反馈已更新", "有行动项支撑", "口径清楚", "无模糊词"].map((item) => <div key={item} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item}</span><span className="orf-success-text">通过</span></div>)}
+              {qualityChecks.map((item) => <div key={item.label} className="flex justify-between rounded-md orf-surface-muted px-3 py-2"><span>{item.label}</span><span className={item.passed ? "orf-success-text" : "orf-warning-text"}>{item.passed ? "通过" : "待补"}</span></div>)}
             </div>
           </Card>
           {capabilities.canEditConfidence && (
