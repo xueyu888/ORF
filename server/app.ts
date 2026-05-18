@@ -1030,10 +1030,17 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
 
-    const updated = await updateFeedbackStatus(params.feedbackId, body.status, user.id);
+    const updated = await updateFeedbackStatus(params.feedbackId, body.status, {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+    });
 
-    if (!updated) {
+    if (updated.status === "notFound") {
       return reply.code(404).send({ error: "Feedback not found" });
+    }
+    if (updated.status === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
     }
 
     return { ok: true };

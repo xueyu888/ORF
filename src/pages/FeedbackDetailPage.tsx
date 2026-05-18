@@ -2,6 +2,7 @@ import { Navigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, StatusBadge } from "../components/ui";
 import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
+import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import { evidenceTypeLabel } from "../utils/labels";
 
@@ -21,12 +22,13 @@ export function FeedbackDetailPage() {
     currentUser,
     permissionRules: state.permissionRules,
   });
+  const canUpdateStatus = canManageFeedbackStatus(feedback, currentUser);
 
   return (
     <PageScaffold
       title={feedback.id}
       subtitle={feedback.phenomenon}
-      action={<div className="flex gap-2">{capabilities.canCreateTask && <Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: feedback.linkedObjectiveId, resultId: feedback.linkedResultId, feedbackId: feedback.id })}>创建行动项</Button>}{capabilities.canProposeUpdate && <Button onClick={() => openModal({ type: "resultUpdate", resultId: feedback.linkedResultId, feedbackId: feedback.id })}>提出指标更新</Button>}<Button variant="secondary" onClick={() => updateFeedbackStatus(feedback.id, "Closed")}>标记为已知边界</Button></div>}
+      action={<div className="flex gap-2">{capabilities.canCreateTask && <Button variant="secondary" onClick={() => openModal({ type: "newTask", objectiveId: feedback.linkedObjectiveId, resultId: feedback.linkedResultId, feedbackId: feedback.id })}>创建行动项</Button>}{capabilities.canProposeUpdate && <Button onClick={() => openModal({ type: "resultUpdate", resultId: feedback.linkedResultId, feedbackId: feedback.id })}>提出指标更新</Button>}{canUpdateStatus && <Button variant="secondary" onClick={() => updateFeedbackStatus(feedback.id, "Closed")}>标记为已知边界</Button>}</div>}
     >
       <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
         <div className="grid gap-4">

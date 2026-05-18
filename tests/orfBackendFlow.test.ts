@@ -975,6 +975,47 @@ test("task and comment API writes require objective participation", async () => 
   });
 });
 
+test("feedback status API writes require an administrator, creator, or owner", async () => {
+  const fixture = await createFixture("api-feedback-status-boundary");
+  const { result } = await createApprovedObjectiveWithResult(fixture);
+
+  await withApiServer(fixture, async (app) => {
+    const created = await apiInject(app, fixture.challenger, "POST", "/api/feedback", {
+      phenomenon: `${fixture.prefix} scoped feedback status`,
+      causeCategories: ["Quality"],
+      impact: "High",
+      linkedResultId: result.id,
+      suggestedAdjustment: "Keep feedback status changes scoped to responsible users.",
+      source: "Team review",
+      owner: fixture.challenger.name,
+    });
+    assert.equal(created.statusCode, 200);
+    const createdPayload = created.json() as { feedback: { id: string; status: string; createdBy?: string | null; owner: string } };
+    assert.equal(createdPayload.feedback.createdBy, fixture.challenger.id);
+    assert.equal(createdPayload.feedback.owner, fixture.challenger.name);
+
+    const observerAttempt = await apiInject(app, fixture.observer, "PATCH", `/api/feedback/${encodeURIComponent(createdPayload.feedback.id)}/status`, {
+      status: "Closed",
+    });
+    assert.equal(observerAttempt.statusCode, 403);
+    const afterForbidden = await getTaskManagementData({ teamId: fixture.teamId });
+    assert.equal(afterForbidden.feedback.find((item) => item.id === createdPayload.feedback.id)?.status, "New");
+
+    const creatorAttempt = await apiInject(app, fixture.challenger, "PATCH", `/api/feedback/${encodeURIComponent(createdPayload.feedback.id)}/status`, {
+      status: "Reviewing",
+    });
+    assert.equal(creatorAttempt.statusCode, 200);
+
+    const adminAttempt = await apiInject(app, fixture.commander, "PATCH", `/api/feedback/${encodeURIComponent(createdPayload.feedback.id)}/status`, {
+      status: "Closed",
+    });
+    assert.equal(adminAttempt.statusCode, 200);
+
+    const afterAllowed = await getTaskManagementData({ teamId: fixture.teamId });
+    assert.equal(afterAllowed.feedback.find((item) => item.id === createdPayload.feedback.id)?.status, "Closed");
+  });
+});
+
 test("loot submission and settlement are safe under concurrent duplicate requests", async () => {
   const fixture = await createFixture("concurrent-loot-review");
   const { objective, result } = await createApprovedObjectiveWithResult(fixture);

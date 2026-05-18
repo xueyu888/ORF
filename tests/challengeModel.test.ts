@@ -11,6 +11,7 @@ import {
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
+import { canManageFeedbackStatus } from "../src/features/feedback/model/feedbackCapabilities";
 import type { CommentThread, Evidence, Feedback, Objective, OrfState, Result, Task } from "../src/types/orf";
 
 const date = "2026-05-14";
@@ -96,6 +97,19 @@ test("summarizeDashboard counts settled, review, unassigned, and average objecti
   assertNear(summary.settledProgress, 100 / 3);
   assertNear(summary.reviewProgress, 100 / 3);
   assertNear(summary.unassignedProgress, 100 / 3);
+});
+
+test("feedback status controls are limited to admins, creators, and owners", () => {
+  const item = feedback({ owner: "Kai Wang", createdBy: "user-kai" });
+  const creator = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const assignee = { id: "user-lee", name: "Lee Chen", email: "lee@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const stranger = { id: "user-stranger", name: "Stranger", email: "stranger@example.com", role: "member" as const, status: "active" as const };
+
+  assert.equal(canManageFeedbackStatus(item, creator), true);
+  assert.equal(canManageFeedbackStatus(feedback({ owner: assignee.name, createdBy: "user-kai" }), assignee), true);
+  assert.equal(canManageFeedbackStatus(item, admin), true);
+  assert.equal(canManageFeedbackStatus(item, stranger), false);
 });
 
 test("drag and drop rules block cross-objective bounty moves and self drops", () => {

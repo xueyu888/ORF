@@ -7,6 +7,7 @@ import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, IntegrityCheck, ResultCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { metricCreationActionForObjective } from "../features/challenge/model/orfFlowCapabilities";
+import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackStatus, TaskStatus } from "../types/orf";
 import { feedbackStatusLabel } from "../utils/labels";
@@ -125,7 +126,7 @@ export function ObjectiveDetailPage() {
 
       {tab === "Tasks" && <Card className="overflow-hidden">{tasks.map((task) => <TaskRow key={task.id} task={task} resultTitle={results.find((result) => result.id === task.linkedResultId)?.title} onStatusChange={(status: TaskStatus) => updateTaskStatus(task.id, status)} />)}</Card>}
 
-      {tab === "Feedback" && <Card className="grid gap-3 orf-card-padding">{feedback.map((item) => <div key={item.id} className="grid gap-2"><FeedbackCard feedback={item} resultTitle={results.find((result) => result.id === item.linkedResultId)?.title} /><select className="orf-input max-w-48 px-2 py-1 text-xs" value={item.status} onChange={(event) => updateFeedbackStatus(item.id, event.target.value as FeedbackStatus)}>{(["New", "Reviewing", "Action Created", "Result Updated", "Closed"] as FeedbackStatus[]).map((status) => <option key={status} value={status}>{feedbackStatusLabel[status]}</option>)}</select></div>)}</Card>}
+      {tab === "Feedback" && <Card className="grid gap-3 orf-card-padding">{feedback.map((item) => <div key={item.id} className="grid gap-2"><FeedbackCard feedback={item} resultTitle={results.find((result) => result.id === item.linkedResultId)?.title} />{canManageFeedbackStatus(item, currentUser) && <select className="orf-input max-w-48 px-2 py-1 text-xs" value={item.status} onChange={(event) => updateFeedbackStatus(item.id, event.target.value as FeedbackStatus)}>{(["New", "Reviewing", "Action Created", "Result Updated", "Closed"] as FeedbackStatus[]).map((status) => <option key={status} value={status}>{feedbackStatusLabel[status]}</option>)}</select>}</div>)}</Card>}
 
       {tab === "Decisions" && <DecisionLog decisions={decisions} />}
 

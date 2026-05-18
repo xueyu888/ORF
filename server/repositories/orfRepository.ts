@@ -364,6 +364,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     source: item.source,
     status: item.status,
     owner: item.owner,
+    createdBy: item.createdBy,
+    updatedBy: item.updatedBy,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     activity: [],
@@ -1188,13 +1190,42 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
   return data.feedback.find((item) => item.id === id) ?? null;
 }
 
-export async function updateFeedbackStatus(feedbackId: string, status: FeedbackStatus, actorId: string): Promise<boolean> {
+type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member" };
+
+export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
+
+function canManageFeedbackStatus(
+  item: { owner: string; createdBy: string | null },
+  actor: FeedbackStatusActor,
+) {
+  return actor.role === "admin" || item.createdBy === actor.id || item.owner === actor.name;
+}
+
+export async function updateFeedbackStatus(
+  feedbackId: string,
+  status: FeedbackStatus,
+  actor: FeedbackStatusActor,
+): Promise<FeedbackStatusUpdateResult> {
+  const [target] = await db
+    .select({ id: feedback.id, owner: feedback.owner, createdBy: feedback.createdBy })
+    .from(feedback)
+    .where(eq(feedback.id, feedbackId))
+    .limit(1);
+
+  if (!target) {
+    return { status: "notFound" };
+  }
+
+  if (!canManageFeedbackStatus(target, actor)) {
+    return { status: "forbidden" };
+  }
+
   const updated = await db
     .update(feedback)
-    .set({ status, updatedAt: today(), updatedBy: actorId })
+    .set({ status, updatedAt: today(), updatedBy: actor.id })
     .where(eq(feedback.id, feedbackId))
     .returning({ id: feedback.id });
-  return updated.length > 0;
+  return updated.length > 0 ? { status: "ok" } : { status: "notFound" };
 }
 
 export async function updateResultConfidence(resultId: string, confidence: number, actorId: string): Promise<boolean> {
