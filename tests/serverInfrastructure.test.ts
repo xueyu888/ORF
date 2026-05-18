@@ -26,7 +26,7 @@ test("Postgres pool config strips SSL query parameters and applies timeout tunin
 });
 
 test("database unavailable errors are classified for 503 responses", () => {
-  assert.equal(isDatabaseUnavailableError(new Error("connect ETIMEDOUT 182.150.118.137:54321")), true);
+  assert.equal(isDatabaseUnavailableError(new Error("connect ETIMEDOUT 203.0.113.10:54321")), true);
   assert.equal(isDatabaseUnavailableError(new Error("remaining connection slots are reserved")), true);
   assert.deepEqual(databaseUnavailablePayload(), { error: "数据服务暂时不可用，请稍后重试。" });
   assert.equal(isDatabaseUnavailableError(new Error("invalid input syntax for type uuid")), false);

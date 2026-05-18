@@ -43,6 +43,12 @@
 
 当数据库连接超时或不可用时，API 返回 `503` 和“数据服务暂时不可用，请稍后重试。”，前端不应把这类故障误判为账号或密码错误。
 
+## Secret Hygiene
+
+`.env.example` 只保留结构化示例和占位符，不提交真实数据库、Mattermost、GitHub、SMTP 或其他第三方凭据。真实环境变量写入本地 `.env` 或部署平台的密钥管理系统，`.env` 必须保持未跟踪状态。
+
+维护脚本也不能内置真实密码。`scripts/rebuild-wechatvm.ps1` 需要通过 `-LocalPassword` 参数或 `WECHATVM_PASSWORD` 环境变量传入本地 VM 密码；其他 WeChat VM 维护脚本需要通过 `-Password` 参数或同一个环境变量传入密码。
+
 以后需要打开本地前端页面时，先识别当前是否在 WSL：
 
 ```bash
