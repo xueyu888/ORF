@@ -80,3 +80,29 @@ test("registration trims display name and normalizes email before posting creden
     password: "password123",
   });
 });
+
+test("disabled users see a disabled account state instead of pending review", async ({ page }) => {
+  await page.unroute("**/api/auth/session");
+  await page.route("**/api/auth/session", async (route) => {
+    await route.fulfill({
+      json: {
+        authenticated: true,
+        user: {
+          ...initialOrfState.users[0],
+          id: "disabled-auth-user",
+          name: "Disabled Auth User",
+          email: "disabled.auth@orf.test",
+          role: "member",
+          status: "disabled",
+        },
+      },
+    });
+  });
+
+  await page.goto("/tasks");
+
+  await expect(page.getByRole("heading", { name: "账号已停用" })).toBeVisible();
+  await expect(page.getByText("你的账号已停用。请联系管理员恢复访问。")).toBeVisible();
+  await expect(page.getByText("等待注册审核")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "挑战" })).toHaveCount(0);
+});

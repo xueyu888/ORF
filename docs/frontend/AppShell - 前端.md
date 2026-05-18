@@ -149,7 +149,9 @@ AppShell 由侧边栏、顶部栏、页面内容出口和全局浮层组成。
 | 命令菜单打开态 | 全局搜索弹窗打开 |
 | 弹窗打开态 | 全局新建弹窗打开 |
 | Toast 展示态 | 页面右侧展示操作反馈 |
-| 注册待审核态 | 已登录但 `currentUser.status !== active`，展示等待审核或停用说明，不加载业务页面 |
+| 注册待审核态 | 已登录但 `currentUser.status=pending`，展示等待审核说明，不加载业务页面 |
+| 注册拒绝态 | 已登录但 `currentUser.status=rejected`，展示注册未通过说明，不加载业务页面 |
+| 账号停用态 | 已登录但 `currentUser.status=disabled`，展示账号已停用说明，不加载业务页面 |
 
 ### 4.3 交互细则
 

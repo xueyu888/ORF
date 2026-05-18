@@ -154,6 +154,7 @@ button:disabled {
   font-size: 15px;
   font-weight: 800;
   line-height: 1.35;
+  margin: 0;
 }
 
 .orf-auth-loading-copy {
