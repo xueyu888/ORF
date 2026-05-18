@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { FastifyInstance } from "fastify";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { buildServer } from "../server/app";
 import { closeDb, db } from "../server/db/client";
 import { objectives, teams, teamMembers, users } from "../server/db/schema";
@@ -93,6 +93,36 @@ test("recruited objective without concrete results is visible as a recruitment i
   assert.equal(item.isRecruitment, true);
   assert.equal(item.result, null);
   assert.deepEqual(item.results, []);
+});
+
+test("task management data removes accepted challengers from pending recruitment lists", async () => {
+  const fixture = await createFixture("normalize-assigned");
+  const objective = await createObjective(
+    {
+      title: `${fixture.prefix} dirty assigned challengers`,
+      whyItMatters: "Legacy data may still list an accepted challenger as pending recruitment.",
+      cycle: "2999-Q4",
+      boundary: "Test-only objective.",
+      finalDueAt: farFutureDueDate,
+    },
+    { teamId: fixture.teamId, userId: fixture.commander.id },
+  );
+  assert.ok(objective);
+
+  await db
+    .update(objectives)
+    .set({
+      flowStatus: "reestimating",
+      stage: "orfReestimate",
+      challengers: [fixture.challenger.name],
+      assignedChallengers: [fixture.challenger.name, fixture.observer.name],
+    })
+    .where(eq(objectives.id, objective.id));
+
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const normalized = data.objectives.find((item) => item.id === objective.id);
+  assert.deepEqual(normalized?.challengers, [fixture.challenger.name]);
+  assert.deepEqual(normalized?.assignedChallengers, [fixture.observer.name]);
 });
 
 test("commander and challenger can complete the application-to-settlement ORF backend flow", async () => {

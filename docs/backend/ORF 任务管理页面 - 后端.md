@@ -40,6 +40,7 @@
 | `PATCH` | `/api/users/:userId/disable` | 停用用户 |
 
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
+读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。
 
 ## 返回集合
 

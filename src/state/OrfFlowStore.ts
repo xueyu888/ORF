@@ -241,12 +241,17 @@ const emptyBusinessState = (): OrfState => ({
   pointLedger: [],
 });
 
-function inferFlowStatus(objective: Objective, assignedChallengers: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
+function inferFlowStatus(
+  objective: Objective,
+  challengers: string[],
+  assignedChallengers: string[],
+  challengeApplications: ChallengeApplication[],
+): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
   if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
   if (objective.lootSubmittedAt) return "submitted";
   if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
-  if (objective.challengers?.length) return "reestimating";
+  if (challengers.length) return "reestimating";
   if (assignedChallengers.length > 0) return "recruiting";
   if (challengeApplications.some((application) => application.status === "pending")) return "applying";
   if (objective.stage === "resultClaiming") return "open";
@@ -281,21 +286,23 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
   const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
   const typedResults = objectiveResults.map(normalizeResult);
   const acceptedResults = typedResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
-  const assignedChallengers = objective.assignedChallengers?.length
+  const challengers = objective.challengers?.length ? uniqueMembers(objective.challengers) : uniqueMembers(objectiveResults.map((result) => result.owner));
+  const rawAssignedChallengers = objective.assignedChallengers?.length
     ? objective.assignedChallengers
-    : uniqueMembers(objectiveResults.map((result) => result.assignedChallenger));
+    : objectiveResults.map((result) => result.assignedChallenger);
+  const assignedChallengers = uniqueMembers(rawAssignedChallengers).filter((member) => !challengers.includes(member));
   const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
 
   return {
     ...objective,
     stage: objective.stage ?? "orfReestimate",
-    flowStatus: inferFlowStatus(objective, assignedChallengers, challengeApplications),
+    flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
     finalDueAt:
       objective.finalDueAt ||
       latestDate(objectiveResults.map((result) => result.finalDueAt)) ||
       latestDate(tasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.dueDate)) ||
       addDays(objective.updatedAt, 14),
-    challengers: objective.challengers?.length ? objective.challengers : uniqueMembers(objectiveResults.map((result) => result.owner)),
+    challengers,
     assignedChallengers,
     challengeApplications,
     acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,

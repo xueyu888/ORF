@@ -387,6 +387,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const objectiveItems: Objective[] = objectiveRows.map((objective) => {
     const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
     const objectiveBasePoints = objectiveResults.reduce((sum, result) => sum + result.uncertaintyScore, 0);
+    const challengers = uniqueMembers(objective.challengers ?? []);
+    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []).filter((member) => !challengers.includes(member));
 
     return {
       id: objective.id,
@@ -405,8 +407,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       feedbackIds: feedbackItems.filter((item) => item.linkedObjectiveId === objective.id).map((item) => item.id),
       taskIds: taskItems.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id),
       finalDueAt: objective.finalDueAt || addDays(objective.updatedAt, 14),
-      challengers: objective.challengers,
-      assignedChallengers: objective.assignedChallengers,
+      challengers,
+      assignedChallengers,
       challengeApplications: objective.challengeApplications,
       acceptedAt: objective.acceptedAt,
       confirmationDueAt: objective.confirmationDueAt,
