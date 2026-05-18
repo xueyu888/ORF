@@ -224,3 +224,81 @@ test("objective evaluation tab does not render hardcoded metrics without eval ru
   await expect(page.getByText("82%")).toHaveCount(0);
   await expect(page.getByText("6.5%")).toHaveCount(0);
 });
+
+test("feedback inbox derives insights from API feedback instead of bundled categories", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-feedback-live",
+    title: "真实反馈目标",
+    resultIds: ["result-feedback-live"],
+    feedbackIds: ["feedback-live-risk", "feedback-live-empty", "feedback-live-closed"],
+    taskIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-feedback-live",
+    objectiveId: objective.id,
+    title: "真实反馈指标",
+    feedbackIds: objective.feedbackIds,
+  };
+  const feedback: Feedback[] = [
+    {
+      ...initialOrfState.feedback[0]!,
+      id: "feedback-live-risk",
+      phenomenon: "真实高影响反馈",
+      impact: "High",
+      status: "New",
+      causeCategories: ["真实风险原因"],
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    },
+    {
+      ...initialOrfState.feedback[0]!,
+      id: "feedback-live-empty",
+      phenomenon: "真实未分类反馈",
+      impact: "Medium",
+      status: "Reviewing",
+      causeCategories: [],
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    },
+    {
+      ...initialOrfState.feedback[0]!,
+      id: "feedback-live-closed",
+      phenomenon: "真实已关闭反馈",
+      impact: "Critical",
+      status: "Closed",
+      causeCategories: ["真实风险原因", "真实系统原因"],
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+      createdAt: "2999-01-01T00:00:00.000Z",
+      updatedAt: "2999-01-02T12:00:00.000Z",
+    },
+  ];
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [],
+        feedback,
+      }),
+    });
+  });
+
+  await page.goto("/feedback");
+
+  await expect(page.getByRole("heading", { name: "反馈收件箱" })).toBeVisible();
+  const insights = page.locator(".orf-card-padding", { hasText: "洞察面板" });
+  await expect(insights.getByText("高影响反馈")).toBeVisible();
+  await expect(insights.getByText("平均响应时间")).toBeVisible();
+  await expect(insights.getByText("36h")).toBeVisible();
+  await expect(insights.locator("span.font-medium", { hasText: "真实风险原因" })).toBeVisible();
+  await expect(page.getByText("18h")).toHaveCount(0);
+  await expect(page.getByText("检索问题")).toHaveCount(0);
+
+  await page.locator("select").first().selectOption("真实系统原因");
+  await expect(page.getByText("真实已关闭反馈")).toBeVisible();
+  await expect(page.getByText("真实高影响反馈")).toHaveCount(0);
+});
