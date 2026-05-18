@@ -1632,7 +1632,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     return { status: "forbidden" };
   }
 
-  const targetTitle = input.targetTitle.trim() || target.title;
+  const targetTitle = target.title;
   const createdAt = nowIso();
   const threadId = await db.transaction(async (tx) => {
     if (input.parentMessageId) {

@@ -1516,10 +1516,22 @@ test("task and comment API writes require objective participation", async () => 
     const challengerComment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
       targetType: "objective",
       targetId: objective.id,
-      targetTitle: objective.title,
+      targetTitle: "spoofed objective title",
       body: "challenger can comment",
     });
     assert.equal(challengerComment.statusCode, 200);
+    const challengerCommentPayload = challengerComment.json() as { commentThread: { id: string; targetTitle: string; messages: Array<{ id: string }> } };
+    assert.equal(challengerCommentPayload.commentThread.targetTitle, objective.title);
+
+    const replyComment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: "spoofed reply title",
+      body: "reply keeps server title",
+      parentMessageId: challengerCommentPayload.commentThread.messages[0]?.id,
+    });
+    assert.equal(replyComment.statusCode, 200);
+    assert.equal((replyComment.json() as { commentThread: { targetTitle: string } }).commentThread.targetTitle, objective.title);
   });
 });
 
