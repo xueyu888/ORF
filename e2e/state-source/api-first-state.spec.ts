@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { BountyHallData } from "../../src/state/apiClient";
-import type { Feedback, Objective, OrfState, Result, Task } from "../../src/types/orf";
+import type { Evidence, Feedback, Objective, OrfState, Result, Task } from "../../src/types/orf";
 
 function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
   return {
@@ -274,6 +274,110 @@ test("objective evaluation tab does not render hardcoded metrics without eval ru
   await expect(page.getByText("$0.038")).toHaveCount(0);
   await expect(page.getByText("82%")).toHaveCount(0);
   await expect(page.getByText("6.5%")).toHaveCount(0);
+});
+
+test("objective overview shows an empty related AI systems state without linked records", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-ai-system-empty",
+    title: "真实 AI 系统空态目标",
+    resultIds: ["result-ai-system-empty"],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-ai-system-empty",
+    objectiveId: objective.id,
+    title: "真实 AI 系统空态指标",
+    evidenceIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [],
+        evidence: [],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto(`/objectives/${objective.id}`);
+
+  await expect(page.getByText("暂无关联 AI 系统。")).toBeVisible();
+  await expect(page.getByText("RAG 服务")).toHaveCount(0);
+  await expect(page.getByText("Agent 运行时")).toHaveCount(0);
+  await expect(page.getByText("评估流水线")).toHaveCount(0);
+  await expect(page.getByText("权限审计")).toHaveCount(0);
+});
+
+test("objective overview derives related AI systems from linked evidence", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-ai-system-live",
+    title: "真实 AI 系统关联目标",
+    resultIds: ["result-ai-system-live"],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-ai-system-live",
+    objectiveId: objective.id,
+    title: "真实 AI 系统关联指标",
+    evidenceIds: ["evidence-ai-system-live", "evidence-ai-system-log"],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const evidence: Evidence[] = [
+    {
+      ...initialOrfState.evidence[0]!,
+      id: "evidence-ai-system-live",
+      title: "真实评估证据",
+      linkedResultId: result.id,
+      source: "真实评估流水线",
+    },
+    {
+      ...initialOrfState.evidence[0]!,
+      id: "evidence-ai-system-log",
+      title: "真实日志证据",
+      linkedResultId: result.id,
+      source: "真实日志平台",
+    },
+    {
+      ...initialOrfState.evidence[0]!,
+      id: "evidence-ai-system-unrelated",
+      title: "无关证据",
+      linkedResultId: "result-ai-system-unrelated",
+      source: "无关演示系统",
+    },
+  ];
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [],
+        evidence,
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto(`/objectives/${objective.id}`);
+
+  await expect(page.getByText("真实评估流水线")).toBeVisible();
+  await expect(page.getByText("真实日志平台")).toBeVisible();
+  await expect(page.getByText("无关演示系统")).toHaveCount(0);
+  await expect(page.getByText("RAG 服务")).toHaveCount(0);
+  await expect(page.getByText("Agent 运行时")).toHaveCount(0);
+  await expect(page.getByText("权限审计")).toHaveCount(0);
 });
 
 test("feedback inbox derives insights from API feedback instead of bundled categories", async ({ page }) => {

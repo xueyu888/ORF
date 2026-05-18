@@ -10,7 +10,7 @@ import { metricCreationActionForObjective } from "../features/challenge/model/or
 import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";
 import { canCreateFeedbackForObjective, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
-import type { FeedbackStatus, TaskStatus } from "../types/orf";
+import type { EvalRun, Evidence, FeedbackStatus, TaskStatus } from "../types/orf";
 import { feedbackStatusLabel } from "../utils/labels";
 
 const tabs = ["Overview", "Results", "Tasks", "Feedback", "Decisions", "Evaluation"] as const;
@@ -22,6 +22,29 @@ const tabLabel: Record<(typeof tabs)[number], string> = {
   Decisions: "决策",
   Evaluation: "评估",
 };
+
+function uniqueLabels(values: Array<string | null | undefined>) {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+
+  for (const value of values) {
+    const label = value?.trim();
+    if (!label || seen.has(label)) {
+      continue;
+    }
+    labels.push(label);
+    seen.add(label);
+  }
+
+  return labels;
+}
+
+function relatedAiSystemLabels(linkedEvidence: Evidence[], evalRuns: EvalRun[]) {
+  return uniqueLabels([
+    ...linkedEvidence.map((item) => item.source),
+    ...evalRuns.flatMap((run) => [run.model, run.ragVersion, run.promptVersion]),
+  ]).slice(0, 8);
+}
 
 export function ObjectiveDetailPage() {
   const { objectiveId } = useParams();
@@ -39,6 +62,8 @@ export function ObjectiveDetailPage() {
   const decisions = state.decisions.filter((decision) => decision.linkedObjectiveId === objective.id);
   const resultIds = new Set(results.map((result) => result.id));
   const evalRuns = state.evalRuns.filter((run) => resultIds.has(run.linkedResultId));
+  const linkedEvidence = state.evidence.filter((item) => resultIds.has(item.linkedResultId));
+  const relatedAiSystems = relatedAiSystemLabels(linkedEvidence, evalRuns);
   const evaluationMetrics = evaluationMetricCards(summarizeEvalRuns(evalRuns));
   const atRiskCount = results.filter((result) => result.status === "At Risk").length;
   const metricAction = metricCreationActionForObjective({
@@ -114,7 +139,16 @@ export function ObjectiveDetailPage() {
           <div className="grid content-start gap-4">
             <IntegrityCheck hasFeedback={feedback.length > 0} hasTasks={tasks.length > 0} resultRiskCount={atRiskCount} />
             <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">开放风险</div><div className="mt-3 grid gap-2">{results.filter((result) => result.status === "At Risk").map((result) => <Link key={result.id} to={`/objectives/${objective.id}/results/${result.id}`} className="orf-warning-text rounded-md orf-surface-muted p-3 text-sm">{result.title}</Link>)}</div></Card>
-            <Card className="orf-card-padding"><div className="text-sm font-semibold orf-text-primary">相关 AI 系统</div><div className="mt-3 flex flex-wrap gap-2">{["RAG 服务", "Agent 运行时", "评估流水线", "权限审计"].map((item) => <span key={item} className="orf-status-tag border orf-border px-2 py-1 text-xs orf-text-secondary">{item}</span>)}</div></Card>
+            <Card className="orf-card-padding">
+              <div className="text-sm font-semibold orf-text-primary">相关 AI 系统</div>
+              {relatedAiSystems.length > 0 ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {relatedAiSystems.map((item) => <span key={item} className="orf-status-tag border orf-border px-2 py-1 text-xs orf-text-secondary">{item}</span>)}
+                </div>
+              ) : (
+                <div className="mt-3 rounded-md orf-surface-muted p-3 text-xs orf-text-muted">暂无关联 AI 系统。</div>
+              )}
+            </Card>
           </div>
         </div>
       )}
