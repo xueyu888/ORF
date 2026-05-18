@@ -5,17 +5,13 @@ import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, MetricCard, ObjectiveCard } from "../components/SharedCards";
 import { Button, Card } from "../components/ui";
+import { summarizeDashboardState } from "../features/dashboard/model/dashboardSummary";
 import { useOrf } from "../state/OrfProvider";
+import { taskStatusLabel } from "../utils/labels";
 
 export function DashboardPage() {
-  const { state } = useOrf();
-  const atRiskResults = state.results.filter((result) => result.status === "At Risk");
-  const feedbackDue = state.feedback.filter((feedback) => feedback.status !== "Closed");
-  const confidence = Math.round(state.objectives.reduce((sum, item) => sum + item.confidence, 0) / state.objectives.length);
-  const causeChart = ["Prompt 问题", "检索问题", "知识缺口", "工具调用失败", "时延问题", "成本问题"].map((cause) => ({
-    cause,
-    count: state.feedback.filter((feedback) => feedback.causeCategories.includes(cause)).length + (cause === "Prompt 问题" ? 2 : cause === "检索问题" ? 3 : 1),
-  }));
+  const { currentUser, state } = useOrf();
+  const summary = summarizeDashboardState(state, currentUser);
 
   return (
     <PageScaffold
@@ -24,10 +20,10 @@ export function DashboardPage() {
       action={<Button variant="secondary">2026 Q2</Button>}
     >
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="进行中的目标" value={`${state.objectives.length}`} delta="+1 个目标进入复盘" icon={Target} />
-        <MetricCard title="有风险的指标" value={`${atRiskResults.length}`} delta="较上周减少 2 个" icon={AlertTriangle} />
-        <MetricCard title="待处理反馈" value={`${feedbackDue.length + 4}`} delta="3 个高影响信号" icon={MessageSquare} />
-        <MetricCard title="工程信心" value={`${confidence}%`} delta="较上次周度更新 +6%" icon={Gauge} />
+        <MetricCard title="进行中的目标" value={`${summary.activeObjectives.length}`} delta={`${state.objectives.length} 个目标总数`} icon={Target} />
+        <MetricCard title="有风险的指标" value={`${summary.atRiskResults.length}`} delta="来自当前指标状态" icon={AlertTriangle} />
+        <MetricCard title="待处理反馈" value={`${summary.pendingFeedback.length}`} delta={`${summary.highImpactFeedback.length} 个高影响信号`} icon={MessageSquare} />
+        <MetricCard title="工程信心" value={`${summary.averageConfidence}%`} delta={`${state.objectives.length} 个目标样本`} icon={Gauge} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[2fr_1fr]">
@@ -54,9 +50,10 @@ export function DashboardPage() {
         <Card className="orf-card-padding">
           <div className="mb-3 text-sm font-semibold orf-text-primary">待处理反馈</div>
           <div className="grid gap-3">
-            {feedbackDue.slice(0, 4).map((feedback) => (
+            {summary.pendingFeedback.slice(0, 4).map((feedback) => (
               <FeedbackCard key={feedback.id} feedback={feedback} resultTitle={state.results.find((result) => result.id === feedback.linkedResultId)?.title} />
             ))}
+            {summary.pendingFeedback.length === 0 && <div className="rounded-md border orf-border orf-surface-muted p-3 text-sm orf-text-muted">暂无待处理反馈。</div>}
           </div>
         </Card>
       </section>
@@ -66,13 +63,17 @@ export function DashboardPage() {
           <div className="mb-4 text-sm font-semibold orf-text-primary">风险雷达</div>
           <ChartFrame className="h-72 min-w-0">
             {({ width, height }) => (
-              <BarChart width={width} height={height} data={causeChart}>
-                <CartesianGrid stroke="var(--orf-border)" vertical={false} />
-                <XAxis dataKey="cause" tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} interval={0} angle={-18} textAnchor="end" height={70} />
-                <YAxis tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} />
-                <Tooltip contentStyle={{ background: "var(--orf-bg-elevated)", border: "1px solid var(--orf-border)", color: "var(--orf-text-primary)" }} />
-                <Bar dataKey="count" fill="var(--orf-accent)" radius={[4, 4, 0, 0]} />
-              </BarChart>
+              summary.causeChart.length > 0 ? (
+                <BarChart width={width} height={height} data={summary.causeChart}>
+                  <CartesianGrid stroke="var(--orf-border)" vertical={false} />
+                  <XAxis dataKey="cause" tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} interval={0} angle={-18} textAnchor="end" height={70} />
+                  <YAxis tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: "var(--orf-bg-elevated)", border: "1px solid var(--orf-border)", color: "var(--orf-text-primary)" }} />
+                  <Bar dataKey="count" fill="var(--orf-accent)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              ) : (
+                <div className="flex h-full w-full items-center justify-center rounded-md border orf-border orf-surface-muted text-sm orf-text-muted">暂无待处理反馈原因。</div>
+              )
             )}
           </ChartFrame>
         </Card>
@@ -82,9 +83,13 @@ export function DashboardPage() {
       <Card className="orf-card-padding">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold orf-text-primary"><CheckSquare className="h-4 w-4 orf-accent-text" /> 我的 ORF 待办</div>
         <div className="grid gap-3 md:grid-cols-4">
-          {["更新 2 个指标", "评审 3 条反馈", "关闭 4 个行动项", "准备周度更新"].map((todo) => (
-            <div key={todo} className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-primary">{todo}</div>
+          {summary.myOpenTasks.slice(0, 4).map((task) => (
+            <Link key={task.id} to="/tasks" className="block rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-primary orf-hover-muted">
+              <div className="line-clamp-2">{task.title}</div>
+              <div className="mt-2 text-xs orf-text-muted">{taskStatusLabel[task.status]} · {task.dueDate}</div>
+            </Link>
           ))}
+          {summary.myOpenTasks.length === 0 && <div className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-muted">暂无分配给你的待办。</div>}
         </div>
       </Card>
     </PageScaffold>

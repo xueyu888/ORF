@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
-import type { Task } from "../../src/types/orf";
+import type { Feedback, OrfState, Task } from "../../src/types/orf";
 
 function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
   return {
@@ -11,6 +11,19 @@ function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
     feedback: initialOrfState.feedback,
     comments: initialOrfState.comments,
     permissionRules: initialOrfState.permissionRules,
+  };
+}
+
+function taskManagementDataWith(overrides: Partial<Pick<OrfState, "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "permissionRules">>) {
+  return {
+    objectives: initialOrfState.objectives,
+    results: initialOrfState.results,
+    tasks: initialOrfState.tasks,
+    evidence: initialOrfState.evidence,
+    feedback: initialOrfState.feedback,
+    comments: initialOrfState.comments,
+    permissionRules: initialOrfState.permissionRules,
+    ...overrides,
   };
 }
 
@@ -99,4 +112,53 @@ test("keeps task status unchanged until the API write succeeds and refreshed dat
 
   await statusSelect.selectOption("Done");
   await expect(statusSelect).toHaveValue("Done");
+});
+
+test("dashboard renders only API-derived state without demo offsets", async ({ page }) => {
+  const user = initialOrfState.users[0]!;
+  const feedback: Feedback = {
+    ...initialOrfState.feedback[0]!,
+    id: "feedback-live-dashboard",
+    status: "New",
+    impact: "High",
+    causeCategories: ["真实风险原因"],
+    linkedObjectiveId: "objective-missing-from-dashboard",
+    linkedResultId: "result-missing-from-dashboard",
+  };
+  const task: Task = {
+    ...initialOrfState.tasks[0]!,
+    id: "task-live-dashboard",
+    title: "处理真实 Dashboard 待办",
+    assignee: user.name,
+    status: "Todo",
+    dueDate: "2999-01-10",
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [],
+        results: [],
+        tasks: [task],
+        feedback: [feedback],
+      }),
+    });
+  });
+
+  await page.goto("/dashboard");
+
+  await expect(page.getByRole("heading", { name: "ORF 仪表盘" })).toBeVisible();
+  const metricSection = page.locator("section").first();
+  await expect(metricSection.locator(".orf-card-padding", { hasText: "待处理反馈" }).locator(".text-3xl")).toHaveText("1");
+  await expect(metricSection.locator(".orf-card-padding", { hasText: "工程信心" }).locator(".text-3xl")).toHaveText("0%");
+  await expect(page.getByText("1 个高影响信号")).toBeVisible();
+  await expect(page.getByText("真实风险原因")).toHaveCount(2);
+  await expect(page.getByText("处理真实 Dashboard 待办")).toBeVisible();
+  await expect(page.getByText("NaN%")).toHaveCount(0);
+  await expect(page.getByText("较上周减少 2 个")).toHaveCount(0);
+  await expect(page.getByText("较上次周度更新 +6%")).toHaveCount(0);
+  await expect(page.getByText("更新 2 个指标")).toHaveCount(0);
+  await expect(page.getByText("评审 3 条反馈")).toHaveCount(0);
+  await expect(page.getByText("关闭 4 个行动项")).toHaveCount(0);
+  await expect(page.getByText("准备周度更新")).toHaveCount(0);
 });
