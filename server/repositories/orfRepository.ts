@@ -94,6 +94,7 @@ const difficultyRanks: Record<UncertaintyLevel, number> = {
 const bountyHallFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting"]);
 const applicationReviewFlowStatuses = new Set<Objective["flowStatus"]>(["applying", "recruiting", "reestimating"]);
 const challengeAcceptanceFlowStatuses = new Set<Objective["flowStatus"]>(["recruiting", "reestimating"]);
+const challengeRecruitmentFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting", "reestimating"]);
 const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled", "closed"]);
 
 function optional<T>(value: T | null): T | undefined {
@@ -539,7 +540,9 @@ export async function getBountyHallData(member: string): Promise<BountyHallData>
   const items = data.objectives.flatMap((objective) => {
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
-    if (objectiveAcceptedForBountyHall(objective) || objectiveClosedForBountyHall(objective)) return [];
+    const isRecruitment = objective.assignedChallengers.includes(member) && challengeAcceptanceFlowStatuses.has(objective.flowStatus);
+    if (objectiveClosedForBountyHall(objective) && !isRecruitment) return [];
+    if (objectiveAcceptedForBountyHall(objective) && !isRecruitment) return [];
 
     const pendingApplications = (objective.challengeApplications ?? []).filter((application) => application.status === "pending");
     return [{
@@ -548,7 +551,7 @@ export async function getBountyHallData(member: string): Promise<BountyHallData>
       definer: result?.definer ?? "",
       difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
       hasCurrentApplication: pendingApplications.some((application) => application.applicant === member),
-      isRecruitment: objective.assignedChallengers.includes(member),
+      isRecruitment,
       objective,
       result: result ?? null,
       results: objectiveResults,
@@ -939,12 +942,19 @@ export async function recruitObjectiveChallengers(
 ): Promise<ObjectiveFlowMutationOutcome> {
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus) || objective.challengers.length > 0) return { status: "invalid" };
-  const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...members]);
+  if (isObjectiveTerminal(objective) || !challengeRecruitmentFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
+  const currentChallengers = uniqueMembers(objective.challengers ?? []);
+  const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
+  const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
   if (assignedChallengers.length === 0) return { status: "invalid" };
   await db
     .update(objectives)
-    .set({ assignedChallengers, flowStatus: "recruiting", updatedAt: today(), updatedBy: actorId })
+    .set({
+      assignedChallengers,
+      flowStatus: currentChallengers.length > 0 || objective.flowStatus === "reestimating" ? "reestimating" : "recruiting",
+      updatedAt: today(),
+      updatedBy: actorId,
+    })
     .where(eq(objectives.id, objectiveId));
   return objectiveOutcome(objectiveId);
 }
@@ -955,19 +965,20 @@ export async function declineObjectiveChallenge(objectiveId: string, member: str
 
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (objective.flowStatus !== "recruiting") return { status: "invalid" };
+  if (!challengeAcceptanceFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
 
   const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
   if (!assignedChallengers.includes(nextMember)) return { status: "invalid" };
 
   const nextAssigned = assignedChallengers.filter((item) => item !== nextMember);
   const applications = objective.challengeApplications ?? [];
+  const challengers = uniqueMembers(objective.challengers ?? []);
   await db
     .update(objectives)
     .set({
       assignedChallengers: nextAssigned,
       challengeApplications: applications,
-      flowStatus: nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
+      flowStatus: challengers.length > 0 ? "reestimating" : nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
       updatedAt: today(),
       updatedBy: actorId,
     })

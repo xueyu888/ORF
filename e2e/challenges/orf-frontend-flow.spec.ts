@@ -303,6 +303,326 @@ test("real user launch flow links commander and challengers from publish to sett
 });
 
 test.describe("ORF high-level audit coverage", () => {
+  test("multi-round objective iteration keeps challenger state isolated and settlement cumulative", async ({ browser }, testInfo) => {
+    const rounds = [
+      {
+        id: "obj-ui-audit-round-one",
+        title: "审计 多轮目标一 权限策略幻觉率",
+        resultId: "res-ui-audit-round-one",
+        resultTitle: "审计 多轮目标一 幻觉率低于 3%",
+        lootId: "loot-ui-audit-round-one",
+      },
+      {
+        id: "obj-ui-audit-round-two",
+        title: "审计 多轮目标二 检索召回率",
+        resultId: "res-ui-audit-round-two",
+        resultTitle: "审计 多轮目标二 Recall 大于 92%",
+        lootId: "loot-ui-audit-round-two",
+      },
+    ];
+    let data = taskManagementData({
+      objectives: rounds.map((round) =>
+        objectiveFixture({
+          id: round.id,
+          title: round.title,
+          flowStatus: "candidate",
+          stage: "goalSetting",
+          objectiveBasePoints: 100,
+          resultIds: [],
+        }),
+      ),
+      results: [],
+    });
+    let activeObjectiveId = rounds[0]!.id;
+    let acceleratedTick = 0;
+    const createdPayloads: ResultCreatePayload[] = [];
+
+    const acceleratedAt = () => {
+      acceleratedTick += 1;
+      return new Date(Date.parse("2026-05-18T10:00:00.000Z") + acceleratedTick * 9 * 60_000).toISOString();
+    };
+    const currentObjective = (objectiveId = activeObjectiveId) => data.objectives.find((item) => item.id === objectiveId)!;
+    const currentRound = (objectiveId = activeObjectiveId) => rounds.find((round) => round.id === objectiveId)!;
+    const rebuildData = (next: Partial<TaskManagementData>) => {
+      data = taskManagementData({
+        objectives: next.objectives ?? data.objectives,
+        results: next.results ?? data.results,
+        objectiveLoot: next.objectiveLoot ?? data.objectiveLoot,
+        objectiveContributionReviews: next.objectiveContributionReviews ?? data.objectiveContributionReviews,
+        pointLedger: next.pointLedger ?? data.pointLedger,
+      });
+    };
+    const updateObjective = (objectiveId: string, update: (objective: Objective) => Objective) => {
+      rebuildData({ objectives: data.objectives.map((objective) => (objective.id === objectiveId ? update(objective) : objective)) });
+    };
+    const dataForMember = (member: string) => {
+      const objectives = data.objectives.filter((objective) => objective.challengers.includes(member));
+      const objectiveIds = new Set(objectives.map((objective) => objective.id));
+      return taskManagementData({
+        objectives,
+        results: data.results.filter((result) => objectiveIds.has(result.objectiveId)),
+        objectiveLoot: data.objectiveLoot.filter((loot) => objectiveIds.has(loot.objectiveId)),
+        objectiveContributionReviews: data.objectiveContributionReviews.filter((review) => objectiveIds.has(review.objectiveId)),
+        pointLedger: data.pointLedger,
+      });
+    };
+    const bountiesForMember = (member: string) =>
+      bountyHallData(
+        data.objectives
+          .filter((objective) => ["open", "applying", "recruiting"].includes(objective.flowStatus) && !objective.challengers.includes(member))
+          .map((objective) =>
+            bountyHallItem(objective, data.results.filter((result) => result.objectiveId === objective.id), {
+              hasCurrentApplication: objective.challengeApplications.some((application) => application.applicant === member && application.status === "pending"),
+            }),
+          ),
+      );
+    const appendApplication = (objectiveId: string, applicant: string) => {
+      updateObjective(objectiveId, (objective) => {
+        if (objective.challengeApplications.some((application) => application.applicant === applicant && application.status === "pending")) return objective;
+        return {
+          ...objective,
+          flowStatus: "applying",
+          challengeApplications: [
+            ...objective.challengeApplications,
+            {
+              id: `app-ui-audit-${objectiveId}-${applicant.toLowerCase().replace(/\s+/g, "-")}`,
+              applicant,
+              status: "pending",
+              createdAt: acceleratedAt(),
+              decidedAt: null,
+            },
+          ],
+        };
+      });
+    };
+    const approveApplication = (applicationId: string) => {
+      const objective = data.objectives.find((item) => item.challengeApplications.some((application) => application.id === applicationId));
+      const application = objective?.challengeApplications.find((item) => item.id === applicationId);
+      if (!objective || !application) return;
+      updateObjective(objective.id, (current) => ({
+        ...current,
+        flowStatus: "reestimating",
+        stage: "orfReestimate",
+        challengers: Array.from(new Set([...current.challengers, application.applicant])),
+        acceptedAt: acceleratedAt(),
+        confirmationDueAt: "2999-01-01T00:00:00.000Z",
+        challengeApplications: current.challengeApplications.map((item) =>
+          item.id === applicationId ? { ...item, status: "approved" as const, decidedAt: acceleratedAt(), decidedBy: adminUser.name } : item,
+        ),
+      }));
+    };
+    const createResult = (payload: unknown) => {
+      const input = payload as ResultCreatePayload;
+      const objectiveId = input.objectiveId ?? activeObjectiveId;
+      const round = currentRound(objectiveId);
+      createdPayloads.push(input);
+      const created = resultFixture({
+        id: round.resultId,
+        objectiveId,
+        title: input.title ?? round.resultTitle,
+        metricName: input.metricName ?? "迭代指标",
+        source: "memberProposed",
+        definer: memberUser.name,
+      });
+      rebuildData({
+        objectives: data.objectives.map((objective) => (objective.id === objectiveId ? { ...objective, resultIds: [created.id] } : objective)),
+        results: [...data.results.filter((result) => result.id !== created.id), created],
+      });
+    };
+    const submitLoot = (payload: unknown) => {
+      const input = payload as LootSubmitPayload;
+      const round = currentRound();
+      const loot = objectiveLootFixture({
+        id: round.lootId,
+        objectiveId: activeObjectiveId,
+        submittedBy: memberUser.name,
+        body: input.body ?? `${round.title} 战利品`,
+        resultClaims: input.resultClaims ?? [{ resultId: round.resultId, claim: "completed", evidenceText: "" }],
+        selfTestReportBody: input.selfTestReportBody ?? null,
+        submittedAt: acceleratedAt(),
+      });
+      updateObjective(activeObjectiveId, (objective) => ({
+        ...objective,
+        flowStatus: "submitted",
+        lootSubmittedAt: loot.submittedAt,
+      }));
+      rebuildData({ objectiveLoot: [...data.objectiveLoot.filter((item) => item.id !== loot.id), loot] });
+    };
+    const submitContributionReview = (reviewer: string, payload: unknown) => {
+      const input = payload as ContributionReviewPayload;
+      rebuildData({
+        objectiveContributionReviews: [
+          ...data.objectiveContributionReviews,
+          contributionReviewFixture({
+            id: `review-ui-audit-${activeObjectiveId}-${reviewer.toLowerCase().replace(/\s+/g, "-")}`,
+            objectiveId: activeObjectiveId,
+            reviewer,
+            allocations: input.allocations ?? [
+              { member: memberUser.name, ratio: 1 },
+              { member: observerUser.name, ratio: 1 },
+            ],
+            submittedAt: acceleratedAt(),
+          }),
+        ],
+      });
+    };
+    const settleLoot = () => {
+      const round = currentRound();
+      updateObjective(activeObjectiveId, (objective) => ({
+        ...objective,
+        flowStatus: "settled",
+        acceptedResult: "completed",
+        objectiveSettlementPoints: 100,
+        progress: 100,
+      }));
+      rebuildData({
+        results: data.results.map((result) => (result.objectiveId === activeObjectiveId ? { ...result, acceptedResult: "completed" as const } : result)),
+        pointLedger: [
+          ...data.pointLedger,
+          pointLedgerFixture({ id: `ledger-ui-audit-${round.id}-mia`, objectiveId: activeObjectiveId, memberName: memberUser.name, points: 50, reason: `${round.title} 50%` }),
+          pointLedgerFixture({ id: `ledger-ui-audit-${round.id}-ethan`, objectiveId: activeObjectiveId, memberName: observerUser.name, points: 50, reason: `${round.title} 50%` }),
+        ],
+      });
+    };
+
+    const context = await browser.newContext();
+    const commanderPage = await context.newPage();
+    const challengerPage = await context.newPage();
+    const secondChallengerPage = await context.newPage();
+    await Promise.all([
+      commanderPage.addInitScript(() => window.localStorage.clear()),
+      challengerPage.addInitScript(() => window.localStorage.clear()),
+      secondChallengerPage.addInitScript(() => window.localStorage.clear()),
+    ]);
+
+    await mockOrfApp(commanderPage, adminUser, data, {
+      allChallenges: () => data,
+      onApprove: approveApplication,
+      onFreeze: () =>
+        updateObjective(activeObjectiveId, (objective) => ({
+          ...objective,
+          flowStatus: "frozen",
+          stage: "goalFrozen",
+          confirmedAt: acceleratedAt(),
+          confirmationDueAt: null,
+        })),
+      onPublish: () => updateObjective(activeObjectiveId, (objective) => ({ ...objective, flowStatus: "open", stage: "resultClaiming" })),
+      onReviewLoot: settleLoot,
+      tasks: () => data,
+    });
+    await mockOrfApp(challengerPage, memberUser, data, {
+      bounties: () => bountiesForMember(memberUser.name),
+      mineChallenges: () => dataForMember(memberUser.name),
+      onApply: () => appendApplication(activeObjectiveId, memberUser.name),
+      onCreateResult: createResult,
+      onSubmitContributionReview: (payload) => submitContributionReview(memberUser.name, payload),
+      onSubmitLoot: submitLoot,
+      tasks: () => data,
+    });
+    await mockOrfApp(secondChallengerPage, observerUser, data, {
+      bounties: () => bountiesForMember(observerUser.name),
+      mineChallenges: () => dataForMember(observerUser.name),
+      onApply: () => appendApplication(activeObjectiveId, observerUser.name),
+      onSubmitContributionReview: (payload) => submitContributionReview(observerUser.name, payload),
+      tasks: () => data,
+    });
+
+    const runRound = async (round: (typeof rounds)[number], index: number) => {
+      activeObjectiveId = round.id;
+      await commanderPage.goto("/tasks");
+      await attachAuditScreenshot(commanderPage, testInfo, `audit-multi-round-${index}-candidate`);
+      await objectivePanel(commanderPage, round.title).getByRole("button", { name: "发布" }).click();
+      await expect(objectivePanel(commanderPage, round.title)).toContainText("可申请");
+
+      for (const [page, user] of [
+        [challengerPage, memberUser] as const,
+        [secondChallengerPage, observerUser] as const,
+      ]) {
+        activeObjectiveId = round.id;
+        await page.goto("/bounties");
+        await expect(page.getByRole("heading", { name: round.title })).toBeVisible();
+        await page.getByRole("button", { name: "申请挑战" }).click();
+        await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
+        await expect(page.getByRole("button", { name: "已申请" })).toBeDisabled();
+      }
+
+      await commanderPage.goto("/tasks");
+      const reviewPanel = objectivePanel(commanderPage, round.title);
+      await attachAuditScreenshot(commanderPage, testInfo, `audit-multi-round-${index}-applications`);
+      await expect(reviewPanel).toContainText(memberUser.name);
+      await expect(reviewPanel).toContainText(observerUser.name);
+      await reviewPanel.getByRole("button", { name: "通过" }).first().click();
+      await expect(reviewPanel.getByRole("button", { name: "通过" })).toHaveCount(1);
+      await reviewPanel.getByRole("button", { name: "通过" }).click();
+      await expect(reviewPanel).toContainText("重估中");
+
+      await challengerPage.goto("/tasks");
+      const challengerPanel = objectivePanel(challengerPage, round.title);
+      await challengerPanel.hover();
+      await challengerPanel.getByRole("button", { name: "提出指标" }).click();
+      await challengerPage.getByLabel("指标标题").fill(round.resultTitle);
+      await challengerPage.getByLabel("衡量指标").fill(index === 1 ? "幻觉率" : "Recall");
+      await challengerPage.getByRole("button", { name: "提交指标" }).click();
+      await expect(challengerPanel).toContainText(round.resultTitle);
+      await expect(createdPayloads.at(-1)).toMatchObject({ objectiveId: round.id, source: "memberProposed", definer: memberUser.name });
+
+      await secondChallengerPage.goto("/tasks");
+      await expect(objectivePanel(secondChallengerPage, round.title)).toContainText(round.resultTitle);
+
+      activeObjectiveId = round.id;
+      await commanderPage.goto("/tasks");
+      await attachAuditScreenshot(commanderPage, testInfo, `audit-multi-round-${index}-reestimate`);
+      await objectivePanel(commanderPage, round.title).getByRole("button", { name: "冻结" }).click();
+      await expect(objectivePanel(commanderPage, round.title)).toContainText("已冻结");
+
+      await challengerPage.goto(`/objectives/${round.id}/loot`);
+      await challengerPage.getByLabel("完成说明").fill(`${round.title} 已完成并通过自测。`);
+      await challengerPage.getByPlaceholder("证据、数据或链接").fill(`https://example.test/orf/audit/${round.id}`);
+      await challengerPage.getByLabel("自测报告").fill(`${round.title} 自动化和人工抽样均通过。`);
+      await challengerPage.getByRole("button", { name: "提交" }).click();
+      await expect(challengerPage).toHaveURL(/\/tasks$/);
+      await expect(objectivePanel(challengerPage, round.title)).toContainText("待验收");
+
+      for (const page of [challengerPage, secondChallengerPage]) {
+        activeObjectiveId = round.id;
+        await page.goto(`/objectives/${round.id}/loot`);
+        await expect(page.getByRole("heading", { name: "提交匿名互评" })).toBeVisible();
+        await page.getByRole("button", { name: "提交匿名互评" }).click();
+        await expect(page).toHaveURL(/\/tasks$/);
+      }
+
+      activeObjectiveId = round.id;
+      await commanderPage.goto(`/objectives/${round.id}/loot`);
+      await attachAuditScreenshot(commanderPage, testInfo, `audit-multi-round-${index}-review`);
+      await expect(commanderPage.getByText("50%")).toHaveCount(2);
+      await commanderPage.getByLabel("验收说明").fill(`${round.title} 验收通过。`);
+      await commanderPage.getByRole("button", { name: "验收并结算" }).click();
+      await expect(commanderPage).toHaveURL(/\/reports$/);
+
+      await commanderPage.goto("/tasks");
+      await expect(objectivePanel(commanderPage, round.title)).toContainText("已结算");
+
+      await challengerPage.goto("/bounties");
+      await expect(challengerPage.getByRole("heading", { name: round.title })).toHaveCount(0);
+    };
+
+    try {
+      await runRound(rounds[0]!, 1);
+      await runRound(rounds[1]!, 2);
+
+      await commanderPage.goto("/tasks");
+      await attachAuditScreenshot(commanderPage, testInfo, "audit-multi-round-final-workbench");
+      await expect(objectivePanel(commanderPage, rounds[0]!.title)).toContainText("已结算");
+      await expect(objectivePanel(commanderPage, rounds[1]!.title)).toContainText("已结算");
+
+      await commanderPage.goto("/reports");
+      await attachAuditScreenshot(commanderPage, testInfo, "audit-multi-round-final-reports");
+      await expect(commanderPage.getByLabel("100 积分")).toHaveCount(2);
+    } finally {
+      await context.close();
+    }
+  });
+
   test("submitted objectives expose visible next steps from the workbench", async ({ browser }, testInfo) => {
     const objective = submittedObjectiveFixture("obj-ui-audit-submitted-next-step", "审计 提交后应有下一步入口", [memberUser.name, observerUser.name], ["res-ui-audit-submitted-next-step"]);
     const result = resultFixture({ id: "res-ui-audit-submitted-next-step", objectiveId: objective.id, title: "审计 提交后验收指标" });
@@ -1362,9 +1682,8 @@ test.describe("ORF frontend guard coverage", () => {
     await page.goto("/tasks");
     const panel = objectivePanel(page, objective.title);
     await panel.hover();
-    await panel.getByRole("button", { name: "提出指标" }).click();
 
-    await expect(page.getByText("没有新增指标权限")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "提出指标" })).toHaveCount(0);
     await expect(page.getByText("新增指标")).toHaveCount(0);
     await expect.poll(() => postCount).toBe(0);
   });
@@ -1391,9 +1710,8 @@ test.describe("ORF frontend guard coverage", () => {
     await page.goto("/tasks");
     const panel = objectivePanel(page, objective.title);
     await panel.hover();
-    await panel.getByRole("button", { name: "提出指标" }).click();
 
-    await expect(page.getByText("没有新增指标权限")).toBeVisible();
+    await expect(panel.getByRole("button", { name: "提出指标" })).toHaveCount(0);
     await expect.poll(() => postCount).toBe(0);
   });
 
@@ -1417,10 +1735,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/tasks");
     for (const objective of statuses) {
-      const panel = objectivePanel(page, objective.title);
-      await panel.hover();
-      await panel.getByRole("button", { name: "提出指标" }).click();
-      await expect(page.getByText("没有新增指标权限").last()).toBeVisible();
+      await expect(page.getByText(objective.title)).toHaveCount(0);
     }
 
     await expect.poll(() => postCount).toBe(0);

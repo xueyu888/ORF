@@ -34,7 +34,65 @@ export function GlobalModals() {
   if (modal.type === "newFeedback") return <NewFeedbackModal objectiveId={modal.objectiveId} resultId={modal.resultId} />;
   if (modal.type === "newTask") return <NewTaskModal objectiveId={modal.objectiveId} resultId={modal.resultId} feedbackId={modal.feedbackId} />;
   if (modal.type === "resultUpdate") return <ResultUpdateModal resultId={modal.resultId} feedbackId={modal.feedbackId} />;
+  if (modal.type === "recruitChallengers") return <RecruitChallengersModal key={modal.objectiveId} objectiveId={modal.objectiveId} />;
   return null;
+}
+
+function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
+  const { state, closeModal, recruitObjectiveChallengers } = useOrf();
+  const objective = state.objectives.find((item) => item.id === objectiveId);
+  const candidates = objective
+    ? state.users.filter(
+        (user) =>
+          user.status === "active" &&
+          user.role === "member" &&
+          !objective.challengers.includes(user.name) &&
+          !objective.assignedChallengers.includes(user.name),
+      )
+    : [];
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+  if (!objective) return null;
+
+  const toggleMember = (member: string) => {
+    setSelectedMembers((items) =>
+      items.includes(member) ? items.filter((item) => item !== member) : [...items, member],
+    );
+  };
+
+  return (
+    <ModalFrame title="征召挑战者">
+      <form
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (selectedMembers.length === 0) return;
+          void recruitObjectiveChallengers(objective.id, selectedMembers).then((ok) => {
+            if (ok) closeModal();
+          });
+        }}
+      >
+        <div className="orf-surface-muted rounded-lg border orf-border p-3 text-sm">
+          <div className="font-medium orf-text-primary">{objective.title}</div>
+          <div className="mt-1 orf-text-secondary">已接受：{objective.challengers.length > 0 ? objective.challengers.join("、") : "暂无"}</div>
+          <div className="mt-1 orf-text-secondary">待响应：{objective.assignedChallengers.length > 0 ? objective.assignedChallengers.join("、") : "暂无"}</div>
+        </div>
+        <div className="grid gap-2">
+          {candidates.map((user) => (
+            <label key={user.id} className="flex items-center justify-between rounded-lg border orf-border px-3 py-2 text-sm">
+              <span>
+                <span className="font-medium orf-text-primary">{user.name}</span>
+                <span className="ml-2 orf-text-muted">{user.email}</span>
+              </span>
+              <input checked={selectedMembers.includes(user.name)} onChange={() => toggleMember(user.name)} type="checkbox" />
+            </label>
+          ))}
+          {candidates.length === 0 && <div className="rounded-lg border orf-border px-3 py-6 text-center text-sm orf-text-secondary">没有可征召的成员。</div>}
+        </div>
+        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button disabled={selectedMembers.length === 0} type="submit">发送征召</Button></div>
+      </form>
+    </ModalFrame>
+  );
 }
 
 function defaultFinalDueAt() {

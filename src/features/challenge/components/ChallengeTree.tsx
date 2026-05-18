@@ -1,11 +1,11 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
-import type { Result, Task, TaskChecklistItem } from "../../../types/orf";
+import type { ObjectiveContributionReview, OrfUser, Result, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -19,6 +19,7 @@ import {
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
+import { workbenchActionForObjective } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
@@ -31,8 +32,11 @@ type RowHandlers = {
   commentCounts: Map<string, number>;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
+  contributionReviews: ObjectiveContributionReview[];
   canManageFlow: boolean;
-  currentMember: string;
+  currentUser: OrfUser | null;
+  metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
+  canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
   onActiveActionChange: (id: string | null) => void;
@@ -45,6 +49,7 @@ type RowHandlers = {
   onFreezeObjective: (objectiveId: string) => Promise<boolean>;
   onOpenActionChange: (id: string | null) => void;
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
+  onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onSaveTitle: (target: ChallengeTarget, title: string) => void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
@@ -101,6 +106,11 @@ function ObjectivePanel({
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const isFrozen = group.objective.stage === "goalFrozen";
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
+  const workbenchAction = workbenchActionForObjective({
+    objective: group.objective,
+    currentUser: handlers.currentUser,
+    contributionReviews: handlers.contributionReviews,
+  });
   const showApplicationReview =
     handlers.canManageFlow &&
     pendingApplications.length > 0;
@@ -118,6 +128,7 @@ function ObjectivePanel({
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
       <div
         className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
+        data-has-workbench-action={workbenchAction ? "true" : undefined}
         data-scope={scope}
         onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
         onPointerEnter={() => handlers.onActiveActionChange(actionId)}
@@ -128,7 +139,7 @@ function ObjectivePanel({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel={objectiveAddLabel(group.objective, handlers)}
+          addLabel={handlers.metricActionLabel(group.objective)}
           left={rowActionLeft.objective}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -156,9 +167,9 @@ function ObjectivePanel({
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
-        {scope === "mine" && group.objective.flowStatus === "frozen" ? (
-          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/objectives/${group.objective.id}/loot`}>
-            提交战利品
+        {workbenchAction ? (
+          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={workbenchAction.to}>
+            {workbenchAction.label}
           </Link>
         ) : null}
       </div>
@@ -199,38 +210,38 @@ function ObjectivePanel({
 function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode["objective"]; handlers: RowHandlers }) {
   if (!handlers.canManageFlow) return <EmptySlot />;
 
+  const actions: ReactNode[] = [];
+
   if (objective.flowStatus === "candidate") {
-    return (
+    actions.push(
       <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="发布到悬赏大厅" onClick={() => void handlers.onPublishObjective(objective.id)}>
         <Send className="h-3.5 w-3.5" />
         发布
-      </button>
+      </button>,
+    );
+  }
+
+  if (handlers.canRecruitObjective(objective)) {
+    actions.push(
+      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="征召挑战者" onClick={() => handlers.onRecruitObjective(objective.id)}>
+        <UserPlus className="h-3.5 w-3.5" />
+        征召
+      </button>,
     );
   }
 
   if (objective.flowStatus === "reestimating") {
-    return (
+    actions.push(
       <button className="orf-flow-action-button orf-flow-action-primary" type="button" title="重估完成并冻结目标" onClick={() => void handlers.onFreezeObjective(objective.id)}>
         <CheckCircle2 className="h-3.5 w-3.5" />
         冻结
-      </button>
+      </button>,
     );
   }
 
-  return <EmptySlot />;
-}
+  if (actions.length === 0) return <EmptySlot />;
 
-function objectiveAddLabel(objective: ObjectiveNode["objective"], handlers: RowHandlers) {
-  if (handlers.canManageFlow) return "新增指标";
-  if (canProposeMetric(objective, handlers.currentMember)) return "提出指标";
-  return "提出指标";
-}
-
-function canProposeMetric(objective: ObjectiveNode["objective"], member: string) {
-  if (objective.flowStatus !== "reestimating" || !objective.challengers.includes(member)) return false;
-  if (!objective.confirmationDueAt) return true;
-  const dueTime = new Date(objective.confirmationDueAt).getTime();
-  return Number.isFinite(dueTime) && Date.now() <= dueTime;
+  return <div className="orf-flow-action-group">{actions.map((action, index) => <span key={index}>{action}</span>)}</div>;
 }
 
 function BountyRow({

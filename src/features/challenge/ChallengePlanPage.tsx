@@ -4,15 +4,16 @@ import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
-import { hasPermission, type PermissionKey } from "../../config/permissions";
+import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
-import type { Objective, Result } from "../../types/orf";
+import type { Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
-import { canAccessDragItem, canAccessTarget, canUsePermission, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
+import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
+import { canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
 import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
 
 export function ChallengePlanPage() {
@@ -84,10 +85,6 @@ export function ChallengePlanPage() {
     setActiveActionId(id);
   };
 
-  const objectiveIdsInMyChallenges = useMemo(
-    () => new Set(state.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id)),
-    [currentMember, state.objectives],
-  );
   const showAll = canShowAllChallenges && scope === "all";
   const loadChallengeData = useCallback(async () => {
     setChallengeData(await getMyChallengesData(showAll ? "all" : "mine"));
@@ -99,6 +96,10 @@ export function ChallengePlanPage() {
 
   const sourceData = challengeData ?? state;
   const challengeState = useMemo(() => ({ ...state, ...sourceData }), [sourceData, state]);
+  const visibleObjectiveIds = useMemo(() => {
+    if (showAll) return undefined;
+    return new Set(challengeState.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id));
+  }, [challengeState.objectives, currentMember, showAll]);
   const groups = useMemo(
     () =>
       buildChallengeTree(
@@ -109,17 +110,11 @@ export function ChallengePlanPage() {
           results: challengeState.results,
           tasks: challengeState.tasks,
         },
-        challengeData || showAll ? undefined : objectiveIdsInMyChallenges,
+        visibleObjectiveIds,
       ),
-    [challengeData, challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, objectiveIdsInMyChallenges, showAll],
+    [challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
   );
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
-
-  const requirePermissionKey = (key: PermissionKey) => {
-    if (canUsePermission(challengeState, role, key)) return true;
-    notify(permissionDeniedMessage(key));
-    return false;
-  };
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
@@ -129,7 +124,7 @@ export function ChallengePlanPage() {
         return false;
       }
       if (role === "admin") return true;
-      if (canAdjustObjectiveDuringReestimate(objective, currentMember)) return true;
+      if (objective && canProposeObjectiveMetric(objective, currentMember, now)) return true;
       notify("没有编辑指标权限");
       return false;
     }
@@ -142,15 +137,18 @@ export function ChallengePlanPage() {
 
   const addBounty = (objectiveId: string) => {
     const objective = challengeState.objectives.find((item) => item.id === objectiveId);
-    const canAdjustDuringReestimate = canAdjustObjectiveDuringReestimate(objective, currentMember);
-    if (canAdjustDuringReestimate) {
-      openModal({ type: "newResult", objectiveId, source: "memberProposed" });
+    if (!objective) return;
+    const action = metricCreationActionForObjective({
+      objective,
+      currentUser,
+      permissionRules: challengeState.permissionRules,
+      now,
+    });
+    if (!action) {
+      notify("没有新增指标权限");
       return;
     }
-
-    if (requirePermissionKey("result.create")) {
-      openModal({ type: "newResult", objectiveId, source: "managerDefined" });
-    }
+    openModal({ type: "newResult", objectiveId, source: action.source });
   };
 
   const addAction = (bounty: Result) => {
@@ -294,6 +292,21 @@ export function ChallengePlanPage() {
           commentCounts,
           dragDrop,
           editingTarget,
+          contributionReviews: challengeState.objectiveContributionReviews,
+          currentUser,
+          metricActionLabel: (objective) =>
+            metricCreationActionForObjective({
+              objective,
+              currentUser,
+              permissionRules: challengeState.permissionRules,
+              now,
+            })?.label ?? null,
+          canRecruitObjective: (objective) =>
+            canRecruitObjectiveChallengers({
+              objective,
+              currentUser,
+              permissionRules: challengeState.permissionRules,
+            }),
           onActionDoneChange: setActionDone,
           onActionRowAction: handleRowAction,
           onActiveActionChange: activateRowAction,
@@ -306,6 +319,7 @@ export function ChallengePlanPage() {
           onFreezeObjective: freezeObjective,
           onOpenActionChange: setOpenActionId,
           onPublishObjective: publishObjective,
+          onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
           onRejectApplication: rejectChallengeApplication,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
@@ -313,7 +327,6 @@ export function ChallengePlanPage() {
           onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
           openActionId,
           canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
-          currentMember,
         }}
         now={now}
         scope={scope}
@@ -355,17 +368,6 @@ function useMinuteNow() {
   }, []);
 
   return now;
-}
-
-function canAdjustObjectiveDuringReestimate(objective: Objective | undefined, member: string) {
-  if (!objective || objective.flowStatus !== "reestimating" || !objective.challengers.includes(member)) return false;
-  if (!objective.confirmationDueAt) return true;
-  const dueTime = new Date(objective.confirmationDueAt).getTime();
-  return Number.isFinite(dueTime) && Date.now() <= dueTime;
-}
-
-function isObjectiveResultLocked(objective: Objective | undefined) {
-  return objective?.flowStatus === "frozen" || objective?.flowStatus === "submitted" || objective?.flowStatus === "settled" || objective?.flowStatus === "closed";
 }
 
 function toggleSetItem<T>(items: Set<T>, item: T) {

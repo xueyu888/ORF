@@ -314,6 +314,64 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   assert.equal(hallAfterAcceptance.availableItems.some((item) => item.objective.id === objective.id), false);
 });
 
+test("multi-member recruitment remains visible until every assigned challenger responds", async () => {
+  const fixture = await createFixture("multi-recruitment");
+  const objective = await createPublishedObjective(fixture, "multi recruitment objective");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} multi recruitment result`);
+
+  const recruited = await recruitObjectiveChallengers(
+    objective.id,
+    [fixture.challenger.name, fixture.observer.name],
+    fixture.commander.id,
+  );
+  assert.equal(recruited.status, "ok");
+  assert.equal(recruited.objective.flowStatus, "recruiting");
+  assert.deepEqual(recruited.objective.assignedChallengers, [fixture.challenger.name, fixture.observer.name]);
+
+  const accepted = await acceptObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(accepted.status, "accepted");
+  assert.equal(accepted.objective.flowStatus, "reestimating");
+  assert.deepEqual(accepted.objective.challengers, [fixture.challenger.name]);
+  assert.deepEqual(accepted.objective.assignedChallengers, [fixture.observer.name]);
+
+  const observerHall = await getBountyHallData(fixture.observer.name);
+  const observerRecruitment = observerHall.recruitmentItems.find((item) => item.objective.id === objective.id);
+  assert.ok(observerRecruitment, "remaining assigned challenger should still see the recruitment while the objective is reestimating");
+  assert.equal(observerRecruitment.isRecruitment, true);
+  assert.equal(observerRecruitment.objective.flowStatus, "reestimating");
+
+  const observerAccepted = await acceptObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+  assert.equal(observerAccepted.status, "accepted");
+  assert.deepEqual(observerAccepted.objective.challengers, [fixture.challenger.name, fixture.observer.name]);
+  assert.deepEqual(observerAccepted.objective.assignedChallengers, []);
+
+  const hallAfterAllAccepted = await getBountyHallData(fixture.observer.name);
+  assert.equal(hallAfterAllAccepted.recruitmentItems.some((item) => item.objective.id === objective.id), false);
+  assert.equal(hallAfterAllAccepted.availableItems.some((item) => item.objective.id === objective.id), false);
+});
+
+test("commander can add recruitment while an objective is already reestimating", async () => {
+  const fixture = await createFixture("recruit-during-reestimate");
+  const objective = await createPublishedObjective(fixture, "recruit during reestimate objective");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} recruit during reestimate result`);
+
+  assert.equal((await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id)).status, "ok");
+  assert.equal((await acceptObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id)).status, "accepted");
+
+  const additionalRecruitment = await recruitObjectiveChallengers(objective.id, [fixture.observer.name], fixture.commander.id);
+  assert.equal(additionalRecruitment.status, "ok");
+  assert.equal(additionalRecruitment.objective.flowStatus, "reestimating");
+  assert.deepEqual(additionalRecruitment.objective.challengers, [fixture.challenger.name]);
+  assert.deepEqual(additionalRecruitment.objective.assignedChallengers, [fixture.observer.name]);
+
+  const observerHall = await getBountyHallData(fixture.observer.name);
+  assert.ok(observerHall.recruitmentItems.some((item) => item.objective.id === objective.id));
+
+  const observerAccepted = await acceptObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+  assert.equal(observerAccepted.status, "accepted");
+  assert.deepEqual(observerAccepted.objective.challengers, [fixture.challenger.name, fixture.observer.name]);
+});
+
 test("member-proposed result creation requires the API actor to be a challenger inside the reestimate window", async () => {
   const fixture = await createFixture("api-create-result");
 

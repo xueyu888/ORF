@@ -4662,6 +4662,7 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-challenge-row-objective[data-scope="mine"],
+.orf-challenge-row-objective[data-has-workbench-action="true"],
 .orf-challenge-row-bounty[data-scope="mine"] {
   grid-template-columns:
     minmax(280px, 1fr)
@@ -4717,6 +4718,14 @@ body[data-dragging-floating="true"] {
   width: 112px;
 }
 
+.orf-flow-action-group {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-self: start !important;
+  gap: 6px;
+}
+
 .orf-flow-action-button {
   display: inline-flex;
   width: 88px;
@@ -4740,6 +4749,13 @@ body[data-dragging-floating="true"] {
     color 140ms ease,
     transform 140ms ease;
   white-space: nowrap;
+}
+
+.orf-flow-action-group .orf-flow-action-button {
+  width: auto;
+  min-width: 78px;
+  padding-right: 10px;
+  padding-left: 10px;
 }
 
 .orf-flow-action-button:hover {
@@ -5152,7 +5168,10 @@ body[data-dragging-floating="true"] {
   .orf-objective-header,
   .orf-result-row,
   .orf-task-row,
-  .orf-subtask-row {
+  .orf-subtask-row,
+  .orf-challenge-row-objective[data-scope="mine"],
+  .orf-challenge-row-objective[data-has-workbench-action="true"],
+  .orf-challenge-row-bounty[data-scope="mine"] {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
     gap: 8px;
@@ -5204,6 +5223,7 @@ body[data-dragging-floating="true"] {
   .orf-date-stack,
   .orf-progress-value,
   .orf-row-loot-action,
+  .orf-flow-action-group,
   .orf-flow-action-button {
     justify-self: start !important;
   }
@@ -5231,6 +5251,7 @@ body[data-dragging-floating="true"] {
   }
 
   .orf-challenge-row-objective[data-scope="mine"],
+  .orf-challenge-row-objective[data-has-workbench-action="true"],
   .orf-challenge-row-bounty[data-scope="mine"] {
     grid-template-columns:
       minmax(240px, 1fr)
@@ -5252,6 +5273,12 @@ body[data-dragging-floating="true"] {
 
   .orf-flow-action-button {
     width: 78px;
+  }
+
+  .orf-flow-action-group .orf-flow-action-button {
+    min-width: 72px;
+    padding-right: 8px;
+    padding-left: 8px;
   }
 
   .orf-progress-value {

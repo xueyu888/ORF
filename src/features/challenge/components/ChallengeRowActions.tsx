@@ -33,7 +33,7 @@ export function ChallengeRowActions({
 }: {
   actionId: string;
   activeActionId: string | null;
-  addLabel: string;
+  addLabel?: string | null;
   dragItem?: DragItem;
   left: number;
   onAction: (action: ChallengeRowAction) => void;
@@ -56,15 +56,17 @@ export function ChallengeRowActions({
       onPointerEnter={() => onActiveActionChange(actionId)}
       style={{ left, zIndex: open ? 100 : 40 }}
     >
-      <button
-        type="button"
-        aria-label={addLabel}
-        className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
-        onClick={onAdd}
-        title={addLabel}
-      >
-        <Plus className="h-4 w-4" />
-      </button>
+      {addLabel ? (
+        <button
+          type="button"
+          aria-label={addLabel}
+          className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
+          onClick={onAdd}
+          title={addLabel}
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      ) : null}
       <div className="relative">
         <button
           type="button"

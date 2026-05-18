@@ -296,7 +296,12 @@ flowchart TD
 
 前端流程测试不维护静态覆盖数字。当前有效性以测试文件和 CI 结果为准，本文只定义真实用户链路、守卫场景和风险边界，避免文档用静态数字伪造确定性。
 
-主链路用 `real user launch flow links commander and challengers from publish to settlement` 表达上线后的用户行为：一个指挥官和两个挑战者在不同浏览器页面里共享同一份后端状态，从发布悬赏目标一直联动到积分结算。
+主链路分两层：
+
+- `real user launch flow links commander and challengers from publish to settlement`：浏览器多页面 + route mock，快速审计前端状态机、显隐规则和截图。
+- `ORF real system multi-user flow`：浏览器多上下文 + 真实 Fastify API + 真实数据库。测试只把 `/api` 请求转发到测试启动的真实后端，不 `fulfill` 业务数据；认证使用测试 Ory 适配器返回真实 Cookie 会话。
+
+上线后的用户行为必须按一个指挥官、多个成员、多个挑战者来验证：指挥官发布目标，多个挑战者申请或接受征召，挑战者在重估窗口内校准指标，目标冻结后提交战利品和匿名互评，指挥官验收后积分进入排行榜。
 
 | 阶段 | 指挥官行为 | 挑战者行为 | 必须看到的用户结果 |
 | --- | --- | --- | --- |
@@ -310,6 +315,29 @@ flowchart TD
 | 验收结算 | 验收指标并结算 | 查看积分结果 | 跳转 `/reports`，排行榜显示按贡献比例写入的积分 |
 
 测试里的时间不等真实分钟。每次流程 mutation 都推进一段业务时间戳；重估窗口使用固定未来 `confirmationDueAt` 保持开放，截止前 / 截止后 / 冻结后的边界由专门守卫测试用固定过去或未来时间验证。
+
+## 真实系统联调用例
+
+真实系统联调测试文件是 `e2e/challenges/orf-real-system-flow.spec.ts`。运行时需要显式打开：
+
+```bash
+ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-system-flow.spec.ts --reporter=line --output="test-results/manual-real-system-$(date +%Y%m%d-%H%M%S)"
+```
+
+测试数据使用唯一前缀 `真实联调 real-e2e-*` 写入真实数据库，默认保留，便于在悬赏大厅、挑战页、统计页面直接查看。
+
+| 用例 | 角色和流程 | 时间处理 | 必须验证 |
+| --- | --- | --- | --- |
+| RS-01 两轮申请结算 | 1 个指挥官、2 个挑战者、1 个观察成员；连续创建两轮目标，发布、双人申请、双人审批、挑战者提指标、冻结、提交战利品、双人匿名互评、验收结算 | 使用远未来截止日，让两轮流程在测试内快速完成 | `/bounties` 下架已结算目标；观察成员 `/tasks` 看不到非本人挑战；`/reports` 两个挑战者累计积分 |
+| RS-02 重估时间加速 | 指挥官发布并审批挑战者进入重估；测试直接把数据库 `confirmationDueAt` 改到 `2000-01-01T00:00:00.000Z` 模拟时间流逝 | 不等真实时间，直接推进业务截止时间 | 挑战者刷新 `/tasks` 后不应再看到“提出指标” |
+| RS-03 征召连续接受 | 指挥官通过 UI 创建、发布目标，并在挑战工作台打开“征召挑战者”弹窗选择两个成员；两个挑战者分别在 `/bounties` 接受征召 | 立即执行征召和接受，不等时间 | 指挥官侧有可见征召入口；第一个挑战者接受后，第二个已征召挑战者仍能看到征召令并接受 |
+
+截至 2026-05-18 本次修复后的真实联调：
+
+- RS-01 已跑通：两轮申请、双人审批、双人匿名互评、验收结算后，两个挑战者在 `/reports` 均出现累计积分；观察成员不出现在本轮积分榜中。
+- RS-02 已跑通：测试把 `confirmationDueAt` 加速到 `2000-01-01T00:00:00.000Z` 后，挑战者刷新 `/tasks` 不再看到“提出指标”入口。
+- RS-03 已跑通：指挥官通过真实 UI 发起双人征召，第一个挑战者接受后目标进入 `reestimating`，第二个挑战者仍能在 `/bounties` 看到征召令并接受。
+- 本次通过截图和真实数据保留在 `test-results/manual-real-system-fix-full-20260518-180200`；修复前暴露问题的截图仍保留在 `test-results/manual-real-system-20260518-172335` 和 `test-results/manual-real-system-recruitment-20260518-172420`。
 
 ## 守卫场景索引
 
@@ -328,13 +356,15 @@ flowchart TD
 
 ## 风险边界
 
-- 这些 E2E 使用 Playwright route mock API，验证的是浏览器用户路径、刷新契约、权限显隐和页面跳转，不替代真实数据库、真实 Ory Cookie 和真实网络环境的上线验收。
+- route mock E2E 验证浏览器用户路径、刷新契约、权限显隐和页面跳转；真实系统 E2E 验证真实 API、真实数据库和 Cookie 会话。
+- 真实系统 E2E 的 Ory 是测试适配器，目的是稳定地产生多个真实登录会话；ORF 业务 API 和数据库不是 mock。
 - 当前主流程用手动刷新 / 页面跳转模拟用户查看最新状态；如果后续引入 websocket 或轮询，需要新增实时同步断言。
 - 当前主流程覆盖目标级战利品和无分歧匿名互评；互评分歧处理、异常提交和越权访问由守卫测试分开验证。
 
 ## 测试数据原则
 
-- E2E 测试使用 Playwright route mock API，避免依赖真实后端、真实 Ory、真实数据库。
+- route mock E2E 使用 Playwright `route.fulfill` 构造 Objective / Result，避免依赖外部状态。
+- real-system E2E 不 `fulfill` 业务 API；它写入真实数据库，并且默认不清理数据。
 - 用例内显式构造 Objective / Result，只保留当前断言需要的字段和状态。
 - 页面断言优先基于用户可见文案、按钮和链接，少量使用稳定 class 定位目标面板。
 - 每个测试开始清空 localStorage，避免 legacy 本地状态污染 API 优先契约。
@@ -357,6 +387,7 @@ flowchart TD
 ```bash
 npm test
 npx playwright test e2e/challenges/orf-frontend-flow.spec.ts
+ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-system-flow.spec.ts --reporter=line --output="test-results/manual-real-system-$(date +%Y%m%d-%H%M%S)"
 npm run test:e2e
 npm run build
 ```
