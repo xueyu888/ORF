@@ -1195,6 +1195,28 @@ test("API user management prevents renaming members referenced by ORF records", 
   });
 });
 
+test("API user upsert cannot bypass referenced member rename guards", async () => {
+  const fixture = await createFixture("api-user-upsert-rename-reference");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "upsert rename referenced challenger objective");
+
+  await withApiServer(fixture, async (app) => {
+    const upsertRename = await apiInject(app, fixture.commander, "POST", "/api/users", {
+      name: `${fixture.prefix} Upsert Renamed Challenger`,
+      email: fixture.challenger.email,
+      role: "member",
+    });
+    assert.equal(upsertRename.statusCode, 409);
+
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const renamedUser = (userList.json() as { users: Array<{ id: string; name: string }> }).users.find((user) => user.id === fixture.challenger.id);
+    assert.equal(renamedUser?.name, fixture.challenger.name);
+
+    const myChallenges = await getMyChallengesData(fixture.challenger.name);
+    assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
 test("API user deletion rejects members referenced by ORF records", async () => {
   const fixture = await createFixture("api-user-delete-reference");
   const { objective } = await createApprovedObjectiveWithResult(fixture, "delete referenced challenger objective");

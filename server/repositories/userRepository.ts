@@ -254,6 +254,7 @@ export async function createTeamUser(teamId: string, actorUserId: string, input:
 
     if (matchedMembership) {
       assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
+      await assertCanRenameUser(teamId, matchedUser.id, normalized.name);
     }
   }
 
