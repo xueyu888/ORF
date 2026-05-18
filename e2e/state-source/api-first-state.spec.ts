@@ -178,6 +178,7 @@ test("reports leaderboard shows visible member names from point ledger", async (
 
   const row = page.locator(".reports-leaderboard-row", { hasText: "Ava Visible" });
   await expect(row).toBeVisible();
+  await expect(row.locator(".reports-change-cell")).toHaveText("-");
   await expect(row.locator(".reports-member-name")).toHaveText("Ava Visible");
   await expect(row.locator(".reports-points-cell")).toHaveText("42.0");
 });

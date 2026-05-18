@@ -398,6 +398,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - `/bounties` 中没有 Result 的 Objective 必须显示“待定义指标”；不能把普通待定义状态描述成已进入重估。
 - `/reports` 没有 `pointLedger` 时必须显示明确的排行榜空态；不能只渲染一个空表。
 - `/reports` 排行榜必须可见展示成员姓名；不能只把成员名放在头像 `title` 或 `aria-label` 中。
+- `/reports` 没有历史排名变化数据时，“变化”列显示 `-`；不能显示 `0-` 这类组合文本。
 
 ## 修改测试时机
 

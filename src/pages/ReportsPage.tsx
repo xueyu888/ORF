@@ -104,8 +104,14 @@ function LeaderboardRowItem({ maxPoints, row }: { maxPoints: number; row: Leader
       </div>
       <div className="reports-change-cell" role="cell">
         <span className={isUp ? "reports-change reports-change-up" : isDown ? "reports-change reports-change-down" : "reports-change"}>
-          <span>{Math.abs(row.rankChange)}</span>
-          <span aria-hidden="true">{isUp ? "↑" : isDown ? "↓" : "-"}</span>
+          {row.rankChange === 0 ? (
+            <span>-</span>
+          ) : (
+            <>
+              <span>{Math.abs(row.rankChange)}</span>
+              <span aria-hidden="true">{isUp ? "↑" : "↓"}</span>
+            </>
+          )}
         </span>
       </div>
       <div className="reports-member-cell" role="cell">
