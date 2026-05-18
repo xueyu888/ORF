@@ -27,6 +27,18 @@ function serializeSessionCookie(value: string, maxAge: number) {
   return `${ORF_SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
+export function authDependencyUnavailablePayload(error: unknown) {
+  if (isDatabaseUnavailableError(error)) {
+    return databaseUnavailablePayload();
+  }
+
+  if (isAuthServiceUnavailableError(error)) {
+    return authServiceUnavailablePayload();
+  }
+
+  return null;
+}
+
 export async function requireAuthenticatedApi(request: FastifyRequest, reply: FastifyReply) {
   const pathname = new URL(request.url, "http://orf.local").pathname;
   if (request.method === "GET" && pathname === "/api/settings/visual/backgrounds") {
@@ -39,8 +51,9 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
 
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
     request.log.warn(error, "Ory session check failed");
-    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
-      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
+    const unavailablePayload = authDependencyUnavailablePayload(error);
+    if (unavailablePayload) {
+      reply.code(503).send(unavailablePayload);
       return undefined;
     }
     return null;
@@ -65,8 +78,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
   app.get("/api/auth/session", async (request, reply) => {
     const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
       request.log.warn(error, "Ory session check failed");
-      if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
-        reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
+      const unavailablePayload = authDependencyUnavailablePayload(error);
+      if (unavailablePayload) {
+        reply.code(503).send(unavailablePayload);
         return undefined;
       }
       return null;
@@ -88,8 +102,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return { authenticated: true, user: auth.user };
     } catch (error) {
       request.log.warn(error, "Ory password login failed");
-      if (isAuthServiceUnavailableError(error)) {
-        return reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
+      const unavailablePayload = authDependencyUnavailablePayload(error);
+      if (unavailablePayload) {
+        return reply.code(503).send(unavailablePayload);
       }
       return reply.code(401).send({ error: "Invalid email or password" });
     }
@@ -104,8 +119,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return { authenticated: true, user: auth.user };
     } catch (error) {
       request.log.warn(error, "Ory password registration failed");
-      if (isAuthServiceUnavailableError(error)) {
-        return reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
+      const unavailablePayload = authDependencyUnavailablePayload(error);
+      if (unavailablePayload) {
+        return reply.code(503).send(unavailablePayload);
       }
       if (error instanceof OryAuthFlowError) {
         return reply.code(400).send({ error: error.message, field: error.field });
