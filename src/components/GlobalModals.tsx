@@ -195,7 +195,7 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
         }}
       >
         <Field label="现象"><textarea className="orf-input min-h-24 px-3 py-2" value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} /></Field>
-        <Field label="关联悬赏"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
+        <Field label="关联指标"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="原因分类"><select className="orf-input px-3 py-2" value={cause} onChange={(event) => setCause(event.target.value)}>{state.causeCategories.map((item) => <option key={item}>{item}</option>)}</select></Field>
           <Field label="影响"><select className="orf-input px-3 py-2" value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "严重"}</option>)}</select></Field>
@@ -221,7 +221,7 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
   const [linkedResultId, setLinkedResultId] = useState(initialResultId);
   const selectedResult = resultOptions.find((result) => result.id === linkedResultId) ?? (!objectiveId ? state.results.find((result) => result.id === linkedResultId) : undefined);
   const [title, setTitle] = useState(linkedFeedback ? `处理反馈：${linkedFeedback.causeCategories.join(" + ")}` : "为 RAG 检索增加版本感知过滤");
-  const [description, setDescription] = useState(linkedFeedback?.suggestedAdjustment ?? "完成悬赏需要推进的行动。");
+  const [description, setDescription] = useState(linkedFeedback?.suggestedAdjustment ?? "完成指标需要推进的行动。");
   const [assignee, setAssignee] = useState(defaultAssignee);
   const [priority, setPriority] = useState<Priority>("High");
 
@@ -249,7 +249,7 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
       >
         <Field label="行动项标题"><input className="orf-input px-3 py-2" value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="说明"><textarea className="orf-input min-h-24 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-        <Field label="关联悬赏"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
+        <Field label="关联指标"><select className="orf-input px-3 py-2" value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="执行人"><input className="orf-input px-3 py-2" value={assignee} onChange={(event) => setAssignee(event.target.value)} /></Field>
           <Field label="优先级"><select className="orf-input px-3 py-2" value={priority} onChange={(event) => setPriority(event.target.value as Priority)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "紧急"}</option>)}</select></Field>
@@ -264,7 +264,7 @@ function ResultUpdateModal({ resultId, feedbackId }: { resultId?: string; feedba
   const { state, proposeResultUpdate, closeModal } = useOrf();
   const result = state.results.find((item) => item.id === resultId) ?? state.results[0];
   const [title, setTitle] = useState(result?.title ?? "");
-  const [reason, setReason] = useState("反馈显示当前悬赏需要更清晰的可验证边界。");
+  const [reason, setReason] = useState("反馈显示当前指标需要更清晰的可验证边界。");
 
   if (!result) return null;
 

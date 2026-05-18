@@ -12,7 +12,7 @@ export function StrategyMapPage() {
   const pillars = ["评估优先", "可靠 RAG", "Agent 安全", "成本与时延控制", "反馈驱动迭代"];
 
   return (
-    <PageScaffold title="策略地图" subtitle="把日常执行追溯到可度量的悬赏。">
+    <PageScaffold title="策略地图" subtitle="把日常执行追溯到可度量的指标。">
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <Card className="overflow-hidden orf-card-padding">
           <div>
@@ -24,7 +24,7 @@ export function StrategyMapPage() {
             <Connector />
             <StrategyRow nodes={state.results.slice(0, 5).map((result) => {
               const objective = state.objectives.find((item) => item.id === result.objectiveId);
-              return { type: "悬赏", title: result.title, status: result.status, progress: result.confidence, challenger: objective?.challengers.join("、"), path: `/objectives/${result.objectiveId}/results/${result.id}` };
+              return { type: "指标", title: result.title, status: result.status, progress: result.confidence, challenger: objective?.challengers.join("、"), path: `/objectives/${result.objectiveId}/results/${result.id}` };
             })} onSelect={setSelected} />
             <Connector />
             <StrategyRow nodes={state.tasks.slice(0, 4).map((task) => ({ type: "行动项", title: task.title, status: task.status, progress: task.status === "Done" ? 100 : 45, owner: task.assignee, path: "/tasks" }))} onSelect={setSelected} />

@@ -48,16 +48,18 @@ test.describe("ORF real stale UI and duplicate mutation guards", () => {
       await dsl.recruitViaApi(real.fixture.commander, duplicate.objectiveId, [real.fixture.challengerA.name]);
       await dsl.acceptRecruitmentViaApi(real.fixture.challengerA, duplicate.objectiveId);
       await dsl.freezeViaApi(real.fixture.commander, duplicate.objectiveId);
-      const firstLoot = await dsl.submitLootViaApi(real.fixture.challengerA, duplicate.objectiveId, `${duplicateTitle} 第一次战利品`);
-      const secondLoot = await dsl.submitLootViaApi(real.fixture.challengerA, duplicate.objectiveId, `${duplicateTitle} 第二次战利品`);
-      expect(firstLoot.status).toBe(200);
-      expect(secondLoot.status).toBe(409);
+      const lootResponses = await Promise.all([
+        dsl.submitLootViaApi(real.fixture.challengerA, duplicate.objectiveId, `${duplicateTitle} 第一次战利品`),
+        dsl.submitLootViaApi(real.fixture.challengerA, duplicate.objectiveId, `${duplicateTitle} 第二次战利品`),
+      ]);
+      expect(lootResponses.map((response) => response.status).sort()).toEqual([200, 409]);
       await assertNoDuplicateLoot(real, duplicate.objectiveId);
 
-      const firstReview = await dsl.reviewAndSettleViaApi(real.fixture.commander, duplicate.objectiveId, { reason: `${duplicateTitle} 第一次验收` });
-      const secondReview = await dsl.reviewAndSettleViaApi(real.fixture.commander, duplicate.objectiveId, { reason: `${duplicateTitle} 第二次验收` });
-      expect(firstReview.status).toBe(200);
-      expect(secondReview.status).toBe(409);
+      const reviewResponses = await Promise.all([
+        dsl.reviewAndSettleViaApi(real.fixture.commander, duplicate.objectiveId, { reason: `${duplicateTitle} 第一次验收` }),
+        dsl.reviewAndSettleViaApi(real.fixture.commander, duplicate.objectiveId, { reason: `${duplicateTitle} 第二次验收` }),
+      ]);
+      expect(reviewResponses.map((response) => response.status).sort()).toEqual([200, 409]);
       await assertNoDuplicateLedger(real, duplicate.objectiveId);
     } finally {
       await dsl.closePages(commander, staleApplicant, challenger);

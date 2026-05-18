@@ -192,7 +192,6 @@ export class RealScenarioDsl {
   }
 
   async reviewAndSettle(page: Page, objectiveId: string, reason: string, resolution?: ContributionAllocation[]) {
-    const objective = await this.objective(objectiveId);
     await page.goto(`/objectives/${objectiveId}/loot`);
     await expect(page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
     if (resolution) {
@@ -206,7 +205,10 @@ export class RealScenarioDsl {
     await expect(page).toHaveURL(/\/reports$/);
     await expect(page.getByRole("heading", { name: "成员积分排行榜" })).toBeVisible();
     await expect.poll(async () => (await this.objective(objectiveId)).flowStatus).toBe("settled");
-    expect(objective.id).toBe(objectiveId);
+    const objective = await this.objective(objectiveId);
+    const data = await this.real.taskData();
+    expect(objective.objectiveSettlementPoints).not.toBeNull();
+    expect(data.pointLedger.some((entry) => entry.objectiveId === objectiveId)).toBe(true);
   }
 
   async reviewAndSettleViaApi(
@@ -308,7 +310,7 @@ export class RealScenarioDsl {
   }
 
   async submitLootViaApi(user: RealUser, objectiveId: string, body = "真实联调 API 战利品") {
-    const data = await this.real.repository.getTaskManagementData();
+    const data = await this.real.taskData();
     const resultClaims = data.results
       .filter((result) => result.objectiveId === objectiveId)
       .map((result) => ({ resultId: result.id, claim: "completed", evidenceText: `${result.title} evidence` }));
@@ -326,14 +328,14 @@ export class RealScenarioDsl {
   }
 
   async objective(objectiveId: string) {
-    const data = await this.real.repository.getTaskManagementData();
+    const data = await this.real.taskData();
     const objective = data.objectives.find((item) => item.id === objectiveId);
     if (!objective) throw new Error(`Objective not found: ${objectiveId}`);
     return objective;
   }
 
   async result(resultId: string) {
-    const data = await this.real.repository.getTaskManagementData();
+    const data = await this.real.taskData();
     const result = data.results.find((item) => item.id === resultId);
     if (!result) throw new Error(`Result not found: ${resultId}`);
     return result;

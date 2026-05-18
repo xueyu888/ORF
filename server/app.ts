@@ -22,6 +22,7 @@ import {
   approveObjectiveChallengeApplication,
   canEditObjectiveResultsDuringReestimate,
   canEditResultDuringReestimate,
+  canMutateObjectiveWorkItem,
   createComment,
   createChecklistItem,
   createFeedback,
@@ -48,6 +49,7 @@ import {
   rejectObjectiveChallengeApplication,
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
+  resolveObjectiveIdForWorkItem,
   setTaskCompletion,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
@@ -428,6 +430,51 @@ async function requireAuthenticatedForWrite(request: FastifyRequest, reply: Fast
   return Boolean(await requireApiUser(request, reply));
 }
 
+async function authorizeObjectiveWorkItemMutation(
+  user: Awaited<ReturnType<typeof requireApiUser>>,
+  reply: FastifyReply,
+  objectiveId: string,
+) {
+  if (!user) {
+    return false;
+  }
+
+  const access = await canMutateObjectiveWorkItem(user, objectiveId);
+  if (access === "notFound") {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+  if (access === "forbidden") {
+    reply.code(403).send({ error: "Forbidden" });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireObjectiveWorkItemMutation(request: FastifyRequest, reply: FastifyReply, objectiveId: string) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  return (await authorizeObjectiveWorkItemMutation(user, reply, objectiveId)) ? user : null;
+}
+
+async function requireWorkItemTargetMutation(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  target: Parameters<typeof resolveObjectiveIdForWorkItem>[0],
+) {
+  const objectiveId = await resolveObjectiveIdForWorkItem(target);
+  if (!objectiveId) {
+    reply.code(404).send({ error: "Work item not found" });
+    return null;
+  }
+
+  return requireObjectiveWorkItemMutation(request, reply, objectiveId);
+}
+
 async function commentActorWithPermissions(request: FastifyRequest, reply: FastifyReply) {
   const user = await requireApiUser(request, reply);
   if (!user) {
@@ -649,19 +696,41 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
   });
 
-  app.get("/api/tasks-page", async () => getTaskManagementData());
-  app.get("/api/bounties", async (request, reply) => {
+  app.get("/api/tasks-page", async (request, reply) => {
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
     }
 
-    return getBountyHallData(user.name);
+    const teamId = await getPrimaryTeamIdForUser(user.id);
+    if (!teamId) {
+      return reply.code(404).send({ error: "Team not found" });
+    }
+
+    return user.role === "admin"
+      ? getTaskManagementData({ teamId })
+      : getMyChallengesData(user.name, false, { teamId });
+  });
+  app.get("/api/bounties", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+    const teamId = await getPrimaryTeamIdForUser(user.id);
+    if (!teamId) {
+      return reply.code(404).send({ error: "Team not found" });
+    }
+
+    return getBountyHallData(user.name, { teamId });
   });
   app.get("/api/my-challenges", async (request, reply) => {
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
+    }
+    const teamId = await getPrimaryTeamIdForUser(user.id);
+    if (!teamId) {
+      return reply.code(404).send({ error: "Team not found" });
     }
 
     const query = myChallengesQuerySchema.parse(request.query);
@@ -669,9 +738,16 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    return getMyChallengesData(user.name, query.scope === "all");
+    return getMyChallengesData(user.name, query.scope === "all", { teamId });
   });
-  app.get("/api/orf-state", async () => getOrfStateSnapshot());
+  app.get("/api/orf-state", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return getOrfStateSnapshot({ teamId: context.teamId });
+  });
 
   app.post("/api/comments", async (request, reply) => {
     const user = await requireApiUser(request, reply);
@@ -899,7 +975,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/tasks", async (request, reply) => {
     const body = createTaskBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "result", id: body.linkedResultId }))) {
       return reply;
     }
 
@@ -915,7 +991,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.post("/api/tasks/:taskId/checklist", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = createChecklistItemBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1183,7 +1259,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1199,7 +1275,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId/label", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = labelBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
       return reply;
     }
 
@@ -1215,7 +1291,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/status", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = updateTaskStatusBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1231,7 +1307,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/completion", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1247,7 +1323,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
       return reply;
     }
 
@@ -1279,7 +1355,15 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/move", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = moveTaskBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId });
+    if (!user) {
+      return reply;
+    }
+    const targetObjectiveId = await resolveObjectiveIdForWorkItem({ type: "result", id: body.toResultId });
+    if (!targetObjectiveId) {
+      return reply.code(404).send({ error: "Task move target not found" });
+    }
+    if (!(await authorizeObjectiveWorkItemMutation(user, reply, targetObjectiveId))) {
       return reply;
     }
 
@@ -1295,7 +1379,15 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId/move", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = moveChecklistBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId });
+    if (!user) {
+      return reply;
+    }
+    const targetObjectiveId = await resolveObjectiveIdForWorkItem({ type: "task", id: body.toTaskId });
+    if (!targetObjectiveId) {
+      return reply.code(404).send({ error: "Checklist move target not found" });
+    }
+    if (!(await authorizeObjectiveWorkItemMutation(user, reply, targetObjectiveId))) {
       return reply;
     }
 
@@ -1340,7 +1432,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.delete("/api/tasks/:taskId", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "task.delete"))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1355,7 +1447,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.delete("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "subtask.delete"))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
       return reply;
     }
 

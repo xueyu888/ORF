@@ -511,7 +511,7 @@ test("approving stale pending applications cannot mutate a frozen objective", as
   assert.deepEqual(unchanged?.challengers, [fixture.challenger.name]);
   assert.equal(
     unchanged?.challengeApplications.find((application) => application.id === observerApplicationId)?.status,
-    "pending",
+    "declined",
   );
 });
 
@@ -527,7 +527,7 @@ test("rejecting stale pending applications cannot reopen a frozen objective", as
   assert.equal(unchanged?.flowStatus, "frozen");
   assert.equal(
     unchanged?.challengeApplications.find((application) => application.id === observerApplicationId)?.status,
-    "pending",
+    "declined",
   );
 });
 
@@ -887,6 +887,133 @@ test("API flow commands enforce commander-only permissions and challenge list sc
     const adminAllScope = await apiInject(app, fixture.commander, "GET", "/api/my-challenges?scope=all");
     assert.equal(adminAllScope.statusCode, 200);
   });
+});
+
+test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
+  const fixture = await createFixture("api-read-boundary");
+  const { objective } = await createSettledObjective(fixture, "scoped settled objective");
+
+  await withApiServer(fixture, async (app) => {
+    const observerTasks = await apiInject(app, fixture.observer, "GET", "/api/tasks-page");
+    assert.equal(observerTasks.statusCode, 200);
+    const observerData = observerTasks.json() as {
+      objectives: Array<{ id: string }>;
+      results: Array<{ objectiveId: string }>;
+      objectiveLoot: Array<{ objectiveId: string }>;
+      pointLedger: Array<{ objectiveId: string }>;
+    };
+    assert.equal(observerData.objectives.some((item) => item.id === objective.id), false);
+    assert.equal(observerData.results.some((item) => item.objectiveId === objective.id), false);
+    assert.equal(observerData.objectiveLoot.some((item) => item.objectiveId === objective.id), false);
+    assert.equal(observerData.pointLedger.some((item) => item.objectiveId === objective.id), false);
+
+    const challengerTasks = await apiInject(app, fixture.challenger, "GET", "/api/tasks-page");
+    assert.equal(challengerTasks.statusCode, 200);
+    assert.equal((challengerTasks.json() as { objectives: Array<{ id: string }> }).objectives.some((item) => item.id === objective.id), true);
+
+    const adminTasks = await apiInject(app, fixture.commander, "GET", "/api/tasks-page");
+    assert.equal(adminTasks.statusCode, 200);
+    assert.equal((adminTasks.json() as { objectives: Array<{ id: string }> }).objectives.some((item) => item.id === objective.id), true);
+
+    const memberSnapshot = await apiInject(app, fixture.challenger, "GET", "/api/orf-state");
+    assert.equal(memberSnapshot.statusCode, 403);
+
+    const adminSnapshot = await apiInject(app, fixture.commander, "GET", "/api/orf-state");
+    assert.equal(adminSnapshot.statusCode, 200);
+    assert.equal((adminSnapshot.json() as { objectives: Array<{ id: string }> }).objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
+test("task and comment API writes require objective participation", async () => {
+  const fixture = await createFixture("api-work-item-boundary");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture);
+
+  await withApiServer(fixture, async (app) => {
+    const taskPayload = {
+      title: `${fixture.prefix} scoped task`,
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    };
+
+    const observerTask = await apiInject(app, fixture.observer, "POST", "/api/tasks", taskPayload);
+    assert.equal(observerTask.statusCode, 403);
+
+    const challengerTask = await apiInject(app, fixture.challenger, "POST", "/api/tasks", taskPayload);
+    assert.equal(challengerTask.statusCode, 200);
+    const taskId = (challengerTask.json() as { task: { id: string } }).task.id;
+
+    const observerChecklist = await apiInject(app, fixture.observer, "POST", `/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
+      label: "observer should not add",
+    });
+    assert.equal(observerChecklist.statusCode, 403);
+
+    const challengerChecklist = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
+      label: "challenger can add",
+    });
+    assert.equal(challengerChecklist.statusCode, 200);
+
+    const observerPatch = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(taskId)}`, {
+      title: "observer should not edit",
+    });
+    assert.equal(observerPatch.statusCode, 403);
+
+    const observerComment = await apiInject(app, fixture.observer, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: "observer should not comment",
+    });
+    assert.equal(observerComment.statusCode, 403);
+
+    const challengerComment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: "challenger can comment",
+    });
+    assert.equal(challengerComment.statusCode, 200);
+  });
+});
+
+test("loot submission and settlement are safe under concurrent duplicate requests", async () => {
+  const fixture = await createFixture("concurrent-loot-review");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture);
+  assert.equal((await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id)).status, "ok");
+
+  const [firstLoot, secondLoot] = await Promise.all([
+    submitObjectiveLoot(
+      objective.id,
+      { body: "concurrent loot A", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done A" }] },
+      { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+    ),
+    submitObjectiveLoot(
+      objective.id,
+      { body: "concurrent loot B", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done B" }] },
+      { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+    ),
+  ]);
+  assert.deepEqual([firstLoot.status, secondLoot.status].sort(), ["closed", "ok"]);
+
+  const submittedData = await getTaskManagementData({ teamId: fixture.teamId });
+  assert.equal(submittedData.objectiveLoot.filter((item) => item.objectiveId === objective.id).length, 1);
+
+  const [firstReview, secondReview] = await Promise.all([
+    reviewObjectiveLoot(
+      objective.id,
+      { resultReviews: [{ resultId: result.id, acceptedResult: "completed" }], reason: "concurrent review A" },
+      fixture.commander.id,
+    ),
+    reviewObjectiveLoot(
+      objective.id,
+      { resultReviews: [{ resultId: result.id, acceptedResult: "completed" }], reason: "concurrent review B" },
+      fixture.commander.id,
+    ),
+  ]);
+  assert.deepEqual([firstReview.status, secondReview.status].sort(), ["invalid", "ok"]);
+
+  const settledData = await getTaskManagementData({ teamId: fixture.teamId });
+  assert.equal(settledData.pointLedger.filter((item) => item.objectiveId === objective.id).length, 1);
+  assert.equal(settledData.objectives.find((item) => item.id === objective.id)?.flowStatus, "settled");
 });
 
 test("API result management routes keep privileged operations behind role permissions", async () => {

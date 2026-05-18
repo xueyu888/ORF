@@ -56,7 +56,7 @@ test.describe("ORF real settlement ledger", () => {
       expect(objective.objectiveSettlementPoints).toBe(basePoints);
       await assertLedgerConsistency(real, objectiveId);
 
-      const data = await real.repository.getTaskManagementData();
+      const data = await real.taskData();
       const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objectiveId);
       const expectedA = basePoints * 0.5;
       const expectedB = basePoints * 0.3;

@@ -88,7 +88,7 @@ export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; re
         <div className="mt-3 flex flex-wrap gap-1">
           {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
         </div>
-        <div className="mt-3 text-xs orf-text-muted">关联悬赏：<span className="orf-text-secondary">{resultTitle}</span></div>
+        <div className="mt-3 text-xs orf-text-muted">关联指标：<span className="orf-text-secondary">{resultTitle}</span></div>
         <div className="mt-3 text-xs orf-text-secondary">{feedback.suggestedAdjustment}</div>
       </Card>
     </Link>
@@ -101,7 +101,7 @@ export function TaskRow({ task, resultTitle, onStatusChange }: { task: Task; res
       <div className="font-mono text-xs orf-text-muted">{task.id}</div>
       <div className="min-w-0">
         <div className="truncate font-medium orf-text-primary">{task.title}</div>
-        <div className="mt-1 truncate text-xs orf-text-muted">{resultTitle ? `支撑悬赏：${resultTitle}` : "未关联悬赏"}</div>
+        <div className="mt-1 truncate text-xs orf-text-muted">{resultTitle ? `支撑指标：${resultTitle}` : "未关联指标"}</div>
       </div>
       <select className="orf-input px-2 py-1 text-xs" value={task.status} onChange={(event) => onStatusChange(event.target.value as Task["status"])}>
         {["Backlog", "Todo", "In Progress", "In Review", "Done"].map((status) => <option key={status} value={status}>{taskStatusLabel[status as Task["status"]]}</option>)}
@@ -116,9 +116,9 @@ export function TaskRow({ task, resultTitle, onStatusChange }: { task: Task; res
 export function IntegrityCheck({ hasFeedback, hasTasks, resultRiskCount }: { hasFeedback: boolean; hasTasks: boolean; resultRiskCount: number }) {
   const items = [
     { label: "目标是挑战导向", state: "通过" },
-    { label: "悬赏可度量", state: resultRiskCount > 0 ? "提醒" : "通过" },
+    { label: "指标可度量", state: resultRiskCount > 0 ? "提醒" : "通过" },
     { label: "本周有反馈更新", state: hasFeedback ? "通过" : "未通过" },
-    { label: "行动项已关联悬赏", state: hasTasks ? "通过" : "提醒" },
+    { label: "行动项已关联指标", state: hasTasks ? "通过" : "提醒" },
   ];
 
   return (

@@ -84,7 +84,7 @@ export async function assertNoUnauthorizedButtons(page: Page) {
 }
 
 export async function assertObjectiveInvariants(real: RealSystemHarness, objectiveId: string) {
-  const data = await real.repository.getTaskManagementData();
+  const data = await real.taskData();
   const objective = data.objectives.find((item) => item.id === objectiveId);
   expect(objective, `Objective should exist: ${objectiveId}`).toBeTruthy();
   if (!objective) return;
@@ -100,22 +100,36 @@ export async function assertObjectiveInvariants(real: RealSystemHarness, objecti
   }
   if (["frozen", "submitted", "settled", "closed"].includes(objective.flowStatus)) {
     expect(objective.stage).toBe("goalFrozen");
+    expect(objective.assignedChallengers, "closed work phases should not keep outstanding recruitments").toEqual([]);
+    expect(
+      objective.challengeApplications.filter((application) => application.status === "pending"),
+      "closed work phases should not keep pending applications",
+    ).toEqual([]);
   }
 
   const results = data.results.filter((result) => result.objectiveId === objectiveId);
+  const loot = data.objectiveLoot.filter((item) => item.objectiveId === objectiveId);
   if (objective.flowStatus !== "settled") {
     for (const result of results) {
       expect(result.acceptedResult).toBe("unreviewed");
     }
   }
 
+  if (objective.flowStatus === "submitted") {
+    expect(loot.length, "submitted objective should have exactly one loot submission").toBe(1);
+  }
+
   if (objective.flowStatus === "settled") {
+    expect(loot.length, "settled objective should keep exactly one loot submission").toBe(1);
+    for (const result of results) {
+      expect(result.acceptedResult, "settled results should have concrete review outcomes").not.toBe("unreviewed");
+    }
     await assertLedgerConsistency(real, objectiveId);
   }
 }
 
 export async function assertLedgerConsistency(real: RealSystemHarness, objectiveId: string) {
-  const data = await real.repository.getTaskManagementData();
+  const data = await real.taskData();
   const objective = data.objectives.find((item) => item.id === objectiveId);
   expect(objective, `Objective should exist: ${objectiveId}`).toBeTruthy();
   if (!objective) return;
@@ -129,26 +143,27 @@ export async function assertLedgerConsistency(real: RealSystemHarness, objective
   expect(objective.objectiveBasePoints).toBe(basePoints);
   expect(Number((basePoints * (objective.completionMultiplier ?? 0)).toFixed(2))).toBe(settlementPoints);
   expect(ledgerPoints).toBe(settlementPoints);
+  expect(new Set(ledger.map((entry) => entry.memberName)).size, "each challenger should have at most one ledger entry").toBe(ledger.length);
   for (const entry of ledger) {
     expect(objective.challengers).toContain(entry.memberName);
   }
 }
 
 export async function assertNoDuplicateLoot(real: RealSystemHarness, objectiveId: string) {
-  const data = await real.repository.getTaskManagementData();
+  const data = await real.taskData();
   const lootCount = data.objectiveLoot.filter((item) => item.objectiveId === objectiveId).length;
   expect(lootCount).toBeLessThanOrEqual(1);
 }
 
 export async function assertNoDuplicateLedger(real: RealSystemHarness, objectiveId: string) {
-  const data = await real.repository.getTaskManagementData();
+  const data = await real.taskData();
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objectiveId);
   const members = new Set(ledger.map((entry) => entry.memberName));
   expect(members.size).toBe(ledger.length);
 }
 
 export async function flyingMetricCountForReportsVisibility(real: RealSystemHarness, smallestContributionShare: number) {
-  const data = await real.repository.getTaskManagementData();
+  const data = await real.taskData();
   const pointsByMember = new Map<string, number>();
   for (const entry of data.pointLedger) {
     pointsByMember.set(entry.memberName, (pointsByMember.get(entry.memberName) ?? 0) + entry.points);

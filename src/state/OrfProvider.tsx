@@ -135,6 +135,10 @@ const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
 
+function taskManagementPathForRole(role: UserRole | null | undefined) {
+  return role === "admin" ? "/api/tasks-page" : "/api/my-challenges?scope=mine";
+}
+
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return normalizeState({
     ...state,
@@ -270,7 +274,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 404) {
-      return "悬赏不存在，已刷新数据";
+      return "悬赏目标不存在，已刷新数据";
     }
 
     if (error.status === 409) {
@@ -349,6 +353,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
+  const currentUserRole = currentUser?.role ?? null;
   const isAuthenticated = currentUser !== null;
   const isApproved = currentUser?.status === "active";
   const isAdmin = currentUser?.role === "admin";
@@ -376,10 +381,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     });
   }, []);
   const refreshTaskManagementData = useCallback(async () => {
-    const data = await apiJson<TaskManagementData>("/api/tasks-page");
+    const data = await apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole));
     applyTaskManagementData(data);
     setDataReady(true);
-  }, [applyTaskManagementData]);
+  }, [applyTaskManagementData, currentUserRole]);
   const applyPermissionRules = useCallback((data: PermissionRulesResponse) => {
     setState((current) => {
       return mergePermissionRules(current, data);
@@ -426,7 +431,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setDataReady(false);
 
-    void apiJson<TaskManagementData>("/api/tasks-page")
+    void apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
       .then((data) => {
         if (!cancelled) {
           applyTaskManagementData(data);
@@ -460,7 +465,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, isAdmin, isAuthenticated, isApproved]);
+  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAdmin, isAuthenticated, isApproved]);
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);
@@ -626,10 +631,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       applyForBounty: async (objectiveId) => {
         const applicant = currentUser?.name ?? "";
-        const next = store.applyForBounty(state, objectiveId, applicant);
-        if (next === state) {
-          notify("这个目标暂时不能申请挑战");
-          return false;
+        const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
+        if (hasScopedObjective) {
+          const next = store.applyForBounty(state, objectiveId, applicant);
+          if (next === state) {
+            notify("这个目标暂时不能申请挑战");
+            return false;
+          }
         }
 
         try {
@@ -645,10 +653,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       acceptBountyChallenge: async (objectiveId) => {
         const challenger = currentUser?.name ?? "";
-        const next = store.acceptBountyChallenge(state, objectiveId, challenger);
-        if (next === state) {
-          notify("这个目标暂时不能接受挑战");
-          return false;
+        const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
+        if (hasScopedObjective) {
+          const next = store.acceptBountyChallenge(state, objectiveId, challenger);
+          if (next === state) {
+            notify("这个目标暂时不能接受挑战");
+            return false;
+          }
         }
 
         try {
@@ -946,9 +957,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ confidence }),
         })
           .then(refreshTaskManagementData)
-          .then(() => notify("悬赏信心已更新"))
+          .then(() => notify("指标信心已更新"))
           .catch((error) => {
-            notify(businessMutationFailureMessage(error, "悬赏信心更新失败"));
+            notify(businessMutationFailureMessage(error, "指标信心更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },

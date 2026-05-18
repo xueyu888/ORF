@@ -67,6 +67,10 @@ export class RealSystemHarness {
     return this.requireRuntime().apiBaseUrl;
   }
 
+  async taskData() {
+    return this.repository.getTaskManagementData({ teamId: this.fixture.teamId });
+  }
+
   async setup() {
     const fakeOry = await startFakeOry(Object.values(this.fixture).filter(isRealUser));
     process.env.ORY_PUBLIC_URL = fakeOry.url;
@@ -185,18 +189,12 @@ export class RealSystemHarness {
   }
 }
 
-export const test = base.extend<{ real: RealSystemHarness }, { workerReal: RealSystemHarness }>({
-  workerReal: [
-    async ({}, use, workerInfo) => {
-      const harness = new RealSystemHarness(workerInfo.workerIndex);
-      await harness.setup();
-      await use(harness);
-      await harness.teardown();
-    },
-    { scope: "worker" },
-  ],
-  real: async ({ workerReal }, use) => {
-    await use(workerReal);
+export const test = base.extend<{ real: RealSystemHarness }>({
+  real: async ({}, use, testInfo) => {
+    const harness = new RealSystemHarness(testInfo.workerIndex);
+    await harness.setup();
+    await use(harness);
+    await harness.teardown();
   },
 });
 

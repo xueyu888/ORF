@@ -15,14 +15,14 @@ export function ResultDetailPage() {
   const { currentUser, dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
   const result = state.results.find((item) => item.id === resultId);
   if (!result) {
-    return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载悬赏数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+    return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载指标数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
   }
 
   const objective = state.objectives.find((item) => item.id === result.objectiveId);
   const tasks = state.tasks.filter((task) => result.taskIds.includes(task.id));
   const feedback = state.feedback.filter((item) => result.feedbackIds.includes(item.id));
   const metricRequirement = result.metricRequirement ?? `${result.metricName}：${result.description}`;
-  const statisticalObject = result.statisticalObject ?? "当前悬赏关联的标准评估集、线上日志样本和结构化反馈";
+  const statisticalObject = result.statisticalObject ?? "当前指标关联的标准评估集、线上日志样本和结构化反馈";
   const completionStandard = result.completionStandard ?? `${result.metricName} 达到 ${metricValue(result.target, result.unit, result.direction)}，并有战利品说明支持`;
   const sampleSet = result.sampleSet ?? "指挥官提前确认的标准样本集；标准问题需要标注正确文本片段和期望答案";
   const measurementScope = result.measurementScope ?? "固定测试环境、固定模型参数、固定上下文长度；模型侧耗时异常时单独记录";

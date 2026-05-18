@@ -385,7 +385,7 @@ export class OrfFlowStore {
       id,
       objectiveId: input.objectiveId,
       title: input.title,
-      description: input.description ?? "由 ORF Flow 规划创建的悬赏。",
+      description: input.description ?? "由 ORF Flow 规划创建的指标。",
       metricName: input.metricName,
       metricRequirement: input.metricRequirement ?? `${input.metricName}：写清统计对象和完成标准后进入执行。`,
       statisticalObject: input.statisticalObject ?? "指挥官确认的标准样本集和线上反馈样本",

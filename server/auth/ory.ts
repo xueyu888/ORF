@@ -71,7 +71,7 @@ export class OryAuthFlowError extends Error {
 const trimSlash = (value: string) => value.replace(/\/+$/, "");
 
 function oryPublicUrl(path: string) {
-  return new URL(path, `${trimSlash(env.ORY_PUBLIC_URL)}/`).toString();
+  return new URL(path, `${trimSlash(process.env.ORY_PUBLIC_URL ?? env.ORY_PUBLIC_URL)}/`).toString();
 }
 
 function cookieHeader(cookie: string | undefined): Record<string, string> {

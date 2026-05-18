@@ -14,7 +14,7 @@ import { feedbackStatusLabel } from "../utils/labels";
 const tabs = ["Overview", "Results", "Tasks", "Feedback", "Decisions", "Evaluation"] as const;
 const tabLabel: Record<(typeof tabs)[number], string> = {
   Overview: "概览",
-  Results: "悬赏",
+  Results: "指标",
   Tasks: "行动项",
   Feedback: "反馈",
   Decisions: "决策",

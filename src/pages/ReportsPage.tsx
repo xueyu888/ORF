@@ -47,13 +47,15 @@ export function ReportsPage() {
     return memberNames
       .map((memberName) => {
         const counts = objectiveCounts.get(memberName) ?? { completed: 0, total: 0 };
+        const points = pointsByMember.get(memberName) ?? 0;
         return {
           completionRate: counts.total > 0 ? Math.round((counts.completed / counts.total) * 100) : 0,
           memberName,
-          points: pointsByMember.get(memberName) ?? 0,
+          points,
           rankChange: 0,
         };
       })
+      .filter((row) => row.points > 0 || row.completionRate > 0)
       .sort((left, right) => right.points - left.points || right.completionRate - left.completionRate || left.memberName.localeCompare(right.memberName))
       .slice(0, 10)
       .map((row, index) => ({
