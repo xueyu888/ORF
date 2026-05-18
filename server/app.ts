@@ -1076,13 +1076,16 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    const item = await createFeedback(body, user.id);
+    const outcome = await createFeedback(body, user.id);
 
-    if (!item) {
+    if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Result not found" });
     }
+    if (outcome.status === "invalidOwner") {
+      return reply.code(409).send({ error: "Feedback owner must be an active team member" });
+    }
 
-    return { feedback: item };
+    return { feedback: outcome.feedback };
   });
 
   app.patch("/api/feedback/:feedbackId/status", async (request, reply) => {

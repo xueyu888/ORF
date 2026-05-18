@@ -1479,6 +1479,42 @@ test("feedback creation is scoped to administrators and objective challengers", 
   });
 });
 
+test("feedback creation only accepts active team members as owners", async () => {
+  const fixture = await createFixture("api-feedback-owner-boundary");
+  const { result } = await createApprovedObjectiveWithResult(fixture);
+  await db.update(users).set({ status: "disabled" }).where(eq(users.id, fixture.observer.id));
+
+  await withApiServer(fixture, async (app) => {
+    const feedbackPayload = {
+      phenomenon: `${fixture.prefix} active owner feedback creation`,
+      causeCategories: ["Quality"],
+      impact: "High",
+      linkedResultId: result.id,
+      suggestedAdjustment: "Keep feedback ownership bound to active team members.",
+      source: "Team review",
+      owner: fixture.challenger.name,
+    };
+
+    const disabledOwnerAttempt = await apiInject(app, fixture.commander, "POST", "/api/feedback", {
+      ...feedbackPayload,
+      owner: fixture.observer.name,
+    });
+    assert.equal(disabledOwnerAttempt.statusCode, 409);
+
+    const missingOwnerAttempt = await apiInject(app, fixture.commander, "POST", "/api/feedback", {
+      ...feedbackPayload,
+      owner: `${fixture.prefix} Missing Owner`,
+    });
+    assert.equal(missingOwnerAttempt.statusCode, 409);
+
+    const activeOwnerAttempt = await apiInject(app, fixture.commander, "POST", "/api/feedback", feedbackPayload);
+    assert.equal(activeOwnerAttempt.statusCode, 200);
+  });
+
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  assert.deepEqual(data.feedback.filter((item) => item.linkedResultId === result.id).map((item) => item.owner), [fixture.challenger.name]);
+});
+
 test("feedback status API writes require an administrator, creator, or owner", async () => {
   const fixture = await createFixture("api-feedback-status-boundary");
   const { result } = await createApprovedObjectiveWithResult(fixture);

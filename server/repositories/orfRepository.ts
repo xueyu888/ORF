@@ -197,6 +197,18 @@ function uniqueMembers(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
 }
 
+async function getActiveTeamMemberNameSet(teamId: string, values: Array<string | undefined | null>) {
+  const memberNames = uniqueMembers(values);
+  if (memberNames.length === 0) return new Set<string>();
+
+  const rows = await db
+    .select({ name: users.name })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, teamId), eq(users.status, "active"), inArray(users.name, memberNames)));
+  return new Set(rows.map((member) => member.name));
+}
+
 function uncertaintyScore(level: UncertaintyLevel | null) {
   return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
 }
@@ -997,12 +1009,7 @@ export async function recruitObjectiveChallengers(
   const currentChallengers = uniqueMembers(objective.challengers ?? []);
   const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
   if (recruitMembers.length === 0) return { status: "invalid" };
-  const activeMemberRows = await db
-    .select({ name: users.name })
-    .from(teamMembers)
-    .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(and(eq(teamMembers.teamId, objective.teamId), eq(users.status, "active"), inArray(users.name, recruitMembers)));
-  const activeMemberNames = new Set(activeMemberRows.map((member) => member.name));
+  const activeMemberNames = await getActiveTeamMemberNameSet(objective.teamId, recruitMembers);
   if (recruitMembers.some((member) => !activeMemberNames.has(member))) return { status: "invalid" };
   const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
   if (assignedChallengers.length === 0) return { status: "invalid" };
@@ -1175,6 +1182,10 @@ export type CreateFeedbackInput = Pick<
   Feedback,
   "phenomenon" | "causeCategories" | "impact" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner"
 >;
+export type CreateFeedbackOutcome =
+  | { status: "ok"; feedback: Feedback }
+  | { status: "notFound" }
+  | { status: "invalidOwner" };
 
 export async function canCreateFeedbackForResult(
   resultId: string,
@@ -1204,10 +1215,16 @@ export async function canCreateFeedbackForResult(
     : "forbidden";
 }
 
-export async function createFeedback(input: CreateFeedbackInput, actorId: string): Promise<Feedback | null> {
+export async function createFeedback(input: CreateFeedbackInput, actorId: string): Promise<CreateFeedbackOutcome> {
   const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
   if (!result) {
-    return null;
+    return { status: "notFound" };
+  }
+
+  const owner = input.owner.trim();
+  const activeOwnerNames = await getActiveTeamMemberNameSet(result.teamId, [owner]);
+  if (!activeOwnerNames.has(owner)) {
+    return { status: "invalidOwner" };
   }
 
   const id = makeId("fb");
@@ -1223,7 +1240,7 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
       suggestedAdjustment: input.suggestedAdjustment,
       source: input.source,
       status: "New",
-      owner: input.owner,
+      owner,
       createdAt: now,
       updatedAt: now,
       createdBy: actorId,
@@ -1237,7 +1254,8 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
   });
 
   const data = await getTaskManagementData({ teamId: result.teamId });
-  return data.feedback.find((item) => item.id === id) ?? null;
+  const item = data.feedback.find((entry) => entry.id === id);
+  return item ? { status: "ok", feedback: item } : { status: "notFound" };
 }
 
 type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; teamId?: string | null };
