@@ -88,6 +88,64 @@ test("normalizeState adds fallback due dates in calendar days", () => {
   assert.equal(normalized.objectives[0]?.finalDueAt, "2026-05-28");
 });
 
+test("local store generated ids stay unique within one millisecond", () => {
+  const current = state({
+    objectives: [objective({ id: "obj-base", resultIds: ["res-base"], taskIds: ["task-base"] })],
+    results: [result({ id: "res-base", objectiveId: "obj-base" })],
+    tasks: [task({ id: "task-base", linkedObjectiveId: "obj-base", linkedResultId: "res-base" })],
+  });
+  const originalNow = Date.now;
+  const originalRandom = Math.random;
+  let randomOffset = 0;
+  Date.now = () => 4102444800000;
+  Math.random = () => {
+    randomOffset += 0.000001;
+    return randomOffset;
+  };
+
+  try {
+    const withObjectives = store.createObjective(
+      store.createObjective(current, { title: "Objective A", whyItMatters: "A", cycle: "2999-Q1", boundary: "Boundary" }),
+      { title: "Objective B", whyItMatters: "B", cycle: "2999-Q1", boundary: "Boundary" },
+    );
+    assert.equal(new Set(withObjectives.objectives.slice(0, 2).map((item) => item.id)).size, 2);
+
+    const withResults = store.createResult(
+      store.createResult(current, { objectiveId: "obj-base", title: "Result A", metricName: "Metric A" }),
+      { objectiveId: "obj-base", title: "Result B", metricName: "Metric B" },
+    );
+    assert.equal(new Set(withResults.results.slice(0, 2).map((item) => item.id)).size, 2);
+
+    const feedbackInput = {
+      phenomenon: "Signal",
+      causeCategories: ["Quality"],
+      impact: "High" as const,
+      linkedObjectiveId: "obj-base",
+      linkedResultId: "res-base",
+      suggestedAdjustment: "Adjust",
+      source: "Team review" as const,
+      owner: "Kai Wang",
+    };
+    const withFeedback = store.createFeedback(store.createFeedback(current, feedbackInput), feedbackInput);
+    assert.equal(new Set(withFeedback.feedback.slice(0, 2).map((item) => item.id)).size, 2);
+    assert.equal(new Set(withFeedback.feedback.slice(0, 2).flatMap((item) => item.activity.map((entry) => entry.id))).size, 2);
+
+    const withChecklist = store.createTaskChecklistItem(store.createTaskChecklistItem(current, "task-base"), "task-base");
+    assert.equal(new Set(withChecklist.tasks[0]?.checklist.map((item) => item.id)).size, 2);
+
+    const withDecisions = store.proposeResultUpdate(
+      store.proposeResultUpdate(current, "res-base", "Title A", "Reason A"),
+      "res-base",
+      "Title B",
+      "Reason B",
+    );
+    assert.equal(new Set(withDecisions.decisions.slice(0, 2).map((item) => item.id)).size, 2);
+  } finally {
+    Date.now = originalNow;
+    Math.random = originalRandom;
+  }
+});
+
 test("deleteObjective cascades all linked records and keeps unrelated records", () => {
   const current = state({
     objectives: [

@@ -358,7 +358,7 @@ export class OrfFlowStore {
   }
 
   createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt">>): OrfState {
-    const id = `obj-${Date.now()}`;
+    const id = makeId("obj");
     const now = currentDate();
     const objective = {
       id,
@@ -396,7 +396,7 @@ export class OrfFlowStore {
   }
 
   createResult(state: OrfState, input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">): OrfState {
-    const id = `res-${Date.now()}`;
+    const id = makeId("res");
     const result: Result = {
       id,
       objectiveId: input.objectiveId,
@@ -444,7 +444,7 @@ export class OrfFlowStore {
       return state;
     }
 
-    const id = `fb-${Date.now()}`;
+    const id = makeId("fb");
     const now = currentDate();
     const owner = input.owner || currentUserName(state);
     const feedback: Feedback = {
@@ -461,7 +461,7 @@ export class OrfFlowStore {
       owner,
       createdAt: now,
       updatedAt: now,
-      activity: [{ id: `act-${Date.now()}`, actor: owner, action: "创建了结构化反馈", at: now }],
+      activity: [{ id: makeId("act"), actor: owner, action: "创建了结构化反馈", at: now }],
     };
 
     return {
@@ -577,7 +577,7 @@ export class OrfFlowStore {
         }
 
         const item = {
-          id: `ck-${Date.now()}`,
+          id: makeId("ck"),
           label: "新子行动项",
           done: false,
           updatedAt: now,
@@ -960,7 +960,7 @@ export class OrfFlowStore {
               ...item,
               status,
               updatedAt: now,
-              activity: [...item.activity, { id: `act-${Date.now()}`, actor: currentUserName(state), action: `更新反馈状态`, at: now }],
+              activity: [...item.activity, { id: makeId("act"), actor: currentUserName(state), action: `更新反馈状态`, at: now }],
             }
           : item,
       ),
@@ -1134,7 +1134,7 @@ export class OrfFlowStore {
       results: state.results.map((item) => (item.id === resultId ? { ...item, title, updatedAt: now } : item)),
       decisions: [
         {
-          id: `dec-${Date.now()}`,
+          id: makeId("dec"),
           title: `更新指标：${title}`,
           reason,
           evidence: feedbackId ? `关联反馈 ${feedbackId}` : "手动 ORF 复盘",
