@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
-import type { Feedback, OrfState, Task } from "../../src/types/orf";
+import type { Feedback, Objective, OrfState, Result, Task } from "../../src/types/orf";
 
 function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
   return {
@@ -161,4 +161,66 @@ test("dashboard renders only API-derived state without demo offsets", async ({ p
   await expect(page.getByText("评审 3 条反馈")).toHaveCount(0);
   await expect(page.getByText("关闭 4 个行动项")).toHaveCount(0);
   await expect(page.getByText("准备周度更新")).toHaveCount(0);
+});
+
+test("AI evaluation summary does not render hardcoded metrics without eval runs", async ({ page }) => {
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [],
+        results: [],
+        tasks: [],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto("/ai-evaluation");
+
+  await expect(page.getByRole("heading", { name: "AI 评估" })).toBeVisible();
+  await expect(page.getByText("暂无评估运行。")).toBeVisible();
+  await expect(page.getByText("4.2s")).toHaveCount(0);
+  await expect(page.getByText("$0.038")).toHaveCount(0);
+  await expect(page.getByText("82%")).toHaveCount(0);
+  await expect(page.getByText("6.5%")).toHaveCount(0);
+  await expect(page.getByText("91%")).toHaveCount(0);
+});
+
+test("objective evaluation tab does not render hardcoded metrics without eval runs", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-eval-empty",
+    title: "真实评估空态目标",
+    resultIds: ["result-eval-empty"],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-eval-empty",
+    objectiveId: objective.id,
+    current: 1,
+    target: 2,
+    trend: [],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: [objective],
+        results: [result],
+        tasks: [],
+        feedback: [],
+      }),
+    });
+  });
+
+  await page.goto(`/objectives/${objective.id}`);
+  await page.getByRole("button", { name: "评估" }).click();
+
+  await expect(page.getByText("暂无关联评估运行。")).toBeVisible();
+  await expect(page.getByText("4.2s")).toHaveCount(0);
+  await expect(page.getByText("$0.038")).toHaveCount(0);
+  await expect(page.getByText("82%")).toHaveCount(0);
+  await expect(page.getByText("6.5%")).toHaveCount(0);
 });

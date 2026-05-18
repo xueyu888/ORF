@@ -376,6 +376,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - 页面断言优先基于用户可见文案、按钮和链接，少量使用稳定 class 定位目标面板。
 - 每个测试开始清空 localStorage，避免 legacy 本地状态污染 API 优先契约。
 - `/dashboard` 只能展示从当前 ORF state 汇总出的目标、指标、反馈和个人任务；不能混入演示偏移、硬编码待办或会在空数据下产生 `NaN` 的指标。
+- `/ai-evaluation` 和目标详情页的评估页签只能展示从 `EvalRun` 汇总出的指标；没有评估运行时必须显示空态，不能展示演示准确率、幻觉率、时延或成本。
 
 ## 修改测试时机
 

@@ -7,6 +7,7 @@ import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, IntegrityCheck, ResultCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { metricCreationActionForObjective } from "../features/challenge/model/orfFlowCapabilities";
+import { evaluationMetricCards, summarizeEvalRuns } from "../features/evaluation/model/evaluationSummary";
 import { canCreateFeedbackFromResults, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackStatus, TaskStatus } from "../types/orf";
@@ -36,6 +37,9 @@ export function ObjectiveDetailPage() {
   const tasks = state.tasks.filter((task) => task.linkedObjectiveId === objective.id);
   const feedback = state.feedback.filter((item) => item.linkedObjectiveId === objective.id);
   const decisions = state.decisions.filter((decision) => decision.linkedObjectiveId === objective.id);
+  const resultIds = new Set(results.map((result) => result.id));
+  const evalRuns = state.evalRuns.filter((run) => resultIds.has(run.linkedResultId));
+  const evaluationMetrics = evaluationMetricCards(summarizeEvalRuns(evalRuns));
   const atRiskCount = results.filter((result) => result.status === "At Risk").length;
   const metricAction = metricCreationActionForObjective({
     objective,
@@ -134,7 +138,25 @@ export function ObjectiveDetailPage() {
       {tab === "Evaluation" && (
         <Card className="orf-card-padding">
           <div className="grid gap-4 md:grid-cols-3">
-            {["准确率", "幻觉率", "检索 Recall@5", "P95 时延", "单次请求成本", "工具调用成功率"].map((metric) => <div key={metric} className="rounded-lg orf-surface-muted p-4 text-sm orf-text-primary">{metric}<div className="mt-2 text-2xl font-semibold orf-text-primary">{metric.includes("时延") ? "4.2s" : metric.includes("成本") ? "$0.038" : metric.includes("幻觉") ? "6.5%" : "82%"}</div></div>)}
+            {evaluationMetrics.map((metric) => <div key={metric.label} className="rounded-lg orf-surface-muted p-4 text-sm orf-text-primary">{metric.label}<div className="mt-2 text-2xl font-semibold orf-text-primary">{metric.value}</div><div className="mt-2 text-xs orf-text-muted">{metric.detail}</div></div>)}
+          </div>
+          <div className="mt-4 grid gap-3">
+            {evalRuns.map((run) => (
+              <div key={run.id} className="rounded-lg border orf-border orf-surface-muted p-4 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="font-medium orf-text-primary">{run.scenario}</div>
+                  <StatusBadge status={run.status} />
+                </div>
+                <div className="mt-3 grid gap-2 text-xs orf-text-secondary md:grid-cols-5">
+                  <span>{run.dataset}</span>
+                  <span>准确率 {run.accuracy}%</span>
+                  <span>幻觉率 {run.hallucination}%</span>
+                  <span>时延 {run.latency}s</span>
+                  <span>成本 ${run.cost}</span>
+                </div>
+              </div>
+            ))}
+            {evalRuns.length === 0 && <div className="rounded-lg border orf-border orf-surface-muted p-4 text-sm orf-text-muted">暂无关联评估运行。</div>}
           </div>
         </Card>
       )}
