@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { hasPermission } from "../config/permissions";
 import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
+import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
 import type {
   CommentStatus,
   CommentThread,
@@ -135,10 +136,6 @@ const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
 const AUTH_PASSWORD_TIMEOUT_MS = 2000;
-
-function taskManagementPathForRole(role: UserRole | null | undefined) {
-  return role === "admin" ? "/api/tasks-page" : "/api/my-challenges?scope=mine";
-}
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return normalizeState({
@@ -449,15 +446,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
       });
 
-    void apiJson<PermissionRulesResponse>("/api/permissions")
-      .then((data) => {
-        if (!cancelled) {
-          applyPermissionRules(data);
-        }
-      })
-      .catch(() => undefined);
+    if (shouldFetchAdminCollections(currentUserRole)) {
+      void apiJson<PermissionRulesResponse>("/api/permissions")
+        .then((data) => {
+          if (!cancelled) {
+            applyPermissionRules(data);
+          }
+        })
+        .catch(() => undefined);
 
-    if (isAdmin) {
       void apiJson<UsersResponse>("/api/users")
         .then((data) => {
           if (!cancelled) {
@@ -470,7 +467,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAdmin, isAuthenticated, isApproved]);
+  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAuthenticated, isApproved]);
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);
