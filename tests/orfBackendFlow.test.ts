@@ -957,6 +957,50 @@ test("task-page and state snapshot APIs do not leak full data to ordinary member
   });
 });
 
+test("API mutations enforce team boundaries even for administrators", async () => {
+  const owner = await createFixture("api-team-owner");
+  const intruder = await createFixture("api-team-intruder");
+  const candidate = await createTestObjective(owner, "cross-team candidate");
+  const objective = await createPublishedObjective(owner, "cross-team published objective");
+  const result = await createTestResult(objective.id, owner.commander.name, `${owner.prefix} cross-team result`);
+
+  await withApiServerForFixtures([owner, intruder], async (app) => {
+    const intruderPublish = await apiInject(app, intruder.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
+    assert.equal(intruderPublish.statusCode, 404);
+
+    const intruderResult = await postResult(app, intruder.commander, objective.id, {
+      title: `${intruder.prefix} should not create metric`,
+      metricName: "Cross-team metric",
+      source: "managerDefined",
+    });
+    assert.equal(intruderResult.statusCode, 404);
+
+    const intruderApplication = await apiInject(
+      app,
+      intruder.challenger,
+      "POST",
+      `/api/objectives/${encodeURIComponent(objective.id)}/challenge-applications`,
+    );
+    assert.equal(intruderApplication.statusCode, 404);
+
+    const intruderConfidence = await apiInject(app, intruder.commander, "PATCH", `/api/results/${encodeURIComponent(result.id)}/confidence`, {
+      confidence: 95,
+    });
+    assert.equal(intruderConfidence.statusCode, 404);
+
+    const intruderComment = await apiInject(app, intruder.commander, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: "cross-team admin should not comment",
+    });
+    assert.equal(intruderComment.statusCode, 404);
+
+    const ownerPublish = await apiInject(app, owner.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
+    assert.equal(ownerPublish.statusCode, 200);
+  });
+});
+
 test("task and comment API writes require objective participation", async () => {
   const fixture = await createFixture("api-work-item-boundary");
   const { objective, result } = await createApprovedObjectiveWithResult(fixture);
@@ -1447,8 +1491,12 @@ async function createSettledObjective(
 }
 
 async function withApiServer(fixture: Fixture, run: (app: FastifyInstance) => Promise<void>) {
+  return withApiServerForFixtures([fixture], run);
+}
+
+async function withApiServerForFixtures(fixtures: Fixture[], run: (app: FastifyInstance) => Promise<void>) {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = mockOryFetch(fixture, originalFetch);
+  globalThis.fetch = mockOryFetch(fixtures, originalFetch);
   const app = await buildServer({ logger: false, registerOptionalIntegrations: false });
 
   try {
@@ -1459,12 +1507,14 @@ async function withApiServer(fixture: Fixture, run: (app: FastifyInstance) => Pr
   }
 }
 
-function mockOryFetch(fixture: Fixture, fallback: typeof fetch): typeof fetch {
-  const usersByToken = new Map([
-    [fixture.commander.id, fixture.commander],
-    [fixture.challenger.id, fixture.challenger],
-    [fixture.observer.id, fixture.observer],
-  ]);
+function mockOryFetch(fixtures: Fixture[], fallback: typeof fetch): typeof fetch {
+  const usersByToken = new Map(
+    fixtures.flatMap((fixture) => [
+      [fixture.commander.id, fixture.commander] as const,
+      [fixture.challenger.id, fixture.challenger] as const,
+      [fixture.observer.id, fixture.observer] as const,
+    ]),
+  );
 
   return async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;

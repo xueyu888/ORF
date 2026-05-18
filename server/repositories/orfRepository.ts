@@ -66,6 +66,7 @@ type CommentActor = {
   id: string;
   name: string;
   role: "admin" | "member";
+  teamId?: string | null;
 };
 
 type CommentMutationOutcome =
@@ -1124,17 +1125,27 @@ export async function canDeleteObjective(objectiveId: string): Promise<Objective
     : { status: "allowed", flowStatus: objective.flowStatus };
 }
 
-export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string): Promise<boolean> {
+export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string, teamId?: string | null): Promise<boolean> {
   const actorName = member.trim();
   if (!actorName) return false;
 
   const [objective] = await db
-    .select({ flowStatus: objectives.flowStatus, challengers: objectives.challengers, confirmationDueAt: objectives.confirmationDueAt })
+    .select({
+      flowStatus: objectives.flowStatus,
+      challengers: objectives.challengers,
+      confirmationDueAt: objectives.confirmationDueAt,
+      teamId: objectives.teamId,
+    })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
     .limit(1);
 
-  return objective?.flowStatus === "reestimating" && uniqueMembers(objective.challengers ?? []).includes(actorName) && isReestimateWindowOpen(objective.confirmationDueAt);
+  return (
+    objective?.flowStatus === "reestimating" &&
+    (!teamId || objective.teamId === teamId) &&
+    uniqueMembers(objective.challengers ?? []).includes(actorName) &&
+    isReestimateWindowOpen(objective.confirmationDueAt)
+  );
 }
 
 export type CreateFeedbackInput = Pick<
@@ -1144,15 +1155,19 @@ export type CreateFeedbackInput = Pick<
 
 export async function canCreateFeedbackForResult(
   resultId: string,
-  actor: Pick<CommentActor, "name" | "role">,
+  actor: Pick<CommentActor, "name" | "role" | "teamId">,
 ): Promise<ObjectiveWorkItemMutationOutcome> {
   const [target] = await db
-    .select({ objectiveId: results.objectiveId, challengers: objectives.challengers })
+    .select({ objectiveId: results.objectiveId, challengers: objectives.challengers, teamId: results.teamId })
     .from(results)
     .innerJoin(objectives, eq(objectives.id, results.objectiveId))
     .where(eq(results.id, resultId))
     .limit(1);
   if (!target) {
+    return "notFound";
+  }
+
+  if (actor.teamId && target.teamId !== actor.teamId) {
     return "notFound";
   }
 
@@ -1202,7 +1217,7 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
   return data.feedback.find((item) => item.id === id) ?? null;
 }
 
-type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member" };
+type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; teamId?: string | null };
 
 export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
 
@@ -1219,12 +1234,16 @@ export async function updateFeedbackStatus(
   actor: FeedbackStatusActor,
 ): Promise<FeedbackStatusUpdateResult> {
   const [target] = await db
-    .select({ id: feedback.id, owner: feedback.owner, createdBy: feedback.createdBy })
+    .select({ id: feedback.id, owner: feedback.owner, createdBy: feedback.createdBy, teamId: feedback.teamId })
     .from(feedback)
     .where(eq(feedback.id, feedbackId))
     .limit(1);
 
   if (!target) {
+    return { status: "notFound" };
+  }
+
+  if (actor.teamId && target.teamId !== actor.teamId) {
     return { status: "notFound" };
   }
 
@@ -1369,16 +1388,53 @@ export async function resolveObjectiveIdForWorkItem(target: ObjectiveWorkItemTar
   return item?.objectiveId ?? null;
 }
 
+export async function resolveTeamIdForWorkItem(target: ObjectiveWorkItemTarget): Promise<string | null> {
+  if (target.type === "objective") {
+    const [objective] = await db.select({ teamId: objectives.teamId }).from(objectives).where(eq(objectives.id, target.id)).limit(1);
+    return objective?.teamId ?? null;
+  }
+
+  if (target.type === "result") {
+    const [result] = await db.select({ teamId: results.teamId }).from(results).where(eq(results.id, target.id)).limit(1);
+    return result?.teamId ?? null;
+  }
+
+  if (target.type === "task") {
+    const [task] = await db.select({ teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, target.id)).limit(1);
+    return task?.teamId ?? null;
+  }
+
+  const conditions = target.taskId
+    ? and(eq(taskChecklistItems.id, target.id), eq(taskChecklistItems.taskId, target.taskId))
+    : eq(taskChecklistItems.id, target.id);
+  const [item] = await db
+    .select({ teamId: tasks.teamId })
+    .from(taskChecklistItems)
+    .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
+    .where(conditions)
+    .limit(1);
+  return item?.teamId ?? null;
+}
+
+export async function resolveTeamIdForFeedback(feedbackId: string): Promise<string | null> {
+  const [target] = await db.select({ teamId: feedback.teamId }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
+  return target?.teamId ?? null;
+}
+
 export async function canMutateObjectiveWorkItem(
-  actor: Pick<CommentActor, "name" | "role">,
+  actor: Pick<CommentActor, "name" | "role" | "teamId">,
   objectiveId: string,
 ): Promise<ObjectiveWorkItemMutationOutcome> {
   const [objective] = await db
-    .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus })
+    .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus, teamId: objectives.teamId })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
     .limit(1);
   if (!objective) {
+    return "notFound";
+  }
+
+  if (actor.teamId && objective.teamId !== actor.teamId) {
     return "notFound";
   }
 
@@ -1401,11 +1457,15 @@ async function canMutateObjectiveComment(
   objectiveId: string,
 ): Promise<ObjectiveWorkItemMutationOutcome> {
   const [objective] = await db
-    .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus })
+    .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus, teamId: objectives.teamId })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
     .limit(1);
   if (!objective) {
+    return "notFound";
+  }
+
+  if (actor.teamId && objective.teamId !== actor.teamId) {
     return "notFound";
   }
 
