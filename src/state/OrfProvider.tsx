@@ -134,6 +134,7 @@ const OrfContext = createContext<OrfContextValue | null>(null);
 const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
+const AUTH_PASSWORD_TIMEOUT_MS = 2000;
 
 function taskManagementPathForRole(role: UserRole | null | undefined) {
   return role === "admin" ? "/api/tasks-page" : "/api/my-challenges?scope=mine";
@@ -210,6 +211,10 @@ function persistAuthenticatedUser(user: OrfUser, setState: (update: (current: Or
 }
 
 function authFailureMessage(error: unknown, action: "login" | "registration") {
+  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
+    return "认证服务暂时不可用，请联系管理员。";
+  }
+
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return "账号或密码不正确";
@@ -224,7 +229,7 @@ function authFailureMessage(error: unknown, action: "login" | "registration") {
     }
 
     if (error.status === 502 || error.status === 503 || error.status === 504) {
-      return "认证服务暂时不可用，请确认后端、Ory 和数据库已启动";
+      return "认证服务暂时不可用，请联系管理员。";
     }
   }
 
@@ -496,6 +501,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           await apiJson<AuthSession>(path, {
             method: "POST",
             body: JSON.stringify(body),
+            signal: AbortSignal.timeout(AUTH_PASSWORD_TIMEOUT_MS),
           }),
         );
       } catch (error) {

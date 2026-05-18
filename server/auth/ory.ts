@@ -55,6 +55,7 @@ type OryAuthResponse = {
 };
 
 export const ORF_SESSION_COOKIE = "orf_ory_session";
+const ORY_REQUEST_TIMEOUT_MS = 2000;
 
 export class OryAuthFlowError extends Error {
   status: number;
@@ -72,6 +73,13 @@ const trimSlash = (value: string) => value.replace(/\/+$/, "");
 
 function oryPublicUrl(path: string) {
   return new URL(path, `${trimSlash(process.env.ORY_PUBLIC_URL ?? env.ORY_PUBLIC_URL)}/`).toString();
+}
+
+async function fetchOry(input: string, init: RequestInit = {}) {
+  return fetch(input, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(ORY_REQUEST_TIMEOUT_MS),
+  });
 }
 
 function cookieHeader(cookie: string | undefined): Record<string, string> {
@@ -228,7 +236,7 @@ export async function getAuthenticatedOrfUser(cookie: string | undefined): Promi
     return null;
   }
 
-  const response = await fetch(oryPublicUrl("/sessions/whoami"), {
+  const response = await fetchOry(oryPublicUrl("/sessions/whoami"), {
     headers: {
       accept: "application/json",
       ...authHeaders(cookie),
@@ -252,7 +260,7 @@ export async function getAuthenticatedOrfUser(cookie: string | undefined): Promi
 }
 
 async function createApiFlow(flowType: "login" | "registration"): Promise<OryFlow> {
-  const response = await fetch(oryPublicUrl(`/self-service/${flowType}/api`), {
+  const response = await fetchOry(oryPublicUrl(`/self-service/${flowType}/api`), {
     headers: {
       accept: "application/json",
     },
@@ -323,7 +331,7 @@ async function submitApiFlow(flowType: "login" | "registration", body: unknown):
     throw new Error(`Ory ${flowType} flow is missing action URL`);
   }
 
-  const response = await fetch(flow.ui.action, {
+  const response = await fetchOry(flow.ui.action, {
     method: "POST",
     headers: {
       accept: "application/json",
@@ -386,7 +394,7 @@ export async function revokeApiSession(cookie: string | undefined) {
     return;
   }
 
-  await fetch(oryPublicUrl("/self-service/logout/api"), {
+  await fetchOry(oryPublicUrl("/self-service/logout/api"), {
     method: "DELETE",
     headers: {
       accept: "application/json",

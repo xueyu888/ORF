@@ -27,7 +27,7 @@ function serializeSessionCookie(value: string, maxAge: number) {
 
 function isAuthServiceUnavailable(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /\b5\d\d\b/.test(message) || /ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(message);
+  return /\b5\d\d\b/.test(message) || /AbortError|TimeoutError|timeout|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(message);
 }
 
 export async function requireAuthenticatedApi(request: FastifyRequest, reply: FastifyReply) {
@@ -74,7 +74,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
     } catch (error) {
       request.log.warn(error, "Ory password login failed");
       if (isAuthServiceUnavailable(error)) {
-        return reply.code(503).send({ error: "Authentication service unavailable" });
+        return reply.code(503).send({ error: "认证服务暂时不可用，请联系管理员。" });
       }
       return reply.code(401).send({ error: "Invalid email or password" });
     }
@@ -90,7 +90,7 @@ export function registerAuthRoutes(app: FastifyInstance) {
     } catch (error) {
       request.log.warn(error, "Ory password registration failed");
       if (isAuthServiceUnavailable(error)) {
-        return reply.code(503).send({ error: "Authentication service unavailable" });
+        return reply.code(503).send({ error: "认证服务暂时不可用，请联系管理员。" });
       }
       if (error instanceof OryAuthFlowError) {
         return reply.code(400).send({ error: error.message, field: error.field });
