@@ -7,6 +7,7 @@ import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
 import { Toasts } from "./Toasts";
 import { hasPermission } from "../config/permissions";
+import { canCreateFeedbackFromResults } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 
 const titleMap: Record<string, string> = {
@@ -43,6 +44,7 @@ export function AppShell() {
   const { currentUser, openModal, state } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
+  const canCreateFeedback = canCreateFeedbackFromResults(state.results);
   const isBountyHall = location.pathname.startsWith("/bounties");
 
   useEffect(() => {
@@ -81,10 +83,10 @@ export function AppShell() {
                   搜索目标、指标、行动项、反馈...
                 </button>
               </div>
-              <Button variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
+              {canCreateFeedback && <Button variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
                 <Plus className="h-4 w-4" />
                 新建反馈
-              </Button>
+              </Button>}
             </>
           )}
           {!isBountyHall && canCreateObjective && (

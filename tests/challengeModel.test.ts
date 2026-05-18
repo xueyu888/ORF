@@ -11,7 +11,7 @@ import {
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
-import { canManageFeedbackStatus } from "../src/features/feedback/model/feedbackCapabilities";
+import { canCreateFeedbackFromResults, canManageFeedbackStatus } from "../src/features/feedback/model/feedbackCapabilities";
 import type { CommentThread, Evidence, Feedback, Objective, OrfState, Result, Task } from "../src/types/orf";
 
 const date = "2026-05-14";
@@ -110,6 +110,11 @@ test("feedback status controls are limited to admins, creators, and owners", () 
   assert.equal(canManageFeedbackStatus(feedback({ owner: assignee.name, createdBy: "user-kai" }), assignee), true);
   assert.equal(canManageFeedbackStatus(item, admin), true);
   assert.equal(canManageFeedbackStatus(item, stranger), false);
+});
+
+test("feedback creation entry requires at least one visible result", () => {
+  assert.equal(canCreateFeedbackFromResults([]), false);
+  assert.equal(canCreateFeedbackFromResults([result({ id: "res-visible" })]), true);
 });
 
 test("drag and drop rules block cross-objective bounty moves and self drops", () => {

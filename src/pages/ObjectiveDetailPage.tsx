@@ -7,7 +7,7 @@ import { PageScaffold } from "../components/PageScaffold";
 import { DecisionLog, FeedbackCard, IntegrityCheck, ResultCard, TaskRow } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { metricCreationActionForObjective } from "../features/challenge/model/orfFlowCapabilities";
-import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
+import { canCreateFeedbackFromResults, canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackStatus, TaskStatus } from "../types/orf";
 import { feedbackStatusLabel } from "../utils/labels";
@@ -42,12 +42,13 @@ export function ObjectiveDetailPage() {
     currentUser,
     permissionRules: state.permissionRules,
   });
+  const canCreateFeedback = canCreateFeedbackFromResults(results);
 
   return (
     <PageScaffold
       title={objective.title}
       subtitle={objective.description}
-      action={<div className="flex gap-2">{metricAction && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id, source: metricAction.source })}><Plus className="h-4 w-4" />{metricAction.label}</Button>}<Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button><Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
+      action={<div className="flex gap-2">{metricAction && <Button variant="secondary" onClick={() => openModal({ type: "newResult", objectiveId: objective.id, source: metricAction.source })}><Plus className="h-4 w-4" />{metricAction.label}</Button>}{canCreateFeedback && <Button onClick={() => openModal({ type: "newFeedback", objectiveId: objective.id })}>新建反馈</Button>}<Button variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>}
     >
       <Card className="orf-card-padding">
         <div className="flex flex-wrap items-center gap-3">
