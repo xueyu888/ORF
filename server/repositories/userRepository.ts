@@ -244,19 +244,23 @@ export async function createTeamUser(teamId: string, actorUserId: string, input:
   }
 
   const [matchedUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${normalized.email}`).limit(1);
+  let matchedMembership: { role: string } | undefined;
   if (matchedUser) {
-    const [membership] = await db
+    [matchedMembership] = await db
       .select({ role: teamMembers.role })
       .from(teamMembers)
       .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, matchedUser.id)))
       .limit(1);
 
-    if (membership) {
+    if (matchedMembership) {
       assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
     }
   }
 
   await assertUniqueTeamUserName(teamId, matchedUser?.id ?? null, normalized.name);
+  if (!matchedMembership && (await isReferencedByOrfRecords(teamId, normalized.name))) {
+    throw Object.assign(new Error("Name is referenced by ORF records"), { statusCode: 409 });
+  }
 
   await db.transaction(async (tx) => {
     const existingUser = matchedUser ?? (await tx.select().from(users).where(sql`lower(${users.email}) = ${normalized.email}`).limit(1))[0];

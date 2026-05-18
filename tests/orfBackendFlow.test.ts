@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { FastifyInstance } from "fastify";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { buildServer } from "../server/app";
 import { closeDb, db } from "../server/db/client";
 import { objectives, teams, teamMembers, users } from "../server/db/schema";
@@ -1210,6 +1210,26 @@ test("API user deletion rejects members referenced by ORF records", async () => 
 
     const myChallenges = await getMyChallengesData(fixture.challenger.name);
     assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
+test("API user creation rejects names already reserved by ORF records", async () => {
+  const fixture = await createFixture("api-user-create-reserved-name");
+  await createApprovedObjectiveWithResult(fixture, "reserved historical challenger objective");
+  await db.delete(teamMembers).where(and(eq(teamMembers.teamId, fixture.teamId), eq(teamMembers.userId, fixture.challenger.id)));
+
+  await withApiServer(fixture, async (app) => {
+    const replacement = await apiInject(app, fixture.commander, "POST", "/api/users", {
+      name: fixture.challenger.name,
+      email: `${fixture.prefix}-replacement@orf.test`,
+      role: "member",
+    });
+    assert.equal(replacement.statusCode, 409);
+
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const emails = (userList.json() as { users: Array<{ email: string }> }).users.map((user) => user.email);
+    assert.equal(emails.includes(`${fixture.prefix}-replacement@orf.test`), false);
   });
 });
 
