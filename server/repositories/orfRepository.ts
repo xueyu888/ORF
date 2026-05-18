@@ -2103,6 +2103,18 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     return null;
   }
 
+  const feedbackOriginId = input.feedbackOriginId?.trim() || null;
+  if (feedbackOriginId) {
+    const [originFeedback] = await db
+      .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
+      .from(feedback)
+      .where(eq(feedback.id, feedbackOriginId))
+      .limit(1);
+    if (!originFeedback || originFeedback.teamId !== result.teamId || originFeedback.linkedResultId !== result.id) {
+      return null;
+    }
+  }
+
   const siblingRows = await db.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedResultId, result.id));
   const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
   const id = `ORF-${Date.now()}`;
@@ -2118,7 +2130,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     assignee: input.assignee?.trim() || "User",
     linkedObjectiveId: result.objectiveId,
     linkedResultId: result.id,
-    feedbackOriginId: input.feedbackOriginId ?? null,
+    feedbackOriginId,
     dueDate: dueDate ?? now,
     tags: ["ORF"],
     createdAt: now,

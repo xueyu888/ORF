@@ -152,7 +152,7 @@ flowchart TD
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
 | ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`。 | API 输入归一化 |
 | ORF-BE-R040 | `Objective.stage` 是兼容字段，旧接口不能写入与 `flowStatus` 冲突的阶段；生命周期状态只能由 ORF 流程接口推进。 | API stage 兼容保护 |
-| ORF-BE-R041 | 指标更新提案携带的 `feedbackId` 必须和当前指标同团队、同指标；合法指标请求不能连带改写其他团队或其他指标的反馈。 | API 跨团队写保护 |
+| ORF-BE-R041 | 指标更新提案携带的 `feedbackId`、任务创建携带的 `feedbackOriginId` 必须和当前指标同团队、同指标；合法指标或任务请求不能连带改写或挂接其他团队或其他指标的反馈。 | API 跨团队写保护 |
 
 ## 关键断言
 

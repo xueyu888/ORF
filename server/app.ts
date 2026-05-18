@@ -1123,7 +1123,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const task = await createTask(body);
 
     if (!task) {
-      return reply.code(404).send({ error: "Result not found" });
+      return reply.code(404).send({ error: "Result or feedback not found" });
     }
 
     return { task };

@@ -1160,6 +1160,7 @@ test("API mutations enforce team boundaries even for administrators", async () =
   const result = await createTestResult(objective.id, owner.commander.name, `${owner.prefix} cross-team result`);
   const intruderObjective = await createPublishedObjective(intruder, "intruder update proposal objective");
   const intruderOwnedResult = await createTestResult(intruderObjective.id, intruder.commander.name, `${intruder.prefix} update proposal result`);
+  const { result: intruderWorkResult } = await createApprovedObjectiveWithResult(intruder, "intruder feedback-origin task objective");
 
   await withApiServerForFixtures([owner, intruder], async (app) => {
     const intruderPublish = await apiInject(app, intruder.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
@@ -1213,6 +1214,15 @@ test("API mutations enforce team boundaries even for administrators", async () =
     assert.equal(intruderUpdateProposal.statusCode, 404);
     const ownerData = await getTaskManagementData({ teamId: owner.teamId });
     assert.equal(ownerData.feedback.find((item) => item.id === ownerFeedbackId)?.status, "New");
+
+    const intruderTaskWithOwnerFeedback = await apiInject(app, intruder.commander, "POST", "/api/tasks", {
+      title: `${intruder.prefix} cross-team feedback origin task`,
+      linkedResultId: intruderWorkResult.id,
+      feedbackOriginId: ownerFeedbackId,
+    });
+    assert.equal(intruderTaskWithOwnerFeedback.statusCode, 404);
+    const intruderData = await getTaskManagementData({ teamId: intruder.teamId });
+    assert.equal(intruderData.tasks.some((item) => item.feedbackOriginId === ownerFeedbackId), false);
 
     const ownerPublish = await apiInject(app, owner.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
     assert.equal(ownerPublish.statusCode, 200);
