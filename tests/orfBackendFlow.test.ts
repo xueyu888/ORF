@@ -619,6 +619,44 @@ test("rejecting remaining pending applications keeps an accepted objective in re
   );
 });
 
+test("concurrent application approvals preserve every accepted challenger", async () => {
+  const fixture = await createFixture("concurrent-application-approvals");
+  const objective = await createPublishedObjective(fixture, "concurrent application approval guard");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} concurrent approval result`);
+
+  const applications = await Promise.all([
+    applyForObjectiveChallenge(objective.id, fixture.challenger.name),
+    applyForObjectiveChallenge(objective.id, fixture.observer.name),
+  ]);
+  assert.deepEqual(applications.map((outcome) => outcome.status).sort(), ["applied", "applied"]);
+
+  const pendingData = await getTaskManagementData({ teamId: fixture.teamId });
+  const pendingObjective = pendingData.objectives.find((item) => item.id === objective.id);
+  const applicationIds = [fixture.challenger.name, fixture.observer.name].map((applicant) =>
+    pendingObjective?.challengeApplications.find((application) => application.applicant === applicant && application.status === "pending")?.id,
+  );
+  assert.ok(applicationIds[0]);
+  assert.ok(applicationIds[1]);
+
+  const approvals = await Promise.all(
+    applicationIds.map((applicationId) => approveObjectiveChallengeApplication(objective.id, applicationId, fixture.commander.id)),
+  );
+  assert.deepEqual(approvals.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
+
+  const finalData = await getTaskManagementData({ teamId: fixture.teamId });
+  const approvedObjective = finalData.objectives.find((item) => item.id === objective.id);
+  assert.deepEqual(approvedObjective?.challengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
+  assert.equal(approvedObjective?.flowStatus, "reestimating");
+  assert.equal(approvedObjective?.stage, "orfReestimate");
+  assert.deepEqual(
+    approvedObjective?.challengeApplications
+      .filter((application) => applicationIds.includes(application.id))
+      .map((application) => application.status)
+      .sort(),
+    ["approved", "approved"],
+  );
+});
+
 test("accepting stale recruitment cannot reopen a frozen objective", async () => {
   const fixture = await createFixture("accept-after-freeze");
   const objective = await createPublishedObjective(fixture, "accept after freeze guard");
@@ -639,6 +677,50 @@ test("accepting stale recruitment cannot reopen a frozen objective", async () =>
   const unchanged = data.objectives.find((item) => item.id === objective.id);
   assert.equal(unchanged?.flowStatus, "frozen");
   assert.deepEqual(unchanged?.challengers, [fixture.challenger.name]);
+});
+
+test("concurrent recruitment responses preserve every member transition", async () => {
+  const fixture = await createFixture("concurrent-recruitment-responses");
+  const acceptedObjective = await createPublishedObjective(fixture, "concurrent recruitment accept guard");
+  await createTestResult(acceptedObjective.id, fixture.commander.name, `${fixture.prefix} concurrent accept result`);
+
+  const recruits = await Promise.all([
+    recruitObjectiveChallengers(acceptedObjective.id, [fixture.challenger.name], fixture.commander.id),
+    recruitObjectiveChallengers(acceptedObjective.id, [fixture.observer.name], fixture.commander.id),
+  ]);
+  assert.deepEqual(recruits.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
+
+  let data = await getTaskManagementData({ teamId: fixture.teamId });
+  const recruitedObjective = data.objectives.find((item) => item.id === acceptedObjective.id);
+  assert.deepEqual(recruitedObjective?.assignedChallengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
+
+  const acceptances = await Promise.all([
+    acceptObjectiveChallenge(acceptedObjective.id, fixture.challenger.name, fixture.challenger.id),
+    acceptObjectiveChallenge(acceptedObjective.id, fixture.observer.name, fixture.observer.id),
+  ]);
+  assert.deepEqual(acceptances.map((outcome) => outcome.status).sort(), ["accepted", "accepted"]);
+
+  data = await getTaskManagementData({ teamId: fixture.teamId });
+  const finalizedAcceptedObjective = data.objectives.find((item) => item.id === acceptedObjective.id);
+  assert.deepEqual(finalizedAcceptedObjective?.challengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
+  assert.deepEqual(finalizedAcceptedObjective?.assignedChallengers, []);
+  assert.equal(finalizedAcceptedObjective?.flowStatus, "reestimating");
+
+  const declinedObjective = await createPublishedObjective(fixture, "concurrent recruitment decline guard");
+  assert.equal(
+    (await recruitObjectiveChallengers(declinedObjective.id, [fixture.challenger.name, fixture.observer.name], fixture.commander.id)).status,
+    "ok",
+  );
+  const declines = await Promise.all([
+    declineObjectiveChallenge(declinedObjective.id, fixture.challenger.name, fixture.challenger.id),
+    declineObjectiveChallenge(declinedObjective.id, fixture.observer.name, fixture.observer.id),
+  ]);
+  assert.deepEqual(declines.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
+
+  data = await getTaskManagementData({ teamId: fixture.teamId });
+  const finalizedDeclinedObjective = data.objectives.find((item) => item.id === declinedObjective.id);
+  assert.deepEqual(finalizedDeclinedObjective?.assignedChallengers, []);
+  assert.equal(finalizedDeclinedObjective?.flowStatus, "open");
 });
 
 test("unassigned members cannot decline recruitment outside the recruiting state", async () => {

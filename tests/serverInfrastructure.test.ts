@@ -21,6 +21,7 @@ test("Postgres pool config strips SSL query parameters and applies timeout tunin
   assert.equal(config.query_timeout, 8000);
   assert.equal(config.statement_timeout, 8000);
   assert.equal(config.idleTimeoutMillis, 9000);
+  assert.equal(config.allowExitOnIdle, true);
   assert.ok(String(config.connectionString).includes("options=-csearch_path%3Dorf_current%2Cpublic"));
   assert.equal(String(config.connectionString).includes("sslmode"), false);
   assert.equal(String(config.connectionString).includes("sslrootcert"), false);

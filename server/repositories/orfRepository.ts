@@ -812,51 +812,59 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     return { status: "notFound" };
   }
 
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) {
-    return { status: "notFound" };
+  const acceptedResult = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) {
+      return { status: "notFound" as const };
+    }
+
+    const currentChallengers = uniqueMembers(objective.challengers ?? []);
+    if (currentChallengers.includes(nextChallenger)) {
+      return { status: "alreadyAccepted" as const, challengers: currentChallengers };
+    }
+    if (isObjectiveTerminal(objective) || !challengeAcceptanceFlowStatuses.has(objective.flowStatus)) {
+      return { status: "closed" as const };
+    }
+
+    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+    const applications = objective.challengeApplications ?? [];
+    const hasApprovedApplication = applications.some((application) => application.applicant === nextChallenger && application.status === "approved");
+    if (!assignedChallengers.includes(nextChallenger) && !hasApprovedApplication) {
+      return { status: "forbidden" as const };
+    }
+
+    const acceptedAt = nowIso();
+    const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
+    if (!nextConfirmationDueAt) {
+      return { status: "invalidDueDate" as const };
+    }
+
+    await tx
+      .update(objectives)
+      .set({
+        challengers: [...currentChallengers, nextChallenger],
+        assignedChallengers: assignedChallengers.filter((member) => member !== nextChallenger),
+        flowStatus: "reestimating",
+        stage: "orfReestimate",
+        acceptedAt: objective.acceptedAt ?? acceptedAt,
+        confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
+        challengeApplications: applications.map((application) =>
+          application.applicant === nextChallenger && application.status === "approved" ? { ...application, decidedAt: application.decidedAt ?? acceptedAt } : application,
+        ),
+        status: objective.status === "Draft" ? "On Track" : objective.status,
+        updatedAt: today(),
+        updatedBy: actorId ?? objective.updatedBy,
+      })
+      .where(eq(objectives.id, objectiveId));
+
+    return { status: "accepted" as const, teamId: objective.teamId };
+  });
+
+  if (acceptedResult.status !== "accepted") {
+    return acceptedResult;
   }
 
-  const currentChallengers = uniqueMembers(objective.challengers ?? []);
-  if (currentChallengers.includes(nextChallenger)) {
-    return { status: "alreadyAccepted", challengers: currentChallengers };
-  }
-  if (isObjectiveTerminal(objective) || !challengeAcceptanceFlowStatuses.has(objective.flowStatus)) {
-    return { status: "closed" };
-  }
-
-  const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
-  const applications = objective.challengeApplications ?? [];
-  const hasApprovedApplication = applications.some((application) => application.applicant === nextChallenger && application.status === "approved");
-  if (!assignedChallengers.includes(nextChallenger) && !hasApprovedApplication) {
-    return { status: "forbidden" };
-  }
-
-  const acceptedAt = nowIso();
-  const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
-  if (!nextConfirmationDueAt) {
-    return { status: "invalidDueDate" };
-  }
-
-  await db
-    .update(objectives)
-    .set({
-      challengers: [...currentChallengers, nextChallenger],
-      assignedChallengers: assignedChallengers.filter((member) => member !== nextChallenger),
-      flowStatus: "reestimating",
-      stage: "orfReestimate",
-      acceptedAt: objective.acceptedAt ?? acceptedAt,
-      confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
-      challengeApplications: applications.map((application) =>
-        application.applicant === nextChallenger && application.status === "approved" ? { ...application, decidedAt: application.decidedAt ?? acceptedAt } : application,
-      ),
-      status: objective.status === "Draft" ? "On Track" : objective.status,
-      updatedAt: today(),
-      updatedBy: actorId ?? objective.updatedBy,
-    })
-    .where(eq(objectives.id, objectiveId));
-
-  const data = await getTaskManagementData({ teamId: objective.teamId });
+  const data = await getTaskManagementData({ teamId: acceptedResult.teamId });
   const accepted = data.objectives.find((item) => item.id === objectiveId);
   return accepted ? { status: "accepted", objective: accepted } : { status: "notFound" };
 }
@@ -951,37 +959,41 @@ export async function approveObjectiveChallengeApplication(
   applicationId: string,
   actorId: string,
 ): Promise<ObjectiveFlowMutationOutcome> {
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) return { status: "notFound" };
-  if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
+  const approvedResult = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
 
-  const applications = objective.challengeApplications ?? [];
-  const application = applications.find((item) => item.id === applicationId && item.status === "pending");
-  if (!application) return { status: "notFound" };
+    const applications = objective.challengeApplications ?? [];
+    const application = applications.find((item) => item.id === applicationId && item.status === "pending");
+    if (!application) return { status: "notFound" as const };
 
-  const acceptedAt = nowIso();
-  const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
-  if (!nextConfirmationDueAt) return { status: "invalid" };
+    const acceptedAt = nowIso();
+    const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
+    if (!nextConfirmationDueAt) return { status: "invalid" as const };
 
-  const challengers = uniqueMembers([...(objective.challengers ?? []), application.applicant]);
-  await db
-    .update(objectives)
-    .set({
-      challengers,
-      flowStatus: "reestimating",
-      stage: "orfReestimate",
-      acceptedAt: objective.acceptedAt ?? acceptedAt,
-      confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
-      challengeApplications: applications.map((item) =>
-        item.id === applicationId ? { ...item, status: "approved", decidedAt: acceptedAt, decidedBy: actorId } : item,
-      ),
-      status: objective.status === "Draft" ? "On Track" : objective.status,
-      updatedAt: today(),
-      updatedBy: actorId,
-    })
-    .where(eq(objectives.id, objectiveId));
+    const challengers = uniqueMembers([...(objective.challengers ?? []), application.applicant]);
+    await tx
+      .update(objectives)
+      .set({
+        challengers,
+        flowStatus: "reestimating",
+        stage: "orfReestimate",
+        acceptedAt: objective.acceptedAt ?? acceptedAt,
+        confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
+        challengeApplications: applications.map((item) =>
+          item.id === applicationId ? { ...item, status: "approved", decidedAt: acceptedAt, decidedBy: actorId } : item,
+        ),
+        status: objective.status === "Draft" ? "On Track" : objective.status,
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId));
 
-  return objectiveOutcome(objectiveId, objective.teamId);
+    return { status: "ok" as const, teamId: objective.teamId };
+  });
+
+  return approvedResult.status === "ok" ? objectiveOutcome(objectiveId, approvedResult.teamId) : approvedResult;
 }
 
 export async function rejectObjectiveChallengeApplication(
@@ -989,27 +1001,31 @@ export async function rejectObjectiveChallengeApplication(
   applicationId: string,
   actorId: string,
 ): Promise<ObjectiveFlowMutationOutcome> {
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) return { status: "notFound" };
-  if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
-  const applications = objective.challengeApplications ?? [];
-  if (!applications.some((item) => item.id === applicationId && item.status === "pending")) return { status: "notFound" };
-  const nextApplications = applications.map((item) =>
-    item.id === applicationId ? { ...item, status: "declined" as const, decidedAt: nowIso(), decidedBy: actorId } : item,
-  );
-  const hasPending = nextApplications.some((item) => item.status === "pending");
-  const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
-  const challengers = uniqueMembers(objective.challengers ?? []);
-  await db
-    .update(objectives)
-    .set({
-      challengeApplications: nextApplications,
-      flowStatus: challengers.length > 0 ? "reestimating" : assignedChallengers.length > 0 ? "recruiting" : hasPending ? "applying" : "open",
-      updatedAt: today(),
-      updatedBy: actorId,
-    })
-    .where(eq(objectives.id, objectiveId));
-  return objectiveOutcome(objectiveId, objective.teamId);
+  const rejectedResult = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
+    const applications = objective.challengeApplications ?? [];
+    if (!applications.some((item) => item.id === applicationId && item.status === "pending")) return { status: "notFound" as const };
+    const nextApplications = applications.map((item) =>
+      item.id === applicationId ? { ...item, status: "declined" as const, decidedAt: nowIso(), decidedBy: actorId } : item,
+    );
+    const hasPending = nextApplications.some((item) => item.status === "pending");
+    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+    const challengers = uniqueMembers(objective.challengers ?? []);
+    await tx
+      .update(objectives)
+      .set({
+        challengeApplications: nextApplications,
+        flowStatus: challengers.length > 0 ? "reestimating" : assignedChallengers.length > 0 ? "recruiting" : hasPending ? "applying" : "open",
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId));
+    return { status: "ok" as const, teamId: objective.teamId };
+  });
+
+  return rejectedResult.status === "ok" ? objectiveOutcome(objectiveId, rejectedResult.teamId) : rejectedResult;
 }
 
 export async function recruitObjectiveChallengers(
@@ -1017,53 +1033,66 @@ export async function recruitObjectiveChallengers(
   members: string[],
   actorId: string,
 ): Promise<ObjectiveFlowMutationOutcome> {
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) return { status: "notFound" };
-  if (isObjectiveTerminal(objective) || !challengeRecruitmentFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
-  const currentChallengers = uniqueMembers(objective.challengers ?? []);
-  const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
-  if (recruitMembers.length === 0) return { status: "invalid" };
-  const activeMemberNames = await getActiveTeamMemberNameSet(objective.teamId, recruitMembers);
-  if (recruitMembers.some((member) => !activeMemberNames.has(member))) return { status: "invalid" };
-  const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
-  if (assignedChallengers.length === 0) return { status: "invalid" };
-  await db
-    .update(objectives)
-    .set({
-      assignedChallengers,
-      flowStatus: currentChallengers.length > 0 || objective.flowStatus === "reestimating" ? "reestimating" : "recruiting",
-      updatedAt: today(),
-      updatedBy: actorId,
-    })
-    .where(eq(objectives.id, objectiveId));
-  return objectiveOutcome(objectiveId, objective.teamId);
+  const recruitedResult = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (isObjectiveTerminal(objective) || !challengeRecruitmentFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
+    const currentChallengers = uniqueMembers(objective.challengers ?? []);
+    const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
+    if (recruitMembers.length === 0) return { status: "invalid" as const };
+    const activeMembers = await tx
+      .select({ name: users.name })
+      .from(teamMembers)
+      .innerJoin(users, eq(teamMembers.userId, users.id))
+      .where(and(eq(teamMembers.teamId, objective.teamId), eq(users.status, "active"), inArray(users.name, recruitMembers)));
+    const activeMemberNames = new Set(activeMembers.map((member) => member.name));
+    if (recruitMembers.some((member) => !activeMemberNames.has(member))) return { status: "invalid" as const };
+    const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
+    if (assignedChallengers.length === 0) return { status: "invalid" as const };
+    await tx
+      .update(objectives)
+      .set({
+        assignedChallengers,
+        flowStatus: currentChallengers.length > 0 || objective.flowStatus === "reestimating" ? "reestimating" : "recruiting",
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId));
+    return { status: "ok" as const, teamId: objective.teamId };
+  });
+
+  return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.teamId) : recruitedResult;
 }
 
 export async function declineObjectiveChallenge(objectiveId: string, member: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
   const nextMember = member.trim();
   if (!nextMember) return { status: "invalid" };
 
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) return { status: "notFound" };
-  if (!challengeAcceptanceFlowStatuses.has(objective.flowStatus)) return { status: "invalid" };
+  const declinedResult = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (!challengeAcceptanceFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
 
-  const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
-  if (!assignedChallengers.includes(nextMember)) return { status: "invalid" };
+    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+    if (!assignedChallengers.includes(nextMember)) return { status: "invalid" as const };
 
-  const nextAssigned = assignedChallengers.filter((item) => item !== nextMember);
-  const applications = objective.challengeApplications ?? [];
-  const challengers = uniqueMembers(objective.challengers ?? []);
-  await db
-    .update(objectives)
-    .set({
-      assignedChallengers: nextAssigned,
-      challengeApplications: applications,
-      flowStatus: challengers.length > 0 ? "reestimating" : nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
-      updatedAt: today(),
-      updatedBy: actorId,
-    })
-    .where(eq(objectives.id, objectiveId));
-  return objectiveOutcome(objectiveId, objective.teamId);
+    const nextAssigned = assignedChallengers.filter((item) => item !== nextMember);
+    const applications = objective.challengeApplications ?? [];
+    const challengers = uniqueMembers(objective.challengers ?? []);
+    await tx
+      .update(objectives)
+      .set({
+        assignedChallengers: nextAssigned,
+        challengeApplications: applications,
+        flowStatus: challengers.length > 0 ? "reestimating" : nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId));
+    return { status: "ok" as const, teamId: objective.teamId };
+  });
+
+  return declinedResult.status === "ok" ? objectiveOutcome(objectiveId, declinedResult.teamId) : declinedResult;
 }
 
 export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {

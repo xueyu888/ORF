@@ -118,6 +118,7 @@ export function createPgPoolConfig(connectionString: string, tuning: PgPoolTunin
     query_timeout: tuning.queryTimeoutMillis,
     statement_timeout: tuning.queryTimeoutMillis,
     idleTimeoutMillis: tuning.idleTimeoutMillis,
+    allowExitOnIdle: true,
   };
 }
 
