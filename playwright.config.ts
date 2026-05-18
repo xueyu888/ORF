@@ -1,7 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:5173";
 const realSystemEnabled = process.env.ORF_REAL_E2E === "1";
+const defaultPort = realSystemEnabled ? 5174 : 5173;
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${defaultPort}`;
+const webServerPort = new URL(baseURL).port || String(defaultPort);
+const baseHost = new URL(baseURL).hostname;
+if (baseHost === "127.0.0.1" || baseHost === "localhost") {
+  for (const key of ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]) {
+    delete process.env[key];
+  }
+}
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,8 +26,8 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: "npm run dev:web -- --host 127.0.0.1 --port 5173",
-        reuseExistingServer: !process.env.CI,
+        command: `npm run dev:web -- --host 127.0.0.1 --port ${webServerPort}`,
+        reuseExistingServer: !process.env.CI && !realSystemEnabled,
         timeout: 120_000,
         url: baseURL,
       },
