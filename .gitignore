@@ -20,7 +20,6 @@ gf-foundation-ui-kit.zip
 .DS_Store
 .artifacts/
 .playwright-mcp/
-playwright-report/
 test-reports/
 ory/.runtime/
 

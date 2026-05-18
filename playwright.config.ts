@@ -11,7 +11,6 @@ export default defineConfig({
   },
   reporter: [
     ["list", { printSteps: true }],
-    ["html", { open: "never", outputFolder: "playwright-report" }],
     ["./e2e/_framework/state-case-markdown.reporter.ts"],
   ],
   fullyParallel: true,
