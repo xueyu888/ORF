@@ -326,6 +326,43 @@ test("acceptBountyChallenge confirms a recruited member and approves their pendi
   assert.ok(next.objectives[0]?.confirmationDueAt);
 });
 
+test("applyForBounty refuses objectives outside bounty application statuses", () => {
+  const lockedStatuses: Objective["flowStatus"][] = [
+    "candidate",
+    "reestimating",
+    "frozen",
+    "submitted",
+    "settled",
+    "closed",
+  ];
+
+  for (const flowStatus of lockedStatuses) {
+    const current = state({
+      objectives: [
+        objective({
+          id: `obj-${flowStatus}`,
+          flowStatus,
+          stage: flowStatus === "candidate" ? "goalSetting" : flowStatus === "reestimating" ? "orfReestimate" : "goalFrozen",
+        }),
+      ],
+    });
+
+    const next = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang");
+
+    assert.equal(next, current, `expected ${flowStatus} objective to reject challenge applications`);
+  }
+
+  for (const flowStatus of ["open", "applying", "recruiting"] satisfies Objective["flowStatus"][]) {
+    const current = state({
+      objectives: [objective({ id: `obj-${flowStatus}`, flowStatus, stage: "resultClaiming" })],
+    });
+    const applied = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang");
+
+    assert.notEqual(applied, current, `expected ${flowStatus} objective to accept challenge applications`);
+    assert.equal(applied.objectives[0]?.challengeApplications[0]?.status, "pending");
+  }
+});
+
 test("updateObjectiveStage refuses stages that contradict lifecycle status", () => {
   const current = state({
     objectives: [

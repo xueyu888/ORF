@@ -1,4 +1,5 @@
 import { initialOrfState } from "../data/initialOrfState";
+import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus, UncertaintyLevel } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
@@ -666,7 +667,7 @@ export class OrfFlowStore {
     }
 
     const objective = state.objectives.find((item) => item.id === objectiveId);
-    if (!objective || objective.challengers.includes(nextApplicant)) {
+    if (!objective || !canApplyForObjectiveChallenge(objective) || objective.challengers.includes(nextApplicant)) {
       return state;
     }
 

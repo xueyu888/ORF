@@ -72,10 +72,13 @@
 ## 征召与申请
 
 - 申请挑战只表达意愿，不直接成为挑战者。
+- 申请挑战只允许在 `open`、`applying`、`recruiting`。
 - 指挥官通过申请后，申请人成为挑战者，目标进入重估。
+- 申请审核只允许在 `applying`、`recruiting`、`reestimating`。
 - 征召发生在目标层级，不存在指标级征召。
 - 被征召成员接受后成为挑战者，目标进入重估。
 - 被征召成员拒绝后从 `assignedChallengers` 移除。
+- `frozen`、`submitted`、`settled`、`closed` 不再接受或审核挑战申请；历史残留的 pending 申请只读，不应展示通过或拒绝操作。
 
 ## 战利品
 

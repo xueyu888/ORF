@@ -10,6 +10,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
+import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
 import {
   BountyBadge,
   BountyButton,
@@ -86,7 +87,7 @@ export function BountyHallPage() {
     return [...recruitmentItems, ...availableBounties].filter((item) => {
       if (seen.has(item.objective.id)) return false;
       seen.add(item.objective.id);
-      return true;
+      return item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
     });
   }, [availableBounties, recruitmentItems]);
   const pageObjectives = useMemo(() => {
@@ -113,6 +114,12 @@ export function BountyHallPage() {
   };
 
   const applyChallenge = async (item: BountyItem) => {
+    if (!canApplyForObjectiveChallenge(item.objective)) {
+      await loadBountyData();
+      setConfirmTarget(null);
+      return;
+    }
+
     setProcessingBountyId(item.objective.id);
     const ok = await applyForBounty(item.objective.id);
     setProcessingBountyId(null);
@@ -326,7 +333,8 @@ function BountyListRow({
   onAction: () => void;
 }) {
   const actionLabel = item.isRecruitment ? "接受挑战" : item.hasCurrentApplication ? "已申请" : "申请挑战";
-  const actionDisabled = processing || (!item.isRecruitment && item.hasCurrentApplication);
+  const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
+  const actionDisabled = processing || !canApply || (!item.isRecruitment && item.hasCurrentApplication);
 
   return (
     <article

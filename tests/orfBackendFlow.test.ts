@@ -598,6 +598,27 @@ test("rejecting stale pending applications cannot reopen a frozen objective", as
   );
 });
 
+test("bounty hall excludes frozen objectives even when legacy data keeps pending applications", async () => {
+  const fixture = await createFixture("bounty-stale-frozen-pending");
+  const { objective, observerApplicationId } = await createFrozenObjectiveWithPendingApplication(fixture);
+  const data = await getTaskManagementData({ scope: fixture.scope });
+  const frozen = data.objectives.find((item) => item.id === objective.id);
+  assert.ok(frozen);
+
+  const staleApplications = frozen.challengeApplications.map((application) =>
+    application.id === observerApplicationId
+      ? { ...application, status: "pending" as const, decidedAt: null, decidedBy: null }
+      : application,
+  );
+  await db.update(objectives).set({ challengeApplications: staleApplications }).where(eq(objectives.id, objective.id));
+
+  const hall = await getBountyHallData(fixture.observer.name, { scope: fixture.scope });
+
+  assert.equal(hall.availableItems.some((item) => item.objective.id === objective.id), false);
+  assert.equal(hall.recruitmentItems.some((item) => item.objective.id === objective.id), false);
+  assert.equal((await applyForObjectiveChallenge(objective.id, fixture.observer.name)).status, "closed");
+});
+
 test("rejecting remaining pending applications keeps an accepted objective in reestimate", async () => {
   const fixture = await createFixture("reject-pending-after-accept");
   const objective = await createPublishedObjective(fixture, "reject remaining pending guard");
@@ -785,6 +806,11 @@ test("challenge application duplicate and closed-state guards are enforced", asy
 
   const observerApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
   assert.equal(observerApplication.status, "closed");
+
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  const frozenApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
+  assert.equal(frozenApplication.status, "closed");
 
   const openObjective = await createPublishedObjective(fixture, "duplicate application guard");
   const firstApply = await applyForObjectiveChallenge(openObjective.id, fixture.observer.name);

@@ -31,6 +31,11 @@ import {
   normalizeContributionAllocations,
   summarizeContributionReviews,
 } from "../../src/features/challenge/model/contributionReview";
+import {
+  objectiveApplicationReviewFlowStatuses as applicationReviewFlowStatuses,
+  objectiveChallengeApplicationFlowStatuses as bountyHallFlowStatuses,
+  objectiveRecruitmentFlowStatuses as challengeRecruitmentFlowStatuses,
+} from "../../src/domain/orfLifecycle";
 import { db } from "../db/client";
 import {
   commentMessages,
@@ -110,10 +115,7 @@ const difficultyRanks: Record<UncertaintyLevel, number> = {
   渡劫: 4,
   飞升: 5,
 };
-const bountyHallFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting"]);
-const applicationReviewFlowStatuses = new Set<Objective["flowStatus"]>(["applying", "recruiting", "reestimating"]);
 const challengeAcceptanceFlowStatuses = new Set<Objective["flowStatus"]>(["recruiting", "reestimating"]);
-const challengeRecruitmentFlowStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting", "reestimating"]);
 const resultMutationFlowStatuses = new Set<Objective["flowStatus"]>(["candidate", "open", "applying", "recruiting", "reestimating"]);
 const workItemMutationFlowStatuses = new Set<Objective["flowStatus"]>(["reestimating", "frozen"]);
 const commentLockedFlowStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);

@@ -1447,6 +1447,73 @@ test.describe("ORF frontend guard coverage", () => {
     await expect(page.getByText("rejection rejected")).toBeVisible();
   });
 
+  test("frozen objectives with stale pending applications do not expose review actions", async ({ page }) => {
+    const objective = objectiveFixture({
+      id: "obj-ui-frozen-stale-application",
+      title: "前端测试 冻结残留申请目标",
+      flowStatus: "frozen",
+      stage: "goalFrozen",
+      resultIds: ["res-ui-frozen-stale-application"],
+      challengers: [memberUser.name],
+      challengeApplications: [{ id: "app-ui-stale-frozen", applicant: observerUser.name, status: "pending", createdAt: "2026-05-18T08:00:00.000Z", decidedAt: null }],
+    });
+    const result = resultFixture({ id: "res-ui-frozen-stale-application", objectiveId: objective.id, title: "前端测试 冻结残留申请指标" });
+    const data = taskManagementData({ objectives: [objective], results: [result] });
+
+    await mockOrfApp(page, adminUser, data, {
+      allChallenges: () => data,
+      tasks: () => data,
+    });
+
+    await page.goto("/tasks");
+    const panel = objectivePanel(page, objective.title);
+
+    await expect(panel.getByText("已冻结")).toBeVisible();
+    await expect(panel.getByText("挑战申请")).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "通过" })).toHaveCount(0);
+    await expect(panel.getByRole("button", { name: "拒绝" })).toHaveCount(0);
+  });
+
+  test("challenge application review actions follow the full objective status matrix", async ({ page }) => {
+    const flowStatuses: Objective["flowStatus"][] = ["candidate", "open", "applying", "recruiting", "reestimating", "frozen", "submitted", "settled", "closed"];
+    const reviewStatuses = new Set<Objective["flowStatus"]>(["applying", "recruiting", "reestimating"]);
+    const objectives = flowStatuses.map((flowStatus) =>
+      objectiveFixture({
+        id: `obj-ui-review-matrix-${flowStatus}`,
+        title: `前端测试 审核矩阵 ${flowStatus}`,
+        flowStatus,
+        stage: stageForFlowStatus(flowStatus),
+        resultIds: [`res-ui-review-matrix-${flowStatus}`],
+        challengers: flowStatus === "reestimating" || flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" ? [memberUser.name] : [],
+        challengeApplications: [{ id: `app-ui-review-matrix-${flowStatus}`, applicant: observerUser.name, status: "pending", createdAt: "2026-05-18T08:00:00.000Z", decidedAt: null }],
+      }),
+    );
+    const results = objectives.map((objective) =>
+      resultFixture({
+        id: objective.resultIds[0]!,
+        objectiveId: objective.id,
+        title: `${objective.title} 指标`,
+      }),
+    );
+    const data = taskManagementData({ objectives, results });
+
+    await mockOrfApp(page, adminUser, data, {
+      allChallenges: () => data,
+      tasks: () => data,
+    });
+
+    await page.goto("/tasks");
+
+    for (const objective of objectives) {
+      const panel = objectivePanel(page, objective.title);
+      const expectedCount = reviewStatuses.has(objective.flowStatus) ? 1 : 0;
+
+      await expect(panel.getByText("挑战申请")).toHaveCount(expectedCount);
+      await expect(panel.getByRole("button", { name: "通过" })).toHaveCount(expectedCount);
+      await expect(panel.getByRole("button", { name: "拒绝" })).toHaveCount(expectedCount);
+    }
+  });
+
   test("loot submit failure stays on form and keeps frozen state", async ({ page }) => {
     const objective = objectiveFixture({
       id: "obj-ui-loot-submit-fail",
@@ -2111,6 +2178,67 @@ test.describe("ORF frontend guard coverage", () => {
     await expect(page.getByRole("heading", { name: objectiveTemplate.title })).toHaveCount(0);
   });
 
+  test("bounty hall filters frozen objectives even if stale API data marks them available", async ({ page }) => {
+    const objective = objectiveFixture({
+      id: "obj-ui-bounty-stale-frozen",
+      title: "前端测试 悬赏大厅冻结残留目标",
+      flowStatus: "frozen",
+      stage: "goalFrozen",
+      resultIds: ["res-ui-bounty-stale-frozen"],
+      challengers: [memberUser.name],
+      challengeApplications: [{ id: "app-ui-bounty-stale-frozen", applicant: observerUser.name, status: "pending", createdAt: "2026-05-18T08:00:00.000Z", decidedAt: null }],
+    });
+    const result = resultFixture({ id: "res-ui-bounty-stale-frozen", objectiveId: objective.id, title: "前端测试 悬赏大厅冻结残留指标" });
+    const data = taskManagementData({ objectives: [objective], results: [result] });
+
+    await mockOrfApp(page, observerUser, data, {
+      bounties: bountyHallData([bountyHallItem(objective, [result])]),
+      tasks: () => data,
+    });
+
+    await page.goto("/bounties");
+
+    await expect(page.getByRole("heading", { name: objective.title })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "申请挑战" })).toHaveCount(0);
+    await expect(page.getByText("当前没有可申请或待接受的悬赏目标")).toBeVisible();
+  });
+
+  test("bounty hall availability follows the full objective status matrix", async ({ page }) => {
+    const flowStatuses: Objective["flowStatus"][] = ["candidate", "open", "applying", "recruiting", "reestimating", "frozen", "submitted", "settled", "closed"];
+    const visibleStatuses = new Set<Objective["flowStatus"]>(["open", "applying", "recruiting"]);
+    const objectives = flowStatuses.map((flowStatus) =>
+      objectiveFixture({
+        id: `obj-ui-bounty-matrix-${flowStatus}`,
+        title: `前端测试 悬赏矩阵 ${flowStatus}`,
+        flowStatus,
+        stage: stageForFlowStatus(flowStatus),
+        resultIds: [`res-ui-bounty-matrix-${flowStatus}`],
+        challengers: flowStatus === "reestimating" || flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" ? [memberUser.name] : [],
+      }),
+    );
+    const results = objectives.map((objective) =>
+      resultFixture({
+        id: objective.resultIds[0]!,
+        objectiveId: objective.id,
+        title: `${objective.title} 指标`,
+      }),
+    );
+    const data = taskManagementData({ objectives, results });
+    const items = objectives.map((objective) => bountyHallItem(objective, results.filter((result) => result.objectiveId === objective.id)));
+
+    await mockOrfApp(page, observerUser, data, {
+      bounties: bountyHallData(items),
+      tasks: () => data,
+    });
+
+    await page.goto("/bounties");
+
+    for (const objective of objectives) {
+      await expect(page.getByRole("heading", { name: objective.title })).toHaveCount(visibleStatuses.has(objective.flowStatus) ? 1 : 0);
+    }
+    await expect(page.getByRole("button", { name: "申请挑战" })).toHaveCount(visibleStatuses.size);
+  });
+
   test("challenge mutation button is disabled while processing", async ({ page }) => {
     const objective = objectiveFixture({ id: "obj-ui-processing", title: "前端测试 处理中目标", flowStatus: "open", resultIds: ["res-ui-processing"] });
     const result = resultFixture({ id: "res-ui-processing", objectiveId: objective.id, title: "前端测试 处理中指标" });
@@ -2583,6 +2711,13 @@ function taskManagementData(input: {
     pointLedger: input.pointLedger ?? [],
     permissionRules: initialOrfState.permissionRules,
   };
+}
+
+function stageForFlowStatus(flowStatus: Objective["flowStatus"]): Objective["stage"] {
+  if (flowStatus === "candidate") return "goalSetting";
+  if (flowStatus === "reestimating") return "orfReestimate";
+  if (flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed") return "goalFrozen";
+  return "resultClaiming";
 }
 
 function objectiveFixture(overrides: Partial<Objective> & Pick<Objective, "id" | "title">): Objective {

@@ -69,6 +69,8 @@
 
 `GET /api/bounties` 只返回 `flowStatus in (open, applying, recruiting)` 且当前用户尚未成为挑战者的目标。
 
+申请挑战只接受 `open/applying/recruiting`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
+
 ## 状态字段
 
 `Objective.flowStatus` 是目标流程的唯一业务状态：
