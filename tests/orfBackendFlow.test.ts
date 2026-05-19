@@ -16,18 +16,23 @@ import {
   createObjective,
   createResult,
   createTask,
+  deleteResult,
   declineObjectiveChallenge,
   freezeObjectiveAfterReestimate,
   getBountyHallData,
   getMyChallengesData,
   getTaskManagementData,
+  moveResult,
   publishObjective,
+  proposeResultUpdate,
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
+  updateResultConfidence,
+  updateResultTitle,
 } from "../server/repositories/orfRepository";
 
 const runId = `test-orf-flow-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -997,6 +1002,84 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   assert.equal(ledger[0]?.points, 40);
   assert.equal(ledger[1]?.memberName, fixture.observer.name);
   assert.equal(ledger[1]?.points, 20);
+});
+
+test("repeated contribution reviews keep history but settlement uses each reviewer latest record", async () => {
+  const fixture = await createFixture("peer-review-latest-record");
+  const objective = await createPublishedObjective(fixture, "latest peer review settlement");
+  const result = await createTestResult(objective.id, fixture.commander.name, "latest peer review result", "进阶");
+
+  const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  const observerApplication = await applyForObjectiveChallenge(objective.id, fixture.observer.name);
+  assert.equal(challengerApplication.status, "applied");
+  assert.equal(observerApplication.status, "applied");
+  const challengerApplicationId = challengerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  const observerApplicationId = observerApplication.objective.challengeApplications.find((item) => item.applicant === fixture.observer.name)?.id;
+  assert.ok(challengerApplicationId);
+  assert.ok(observerApplicationId);
+  assert.equal((await approveObjectiveChallengeApplication(objective.id, challengerApplicationId, fixture.commander.id)).status, "ok");
+  assert.equal((await approveObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id)).status, "ok");
+  assert.equal((await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id)).status, "ok");
+
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    {
+      body: "Repeated peer review target loot.",
+      resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+
+  const firstReview = await submitObjectiveContributionReview(
+    objective.id,
+    {
+      allocations: [
+        { member: fixture.challenger.name, ratio: 9 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(firstReview.status, "ok");
+
+  const latestReview = await submitObjectiveContributionReview(
+    objective.id,
+    {
+      allocations: [
+        { member: fixture.challenger.name, ratio: 1 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(latestReview.status, "ok");
+
+  const observerReview = await submitObjectiveContributionReview(
+    objective.id,
+    {
+      allocations: [
+        { member: fixture.challenger.name, ratio: 1 },
+        { member: fixture.observer.name, ratio: 1 },
+      ],
+    },
+    { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
+  );
+  assert.equal(observerReview.status, "ok");
+
+  const reviewed = await reviewObjectiveLoot(
+    objective.id,
+    { lootId: loot.loot.id, resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    fixture.commander.id,
+  );
+  assert.equal(reviewed.status, "ok");
+
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 3);
+  const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => left.memberName.localeCompare(right.memberName));
+  assert.equal(ledger.length, 2);
+  assert.equal(ledger[0]?.points, 15);
+  assert.equal(ledger[1]?.points, 15);
 });
 
 test("settlement resolves point ledger user ids within the objective team", async () => {
@@ -2107,6 +2190,69 @@ test("visual background read routes only expose login assets publicly", async ()
   });
 });
 
+test("repository result mutations are locked by objective lifecycle state", async () => {
+  const fixture = await createFixture("repository-result-lifecycle-locks");
+
+  for (const flowStatus of ["frozen", "submitted", "settled"] as const) {
+    const { objective, result, referenceResult } = await createObjectiveWithLockedResults(fixture, flowStatus);
+
+    const createdAfterLock = await createResult({
+      objectiveId: objective.id,
+      title: `${fixture.prefix} ${flowStatus} direct create should fail`,
+      metricName: `${flowStatus} direct create metric`,
+      uncertaintyLevel: "入门",
+      definer: fixture.commander.name,
+    });
+    assert.equal(createdAfterLock, null);
+
+    assert.equal(await updateResultTitle(result.id, `${fixture.prefix} ${flowStatus} direct title should fail`), false);
+    assert.equal(await updateResultConfidence(result.id, 99, fixture.commander.id), false);
+    assert.equal(
+      await proposeResultUpdate(
+        {
+          resultId: result.id,
+          title: `${fixture.prefix} ${flowStatus} proposal should fail`,
+          reason: "Repository-level lifecycle lock should reject direct calls.",
+        },
+        { id: fixture.commander.id, name: fixture.commander.name },
+      ),
+      false,
+    );
+    assert.equal(await moveResult(result.id, referenceResult.id, "after"), false);
+    assert.equal(await deleteResult(result.id), false);
+
+    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    const unchangedObjective = data.objectives.find((item) => item.id === objective.id);
+    assert.equal(unchangedObjective?.flowStatus, flowStatus);
+    assert.equal(data.results.find((item) => item.id === result.id)?.title, result.title);
+    assert.equal(data.results.find((item) => item.id === result.id)?.confidence, result.confidence);
+    assert.deepEqual(
+      data.results.filter((item) => item.objectiveId === objective.id).map((item) => item.id),
+      [result.id, referenceResult.id],
+    );
+  }
+});
+
+test("concurrent freezing and deleting the last result cannot leave a frozen objective without metrics", async () => {
+  const fixture = await createFixture("freeze-delete-last-result-race");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "freeze delete last result race");
+
+  const [freezeOutcome, deleted] = await Promise.all([
+    freezeObjectiveAfterReestimate(objective.id, fixture.commander.id),
+    deleteResult(result.id),
+  ]);
+
+  assert.equal(freezeOutcome.status === "ok", !deleted);
+  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const refreshedObjective = data.objectives.find((item) => item.id === objective.id);
+  const remainingResults = data.results.filter((item) => item.objectiveId === objective.id);
+  assert.ok(refreshedObjective);
+  assert.equal(refreshedObjective.flowStatus === "frozen" && remainingResults.length === 0, false);
+  if (refreshedObjective.flowStatus === "frozen") {
+    assert.equal(remainingResults.length, 1);
+  }
+});
+
 test("API result and submitted objective mutations are locked by lifecycle state", async () => {
   const fixture = await createFixture("api-lifecycle-locks");
 
@@ -2359,6 +2505,58 @@ async function createSettledObjective(
   );
   assert.equal(reviewed.status, "ok");
   return { objective: reviewed.objective, result, loot: loot.loot };
+}
+
+async function createObjectiveWithLockedResults(
+  fixture: Fixture,
+  flowStatus: "frozen" | "submitted" | "settled",
+) {
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, `${flowStatus} repository result lock objective`);
+  const referenceResult = await createTestResult(
+    objective.id,
+    fixture.commander.name,
+    `${fixture.prefix} ${flowStatus} repository result lock reference`,
+    "入门",
+  );
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  if (flowStatus === "frozen") {
+    return { objective: frozen.objective, result, referenceResult };
+  }
+
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    {
+      body: `${flowStatus} repository result lock loot.`,
+      resultClaims: [
+        { resultId: result.id, claim: "completed", evidenceText: "done" },
+        { resultId: referenceResult.id, claim: "completed", evidenceText: "done" },
+      ],
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+  if (flowStatus === "submitted") {
+    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    const submittedObjective = data.objectives.find((item) => item.id === objective.id);
+    assert.ok(submittedObjective);
+    return { objective: submittedObjective, result, referenceResult };
+  }
+
+  const settled = await reviewObjectiveLoot(
+    objective.id,
+    {
+      lootId: loot.loot.id,
+      resultReviews: [
+        { resultId: result.id, acceptedResult: "completed" },
+        { resultId: referenceResult.id, acceptedResult: "completed" },
+      ],
+      reason: `${flowStatus} repository result lock settlement.`,
+    },
+    fixture.commander.id,
+  );
+  assert.equal(settled.status, "ok");
+  return { objective: settled.objective, result, referenceResult };
 }
 
 async function withApiServer(fixture: Fixture, run: (app: FastifyInstance) => Promise<void>) {

@@ -104,27 +104,70 @@ test.describe("ORF real lifecycle simulation", () => {
         }
       }, { skipInvariants: true });
 
-      await simulator.runStep({ action: "disabled-user-blocked-from-business", actor: "disabled" }, async () => {
-        const context = await browser.newContext();
-        await real.connectContextToRealApi(context);
-        const page = await context.newPage();
-        world.pages.disabled = { context, page };
-        await page.goto("/auth");
-        await page.getByPlaceholder("Email").fill(world.users.disabled.email);
-        await page.getByPlaceholder("Password").fill(world.users.disabled.password);
-        const [loginResponse] = await Promise.all([
-          page.waitForResponse((response) => response.url().includes("/api/auth/login")),
-          page.getByRole("button", { name: "Sign In" }).click(),
-        ]);
-        expect(loginResponse.status()).toBe(200);
-        await page.goto("/tasks");
-        await expect(page.getByText(/你的账号已停用|Sign in/)).toBeVisible();
-        await expect(page.getByRole("heading", { name: "挑战" })).toHaveCount(0);
+      await simulator.runStep({ action: "inactive-users-blocked-from-business", actor: "disabled" }, async () => {
+        for (const inactive of [
+          {
+            expectedCopy: /你的账号已停用/,
+            expectedHeading: "账号已停用",
+            user: world.users.disabled,
+          },
+          {
+            expectedCopy: /等待管理员审核通过/,
+            expectedHeading: "等待注册审核",
+            user: real.fixture.pendingMember,
+          },
+        ]) {
+          const context = await browser.newContext();
+          await real.connectContextToRealApi(context);
+          const page = await context.newPage();
+          if (inactive.user.id === world.users.disabled.id) {
+            world.pages.disabled = { context, page };
+          }
+          const businessRequests: string[] = [];
+          page.on("request", (request) => {
+            const path = new URL(request.url()).pathname;
+            if (["/api/tasks-page", "/api/bounties", "/api/my-challenges"].includes(path)) {
+              businessRequests.push(path);
+            }
+          });
 
-        const tasksPage = await real.apiAs(world.users.disabled, "/api/tasks-page");
-        const bounties = await real.apiAs(world.users.disabled, "/api/bounties");
-        expect(tasksPage.status).toBe(403);
-        expect(bounties.status).toBe(403);
+          await page.goto("/auth");
+          await page.getByPlaceholder("Email").fill(inactive.user.email);
+          await page.getByPlaceholder("Password").fill(inactive.user.password);
+          const [loginResponse] = await Promise.all([
+            page.waitForResponse((response) => response.url().includes("/api/auth/login")),
+            page.getByRole("button", { name: "Sign In" }).click(),
+          ]);
+          expect(loginResponse.status()).toBe(200);
+
+          for (const path of ["/bounties", "/tasks"]) {
+            await page.goto(path);
+            await expect(page.getByRole("heading", { name: inactive.expectedHeading })).toBeVisible();
+            await expect(page.getByText(inactive.expectedCopy)).toBeVisible();
+            await expect(page.getByRole("heading", { name: "悬赏大厅" })).toHaveCount(0);
+            await expect(page.getByRole("heading", { name: "挑战" })).toHaveCount(0);
+          }
+          expect(businessRequests, `${inactive.user.name} should not load business data in the UI`).toEqual([]);
+
+          const tasksPage = await real.apiAs(inactive.user, "/api/tasks-page");
+          const bounties = await real.apiAs(inactive.user, "/api/bounties");
+          const createObjective = await real.apiAs(inactive.user, "/api/objectives", {
+            body: JSON.stringify({
+              boundary: "inactive user should not create objectives",
+              cycle: "2999 Q1",
+              finalDueAt: "2999-12-31",
+              title: `${inactive.user.name} forbidden objective`,
+              whyItMatters: "Inactive users must not reach business mutations.",
+            }),
+            method: "POST",
+          });
+          expect(tasksPage.status).toBe(403);
+          expect(bounties.status).toBe(403);
+          expect(createObjective.status).toBe(403);
+          if (inactive.user.id !== world.users.disabled.id) {
+            await context.close();
+          }
+        }
       });
 
       const q1Candidate = registerObjective("q1Candidate", "2999 Q1", "候选目标");

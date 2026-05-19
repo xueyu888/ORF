@@ -10,7 +10,7 @@
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/tasks-page` | 返回目标、指标、任务、评论、战利品、积分流水和权限 |
+| `GET` | `/api/tasks-page` | 管理员返回团队目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 scoped `my-challenges` 数据 |
 | `GET` | `/api/bounties` | 返回悬赏大厅数据 |
 | `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
 | `POST` | `/api/objectives` | 创建候选目标，默认 `flowStatus=candidate` |
@@ -44,9 +44,15 @@
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、执行人、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。
 
+## 术语
+
+- `Objective` 在业务文案中叫“悬赏目标”，是挑战、战利品和结算的绑定对象。
+- `Result` 在业务文案中统一叫“指标”，只定义悬赏目标的验收口径和计分基础。
+- 只有悬赏目标可以有挑战者、申请、征召和状态流转；指标不表达挑战关系，也不直接分配个人积分。
+
 ## 返回集合
 
-`GET /api/tasks-page` 和 `GET /api/my-challenges` 返回：
+`GET /api/tasks-page` 和 `GET /api/my-challenges` 返回同一种集合结构。区别是：`/api/tasks-page` 对管理员返回团队全量任务页数据，对普通成员返回等价于 `/api/my-challenges?scope=mine` 的 scoped 数据；`/api/my-challenges?scope=all` 只允许管理员使用。
 
 | 集合 | 用途 |
 | --- | --- |

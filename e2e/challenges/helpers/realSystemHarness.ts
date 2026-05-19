@@ -31,6 +31,7 @@ export type RealFixture = {
   member5: RealUser;
   member6: RealUser;
   observer: RealUser;
+  pendingMember: RealUser;
   rejectedApplicant: RealUser;
   reluctantMember: RealUser;
   runLabel: string;
@@ -229,6 +230,7 @@ function createFixture(workerIndex: number): RealFixture {
     member5: user("member-5", "成员5", "member"),
     member6: user("member-6", "成员6", "member"),
     observer: user("observer", "观察成员", "member"),
+    pendingMember: user("pending", "待审核成员", "member", "pending"),
     rejectedApplicant: user("rejected-applicant", "被拒申请人", "member"),
     reluctantMember: user("reluctant", "拒绝征召人", "member"),
     runLabel,

@@ -80,7 +80,12 @@ type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
 
 const today = () => localDateString(new Date());
-const nowIso = () => new Date().toISOString();
+let lastNowMs = 0;
+const nowIso = () => {
+  const nextNowMs = Math.max(Date.now(), lastNowMs + 1);
+  lastNowMs = nextNowMs;
+  return new Date(nextNowMs).toISOString();
+};
 let idCounter = 0;
 const nextIdCounter = () => {
   idCounter = (idCounter + 1) % Number.MAX_SAFE_INTEGER;
@@ -762,6 +767,9 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     if (!objective) {
       return null;
     }
+    if (!resultMutationFlowStatuses.has(objective.flowStatus)) {
+      return null;
+    }
 
     const siblingRows = await tx.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, input.objectiveId));
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
@@ -1104,32 +1112,38 @@ export async function declineObjectiveChallenge(objectiveId: string, member: str
 }
 
 export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) return { status: "notFound" };
-  const objectiveResults = await db.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId)).limit(1);
-  if (objectiveResults.length === 0) return { status: "invalid" };
+  const frozen = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (objective.flowStatus !== "reestimating") return { status: "invalid" as const };
 
-  const decidedAt = nowIso();
-  const challengeApplications = (objective.challengeApplications ?? []).map((application) =>
-    application.status === "pending"
-      ? { ...application, status: "declined" as const, decidedAt, decidedBy: actorId }
-      : application,
-  );
-  const updated = await db
-    .update(objectives)
-    .set({
-      assignedChallengers: [],
-      challengeApplications,
-      flowStatus: "frozen",
-      stage: "goalFrozen",
-      confirmedAt: decidedAt,
-      updatedAt: today(),
-      updatedBy: actorId,
-    })
-    .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "reestimating")))
-    .returning({ id: objectives.id });
-  if (updated.length === 0) return { status: "invalid" };
-  return objectiveOutcome(objectiveId, objective.teamId);
+    const objectiveResults = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId)).limit(1);
+    if (objectiveResults.length === 0) return { status: "invalid" as const };
+
+    const decidedAt = nowIso();
+    const challengeApplications = (objective.challengeApplications ?? []).map((application) =>
+      application.status === "pending"
+        ? { ...application, status: "declined" as const, decidedAt, decidedBy: actorId }
+        : application,
+    );
+
+    await tx
+      .update(objectives)
+      .set({
+        assignedChallengers: [],
+        challengeApplications,
+        flowStatus: "frozen",
+        stage: "goalFrozen",
+        confirmedAt: decidedAt,
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(eq(objectives.id, objectiveId));
+
+    return { status: "ok" as const, teamId: objective.teamId };
+  });
+
+  return frozen.status === "ok" ? objectiveOutcome(objectiveId, frozen.teamId) : frozen;
 }
 
 export async function reopenObjectiveReestimate(_objectiveId: string, _actorId: string): Promise<ObjectiveFlowMutationOutcome> {
@@ -1352,12 +1366,25 @@ export async function updateFeedbackStatus(
 }
 
 export async function updateResultConfidence(resultId: string, confidence: number, actorId: string): Promise<boolean> {
-  const updated = await db
-    .update(results)
-    .set({ confidence, updatedBy: actorId })
-    .where(eq(results.id, resultId))
-    .returning({ id: results.id });
-  return updated.length > 0;
+  return db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ flowStatus: objectives.flowStatus })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !resultMutationFlowStatuses.has(target.flowStatus)) {
+      return false;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ confidence, updatedBy: actorId })
+      .where(eq(results.id, resultId))
+      .returning({ id: results.id });
+    return updated.length > 0;
+  });
 }
 
 export async function proposeResultUpdate(
@@ -1371,8 +1398,18 @@ export async function proposeResultUpdate(
   }
 
   return db.transaction(async (tx) => {
-    const [result] = await tx.select().from(results).where(eq(results.id, input.resultId)).limit(1);
-    if (!result) {
+    const [target] = await tx
+      .select({
+        id: results.id,
+        teamId: results.teamId,
+        flowStatus: objectives.flowStatus,
+      })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, input.resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !resultMutationFlowStatuses.has(target.flowStatus)) {
       return false;
     }
 
@@ -1382,7 +1419,7 @@ export async function proposeResultUpdate(
         .from(feedback)
         .where(eq(feedback.id, input.feedbackId))
         .limit(1);
-      if (!linkedFeedback || linkedFeedback.teamId !== result.teamId || linkedFeedback.linkedResultId !== result.id) {
+      if (!linkedFeedback || linkedFeedback.teamId !== target.teamId || linkedFeedback.linkedResultId !== target.id) {
         return false;
       }
     }
@@ -1413,9 +1450,9 @@ export async function proposeResultUpdate(
     const now = nowIso();
     await tx.insert(commentThreads).values({
       id: threadId,
-      teamId: result.teamId,
+      teamId: target.teamId,
       targetType: "result",
-      targetId: result.id,
+      targetId: target.id,
       targetTitle: nextTitle,
       status: "open",
       createdBy: actor.id,
@@ -2363,6 +2400,17 @@ export async function updateResultTitle(resultId: string, title: string): Promis
   }
 
   return db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ flowStatus: objectives.flowStatus })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !resultMutationFlowStatuses.has(target.flowStatus)) {
+      return false;
+    }
+
     const updated = await tx.update(results).set({ title: nextTitle }).where(eq(results.id, resultId)).returning({ id: results.id });
     if (updated.length === 0) {
       return false;
@@ -2465,7 +2513,8 @@ export async function deleteResult(resultId: string): Promise<boolean> {
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (!result) {
       return false;
     }
@@ -2550,8 +2599,16 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
     if (!moving || !reference || moving.objectiveId !== reference.objectiveId || moving.id === reference.id) {
       return false;
     }
-    const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, moving.objectiveId)).limit(1).for("update");
+    const [objective] = await tx
+      .select({ flowStatus: objectives.flowStatus, id: objectives.id })
+      .from(objectives)
+      .where(eq(objectives.id, moving.objectiveId))
+      .limit(1)
+      .for("update");
     if (!objective) {
+      return false;
+    }
+    if (!resultMutationFlowStatuses.has(objective.flowStatus)) {
       return false;
     }
 

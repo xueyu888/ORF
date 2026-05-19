@@ -14,7 +14,7 @@ currentUser in Objective.challengers
 
 目标来自悬赏大厅中的申请、征召或接受挑战流程；未正式接受的目标不在本页展示。
 
-数据加载边界：普通成员只请求 `/api/my-challenges?scope=mine` 等成员可访问接口，不主动请求 `/api/permissions` 或 `/api/users` 等管理员集合。管理员进入业务页时才额外加载权限规则和成员列表。
+数据加载边界：普通成员只请求 `/api/my-challenges?scope=mine` 等成员可访问接口，不主动请求 `/api/permissions` 或 `/api/users` 等管理员集合。管理员进入业务页时才额外加载权限规则和成员列表。后端兼容的 `/api/tasks-page` 对普通成员也只返回 scoped `my-challenges` 数据，不返回全量 state。
 
 ## 页面内容
 
