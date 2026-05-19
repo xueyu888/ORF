@@ -19,9 +19,10 @@ import {
   BountySelect,
   BountyTextInput,
 } from "../features/bounty-hall/BountyHallSkin";
+import { bountyCycleLabel } from "../features/bounty-hall/model/bountyHallSummary";
 import { useOrf } from "../state/OrfProvider";
 import { getBountyHallData, type BountyHallData, type BountyHallItem } from "../state/apiClient";
-import type { Objective, UncertaintyLevel } from "../types/orf";
+import type { UncertaintyLevel } from "../types/orf";
 
 type DifficultyFilter = "all" | UncertaintyLevel;
 type SortKey = "deadline" | "points" | "difficulty" | "created";
@@ -136,7 +137,7 @@ export function BountyHallPage() {
     <div className="bounty-hall-page grid gap-5">
       <BountyOverview
         availableCount={availableBounties.length}
-        cycle={currentCycle(pageObjectives)}
+        cycle={bountyCycleLabel(pageObjectives)}
         recruitmentCount={recruitmentItems.length}
       />
 
@@ -380,7 +381,7 @@ function ResultPreview({ item }: { item: BountyItem }) {
             </div>
           ))
         ) : (
-          <div className="bounty-result-preview-item">重估阶段校准</div>
+          <div className="bounty-result-preview-item">待定义指标</div>
         )}
       </div>
     </>
@@ -488,10 +489,6 @@ function resultCountLabel(item: BountyItem) {
 
 function bountySortTitle(item: BountyItem) {
   return item.result?.title ?? item.objective.title;
-}
-
-function currentCycle(objectives: Objective[]) {
-  return objectives[0]?.cycle ?? "全部周期";
 }
 
 function useMinuteNow() {

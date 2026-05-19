@@ -1,6 +1,6 @@
 {
   "nav.bounties": {
-    "label": "侧边栏悬赏入口",
+    "label": "侧边栏悬赏大厅入口",
     "audience": "all"
   },
   "nav.tasks": {
@@ -25,11 +25,7 @@
   },
   "nav.settings": {
     "label": "侧边栏设置入口",
-    "audience": "all"
-  },
-  "command.auth": {
-    "label": "命令菜单注册登录入口",
-    "audience": "all"
+    "audience": ["admin"]
   },
   "command.objectives": {
     "label": "命令菜单目标入口",
@@ -41,6 +37,10 @@
   },
   "page.permissions": {
     "label": "权限管理页面访问",
+    "audience": ["admin"]
+  },
+  "page.settings": {
+    "label": "设置页面访问",
     "audience": ["admin"]
   },
   "challenge.scope.all": {

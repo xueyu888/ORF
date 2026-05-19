@@ -6,11 +6,25 @@ import {
   commentCountFor,
   commentCountsByTarget,
   commentTargetForChallengeTarget,
-  submittedLootIdsFromComments,
+  submittedLootObjectiveIdsFromComments,
 } from "../src/features/challenge/model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
+import {
+  canViewObjectiveRecord,
+  filterFeedbackForVisibleObjectives,
+  filterResultsForVisibleObjectives,
+  filterTasksForVisibleObjectives,
+  visibleObjectiveIdsForUser,
+  visibleObjectivesForUser,
+} from "../src/features/challenge/model/objectiveVisibility";
+import {
+  canCreateFeedbackForObjective,
+  canCreateFeedbackFromResults,
+  canCreateFeedbackFromVisibleState,
+  canManageFeedbackStatus,
+} from "../src/features/feedback/model/feedbackCapabilities";
 import type { CommentThread, Evidence, Feedback, Objective, OrfState, Result, Task } from "../src/types/orf";
 
 const date = "2026-05-14";
@@ -98,6 +112,65 @@ test("summarizeDashboard counts settled, review, unassigned, and average objecti
   assertNear(summary.unassignedProgress, 100 / 3);
 });
 
+test("feedback status controls are limited to admins, creators, and owners", () => {
+  const item = feedback({ owner: "Kai Wang", createdBy: "user-kai" });
+  const creator = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const assignee = { id: "user-lee", name: "Lee Chen", email: "lee@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const stranger = { id: "user-stranger", name: "Stranger", email: "stranger@example.com", role: "member" as const, status: "active" as const };
+
+  assert.equal(canManageFeedbackStatus(item, creator), true);
+  assert.equal(canManageFeedbackStatus(feedback({ owner: assignee.name, createdBy: "user-kai" }), assignee), true);
+  assert.equal(canManageFeedbackStatus(item, admin), true);
+  assert.equal(canManageFeedbackStatus(item, stranger), false);
+});
+
+test("feedback creation entry requires at least one visible result", () => {
+  assert.equal(canCreateFeedbackFromResults([]), false);
+  assert.equal(canCreateFeedbackFromResults([result({ id: "res-visible" })]), true);
+});
+
+test("feedback creation entry is limited to admins and objective challengers", () => {
+  const objectiveItem = objective({ id: "obj-feedback-access", challengers: ["Kai Wang"], resultIds: ["res-visible"] });
+  const resultItem = result({ id: "res-visible", objectiveId: objectiveItem.id });
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const observer = { id: "user-observer", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
+
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, admin, [resultItem]), true);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, [resultItem]), true);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, observer, [resultItem]), false);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, []), false);
+  assert.equal(canCreateFeedbackFromVisibleState({ objectives: [objectiveItem], results: [resultItem] }, observer), false);
+});
+
+test("objective visibility scopes member-facing records to current challengers", () => {
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const mine = objective({ id: "obj-mine", challengers: [challenger.name] });
+  const other = objective({ id: "obj-other", challengers: ["Other Member"] });
+  const memberVisibleIds = visibleObjectiveIdsForUser([mine, other], challenger);
+
+  assert.equal(canViewObjectiveRecord(mine, challenger), true);
+  assert.equal(canViewObjectiveRecord(other, challenger), false);
+  assert.equal(canViewObjectiveRecord(undefined, admin), true);
+  assert.deepEqual(visibleObjectivesForUser([mine, other], challenger).map((item) => item.id), ["obj-mine"]);
+  assert.deepEqual([...visibleObjectiveIdsForUser([mine, other], admin)].sort(), ["obj-mine", "obj-other"]);
+  assert.deepEqual(filterFeedbackForVisibleObjectives([feedback({ id: "fb-orphan", linkedObjectiveId: "obj-missing" })], memberVisibleIds, admin).map((item) => item.id), ["fb-orphan"]);
+  assert.deepEqual(
+    filterResultsForVisibleObjectives([result({ id: "res-mine", objectiveId: "obj-mine" }), result({ id: "res-other", objectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
+    ["res-mine"],
+  );
+  assert.deepEqual(
+    filterTasksForVisibleObjectives([task({ id: "task-mine", linkedObjectiveId: "obj-mine" }), task({ id: "task-other", linkedObjectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
+    ["task-mine"],
+  );
+  assert.deepEqual(
+    filterFeedbackForVisibleObjectives([feedback({ id: "fb-mine", linkedObjectiveId: "obj-mine" }), feedback({ id: "fb-other", linkedObjectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
+    ["fb-mine"],
+  );
+});
+
 test("drag and drop rules block cross-objective bounty moves and self drops", () => {
   assert.equal(
     canDropItem({ type: "bounty", id: "res-a", objectiveId: "obj-a" }, { type: "bounty", bountyId: "res-b", objectiveId: "obj-b", placement: "after" }),
@@ -130,11 +203,12 @@ test("drag and drop rules block cross-objective bounty moves and self drops", ()
   );
 });
 
-test("comment helpers map challenge targets, count only messages, and detect loot comments", () => {
+test("comment helpers map challenge targets, count only messages, and detect objective loot comments", () => {
   const threads: CommentThread[] = [
     comment("thread-result", "result", "res-a", ["one", "two"]),
     comment("thread-result-empty", "result", "res-b", []),
-    comment("thread-loot", "result", "res-loot", ["战利品提交：done"]),
+    comment("thread-result-legacy-loot", "result", "res-legacy-loot", ["战利品提交：old"]),
+    comment("thread-loot", "objective", "obj-loot", ["战利品提交：done"]),
     comment("thread-task", "task", "task-a", ["task comment"]),
   ];
   const counts = commentCountsByTarget(threads);
@@ -147,7 +221,7 @@ test("comment helpers map challenge targets, count only messages, and detect loo
   assert.equal(commentCountFor(counts, "result", "res-a"), 2);
   assert.equal(commentCountFor(counts, "result", "res-b"), 0);
   assert.equal(commentCountFor(counts, "task", "task-a"), 1);
-  assert.deepEqual([...submittedLootIdsFromComments(threads)], ["res-loot"]);
+  assert.deepEqual([...submittedLootObjectiveIdsFromComments(threads)], ["obj-loot"]);
 });
 
 test("date and status helpers keep challenge display boundaries stable", () => {

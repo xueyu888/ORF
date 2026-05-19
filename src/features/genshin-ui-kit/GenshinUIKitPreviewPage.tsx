@@ -77,7 +77,7 @@ export function GenshinUIKitPreviewPage() {
         metrics={
           <>
             <GiMetric icon={Trophy} label="我的积分" tone="gold" value="12,480" />
-            <GiMetric icon={Target} label="可申请悬赏" value="18" />
+            <GiMetric icon={Target} label="可申请悬赏目标" value="18" />
             <GiMetric icon={Clock} label="确认中" tone="teal" value="3" />
           </>
         }
@@ -150,7 +150,7 @@ export function GenshinUIKitPreviewPage() {
             </div>
           </GiPanel>
 
-          <GiPanel title="业务条目" subtitle="用于替代悬赏卡片、征召令、优先挑战和轻详情里的信息块。">
+          <GiPanel title="业务条目" subtitle="用于替代悬赏目标卡片、征召令、优先挑战和轻详情里的信息块。">
             <div className="gk-kit-preview-section">
               <GiQuestStrip
                 active
@@ -233,7 +233,7 @@ export function GenshinUIKitPreviewPage() {
                 }
                 title="申请挑战"
               >
-                <p>提交后等待指挥官确认。确认后，这条悬赏会进入你的挑战页。</p>
+                <p>提交后等待指挥官确认。确认后，这条悬赏目标会进入你的挑战页。</p>
                 <GiQuestStrip
                   icon={<Target className="h-5 w-5" />}
                   rewards={rewardSet}

@@ -14,6 +14,8 @@ currentUser in Objective.challengers
 
 目标来自悬赏大厅中的申请、征召或接受挑战流程；未正式接受的目标不在本页展示。
 
+数据加载边界：普通成员只请求 `/api/my-challenges?scope=mine` 等成员可访问接口，不主动请求 `/api/permissions` 或 `/api/users` 等管理员集合。管理员进入业务页时才额外加载权限规则和成员列表。后端兼容的 `/api/tasks-page` 对普通成员也只返回 scoped `my-challenges` 数据，不返回全量 state。
+
 ## 页面内容
 
 | 区域 | 内容 |
@@ -82,6 +84,8 @@ currentUser in Objective.challengers
 | 审核挑战申请 | 指挥官在目标行处理待审核申请 |
 
 权限由 `permissionRules` 和状态机共同控制。目标内容只能由指挥官调整；指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑自己参与目标下的指标。冻结后指标口径锁定。
+
+反馈状态控件仅对管理员、反馈创建人或反馈 `owner` 指定处理人显示。普通成员可以看到自己可见范围内的反馈内容，但不能关闭或改写他人反馈状态。
 
 ## 布局要求
 

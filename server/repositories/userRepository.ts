@@ -1,7 +1,17 @@
 import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { OrfUser, UserRole } from "../../src/types/orf";
 import { db } from "../db/client";
-import { teamMembers, users } from "../db/schema";
+import {
+  feedback,
+  objectiveContributionReviews,
+  objectiveLoot,
+  objectives,
+  pointLedger,
+  results,
+  tasks,
+  teamMembers,
+  users,
+} from "../db/schema";
 
 export type UserInput = {
   name: string;
@@ -64,15 +74,116 @@ async function assertMembershipExists(teamId: string, userId: string) {
   }
 }
 
+async function assertUniqueTeamUserName(teamId: string, userId: string | null, name: string) {
+  const normalizedName = name.toLowerCase();
+  const nameFilter = userId
+    ? and(eq(teamMembers.teamId, teamId), sql`lower(${users.name}) = ${normalizedName}`, ne(users.id, userId))
+    : and(eq(teamMembers.teamId, teamId), sql`lower(${users.name}) = ${normalizedName}`);
+  const [nameOwner] = await db
+    .select({ id: users.id })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(nameFilter)
+    .limit(1);
+
+  if (nameOwner) {
+    throw Object.assign(new Error("Name already exists"), { statusCode: 409 });
+  }
+}
+
+async function isReferencedByOrfRecords(teamId: string, name: string) {
+  const objectiveRows = await db
+    .select({
+      challengers: objectives.challengers,
+      assignedChallengers: objectives.assignedChallengers,
+      challengeApplications: objectives.challengeApplications,
+    })
+    .from(objectives)
+    .where(eq(objectives.teamId, teamId));
+  if (
+    objectiveRows.some(
+      (objective) =>
+        (objective.challengers ?? []).includes(name) ||
+        (objective.assignedChallengers ?? []).includes(name) ||
+        (objective.challengeApplications ?? []).some((application) => application.applicant === name),
+    )
+  ) {
+    return true;
+  }
+
+  const contributionRows = await db
+    .select({
+      reviewer: objectiveContributionReviews.reviewer,
+      allocations: objectiveContributionReviews.allocations,
+    })
+    .from(objectiveContributionReviews)
+    .where(eq(objectiveContributionReviews.teamId, teamId));
+  if (
+    contributionRows.some(
+      (review) =>
+        review.reviewer === name ||
+        (review.allocations ?? []).some((allocation) => allocation.member === name),
+    )
+  ) {
+    return true;
+  }
+
+  const [resultRef, taskRef, feedbackRef, lootRef, ledgerRef] = await Promise.all([
+    db
+      .select({ id: results.id })
+      .from(results)
+      .where(and(eq(results.teamId, teamId), eq(results.definer, name)))
+      .limit(1),
+    db
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(and(eq(tasks.teamId, teamId), eq(tasks.assignee, name)))
+      .limit(1),
+    db
+      .select({ id: feedback.id })
+      .from(feedback)
+      .where(and(eq(feedback.teamId, teamId), eq(feedback.owner, name)))
+      .limit(1),
+    db
+      .select({ id: objectiveLoot.id })
+      .from(objectiveLoot)
+      .where(and(eq(objectiveLoot.teamId, teamId), eq(objectiveLoot.submittedBy, name)))
+      .limit(1),
+    db
+      .select({ id: pointLedger.id })
+      .from(pointLedger)
+      .where(and(eq(pointLedger.teamId, teamId), eq(pointLedger.memberName, name)))
+      .limit(1),
+  ]);
+
+  return [resultRef, taskRef, feedbackRef, lootRef, ledgerRef].some((rows) => rows.length > 0);
+}
+
+async function assertCanRenameUser(teamId: string, userId: string, nextName: string) {
+  const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user || user.name === nextName) {
+    return;
+  }
+
+  if (await isReferencedByOrfRecords(teamId, user.name)) {
+    throw Object.assign(new Error("User name is referenced by ORF records"), { statusCode: 409 });
+  }
+}
+
 function assertCanChangeRole(actorUserId: string, userId: string, nextRole: UserRole) {
   if (actorUserId === userId && nextRole !== "admin") {
     throw Object.assign(new Error("Admin cannot demote self"), { statusCode: 409 });
   }
 }
 
-function assertCanDeleteUser(actorUserId: string, userId: string) {
+async function assertCanDeleteUser(teamId: string, actorUserId: string, userId: string) {
   if (actorUserId === userId) {
     throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
+  }
+
+  const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
+  if (user && (await isReferencedByOrfRecords(teamId, user.name))) {
+    throw Object.assign(new Error("User is referenced by ORF records"), { statusCode: 409 });
   }
 }
 
@@ -133,16 +244,23 @@ export async function createTeamUser(teamId: string, actorUserId: string, input:
   }
 
   const [matchedUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${normalized.email}`).limit(1);
+  let matchedMembership: { role: string } | undefined;
   if (matchedUser) {
-    const [membership] = await db
+    [matchedMembership] = await db
       .select({ role: teamMembers.role })
       .from(teamMembers)
       .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, matchedUser.id)))
       .limit(1);
 
-    if (membership) {
+    if (matchedMembership) {
       assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
+      await assertCanRenameUser(teamId, matchedUser.id, normalized.name);
     }
+  }
+
+  await assertUniqueTeamUserName(teamId, matchedUser?.id ?? null, normalized.name);
+  if (!matchedMembership && (await isReferencedByOrfRecords(teamId, normalized.name))) {
+    throw Object.assign(new Error("Name is referenced by ORF records"), { statusCode: 409 });
   }
 
   await db.transaction(async (tx) => {
@@ -196,6 +314,9 @@ async function updateTeamUserRecord(teamId: string, userId: string, normalized: 
     throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
   }
 
+  await assertCanRenameUser(teamId, userId, normalized.name);
+  await assertUniqueTeamUserName(teamId, userId, normalized.name);
+
   await db.transaction(async (tx) => {
     await tx.update(users).set({ name: normalized.name, email: normalized.email }).where(eq(users.id, userId));
     await tx.update(teamMembers).set({ role: normalized.role }).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
@@ -205,17 +326,8 @@ async function updateTeamUserRecord(teamId: string, userId: string, normalized: 
 }
 
 export async function deleteTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
-  assertCanDeleteUser(actorUserId, userId);
-
-  const [membership] = await db
-    .select({ role: teamMembers.role })
-    .from(teamMembers)
-    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
-    .limit(1);
-
-  if (!membership) {
-    return getTeamUsers(teamId);
-  }
+  await assertMembershipExists(teamId, userId);
+  await assertCanDeleteUser(teamId, actorUserId, userId);
 
   await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
   return getTeamUsers(teamId);
@@ -234,8 +346,10 @@ export async function rejectRegistrationRequest(teamId: string, userId: string):
 }
 
 export async function disableTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
-  assertCanDeleteUser(actorUserId, userId);
   await assertMembershipExists(teamId, userId);
+  if (actorUserId === userId) {
+    throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
+  }
   await db.update(users).set({ status: "disabled" }).where(eq(users.id, userId));
   return getTeamUsers(teamId);
 }

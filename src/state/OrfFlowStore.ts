@@ -28,7 +28,25 @@ type LegacyResult = Result & {
 
 const cloneState = (state: OrfState): OrfState => JSON.parse(JSON.stringify(state)) as OrfState;
 const cloneValue = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
-const makeId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+let idCounter = 0;
+const nextIdCounter = () => {
+  idCounter = (idCounter + 1) % Number.MAX_SAFE_INTEGER;
+  return idCounter.toString(36);
+};
+const randomIdSegment = () => {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const bytes = new Uint32Array(4);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (value) => value.toString(16).padStart(8, "0")).join("");
+  }
+
+  return Math.random().toString(16).slice(2);
+};
+const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomIdSegment()}`;
 const currentTime = () => new Date().toISOString();
 const currentDate = () => localDateString(new Date());
 const currentUserName = (state: OrfState) => state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
@@ -74,6 +92,15 @@ const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStat
 
   const completedCount = checklist.filter((item) => item.done).length;
   return completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
+};
+
+const isStageCompatibleWithFlowStatus = (
+  flowStatus: OrfState["objectives"][number]["flowStatus"],
+  stage: OrfState["objectives"][number]["stage"],
+) => {
+  if (flowStatus === "reestimating") return stage === "orfReestimate";
+  if (flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed") return stage === "goalFrozen";
+  return stage !== "goalFrozen";
 };
 const moveByReference = <T extends { id: string }>(items: T[], movingId: string, referenceId: string, placement: Placement): T[] => {
   const moving = items.find((item) => item.id === movingId);
@@ -241,12 +268,17 @@ const emptyBusinessState = (): OrfState => ({
   pointLedger: [],
 });
 
-function inferFlowStatus(objective: Objective, assignedChallengers: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
+function inferFlowStatus(
+  objective: Objective,
+  challengers: string[],
+  assignedChallengers: string[],
+  challengeApplications: ChallengeApplication[],
+): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
   if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
   if (objective.lootSubmittedAt) return "submitted";
   if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
-  if (objective.challengers?.length) return "reestimating";
+  if (challengers.length) return "reestimating";
   if (assignedChallengers.length > 0) return "recruiting";
   if (challengeApplications.some((application) => application.status === "pending")) return "applying";
   if (objective.stage === "resultClaiming") return "open";
@@ -281,21 +313,23 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
   const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
   const typedResults = objectiveResults.map(normalizeResult);
   const acceptedResults = typedResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
-  const assignedChallengers = objective.assignedChallengers?.length
+  const challengers = objective.challengers?.length ? uniqueMembers(objective.challengers) : uniqueMembers(objectiveResults.map((result) => result.owner));
+  const rawAssignedChallengers = objective.assignedChallengers?.length
     ? objective.assignedChallengers
-    : uniqueMembers(objectiveResults.map((result) => result.assignedChallenger));
+    : objectiveResults.map((result) => result.assignedChallenger);
+  const assignedChallengers = uniqueMembers(rawAssignedChallengers).filter((member) => !challengers.includes(member));
   const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
 
   return {
     ...objective,
     stage: objective.stage ?? "orfReestimate",
-    flowStatus: inferFlowStatus(objective, assignedChallengers, challengeApplications),
+    flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
     finalDueAt:
       objective.finalDueAt ||
       latestDate(objectiveResults.map((result) => result.finalDueAt)) ||
       latestDate(tasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.dueDate)) ||
       addDays(objective.updatedAt, 14),
-    challengers: objective.challengers?.length ? objective.challengers : uniqueMembers(objectiveResults.map((result) => result.owner)),
+    challengers,
     assignedChallengers,
     challengeApplications,
     acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
@@ -342,7 +376,7 @@ export class OrfFlowStore {
   }
 
   createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt">>): OrfState {
-    const id = `obj-${Date.now()}`;
+    const id = makeId("obj");
     const now = currentDate();
     const objective = {
       id,
@@ -380,12 +414,12 @@ export class OrfFlowStore {
   }
 
   createResult(state: OrfState, input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">): OrfState {
-    const id = `res-${Date.now()}`;
+    const id = makeId("res");
     const result: Result = {
       id,
       objectiveId: input.objectiveId,
       title: input.title,
-      description: input.description ?? "由 ORF Flow 规划创建的悬赏。",
+      description: input.description ?? "由 ORF Flow 规划创建的指标。",
       metricName: input.metricName,
       metricRequirement: input.metricRequirement ?? `${input.metricName}：写清统计对象和完成标准后进入执行。`,
       statisticalObject: input.statisticalObject ?? "指挥官确认的标准样本集和线上反馈样本",
@@ -428,7 +462,7 @@ export class OrfFlowStore {
       return state;
     }
 
-    const id = `fb-${Date.now()}`;
+    const id = makeId("fb");
     const now = currentDate();
     const owner = input.owner || currentUserName(state);
     const feedback: Feedback = {
@@ -445,7 +479,7 @@ export class OrfFlowStore {
       owner,
       createdAt: now,
       updatedAt: now,
-      activity: [{ id: `act-${Date.now()}`, actor: owner, action: "创建了结构化反馈", at: now }],
+      activity: [{ id: makeId("act"), actor: owner, action: "创建了结构化反馈", at: now }],
     };
 
     return {
@@ -561,7 +595,7 @@ export class OrfFlowStore {
         }
 
         const item = {
-          id: `ck-${Date.now()}`,
+          id: makeId("ck"),
           label: "新子行动项",
           done: false,
           updatedAt: now,
@@ -598,6 +632,11 @@ export class OrfFlowStore {
   }
 
   updateObjectiveStage(state: OrfState, objectiveId: string, stage: OrfState["objectives"][number]["stage"]): OrfState {
+    const objective = state.objectives.find((item) => item.id === objectiveId);
+    if (!objective || !isStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
+      return state;
+    }
+
     const now = currentDate();
     return {
       ...state,
@@ -939,7 +978,7 @@ export class OrfFlowStore {
               ...item,
               status,
               updatedAt: now,
-              activity: [...item.activity, { id: `act-${Date.now()}`, actor: currentUserName(state), action: `更新反馈状态`, at: now }],
+              activity: [...item.activity, { id: makeId("act"), actor: currentUserName(state), action: `更新反馈状态`, at: now }],
             }
           : item,
       ),
@@ -1091,7 +1130,13 @@ export class OrfFlowStore {
           return [thread];
         }
 
-        const messages = thread.messages.filter((message) => message.id !== messageId && message.parentMessageId !== messageId);
+        const messages = thread.messages
+          .filter((message) => message.id !== messageId && message.parentMessageId !== messageId)
+          .map((message) =>
+            message.replyToMessageId === messageId
+              ? { ...message, replyToMessageId: undefined, replyToAuthor: undefined }
+              : message,
+          );
         if (messages.length === 0) {
           return [];
         }
@@ -1113,7 +1158,7 @@ export class OrfFlowStore {
       results: state.results.map((item) => (item.id === resultId ? { ...item, title, updatedAt: now } : item)),
       decisions: [
         {
-          id: `dec-${Date.now()}`,
+          id: makeId("dec"),
           title: `更新指标：${title}`,
           reason,
           evidence: feedbackId ? `关联反馈 ${feedbackId}` : "手动 ORF 复盘",

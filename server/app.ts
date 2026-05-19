@@ -4,7 +4,9 @@ import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
 import { getAuthenticatedOrfUser } from "./auth/ory";
+import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./auth/errors";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
+import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/errors";
 import { env } from "./env";
 import { registerOptionalIntegrations } from "./integrations";
 import {
@@ -20,8 +22,13 @@ import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
   approveObjectiveChallengeApplication,
+  canDeleteObjective,
+  canCreateFeedbackForResult,
   canEditObjectiveResultsDuringReestimate,
   canEditResultDuringReestimate,
+  canMutateObjectiveResults,
+  canMutateResult,
+  canMutateObjectiveWorkItem,
   createComment,
   createChecklistItem,
   createFeedback,
@@ -48,6 +55,9 @@ import {
   rejectObjectiveChallengeApplication,
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
+  resolveObjectiveIdForWorkItem,
+  resolveTeamIdForFeedback,
+  resolveTeamIdForWorkItem,
   setTaskCompletion,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
@@ -83,6 +93,7 @@ import {
   setDefaultVisualBackground,
   visualBackgroundError,
 } from "./settings/visualBackgrounds";
+import { isDateOnlyString } from "../src/utils/date";
 
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
 const prioritySchema = z.enum(["Low", "Medium", "High", "Critical"]);
@@ -100,15 +111,17 @@ const objectiveAcceptedResultSchema = z.enum(["completed", "falsified", "overtur
 const resultAcceptedResultSchema = z.enum(["unreviewed", "completed", "falsified", "failed"]);
 const userBodySchema = z.object({
   name: z.string().trim().min(1),
-  email: z.string().email().transform((value) => value.toLowerCase()),
+  email: z.string().trim().email().transform((value) => value.toLowerCase()),
   role: userRoleSchema,
 });
+const requiredTextSchema = z.string().trim().min(1);
+const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
 const editablePermissionRoleSchema = z.enum(["member"]);
 const objectiveStageSchema = z.enum(["goalSetting", "resultClaiming", "orfReestimate", "goalFrozen"]);
 const permissionKeySchema = z.enum(permissionKeys);
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
-const titleBodySchema = z.object({ title: z.string().trim().min(1) });
-const labelBodySchema = z.object({ label: z.string().trim().min(1) });
+const titleBodySchema = z.object({ title: requiredTextSchema });
+const labelBodySchema = z.object({ label: requiredTextSchema });
 const completionBodySchema = z.object({ done: z.boolean() });
 const objectiveStageBodySchema = z.object({ stage: objectiveStageSchema });
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
@@ -121,6 +134,8 @@ const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
 const permissionRoleParamsSchema = z.object({ role: userRoleSchema });
+const dateOnlySchema = z.string().trim().refine(isDateOnlyString, { message: "Invalid date" });
+const optionalDateOnlySchema = z.string().trim().transform((value) => value || undefined).pipe(dateOnlySchema.optional()).optional();
 const placementSchema = z.enum(["before", "after"]);
 const permissionRuleSchema = z.object({
   role: editablePermissionRoleSchema,
@@ -148,25 +163,25 @@ const visualBackgroundStaticParamsSchema = z.object({
   fileName: z.string().min(1),
 });
 const createResultBodySchema = z.object({
-  objectiveId: z.string().min(1),
-  title: z.string().min(1),
-  metricName: z.string().min(1),
-  description: z.string().optional(),
+  objectiveId: requiredTextSchema,
+  title: requiredTextSchema,
+  metricName: requiredTextSchema,
+  description: optionalTextSchema,
   baseline: z.number().optional(),
   current: z.number().optional(),
   target: z.number().optional(),
-  unit: z.string().optional(),
+  unit: optionalTextSchema,
   direction: metricDirectionSchema.optional(),
   uncertaintyLevel: uncertaintyLevelSchema.optional(),
   source: bountySourceSchema.optional(),
-  definer: z.string().optional(),
+  definer: optionalTextSchema,
 });
 const createObjectiveBodySchema = z.object({
   title: z.string().trim().min(1),
   whyItMatters: z.string().trim().min(1),
   cycle: z.string().trim().min(1),
   boundary: z.string().trim().min(1),
-  finalDueAt: z.string().optional(),
+  finalDueAt: dateOnlySchema.optional(),
 });
 const createFeedbackBodySchema = z.object({
   phenomenon: z.string().trim().min(1),
@@ -185,31 +200,31 @@ const resultUpdateProposalBodySchema = z.object({
   feedbackId: z.string().min(1).optional(),
 });
 const createTaskBodySchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  assignee: z.string().optional(),
+  title: requiredTextSchema,
+  description: optionalTextSchema,
+  assignee: optionalTextSchema,
   priority: prioritySchema.optional(),
-  linkedObjectiveId: z.string().optional(),
-  linkedResultId: z.string().min(1),
-  dueDate: z.string().optional(),
-  feedbackOriginId: z.string().optional(),
+  linkedObjectiveId: optionalTextSchema,
+  linkedResultId: requiredTextSchema,
+  dueDate: optionalDateOnlySchema,
+  feedbackOriginId: optionalTextSchema,
 });
 const createChecklistItemBodySchema = z.object({
-  label: z.string().optional(),
-  afterItemId: z.string().optional(),
+  label: optionalTextSchema,
+  afterItemId: optionalTextSchema,
 });
 const moveResultBodySchema = z.object({
-  referenceResultId: z.string().min(1),
+  referenceResultId: requiredTextSchema,
   placement: placementSchema.default("after"),
 });
 const moveTaskBodySchema = z.object({
-  toResultId: z.string().min(1),
-  referenceTaskId: z.string().optional(),
+  toResultId: requiredTextSchema,
+  referenceTaskId: optionalTextSchema,
   placement: placementSchema.optional(),
 });
 const moveChecklistBodySchema = z.object({
-  toTaskId: z.string().min(1),
-  referenceItemId: z.string().optional(),
+  toTaskId: requiredTextSchema,
+  referenceItemId: optionalTextSchema,
   placement: placementSchema.optional(),
 });
 const createCommentBodySchema = z.object({
@@ -259,6 +274,9 @@ const contributionReviewBodySchema = z.object({
   })).min(1),
 });
 
+type AuthenticatedOrfUser = NonNullable<Awaited<ReturnType<typeof getAuthenticatedOrfUser>>>;
+type RequestWithOrfUser = FastifyRequest & { orfUser?: AuthenticatedOrfUser | null };
+
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
@@ -267,14 +285,42 @@ function corsOrigin() {
   return env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
 }
 
-async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
+async function getRequestOrfUser(request: FastifyRequest, reply: FastifyReply, logMessage: string) {
+  const requestWithUser = request as RequestWithOrfUser;
+  if (requestWithUser.orfUser !== undefined) {
+    return requestWithUser.orfUser;
+  }
+
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, "Ory admin session check failed");
+    request.log.warn(error, logMessage);
+    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
+      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
+      return undefined;
+    }
     return null;
   });
 
+  if (user !== undefined) {
+    requestWithUser.orfUser = user;
+  }
+
+  return user;
+}
+
+async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
+  const user = await getRequestOrfUser(request, reply, "Ory admin session check failed");
+
+  if (user === undefined) {
+    return null;
+  }
+
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
+    return null;
+  }
+
+  if (user.status !== "active") {
+    reply.code(403).send({ error: "User is not approved", status: user.status });
     return null;
   }
 
@@ -287,17 +333,38 @@ async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
 }
 
 async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
-  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, "Ory API session check failed");
+  const user = await getRequestOrfUser(request, reply, "Ory API session check failed");
+
+  if (user === undefined) {
     return null;
-  });
+  }
 
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
     return null;
   }
 
+  if (user.status !== "active") {
+    reply.code(403).send({ error: "User is not approved", status: user.status });
+    return null;
+  }
+
   return user;
+}
+
+async function requireUserTeamContext(request: FastifyRequest, reply: FastifyReply) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  const teamId = await getPrimaryTeamIdForUser(user.id);
+  if (!teamId) {
+    reply.code(404).send({ error: "Team not found" });
+    return null;
+  }
+
+  return { user, teamId };
 }
 
 async function requireAdminTeamId(request: FastifyRequest, reply: FastifyReply) {
@@ -330,15 +397,41 @@ async function requireAdminContext(request: FastifyRequest, reply: FastifyReply)
   return { user, teamId };
 }
 
+async function requireTargetInTeam(
+  reply: FastifyReply,
+  target: Parameters<typeof resolveTeamIdForWorkItem>[0],
+  teamId: string,
+  message = "Work item not found",
+) {
+  const targetTeamId = await resolveTeamIdForWorkItem(target);
+  if (!targetTeamId || targetTeamId !== teamId) {
+    reply.code(404).send({ error: message });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireFeedbackInTeam(reply: FastifyReply, feedbackId: string, teamId: string) {
+  const targetTeamId = await resolveTeamIdForFeedback(feedbackId);
+  if (!targetTeamId || targetTeamId !== teamId) {
+    reply.code(404).send({ error: "Feedback not found" });
+    return false;
+  }
+
+  return true;
+}
+
 async function requireWriteContext(
   request: FastifyRequest,
   reply: FastifyReply,
   permission: PermissionKey,
 ) {
-  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, "Ory permission session check failed");
+  const user = await getRequestOrfUser(request, reply, "Ory permission session check failed");
+
+  if (user === undefined) {
     return null;
-  });
+  }
 
   if (!user) {
     reply.code(401).send({ error: "Unauthorized" });
@@ -366,51 +459,19 @@ async function requireWriteContext(
   return { user, teamId };
 }
 
-async function requireWritePermission(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  permission: PermissionKey,
-) {
-  const user = await requireApiUser(request, reply);
-  if (!user) {
-    return false;
-  }
-
-  if (user.role === "admin") {
-    return true;
-  }
-
-  const teamId = await getPrimaryTeamIdForUser(user.id);
-  if (!teamId) {
-    reply.code(404).send({ error: "Team not found" });
-    return false;
-  }
-
-  const permissionRules = await getPermissionRulesForTeam(teamId);
-  const allowed = hasRolePermission(user.role, permissionRules, permission);
-
-  if (!allowed) {
-    reply.code(403).send({ error: "Forbidden" });
-    return false;
-  }
-
-  return true;
-}
-
 async function requireResultEditContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
-  const user = await requireApiUser(request, reply);
-  if (!user) {
+  const context = await requireUserTeamContext(request, reply);
+  if (!context) {
+    return null;
+  }
+  const { user, teamId } = context;
+
+  if (!(await requireTargetInTeam(reply, { type: "result", id: resultId }, teamId, "Result not found"))) {
     return null;
   }
 
   if (user.role === "admin") {
-    return { user };
-  }
-
-  const teamId = await getPrimaryTeamIdForUser(user.id);
-  if (!teamId) {
-    reply.code(404).send({ error: "Team not found" });
-    return null;
+    return { user, teamId };
   }
 
   const permissionRules = await getPermissionRulesForTeam(teamId);
@@ -421,31 +482,127 @@ async function requireResultEditContext(request: FastifyRequest, reply: FastifyR
     return null;
   }
 
-  return { user };
+  return { user, teamId };
 }
 
-async function requireAuthenticatedForWrite(request: FastifyRequest, reply: FastifyReply) {
-  return Boolean(await requireApiUser(request, reply));
-}
-
-async function commentActorWithPermissions(request: FastifyRequest, reply: FastifyReply) {
-  const user = await requireApiUser(request, reply);
-  if (!user) {
-    return null;
+function sendObjectiveResultLock(reply: FastifyReply, access: Awaited<ReturnType<typeof canMutateResult>>): boolean {
+  if (access.status === "notFound") {
+    reply.code(404).send({ error: "Result not found" });
+    return false;
   }
 
-  if (user.role === "admin") {
-    return { ...user, canManageAllComments: true };
+  if (access.status === "locked") {
+    reply.code(409).send({ error: "Objective results are locked for this lifecycle state", flowStatus: access.flowStatus });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireObjectiveResultsUnlocked(reply: FastifyReply, objectiveId: string) {
+  const access = await canMutateObjectiveResults(objectiveId);
+  if (access.status === "notFound") {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+
+  if (access.status === "locked") {
+    reply.code(409).send({ error: "Objective results are locked for this lifecycle state", flowStatus: access.flowStatus });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireResultUnlocked(reply: FastifyReply, resultId: string) {
+  return sendObjectiveResultLock(reply, await canMutateResult(resultId));
+}
+
+async function requireObjectiveDeleteUnlocked(reply: FastifyReply, objectiveId: string) {
+  const access = await canDeleteObjective(objectiveId);
+  if (access.status === "notFound") {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+
+  if (access.status === "locked") {
+    reply.code(409).send({ error: "Objective cannot be deleted after submission or settlement", flowStatus: access.flowStatus });
+    return false;
+  }
+
+  return true;
+}
+
+async function authorizeObjectiveWorkItemMutation(
+  user: Awaited<ReturnType<typeof requireApiUser>>,
+  reply: FastifyReply,
+  objectiveId: string,
+) {
+  if (!user) {
+    return false;
   }
 
   const teamId = await getPrimaryTeamIdForUser(user.id);
   if (!teamId) {
     reply.code(404).send({ error: "Team not found" });
+    return false;
+  }
+
+  const targetTeamId = await resolveTeamIdForWorkItem({ type: "objective", id: objectiveId });
+  if (!targetTeamId || targetTeamId !== teamId) {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+
+  const access = await canMutateObjectiveWorkItem({ ...user, teamId }, objectiveId);
+  if (access === "notFound") {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+  if (access === "forbidden") {
+    reply.code(403).send({ error: "Forbidden" });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireObjectiveWorkItemMutation(request: FastifyRequest, reply: FastifyReply, objectiveId: string) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
     return null;
   }
 
+  return (await authorizeObjectiveWorkItemMutation(user, reply, objectiveId)) ? user : null;
+}
+
+async function requireWorkItemTargetMutation(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  target: Parameters<typeof resolveObjectiveIdForWorkItem>[0],
+) {
+  const objectiveId = await resolveObjectiveIdForWorkItem(target);
+  if (!objectiveId) {
+    reply.code(404).send({ error: "Work item not found" });
+    return null;
+  }
+
+  return requireObjectiveWorkItemMutation(request, reply, objectiveId);
+}
+
+async function commentActorWithPermissions(request: FastifyRequest, reply: FastifyReply) {
+  const context = await requireUserTeamContext(request, reply);
+  if (!context) {
+    return null;
+  }
+  const { user, teamId } = context;
+
+  if (user.role === "admin") {
+    return { ...user, teamId, canManageAllComments: true };
+  }
+
   const permissions = await getRolePermissionKeysForTeam(teamId, user.role);
-  return { ...user, canManageAllComments: permissions.includes("comment.manage") };
+  return { ...user, teamId, canManageAllComments: permissions.includes("comment.manage") };
 }
 
 function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof createComment>>) {
@@ -543,6 +700,11 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(statusCode).send({ error: error instanceof Error ? error.message : "Bad Request" });
     }
 
+    if (isDatabaseUnavailableError(error)) {
+      app.log.error(error);
+      return reply.code(503).send(databaseUnavailablePayload());
+    }
+
     app.log.error(error);
     return reply.code(500).send({ error: "Internal Server Error" });
   });
@@ -562,6 +724,13 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
     try {
       const params = visualBackgroundStaticParamsSchema.parse(request.params);
+      if (params.scene !== "login_background") {
+        const user = await requireApiUser(request, reply);
+        if (!user) {
+          return reply;
+        }
+      }
+
       const file = await getVisualBackgroundFile(params.scene, params.scope, params.fileName);
       reply.header("Content-Type", file.mimeType);
       return reply.send(file.stream);
@@ -586,6 +755,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.post("/api/settings/visual/backgrounds", async (request, reply) => {
+    if (!(await requireAdminContext(request, reply))) {
+      return reply;
+    }
+
     try {
       let scene: z.infer<typeof backgroundSceneSchema> | null = null;
       let file: { fileName: string; mimeType: string; buffer: Buffer } | null = null;
@@ -622,6 +795,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.put("/api/settings/visual/backgrounds/:id/default", async (request, reply) => {
+    if (!(await requireAdminContext(request, reply))) {
+      return reply;
+    }
+
     try {
       const params = visualBackgroundParamsSchema.parse(request.params);
       return {
@@ -636,6 +813,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.put("/api/settings/visual/background-config", async (request, reply) => {
+    if (!(await requireAdminContext(request, reply))) {
+      return reply;
+    }
+
     try {
       const body = visualBackgroundConfigBodySchema.parse(request.body);
       return {
@@ -649,19 +830,41 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
   });
 
-  app.get("/api/tasks-page", async () => getTaskManagementData());
-  app.get("/api/bounties", async (request, reply) => {
+  app.get("/api/tasks-page", async (request, reply) => {
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
     }
 
-    return getBountyHallData(user.name);
+    const teamId = await getPrimaryTeamIdForUser(user.id);
+    if (!teamId) {
+      return reply.code(404).send({ error: "Team not found" });
+    }
+
+    return user.role === "admin"
+      ? getTaskManagementData({ teamId })
+      : getMyChallengesData(user.name, false, { teamId });
+  });
+  app.get("/api/bounties", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+    const teamId = await getPrimaryTeamIdForUser(user.id);
+    if (!teamId) {
+      return reply.code(404).send({ error: "Team not found" });
+    }
+
+    return getBountyHallData(user.name, { teamId });
   });
   app.get("/api/my-challenges", async (request, reply) => {
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
+    }
+    const teamId = await getPrimaryTeamIdForUser(user.id);
+    if (!teamId) {
+      return reply.code(404).send({ error: "Team not found" });
     }
 
     const query = myChallengesQuerySchema.parse(request.query);
@@ -669,12 +872,19 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    return getMyChallengesData(user.name, query.scope === "all");
+    return getMyChallengesData(user.name, query.scope === "all", { teamId });
   });
-  app.get("/api/orf-state", async () => getOrfStateSnapshot());
+  app.get("/api/orf-state", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return getOrfStateSnapshot({ teamId: context.teamId });
+  });
 
   app.post("/api/comments", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
+    const user = await commentActorWithPermissions(request, reply);
     if (!user) {
       return reply;
     }
@@ -834,21 +1044,24 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/results", async (request, reply) => {
     const body = createResultBodySchema.parse(request.body);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
       return reply;
     }
-    const teamId = await getPrimaryTeamIdForUser(user.id);
-    if (!teamId) {
-      return reply.code(404).send({ error: "Team not found" });
+    const { user, teamId } = context;
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: body.objectiveId }, teamId, "Objective not found"))) {
+      return reply;
     }
     const permissionRules = await getPermissionRulesForTeam(teamId);
     const source = body.source ?? "managerDefined";
     const allowedByRole = user.role === "admin" || hasRolePermission(user.role, permissionRules, "result.create");
-    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name);
+    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name, teamId);
     const allowed = source === "memberProposed" ? allowedByReestimate : allowedByRole;
     if (!allowed) {
       return reply.code(403).send({ error: "Forbidden" });
+    }
+    if (!(await requireObjectiveResultsUnlocked(reply, body.objectiveId))) {
+      return reply;
     }
 
     const result = await createResult({
@@ -865,33 +1078,57 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.post("/api/feedback", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
       return reply;
     }
+    const { user, teamId } = context;
 
     const body = createFeedbackBodySchema.parse(request.body);
-    const item = await createFeedback(body, user.id);
-
-    if (!item) {
+    const feedbackAccess = await canCreateFeedbackForResult(body.linkedResultId, { ...user, teamId });
+    if (feedbackAccess === "notFound") {
       return reply.code(404).send({ error: "Result not found" });
     }
+    if (feedbackAccess === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
 
-    return { feedback: item };
+    const outcome = await createFeedback(body, user.id);
+
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+    if (outcome.status === "invalidOwner") {
+      return reply.code(409).send({ error: "Feedback owner must be an active team member" });
+    }
+
+    return { feedback: outcome.feedback };
   });
 
   app.patch("/api/feedback/:feedbackId/status", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = updateFeedbackStatusBodySchema.parse(request.body);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, teamId } = context;
+    if (!(await requireFeedbackInTeam(reply, params.feedbackId, teamId))) {
       return reply;
     }
 
-    const updated = await updateFeedbackStatus(params.feedbackId, body.status, user.id);
+    const updated = await updateFeedbackStatus(params.feedbackId, body.status, {
+      id: user.id,
+      name: user.name,
+      role: user.role,
+      teamId,
+    });
 
-    if (!updated) {
+    if (updated.status === "notFound") {
       return reply.code(404).send({ error: "Feedback not found" });
+    }
+    if (updated.status === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
     }
 
     return { ok: true };
@@ -899,14 +1136,14 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/tasks", async (request, reply) => {
     const body = createTaskBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "result", id: body.linkedResultId }))) {
       return reply;
     }
 
     const task = await createTask(body);
 
     if (!task) {
-      return reply.code(404).send({ error: "Result not found" });
+      return reply.code(404).send({ error: "Result or feedback not found" });
     }
 
     return { task };
@@ -915,7 +1152,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.post("/api/tasks/:taskId/checklist", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = createChecklistItemBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -931,7 +1168,11 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/objectives/:objectiveId", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireAdminContext(request, reply))) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
       return reply;
     }
 
@@ -947,14 +1188,18 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/objectives/:objectiveId/stage", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
     const body = objectiveStageBodySchema.parse(request.body);
-    if (!(await requireAdminContext(request, reply))) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
       return reply;
     }
 
     const updated = await updateObjectiveStage(params.objectiveId, body.stage);
 
     if (!updated) {
-      return reply.code(404).send({ error: "Objective not found" });
+      return reply.code(409).send({ error: "Objective stage is incompatible with the current lifecycle state" });
     }
 
     return { ok: true };
@@ -967,6 +1212,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = objectiveParamsSchema.parse(request.params);
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
     return sendObjectiveFlowOutcome(reply, await publishObjective(params.objectiveId, context.user.id));
   });
 
@@ -978,6 +1226,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const params = objectiveParamsSchema.parse(request.params);
     const body = recruitBodySchema.parse(request.body);
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
     return sendObjectiveFlowOutcome(reply, await recruitObjectiveChallengers(params.objectiveId, body.members, context.user.id));
   });
 
@@ -988,6 +1239,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = applicationParamsSchema.parse(request.params);
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
     return sendObjectiveFlowOutcome(
       reply,
       await approveObjectiveChallengeApplication(params.objectiveId, params.applicationId, context.user.id),
@@ -1001,6 +1255,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = applicationParamsSchema.parse(request.params);
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
     return sendObjectiveFlowOutcome(
       reply,
       await rejectObjectiveChallengeApplication(params.objectiveId, params.applicationId, context.user.id),
@@ -1014,6 +1271,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = objectiveParamsSchema.parse(request.params);
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
     return sendObjectiveFlowOutcome(reply, await freezeObjectiveAfterReestimate(params.objectiveId, context.user.id));
   });
 
@@ -1024,6 +1284,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = objectiveParamsSchema.parse(request.params);
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
     return sendObjectiveFlowOutcome(reply, await reopenObjectiveReestimate(params.objectiveId, context.user.id));
   });
 
@@ -1035,6 +1298,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const params = objectiveParamsSchema.parse(request.params);
     const body = reviewLootBodySchema.parse(request.body);
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
     return sendObjectiveFlowOutcome(reply, await reviewObjectiveLoot(params.objectiveId, body, context.user.id));
   });
 
@@ -1042,6 +1308,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const params = resultParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
     if (!(await requireResultEditContext(request, reply, params.resultId))) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
       return reply;
     }
 
@@ -1061,6 +1330,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
+    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
 
     const updated = await updateResultConfidence(params.resultId, body.confidence, context.user.id);
 
@@ -1078,6 +1353,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
+    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
 
     const updated = await proposeResultUpdate(
       { resultId: params.resultId, title: body.title, reason: body.reason, feedbackId: body.feedbackId },
@@ -1085,7 +1366,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     );
 
     if (!updated) {
-      return reply.code(404).send({ error: "Result not found" });
+      return reply.code(404).send({ error: "Result or feedback not found" });
     }
 
     return { ok: true };
@@ -1093,8 +1374,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.patch("/api/objectives/:objectiveId/challenge", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, teamId } = context;
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
       return reply;
     }
 
@@ -1125,8 +1410,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.patch("/api/objectives/:objectiveId/challenge/decline", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, teamId } = context;
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
       return reply;
     }
 
@@ -1135,8 +1424,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/objectives/:objectiveId/challenge-applications", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, teamId } = context;
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
       return reply;
     }
 
@@ -1160,8 +1453,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/objectives/:objectiveId/loot", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, teamId } = context;
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
       return reply;
     }
 
@@ -1171,8 +1468,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/objectives/:objectiveId/contribution-reviews", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserTeamContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, teamId } = context;
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
       return reply;
     }
 
@@ -1183,7 +1484,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1199,7 +1500,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId/label", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = labelBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
       return reply;
     }
 
@@ -1215,7 +1516,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/status", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = updateTaskStatusBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1231,7 +1532,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/completion", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1247,7 +1548,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
       return reply;
     }
 
@@ -1263,7 +1564,17 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/results/:resultId/order", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = moveResultBodySchema.parse(request.body);
-    if (!(await requireWritePermission(request, reply, "result.edit"))) {
+    const context = await requireWriteContext(request, reply, "result.edit");
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+      return reply;
+    }
+    if (!(await requireTargetInTeam(reply, { type: "result", id: body.referenceResultId }, context.teamId, "Result move target not found"))) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
       return reply;
     }
 
@@ -1279,7 +1590,15 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/move", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = moveTaskBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId });
+    if (!user) {
+      return reply;
+    }
+    const targetObjectiveId = await resolveObjectiveIdForWorkItem({ type: "result", id: body.toResultId });
+    if (!targetObjectiveId) {
+      return reply.code(404).send({ error: "Task move target not found" });
+    }
+    if (!(await authorizeObjectiveWorkItemMutation(user, reply, targetObjectiveId))) {
       return reply;
     }
 
@@ -1295,7 +1614,15 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId/move", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = moveChecklistBodySchema.parse(request.body);
-    if (!(await requireAuthenticatedForWrite(request, reply))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId });
+    if (!user) {
+      return reply;
+    }
+    const targetObjectiveId = await resolveObjectiveIdForWorkItem({ type: "task", id: body.toTaskId });
+    if (!targetObjectiveId) {
+      return reply.code(404).send({ error: "Checklist move target not found" });
+    }
+    if (!(await authorizeObjectiveWorkItemMutation(user, reply, targetObjectiveId))) {
       return reply;
     }
 
@@ -1310,7 +1637,14 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.delete("/api/objectives/:objectiveId", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "objective.delete"))) {
+    const context = await requireWriteContext(request, reply, "objective.delete");
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+      return reply;
+    }
+    if (!(await requireObjectiveDeleteUnlocked(reply, params.objectiveId))) {
       return reply;
     }
 
@@ -1325,7 +1659,14 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.delete("/api/results/:resultId", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "result.delete"))) {
+    const context = await requireWriteContext(request, reply, "result.delete");
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
       return reply;
     }
 
@@ -1340,7 +1681,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.delete("/api/tasks/:taskId", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "task.delete"))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
       return reply;
     }
 
@@ -1355,7 +1696,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.delete("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
-    if (!(await requireWritePermission(request, reply, "subtask.delete"))) {
+    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
       return reply;
     }
 

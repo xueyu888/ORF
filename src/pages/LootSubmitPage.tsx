@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field } from "../components/ui";
 import { equalRatios, summarizeContributionReviews } from "../features/challenge/model/contributionReview";
+import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
 import type { ContributionAllocation, LootResultClaimStatus, ResultAcceptedResult } from "../types/orf";
 
@@ -39,6 +40,7 @@ export function LootSubmitPage() {
   const [resolutionReason, setResolutionReason] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
+  const [submittingAction, setSubmittingAction] = useState<"loot" | "peerReview" | "review" | null>(null);
 
   useEffect(() => {
     setClaims((current) => {
@@ -63,7 +65,11 @@ export function LootSubmitPage() {
   }, [objective?.challengers]);
 
   if (!objective) {
-    return dataReady ? <Navigate to="/tasks" replace /> : <PageScaffold title="加载中" subtitle="正在加载悬赏数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+    return dataReady ? <Navigate to="/tasks" replace /> : <PageScaffold title="加载中" subtitle="正在加载目标数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
+  }
+
+  if (!canViewObjectiveRecord(objective, currentUser)) {
+    return <Navigate to="/tasks" replace />;
   }
 
   const currentMember = currentUser?.name ?? "";
@@ -77,8 +83,9 @@ export function LootSubmitPage() {
   const hasCurrentPeerReview = contributionReviews.some((item) => item.reviewer === currentMember);
   const objectiveReviewResult = objectiveAcceptedResultFromReviews(results.map((result) => resultReviews[result.id] ?? "completed"));
 
-  const submit = () => {
+  const submit = async () => {
     const value = body.trim();
+    if (submittingAction) return;
     if (!canSubmit) {
       setError("目标冻结后，挑战者才能提交战利品");
       return;
@@ -92,22 +99,34 @@ export function LootSubmitPage() {
       return;
     }
 
-    void submitLoot({
-      objectiveId: objective.id,
-      body: value,
-      author: currentUser?.name,
-      selfTestReportBody: selfTestReportBody.trim() || null,
-      resultClaims: results.map((result) => ({
-        resultId: result.id,
-        claim: claims[result.id]?.claim ?? "notClaimed",
-        evidenceText: claims[result.id]?.evidenceText ?? "",
-      })),
-    }).then((ok) => {
+    const resultClaims = results.map((result) => ({
+      resultId: result.id,
+      claim: claims[result.id]?.claim ?? "completed",
+      evidenceText: claims[result.id]?.evidenceText?.trim() ?? "",
+    }));
+    const missingEvidence = resultClaims.find((claim) => claim.claim !== "notClaimed" && !claim.evidenceText);
+    if (missingEvidence) {
+      setError("请填写每个已声明指标的证据、数据或链接");
+      return;
+    }
+
+    setSubmittingAction("loot");
+    try {
+      const ok = await submitLoot({
+        objectiveId: objective.id,
+        body: value,
+        author: currentUser?.name,
+        selfTestReportBody: selfTestReportBody.trim() || null,
+        resultClaims,
+      });
       if (ok) navigate("/tasks");
-    });
+    } finally {
+      setSubmittingAction(null);
+    }
   };
 
-  const review = () => {
+  const review = async () => {
+    if (submittingAction) return;
     if (!canReview || !latestLoot) {
       setError("只有指挥官能验收已提交的战利品");
       return;
@@ -125,29 +144,38 @@ export function LootSubmitPage() {
       return;
     }
 
-    void reviewObjectiveLoot(objective.id, {
-      lootId: latestLoot.id,
-      reason: reason.trim() || undefined,
-      resultReviews: results.map((result) => ({
-        resultId: result.id,
-        acceptedResult: resultReviews[result.id] ?? "completed",
-      })),
-      contributionResolution,
-    }).then((ok) => {
+    setSubmittingAction("review");
+    try {
+      const ok = await reviewObjectiveLoot(objective.id, {
+        lootId: latestLoot.id,
+        reason: reason.trim() || undefined,
+        resultReviews: results.map((result) => ({
+          resultId: result.id,
+          acceptedResult: resultReviews[result.id] ?? "completed",
+        })),
+        contributionResolution,
+      });
       if (ok) navigate("/reports");
-    });
+    } finally {
+      setSubmittingAction(null);
+    }
   };
 
-  const submitPeerReview = () => {
+  const submitPeerReview = async () => {
+    if (submittingAction) return;
     const allocations = ratioInputsToAllocations(contributionInputs, objective.challengers);
     if (!canPeerReview || allocations.length !== objective.challengers.length) {
       setError("请完成匿名互评");
       return;
     }
 
-    void submitContributionReview(objective.id, allocations).then((ok) => {
+    setSubmittingAction("peerReview");
+    try {
+      const ok = await submitContributionReview(objective.id, allocations);
       if (ok) navigate("/tasks");
-    });
+    } finally {
+      setSubmittingAction(null);
+    }
   };
 
   return (
@@ -186,7 +214,7 @@ export function LootSubmitPage() {
               className="grid gap-5"
               onSubmit={(event) => {
                 event.preventDefault();
-                review();
+                void review();
               }}
             >
               <div className="grid gap-3">
@@ -226,7 +254,7 @@ export function LootSubmitPage() {
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
-                <Button type="submit">验收并结算</Button>
+                <Button type="submit" disabled={submittingAction === "review"}>验收并结算</Button>
               </div>
             </form>
           </Card>
@@ -236,7 +264,7 @@ export function LootSubmitPage() {
               className="grid gap-5"
               onSubmit={(event) => {
                 event.preventDefault();
-                submitPeerReview();
+                void submitPeerReview();
               }}
             >
               <div className="text-sm orf-text-secondary">
@@ -252,7 +280,7 @@ export function LootSubmitPage() {
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
-                <Button type="submit">提交匿名互评</Button>
+                <Button type="submit" disabled={submittingAction === "peerReview"}>提交匿名互评</Button>
               </div>
             </form>
           </Card>
@@ -262,7 +290,7 @@ export function LootSubmitPage() {
               className="grid gap-5"
               onSubmit={(event) => {
                 event.preventDefault();
-                submit();
+                void submit();
               }}
             >
               <Field label="完成说明">
@@ -280,12 +308,12 @@ export function LootSubmitPage() {
                 ))}
               </div>
               <Field label="自测报告">
-                <textarea className="orf-input min-h-24 px-3 py-2 text-sm" placeholder="先粘贴自测摘要；文件编辑器接入后再支持报告文件。" value={selfTestReportBody} onChange={(event) => setSelfTestReportBody(event.target.value)} />
+                <textarea className="orf-input min-h-24 px-3 py-2 text-sm" placeholder="记录自测覆盖、复核结论或风险说明" value={selfTestReportBody} onChange={(event) => setSelfTestReportBody(event.target.value)} />
               </Field>
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
-                <Button type="submit" disabled={!canSubmit}>
+                <Button type="submit" disabled={!canSubmit || submittingAction === "loot"}>
                   <Send className="h-4 w-4" />
                   提交
                 </Button>

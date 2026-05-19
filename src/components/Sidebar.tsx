@@ -13,7 +13,7 @@ import { Avatar } from "./ui";
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
 const defaultSidebarBackgroundUrl = "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png";
 const sidebarGroups = [
-  { title: "work", labels: ["悬赏", "计划"] },
+  { title: "work", labels: ["悬赏大厅", "计划"] },
   { title: "report", labels: ["反馈", "统计"] },
   { title: "admin", labels: ["成员管理", "权限管理"] },
 ].map((group) => ({

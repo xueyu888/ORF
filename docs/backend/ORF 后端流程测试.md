@@ -18,6 +18,8 @@
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
 | API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
+| API 输入归一化 | `API work item creation trims labels and prevents blank persisted titles` | 指标、任务、子任务创建接口会 trim 用户输入，拒绝空白必填标题，选填空白字段回落默认值，非法日期返回 400 |
+| API stage 兼容保护 | `API objective stage updates cannot violate lifecycle compatibility` | 旧 stage 接口不能把重估目标标成冻结阶段，也不能把冻结后目标改回重估阶段 |
 | 发布前征召保护 | `recruitment is only allowed after an objective is published` | `candidate` 目标不能被征召，必须先发布 |
 | 冻结后旧申请保护 | `approving stale pending applications cannot mutate a frozen objective` / `rejecting stale pending applications cannot reopen a frozen objective` | 冻结后不能通过或拒绝旧申请来改写目标状态 |
 | 已接受后旧申请保护 | `rejecting remaining pending applications keeps an accepted objective in reestimate` | 目标已有挑战者后，继续拒绝剩余 pending application 不能把目标退回悬赏大厅 |
@@ -29,6 +31,7 @@
 | 战利品与验收异常 | `loot submission rejects incomplete or out-of-state payloads` / `review rejects invalid state and missing loot` | 提交和验收的非法状态、漏 claim、外部 Result、缺失 loot 均应拒绝 |
 | 多挑战者结算 | `settlement normalizes multi-challenger contribution ratios and supports overdelivery` | 多挑战者贡献比例来自匿名互评并归一化，超预期完成按 1.5 倍结算 |
 | API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、验收、全量挑战视图权限 |
+| API 跨团队写保护 | `API mutations enforce team boundaries even for administrators` | 管理员不能通过其他团队的目标、指标、评论或反馈 ID 改写跨团队数据 |
 | API 指标管理权限 | `API result management routes keep privileged operations behind role permissions` | `managerDefined` 创建、confidence、update-proposal、排序、删除等高权限指标操作 |
 
 测试直接调用 `server/repositories/orfRepository.ts` 的公开函数。
@@ -147,6 +150,27 @@ flowchart TD
 | ORF-BE-R036 | 发布、征召、申请审核、冻结、验收均应保持指挥官权限边界。 | API 流程权限 |
 | ORF-BE-R037 | `/api/my-challenges?scope=all` 只能由指挥官读取。 | API 流程权限 |
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
+| ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`。 | API 输入归一化 |
+| ORF-BE-R040 | `Objective.stage` 是兼容字段，旧接口不能写入与 `flowStatus` 冲突的阶段；生命周期状态只能由 ORF 流程接口推进。 | API stage 兼容保护 |
+| ORF-BE-R041 | 指标更新提案携带的 `feedbackId`、任务创建携带的 `feedbackOriginId` 必须和当前指标同团队、同指标；合法指标或任务请求不能连带改写或挂接其他团队或其他指标的反馈。 | API 跨团队写保护 |
+| ORF-BE-R042 | 目标结算写入 `pointLedger.userId` 时，只能在目标所属团队内解析挑战者；跨团队同名用户不能抢占积分流水身份。 | 积分流水团队边界 |
+| ORF-BE-R043 | 用户管理创建和编辑成员时，同一团队内的显示名必须大小写不敏感唯一；不能制造会混淆挑战者身份的同名成员。 | 用户身份唯一性 |
+| ORF-BE-R044 | 已经被 ORF 业务记录引用的成员不能改名；否则会切断 `Objective.challengers`、互评和积分流水等按成员名关联的数据。 | 用户身份引用保护 |
+| ORF-BE-R045 | 已经被 ORF 业务记录引用的成员不能删除团队成员关系；必须用停用保留历史身份并阻止继续访问。 | 用户身份引用保护 |
+| ORF-BE-R046 | 即使当前团队成员关系缺失，仍被 ORF 历史记录引用的姓名也不能被新成员占用，避免新身份继承旧挑战。 | 用户身份引用保护 |
+| ORF-BE-R047 | `POST /api/users` 对已有邮箱的 upsert 不能绕过成员改名引用保护；它必须和 `PATCH /api/users/:userId` 使用同一身份规则。 | 用户身份引用保护 |
+| ORF-BE-R048 | 征召 API 只能写入当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名必须被拒绝，不能进入 `assignedChallengers`。 | 征召成员边界 |
+| ORF-BE-R049 | 反馈创建只能把 `owner` 指向当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为可处理人。 | 反馈处理人边界 |
+| ORF-BE-R050 | 行动项并发创建必须生成不重复的 `ORF-*` ID；不能只依赖毫秒级时间戳或短伪随机数作为主键。 | API 输入归一化 |
+| ORF-BE-R051 | 密码登录不能把首次进入 ORF 的 Ory identity 自动审批为 `active`，也不能用 Ory traits 覆盖已存在 ORF 用户的显示名。 | 用户身份引用保护 |
+| ORF-BE-R052 | 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 不能伪造评论归属。 | 评论数据一致性 |
+| ORF-BE-R053 | 评论回复只能引用同一线程内真实存在的消息，`replyToAuthor` 必须由后端按真实作者回填。 | 评论数据一致性 |
+| ORF-BE-R054 | 删除被回复的评论消息后，保留下来的消息不能继续引用已删除的 `replyToMessageId`。 | 评论数据一致性 |
+| ORF-BE-R055 | 多名成员并发申请同一目标时，`challengeApplications` 必须保留所有申请，不能发生 JSON 数组读改写覆盖。 | 申请并发一致性 |
+| ORF-BE-R056 | 并发审批申请、征召、接受征召和拒绝征召时，目标上的挑战者、待征召成员和申请记录必须保留所有成员状态变化。 | 挑战生命周期并发一致性 |
+| ORF-BE-R057 | 并发新增指标、任务和子任务时，兄弟项 `sortOrder` 必须连续且不重复，移动操作也必须和新增操作使用同一父级锁。 | 执行协作排序一致性 |
+| ORF-BE-R058 | 并发新增同一目标下的评论时，只能复用同一个 open thread，并且保留每条根评论消息。 | 评论线程并发一致性 |
+| ORF-BE-R059 | 登录、注册、创建成员和编辑成员 API 必须在后端请求边界裁剪邮箱首尾空白并统一小写；注册姓名和成员姓名也必须裁剪后再校验和写入。 | API 输入归一化 |
 
 ## 关键断言
 
@@ -160,7 +184,7 @@ flowchart TD
 | 审核申请 | 申请状态变为 `approved`，目标进入 `reestimating` |
 | 冻结目标 | 已有 Result 的 `reestimating` 目标可进入 `flowStatus=frozen`，挑战者指标调整资格变为 `false` |
 | 验收战利品 | 每个指标写入验收结论，目标结果由指标结论汇总，`flowStatus=settled`，写入基础分和结算分 |
-| 积分流水 | `pointLedger` 写入挑战者、用户 ID、积分和结算原因 |
+| 积分流水 | `pointLedger` 写入挑战者、团队内用户 ID、积分和结算原因 |
 
 ### 挑战者视角
 

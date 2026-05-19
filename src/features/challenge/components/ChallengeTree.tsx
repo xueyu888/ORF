@@ -34,6 +34,8 @@ type RowHandlers = {
   editingTarget: ChallengeTarget | null;
   contributionReviews: ObjectiveContributionReview[];
   canManageFlow: boolean;
+  canMutateMetrics: (objectiveId: string) => boolean;
+  canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
@@ -202,8 +204,31 @@ function ObjectivePanel({
             scope={scope}
           />
         ))}
+        {group.bounties.length === 0 && <ObjectiveMetricEmptyState parentAnchorId={anchorId} />}
       </div>
     </section>
+  );
+}
+
+function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string }) {
+  return (
+    <div className="orf-objective-metric-empty">
+      <HierarchyCell depth={1}>
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center"
+          data-hierarchy-anchor={`empty:${parentAnchorId}`}
+          data-hierarchy-branch-end-offset="0"
+          data-hierarchy-branch-target={`empty:${parentAnchorId}`}
+          data-hierarchy-parent={parentAnchorId}
+        >
+          <MetricSquareIcon tone="todo" />
+        </span>
+        <div className="grid min-w-0 gap-1">
+          <div className="text-base font-semibold text-[#475467]">待定义指标</div>
+          <div className="text-xs orf-text-muted">当前目标还没有指标。</div>
+        </div>
+      </HierarchyCell>
+    </div>
   );
 }
 
@@ -289,8 +314,8 @@ function BountyRow({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel="新增行动项"
-          dragItem={{ type: "bounty", id: bounty.result.id, objectiveId: bounty.result.objectiveId }}
+          addLabel={handlers.canMutateWorkItems(bounty.result.objectiveId) ? "新增行动项" : null}
+          dragItem={handlers.canMutateMetrics(bounty.result.objectiveId) ? { type: "bounty", id: bounty.result.id, objectiveId: bounty.result.objectiveId } : undefined}
           left={rowActionLeft.bounty}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -411,8 +436,8 @@ function ActionRow({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel="新增子行动项"
-          dragItem={{ type: "action", id: action.id, bountyId: action.linkedResultId, objectiveId: action.linkedObjectiveId }}
+          addLabel={handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增子行动项" : null}
+          dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "action", id: action.id, bountyId: action.linkedResultId, objectiveId: action.linkedObjectiveId } : undefined}
           left={rowActionLeft.action}
           onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -529,8 +554,8 @@ function SubActionRow({
       <ChallengeRowActions
         actionId={actionId}
         activeActionId={handlers.activeActionId}
-        addLabel="新增同级子行动项"
-        dragItem={{ type: "subAction", id: item.id, actionId: action.id }}
+        addLabel={handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增同级子行动项" : null}
+        dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "subAction", id: item.id, actionId: action.id } : undefined}
         left={rowActionLeft.subAction}
         onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
         onActiveActionChange={handlers.onActiveActionChange}

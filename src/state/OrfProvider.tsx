@@ -2,6 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import { hasPermission } from "../config/permissions";
 import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
+import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
 import type {
   CommentStatus,
   CommentThread,
@@ -70,8 +71,8 @@ interface OrfContextValue {
   notify: (message: string) => void;
   removeToast: (id: string) => void;
   resetState: () => void;
-  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => void : never;
-  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => void;
+  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<boolean> : never;
+  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<boolean>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
@@ -82,8 +83,8 @@ interface OrfContextValue {
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
-  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => void;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => void;
+  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => Promise<boolean>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
@@ -126,7 +127,7 @@ interface OrfContextValue {
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
-  proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => void;
+  proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => Promise<boolean>;
 }
 
 const OrfContext = createContext<OrfContextValue | null>(null);
@@ -134,6 +135,7 @@ const OrfContext = createContext<OrfContextValue | null>(null);
 const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
+const AUTH_PASSWORD_TIMEOUT_MS = 2000;
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return normalizeState({
@@ -205,7 +207,11 @@ function persistAuthenticatedUser(user: OrfUser, setState: (update: (current: Or
   });
 }
 
-function authFailureMessage(error: unknown, action: "login" | "registration") {
+export function authFailureMessage(error: unknown, action: "login" | "registration") {
+  if (error instanceof DOMException && (error.name === "AbortError" || error.name === "TimeoutError")) {
+    return "认证服务暂时不可用，请联系管理员。";
+  }
+
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return "账号或密码不正确";
@@ -220,7 +226,7 @@ function authFailureMessage(error: unknown, action: "login" | "registration") {
     }
 
     if (error.status === 502 || error.status === 503 || error.status === 504) {
-      return "认证服务暂时不可用，请确认后端、Ory 和数据库已启动";
+      return error.message || "认证服务暂时不可用，请联系管理员。";
     }
   }
 
@@ -244,6 +250,22 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
 
       if (error.message === "Admin cannot demote self") {
         return "管理员不能将自己降级为成员";
+      }
+
+      if (error.message === "Name already exists") {
+        return "同一团队内已存在同名成员";
+      }
+
+      if (error.message === "User name is referenced by ORF records") {
+        return "该成员已被 ORF 业务记录引用，不能改名";
+      }
+
+      if (error.message === "User is referenced by ORF records") {
+        return "该成员已被 ORF 业务记录引用，不能删除，请改为停用";
+      }
+
+      if (error.message === "Name is referenced by ORF records") {
+        return "该姓名已被 ORF 历史记录占用，不能创建新成员";
       }
 
       return error.message;
@@ -270,7 +292,7 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 404) {
-      return "悬赏不存在，已刷新数据";
+      return "悬赏目标不存在，已刷新数据";
     }
 
     if (error.status === 409) {
@@ -322,6 +344,9 @@ function businessMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
+      if (error.message === "Feedback owner must be an active team member") {
+        return "反馈处理人必须是当前团队内的可用成员";
+      }
       return error.message || "数据状态已变化，请刷新后再试";
     }
 
@@ -349,6 +374,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
+  const currentUserRole = currentUser?.role ?? null;
   const isAuthenticated = currentUser !== null;
   const isApproved = currentUser?.status === "active";
   const isAdmin = currentUser?.role === "admin";
@@ -376,10 +402,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     });
   }, []);
   const refreshTaskManagementData = useCallback(async () => {
-    const data = await apiJson<TaskManagementData>("/api/tasks-page");
+    const data = await apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole));
     applyTaskManagementData(data);
     setDataReady(true);
-  }, [applyTaskManagementData]);
+  }, [applyTaskManagementData, currentUserRole]);
   const applyPermissionRules = useCallback((data: PermissionRulesResponse) => {
     setState((current) => {
       return mergePermissionRules(current, data);
@@ -426,7 +452,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     setDataReady(false);
 
-    void apiJson<TaskManagementData>("/api/tasks-page")
+    void apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
       .then((data) => {
         if (!cancelled) {
           applyTaskManagementData(data);
@@ -439,15 +465,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
       });
 
-    void apiJson<PermissionRulesResponse>("/api/permissions")
-      .then((data) => {
-        if (!cancelled) {
-          applyPermissionRules(data);
-        }
-      })
-      .catch(() => undefined);
+    if (shouldFetchAdminCollections(currentUserRole)) {
+      void apiJson<PermissionRulesResponse>("/api/permissions")
+        .then((data) => {
+          if (!cancelled) {
+            applyPermissionRules(data);
+          }
+        })
+        .catch(() => undefined);
 
-    if (isAdmin) {
       void apiJson<UsersResponse>("/api/users")
         .then((data) => {
           if (!cancelled) {
@@ -460,7 +486,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, isAdmin, isAuthenticated, isApproved]);
+  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAuthenticated, isApproved]);
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);
@@ -491,6 +517,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           await apiJson<AuthSession>(path, {
             method: "POST",
             body: JSON.stringify(body),
+            signal: AbortSignal.timeout(AUTH_PASSWORD_TIMEOUT_MS),
           }),
         );
       } catch (error) {
@@ -523,24 +550,27 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           .then(() => notify("数据已从后端重新加载"))
           .catch((error) => notify(businessMutationFailureMessage(error, "重新加载数据失败")));
       },
-      createObjective: (input) => {
+      createObjective: async (input) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");
-          return;
+          return false;
         }
 
-        void apiRequest("/api/objectives", {
-          method: "POST",
-          body: JSON.stringify(input),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("目标已创建"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "目标创建失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+        try {
+          await apiRequest("/api/objectives", {
+            method: "POST",
+            body: JSON.stringify(input),
           });
+          await refreshTaskManagementData();
+          notify("目标已创建");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "目标创建失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
-      createResult: (input) => {
+      createResult: async (input) => {
         const payload = {
           ...input,
           source: input.source ?? "managerDefined",
@@ -559,19 +589,22 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;
         if (!canCreateManagerDefined && !canCreateMemberProposed) {
           notify("没有新增指标权限");
-          return;
+          return false;
         }
 
-        void apiRequest("/api/results", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "指标创建失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+        try {
+          await apiRequest("/api/results", {
+            method: "POST",
+            body: JSON.stringify(payload),
           });
+          await refreshTaskManagementData();
+          notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标创建失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       publishObjective: async (objectiveId) => {
         try {
@@ -626,10 +659,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       applyForBounty: async (objectiveId) => {
         const applicant = currentUser?.name ?? "";
-        const next = store.applyForBounty(state, objectiveId, applicant);
-        if (next === state) {
-          notify("这个目标暂时不能申请挑战");
-          return false;
+        const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
+        if (hasScopedObjective) {
+          const next = store.applyForBounty(state, objectiveId, applicant);
+          if (next === state) {
+            notify("这个目标暂时不能申请挑战");
+            return false;
+          }
         }
 
         try {
@@ -645,10 +681,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       acceptBountyChallenge: async (objectiveId) => {
         const challenger = currentUser?.name ?? "";
-        const next = store.acceptBountyChallenge(state, objectiveId, challenger);
-        if (next === state) {
-          notify("这个目标暂时不能接受挑战");
-          return false;
+        const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
+        if (hasScopedObjective) {
+          const next = store.acceptBountyChallenge(state, objectiveId, challenger);
+          if (next === state) {
+            notify("这个目标暂时不能接受挑战");
+            return false;
+          }
         }
 
         try {
@@ -716,37 +755,43 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      createFeedback: (input) => {
-        void apiRequest("/api/feedback", {
-          method: "POST",
-          body: JSON.stringify({
-            phenomenon: input.phenomenon,
-            causeCategories: input.causeCategories,
-            impact: input.impact,
-            linkedResultId: input.linkedResultId,
-            suggestedAdjustment: input.suggestedAdjustment,
-            source: input.source,
-            owner: input.owner,
-          }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("反馈已捕获"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "反馈保存失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      createFeedback: async (input) => {
+        try {
+          await apiRequest("/api/feedback", {
+            method: "POST",
+            body: JSON.stringify({
+              phenomenon: input.phenomenon,
+              causeCategories: input.causeCategories,
+              impact: input.impact,
+              linkedResultId: input.linkedResultId,
+              suggestedAdjustment: input.suggestedAdjustment,
+              source: input.source,
+              owner: input.owner,
+            }),
           });
+          await refreshTaskManagementData();
+          notify("反馈已捕获");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "反馈保存失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
-      createTask: (input) => {
-        void apiRequest("/api/tasks", {
-          method: "POST",
-          body: JSON.stringify(input),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("行动项已创建"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "行动项创建失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      createTask: async (input) => {
+        try {
+          await apiRequest("/api/tasks", {
+            method: "POST",
+            body: JSON.stringify(input),
           });
+          await refreshTaskManagementData();
+          notify("行动项已创建");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "行动项创建失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       updateTaskStatus: (taskId, status) => {
         void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/status`, {
@@ -946,9 +991,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ confidence }),
         })
           .then(refreshTaskManagementData)
-          .then(() => notify("悬赏信心已更新"))
+          .then(() => notify("指标信心已更新"))
           .catch((error) => {
-            notify(businessMutationFailureMessage(error, "悬赏信心更新失败"));
+            notify(businessMutationFailureMessage(error, "指标信心更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
@@ -1140,17 +1185,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      proposeResultUpdate: (resultId, title, reason, feedbackId) => {
-        void apiRequest(`/api/results/${encodeURIComponent(resultId)}/update-proposal`, {
-          method: "POST",
-          body: JSON.stringify({ title, reason, feedbackId }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("指标更新已记录"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "指标更新记录失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      proposeResultUpdate: async (resultId, title, reason, feedbackId) => {
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/update-proposal`, {
+            method: "POST",
+            body: JSON.stringify({ title, reason, feedbackId }),
           });
+          await refreshTaskManagementData();
+          notify("指标更新已记录");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标更新记录失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
     }),
     [

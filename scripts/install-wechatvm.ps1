@@ -1,7 +1,7 @@
 param(
   [string]$VmName = "WechatVM",
   [string]$UserName = "xue",
-  [string]$Password = "WechatVM2026!",
+  [string]$Password = $env:WECHATVM_PASSWORD,
   [string]$LogPath = "D:\HyperV\wechatvm-install.log"
 )
 
@@ -25,6 +25,10 @@ if (-not (Test-Admin)) {
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Null
 Log "==== WechatVM install started ===="
+
+if ([string]::IsNullOrWhiteSpace($Password)) {
+  throw "Set -Password or WECHATVM_PASSWORD before connecting to the VM."
+}
 
 $secure = ConvertTo-SecureString $Password -AsPlainText -Force
 $credentials = @(

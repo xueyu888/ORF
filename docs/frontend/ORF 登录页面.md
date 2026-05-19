@@ -114,6 +114,7 @@
 提交表单
 校验 authReady 和 submitting
 清空 authError
+裁剪邮箱首尾空白并转成小写
 submitting = true
 调用密码登录
 submitting = false
@@ -135,6 +136,7 @@ submitting = false
 提交表单
 校验 authReady 和 submitting
 清空 authError
+裁剪姓名和邮箱首尾空白，邮箱转成小写
 submitting = true
 调用密码注册
 submitting = false

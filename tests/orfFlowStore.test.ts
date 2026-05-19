@@ -66,10 +66,10 @@ test("normalizeState migrates legacy challenge fields and result defaults", () =
   );
 
   assert.equal(normalized.objectives[0]?.stage, "orfReestimate");
-  assert.equal(normalized.objectives[0]?.flowStatus, "recruiting");
+  assert.equal(normalized.objectives[0]?.flowStatus, "reestimating");
   assert.equal(normalized.objectives[0]?.finalDueAt, "2026-06-10");
   assert.deepEqual(normalized.objectives[0]?.challengers, ["Kai Wang"]);
-  assert.deepEqual(normalized.objectives[0]?.assignedChallengers, ["Kai Wang"]);
+  assert.deepEqual(normalized.objectives[0]?.assignedChallengers, []);
   assert.equal(normalized.objectives[0]?.challengeApplications[0]?.applicant, "Nora Li");
   assert.equal(normalized.results[0]?.source, "managerDefined");
   assert.equal(normalized.results[0]?.uncertaintyScore, 810);
@@ -86,6 +86,60 @@ test("normalizeState adds fallback due dates in calendar days", () => {
   );
 
   assert.equal(normalized.objectives[0]?.finalDueAt, "2026-05-28");
+});
+
+test("local store generated ids stay unique within one millisecond", () => {
+  const current = state({
+    objectives: [objective({ id: "obj-base", resultIds: ["res-base"], taskIds: ["task-base"] })],
+    results: [result({ id: "res-base", objectiveId: "obj-base" })],
+    tasks: [task({ id: "task-base", linkedObjectiveId: "obj-base", linkedResultId: "res-base" })],
+  });
+  const originalNow = Date.now;
+  const originalRandom = Math.random;
+  Date.now = () => 4102444800000;
+  Math.random = () => 0.123456;
+
+  try {
+    const withObjectives = store.createObjective(
+      store.createObjective(current, { title: "Objective A", whyItMatters: "A", cycle: "2999-Q1", boundary: "Boundary" }),
+      { title: "Objective B", whyItMatters: "B", cycle: "2999-Q1", boundary: "Boundary" },
+    );
+    assert.equal(new Set(withObjectives.objectives.slice(0, 2).map((item) => item.id)).size, 2);
+
+    const withResults = store.createResult(
+      store.createResult(current, { objectiveId: "obj-base", title: "Result A", metricName: "Metric A" }),
+      { objectiveId: "obj-base", title: "Result B", metricName: "Metric B" },
+    );
+    assert.equal(new Set(withResults.results.slice(0, 2).map((item) => item.id)).size, 2);
+
+    const feedbackInput = {
+      phenomenon: "Signal",
+      causeCategories: ["Quality"],
+      impact: "High" as const,
+      linkedObjectiveId: "obj-base",
+      linkedResultId: "res-base",
+      suggestedAdjustment: "Adjust",
+      source: "Team review" as const,
+      owner: "Kai Wang",
+    };
+    const withFeedback = store.createFeedback(store.createFeedback(current, feedbackInput), feedbackInput);
+    assert.equal(new Set(withFeedback.feedback.slice(0, 2).map((item) => item.id)).size, 2);
+    assert.equal(new Set(withFeedback.feedback.slice(0, 2).flatMap((item) => item.activity.map((entry) => entry.id))).size, 2);
+
+    const withChecklist = store.createTaskChecklistItem(store.createTaskChecklistItem(current, "task-base"), "task-base");
+    assert.equal(new Set(withChecklist.tasks[0]?.checklist.map((item) => item.id)).size, 2);
+
+    const withDecisions = store.proposeResultUpdate(
+      store.proposeResultUpdate(current, "res-base", "Title A", "Reason A"),
+      "res-base",
+      "Title B",
+      "Reason B",
+    );
+    assert.equal(new Set(withDecisions.decisions.slice(0, 2).map((item) => item.id)).size, 2);
+  } finally {
+    Date.now = originalNow;
+    Math.random = originalRandom;
+  }
 });
 
 test("deleteObjective cascades all linked records and keeps unrelated records", () => {
@@ -211,6 +265,43 @@ test("checklist mutations keep task status and subtask comments consistent", () 
   assert.equal(deleted.tasks[0]?.status, "Todo");
 });
 
+test("deleteCommentMessage clears reply references to deleted messages", () => {
+  const current = state({
+    comments: [
+      {
+        id: "thread-a",
+        targetType: "objective",
+        targetId: "obj-a",
+        targetTitle: "Objective A",
+        status: "open",
+        createdBy: "user-kai",
+        createdAt: date,
+        updatedAt: date,
+        messages: [
+          { id: "msg-root", author: "Kai Wang", body: "Root", createdAt: date },
+          { id: "msg-reply", author: "Kai Wang", body: "Reply", createdAt: date, parentMessageId: "msg-root" },
+          {
+            id: "msg-nested",
+            author: "Nora Li",
+            body: "Nested",
+            createdAt: date,
+            parentMessageId: "msg-root",
+            replyToMessageId: "msg-reply",
+            replyToAuthor: "Kai Wang",
+          },
+        ],
+      },
+    ],
+  });
+
+  const next = store.deleteCommentMessage(current, "thread-a", "msg-reply");
+  const messages = next.comments[0]?.messages ?? [];
+
+  assert.deepEqual(messages.map((message) => message.id), ["msg-root", "msg-nested"]);
+  assert.equal(messages.find((message) => message.id === "msg-nested")?.replyToMessageId, undefined);
+  assert.equal(messages.find((message) => message.id === "msg-nested")?.replyToAuthor, undefined);
+});
+
 test("acceptBountyChallenge confirms a recruited member and approves their pending application", () => {
   const current = state({
     objectives: [
@@ -233,6 +324,28 @@ test("acceptBountyChallenge confirms a recruited member and approves their pendi
   assert.equal(next.objectives[0]?.challengeApplications[0]?.status, "approved");
   assert.ok(next.objectives[0]?.acceptedAt);
   assert.ok(next.objectives[0]?.confirmationDueAt);
+});
+
+test("updateObjectiveStage refuses stages that contradict lifecycle status", () => {
+  const current = state({
+    objectives: [
+      objective({ id: "obj-reestimating", flowStatus: "reestimating", stage: "orfReestimate" }),
+      objective({ id: "obj-frozen", flowStatus: "frozen", stage: "goalFrozen" }),
+    ],
+  });
+
+  const invalidReestimating = store.updateObjectiveStage(current, "obj-reestimating", "goalFrozen");
+  assert.equal(invalidReestimating.objectives.find((item) => item.id === "obj-reestimating")?.stage, "orfReestimate");
+
+  const invalidFrozen = store.updateObjectiveStage(current, "obj-frozen", "orfReestimate");
+  assert.equal(invalidFrozen.objectives.find((item) => item.id === "obj-frozen")?.stage, "goalFrozen");
+
+  const compatibleOpenStage = store.updateObjectiveStage(
+    state({ objectives: [objective({ id: "obj-open", flowStatus: "open", stage: "resultClaiming" })] }),
+    "obj-open",
+    "orfReestimate",
+  );
+  assert.equal(compatibleOpenStage.objectives[0]?.stage, "orfReestimate");
 });
 
 function state(overrides: Partial<OrfState> = {}): OrfState {

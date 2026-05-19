@@ -168,6 +168,8 @@ export interface Feedback {
   source: FeedbackSource;
   status: FeedbackStatus;
   owner: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
   createdAt: string;
   updatedAt: string;
   activity: ActivityItem[];

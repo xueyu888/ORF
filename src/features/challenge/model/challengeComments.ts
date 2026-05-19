@@ -31,14 +31,16 @@ export function commentTargetKey(targetType: CommentTargetType, targetId: string
   return `${targetType}:${targetId}`;
 }
 
-export function submittedLootIdsFromComments(threads: CommentThread[]) {
+export function submittedLootObjectiveIdsFromComments(threads: CommentThread[]) {
   const ids = new Set<string>();
 
   for (const thread of threads) {
-    if (thread.targetType === "result" && thread.messages.some((message) => message.body.startsWith("战利品提交："))) {
+    if (thread.targetType === "objective" && thread.messages.some((message) => message.body.startsWith("战利品提交："))) {
       ids.add(thread.targetId);
     }
   }
 
   return ids;
 }
+
+export const submittedLootIdsFromComments = submittedLootObjectiveIdsFromComments;

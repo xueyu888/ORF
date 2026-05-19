@@ -3,6 +3,13 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
 import { quickPages } from "../config/navigation";
+import {
+  filterFeedbackForVisibleObjectives,
+  filterResultsForVisibleObjectives,
+  filterTasksForVisibleObjectives,
+  visibleObjectiveIdsForUser,
+  visibleObjectivesForUser,
+} from "../features/challenge/model/objectiveVisibility";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import { commandTypeLabel } from "../utils/labels";
@@ -14,13 +21,18 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
 
   const items = useMemo(() => {
+    const visibleObjectiveIds = visibleObjectiveIdsForUser(state.objectives, currentUser);
+    const visibleObjectives = visibleObjectivesForUser(state.objectives, currentUser);
+    const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser);
+    const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds, currentUser);
+    const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser);
     const pageItems = quickPages
       .filter((item) => canShowFrontendPath(currentUser, item.path))
       .map((item) => ({ label: item.label, path: item.path, type: "Page" }));
-    const objectiveItems = state.objectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
-    const resultItems = state.results.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));
-    const taskItems = state.tasks.map((item) => ({ label: `${item.id} ${item.title}`, path: "/tasks", type: "Task" }));
-    const feedbackItems = state.feedback.map((item) => ({ label: item.phenomenon, path: `/feedback/${item.id}`, type: "Feedback" }));
+    const objectiveItems = visibleObjectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
+    const resultItems = visibleResults.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));
+    const taskItems = visibleTasks.map((item) => ({ label: `${item.id} ${item.title}`, path: "/tasks", type: "Task" }));
+    const feedbackItems = visibleFeedback.map((item) => ({ label: item.phenomenon, path: `/feedback/${item.id}`, type: "Feedback" }));
 
     return [...pageItems, ...objectiveItems, ...resultItems, ...taskItems, ...feedbackItems].filter((item) =>
       `${item.label} ${item.type}`.toLowerCase().includes(query.toLowerCase()),
@@ -36,7 +48,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
       <div ref={drag.ref} style={drag.style} className="orf-card orf-draggable-floating w-full max-w-2xl overflow-hidden rounded-xl" onMouseDown={(event) => event.stopPropagation()}>
         <div className="orf-drag-handle flex items-center gap-3 border-b orf-border px-4 py-3" {...drag.handleProps}>
           <Search className="orf-text-muted h-4 w-4" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} autoFocus className="orf-text-primary flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--orf-text-faint)]" placeholder="搜索页面、目标、悬赏、行动项、反馈..." />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} autoFocus className="orf-text-primary flex-1 bg-transparent text-sm outline-none placeholder:text-[color:var(--orf-text-faint)]" placeholder="搜索页面、目标、指标、行动项、反馈..." />
           <button onClick={onClose} className="orf-text-muted orf-hover-text">
             <X className="h-4 w-4" />
           </button>
