@@ -10,7 +10,7 @@ export type TestContext = {
 
 export type TeamRole = "admin" | "member" | "readonly" | "supervisor";
 
-export type LoginCaseData = {
+export type MloginCaseData = {
   email: string;
   password: string;
   name: string;

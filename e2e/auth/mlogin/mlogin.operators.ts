@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
-import type { LoginCaseData, TestContext } from "./_support/login.context";
+import type { MloginCaseData, TestContext } from "./_support/mlogin.context";
 import {
   clearBrowserState,
   ensureTestTeam,
@@ -16,7 +16,7 @@ import {
   revokeIdentitySessions,
   upsertOrfMember,
   upsertOryIdentity,
-} from "./_support/login.helpers";
+} from "./_support/mlogin.helpers";
 
 type CapturedResponse = {
   ok: boolean;
@@ -26,7 +26,7 @@ type CapturedResponse = {
   body: unknown;
 };
 
-export const loginOperators = {
+export const mloginOperators = {
   "api.health.ok": async ({ ctx }) => {
     await expect.poll(() => isBackendReady(ctx.page)).toBe(true);
   },
@@ -207,7 +207,7 @@ export const loginOperators = {
 
     await restoreLastLoginAt(userId, lastLoginAt);
   },
-} satisfies OperatorRegistry<TestContext, LoginCaseData>;
+} satisfies OperatorRegistry<TestContext, MloginCaseData>;
 
 function locatorFromParams(page: Page, params: StepParams): Locator {
   const exact = optionalBoolean(params, "exact");

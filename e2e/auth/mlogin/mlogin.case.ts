@@ -1,7 +1,7 @@
 import { STATE_CASE_MODEL, type StateCaseSpec } from "../../_framework/types";
-import type { LoginCaseData } from "./_support/login.context";
+import type { MloginCaseData } from "./_support/mlogin.context";
 
-export const loginSuccessCase = {
+export const mloginSuccessCase = {
   id: "auth.login.success",
   title: "普通成员可以使用正确邮箱和密码登录 ORF",
   model: STATE_CASE_MODEL,
@@ -362,4 +362,4 @@ export const loginSuccessCase = {
       },
     ],
   },
-} satisfies StateCaseSpec<LoginCaseData>;
+} satisfies StateCaseSpec<MloginCaseData>;

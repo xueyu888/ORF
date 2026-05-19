@@ -7,11 +7,11 @@ import {
   ORY_ADMIN_URL,
   type BrowserAuthStorageState,
   type BrowserSession,
-  type LoginCaseData,
+  type MloginCaseData,
   type OryIdentity,
-} from "./login.context";
+} from "./mlogin.context";
 
-export async function closeLoginTestDb() {
+export async function closeMloginTestDb() {
   await closeDb();
 }
 
@@ -99,7 +99,7 @@ export async function findOryIdentityByEmail(email: string) {
   return identities.find((identity) => identity.traits?.email?.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
-export async function upsertOryIdentity(data: Pick<LoginCaseData, "email" | "name" | "password">) {
+export async function upsertOryIdentity(data: Pick<MloginCaseData, "email" | "name" | "password">) {
   const existing = await findOryIdentityByEmail(data.email);
   const body = {
     schema_id: existing?.schema_id ?? "default",
@@ -162,7 +162,7 @@ export async function ensureTestTeam(teamId: string) {
 
 export async function upsertOrfMember(
   teamId: string,
-  data: Pick<LoginCaseData, "email" | "name" | "role" | "userId">,
+  data: Pick<MloginCaseData, "email" | "name" | "role" | "userId">,
 ) {
   const [existingByEmail] = await db
     .select({ id: users.id, lastLoginAt: users.lastLoginAt })
