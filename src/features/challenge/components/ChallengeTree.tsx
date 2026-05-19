@@ -364,7 +364,7 @@ function BountyRow({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyCell>
-        <div className="orf-row-kind-cell"><Badge>{bounty.kind}</Badge><Badge>{bounty.difficulty}</Badge></div>
+        <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div>
         <EmptySlot />
         <StatusChip tone={bounty.status}>{bountyStatusLabel[bounty.status]}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(bounty.deadline, now)} />

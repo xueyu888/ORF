@@ -46,7 +46,6 @@ function bounty(input: Partial<BountyNode> = {}): BountyNode {
     actions: [],
     deadline: "2999-03-31",
     difficulty: "进阶",
-    kind: "主线",
     progress: 0,
     result: result(),
     status: "active",

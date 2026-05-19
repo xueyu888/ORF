@@ -4714,7 +4714,7 @@ body[data-dragging-floating="true"] {
   justify-self: start;
 }
 
-.orf-row-kind-cell,
+.orf-row-difficulty-cell,
 .orf-avatar-stack,
 .orf-status-chip,
 .orf-time-value,
@@ -4723,7 +4723,7 @@ body[data-dragging-floating="true"] {
   max-width: 100%;
 }
 
-.orf-row-kind-cell {
+.orf-row-difficulty-cell {
   display: inline-flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -5256,7 +5256,7 @@ body[data-dragging-floating="true"] {
     display: none;
   }
 
-  .orf-row-kind-cell,
+  .orf-row-difficulty-cell,
   .orf-avatar-stack,
   .orf-status-chip,
   .orf-time-value,

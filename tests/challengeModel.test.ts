@@ -53,7 +53,6 @@ test("buildChallengeTree filters objectives and preserves objective result order
   assert.equal(tree.length, 1);
   assert.equal(tree[0]?.objective.id, "obj-a");
   assert.deepEqual(tree[0]?.bounties.map((item) => item.result.id), ["res-b", "res-a"]);
-  assert.deepEqual(tree[0]?.bounties.map((item) => item.kind), ["主线", "支线"]);
   assert.equal(tree[0]?.bounties[0]?.difficulty, "5 星");
   assert.equal(tree[0]?.bounties[0]?.status, "active");
   assert.equal(tree[0]?.bounties[0]?.progress, 30);
