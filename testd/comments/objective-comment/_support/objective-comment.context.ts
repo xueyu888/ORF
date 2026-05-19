@@ -12,7 +12,7 @@ export type ObjectiveCommentCaseData = {
   email: string;
   password: string;
   name: string;
-  role: "member";
+  role: "admin" | "member";
   commentBody: string;
   commentBodyPrefix: string;
 };

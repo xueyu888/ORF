@@ -127,6 +127,10 @@ export async function visibleObjectiveFixtureExists(data: Pick<ObjectiveCommentC
     })
     .from(objectives);
 
+  if (data.role === "admin") {
+    return rows.some((objective) => teamIds.has(objective.teamId) && objective.title.trim().length > 0);
+  }
+
   return rows.some(
     (objective) =>
       teamIds.has(objective.teamId) &&
@@ -168,9 +172,13 @@ export async function removeTestComments(prefix: string) {
   }
 }
 
-export async function readMyChallenges(page: Page): Promise<MyChallengesResponse> {
-  return page.evaluate(async () => {
-    const response = await fetch("/api/my-challenges?scope=mine", { credentials: "include" });
+export type MyChallengesScope = "mine" | "all";
+
+export async function readMyChallenges(page: Page, scope: MyChallengesScope = "mine"): Promise<MyChallengesResponse> {
+  return page.evaluate(async (requestedScope) => {
+    const response = await fetch(`/api/my-challenges?scope=${encodeURIComponent(requestedScope)}`, {
+      credentials: "include",
+    });
     let body: MyChallengesData = {};
     try {
       body = await response.json();
@@ -182,18 +190,18 @@ export async function readMyChallenges(page: Page): Promise<MyChallengesResponse
       status: response.status,
       body,
     };
-  });
+  }, scope);
 }
 
-export async function selectObjectiveCommentTarget(page: Page): Promise<ObjectiveCommentTarget> {
-  const response = await readMyChallenges(page);
+export async function selectObjectiveCommentTarget(page: Page, scope: MyChallengesScope = "mine"): Promise<ObjectiveCommentTarget> {
+  const response = await readMyChallenges(page, scope);
   if (response.status !== 200) {
     throw new Error(`读取我的挑战数据失败: HTTP ${response.status}`);
   }
 
   const objectives = (response.body.objectives ?? []).filter((objective) => objective.id && objective.title.trim());
   if (objectives.length === 0) {
-    throw new Error("当前成员可见挑战树中没有可用于评论测试的目标");
+    throw new Error("当前用户可见挑战树中没有可用于评论测试的目标");
   }
 
   const titleCounts = new Map<string, number>();
@@ -209,8 +217,8 @@ export async function selectObjectiveCommentTarget(page: Page): Promise<Objectiv
   };
 }
 
-export async function myChallengesHasObjectiveTarget(page: Page, target: ObjectiveCommentTarget) {
-  const response = await readMyChallenges(page);
+export async function myChallengesHasObjectiveTarget(page: Page, target: ObjectiveCommentTarget, scope: MyChallengesScope = "mine") {
+  const response = await readMyChallenges(page, scope);
   return (
     response.status === 200 &&
     (response.body.objectives ?? []).some((objective) => objective.id === target.id && objective.title === target.title)
@@ -222,8 +230,9 @@ export async function myChallengesHasComment(
   target: ObjectiveCommentTarget,
   body: string,
   author: string,
+  scope: MyChallengesScope = "mine",
 ) {
-  const response = await readMyChallenges(page);
+  const response = await readMyChallenges(page, scope);
   return (
     response.status === 200 &&
     (response.body.comments ?? []).some(

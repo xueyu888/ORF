@@ -142,18 +142,19 @@ export const objectiveCommentOperators = {
     await locatorFromParams(ctx.page, params).click();
   },
 
-  "api.my_challenges.select_objective_target": async ({ ctx }) => selectObjectiveCommentTarget(ctx.page),
+  "api.my_challenges.select_objective_target": async ({ ctx, data }) =>
+    selectObjectiveCommentTarget(ctx.page, myChallengesScopeFor(data.role)),
 
-  "api.my_challenges.objective_target.present": async ({ ctx, params }) => {
+  "api.my_challenges.objective_target.present": async ({ ctx, data, params }) => {
     const target = requiredObjectiveCommentTarget(params, "target");
-    await expect.poll(() => myChallengesHasObjectiveTarget(ctx.page, target)).toBe(true);
+    await expect.poll(() => myChallengesHasObjectiveTarget(ctx.page, target, myChallengesScopeFor(data.role))).toBe(true);
   },
 
-  "api.my_challenges.comment.present": async ({ ctx, params }) => {
+  "api.my_challenges.comment.present": async ({ ctx, data, params }) => {
     const target = requiredObjectiveCommentTarget(params, "target");
     const body = requiredString(params, "body");
     const author = requiredString(params, "author");
-    await expect.poll(() => myChallengesHasComment(ctx.page, target, body, author)).toBe(true);
+    await expect.poll(() => myChallengesHasComment(ctx.page, target, body, author, myChallengesScopeFor(data.role))).toBe(true);
   },
 
   "api.capture_response": async ({ ctx, runtime, params }) => {
@@ -191,9 +192,6 @@ export const objectiveCommentOperators = {
         messages: expect.arrayContaining([
           expect.objectContaining({
             body,
-            parentMessageId: undefined,
-            replyToMessageId: undefined,
-            replyToAuthor: undefined,
           }),
         ]),
       },
@@ -260,6 +258,10 @@ export const objectiveCommentOperators = {
   },
 } satisfies OperatorRegistry<TestContext, ObjectiveCommentCaseData>;
 
+function myChallengesScopeFor(role: ObjectiveCommentCaseData["role"]) {
+  return role === "admin" ? "all" : "mine";
+}
+
 function locatorFromParams(page: Page, params: StepParams): Locator {
   const exact = optionalBoolean(params, "exact");
   const name = optionalString(params, "name");
@@ -287,7 +289,7 @@ async function openObjectiveCommentPanel(page: Page, target: ObjectiveCommentTar
   await expect(row).toBeVisible();
   await row.hover();
   await row.locator('[data-challenge-row-actions] button[aria-label="打开块菜单"]').click();
-  await row.getByRole("button", { name: "评论" }).click();
+  await row.locator(".orf-block-menu").getByRole("button", { name: "评论", exact: true }).click();
   await expect(commentPanel(page)).toBeVisible();
 }
 

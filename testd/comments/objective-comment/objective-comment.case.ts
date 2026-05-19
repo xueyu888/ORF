@@ -3,15 +3,15 @@ import type { ObjectiveCommentCaseData } from "./_support/objective-comment.cont
 
 export const objectiveCommentCreateCase = {
   id: "comments.objective.create",
-  title: "普通成员可以在计划页面给目标新增评论",
+  title: "管理员可以在计划页面给目标新增评论",
   model: STATE_CASE_MODEL,
-  tags: ["comments", "objective", "create", "happy-path"],
+  tags: ["comments", "objective", "create", "admin", "happy-path"],
 
   data: {
-    email: "orf-login-e2e@orf.local",
-    password: "OrfLoginE2E!2026",
-    name: "ORF Login E2E",
-    role: "member",
+    email: "zrx831@gmail.com",
+    password: "123123123",
+    name: "zrx",
+    role: "admin",
     commentBody: "E2E-PLAN-COMMENT: 需要补充边界样例覆盖情况",
     commentBodyPrefix: "E2E-PLAN-COMMENT:",
   },
@@ -44,12 +44,12 @@ export const objectiveCommentCreateCase = {
       },
       {
         id: "db.member.fixture.exists",
-        title: "ORF 普通成员基准夹具存在",
+        title: "ORF 管理员基准夹具存在",
         operator: "db.member.fixture.exists",
       },
       {
         id: "db.objective.fixture.exists",
-        title: "当前成员可见目标基准夹具存在",
+        title: "当前用户可见目标基准夹具存在",
         operator: "db.objective.fixture.exists",
       },
       {
@@ -88,7 +88,7 @@ export const objectiveCommentCreateCase = {
   },
 
   Setup: {
-    description: "登录测试成员，进入计划页并打开一个可见目标的评论窗口",
+    description: "登录管理员，进入计划页并打开一个可见目标的评论窗口",
     steps: [
       {
         id: "browser.clear",
@@ -132,6 +132,15 @@ export const objectiveCommentCreateCase = {
         },
       },
       {
+        id: "session.authenticated",
+        title: "等待后端 session 已登录",
+        operator: "auth.session.authenticated",
+        params: {
+          emailFrom: "data.email",
+          roleFrom: "data.role",
+        },
+      },
+      {
         id: "page.goto.tasks",
         title: "打开计划页",
         operator: "page.goto",
@@ -141,7 +150,7 @@ export const objectiveCommentCreateCase = {
       },
       {
         id: "api.select_objective_target",
-        title: "选择当前成员可见目标作为评论对象",
+        title: "选择当前管理员可见目标作为评论对象",
         operator: "api.my_challenges.select_objective_target",
         params: {
           saveAs: "commentTarget",
@@ -267,7 +276,7 @@ export const objectiveCommentCreateCase = {
       },
       {
         id: "comment.author.visible",
-        title: "评论作者显示为当前成员",
+        title: "评论作者显示为当前管理员",
         operator: "page.comment_author.visible",
         params: {
           authorFrom: "data.name",
@@ -339,7 +348,7 @@ export const objectiveCommentCreateCase = {
   },
 
   Clean: {
-    description: "删除本用例评论并退出登录，保留目标数据和测试成员夹具",
+    description: "删除本用例评论并退出登录，保留目标数据和管理员夹具",
     steps: [
       {
         id: "comment_panel.close",
@@ -377,7 +386,7 @@ export const objectiveCommentCreateCase = {
       },
       {
         id: "db.member.fixture.exists",
-        title: "测试成员夹具仍然存在",
+        title: "管理员夹具仍然存在",
         operator: "db.member.fixture.exists",
       },
       {
