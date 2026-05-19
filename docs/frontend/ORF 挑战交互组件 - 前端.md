@@ -4,7 +4,7 @@
 
 ## 1. 行操作
 
-行操作绑定目标、悬赏指标、任务、子任务。
+行操作绑定目标、指标、任务、子任务。
 
 | 操作 | 说明 |
 | --- | --- |
@@ -23,12 +23,12 @@
 
 | 操作 | 权限 key |
 | --- | --- |
-| 新增悬赏指标 | `result.create` |
+| 新增指标 | `result.create` |
 | 编辑目标 | `objective.edit` |
-| 编辑悬赏指标 | `result.edit` |
-| 拖拽悬赏指标 | `result.edit` |
+| 编辑指标 | `result.edit` |
+| 拖拽指标 | `result.edit` |
 | 删除目标 | `objective.delete` |
-| 删除悬赏指标 | `result.delete` |
+| 删除指标 | `result.delete` |
 | 删除行动项 | `task.delete` |
 | 删除子行动项 | `subtask.delete` |
 
@@ -52,18 +52,18 @@
 
 | 删除对象 | 确认内容 |
 | --- | --- |
-| 目标 | 悬赏指标、任务、子任务数量 |
-| 悬赏指标 | 任务、子任务数量 |
+| 目标 | 指标、任务、子任务数量 |
+| 指标 | 任务、子任务数量 |
 | 任务 | 子任务数量 |
 | 子任务 | 当前子任务标题 |
 
 ## 5. 更新时间来源
 
-悬赏指标行最近更新时间取以下字段的最新值：
+指标行最近更新时间取以下字段的最新值：
 
 | 来源 | 字段 |
 | --- | --- |
-| 悬赏指标趋势 | `Result.trend[-1].date` |
+| 指标趋势 | `Result.trend[-1].date` |
 | 任务 | `Task.updatedAt` |
 | 子任务 | `TaskChecklistItem.updatedAt` |
 | 反馈 | `Feedback.updatedAt` |

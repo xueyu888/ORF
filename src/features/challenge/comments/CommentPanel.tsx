@@ -299,7 +299,7 @@ function CommentMessageRow({
           {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
           {message.body}
         </p>
-        {showReplyEntry && (
+        {showReplyEntry && entry.replyCount > 0 && (
           <button type="button" className="orf-comment-reply-count" onClick={(event) => { event.stopPropagation(); onEnterReplies?.(); }}>
             共 {entry.replyCount} 条回复
             <ChevronRight className="h-3.5 w-3.5" />

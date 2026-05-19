@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 
@@ -64,6 +65,7 @@ const backgroundsRoot = path.join(settingsRoot, "backgrounds");
 const userSettingsDir = path.join(settingsRoot, "user");
 const userSettingsPath = path.join(userSettingsDir, "settings.json");
 const userSettingsExamplePath = path.join(userSettingsDir, "settings.json.example");
+let settingsMutationQueue: Promise<void> = Promise.resolve();
 
 const emptySettings = (): SettingsFile => ({
   visual: {
@@ -128,6 +130,36 @@ function extensionFromMimeType(mimeType: string) {
   }
 }
 
+export function isSupportedVisualBackgroundImage(mimeType: string, buffer: Buffer) {
+  if (!allowedMimeTypes.has(mimeType)) {
+    return false;
+  }
+
+  if (mimeType === "image/jpeg") {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+
+  if (mimeType === "image/png") {
+    return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+
+  if (mimeType === "image/gif") {
+    const signature = buffer.subarray(0, 6).toString("ascii");
+    return signature === "GIF87a" || signature === "GIF89a";
+  }
+
+  if (mimeType === "image/webp") {
+    return buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+
+  if (mimeType === "image/avif") {
+    const brands = buffer.subarray(8, Math.min(buffer.length, 64)).toString("ascii");
+    return buffer.length >= 16 && buffer.subarray(4, 8).toString("ascii") === "ftyp" && (brands.includes("avif") || brands.includes("avis"));
+  }
+
+  return false;
+}
+
 function sanitizeFileName(fileName: string, mimeType: string) {
   const parsed = path.parse(fileName);
   const fallbackExtension = extensionFromMimeType(mimeType);
@@ -144,26 +176,39 @@ function sanitizeFileName(fileName: string, mimeType: string) {
   return `${safeBase || "background"}${extension || ".png"}`;
 }
 
-async function pathExists(filePath: string) {
-  try {
-    await stat(filePath);
-    return true;
-  } catch {
-    return false;
+function uploadFileNameCandidate(fileName: string, attempt: number) {
+  if (attempt === 0) {
+    return fileName;
   }
+
+  const parsed = path.parse(fileName);
+  return `${parsed.name}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}${parsed.ext}`;
 }
 
-async function uniqueFileName(directory: string, fileName: string) {
-  const parsed = path.parse(fileName);
-  let candidate = fileName;
-  let index = 0;
+function isFileExistsError(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "EEXIST";
+}
 
-  while (await pathExists(path.join(directory, candidate))) {
-    index += 1;
-    candidate = `${parsed.name}-${Date.now().toString(36)}-${index}${parsed.ext}`;
+async function writeUniqueUploadFile(directory: string, fileName: string, buffer: Buffer) {
+  const maxAttempts = 20;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const candidate = uploadFileNameCandidate(fileName, attempt);
+    const filePath = path.join(directory, candidate);
+
+    try {
+      await writeFile(filePath, buffer, { flag: "wx" });
+      return { fileName: candidate, filePath };
+    } catch (error) {
+      if (isFileExistsError(error)) {
+        continue;
+      }
+
+      throw error;
+    }
   }
 
-  return candidate;
+  throw new Error("file already exists");
 }
 
 async function ensureBackgroundDirectories() {
@@ -216,9 +261,26 @@ async function readUserSettings() {
 
 async function writeUserSettings(settings: SettingsFile) {
   await mkdir(userSettingsDir, { recursive: true });
-  const tempPath = `${userSettingsPath}.tmp`;
-  await writeFile(tempPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
-  await rename(tempPath, userSettingsPath);
+  const tempPath = `${userSettingsPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
+
+  try {
+    await writeFile(tempPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
+    await rename(tempPath, userSettingsPath);
+  } catch (error) {
+    await rm(tempPath, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function updateUserSettings<T>(mutator: (settings: SettingsFile) => T | Promise<T>) {
+  const mutation = settingsMutationQueue.then(async () => {
+    const settings = await readUserSettings();
+    const result = await mutator(settings);
+    await writeUserSettings(settings);
+    return result;
+  });
+  settingsMutationQueue = mutation.then(() => undefined, () => undefined);
+  return mutation;
 }
 
 async function scanBackgroundScope(scene: BackgroundScene, scope: BackgroundScope) {
@@ -272,7 +334,13 @@ export async function listVisualBackgrounds(scene: BackgroundScene) {
 }
 
 export function parseBackgroundId(id: string): ParsedBackgroundId {
-  const decodedId = decodeURIComponent(id);
+  let decodedId: string;
+  try {
+    decodedId = decodeURIComponent(id);
+  } catch {
+    throw new Error("background not found");
+  }
+
   const [sceneRaw, scopeRaw, ...fileNameParts] = decodedId.split("/");
   const scene = backgroundSceneSchema.parse(sceneRaw);
   const scope = z.enum(backgroundScopes).parse(scopeRaw);
@@ -304,7 +372,7 @@ export async function getVisualBackgroundFile(scene: BackgroundScene, scope: Bac
 }
 
 export async function saveUploadedVisualBackground(input: { scene: BackgroundScene; fileName: string; mimeType: string; buffer: Buffer }) {
-  if (!allowedMimeTypes.has(input.mimeType)) {
+  if (!isSupportedVisualBackgroundImage(input.mimeType, input.buffer)) {
     throw new Error("invalid file type");
   }
 
@@ -314,10 +382,7 @@ export async function saveUploadedVisualBackground(input: { scene: BackgroundSce
 
   const directory = sceneDir(input.scene, "user");
   await mkdir(directory, { recursive: true });
-  const fileName = await uniqueFileName(directory, sanitizeFileName(input.fileName, input.mimeType));
-  const filePath = path.join(directory, fileName);
-
-  await writeFile(filePath, input.buffer);
+  const { fileName, filePath } = await writeUniqueUploadFile(directory, sanitizeFileName(input.fileName, input.mimeType), input.buffer);
 
   const fileStat = await stat(filePath);
   const fileKey = `${input.scene}/user/${fileName}`;
@@ -358,36 +423,36 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
     fixedBackgroundId = `${fixedBackground.scene}/${fixedBackground.scope}/${fixedBackground.fileName}`;
   }
 
-  const settings = await readUserSettings();
-  settings.visual.backgrounds[scene] = {
-    ...config,
-    fixedBackgroundId,
-  };
-  await writeUserSettings(settings);
+  return updateUserSettings((settings) => {
+    settings.visual.backgrounds[scene] = {
+      ...config,
+      fixedBackgroundId,
+    };
 
-  return {
-    scene,
-    config: settings.visual.backgrounds[scene],
-  };
+    return {
+      scene,
+      config: settings.visual.backgrounds[scene],
+    };
+  });
 }
 
 export async function setDefaultVisualBackground(id: string) {
   const parsed = await assertBackgroundExists(id);
 
-  const settings = await readUserSettings();
-  settings.visual.backgrounds[parsed.scene] = {
-    ...settings.visual.backgrounds[parsed.scene],
-    mode: "fixed",
-    fixedBackgroundId: `${parsed.scene}/${parsed.scope}/${parsed.fileName}`,
-  };
-  await writeUserSettings(settings);
+  return updateUserSettings((settings) => {
+    settings.visual.backgrounds[parsed.scene] = {
+      ...settings.visual.backgrounds[parsed.scene],
+      mode: "fixed",
+      fixedBackgroundId: `${parsed.scene}/${parsed.scope}/${parsed.fileName}`,
+    };
 
-  return {
-    id: settings.visual.backgrounds[parsed.scene].fixedBackgroundId,
-    scene: parsed.scene,
-    config: settings.visual.backgrounds[parsed.scene],
-    isDefault: true,
-  };
+    return {
+      id: settings.visual.backgrounds[parsed.scene].fixedBackgroundId,
+      scene: parsed.scene,
+      config: settings.visual.backgrounds[parsed.scene],
+      isDefault: true,
+    };
+  });
 }
 
 export function visualBackgroundError(error: unknown) {

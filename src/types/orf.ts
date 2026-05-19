@@ -14,13 +14,17 @@ export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "f
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
+export type UserStatus = "pending" | "active" | "rejected" | "disabled";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
+export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "settled" | "closed";
+export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 
 export interface OrfUser {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  status: UserStatus;
   lastLoginAt?: string | null;
 }
 
@@ -40,6 +44,7 @@ export interface ChallengeApplication {
   status: ChallengeApplicationStatus;
   createdAt: string;
   decidedAt?: string | null;
+  decidedBy?: string | null;
 }
 
 export interface ActivityItem {
@@ -56,6 +61,7 @@ export interface Objective {
   whyItMatters: string;
   cycle: string;
   stage: OrfStage;
+  flowStatus: ObjectiveFlowStatus;
   status: WorkStatus;
   confidence: number;
   progress: number;
@@ -78,6 +84,46 @@ export interface Objective {
   objectiveSettlementPoints?: number | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LootResultClaim {
+  resultId: string;
+  claim: LootResultClaimStatus;
+  evidenceText: string;
+}
+
+export interface ObjectiveLoot {
+  id: string;
+  objectiveId: string;
+  submittedBy: string;
+  body: string;
+  resultClaims: LootResultClaim[];
+  selfTestReportUrl?: string | null;
+  selfTestReportBody?: string | null;
+  submittedAt: string;
+}
+
+export interface PointLedgerEntry {
+  id: string;
+  objectiveId: string;
+  userId?: string | null;
+  memberName: string;
+  points: number;
+  reason: string;
+  createdAt: string;
+}
+
+export interface ContributionAllocation {
+  member: string;
+  ratio: number;
+}
+
+export interface ObjectiveContributionReview {
+  id: string;
+  objectiveId: string;
+  reviewer: string;
+  allocations: ContributionAllocation[];
+  submittedAt: string;
 }
 
 export interface Result {
@@ -122,6 +168,8 @@ export interface Feedback {
   source: FeedbackSource;
   status: FeedbackStatus;
   owner: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
   createdAt: string;
   updatedAt: string;
   activity: ActivityItem[];
@@ -255,6 +303,9 @@ export interface OrfState {
   scenarios: Scenario[];
   failureSamples: FailureSample[];
   comments: CommentThread[];
+  objectiveLoot: ObjectiveLoot[];
+  objectiveContributionReviews: ObjectiveContributionReview[];
+  pointLedger: PointLedgerEntry[];
   causeCategories: string[];
   rules: OrfRules;
 }

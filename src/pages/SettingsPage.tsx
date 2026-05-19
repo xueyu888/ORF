@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, Check, Database, Image, Loader2, MousePointerClick, Palette, ShieldCheck, Shuffle, Tags, Timer, ToggleLeft, Upload } from "lucide-react";
+import { Check, Image, Loader2, MousePointerClick, Palette, Shuffle, Timer, ToggleLeft, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
@@ -17,15 +17,11 @@ import {
 import { useOrf } from "../state/OrfProvider";
 import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 
-type NavigationKey = "visual" | "cycle" | "feedback" | "rules" | "storage";
+type NavigationKey = "visual";
 type RequestStatus = "idle" | "loading" | "success" | "error";
 
 const settingsNavigation: Array<{ key: NavigationKey; label: string; icon: LucideIcon }> = [
   { key: "visual", label: "视觉设置", icon: Palette },
-  { key: "cycle", label: "周期与团队", icon: CalendarDays },
-  { key: "feedback", label: "反馈分类", icon: Tags },
-  { key: "rules", label: "ORF 规则", icon: ShieldCheck },
-  { key: "storage", label: "存储", icon: Database },
 ];
 
 const backgroundSections: Array<{
@@ -54,46 +50,33 @@ const defaultVisualBackgroundConfig: VisualBackgroundConfig = {
 };
 
 export function SettingsPage() {
-  const [activeNavigation, setActiveNavigation] = useState<NavigationKey>("visual");
-
   return (
     <div className="orf-settings-page">
       <nav className="orf-settings-nav" aria-label="设置导航">
         {settingsNavigation.map((item) => (
-          <button
+          <div
             key={item.key}
-            type="button"
-            className={clsx(activeNavigation === item.key && "orf-settings-nav-active")}
-            onClick={() => setActiveNavigation(item.key)}
+            className="orf-settings-nav-item orf-settings-nav-active"
+            aria-current="page"
           >
             <item.icon className="h-5 w-5" />
             <span>{item.label}</span>
-          </button>
+          </div>
         ))}
       </nav>
 
       <section className="orf-settings-detail" aria-label="设置详情">
-        {activeNavigation === "visual" ? (
-          <>
-            <div className="orf-settings-detail-heading">
-              <span>Visual Config</span>
-              <h1>视觉设置</h1>
-              <p>自定义系统的视觉风格，让界面更贴合你的偏好。</p>
-            </div>
+        <div className="orf-settings-detail-heading">
+          <span>Visual Config</span>
+          <h1>视觉设置</h1>
+          <p>自定义系统的视觉风格，让界面更贴合你的偏好。</p>
+        </div>
 
-            <div className="orf-settings-sections">
-              {backgroundSections.map((section) => (
-                <BackgroundSettingSection key={section.scene} {...section} />
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="orf-settings-placeholder">
-            <span>Coming Soon</span>
-            <h1>{settingsNavigation.find((item) => item.key === activeNavigation)?.label}</h1>
-            <p>该设置项暂不展开具体内容。</p>
-          </div>
-        )}
+        <div className="orf-settings-sections">
+          {backgroundSections.map((section) => (
+            <BackgroundSettingSection key={section.scene} {...section} />
+          ))}
+        </div>
       </section>
     </div>
   );

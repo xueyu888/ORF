@@ -1,11 +1,11 @@
 import { clsx } from "clsx";
-import { CalendarDays, Clock3, MessageSquare, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
-import type { Result, Task, TaskChecklistItem } from "../../../types/orf";
+import type { ObjectiveContributionReview, OrfUser, Result, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -19,6 +19,7 @@ import {
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
+import { workbenchActionForObjective } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
@@ -31,15 +32,27 @@ type RowHandlers = {
   commentCounts: Map<string, number>;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
+  contributionReviews: ObjectiveContributionReview[];
+  canManageFlow: boolean;
+  canMutateMetrics: (objectiveId: string) => boolean;
+  canMutateWorkItems: (objectiveId: string) => boolean;
+  currentUser: OrfUser | null;
+  metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
+  canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
   onActiveActionChange: (id: string | null) => void;
   onAddAction: (bounty: Result) => void;
   onAddBounty: (objectiveId: string) => void;
   onAddSubAction: (actionId: string, afterItemId?: string) => void;
+  onApproveApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCancelEdit: () => void;
   onEditTarget: (target: ChallengeTarget) => void;
+  onFreezeObjective: (objectiveId: string) => Promise<boolean>;
   onOpenActionChange: (id: string | null) => void;
+  onPublishObjective: (objectiveId: string) => Promise<boolean>;
+  onRecruitObjective: (objectiveId: string) => void;
+  onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onSaveTitle: (target: ChallengeTarget, title: string) => void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -94,6 +107,15 @@ function ObjectivePanel({
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const isFrozen = group.objective.stage === "goalFrozen";
+  const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
+  const workbenchAction = workbenchActionForObjective({
+    objective: group.objective,
+    currentUser: handlers.currentUser,
+    contributionReviews: handlers.contributionReviews,
+  });
+  const showApplicationReview =
+    handlers.canManageFlow &&
+    pendingApplications.length > 0;
   const layoutKey = group.bounties
     .map((bounty) => {
       if (handlers.collapsedBountyIds.has(bounty.result.id)) return `${bounty.result.id}:closed`;
@@ -108,6 +130,7 @@ function ObjectivePanel({
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
       <div
         className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
+        data-has-workbench-action={workbenchAction ? "true" : undefined}
         data-scope={scope}
         onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
         onPointerEnter={() => handlers.onActiveActionChange(actionId)}
@@ -118,7 +141,7 @@ function ObjectivePanel({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel="新增悬赏"
+          addLabel={handlers.metricActionLabel(group.objective)}
           left={rowActionLeft.objective}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -140,18 +163,35 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
-        <EmptySlot />
+        <ObjectiveFlowAction objective={group.objective} handlers={handlers} />
         <AvatarStack names={group.challengers} />
         <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
-        {scope === "mine" ? (
-          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={`/objectives/${group.objective.id}/loot`}>
-            提交战利品
+        {workbenchAction ? (
+          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={workbenchAction.to}>
+            {workbenchAction.label}
           </Link>
         ) : null}
       </div>
+
+      {showApplicationReview && (
+        <div className="orf-objective-admin-strip">
+          <span className="orf-objective-admin-strip-label">挑战申请</span>
+          {pendingApplications.map((application) => (
+            <span key={application.id} className="orf-objective-application-pill">
+              <span className="font-semibold orf-text-primary">{application.applicant}</span>
+              <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
+                通过
+              </button>
+              <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
+                拒绝
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="orf-objective-body">
         {group.bounties.map((bounty) => (
@@ -164,9 +204,69 @@ function ObjectivePanel({
             scope={scope}
           />
         ))}
+        {group.bounties.length === 0 && <ObjectiveMetricEmptyState parentAnchorId={anchorId} />}
       </div>
     </section>
   );
+}
+
+function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string }) {
+  return (
+    <div className="orf-objective-metric-empty">
+      <HierarchyCell depth={1}>
+        <span
+          className="flex h-7 w-7 shrink-0 items-center justify-center"
+          data-hierarchy-anchor={`empty:${parentAnchorId}`}
+          data-hierarchy-branch-end-offset="0"
+          data-hierarchy-branch-target={`empty:${parentAnchorId}`}
+          data-hierarchy-parent={parentAnchorId}
+        >
+          <MetricSquareIcon tone="todo" />
+        </span>
+        <div className="grid min-w-0 gap-1">
+          <div className="text-base font-semibold text-[#475467]">待定义指标</div>
+          <div className="text-xs orf-text-muted">当前目标还没有指标。</div>
+        </div>
+      </HierarchyCell>
+    </div>
+  );
+}
+
+function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode["objective"]; handlers: RowHandlers }) {
+  if (!handlers.canManageFlow) return <EmptySlot />;
+
+  const actions: ReactNode[] = [];
+
+  if (objective.flowStatus === "candidate") {
+    actions.push(
+      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="发布到悬赏大厅" onClick={() => void handlers.onPublishObjective(objective.id)}>
+        <Send className="h-3.5 w-3.5" />
+        发布
+      </button>,
+    );
+  }
+
+  if (handlers.canRecruitObjective(objective)) {
+    actions.push(
+      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="征召挑战者" onClick={() => handlers.onRecruitObjective(objective.id)}>
+        <UserPlus className="h-3.5 w-3.5" />
+        征召
+      </button>,
+    );
+  }
+
+  if (objective.flowStatus === "reestimating") {
+    actions.push(
+      <button className="orf-flow-action-button orf-flow-action-primary" type="button" title="重估完成并冻结目标" onClick={() => void handlers.onFreezeObjective(objective.id)}>
+        <CheckCircle2 className="h-3.5 w-3.5" />
+        冻结
+      </button>,
+    );
+  }
+
+  if (actions.length === 0) return <EmptySlot />;
+
+  return <div className="orf-flow-action-group">{actions.map((action, index) => <span key={index}>{action}</span>)}</div>;
 }
 
 function BountyRow({
@@ -214,8 +314,8 @@ function BountyRow({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel="新增行动项"
-          dragItem={{ type: "bounty", id: bounty.result.id, objectiveId: bounty.result.objectiveId }}
+          addLabel={handlers.canMutateWorkItems(bounty.result.objectiveId) ? "新增行动项" : null}
+          dragItem={handlers.canMutateMetrics(bounty.result.objectiveId) ? { type: "bounty", id: bounty.result.id, objectiveId: bounty.result.objectiveId } : undefined}
           left={rowActionLeft.bounty}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -231,7 +331,7 @@ function BountyRow({
             activeActionId={handlers.activeActionId}
             className="absolute top-1/2 -translate-y-1/2"
             expanded={open}
-            label={open ? "折叠悬赏" : "展开悬赏"}
+            label={open ? "折叠指标" : "展开指标"}
             left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1]}
             onActiveActionChange={handlers.onActiveActionChange}
             onOpenActionChange={handlers.onOpenActionChange}
@@ -251,7 +351,7 @@ function BountyRow({
           </span>
           {isSameTarget(handlers.editingTarget, target) ? (
             <InlineTitleEditor
-              ariaLabel="编辑悬赏指标标题"
+              ariaLabel="编辑指标标题"
               className="orf-result-title text-base font-semibold"
               onCancel={handlers.onCancelEdit}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
@@ -336,8 +436,8 @@ function ActionRow({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel="新增子行动项"
-          dragItem={{ type: "action", id: action.id, bountyId: action.linkedResultId, objectiveId: action.linkedObjectiveId }}
+          addLabel={handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增子行动项" : null}
+          dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "action", id: action.id, bountyId: action.linkedResultId, objectiveId: action.linkedObjectiveId } : undefined}
           left={rowActionLeft.action}
           onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -454,8 +554,8 @@ function SubActionRow({
       <ChallengeRowActions
         actionId={actionId}
         activeActionId={handlers.activeActionId}
-        addLabel="新增同级子行动项"
-        dragItem={{ type: "subAction", id: item.id, actionId: action.id }}
+        addLabel={handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增同级子行动项" : null}
+        dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "subAction", id: item.id, actionId: action.id } : undefined}
         left={rowActionLeft.subAction}
         onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
         onActiveActionChange={handlers.onActiveActionChange}

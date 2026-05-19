@@ -13,7 +13,7 @@
 | `MATTERMOST_URL` | Mattermost 站点地址。 |
 | `MATTERMOST_LOGIN_ID` | 用于发消息的 Mattermost 登录账号。 |
 | `MATTERMOST_PASSWORD` | Mattermost 登录密码。 |
-| `MATTERMOST_CHANNEL_ID` | 目标频道 ID，当前 ORF 频道为 `5bs9q1hs7b8mfx9xp389bp8wmo`。 |
+| `MATTERMOST_CHANNEL_ID` | 目标频道 ID。使用部署环境中的真实频道 ID，不要提交到仓库。 |
 | `GITHUB_REPOSITORY_FULL_NAME` | 允许同步的仓库全名，默认 `xueyu888/ORF`。 |
 | `GITHUB_SYNC_ENABLED` | 是否启用局域网轮询同步，当前设为 `true`。 |
 | `GITHUB_SYNC_BRANCH` | 兼容旧配置；当前同步不按分支过滤，任何分支推送都通知。 |
@@ -52,6 +52,7 @@
 - Content type: `application/json`
 - Secret: 填写 `.env` 中的 `GITHUB_WEBHOOK_SECRET`
 - Which events: `Just the push event`
+- ORF 在验签前最多缓冲 1 MiB webhook payload，超过上限直接返回 413，避免异常大请求占用内存。
 
 如果要用 webhook 实时接收 issue opened/reopened 事件，新增第二个 webhook：
 

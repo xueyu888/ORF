@@ -11,8 +11,9 @@ import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroun
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
+const defaultSidebarBackgroundUrl = "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png";
 const sidebarGroups = [
-  { title: "work", labels: ["悬赏", "计划"] },
+  { title: "work", labels: ["悬赏大厅", "计划"] },
   { title: "report", labels: ["反馈", "统计"] },
   { title: "admin", labels: ["成员管理", "权限管理"] },
 ].map((group) => ({
@@ -23,7 +24,7 @@ const sidebarGroups = [
 export function Sidebar({ onCommand }: { onCommand: () => void }) {
   const { currentUser, logout } = useOrf();
   const [collapsed, setCollapsed] = useState(false);
-  const [configuredSidebarBackgroundUrl, setConfiguredSidebarBackgroundUrl] = useState<string | null>(null);
+  const [configuredSidebarBackgroundUrl, setConfiguredSidebarBackgroundUrl] = useState(defaultSidebarBackgroundUrl);
   const visibleGroups = sidebarGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
@@ -47,12 +48,12 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           if (cancelled) {
             return;
           }
-          setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? null);
+          setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? defaultSidebarBackgroundUrl);
 
           const intervalMs = visualBackgroundIntervalMs(data);
           if (intervalMs) {
             intervalId = window.setInterval(() => {
-              setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? null);
+              setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? defaultSidebarBackgroundUrl);
             }, intervalMs);
           }
         })
@@ -70,7 +71,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
   }, []);
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-image": toCssImageUrl(configuredSidebarBackgroundUrl ?? sidebarBackground.src),
+    "--orf-sidebar-bg-image": toCssImageUrl(configuredSidebarBackgroundUrl || sidebarBackground.src),
     "--orf-sidebar-bg-position": sidebarBackground.position,
     "--orf-sidebar-bg-filter": sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,

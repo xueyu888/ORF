@@ -1,7 +1,7 @@
 param(
   [string]$VmName = "WechatVM",
   [string]$UserName = "xue",
-  [string]$Password = "WechatVM2026!",
+  [string]$Password = $env:WECHATVM_PASSWORD,
   [string]$LogPath = "D:\HyperV\wechatvm-query.log"
 )
 
@@ -17,6 +17,10 @@ $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
   throw "This script must run as Administrator."
+}
+
+if ([string]::IsNullOrWhiteSpace($Password)) {
+  throw "Set -Password or WECHATVM_PASSWORD before connecting to the VM."
 }
 
 $secure = ConvertTo-SecureString $Password -AsPlainText -Force

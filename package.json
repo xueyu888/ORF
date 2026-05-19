@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
+  "bin": {
+    "orf": "./bin/orf.mjs"
+  },
   "type": "module",
   "packageManager": "npm@10.9.2",
   "scripts": {
+    "orf": "node bin/orf.mjs",
     "check:env": "uv --version && node --version && npm --version",
     "dev": "vite --host 0.0.0.0",
     "dev:web": "vite --host 0.0.0.0",
@@ -13,6 +17,7 @@
     "server:start": "tsx server/index.ts",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
+    "verify": "npm run build && npm test && npm run test:e2e",
     "ory:dev": "tsx scripts/prepare-ory-env.ts && sg docker -c 'docker compose -f docker-compose.ory.yml up -d kratos'",
     "ory:down": "sg docker -c 'docker compose -f docker-compose.ory.yml down'",
     "db:local": "echo 'Local Postgres is disabled. Use DATABASE_URL in .env.' && exit 1",
@@ -21,6 +26,8 @@
     "db:migrate": "tsx scripts/migrate-db.ts",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx scripts/seed.ts",
+    "db:seed:bounties": "tsx scripts/seed-bounty-hall.ts",
+    "notify:email": "tsx scripts/send-email-notification.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "check": "npm run check:env && npm run build"
@@ -37,6 +44,7 @@
     "drizzle-orm": "^0.45.2",
     "fastify": "^5.8.5",
     "lucide-react": "^1.11.0",
+    "nodemailer": "^8.0.7",
     "pg": "^8.20.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
@@ -44,10 +52,14 @@
     "recharts": "^3.8.1",
     "zod": "^4.4.1"
   },
+  "overrides": {
+    "fast-uri": "3.1.2"
+  },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.2.4",
     "@types/node": "^25.6.0",
+    "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

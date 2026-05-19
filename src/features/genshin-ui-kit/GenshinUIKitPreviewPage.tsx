@@ -69,7 +69,7 @@ export function GenshinUIKitPreviewPage() {
             <GiButton icon={<Trophy className="h-4 w-4" />} variant="secondary">
               我的挑战
             </GiButton>
-            <GiButton icon={<Send className="h-4 w-4" />}>提出候选悬赏指标</GiButton>
+            <GiButton icon={<Send className="h-4 w-4" />}>提出指标</GiButton>
           </>
         }
         eyebrow="ORF Game UI Kit"
@@ -77,7 +77,7 @@ export function GenshinUIKitPreviewPage() {
         metrics={
           <>
             <GiMetric icon={Trophy} label="我的积分" tone="gold" value="12,480" />
-            <GiMetric icon={Target} label="可申请悬赏" value="18" />
+            <GiMetric icon={Target} label="可申请悬赏目标" value="18" />
             <GiMetric icon={Clock} label="确认中" tone="teal" value="3" />
           </>
         }
@@ -115,7 +115,7 @@ export function GenshinUIKitPreviewPage() {
                 <GiField label="搜索">
                   <div className="gk-kit-search-field">
                     <Search className="gk-kit-search-field__icon" />
-                    <GiInput placeholder="搜索悬赏指标标题或目标..." />
+                    <GiInput placeholder="搜索悬赏目标或指标..." />
                   </div>
                 </GiField>
                 <GiField label="难度">
@@ -150,7 +150,7 @@ export function GenshinUIKitPreviewPage() {
             </div>
           </GiPanel>
 
-          <GiPanel title="业务条目" subtitle="用于替代悬赏卡片、征召令、优先挑战和轻详情里的信息块。">
+          <GiPanel title="业务条目" subtitle="用于替代悬赏目标卡片、征召令、优先挑战和轻详情里的信息块。">
             <div className="gk-kit-preview-section">
               <GiQuestStrip
                 active
@@ -233,7 +233,7 @@ export function GenshinUIKitPreviewPage() {
                 }
                 title="申请挑战"
               >
-                <p>提交后等待指挥官确认。确认后，这条悬赏会进入你的挑战页。</p>
+                <p>提交后等待指挥官确认。确认后，这条悬赏目标会进入你的挑战页。</p>
                 <GiQuestStrip
                   icon={<Target className="h-5 w-5" />}
                   rewards={rewardSet}
@@ -244,7 +244,7 @@ export function GenshinUIKitPreviewPage() {
               <GiEmptyState
                 action={<GiButton variant="secondary">重置筛选</GiButton>}
                 description="调整搜索或筛选条件后再查看。"
-                title="没有符合条件的悬赏指标"
+                title="没有符合条件的指标"
               />
             </div>
           </GiPanel>

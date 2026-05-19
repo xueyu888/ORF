@@ -8,6 +8,7 @@ export type AuthenticatedOrfUser = {
   name: string;
   email: string;
   role: "admin" | "member";
+  status: "pending" | "active" | "rejected" | "disabled";
   lastLoginAt: string | null;
 };
 
@@ -54,6 +55,7 @@ type OryAuthResponse = {
 };
 
 export const ORF_SESSION_COOKIE = "orf_ory_session";
+const ORY_REQUEST_TIMEOUT_MS = 2000;
 
 export class OryAuthFlowError extends Error {
   status: number;
@@ -70,7 +72,14 @@ export class OryAuthFlowError extends Error {
 const trimSlash = (value: string) => value.replace(/\/+$/, "");
 
 function oryPublicUrl(path: string) {
-  return new URL(path, `${trimSlash(env.ORY_PUBLIC_URL)}/`).toString();
+  return new URL(path, `${trimSlash(process.env.ORY_PUBLIC_URL ?? env.ORY_PUBLIC_URL)}/`).toString();
+}
+
+async function fetchOry(input: string, init: RequestInit = {}) {
+  return fetch(input, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(ORY_REQUEST_TIMEOUT_MS),
+  });
 }
 
 function cookieHeader(cookie: string | undefined): Record<string, string> {
@@ -174,19 +183,22 @@ async function createDefaultTeamMembership(userId: string): Promise<Authenticate
   return "member";
 }
 
-async function upsertOrfUser(identity: OryIdentity, options: { recordLogin?: boolean } = {}): Promise<AuthenticatedOrfUser> {
+async function upsertOrfUser(
+  identity: OryIdentity,
+  options: { newUserStatus?: AuthenticatedOrfUser["status"]; recordLogin?: boolean } = {},
+): Promise<AuthenticatedOrfUser> {
   const email = identityEmail(identity);
   if (!email) {
     throw new Error("Ory identity does not include traits.email");
   }
 
-  const name = identityName(identity, email);
+  const identityDisplayName = identityName(identity, email);
   const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
   const lastLoginAt = options.recordLogin ? new Date().toISOString() : undefined;
 
   if (existing) {
-    if (existing.name !== name || lastLoginAt) {
-      await db.update(users).set({ name, ...(lastLoginAt ? { lastLoginAt } : {}) }).where(sql`${users.id} = ${existing.id}`);
+    if (lastLoginAt) {
+      await db.update(users).set({ lastLoginAt }).where(sql`${users.id} = ${existing.id}`);
     }
 
     const role = await existingTeamRole(existing.id);
@@ -196,9 +208,10 @@ async function upsertOrfUser(identity: OryIdentity, options: { recordLogin?: boo
 
     return {
       id: existing.id,
-      name,
+      name: existing.name,
       email: existing.email ?? email,
       role,
+      status: existing.status ?? "active",
       lastLoginAt: lastLoginAt ?? existing.lastLoginAt,
     };
   }
@@ -207,14 +220,15 @@ async function upsertOrfUser(identity: OryIdentity, options: { recordLogin?: boo
   const createdLastLoginAt = lastLoginAt ?? null;
   await db.insert(users).values({
     id,
-    name,
+    name: identityDisplayName,
     email,
+    status: options.newUserStatus ?? "pending",
     createdAt: new Date().toISOString().slice(0, 10),
     lastLoginAt: createdLastLoginAt,
   });
 
   const role = await createDefaultTeamMembership(id);
-  return { id, name, email, role, lastLoginAt: createdLastLoginAt };
+  return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastLoginAt: createdLastLoginAt };
 }
 
 export async function getAuthenticatedOrfUser(cookie: string | undefined): Promise<AuthenticatedOrfUser | null> {
@@ -222,7 +236,7 @@ export async function getAuthenticatedOrfUser(cookie: string | undefined): Promi
     return null;
   }
 
-  const response = await fetch(oryPublicUrl("/sessions/whoami"), {
+  const response = await fetchOry(oryPublicUrl("/sessions/whoami"), {
     headers: {
       accept: "application/json",
       ...authHeaders(cookie),
@@ -246,7 +260,7 @@ export async function getAuthenticatedOrfUser(cookie: string | undefined): Promi
 }
 
 async function createApiFlow(flowType: "login" | "registration"): Promise<OryFlow> {
-  const response = await fetch(oryPublicUrl(`/self-service/${flowType}/api`), {
+  const response = await fetchOry(oryPublicUrl(`/self-service/${flowType}/api`), {
     headers: {
       accept: "application/json",
     },
@@ -317,7 +331,7 @@ async function submitApiFlow(flowType: "login" | "registration", body: unknown):
     throw new Error(`Ory ${flowType} flow is missing action URL`);
   }
 
-  const response = await fetch(flow.ui.action, {
+  const response = await fetchOry(flow.ui.action, {
     method: "POST",
     headers: {
       accept: "application/json",
@@ -350,7 +364,7 @@ export async function loginWithPassword(identifier: string, password: string) {
     throw new Error("Ory login did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { recordLogin: true });
+  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordLogin: true });
   return { sessionToken: auth.session_token, user };
 }
 
@@ -370,7 +384,7 @@ export async function registerWithPassword(input: { name: string; email: string;
     throw new Error("Ory registration did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { recordLogin: true });
+  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordLogin: true });
   return { sessionToken: auth.session_token, user };
 }
 
@@ -380,7 +394,7 @@ export async function revokeApiSession(cookie: string | undefined) {
     return;
   }
 
-  await fetch(oryPublicUrl("/self-service/logout/api"), {
+  await fetchOry(oryPublicUrl("/self-service/logout/api"), {
     method: "DELETE",
     headers: {
       accept: "application/json",

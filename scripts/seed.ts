@@ -6,6 +6,9 @@ import {
   feedback,
   feedbackCauseCategories,
   objectives,
+  objectiveContributionReviews,
+  objectiveLoot,
+  pointLedger,
   results,
   resultTrendPoints,
   rolePermissions,
@@ -23,19 +26,21 @@ const team = {
   name: "AI 应用团队",
   createdAt: "2026-04-01",
 };
-const bootstrapAdmin = {
-  id: "user-xueyu",
-  name: "xueyu",
-  email: "xueyu@qq.com",
-  createdAt: "2026-04-01",
-  lastLoginAt: "2026-05-05T09:42:00.000Z",
-};
 type SeedUser = {
   id: string;
   name: string;
   email: string;
+  status: "active";
   createdAt: string;
   lastLoginAt: string | null;
+};
+const bootstrapAdmin: SeedUser = {
+  id: "user-xueyu",
+  name: "xueyu",
+  email: "xueyu@qq.com",
+  status: "active",
+  createdAt: "2026-04-01",
+  lastLoginAt: "2026-05-05T09:42:00.000Z",
 };
 
 function userIdForName(name: string) {
@@ -66,6 +71,9 @@ async function seed() {
   await db.transaction(async (tx) => {
     await tx.delete(commentMessages);
     await tx.delete(commentThreads);
+    await tx.delete(pointLedger);
+    await tx.delete(objectiveContributionReviews);
+    await tx.delete(objectiveLoot);
     await tx.delete(evidence);
     await tx.delete(feedbackCauseCategories);
     await tx.delete(feedback);
@@ -90,14 +98,21 @@ async function seed() {
       })),
     );
 
-    const userRows: SeedUser[] = collectUserNames().map((name) => ({
-      id: userIdForName(name),
-      name,
-      email: emailForName(name),
-      createdAt: "2026-04-01",
-      lastLoginAt: "2026-05-01T11:06:00.000Z",
-    }));
-    userRows.push(bootstrapAdmin);
+    const userRowsById = new Map<string, SeedUser>(
+      collectUserNames().map((name) => [
+        userIdForName(name),
+        {
+          id: userIdForName(name),
+          name,
+          email: emailForName(name),
+          status: "active",
+          createdAt: "2026-04-01",
+          lastLoginAt: "2026-05-01T11:06:00.000Z",
+        },
+      ]),
+    );
+    userRowsById.set(bootstrapAdmin.id, bootstrapAdmin);
+    const userRows = Array.from(userRowsById.values());
 
     if (userRows.length > 0) {
       await tx.insert(users).values(userRows);
@@ -113,6 +128,7 @@ async function seed() {
         whyItMatters: objective.whyItMatters,
         cycle: objective.cycle,
         stage: objective.stage,
+        flowStatus: objective.flowStatus,
         status: objective.status,
         confidence: objective.confidence,
         progress: objective.progress,
@@ -179,6 +195,50 @@ async function seed() {
     );
     if (trendRows.length > 0) {
       await tx.insert(resultTrendPoints).values(trendRows);
+    }
+
+    if (initialOrfState.objectiveLoot.length > 0) {
+      await tx.insert(objectiveLoot).values(
+        initialOrfState.objectiveLoot.map((loot) => ({
+          id: loot.id,
+          teamId: team.id,
+          objectiveId: loot.objectiveId,
+          submittedBy: loot.submittedBy,
+          body: loot.body,
+          resultClaims: loot.resultClaims,
+          selfTestReportUrl: loot.selfTestReportUrl ?? null,
+          selfTestReportBody: loot.selfTestReportBody ?? null,
+          submittedAt: loot.submittedAt,
+        })),
+      );
+    }
+
+    if (initialOrfState.objectiveContributionReviews.length > 0) {
+      await tx.insert(objectiveContributionReviews).values(
+        initialOrfState.objectiveContributionReviews.map((review) => ({
+          id: review.id,
+          teamId: team.id,
+          objectiveId: review.objectiveId,
+          reviewer: review.reviewer,
+          allocations: review.allocations,
+          submittedAt: review.submittedAt,
+        })),
+      );
+    }
+
+    if (initialOrfState.pointLedger.length > 0) {
+      await tx.insert(pointLedger).values(
+        initialOrfState.pointLedger.map((entry) => ({
+          id: entry.id,
+          teamId: team.id,
+          objectiveId: entry.objectiveId,
+          userId: entry.userId ?? userIdForName(entry.memberName),
+          memberName: entry.memberName,
+          points: entry.points,
+          reason: entry.reason,
+          createdAt: entry.createdAt,
+        })),
+      );
     }
 
     await tx.insert(tasks).values(

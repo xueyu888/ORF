@@ -41,7 +41,7 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AuthPage() {
   const navigate = useNavigate();
-  const { authReady, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
+  const { authReady, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
   const [mode, setMode] = useState<AuthMode>("login");
   const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
   const [configuredHeroOptions, setConfiguredHeroOptions] = useState<AuthHeroOption[]>([]);
@@ -53,10 +53,10 @@ export function AuthPage() {
   const [authError, setAuthError] = useState("");
 
   useEffect(() => {
-    if (authReady && isAuthenticated) {
+    if (authReady && isAuthenticated && isApproved) {
       navigate("/tasks");
     }
-  }, [authReady, isAuthenticated, navigate]);
+  }, [authReady, isApproved, isAuthenticated, navigate]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +116,9 @@ export function AuthPage() {
     }
 
     setAuthError("");
-    const validationMessage = validateAuthInput(mode, { name, email, password });
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const validationMessage = validateAuthInput(mode, { name: normalizedName, email: normalizedEmail, password });
     if (validationMessage) {
       setAuthError(validationMessage);
       notify(validationMessage);
@@ -126,8 +128,8 @@ export function AuthPage() {
     setSubmitting(true);
     const result =
       mode === "login"
-        ? await loginWithPassword(email, password)
-        : await registerWithPassword({ name, email, password });
+        ? await loginWithPassword(normalizedEmail, password)
+        : await registerWithPassword({ name: normalizedName, email: normalizedEmail, password });
     setSubmitting(false);
 
     if (!result.ok) {

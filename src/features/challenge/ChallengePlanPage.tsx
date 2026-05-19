@@ -1,22 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
-import { hasPermission, type PermissionKey } from "../../config/permissions";
+import { hasPermission } from "../../config/permissions";
+import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
 import type { Result } from "../../types/orf";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
-import { canAccessDragItem, canAccessTarget, canUsePermission, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
+import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
+import { challengeCycleOptions, filterChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
+import { canMutateObjectiveWorkItems, canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
 import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
 
 export function ChallengePlanPage() {
   const {
     addComment,
+    approveChallengeApplication,
     createTaskChecklistItem,
     currentUser,
     deleteCommentMessage,
@@ -29,6 +33,9 @@ export function ChallengePlanPage() {
     moveTaskChecklistItem,
     notify,
     openModal,
+    publishObjective,
+    freezeObjective,
+    rejectChallengeApplication,
     setTaskCompletion,
     state,
     updateCommentMessage,
@@ -42,6 +49,8 @@ export function ChallengePlanPage() {
   const currentMember = currentUser?.name ?? "User";
   const canShowAllChallenges = canShowFrontend(currentUser, "challenge.scope.all");
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
+  const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
@@ -50,6 +59,7 @@ export function ChallengePlanPage() {
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
   const now = useMinuteNow();
 
   useEffect(() => {
@@ -78,53 +88,114 @@ export function ChallengePlanPage() {
     setActiveActionId(id);
   };
 
-  const objectiveIdsInMyChallenges = useMemo(
-    () => new Set(state.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id)),
-    [currentMember, state.objectives],
-  );
   const showAll = canShowAllChallenges && scope === "all";
+  const loadChallengeData = useCallback(async () => {
+    setChallengeData(await getMyChallengesData(showAll ? "all" : "mine"));
+  }, [showAll]);
+
+  useEffect(() => {
+    void loadChallengeData().catch(() => setChallengeData(null));
+  }, [loadChallengeData, state.comments, state.objectives, state.results, state.tasks]);
+
+  const sourceData = challengeData ?? state;
+  const challengeState = useMemo(() => ({ ...state, ...sourceData }), [sourceData, state]);
+  const visibleObjectiveIds = useMemo(() => {
+    if (showAll) return undefined;
+    return new Set(challengeState.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id));
+  }, [challengeState.objectives, currentMember, showAll]);
   const groups = useMemo(
     () =>
       buildChallengeTree(
         {
-          evidence: state.evidence,
-          feedback: state.feedback,
-          objectives: state.objectives,
-          results: state.results,
-          tasks: state.tasks,
+          evidence: challengeState.evidence,
+          feedback: challengeState.feedback,
+          objectives: challengeState.objectives,
+          results: challengeState.results,
+          tasks: challengeState.tasks,
         },
-        showAll ? undefined : objectiveIdsInMyChallenges,
+        visibleObjectiveIds,
       ),
-    [objectiveIdsInMyChallenges, showAll, state.evidence, state.feedback, state.objectives, state.results, state.tasks],
+    [challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
   );
-  const commentCounts = useMemo(() => commentCountsByTarget(state.comments), [state.comments]);
+  const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
+  const filteredGroups = useMemo(() => filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter }), [cycleFilter, groups, statusFilter]);
+  const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
+  const hasActiveFilters = cycleFilter !== "all" || statusFilter !== "all";
+  const emptyText = hasActiveFilters
+    ? "没有符合筛选条件的挑战目标。"
+    : showAll
+      ? "当前还没有挑战内容。"
+      : "当前没有与你的挑战目标相关的内容。";
 
-  const requirePermissionKey = (key: PermissionKey) => {
-    if (canUsePermission(state, role, key)) return true;
-    notify(permissionDeniedMessage(key));
-    return false;
-  };
+  useEffect(() => {
+    if (cycleFilter !== "all" && !cycleOptions.includes(cycleFilter)) {
+      setCycleFilter("all");
+    }
+  }, [cycleFilter, cycleOptions]);
+  const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
+  const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
+  const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
-    if (canAccessTarget(state, role, target, action)) return true;
+    if (target.type === "bounty" && action === "edit") {
+      const objective = challengeState.objectives.find((item) => item.id === target.objectiveId);
+      if (isObjectiveResultLocked(objective)) {
+        notify("指标已冻结，不能编辑");
+        return false;
+      }
+      if (role === "admin") return true;
+      if (objective && canProposeObjectiveMetric(objective, currentMember, now)) return true;
+      notify("没有编辑指标权限");
+      return false;
+    }
+
+    if (target.type === "bounty" && action === "delete" && !canMutateMetricForObjective(target.objectiveId)) {
+      notify("指标已冻结，不能删除");
+      return false;
+    }
+
+    if ((target.type === "action" || target.type === "subAction") && (action === "edit" || action === "delete") && !canMutateWorkItemsForObjective(target.objectiveId)) {
+      notify("目标当前阶段不能修改行动项");
+      return false;
+    }
+
+    if (canAccessTarget(challengeState, role, target, action)) return true;
     const key = permissionKeyForChallengeAction(resourceForTarget(target), action);
     if (key) notify(permissionDeniedMessage(key));
     return false;
   };
 
   const addBounty = (objectiveId: string) => {
-    if (requirePermissionKey("result.create")) {
-      openModal({ type: "newResult", objectiveId });
+    const objective = challengeState.objectives.find((item) => item.id === objectiveId);
+    if (!objective) return;
+    const action = metricCreationActionForObjective({
+      objective,
+      currentUser,
+      permissionRules: challengeState.permissionRules,
+      now,
+    });
+    if (!action) {
+      notify("没有新增指标权限");
+      return;
     }
+    openModal({ type: "newResult", objectiveId, source: action.source });
   };
 
   const addAction = (bounty: Result) => {
+    if (!canMutateWorkItemsForObjective(bounty.objectiveId)) {
+      notify("目标当前阶段不能新增行动项");
+      return;
+    }
     openModal({ type: "newTask", objectiveId: bounty.objectiveId, resultId: bounty.id });
   };
 
   const addSubAction = (actionId: string, afterItemId?: string) => {
-    const action = state.tasks.find((item) => item.id === actionId);
+    const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
+    if (!canMutateWorkItemsForObjective(action.linkedObjectiveId)) {
+      notify("目标当前阶段不能新增子行动项");
+      return;
+    }
     createTaskChecklistItem(actionId, afterItemId);
     setCollapsedActionIds((items) => withoutItem(items, actionId));
   };
@@ -151,7 +222,7 @@ export function ChallengePlanPage() {
 
   const deleteTarget = (target: ChallengeTarget) => {
     if (!requireTargetPermission(target, "delete")) return;
-    if (!window.confirm(deleteConfirmMessage(target, state))) return;
+    if (!window.confirm(deleteConfirmMessage(target, challengeState))) return;
 
     if (target.type === "objective") deleteObjective(target.id);
     if (target.type === "bounty") deleteResult(target.id);
@@ -177,14 +248,22 @@ export function ChallengePlanPage() {
   };
 
   const setActionDone = (actionId: string, done: boolean) => {
-    const action = state.tasks.find((item) => item.id === actionId);
+    const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
+    if (!canMutateWorkItemsForObjective(action.linkedObjectiveId)) {
+      notify("目标当前阶段不能修改行动项");
+      return;
+    }
     setTaskCompletion(actionId, done);
   };
 
   const setSubActionDone = (actionId: string, itemId: string, done: boolean) => {
-    const action = state.tasks.find((item) => item.id === actionId);
+    const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
+    if (!canMutateWorkItemsForObjective(action.linkedObjectiveId)) {
+      notify("目标当前阶段不能修改子行动项");
+      return;
+    }
     updateTaskChecklistItem(actionId, itemId, done);
   };
 
@@ -203,9 +282,21 @@ export function ChallengePlanPage() {
     onDropTargetChange: setDropTarget,
     onDrop: (target: DropTarget) => {
       if (!dragItem) return;
-      if (!canAccessDragItem(state, role, dragItem)) {
+      if (!canAccessDragItem(challengeState, role, dragItem)) {
         const key = permissionKeyForChallengeAction(resourceForDragItem(dragItem), "edit");
         if (key) notify(permissionDeniedMessage(key));
+        setDragItem(null);
+        setDropTarget(null);
+        return;
+      }
+      if (dragItem.type === "bounty" && !canMutateMetricForObjective(dragItem.objectiveId)) {
+        notify("指标已冻结，不能排序");
+        setDragItem(null);
+        setDropTarget(null);
+        return;
+      }
+      if (dragItem.type === "action" && !canMutateWorkItemsForObjective(dragItem.objectiveId)) {
+        notify("目标当前阶段不能移动行动项");
         setDragItem(null);
         setDropTarget(null);
         return;
@@ -247,11 +338,20 @@ export function ChallengePlanPage() {
         setOpenActionId(null);
       }}
     >
-      {showAll && <TeamDashboard groups={groups} />}
-      <ChallengeToolbar canShowAll={canShowAllChallenges} onScopeChange={setScope} scope={scope} />
+      {showAll && <TeamDashboard groups={filteredGroups} />}
+      <ChallengeToolbar
+        canShowAll={canShowAllChallenges}
+        cycle={cycleFilter}
+        cycleOptions={cycleOptions}
+        onCycleChange={setCycleFilter}
+        onScopeChange={setScope}
+        onStatusChange={setStatusFilter}
+        scope={scope}
+        status={statusFilter}
+      />
       <ChallengeTree
-        emptyText={showAll ? "当前还没有挑战内容。" : "当前没有与你的挑战目标相关的内容。"}
-        groups={groups}
+        emptyText={emptyText}
+        groups={filteredGroups}
         handlers={{
           activeActionId,
           collapsedActionIds,
@@ -259,20 +359,43 @@ export function ChallengePlanPage() {
           commentCounts,
           dragDrop,
           editingTarget,
+          contributionReviews: challengeState.objectiveContributionReviews,
+          currentUser,
+          metricActionLabel: (objective) =>
+            metricCreationActionForObjective({
+              objective,
+              currentUser,
+              permissionRules: challengeState.permissionRules,
+              now,
+            })?.label ?? null,
+          canRecruitObjective: (objective) =>
+            canRecruitObjectiveChallengers({
+              objective,
+              currentUser,
+              permissionRules: challengeState.permissionRules,
+            }),
+          canMutateMetrics: canMutateMetricForObjective,
+          canMutateWorkItems: canMutateWorkItemsForObjective,
           onActionDoneChange: setActionDone,
           onActionRowAction: handleRowAction,
           onActiveActionChange: activateRowAction,
           onAddAction: addAction,
           onAddBounty: addBounty,
           onAddSubAction: addSubAction,
+          onApproveApplication: approveChallengeApplication,
           onCancelEdit: () => setEditingTarget(null),
           onEditTarget: beginEdit,
+          onFreezeObjective: freezeObjective,
           onOpenActionChange: setOpenActionId,
+          onPublishObjective: publishObjective,
+          onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
+          onRejectApplication: rejectChallengeApplication,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
           onToggleBounty: (bountyId) => setCollapsedBountyIds((items) => toggleSetItem(items, bountyId)),
           openActionId,
+          canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
         }}
         now={now}
         scope={scope}
@@ -283,7 +406,7 @@ export function ChallengePlanPage() {
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
           targetTitle={commentTarget.title}
-          threads={state.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}
+          threads={challengeState.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}
           onAddComment={(body, replyInput?: CommentReplyInput) =>
             addComment({
               targetType: commentTarget.type,

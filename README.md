@@ -40,7 +40,11 @@ npm install
 ```bash
 cp .env.example .env
 node scripts/verify-db.mjs
+npm run db:migrate
+npm run db:seed
 ```
+
+`db:seed` 会写入悬赏大厅、我的挑战、冻结提交、待验收和已结算等演示状态，便于本地检查完整 ORF 流程界面。
 
 ### 3) 启动后端
 
@@ -69,5 +73,8 @@ npm run dev
 ## Feedback
 
 - 使用 `npm run check` 检查基础工具链是否可用。
+- 使用 `npm test` 运行快速业务不变量测试。
+- 使用 `npm run test:e2e` 运行 Playwright 端到端测试。
+- 使用 `npm run verify` 执行完整验证：构建、快速测试和端到端测试。
 - 涉及产品需求、功能设计或业务代码的改动，必须说明目标、预期结果、反馈方式、来源文档和验证方式。
 - 如果产品方向违背 ORF 思想，或业务代码缺少文档来源，必须拒绝修改。

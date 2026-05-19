@@ -12,6 +12,12 @@ const certParams = [
   ["sslkey", "client.key"],
   ["sslrootcert", "ca.crt"],
 ] as const;
+const oryPoolParams = [
+  ["max_conns", "ORY_DATABASE_POOL_MAX", "6"],
+  ["max_idle_conns", "ORY_DATABASE_POOL_IDLE_MAX", "2"],
+  ["max_conn_idle_time", "ORY_DATABASE_POOL_IDLE_TIME", "5m"],
+  ["max_conn_lifetime", "ORY_DATABASE_POOL_CONN_LIFETIME", "30m"],
+] as const;
 
 function databaseUrlFromEnv() {
   const databaseUrl = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
@@ -49,6 +55,13 @@ async function assertOryMigrationPermission(connectionString: string) {
   }
 }
 
+function applyOryPoolParams(url: URL) {
+  for (const [param, envName, defaultValue] of oryPoolParams) {
+    const configured = process.env[envName] ?? url.searchParams.get(param) ?? defaultValue;
+    url.searchParams.set(param, configured);
+  }
+}
+
 async function main() {
   const databaseUrl = databaseUrlFromEnv();
   const url = new URL(databaseUrl);
@@ -74,6 +87,7 @@ async function main() {
     url.searchParams.set(param, `/etc/ory/certs/${filename}`);
   }
 
+  applyOryPoolParams(url);
   fs.writeFileSync(outputFile, `DSN=${url.toString()}\n`);
   fs.chmodSync(outputFile, 0o600);
 

@@ -59,7 +59,14 @@ export function App() {
             </RequireFrontendVisibility>
           }
         />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route
+          path="settings"
+          element={
+            <RequireFrontendVisibility visibilityKey="page.settings">
+              <SettingsPage />
+            </RequireFrontendVisibility>
+          }
+        />
         <Route path="*" element={<Navigate to="/bounties" replace />} />
       </Route>
     </Routes>
@@ -67,17 +74,25 @@ export function App() {
 }
 
 function AuthRoute() {
-  const { authReady, isAuthenticated } = useOrf();
-  return authReady && isAuthenticated ? <Navigate to="/bounties" replace /> : <AuthPage />;
+  const { authReady, isAuthenticated, isApproved } = useOrf();
+  return authReady && isAuthenticated && isApproved ? <Navigate to="/bounties" replace /> : <AuthPage />;
 }
 
 function RequireAuth() {
-  const { authReady, isAuthenticated } = useOrf();
+  const { authReady, currentUser, isAuthenticated, isApproved, logout } = useOrf();
   if (!authReady) {
     return <AuthLoadingScreen />;
   }
 
-  return isAuthenticated ? <AppShell /> : <Navigate to="/auth" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (!isApproved) {
+    return <ApprovalPendingScreen status={currentUser?.status ?? "pending"} onLogout={logout} />;
+  }
+
+  return <AppShell />;
 }
 
 function AuthLoadingScreen() {
@@ -92,6 +107,45 @@ function AuthLoadingScreen() {
       </div>
     </main>
   );
+}
+
+function ApprovalPendingScreen({ onLogout, status }: { onLogout: () => void; status: string }) {
+  const stateCopy = approvalStateCopy(status);
+
+  return (
+    <main className="orf-auth-loading-page" role="status" aria-live="polite">
+      <div className="orf-auth-loading-panel">
+        <div>
+          <h1 className="orf-auth-loading-title">{stateCopy.title}</h1>
+          <div className="orf-auth-loading-copy">{stateCopy.copy}</div>
+        </div>
+        <button className="orf-control orf-secondary-action mt-4 inline-flex justify-center border px-4 py-2 text-sm font-medium" type="button" onClick={onLogout}>
+          退出登录
+        </button>
+      </div>
+    </main>
+  );
+}
+
+function approvalStateCopy(status: string) {
+  if (status === "rejected") {
+    return {
+      title: "注册未通过",
+      copy: "你的注册申请未通过。请联系管理员确认后再重新申请。",
+    };
+  }
+
+  if (status === "disabled") {
+    return {
+      title: "账号已停用",
+      copy: "你的账号已停用。请联系管理员恢复访问。",
+    };
+  }
+
+  return {
+    title: "等待注册审核",
+    copy: "你的注册申请已提交，等待管理员审核通过后即可进入 ORF。",
+  };
 }
 
 function RequireFrontendVisibility({ children, visibilityKey }: { children: ReactNode; visibilityKey: FrontendVisibilityKey }) {

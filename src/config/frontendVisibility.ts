@@ -17,14 +17,13 @@ export const frontendVisibilityTable = validateFrontendVisibilityConfig(
 );
 
 export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
-  "/auth": "command.auth",
   "/bounties": "nav.bounties",
   "/tasks": "nav.tasks",
   "/feedback": "nav.feedback",
   "/reports": "nav.reports",
   "/members": "nav.members",
   "/permissions": "nav.permissions",
-  "/settings": "nav.settings",
+  "/settings": "page.settings",
   "/objectives": "command.objectives",
 };
 

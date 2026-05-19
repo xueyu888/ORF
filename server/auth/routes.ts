@@ -1,15 +1,19 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
 import { env } from "../env";
+import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
 import { ORF_SESSION_COOKIE, OryAuthFlowError, getAuthenticatedOrfUser, loginWithPassword, registerWithPassword, revokeApiSession } from "./ory";
 
+const emailBodySchema = z.string().trim().email().transform((value) => value.toLowerCase());
+
 const loginBodySchema = z.object({
-  email: z.string().email(),
+  email: emailBodySchema,
   password: z.string().min(1),
 });
 
 const registrationBodySchema = loginBodySchema.extend({
-  name: z.string().min(1),
+  name: z.string().trim().min(1),
 });
 
 function authCookie(sessionToken: string) {
@@ -25,14 +29,26 @@ function serializeSessionCookie(value: string, maxAge: number) {
   return `${ORF_SESSION_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
-function isAuthServiceUnavailable(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /\b5\d\d\b/.test(message) || /ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(message);
+export function authDependencyUnavailablePayload(error: unknown) {
+  if (isDatabaseUnavailableError(error)) {
+    return databaseUnavailablePayload();
+  }
+
+  if (isAuthServiceUnavailableError(error)) {
+    return authServiceUnavailablePayload();
+  }
+
+  return null;
 }
 
 export async function requireAuthenticatedApi(request: FastifyRequest, reply: FastifyReply) {
-  const pathname = new URL(request.url, "http://orf.local").pathname;
-  if (request.method === "GET" && pathname === "/api/settings/visual/backgrounds") {
+  const requestUrl = new URL(request.url, "http://orf.local");
+  const pathname = requestUrl.pathname;
+  if (
+    request.method === "GET" &&
+    pathname === "/api/settings/visual/backgrounds" &&
+    requestUrl.searchParams.get("scene") === "login_background"
+  ) {
     return;
   }
 
@@ -42,20 +58,44 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
 
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
     request.log.warn(error, "Ory session check failed");
+    const unavailablePayload = authDependencyUnavailablePayload(error);
+    if (unavailablePayload) {
+      reply.code(503).send(unavailablePayload);
+      return undefined;
+    }
     return null;
   });
+
+  if (user === undefined) {
+    return;
+  }
 
   if (!user) {
     return reply.code(401).send({ error: "Unauthorized" });
   }
+
+  (request as FastifyRequest & { orfUser?: typeof user }).orfUser = user;
+
+  if (user.status !== "active") {
+    return reply.code(403).send({ error: "User is not approved", status: user.status });
+  }
 }
 
 export function registerAuthRoutes(app: FastifyInstance) {
-  app.get("/api/auth/session", async (request) => {
+  app.get("/api/auth/session", async (request, reply) => {
     const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
       request.log.warn(error, "Ory session check failed");
+      const unavailablePayload = authDependencyUnavailablePayload(error);
+      if (unavailablePayload) {
+        reply.code(503).send(unavailablePayload);
+        return undefined;
+      }
       return null;
     });
+
+    if (user === undefined) {
+      return reply;
+    }
 
     return user ? { authenticated: true, user } : { authenticated: false, user: null };
   });
@@ -69,8 +109,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return { authenticated: true, user: auth.user };
     } catch (error) {
       request.log.warn(error, "Ory password login failed");
-      if (isAuthServiceUnavailable(error)) {
-        return reply.code(503).send({ error: "Authentication service unavailable" });
+      const unavailablePayload = authDependencyUnavailablePayload(error);
+      if (unavailablePayload) {
+        return reply.code(503).send(unavailablePayload);
       }
       return reply.code(401).send({ error: "Invalid email or password" });
     }
@@ -85,8 +126,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
       return { authenticated: true, user: auth.user };
     } catch (error) {
       request.log.warn(error, "Ory password registration failed");
-      if (isAuthServiceUnavailable(error)) {
-        return reply.code(503).send({ error: "Authentication service unavailable" });
+      const unavailablePayload = authDependencyUnavailablePayload(error);
+      if (unavailablePayload) {
+        return reply.code(503).send(unavailablePayload);
       }
       if (error instanceof OryAuthFlowError) {
         return reply.code(400).send({ error: error.message, field: error.field });

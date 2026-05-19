@@ -10,6 +10,7 @@ import { z } from "zod";
 const execFileAsync = promisify(execFile);
 const gitFieldSeparator = "\x1f";
 const gitRecordSeparator = "\x1e";
+const githubWebhookMaxBodyBytes = 1024 * 1024;
 
 const configSchema = z.object({
   MATTERMOST_URL: z.string().url().optional(),
@@ -305,6 +306,12 @@ function getHeaderValue(value: string | string[] | undefined) {
 
 function signatureFor(rawBody: Buffer, secret: string) {
   return `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`;
+}
+
+function webhookPayloadTooLargeError() {
+  const error = new Error("GitHub webhook payload is too large") as Error & { statusCode: number };
+  error.statusCode = 413;
+  return error;
 }
 
 function requireWebhookSignature(config: GitHubMattermostSyncConfig, request: FastifyRequest, reply: FastifyReply) {
@@ -870,9 +877,20 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
       return payload;
     }
 
+    const contentLength = Number(getHeaderValue(request.headers["content-length"]));
+    if (Number.isFinite(contentLength) && contentLength > githubWebhookMaxBodyBytes) {
+      throw webhookPayloadTooLargeError();
+    }
+
     const chunks: Buffer[] = [];
+    let totalBytes = 0;
     for await (const chunk of payload) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      totalBytes += buffer.length;
+      if (totalBytes > githubWebhookMaxBodyBytes) {
+        throw webhookPayloadTooLargeError();
+      }
+      chunks.push(buffer);
     }
 
     const rawBody = Buffer.concat(chunks);

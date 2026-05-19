@@ -1,19 +1,10 @@
 import { CalendarDays } from "lucide-react";
 import { useMemo, useState } from "react";
 import brandLogo from "../assets/brand/orf-logo.png";
+import { buildLeaderboardRows, type LeaderboardRow, type TimeRange } from "../features/reports/model/leaderboard";
 import { useOrf } from "../state/OrfProvider";
 import { avatarStyleForName } from "../utils/avatar";
 import { initials } from "../utils/format";
-
-type TimeRange = "quarter" | "year" | "all";
-
-type LeaderboardRow = {
-  completionRate: number;
-  memberName: string;
-  points: number;
-  rank: number;
-  rankChange: number;
-};
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "按季度", value: "quarter" },
@@ -21,35 +12,13 @@ const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "全部时间", value: "all" },
 ];
 
-const fallbackMembers = ["Alex Chen", "Mia Zhang", "Ethan Liu", "Nora Patel", "Kai Wang"];
-const baseRows = [
-  { completionRate: 92, points: 169.5, rankChange: 2 },
-  { completionRate: 80, points: 132.0, rankChange: -1 },
-  { completionRate: 75, points: 98.0, rankChange: 0 },
-  { completionRate: 68, points: 84.5, rankChange: 1 },
-  { completionRate: 61, points: 73.0, rankChange: -2 },
-];
-
 export function ReportsPage() {
   const { state } = useOrf();
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
 
-  const rows = useMemo<LeaderboardRow[]>(() => {
-    const owners = [
-      ...state.users.map((user) => user.name),
-      ...state.objectives.flatMap((objective) => objective.challengers),
-    ];
-    const memberNames = Array.from(new Set(owners.filter(Boolean)));
-    const names = [...memberNames, ...fallbackMembers].filter((name, index, list) => list.indexOf(name) === index).slice(0, 5);
+  const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(state, timeRange), [state, timeRange]);
 
-    return names.map((memberName, index) => ({
-      ...baseRows[index],
-      memberName,
-      rank: index + 1,
-    }));
-  }, [state.objectives, state.results, state.users]);
-
-  const maxPoints = Math.max(...rows.map((row) => row.points));
+  const maxPoints = Math.max(1, ...rows.map((row) => row.points));
 
   return (
     <section className="reports-scoreboard-page" aria-labelledby="reports-scoreboard-title">
@@ -113,6 +82,7 @@ export function ReportsPage() {
             {rows.map((row) => (
               <LeaderboardRowItem key={row.memberName} maxPoints={maxPoints} row={row} />
             ))}
+            {rows.length === 0 && <div className="reports-leaderboard-empty" role="row"><div role="cell">暂无积分记录</div></div>}
           </div>
         </div>
       </div>
@@ -134,14 +104,21 @@ function LeaderboardRowItem({ maxPoints, row }: { maxPoints: number; row: Leader
       </div>
       <div className="reports-change-cell" role="cell">
         <span className={isUp ? "reports-change reports-change-up" : isDown ? "reports-change reports-change-down" : "reports-change"}>
-          <span>{Math.abs(row.rankChange)}</span>
-          <span aria-hidden="true">{isUp ? "↑" : isDown ? "↓" : "-"}</span>
+          {row.rankChange === 0 ? (
+            <span>-</span>
+          ) : (
+            <>
+              <span>{Math.abs(row.rankChange)}</span>
+              <span aria-hidden="true">{isUp ? "↑" : "↓"}</span>
+            </>
+          )}
         </span>
       </div>
       <div className="reports-member-cell" role="cell">
         <div className="reports-member-avatar" style={avatarStyleForName(row.memberName)} title={row.memberName} aria-label={row.memberName}>
           {initials(row.memberName)}
         </div>
+        <span className="reports-member-name">{row.memberName}</span>
       </div>
       <div className="reports-bar-cell" role="cell">
         <div className="reports-points-track" aria-label={`${row.points} 积分`}>

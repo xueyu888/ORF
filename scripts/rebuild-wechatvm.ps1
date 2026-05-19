@@ -2,7 +2,8 @@ param(
   [string]$VmName = "WechatVM",
   [string]$VmRoot = "D:\HyperV\WechatVM",
   [string]$IsoPath = "E:\Win11_23H2_Chinese_Simplified_x64v2.iso",
-  [int64]$DiskSizeBytes = 80GB
+  [int64]$DiskSizeBytes = 80GB,
+  [string]$LocalPassword = $env:WECHATVM_PASSWORD
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,7 +14,12 @@ $dismLogPath = "D:\HyperV\wechatvm-dism.log"
 $tempDir = "D:\HyperV\WechatVMBuild"
 $winLetter = "T"
 $efiLetter = "R"
-$password = "WechatVM2026!"
+
+if ([string]::IsNullOrWhiteSpace($LocalPassword)) {
+  throw "Set -LocalPassword or WECHATVM_PASSWORD before rebuilding the VM."
+}
+
+$password = $LocalPassword
 
 New-Item -ItemType Directory -Force -Path "D:\HyperV" | Out-Null
 New-Item -ItemType Directory -Force -Path $tempDir | Out-Null

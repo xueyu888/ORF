@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { ChevronDown, Edit3, Plus, Search, Trash2, X } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfUser, UserRole } from "../types/orf";
@@ -22,6 +22,13 @@ const roleLabel: Record<UserRole, string> = {
   member: "成员",
 };
 
+const userStatusLabel: Record<OrfUser["status"], string> = {
+  pending: "待审核",
+  active: "启用",
+  rejected: "已拒绝",
+  disabled: "已停用",
+};
+
 function formatLastLoginAt(value: string | null | undefined) {
   if (!value) {
     return "未登录";
@@ -41,12 +48,21 @@ function formatLastLoginAt(value: string | null | undefined) {
 }
 
 export function MembersPage() {
-  const { state, currentUser, createUser, updateUser, deleteUser } = useOrf();
+  const {
+    approveRegistrationRequest,
+    createUser,
+    currentUser,
+    disableUser,
+    notify,
+    rejectRegistrationRequest,
+    state,
+    updateUser,
+  } = useOrf();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
   const [dialog, setDialog] = useState<UserDialogState>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [processingUserId, setProcessingUserId] = useState<string | null>(null);
   const currentUserId = currentUser?.id ?? state.currentUserId;
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
   const isCurrentUser = (user: OrfUser) => user.id === currentUserId;
@@ -64,6 +80,13 @@ export function MembersPage() {
 
   const openAddDialog = () => setDialog({ mode: "add", name: "", email: "", role: "member" });
   const openEditDialog = (user: OrfUser) => setDialog({ mode: "edit", userId: user.id, name: user.name, email: user.email, role: user.role });
+  const closeDialog = () => {
+    if (submitting) {
+      return;
+    }
+
+    setDialog(null);
+  };
 
   const handleDialogSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -75,28 +98,66 @@ export function MembersPage() {
       return;
     }
 
+    const normalizedInput = {
+      name: dialog.name.trim(),
+      email: dialog.email.trim().toLowerCase(),
+      role: dialog.role,
+    };
+
+    if (!normalizedInput.name || !normalizedInput.email) {
+      notify("请填写姓名和邮箱");
+      return;
+    }
+
     setSubmitting(true);
-    const input = { name: dialog.name, email: dialog.email, role: dialog.role };
-    const ok = dialog.mode === "edit" && dialog.userId ? await updateUser(dialog.userId, input) : await createUser(input);
-    setSubmitting(false);
+    let ok = false;
+    try {
+      ok = dialog.mode === "edit" && dialog.userId ? await updateUser(dialog.userId, normalizedInput) : await createUser(normalizedInput);
+    } finally {
+      setSubmitting(false);
+    }
 
     if (ok) {
       setDialog(null);
     }
   };
 
-  const handleDelete = async (user: OrfUser) => {
-    if (isCurrentUser(user) || deletingUserId) {
+  const handleApprove = async (user: OrfUser) => {
+    if (processingUserId) {
       return;
     }
 
-    if (!window.confirm(`删除用户「${user.name}」？`)) {
+    setProcessingUserId(user.id);
+    await approveRegistrationRequest(user.id);
+    setProcessingUserId(null);
+  };
+
+  const handleReject = async (user: OrfUser) => {
+    if (processingUserId) {
       return;
     }
 
-    setDeletingUserId(user.id);
-    await deleteUser(user.id);
-    setDeletingUserId(null);
+    if (!window.confirm(`拒绝「${user.name}」的注册申请？`)) {
+      return;
+    }
+
+    setProcessingUserId(user.id);
+    await rejectRegistrationRequest(user.id);
+    setProcessingUserId(null);
+  };
+
+  const handleDisable = async (user: OrfUser) => {
+    if (isCurrentUser(user) || processingUserId) {
+      return;
+    }
+
+    if (!window.confirm(`停用用户「${user.name}」？`)) {
+      return;
+    }
+
+    setProcessingUserId(user.id);
+    await disableUser(user.id);
+    setProcessingUserId(null);
   };
 
   return (
@@ -170,7 +231,7 @@ export function MembersPage() {
                       </span>
                     </td>
                     <td>
-                      <span className="orf-user-status">启用</span>
+                      <span className={clsx("orf-user-status", `orf-user-status-${user.status}`)}>{userStatusLabel[user.status]}</span>
                     </td>
                     <td>
                       <span className="orf-user-last-login">{formatLastLoginAt(user.lastLoginAt)}</span>
@@ -181,16 +242,29 @@ export function MembersPage() {
                           <Edit3 className="h-4 w-4" />
                           编辑
                         </button>
-                        <button
-                          type="button"
-                          className="orf-user-delete-action"
-                          disabled={isCurrentUser(user) || deletingUserId === user.id}
-                          title={isCurrentUser(user) ? "不能删除自己" : "删除"}
-                          onClick={() => void handleDelete(user)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          删除
-                        </button>
+                        {user.status === "pending" ? (
+                          <>
+                            <button type="button" disabled={processingUserId === user.id} onClick={() => void handleApprove(user)}>
+                              <CheckCircle2 className="h-4 w-4" />
+                              通过
+                            </button>
+                            <button type="button" className="orf-user-delete-action" disabled={processingUserId === user.id} onClick={() => void handleReject(user)}>
+                              <XCircle className="h-4 w-4" />
+                              拒绝
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            className="orf-user-delete-action"
+                            disabled={isCurrentUser(user) || processingUserId === user.id || user.status === "disabled"}
+                            title={isCurrentUser(user) ? "不能停用自己" : "停用"}
+                            onClick={() => void handleDisable(user)}
+                          >
+                            <Ban className="h-4 w-4" />
+                            停用
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -204,31 +278,38 @@ export function MembersPage() {
       </section>
 
       {dialog && (
-        <div className="orf-user-dialog-backdrop" role="presentation" onMouseDown={() => setDialog(null)}>
-          <form className="orf-user-dialog" onSubmit={(event) => void handleDialogSubmit(event)} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="orf-user-dialog-backdrop" role="presentation" onMouseDown={closeDialog}>
+          <form
+            className="orf-user-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="orf-user-dialog-title"
+            onSubmit={(event) => void handleDialogSubmit(event)}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
             <div className="orf-user-dialog-header">
-              <h2>{dialog.mode === "edit" ? "编辑用户" : "新增用户"}</h2>
-              <button type="button" aria-label="关闭" onClick={() => setDialog(null)}>
+              <h2 id="orf-user-dialog-title">{dialog.mode === "edit" ? "编辑用户" : "新增用户"}</h2>
+              <button type="button" aria-label="关闭" disabled={submitting} onClick={closeDialog}>
                 <X className="h-5 w-5" />
               </button>
             </div>
             <label>
               <span>姓名</span>
-              <input value={dialog.name} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} autoFocus required />
+              <input value={dialog.name} disabled={submitting} onChange={(event) => setDialog({ ...dialog, name: event.target.value })} autoFocus required />
             </label>
             <label>
               <span>邮箱</span>
-              <input type="email" value={dialog.email} onChange={(event) => setDialog({ ...dialog, email: event.target.value })} required />
+              <input type="email" value={dialog.email} disabled={submitting} onChange={(event) => setDialog({ ...dialog, email: event.target.value })} required />
             </label>
             <label>
               <span>角色</span>
-              <select value={dialog.role} disabled={isEditingCurrentAdmin} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
+              <select value={dialog.role} disabled={submitting || isEditingCurrentAdmin} onChange={(event) => setDialog({ ...dialog, role: event.target.value as UserRole })}>
                 <option value="admin">管理员</option>
                 <option value="member">成员</option>
               </select>
             </label>
             <div className="orf-user-dialog-actions">
-              <button type="button" disabled={submitting} onClick={() => setDialog(null)}>
+              <button type="button" disabled={submitting} onClick={closeDialog}>
                 取消
               </button>
               <button type="submit" disabled={submitting}>

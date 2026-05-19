@@ -28,6 +28,29 @@
 - npm：`10.9.2`。
 - uv：`0.7.21`。
 
+## Database Resilience
+
+开发环境默认连接 `.env` 中的远端 PostgreSQL。远端数据库不可达时，后端必须快速失败，而不是让登录或页面请求长时间悬挂。
+
+数据库连接池由以下环境变量控制：
+
+| 变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `DATABASE_POOL_MAX` | `10` | 最大连接数 |
+| `DATABASE_CONNECTION_TIMEOUT_MS` | `10000` | 新建数据库连接的等待上限 |
+| `DATABASE_QUERY_TIMEOUT_MS` | `10000` | 单条查询和 PostgreSQL `statement_timeout` 上限 |
+| `DATABASE_IDLE_TIMEOUT_MS` | `10000` | 空闲连接回收时间 |
+
+连接池启用 `allowExitOnIdle`。短生命周期脚本和测试在数据库连接已空闲时可以正常退出，不会因为远端 PostgreSQL/TLS socket 关闭阶段停留而挂住；长运行 API 进程仍由 HTTP server 保持生命周期。
+
+当数据库连接超时或不可用时，API 返回 `503` 和“数据服务暂时不可用，请稍后重试。”，前端不应把这类故障误判为账号或密码错误。
+
+## Secret Hygiene
+
+`.env.example` 只保留结构化示例和占位符，不提交真实数据库、Mattermost、GitHub、SMTP 或其他第三方凭据。真实环境变量写入本地 `.env` 或部署平台的密钥管理系统，`.env` 必须保持未跟踪状态。
+
+维护脚本也不能内置真实密码。`scripts/rebuild-wechatvm.ps1` 需要通过 `-LocalPassword` 参数或 `WECHATVM_PASSWORD` 环境变量传入本地 VM 密码；其他 WeChat VM 维护脚本需要通过 `-Password` 参数或同一个环境变量传入密码。
+
 以后需要打开本地前端页面时，先识别当前是否在 WSL：
 
 ```bash
