@@ -43,7 +43,6 @@ export interface BountyNode {
   actions: Task[];
   deadline: string;
   difficulty: string;
-  kind: "主线" | "支线";
   progress: number;
   result: Result;
   status: BountyStatus;

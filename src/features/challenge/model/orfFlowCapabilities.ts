@@ -1,4 +1,9 @@
 import { hasPermission } from "../../../config/permissions";
+import {
+  canRecruitObjectiveChallengersByFlow,
+  isObjectiveResultLockedByFlow,
+  isObjectiveSettledOrClosed,
+} from "../../../domain/orfLifecycle";
 import type {
   Objective,
   ObjectiveContributionReview,
@@ -17,39 +22,19 @@ type WorkbenchAction = {
   to: string;
 };
 
-const objectiveResultLockedStatuses = new Set([
-  "frozen",
-  "submitted",
-  "settled",
-  "closed",
-]);
-
-const objectiveRecruitableStatuses = new Set([
-  "open",
-  "applying",
-  "recruiting",
-  "reestimating",
-]);
-
 const objectiveWorkItemMutationStatuses = new Set([
   "reestimating",
   "frozen",
 ]);
 
-export const objectiveSettlementStatuses = new Set(["settled", "closed"]);
-
 export function isObjectiveResultLocked(objective: Objective | undefined): boolean {
-  if (!objective) return true;
-  return (
-    objectiveResultLockedStatuses.has(objective.flowStatus) ||
-    Boolean(objective.acceptedResult)
-  );
+  return isObjectiveResultLockedByFlow(objective) || Boolean(objective?.acceptedResult);
 }
 
 export function isObjectiveRecruitable(objective: Objective): boolean {
   return (
-    objectiveRecruitableStatuses.has(objective.flowStatus) &&
-    !objectiveSettlementStatuses.has(objective.flowStatus) &&
+    canRecruitObjectiveChallengersByFlow(objective) &&
+    !isObjectiveSettledOrClosed(objective) &&
     !objective.acceptedResult
   );
 }

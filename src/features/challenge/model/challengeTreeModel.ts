@@ -20,7 +20,7 @@ export function buildChallengeTree(
       const orderedResults = input.results
         .filter((result) => result.objectiveId === objective.id)
         .sort((left, right) => orderIndex(objective.resultIds, left.id) - orderIndex(objective.resultIds, right.id));
-      const bounties = orderedResults.map((result, index) => {
+      const bounties = orderedResults.map((result) => {
         const actions = input.tasks.filter((task) => task.linkedResultId === result.id);
 
         return {
@@ -30,7 +30,6 @@ export function buildChallengeTree(
           deadline: objective.finalDueAt,
           updatedAt: bountyUpdatedAt(result, actions, input.feedback, input.evidence),
           progress: resultProgress(result),
-          kind: index === 0 ? "主线" : "支线",
           difficulty: bountyDifficulty(result),
         } satisfies BountyNode;
       });

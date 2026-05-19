@@ -4,13 +4,13 @@
 
 本文档定义悬赏大厅、我的挑战、战利品验收、积分榜和注册审核所需的后端契约。流程规则见 [ORF 悬赏目标流程设计.md](../rules/ORF%20悬赏目标流程设计.md)。
 
-当前产品明确不支持多团队。数据库保留 `team_id` 作为技术预留，但后端不提供团队切换或多团队聚合接口。
+当前产品明确不支持多团队。运行时只有一个默认作用域；数据库保留 `team_id` 作为底层存储 scope，业务 API 和 repository 不暴露团队切换或团队聚合。
 
 ## API
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/api/tasks-page` | 管理员返回团队目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 scoped `my-challenges` 数据 |
+| `GET` | `/api/tasks-page` | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据 |
 | `GET` | `/api/bounties` | 返回悬赏大厅数据 |
 | `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
 | `POST` | `/api/objectives` | 创建候选目标，默认 `flowStatus=candidate` |
@@ -52,7 +52,7 @@
 
 ## 返回集合
 
-`GET /api/tasks-page` 和 `GET /api/my-challenges` 返回同一种集合结构。区别是：`/api/tasks-page` 对管理员返回团队全量任务页数据，对普通成员返回等价于 `/api/my-challenges?scope=mine` 的 scoped 数据；`/api/my-challenges?scope=all` 只允许管理员使用。
+`GET /api/tasks-page` 和 `GET /api/my-challenges` 返回同一种集合结构。区别是：`/api/tasks-page` 对管理员返回当前默认作用域内全量任务页数据，对普通成员返回等价于 `/api/my-challenges?scope=mine` 的数据；`/api/my-challenges?scope=all` 只允许管理员使用。
 
 | 集合 | 用途 |
 | --- | --- |
@@ -60,7 +60,7 @@
 | `results` | 目标下的指标 |
 | `tasks` | 指标下的任务和子任务 |
 | `evidence` | 证据 |
-| `feedback` | 系统或团队反馈，不驱动悬赏状态机 |
+| `feedback` | 系统或管理反馈，不驱动悬赏状态机 |
 | `comments` | 目标、指标、任务、子任务评论 |
 | `objectiveLoot` | 结构化战利品提交记录 |
 | `objectiveContributionReviews` | 目标挑战者匿名互评记录 |
@@ -68,6 +68,8 @@
 | `permissionRules` | 前端操作权限 |
 
 `GET /api/bounties` 只返回 `flowStatus in (open, applying, recruiting)` 且当前用户尚未成为挑战者的目标。
+
+申请挑战只接受 `open/applying/recruiting`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
 
 ## 状态字段
 
@@ -137,9 +139,9 @@ type ObjectiveFlowStatus =
 - 挑战者只能在未过期 `reestimating` 状态提出或编辑自己参与目标下的指标；超过 `confirmationDueAt` 或目标冻结后均不可调整。
 - 反馈状态只能由管理员、反馈创建人或 `owner` 指定处理人更新；普通成员不能关闭或改写他人反馈状态。
 - 反馈创建遵循目标可见边界；普通成员只能给自己参与目标下的指标创建反馈，不能通过猜测指标 ID 写入别人的目标。
-- 反馈 `owner` 必须是当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为反馈处理人。
-- 指标更新提案如果携带 `feedbackId`，该反馈必须属于同一团队且绑定到当前指标；不能通过一个合法指标请求改写其他团队或其他指标的反馈状态。
-- 任务创建如果携带 `feedbackOriginId`，该反馈必须属于同一团队且绑定到任务所在指标；不能把其他团队或其他指标的反馈挂成任务来源。
+- 反馈 `owner` 必须是当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为反馈处理人。
+- 指标更新提案如果携带 `feedbackId`，该反馈必须属于同一默认作用域且绑定到当前指标；不能通过一个合法指标请求改写其他作用域或其他指标的反馈状态。
+- 任务创建如果携带 `feedbackOriginId`，该反馈必须属于同一默认作用域且绑定到任务所在指标；不能把其他作用域或其他指标的反馈挂成任务来源。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
 - 当前不开放退回重估；重估截止后停止调整，不续期。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
@@ -151,7 +153,7 @@ type ObjectiveFlowStatus =
 - 多名成员同时申请同一目标时，后端必须用行级锁保护 `challengeApplications` 的读改写，不能让后一次写入覆盖前一次申请。
 - 审批申请、征召、接受征召和拒绝征召都会同时读改写 `Objective.challengers` / `Objective.assignedChallengers` / `Objective.challengeApplications`，必须在同一行级锁事务内完成。
 - 并发新增或移动指标、任务、子任务时，后端必须锁住对应父级目标、指标或任务后再计算 `sortOrder`，避免重复排序号导致页面顺序不稳定。
-- `征召挑战` 的成员必须是当前团队内 `active` 用户；停用、待审核、拒绝或不存在的姓名不能写入 `Objective.assignedChallengers`。
+- `征召挑战` 的成员必须是当前默认作用域内 `active` 用户；停用、待审核、拒绝或不存在的姓名不能写入 `Objective.assignedChallengers`。
 - `接受挑战` 只用于征召。
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。
 - `验收结算` 仅允许指挥官在 `submitted` 状态执行。

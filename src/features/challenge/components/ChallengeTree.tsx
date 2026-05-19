@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
+import { canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
 import type { ObjectiveContributionReview, OrfUser, Result, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
@@ -106,7 +107,7 @@ function ObjectivePanel({
   const actionId = `objective:${group.objective.id}`;
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
-  const isFrozen = group.objective.stage === "goalFrozen";
+  const isFrozen = shouldRenderObjectiveAsFrozen(group.objective);
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const workbenchAction = workbenchActionForObjective({
     objective: group.objective,
@@ -115,6 +116,7 @@ function ObjectivePanel({
   });
   const showApplicationReview =
     handlers.canManageFlow &&
+    canReviewObjectiveChallengeApplications(group.objective) &&
     pendingApplications.length > 0;
   const layoutKey = group.bounties
     .map((bounty) => {
@@ -362,7 +364,7 @@ function BountyRow({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyCell>
-        <div className="orf-row-kind-cell"><Badge>{bounty.kind}</Badge><Badge>{bounty.difficulty}</Badge></div>
+        <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div>
         <EmptySlot />
         <StatusChip tone={bounty.status}>{bountyStatusLabel[bounty.status]}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(bounty.deadline, now)} />

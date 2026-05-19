@@ -10,13 +10,13 @@ import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/err
 import { env } from "./env";
 import { registerOptionalIntegrations } from "./integrations";
 import {
-  getRolePermissionKeysForTeam,
-  getPermissionRulesForTeam,
-  getPrimaryTeamIdForUser,
+  getRolePermissionKeysForScope,
+  getPermissionRulesForScope,
   hasRolePermission,
   permissionKeys,
   replaceRolePermissionRules,
 } from "./repositories/permissionRepository";
+import { getDefaultRuntimeScopeForUser, runtimeScopeStorageId, type RuntimeScope } from "./repositories/runtimeScope";
 import type { PermissionKey } from "../src/config/permissions";
 import {
   acceptObjectiveChallenge,
@@ -56,8 +56,8 @@ import {
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
   resolveObjectiveIdForWorkItem,
-  resolveTeamIdForFeedback,
-  resolveTeamIdForWorkItem,
+  resolveRuntimeScopeForFeedback,
+  resolveRuntimeScopeForWorkItem,
   setTaskCompletion,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
@@ -75,13 +75,13 @@ import {
 } from "./repositories/orfRepository";
 import {
   approveRegistrationRequest,
-  createTeamUser,
-  deleteTeamUser,
-  disableTeamUser,
+  createScopedUser,
+  deleteScopedUser,
+  disableScopedUser,
   getRegistrationRequests,
-  getTeamUsers,
+  getScopedUsers,
   rejectRegistrationRequest,
-  updateTeamUser,
+  updateScopedUser,
 } from "./repositories/userRepository";
 import {
   backgroundSceneConfigSchema,
@@ -352,34 +352,34 @@ async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
   return user;
 }
 
-async function requireUserTeamContext(request: FastifyRequest, reply: FastifyReply) {
+async function requireUserScopeContext(request: FastifyRequest, reply: FastifyReply) {
   const user = await requireApiUser(request, reply);
   if (!user) {
     return null;
   }
 
-  const teamId = await getPrimaryTeamIdForUser(user.id);
-  if (!teamId) {
-    reply.code(404).send({ error: "Team not found" });
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
     return null;
   }
 
-  return { user, teamId };
+  return { user, scope };
 }
 
-async function requireAdminTeamId(request: FastifyRequest, reply: FastifyReply) {
+async function requireAdminScope(request: FastifyRequest, reply: FastifyReply) {
   const user = await requireAdminUser(request, reply);
   if (!user) {
     return null;
   }
 
-  const teamId = await getPrimaryTeamIdForUser(user.id);
-  if (!teamId) {
-    reply.code(404).send({ error: "Team not found" });
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
     return null;
   }
 
-  return teamId;
+  return scope;
 }
 
 async function requireAdminContext(request: FastifyRequest, reply: FastifyReply) {
@@ -388,23 +388,23 @@ async function requireAdminContext(request: FastifyRequest, reply: FastifyReply)
     return null;
   }
 
-  const teamId = await getPrimaryTeamIdForUser(user.id);
-  if (!teamId) {
-    reply.code(404).send({ error: "Team not found" });
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
     return null;
   }
 
-  return { user, teamId };
+  return { user, scope };
 }
 
-async function requireTargetInTeam(
+async function requireTargetInScope(
   reply: FastifyReply,
-  target: Parameters<typeof resolveTeamIdForWorkItem>[0],
-  teamId: string,
+  target: Parameters<typeof resolveRuntimeScopeForWorkItem>[0],
+  scope: RuntimeScope,
   message = "Work item not found",
 ) {
-  const targetTeamId = await resolveTeamIdForWorkItem(target);
-  if (!targetTeamId || targetTeamId !== teamId) {
+  const targetScope = await resolveRuntimeScopeForWorkItem(target);
+  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
     reply.code(404).send({ error: message });
     return false;
   }
@@ -412,9 +412,9 @@ async function requireTargetInTeam(
   return true;
 }
 
-async function requireFeedbackInTeam(reply: FastifyReply, feedbackId: string, teamId: string) {
-  const targetTeamId = await resolveTeamIdForFeedback(feedbackId);
-  if (!targetTeamId || targetTeamId !== teamId) {
+async function requireFeedbackInScope(reply: FastifyReply, feedbackId: string, scope: RuntimeScope) {
+  const targetScope = await resolveRuntimeScopeForFeedback(feedbackId);
+  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
     reply.code(404).send({ error: "Feedback not found" });
     return false;
   }
@@ -438,17 +438,17 @@ async function requireWriteContext(
     return null;
   }
 
-  const teamId = await getPrimaryTeamIdForUser(user.id);
-  if (!teamId) {
-    reply.code(404).send({ error: "Team not found" });
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
     return null;
   }
 
   if (user.role === "admin") {
-    return { user, teamId };
+    return { user, scope };
   }
 
-  const permissionRules = await getPermissionRulesForTeam(teamId);
+  const permissionRules = await getPermissionRulesForScope(scope);
   const allowed = hasRolePermission(user.role, permissionRules, permission);
 
   if (!allowed) {
@@ -456,25 +456,25 @@ async function requireWriteContext(
     return null;
   }
 
-  return { user, teamId };
+  return { user, scope };
 }
 
 async function requireResultEditContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
-  const context = await requireUserTeamContext(request, reply);
+  const context = await requireUserScopeContext(request, reply);
   if (!context) {
     return null;
   }
-  const { user, teamId } = context;
+  const { user, scope } = context;
 
-  if (!(await requireTargetInTeam(reply, { type: "result", id: resultId }, teamId, "Result not found"))) {
+  if (!(await requireTargetInScope(reply, { type: "result", id: resultId }, scope, "Result not found"))) {
     return null;
   }
 
   if (user.role === "admin") {
-    return { user, teamId };
+    return { user, scope };
   }
 
-  const permissionRules = await getPermissionRulesForTeam(teamId);
+  const permissionRules = await getPermissionRulesForScope(scope);
   const allowedByRole = hasRolePermission(user.role, permissionRules, "result.edit");
   const allowedByReestimate = await canEditResultDuringReestimate(resultId, user.name);
   if (!allowedByRole && !allowedByReestimate) {
@@ -482,7 +482,7 @@ async function requireResultEditContext(request: FastifyRequest, reply: FastifyR
     return null;
   }
 
-  return { user, teamId };
+  return { user, scope };
 }
 
 function sendObjectiveResultLock(reply: FastifyReply, access: Awaited<ReturnType<typeof canMutateResult>>): boolean {
@@ -542,19 +542,19 @@ async function authorizeObjectiveWorkItemMutation(
     return false;
   }
 
-  const teamId = await getPrimaryTeamIdForUser(user.id);
-  if (!teamId) {
-    reply.code(404).send({ error: "Team not found" });
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
     return false;
   }
 
-  const targetTeamId = await resolveTeamIdForWorkItem({ type: "objective", id: objectiveId });
-  if (!targetTeamId || targetTeamId !== teamId) {
+  const targetScope = await resolveRuntimeScopeForWorkItem({ type: "objective", id: objectiveId });
+  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
     reply.code(404).send({ error: "Objective not found" });
     return false;
   }
 
-  const access = await canMutateObjectiveWorkItem({ ...user, teamId }, objectiveId);
+  const access = await canMutateObjectiveWorkItem({ ...user, scope }, objectiveId);
   if (access === "notFound") {
     reply.code(404).send({ error: "Objective not found" });
     return false;
@@ -591,18 +591,18 @@ async function requireWorkItemTargetMutation(
 }
 
 async function commentActorWithPermissions(request: FastifyRequest, reply: FastifyReply) {
-  const context = await requireUserTeamContext(request, reply);
+  const context = await requireUserScopeContext(request, reply);
   if (!context) {
     return null;
   }
-  const { user, teamId } = context;
+  const { user, scope } = context;
 
   if (user.role === "admin") {
-    return { ...user, teamId, canManageAllComments: true };
+    return { ...user, scope, canManageAllComments: true };
   }
 
-  const permissions = await getRolePermissionKeysForTeam(teamId, user.role);
-  return { ...user, teamId, canManageAllComments: permissions.includes("comment.manage") };
+  const permissions = await getRolePermissionKeysForScope(scope, user.role);
+  return { ...user, scope, canManageAllComments: permissions.includes("comment.manage") };
 }
 
 function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof createComment>>) {
@@ -836,35 +836,35 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
 
-    const teamId = await getPrimaryTeamIdForUser(user.id);
-    if (!teamId) {
-      return reply.code(404).send({ error: "Team not found" });
+    const scope = await getDefaultRuntimeScopeForUser(user.id);
+    if (!scope) {
+      return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
     return user.role === "admin"
-      ? getTaskManagementData({ teamId })
-      : getMyChallengesData(user.name, false, { teamId });
+      ? getTaskManagementData({ scope })
+      : getMyChallengesData(user.name, false, { scope });
   });
   app.get("/api/bounties", async (request, reply) => {
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
     }
-    const teamId = await getPrimaryTeamIdForUser(user.id);
-    if (!teamId) {
-      return reply.code(404).send({ error: "Team not found" });
+    const scope = await getDefaultRuntimeScopeForUser(user.id);
+    if (!scope) {
+      return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
-    return getBountyHallData(user.name, { teamId });
+    return getBountyHallData(user.name, { scope });
   });
   app.get("/api/my-challenges", async (request, reply) => {
     const user = await requireApiUser(request, reply);
     if (!user) {
       return reply;
     }
-    const teamId = await getPrimaryTeamIdForUser(user.id);
-    if (!teamId) {
-      return reply.code(404).send({ error: "Team not found" });
+    const scope = await getDefaultRuntimeScopeForUser(user.id);
+    if (!scope) {
+      return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
     const query = myChallengesQuerySchema.parse(request.query);
@@ -872,7 +872,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    return getMyChallengesData(user.name, query.scope === "all", { teamId });
+    return getMyChallengesData(user.name, query.scope === "all", { scope });
   });
   app.get("/api/orf-state", async (request, reply) => {
     const context = await requireAdminContext(request, reply);
@@ -880,7 +880,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
 
-    return getOrfStateSnapshot({ teamId: context.teamId });
+    return getOrfStateSnapshot({ scope: context.scope });
   });
 
   app.post("/api/comments", async (request, reply) => {
@@ -926,21 +926,21 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.get("/api/users", async (request, reply) => {
-    const teamId = await requireAdminTeamId(request, reply);
-    if (!teamId) {
+    const scope = await requireAdminScope(request, reply);
+    if (!scope) {
       return reply;
     }
 
-    return { users: await getTeamUsers(teamId) };
+    return { users: await getScopedUsers(scope) };
   });
 
   app.get("/api/registration-requests", async (request, reply) => {
-    const teamId = await requireAdminTeamId(request, reply);
-    if (!teamId) {
+    const scope = await requireAdminScope(request, reply);
+    if (!scope) {
       return reply;
     }
 
-    return { users: await getRegistrationRequests(teamId) };
+    return { users: await getRegistrationRequests(scope) };
   });
 
   app.post("/api/users", async (request, reply) => {
@@ -950,7 +950,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const body = userBodySchema.parse(request.body);
-    return { users: await createTeamUser(context.teamId, context.user.id, body) };
+    return { users: await createScopedUser(context.scope, context.user.id, body) };
   });
 
   app.patch("/api/users/:userId", async (request, reply) => {
@@ -961,7 +961,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const params = userParamsSchema.parse(request.params);
     const body = userBodySchema.parse(request.body);
-    return { users: await updateTeamUser(context.teamId, context.user.id, params.userId, body) };
+    return { users: await updateScopedUser(context.scope, context.user.id, params.userId, body) };
   });
 
   app.patch("/api/users/:userId/disable", async (request, reply) => {
@@ -971,7 +971,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = userParamsSchema.parse(request.params);
-    return { users: await disableTeamUser(context.teamId, context.user.id, params.userId) };
+    return { users: await disableScopedUser(context.scope, context.user.id, params.userId) };
   });
 
   app.patch("/api/registration-requests/:userId/approve", async (request, reply) => {
@@ -981,7 +981,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = userParamsSchema.parse(request.params);
-    return { users: await approveRegistrationRequest(context.teamId, params.userId) };
+    return { users: await approveRegistrationRequest(context.scope, params.userId) };
   });
 
   app.patch("/api/registration-requests/:userId/reject", async (request, reply) => {
@@ -991,7 +991,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = userParamsSchema.parse(request.params);
-    return { users: await rejectRegistrationRequest(context.teamId, params.userId) };
+    return { users: await rejectRegistrationRequest(context.scope, params.userId) };
   });
 
   app.delete("/api/users/:userId", async (request, reply) => {
@@ -1001,21 +1001,21 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = userParamsSchema.parse(request.params);
-    return { users: await deleteTeamUser(context.teamId, context.user.id, params.userId) };
+    return { users: await deleteScopedUser(context.scope, context.user.id, params.userId) };
   });
 
   app.get("/api/permissions", async (request, reply) => {
-    const teamId = await requireAdminTeamId(request, reply);
-    if (!teamId) {
+    const scope = await requireAdminScope(request, reply);
+    if (!scope) {
       return reply;
     }
 
-    return { permissionRules: await getPermissionRulesForTeam(teamId) };
+    return { permissionRules: await getPermissionRulesForScope(scope) };
   });
 
   app.put("/api/permissions/:role", async (request, reply) => {
-    const teamId = await requireAdminTeamId(request, reply);
-    if (!teamId) {
+    const scope = await requireAdminScope(request, reply);
+    if (!scope) {
       return reply;
     }
 
@@ -1026,7 +1026,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const body = updateRolePermissionsBodySchema.parse(request.body);
     return {
-      permissionRules: await replaceRolePermissionRules(teamId, params.role, body.permissionRules),
+      permissionRules: await replaceRolePermissionRules(scope, params.role, body.permissionRules),
     };
   });
 
@@ -1037,25 +1037,25 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const body = createObjectiveBodySchema.parse(request.body);
-    const objective = await createObjective(body, { teamId: context.teamId, userId: context.user.id });
+    const objective = await createObjective(body, { scope: context.scope, userId: context.user.id });
 
     return { objective };
   });
 
   app.post("/api/results", async (request, reply) => {
     const body = createResultBodySchema.parse(request.body);
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: body.objectiveId }, teamId, "Objective not found"))) {
+    const { user, scope } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: body.objectiveId }, scope, "Objective not found"))) {
       return reply;
     }
-    const permissionRules = await getPermissionRulesForTeam(teamId);
+    const permissionRules = await getPermissionRulesForScope(scope);
     const source = body.source ?? "managerDefined";
     const allowedByRole = user.role === "admin" || hasRolePermission(user.role, permissionRules, "result.create");
-    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name, teamId);
+    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name, scope);
     const allowed = source === "memberProposed" ? allowedByReestimate : allowedByRole;
     if (!allowed) {
       return reply.code(403).send({ error: "Forbidden" });
@@ -1078,14 +1078,14 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
 
   app.post("/api/feedback", async (request, reply) => {
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
+    const { user, scope } = context;
 
     const body = createFeedbackBodySchema.parse(request.body);
-    const feedbackAccess = await canCreateFeedbackForResult(body.linkedResultId, { ...user, teamId });
+    const feedbackAccess = await canCreateFeedbackForResult(body.linkedResultId, { ...user, scope });
     if (feedbackAccess === "notFound") {
       return reply.code(404).send({ error: "Result not found" });
     }
@@ -1099,7 +1099,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(404).send({ error: "Result not found" });
     }
     if (outcome.status === "invalidOwner") {
-      return reply.code(409).send({ error: "Feedback owner must be an active team member" });
+      return reply.code(409).send({ error: "Feedback owner must be an active member" });
     }
 
     return { feedback: outcome.feedback };
@@ -1108,12 +1108,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/feedback/:feedbackId/status", async (request, reply) => {
     const params = feedbackParamsSchema.parse(request.params);
     const body = updateFeedbackStatusBodySchema.parse(request.body);
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
-    if (!(await requireFeedbackInTeam(reply, params.feedbackId, teamId))) {
+    const { user, scope } = context;
+    if (!(await requireFeedbackInScope(reply, params.feedbackId, scope))) {
       return reply;
     }
 
@@ -1121,7 +1121,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       id: user.id,
       name: user.name,
       role: user.role,
-      teamId,
+      scope,
     });
 
     if (updated.status === "notFound") {
@@ -1172,7 +1172,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
 
@@ -1192,7 +1192,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
 
@@ -1212,7 +1212,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await publishObjective(params.objectiveId, context.user.id));
@@ -1226,7 +1226,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const params = objectiveParamsSchema.parse(request.params);
     const body = recruitBodySchema.parse(request.body);
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await recruitObjectiveChallengers(params.objectiveId, body.members, context.user.id));
@@ -1239,7 +1239,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = applicationParamsSchema.parse(request.params);
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     return sendObjectiveFlowOutcome(
@@ -1255,7 +1255,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = applicationParamsSchema.parse(request.params);
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     return sendObjectiveFlowOutcome(
@@ -1271,7 +1271,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await freezeObjectiveAfterReestimate(params.objectiveId, context.user.id));
@@ -1284,7 +1284,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await reopenObjectiveReestimate(params.objectiveId, context.user.id));
@@ -1298,7 +1298,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const params = objectiveParamsSchema.parse(request.params);
     const body = reviewLootBodySchema.parse(request.body);
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await reviewObjectiveLoot(params.objectiveId, body, context.user.id));
@@ -1330,7 +1330,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {
@@ -1353,7 +1353,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {
@@ -1374,12 +1374,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.patch("/api/objectives/:objectiveId/challenge", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
+    const { user, scope } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
       return reply;
     }
 
@@ -1410,12 +1410,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.patch("/api/objectives/:objectiveId/challenge/decline", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
+    const { user, scope } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
       return reply;
     }
 
@@ -1424,12 +1424,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/objectives/:objectiveId/challenge-applications", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
+    const { user, scope } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
       return reply;
     }
 
@@ -1453,12 +1453,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/objectives/:objectiveId/loot", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
+    const { user, scope } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
       return reply;
     }
 
@@ -1468,12 +1468,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/objectives/:objectiveId/contribution-reviews", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const context = await requireUserTeamContext(request, reply);
+    const context = await requireUserScopeContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user, teamId } = context;
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, teamId, "Objective not found"))) {
+    const { user, scope } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
       return reply;
     }
 
@@ -1568,10 +1568,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "result", id: body.referenceResultId }, context.teamId, "Result move target not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "result", id: body.referenceResultId }, context.scope, "Result move target not found"))) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {
@@ -1641,7 +1641,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "objective", id: params.objectiveId }, context.teamId, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     if (!(await requireObjectiveDeleteUnlocked(reply, params.objectiveId))) {
@@ -1663,7 +1663,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    if (!(await requireTargetInTeam(reply, { type: "result", id: params.resultId }, context.teamId, "Result not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {

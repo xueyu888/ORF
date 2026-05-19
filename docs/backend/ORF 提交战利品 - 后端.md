@@ -76,7 +76,7 @@
 - 写入 `Result.acceptedResult`。
 - 按指标验收结论汇总并写入目标结算字段。
 - 按匿名互评结果或分歧处理结果生成 `pointLedger`。
-- `pointLedger.userId` 只在目标所属团队内按挑战者姓名解析；跨团队同名用户不能被错误关联。
+- `pointLedger.userId` 只在目标所属默认作用域内按挑战者姓名解析；底层存储 scope 间的同名用户不能被错误关联。
 - 将 `Objective.flowStatus` 改为 `settled`。
 
 ## 约束

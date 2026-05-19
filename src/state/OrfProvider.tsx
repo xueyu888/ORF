@@ -253,7 +253,7 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
       }
 
       if (error.message === "Name already exists") {
-        return "同一团队内已存在同名成员";
+        return "已存在同名成员";
       }
 
       if (error.message === "User name is referenced by ORF records") {
@@ -344,8 +344,8 @@ function businessMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
-      if (error.message === "Feedback owner must be an active team member") {
-        return "反馈处理人必须是当前团队内的可用成员";
+      if (error.message === "Feedback owner must be an active member") {
+        return "反馈处理人必须是当前可用成员";
       }
       return error.message || "数据状态已变化，请刷新后再试";
     }
