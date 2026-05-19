@@ -17,7 +17,7 @@ if (baseHost === "127.0.0.1" || baseHost === "localhost") {
 }
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./testd",
   outputDir: ".artifacts/playwright-test-results",
   timeout: 30_000,
   expect: {
@@ -25,7 +25,7 @@ export default defineConfig({
   },
   reporter: [
     ["list", { printSteps: true }],
-    ["./e2e/_framework/reporter.ts"],
+    ["./testd/_framework/reporter.ts"],
   ],
   fullyParallel: !realSystemEnabled,
   workers: realSystemEnabled ? 1 : undefined,
