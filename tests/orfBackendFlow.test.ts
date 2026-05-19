@@ -34,6 +34,7 @@ import {
   updateResultConfidence,
   updateResultTitle,
 } from "../server/repositories/orfRepository";
+import { runtimeScope } from "../server/repositories/runtimeScope";
 
 const runId = `test-orf-flow-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const farFutureDueDate = "2999-12-31";
@@ -59,7 +60,7 @@ test("published objective without concrete results is visible in the bounty hall
       boundary: "Test-only objective.",
       finalDueAt: farFutureDueDate,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
 
@@ -86,7 +87,7 @@ test("recruited objective without concrete results is visible as a recruitment i
       boundary: "Test-only objective.",
       finalDueAt: farFutureDueDate,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
 
@@ -113,7 +114,7 @@ test("task management data removes accepted challengers from pending recruitment
       boundary: "Test-only objective.",
       finalDueAt: farFutureDueDate,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
 
@@ -127,7 +128,7 @@ test("task management data removes accepted challengers from pending recruitment
     })
     .where(eq(objectives.id, objective.id));
 
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   const normalized = data.objectives.find((item) => item.id === objective.id);
   assert.deepEqual(normalized?.challengers, [fixture.challenger.name]);
   assert.deepEqual(normalized?.assignedChallengers, [fixture.observer.name]);
@@ -144,7 +145,7 @@ test("commander and challenger can complete the application-to-settlement ORF ba
       boundary: "Test-only objective.",
       finalDueAt: farFutureDueDate,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
   assert.equal(objective.flowStatus, "candidate");
@@ -300,7 +301,7 @@ test("commander recruitment appears as a recruitment item and the recruited chal
       boundary: "Test-only objective.",
       finalDueAt: farFutureDueDate,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
 
@@ -410,7 +411,7 @@ test("commander can add recruitment while an objective is already reestimating",
   assert.deepEqual(observerAccepted.objective.challengers, [fixture.challenger.name, fixture.observer.name]);
 });
 
-test("recruitment API only accepts active team members", async () => {
+test("recruitment API only accepts active members in scope", async () => {
   const fixture = await createFixture("recruit-active-member-guard");
   const objective = await createPublishedObjective(fixture, "active member recruitment guard");
   await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} active member recruitment guard result`);
@@ -433,7 +434,7 @@ test("recruitment API only accepts active team members", async () => {
     assert.equal(activeRecruit.statusCode, 200);
   });
 
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   const refreshed = data.objectives.find((item) => item.id === objective.id);
   assert.deepEqual(refreshed?.assignedChallengers, [fixture.challenger.name]);
 });
@@ -449,7 +450,7 @@ test("member-proposed result creation requires the API actor to be a challenger 
       boundary: "Test-only objective.",
       finalDueAt: farFutureDueDate,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
   assert.equal((await publishObjective(objective.id, fixture.commander.id)).status, "ok");
@@ -509,7 +510,7 @@ test("challenger result edits through the API close after reestimate expiry and 
       boundary: "Test-only objective.",
       finalDueAt: farFutureDueDate,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
   const result = await createResult({
@@ -636,7 +637,7 @@ test("concurrent application approvals preserve every accepted challenger", asyn
   ]);
   assert.deepEqual(applications.map((outcome) => outcome.status).sort(), ["applied", "applied"]);
 
-  const pendingData = await getTaskManagementData({ teamId: fixture.teamId });
+  const pendingData = await getTaskManagementData({ scope: fixture.scope });
   const pendingObjective = pendingData.objectives.find((item) => item.id === objective.id);
   const applicationIds = [fixture.challenger.name, fixture.observer.name].map((applicant) =>
     pendingObjective?.challengeApplications.find((application) => application.applicant === applicant && application.status === "pending")?.id,
@@ -649,7 +650,7 @@ test("concurrent application approvals preserve every accepted challenger", asyn
   );
   assert.deepEqual(approvals.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
 
-  const finalData = await getTaskManagementData({ teamId: fixture.teamId });
+  const finalData = await getTaskManagementData({ scope: fixture.scope });
   const approvedObjective = finalData.objectives.find((item) => item.id === objective.id);
   assert.deepEqual(approvedObjective?.challengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
   assert.equal(approvedObjective?.flowStatus, "reestimating");
@@ -696,7 +697,7 @@ test("concurrent recruitment responses preserve every member transition", async 
   ]);
   assert.deepEqual(recruits.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
 
-  let data = await getTaskManagementData({ teamId: fixture.teamId });
+  let data = await getTaskManagementData({ scope: fixture.scope });
   const recruitedObjective = data.objectives.find((item) => item.id === acceptedObjective.id);
   assert.deepEqual(recruitedObjective?.assignedChallengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
 
@@ -706,7 +707,7 @@ test("concurrent recruitment responses preserve every member transition", async 
   ]);
   assert.deepEqual(acceptances.map((outcome) => outcome.status).sort(), ["accepted", "accepted"]);
 
-  data = await getTaskManagementData({ teamId: fixture.teamId });
+  data = await getTaskManagementData({ scope: fixture.scope });
   const finalizedAcceptedObjective = data.objectives.find((item) => item.id === acceptedObjective.id);
   assert.deepEqual(finalizedAcceptedObjective?.challengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
   assert.deepEqual(finalizedAcceptedObjective?.assignedChallengers, []);
@@ -723,7 +724,7 @@ test("concurrent recruitment responses preserve every member transition", async 
   ]);
   assert.deepEqual(declines.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
 
-  data = await getTaskManagementData({ teamId: fixture.teamId });
+  data = await getTaskManagementData({ scope: fixture.scope });
   const finalizedDeclinedObjective = data.objectives.find((item) => item.id === declinedObjective.id);
   assert.deepEqual(finalizedDeclinedObjective?.assignedChallengers, []);
   assert.equal(finalizedDeclinedObjective?.flowStatus, "open");
@@ -797,7 +798,7 @@ test("challenge application duplicate and closed-state guards are enforced", asy
     applyForObjectiveChallenge(concurrentObjective.id, fixture.observer.name),
   ]);
   assert.deepEqual(concurrentApplications.map((outcome) => outcome.status).sort(), ["applied", "applied"]);
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   const pendingApplicants = data.objectives
     .find((item) => item.id === concurrentObjective.id)
     ?.challengeApplications.filter((application) => application.status === "pending")
@@ -1074,7 +1075,7 @@ test("repeated contribution reviews keep history but settlement uses each review
   );
   assert.equal(reviewed.status, "ok");
 
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 3);
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => left.memberName.localeCompare(right.memberName));
   assert.equal(ledger.length, 2);
@@ -1082,18 +1083,18 @@ test("repeated contribution reviews keep history but settlement uses each review
   assert.equal(ledger[1]?.points, 15);
 });
 
-test("settlement resolves point ledger user ids within the objective team", async () => {
+test("settlement resolves point ledger user ids within the objective runtime scope", async () => {
   const owner = await createFixture("settlement-user-scope-owner");
   const intruder = await createFixture("settlement-user-scope-intruder");
   await db.update(users).set({ name: owner.challenger.name }).where(eq(users.id, intruder.challenger.id));
 
-  const { objective, result } = await createApprovedObjectiveWithResult(owner, "team-scoped ledger objective");
+  const { objective, result } = await createApprovedObjectiveWithResult(owner, "scope ledger objective");
   const frozen = await freezeObjectiveAfterReestimate(objective.id, owner.commander.id);
   assert.equal(frozen.status, "ok");
 
   const loot = await submitObjectiveLoot(
     objective.id,
-    { body: "Completed with a same-name user in another team.", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }] },
+    { body: "Completed with a same-name user in another scope.", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }] },
     { id: owner.challenger.id, name: owner.challenger.name, role: "member" },
   );
   assert.equal(loot.status, "ok");
@@ -1105,7 +1106,7 @@ test("settlement resolves point ledger user ids within the objective team", asyn
   );
   assert.equal(reviewed.status, "ok");
 
-  const data = await getTaskManagementData({ teamId: owner.teamId });
+  const data = await getTaskManagementData({ scope: owner.scope });
   const ledger = data.pointLedger.find((entry) => entry.objectiveId === objective.id && entry.memberName === owner.challenger.name);
   assert.ok(ledger);
   assert.equal(ledger.userId, owner.challenger.id);
@@ -1308,7 +1309,7 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     });
     assert.equal(defaultLabel.statusCode, 200);
 
-    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    const data = await getTaskManagementData({ scope: fixture.scope });
     const storedTask = data.tasks.find((item) => item.id === trimmedTaskPayload.task.id);
     assert.equal(storedTask?.checklist[0]?.label, "新子任务");
   });
@@ -1347,7 +1348,7 @@ test("task creation generates collision-resistant ids under concurrent writes", 
     Math.random = originalRandom;
   }
 
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   assert.equal(data.tasks.filter((task) => task.linkedResultId === result.id).length, 2);
 });
 
@@ -1416,7 +1417,7 @@ test("API objective stage updates cannot violate lifecycle compatibility", async
     });
     assert.equal(frozenStageOnReestimating.statusCode, 409);
 
-    let data = await getTaskManagementData({ teamId: fixture.teamId });
+    let data = await getTaskManagementData({ scope: fixture.scope });
     assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "orfReestimate");
 
     const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
@@ -1432,12 +1433,12 @@ test("API objective stage updates cannot violate lifecycle compatibility", async
     });
     assert.equal(currentStageOnFrozen.statusCode, 200);
 
-    data = await getTaskManagementData({ teamId: fixture.teamId });
+    data = await getTaskManagementData({ scope: fixture.scope });
     assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "goalFrozen");
   });
 });
 
-test("API user deletion reports missing team members instead of a successful no-op", async () => {
+test("API user deletion reports missing members instead of a successful no-op", async () => {
   const fixture = await createFixture("api-user-delete-missing");
 
   await withApiServer(fixture, async (app) => {
@@ -1449,7 +1450,7 @@ test("API user deletion reports missing team members instead of a successful no-
   });
 });
 
-test("API user management rejects duplicate display names inside a team", async () => {
+test("API user management rejects duplicate display names inside the default scope", async () => {
   const fixture = await createFixture("api-user-duplicate-name");
 
   await withApiServer(fixture, async (app) => {
@@ -1706,12 +1707,12 @@ test("task-page and state snapshot APIs do not leak full data to ordinary member
   });
 });
 
-test("API mutations enforce team boundaries even for administrators", async () => {
-  const owner = await createFixture("api-team-owner");
-  const intruder = await createFixture("api-team-intruder");
-  const candidate = await createTestObjective(owner, "cross-team candidate");
-  const objective = await createPublishedObjective(owner, "cross-team published objective");
-  const result = await createTestResult(objective.id, owner.commander.name, `${owner.prefix} cross-team result`);
+test("API mutations enforce runtime scope boundaries even for administrators", async () => {
+  const owner = await createFixture("api-scope-owner");
+  const intruder = await createFixture("api-scope-intruder");
+  const candidate = await createTestObjective(owner, "cross-scope candidate");
+  const objective = await createPublishedObjective(owner, "cross-scope published objective");
+  const result = await createTestResult(objective.id, owner.commander.name, `${owner.prefix} cross-scope result`);
   const intruderObjective = await createPublishedObjective(intruder, "intruder update proposal objective");
   const intruderOwnedResult = await createTestResult(intruderObjective.id, intruder.commander.name, `${intruder.prefix} update proposal result`);
   const { result: intruderWorkResult } = await createApprovedObjectiveWithResult(intruder, "intruder feedback-origin task objective");
@@ -1722,7 +1723,7 @@ test("API mutations enforce team boundaries even for administrators", async () =
 
     const intruderResult = await postResult(app, intruder.commander, objective.id, {
       title: `${intruder.prefix} should not create metric`,
-      metricName: "Cross-team metric",
+      metricName: "Cross-scope metric",
       source: "managerDefined",
     });
     assert.equal(intruderResult.statusCode, 404);
@@ -1744,16 +1745,16 @@ test("API mutations enforce team boundaries even for administrators", async () =
       targetType: "objective",
       targetId: objective.id,
       targetTitle: objective.title,
-      body: "cross-team admin should not comment",
+      body: "cross-scope admin should not comment",
     });
     assert.equal(intruderComment.statusCode, 404);
 
     const ownerFeedback = await apiInject(app, owner.commander, "POST", "/api/feedback", {
-      phenomenon: `${owner.prefix} cross-team feedback target`,
+      phenomenon: `${owner.prefix} cross-scope feedback target`,
       causeCategories: ["Quality"],
       impact: "High",
       linkedResultId: result.id,
-      suggestedAdjustment: "Cross-team update proposals must not mutate this feedback.",
+      suggestedAdjustment: "Cross-scope update proposals must not mutate this feedback.",
       source: "Team review",
       owner: owner.commander.name,
     });
@@ -1762,20 +1763,20 @@ test("API mutations enforce team boundaries even for administrators", async () =
 
     const intruderUpdateProposal = await apiInject(app, intruder.commander, "POST", `/api/results/${encodeURIComponent(intruderOwnedResult.id)}/update-proposal`, {
       title: `${intruder.prefix} scoped proposal`,
-      reason: "Attempt to update another team's feedback status.",
+      reason: "Attempt to update another scope's feedback status.",
       feedbackId: ownerFeedbackId,
     });
     assert.equal(intruderUpdateProposal.statusCode, 404);
-    const ownerData = await getTaskManagementData({ teamId: owner.teamId });
+    const ownerData = await getTaskManagementData({ scope: owner.scope });
     assert.equal(ownerData.feedback.find((item) => item.id === ownerFeedbackId)?.status, "New");
 
     const intruderTaskWithOwnerFeedback = await apiInject(app, intruder.commander, "POST", "/api/tasks", {
-      title: `${intruder.prefix} cross-team feedback origin task`,
+      title: `${intruder.prefix} cross-scope feedback origin task`,
       linkedResultId: intruderWorkResult.id,
       feedbackOriginId: ownerFeedbackId,
     });
     assert.equal(intruderTaskWithOwnerFeedback.statusCode, 404);
-    const intruderData = await getTaskManagementData({ teamId: intruder.teamId });
+    const intruderData = await getTaskManagementData({ scope: intruder.scope });
     assert.equal(intruderData.tasks.some((item) => item.feedbackOriginId === ownerFeedbackId), false);
 
     const ownerPublish = await apiInject(app, owner.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
@@ -1919,7 +1920,7 @@ test("concurrent comments on the same target share one open thread", async () =>
     assert.equal(secondComment.statusCode, 200);
   });
 
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   const threads = data.comments.filter((thread) => thread.targetType === "objective" && thread.targetId === objective.id && thread.status === "open");
   assert.equal(threads.length, 1);
   assert.equal(threads[0]?.targetTitle, objective.title);
@@ -1957,12 +1958,12 @@ test("feedback creation is scoped to administrators and objective challengers", 
     });
     assert.equal(adminAttempt.statusCode, 200);
 
-    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    const data = await getTaskManagementData({ scope: fixture.scope });
     assert.equal(data.feedback.filter((item) => item.linkedResultId === result.id).length, 2);
   });
 });
 
-test("feedback creation only accepts active team members as owners", async () => {
+test("feedback creation only accepts active members in scope as owners", async () => {
   const fixture = await createFixture("api-feedback-owner-boundary");
   const { result } = await createApprovedObjectiveWithResult(fixture);
   await db.update(users).set({ status: "disabled" }).where(eq(users.id, fixture.observer.id));
@@ -1973,7 +1974,7 @@ test("feedback creation only accepts active team members as owners", async () =>
       causeCategories: ["Quality"],
       impact: "High",
       linkedResultId: result.id,
-      suggestedAdjustment: "Keep feedback ownership bound to active team members.",
+      suggestedAdjustment: "Keep feedback ownership bound to active members in scope.",
       source: "Team review",
       owner: fixture.challenger.name,
     };
@@ -1994,7 +1995,7 @@ test("feedback creation only accepts active team members as owners", async () =>
     assert.equal(activeOwnerAttempt.statusCode, 200);
   });
 
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   assert.deepEqual(data.feedback.filter((item) => item.linkedResultId === result.id).map((item) => item.owner), [fixture.challenger.name]);
 });
 
@@ -2021,7 +2022,7 @@ test("feedback status API writes require an administrator, creator, or owner", a
       status: "Closed",
     });
     assert.equal(observerAttempt.statusCode, 403);
-    const afterForbidden = await getTaskManagementData({ teamId: fixture.teamId });
+    const afterForbidden = await getTaskManagementData({ scope: fixture.scope });
     assert.equal(afterForbidden.feedback.find((item) => item.id === createdPayload.feedback.id)?.status, "New");
 
     const creatorAttempt = await apiInject(app, fixture.challenger, "PATCH", `/api/feedback/${encodeURIComponent(createdPayload.feedback.id)}/status`, {
@@ -2034,7 +2035,7 @@ test("feedback status API writes require an administrator, creator, or owner", a
     });
     assert.equal(adminAttempt.statusCode, 200);
 
-    const afterAllowed = await getTaskManagementData({ teamId: fixture.teamId });
+    const afterAllowed = await getTaskManagementData({ scope: fixture.scope });
     assert.equal(afterAllowed.feedback.find((item) => item.id === createdPayload.feedback.id)?.status, "Closed");
   });
 });
@@ -2058,7 +2059,7 @@ test("loot submission and settlement are safe under concurrent duplicate request
   ]);
   assert.deepEqual([firstLoot.status, secondLoot.status].sort(), ["closed", "ok"]);
 
-  const submittedData = await getTaskManagementData({ teamId: fixture.teamId });
+  const submittedData = await getTaskManagementData({ scope: fixture.scope });
   assert.equal(submittedData.objectiveLoot.filter((item) => item.objectiveId === objective.id).length, 1);
 
   const [firstReview, secondReview] = await Promise.all([
@@ -2075,7 +2076,7 @@ test("loot submission and settlement are safe under concurrent duplicate request
   ]);
   assert.deepEqual([firstReview.status, secondReview.status].sort(), ["invalid", "ok"]);
 
-  const settledData = await getTaskManagementData({ teamId: fixture.teamId });
+  const settledData = await getTaskManagementData({ scope: fixture.scope });
   assert.equal(settledData.pointLedger.filter((item) => item.objectiveId === objective.id).length, 1);
   assert.equal(settledData.objectives.find((item) => item.id === objective.id)?.flowStatus, "settled");
 });
@@ -2221,7 +2222,7 @@ test("repository result mutations are locked by objective lifecycle state", asyn
     assert.equal(await moveResult(result.id, referenceResult.id, "after"), false);
     assert.equal(await deleteResult(result.id), false);
 
-    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    const data = await getTaskManagementData({ scope: fixture.scope });
     const unchangedObjective = data.objectives.find((item) => item.id === objective.id);
     assert.equal(unchangedObjective?.flowStatus, flowStatus);
     assert.equal(data.results.find((item) => item.id === result.id)?.title, result.title);
@@ -2243,7 +2244,7 @@ test("concurrent freezing and deleting the last result cannot leave a frozen obj
   ]);
 
   assert.equal(freezeOutcome.status === "ok", !deleted);
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   const refreshedObjective = data.objectives.find((item) => item.id === objective.id);
   const remainingResults = data.results.filter((item) => item.objectiveId === objective.id);
   assert.ok(refreshedObjective);
@@ -2362,7 +2363,7 @@ test("API result and submitted objective mutations are locked by lifecycle state
     assert.equal(settledDeleteObjective.statusCode, 409);
   });
 
-  const data = await getTaskManagementData({ teamId: fixture.teamId });
+  const data = await getTaskManagementData({ scope: fixture.scope });
   assert.ok(data.results.some((result) => result.id === submittedResult.id), "submitted result should survive rejected delete");
   assert.ok(data.results.some((result) => result.id === settledResult.id), "settled result should survive rejected reorder/delete attempts");
   assert.ok(data.pointLedger.some((entry) => entry.objectiveId === settlementObjective.id), "settlement ledger should survive locked mutations");
@@ -2401,7 +2402,7 @@ async function createFixture(label: string) {
     { teamId, userId: observer.id, role: "member" },
   ]);
 
-  return { prefix, teamId, commander, challenger, observer };
+  return { prefix, teamId, scope: runtimeScope(teamId), commander, challenger, observer };
 }
 
 type Fixture = Awaited<ReturnType<typeof createFixture>>;
@@ -2416,7 +2417,7 @@ async function createTestObjective(fixture: Fixture, title: string, finalDueAt =
       boundary: "Test-only objective.",
       finalDueAt,
     },
-    { teamId: fixture.teamId, userId: fixture.commander.id },
+    { scope: fixture.scope, userId: fixture.commander.id },
   );
   assert.ok(objective);
   return objective;
@@ -2537,7 +2538,7 @@ async function createObjectiveWithLockedResults(
   );
   assert.equal(loot.status, "ok");
   if (flowStatus === "submitted") {
-    const data = await getTaskManagementData({ teamId: fixture.teamId });
+    const data = await getTaskManagementData({ scope: fixture.scope });
     const submittedObjective = data.objectives.find((item) => item.id === objective.id);
     assert.ok(submittedObjective);
     return { objective: submittedObjective, result, referenceResult };

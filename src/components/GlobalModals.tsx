@@ -264,7 +264,7 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
           <Field label="影响"><select className="orf-input px-3 py-2" value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "严重"}</option>)}</select></Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="来源"><select className="orf-input px-3 py-2" value={source} onChange={(event) => setSource(event.target.value as FeedbackSource)}>{["User report", "Eval run", "Log", "Incident", "Team review"].map((item) => <option key={item} value={item}>{item === "User report" ? "用户反馈" : item === "Eval run" ? "评估运行" : item === "Log" ? "日志" : item === "Incident" ? "事故" : "团队复盘"}</option>)}</select></Field>
+          <Field label="来源"><select className="orf-input px-3 py-2" value={source} onChange={(event) => setSource(event.target.value as FeedbackSource)}>{["User report", "Eval run", "Log", "Incident", "Team review"].map((item) => <option key={item} value={item}>{item === "User report" ? "用户反馈" : item === "Eval run" ? "评估运行" : item === "Log" ? "日志" : item === "Incident" ? "事故" : "内部复盘"}</option>)}</select></Field>
           <Field label="处理人"><input className="orf-input px-3 py-2" required value={owner} onChange={(event) => setOwner(event.target.value)} /></Field>
         </div>
         <Field label="建议调整"><textarea className="orf-input min-h-20 px-3 py-2" required value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} /></Field>

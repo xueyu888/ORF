@@ -75,7 +75,7 @@ export class RealSystemHarness {
   }
 
   async taskData() {
-    return this.repository.getTaskManagementData({ teamId: this.fixture.teamId });
+    return this.repository.getTaskManagementData({ scope: { id: this.fixture.teamId } });
   }
 
   async setup() {

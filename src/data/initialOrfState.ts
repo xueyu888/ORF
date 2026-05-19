@@ -174,7 +174,7 @@ const legacyInitialOrfState: LegacyInitialState = {
     {
       id: "obj-engineering",
       title: "建立可持续交付大模型应用的工程能力",
-      description: "把团队从 Demo 驱动转向可评估、可追踪、可灰度、可回滚的工程化交付方式。",
+      description: "把项目从 Demo 驱动转向可评估、可追踪、可灰度、可回滚的工程化交付方式。",
       whyItMatters: "AI 应用进入生产后，交付质量取决于评估、灰度、回滚和反馈闭环，而不是单次演示效果。",
       cycle: "2026 Q2",
       stage: "orfReestimate",
@@ -193,7 +193,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "obj-feedback-loop",
       title: "建立结构化反馈闭环，持续修正 Prompt、RAG 与 Agent 流程",
       description: "将线上失败案例沉淀为可分类、可追踪、可转化为改进动作的反馈系统。",
-      whyItMatters: "没有结构化反馈，团队只能不断修补问题，无法把失败案例转成稳定的评估和工程能力。",
+      whyItMatters: "没有结构化反馈，只能不断修补问题，无法把失败案例转成稳定的评估和工程能力。",
       cycle: "2026 Q2",
       stage: "orfReestimate",
       status: "On Track",

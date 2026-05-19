@@ -50,8 +50,10 @@ import {
   teams,
   users,
 } from "../db/schema";
-import { getPermissionRulesForTeam } from "./permissionRepository";
-import { getTeamUsers } from "./userRepository";
+import { getPermissionRulesForScope } from "./permissionRepository";
+import type { RuntimeScope } from "./runtimeScope";
+import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
+import { getScopedUsers } from "./userRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
 
 export type TaskManagementData = Pick<
@@ -60,7 +62,7 @@ export type TaskManagementData = Pick<
 >;
 
 export type TaskManagementDataScope = {
-  teamId?: string | null;
+  scope?: RuntimeScope | null;
 };
 
 type CommentActor = {
@@ -68,7 +70,7 @@ type CommentActor = {
   id: string;
   name: string;
   role: "admin" | "member";
-  teamId?: string | null;
+  scope?: RuntimeScope | null;
 };
 
 type CommentMutationOutcome =
@@ -157,11 +159,20 @@ function isMissingCommentStorageError(error: unknown) {
   return cause.code === "42P01" || cause.code === "42704";
 }
 
+function scopedStorageId(scope: TaskManagementDataScope = {}) {
+  return scope.scope ? runtimeScopeStorageId(scope.scope).trim() : "";
+}
+
+function storageScope(id: string | null | undefined): RuntimeScope | null {
+  const storageId = id?.trim();
+  return storageId ? runtimeScope(storageId) : null;
+}
+
 async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[CommentThreadRow[], CommentMessageRow[]]> {
   try {
-    const teamId = scope.teamId?.trim();
-    const threadRows = teamId
-      ? await db.select().from(commentThreads).where(eq(commentThreads.teamId, teamId))
+    const storageScopeId = scopedStorageId(scope);
+    const threadRows = storageScopeId
+      ? await db.select().from(commentThreads).where(eq(commentThreads.teamId, storageScopeId))
       : await db.select().from(commentThreads);
     const threadIds = threadRows.map((thread) => thread.id);
     const messageRows =
@@ -208,7 +219,7 @@ function uniqueMembers(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
 }
 
-async function getActiveTeamMemberNameSet(teamId: string, values: Array<string | undefined | null>) {
+async function getActiveMemberNameSetInScope(storageScopeId: string, values: Array<string | undefined | null>) {
   const memberNames = uniqueMembers(values);
   if (memberNames.length === 0) return new Set<string>();
 
@@ -216,7 +227,7 @@ async function getActiveTeamMemberNameSet(teamId: string, values: Array<string |
     .select({ name: users.name })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(and(eq(teamMembers.teamId, teamId), eq(users.status, "active"), inArray(users.name, memberNames)));
+    .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "active"), inArray(users.name, memberNames)));
   return new Set(rows.map((member) => member.name));
 }
 
@@ -278,26 +289,26 @@ function objectiveAcceptedResultFromReviews(reviews: ResultAcceptedResult[]): Ob
 }
 
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
-  const teamId = scope.teamId?.trim();
-  const objectiveRows = teamId ? await db.select().from(objectives).where(eq(objectives.teamId, teamId)) : await db.select().from(objectives);
-  const resultRows = teamId ? await db.select().from(results).where(eq(results.teamId, teamId)) : await db.select().from(results);
-  const taskRows = teamId ? await db.select().from(tasks).where(eq(tasks.teamId, teamId)) : await db.select().from(tasks);
-  const evidenceRows = teamId ? await db.select().from(evidence).where(eq(evidence.teamId, teamId)) : await db.select().from(evidence);
-  const feedbackRows = teamId ? await db.select().from(feedback).where(eq(feedback.teamId, teamId)) : await db.select().from(feedback);
-  const objectiveLootRows = teamId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, teamId)) : await db.select().from(objectiveLoot);
-  const objectiveContributionReviewRows = teamId
-    ? await db.select().from(objectiveContributionReviews).where(eq(objectiveContributionReviews.teamId, teamId))
+  const storageScopeId = scopedStorageId(scope);
+  const objectiveRows = storageScopeId ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)) : await db.select().from(objectives);
+  const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
+  const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
+  const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
+  const feedbackRows = storageScopeId ? await db.select().from(feedback).where(eq(feedback.teamId, storageScopeId)) : await db.select().from(feedback);
+  const objectiveLootRows = storageScopeId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId)) : await db.select().from(objectiveLoot);
+  const objectiveContributionReviewRows = storageScopeId
+    ? await db.select().from(objectiveContributionReviews).where(eq(objectiveContributionReviews.teamId, storageScopeId))
     : await db.select().from(objectiveContributionReviews);
-  const pointLedgerRows = teamId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, teamId)) : await db.select().from(pointLedger);
-  const teamRows = teamId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)) : await db.select({ id: teams.id }).from(teams);
+  const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
+  const scopeRows = storageScopeId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)) : await db.select({ id: teams.id }).from(teams);
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
   const feedbackIds = feedbackRows.map((item) => item.id);
   const trendRows = await getResultTrendRows(resultIds);
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIds);
-  const [commentThreadRows, commentMessageRows] = await getCommentRows({ teamId });
-  const permissionRules = teamRows[0] ? await getPermissionRulesForTeam(teamRows[0].id) : initialOrfState.permissionRules;
+  const [commentThreadRows, commentMessageRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
+  const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();
   for (const item of checklistRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
@@ -516,17 +527,17 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
 }
 
 export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): Promise<OrfState> {
-  const teamId = scope.teamId?.trim();
-  const data = await getTaskManagementData({ teamId });
-  const [team] = teamId
-    ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).limit(1)
+  const storageScopeId = scopedStorageId(scope);
+  const data = await getTaskManagementData(scope);
+  const [scopeRow] = storageScopeId
+    ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)).limit(1)
     : await db.select({ id: teams.id }).from(teams).limit(1);
-  const teamUsers = team ? await getTeamUsers(team.id) : initialOrfState.users;
+  const scopeUsers = scopeRow ? await getScopedUsers(runtimeScope(scopeRow.id)) : initialOrfState.users;
 
   return {
     ...data,
-    users: teamUsers,
-    currentUserId: teamUsers[0]?.id ?? initialOrfState.currentUserId,
+    users: scopeUsers,
+    currentUserId: scopeUsers[0]?.id ?? initialOrfState.currentUserId,
     decisions: [],
     evalRuns: [],
     scenarios: [],
@@ -710,13 +721,14 @@ export interface CreateObjectiveInput {
   finalDueAt?: string;
 }
 
-export async function createObjective(input: CreateObjectiveInput, context: { teamId: string; userId: string }): Promise<Objective | null> {
+export async function createObjective(input: CreateObjectiveInput, context: { scope: RuntimeScope; userId: string }): Promise<Objective | null> {
   const id = makeId("obj");
   const now = today();
+  const storageScopeId = runtimeScopeStorageId(context.scope);
 
   await db.insert(objectives).values({
     id,
-    teamId: context.teamId,
+    teamId: storageScopeId,
     title: input.title,
     description: input.whyItMatters,
     whyItMatters: input.whyItMatters,
@@ -746,7 +758,7 @@ export async function createObjective(input: CreateObjectiveInput, context: { te
     updatedBy: context.userId,
   });
 
-  const data = await getTaskManagementData({ teamId: context.teamId });
+  const data = await getTaskManagementData({ scope: context.scope });
   return data.objectives.find((objective) => objective.id === id) ?? null;
 }
 
@@ -803,14 +815,14 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
       sortOrder,
     });
 
-    return { id, teamId: objective.teamId };
+    return { id, scope: runtimeScope(objective.teamId) };
   });
 
   if (!created) {
     return null;
   }
 
-  const data = await getTaskManagementData({ teamId: created.teamId });
+  const data = await getTaskManagementData({ scope: created.scope });
   return data.results.find((result) => result.id === created.id) ?? null;
 }
 
@@ -873,14 +885,14 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "accepted" as const, teamId: objective.teamId };
+    return { status: "accepted" as const, scope: runtimeScope(objective.teamId) };
   });
 
   if (acceptedResult.status !== "accepted") {
     return acceptedResult;
   }
 
-  const data = await getTaskManagementData({ teamId: acceptedResult.teamId });
+  const data = await getTaskManagementData({ scope: acceptedResult.scope });
   const accepted = data.objectives.find((item) => item.id === objectiveId);
   return accepted ? { status: "accepted", objective: accepted } : { status: "notFound" };
 }
@@ -934,14 +946,14 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "applied" as const, teamId: objective.teamId };
+    return { status: "applied" as const, scope: runtimeScope(objective.teamId) };
   });
 
   if (appliedResult.status !== "applied") {
     return appliedResult;
   }
 
-  const data = await getTaskManagementData({ teamId: appliedResult.teamId });
+  const data = await getTaskManagementData({ scope: appliedResult.scope });
   const applied = data.objectives.find((item) => item.id === objectiveId);
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
@@ -951,8 +963,8 @@ export type ObjectiveFlowMutationOutcome =
   | { status: "invalid" }
   | { status: "notFound" };
 
-async function objectiveOutcome(objectiveId: string, teamId?: string): Promise<ObjectiveFlowMutationOutcome> {
-  const data = await getTaskManagementData({ teamId });
+async function objectiveOutcome(objectiveId: string, scope?: RuntimeScope | null): Promise<ObjectiveFlowMutationOutcome> {
+  const data = await getTaskManagementData({ scope });
   const objective = data.objectives.find((item) => item.id === objectiveId);
   return objective ? { status: "ok", objective } : { status: "notFound" };
 }
@@ -967,7 +979,7 @@ export async function publishObjective(objectiveId: string, actorId: string): Pr
     const [existing] = await db.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
     return existing ? { status: "invalid" } : { status: "notFound" };
   }
-  return objectiveOutcome(objectiveId, updated[0]?.teamId);
+  return objectiveOutcome(objectiveId, storageScope(updated[0]?.teamId));
 }
 
 export async function approveObjectiveChallengeApplication(
@@ -1006,10 +1018,10 @@ export async function approveObjectiveChallengeApplication(
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "ok" as const, teamId: objective.teamId };
+    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return approvedResult.status === "ok" ? objectiveOutcome(objectiveId, approvedResult.teamId) : approvedResult;
+  return approvedResult.status === "ok" ? objectiveOutcome(objectiveId, approvedResult.scope) : approvedResult;
 }
 
 export async function rejectObjectiveChallengeApplication(
@@ -1038,10 +1050,10 @@ export async function rejectObjectiveChallengeApplication(
         updatedBy: actorId,
       })
       .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, teamId: objective.teamId };
+    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return rejectedResult.status === "ok" ? objectiveOutcome(objectiveId, rejectedResult.teamId) : rejectedResult;
+  return rejectedResult.status === "ok" ? objectiveOutcome(objectiveId, rejectedResult.scope) : rejectedResult;
 }
 
 export async function recruitObjectiveChallengers(
@@ -1074,10 +1086,10 @@ export async function recruitObjectiveChallengers(
         updatedBy: actorId,
       })
       .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, teamId: objective.teamId };
+    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.teamId) : recruitedResult;
+  return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.scope) : recruitedResult;
 }
 
 export async function declineObjectiveChallenge(objectiveId: string, member: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
@@ -1105,10 +1117,10 @@ export async function declineObjectiveChallenge(objectiveId: string, member: str
         updatedBy: actorId,
       })
       .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, teamId: objective.teamId };
+    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return declinedResult.status === "ok" ? objectiveOutcome(objectiveId, declinedResult.teamId) : declinedResult;
+  return declinedResult.status === "ok" ? objectiveOutcome(objectiveId, declinedResult.scope) : declinedResult;
 }
 
 export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
@@ -1140,10 +1152,10 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "ok" as const, teamId: objective.teamId };
+    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return frozen.status === "ok" ? objectiveOutcome(objectiveId, frozen.teamId) : frozen;
+  return frozen.status === "ok" ? objectiveOutcome(objectiveId, frozen.scope) : frozen;
 }
 
 export async function reopenObjectiveReestimate(_objectiveId: string, _actorId: string): Promise<ObjectiveFlowMutationOutcome> {
@@ -1220,9 +1232,10 @@ export async function canDeleteObjective(objectiveId: string): Promise<Objective
     : { status: "allowed", flowStatus: objective.flowStatus };
 }
 
-export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string, teamId?: string | null): Promise<boolean> {
+export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string, scope?: RuntimeScope | null): Promise<boolean> {
   const actorName = member.trim();
   if (!actorName) return false;
+  const storageScopeId = scope ? runtimeScopeStorageId(scope) : "";
 
   const [objective] = await db
     .select({
@@ -1237,7 +1250,7 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
 
   return (
     objective?.flowStatus === "reestimating" &&
-    (!teamId || objective.teamId === teamId) &&
+    (!storageScopeId || objective.teamId === storageScopeId) &&
     uniqueMembers(objective.challengers ?? []).includes(actorName) &&
     isReestimateWindowOpen(objective.confirmationDueAt)
   );
@@ -1254,8 +1267,9 @@ export type CreateFeedbackOutcome =
 
 export async function canCreateFeedbackForResult(
   resultId: string,
-  actor: Pick<CommentActor, "name" | "role" | "teamId">,
+  actor: Pick<CommentActor, "name" | "role" | "scope">,
 ): Promise<ObjectiveWorkItemMutationOutcome> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
   const [target] = await db
     .select({ objectiveId: results.objectiveId, challengers: objectives.challengers, teamId: results.teamId })
     .from(results)
@@ -1266,7 +1280,7 @@ export async function canCreateFeedbackForResult(
     return "notFound";
   }
 
-  if (actor.teamId && target.teamId !== actor.teamId) {
+  if (storageScopeId && target.teamId !== storageScopeId) {
     return "notFound";
   }
 
@@ -1287,7 +1301,7 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
   }
 
   const owner = input.owner.trim();
-  const activeOwnerNames = await getActiveTeamMemberNameSet(result.teamId, [owner]);
+  const activeOwnerNames = await getActiveMemberNameSetInScope(result.teamId, [owner]);
   if (!activeOwnerNames.has(owner)) {
     return { status: "invalidOwner" };
   }
@@ -1318,12 +1332,12 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
     }
   });
 
-  const data = await getTaskManagementData({ teamId: result.teamId });
+  const data = await getTaskManagementData({ scope: runtimeScope(result.teamId) });
   const item = data.feedback.find((entry) => entry.id === id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
 }
 
-type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; teamId?: string | null };
+type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; scope?: RuntimeScope | null };
 
 export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
 
@@ -1339,6 +1353,7 @@ export async function updateFeedbackStatus(
   status: FeedbackStatus,
   actor: FeedbackStatusActor,
 ): Promise<FeedbackStatusUpdateResult> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
   const [target] = await db
     .select({ id: feedback.id, owner: feedback.owner, createdBy: feedback.createdBy, teamId: feedback.teamId })
     .from(feedback)
@@ -1349,7 +1364,7 @@ export async function updateFeedbackStatus(
     return { status: "notFound" };
   }
 
-  if (actor.teamId && target.teamId !== actor.teamId) {
+  if (storageScopeId && target.teamId !== storageScopeId) {
     return { status: "notFound" };
   }
 
@@ -1488,7 +1503,7 @@ export interface CreateCommentInput {
 
 type CommentTarget = {
   objectiveId: string;
-  teamId: string;
+  storageScopeId: string;
   title: string;
 };
 
@@ -1528,20 +1543,20 @@ export async function resolveObjectiveIdForWorkItem(target: ObjectiveWorkItemTar
   return item?.objectiveId ?? null;
 }
 
-export async function resolveTeamIdForWorkItem(target: ObjectiveWorkItemTarget): Promise<string | null> {
+export async function resolveRuntimeScopeForWorkItem(target: ObjectiveWorkItemTarget): Promise<RuntimeScope | null> {
   if (target.type === "objective") {
     const [objective] = await db.select({ teamId: objectives.teamId }).from(objectives).where(eq(objectives.id, target.id)).limit(1);
-    return objective?.teamId ?? null;
+    return storageScope(objective?.teamId);
   }
 
   if (target.type === "result") {
     const [result] = await db.select({ teamId: results.teamId }).from(results).where(eq(results.id, target.id)).limit(1);
-    return result?.teamId ?? null;
+    return storageScope(result?.teamId);
   }
 
   if (target.type === "task") {
     const [task] = await db.select({ teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, target.id)).limit(1);
-    return task?.teamId ?? null;
+    return storageScope(task?.teamId);
   }
 
   const conditions = target.taskId
@@ -1553,18 +1568,19 @@ export async function resolveTeamIdForWorkItem(target: ObjectiveWorkItemTarget):
     .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
     .where(conditions)
     .limit(1);
-  return item?.teamId ?? null;
+  return storageScope(item?.teamId);
 }
 
-export async function resolveTeamIdForFeedback(feedbackId: string): Promise<string | null> {
+export async function resolveRuntimeScopeForFeedback(feedbackId: string): Promise<RuntimeScope | null> {
   const [target] = await db.select({ teamId: feedback.teamId }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
-  return target?.teamId ?? null;
+  return storageScope(target?.teamId);
 }
 
 export async function canMutateObjectiveWorkItem(
-  actor: Pick<CommentActor, "name" | "role" | "teamId">,
+  actor: Pick<CommentActor, "name" | "role" | "scope">,
   objectiveId: string,
 ): Promise<ObjectiveWorkItemMutationOutcome> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
   const [objective] = await db
     .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus, teamId: objectives.teamId })
     .from(objectives)
@@ -1574,7 +1590,7 @@ export async function canMutateObjectiveWorkItem(
     return "notFound";
   }
 
-  if (actor.teamId && objective.teamId !== actor.teamId) {
+  if (storageScopeId && objective.teamId !== storageScopeId) {
     return "notFound";
   }
 
@@ -1596,6 +1612,7 @@ async function canMutateObjectiveComment(
   actor: CommentActor,
   objectiveId: string,
 ): Promise<ObjectiveWorkItemMutationOutcome> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
   const [objective] = await db
     .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus, teamId: objectives.teamId })
     .from(objectives)
@@ -1605,7 +1622,7 @@ async function canMutateObjectiveComment(
     return "notFound";
   }
 
-  if (actor.teamId && objective.teamId !== actor.teamId) {
+  if (storageScopeId && objective.teamId !== storageScopeId) {
     return "notFound";
   }
 
@@ -1632,7 +1649,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(objectives)
       .where(eq(objectives.id, targetId))
       .limit(1);
-    return target ?? null;
+    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
   if (targetType === "result") {
@@ -1641,7 +1658,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(results)
       .where(eq(results.id, targetId))
       .limit(1);
-    return target ?? null;
+    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
   if (targetType === "task") {
@@ -1650,7 +1667,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(tasks)
       .where(eq(tasks.id, targetId))
       .limit(1);
-    return target ?? null;
+    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
   const [target] = await db
@@ -1659,7 +1676,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
     .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
     .where(eq(taskChecklistItems.id, targetId))
     .limit(1);
-  return target ?? null;
+  return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
 }
 
 async function getCommentThread(threadId: string): Promise<CommentThread | null> {
@@ -1792,7 +1809,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     if (!openThread) {
       await tx.insert(commentThreads).values({
         id: nextThreadId,
-        teamId: target.teamId,
+        teamId: target.storageScopeId,
         targetType: input.targetType,
         targetId: input.targetId,
         targetTitle,
@@ -2062,7 +2079,7 @@ export async function submitObjectiveLoot(
     return { status: "closed" };
   }
 
-  const data = await getTaskManagementData({ teamId: objective.teamId });
+  const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
   const loot = data.objectiveLoot.find((item) => item.id === lootId);
   return loot ? { status: "ok", loot } : { status: "notFound" };
 }
@@ -2102,7 +2119,7 @@ export async function submitObjectiveContributionReview(
     submittedAt,
   });
 
-  const data = await getTaskManagementData({ teamId: objective.teamId });
+  const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
   const review = data.objectiveContributionReviews.find((item) => item.id === reviewId);
   return review ? { status: "ok", review } : { status: "notFound" };
 }
@@ -2241,7 +2258,7 @@ export async function reviewObjectiveLoot(
   });
   if (!settled) return { status: "invalid" };
 
-  return objectiveOutcome(objectiveId, objective.teamId);
+  return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task | null> {
@@ -2296,14 +2313,14 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       sortOrder,
     });
 
-    return { id, teamId: result.teamId };
+    return { id, scope: runtimeScope(result.teamId) };
   });
 
   if (!created) {
     return null;
   }
 
-  const data = await getTaskManagementData({ teamId: created.teamId });
+  const data = await getTaskManagementData({ scope: created.scope });
   return data.tasks.find((task) => task.id === created.id) ?? null;
 }
 

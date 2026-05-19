@@ -12,6 +12,8 @@ import {
   teamMembers,
   users,
 } from "../db/schema";
+import type { RuntimeScope } from "./runtimeScope";
+import { runtimeScopeStorageId } from "./runtimeScope";
 
 export type UserInput = {
   name: string;
@@ -62,11 +64,12 @@ function normalizeRole(role: string): UserRole {
   return role === "admin" ? "admin" : "member";
 }
 
-async function assertMembershipExists(teamId: string, userId: string) {
+async function assertMembershipExists(scope: RuntimeScope, userId: string) {
+  const storageScopeId = runtimeScopeStorageId(scope);
   const [membership] = await db
     .select({ role: teamMembers.role })
     .from(teamMembers)
-    .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)))
+    .where(and(eq(teamMembers.teamId, storageScopeId), eq(teamMembers.userId, userId)))
     .limit(1);
 
   if (!membership) {
@@ -74,11 +77,12 @@ async function assertMembershipExists(teamId: string, userId: string) {
   }
 }
 
-async function assertUniqueTeamUserName(teamId: string, userId: string | null, name: string) {
+async function assertUniqueUserNameInScope(scope: RuntimeScope, userId: string | null, name: string) {
+  const storageScopeId = runtimeScopeStorageId(scope);
   const normalizedName = name.toLowerCase();
   const nameFilter = userId
-    ? and(eq(teamMembers.teamId, teamId), sql`lower(${users.name}) = ${normalizedName}`, ne(users.id, userId))
-    : and(eq(teamMembers.teamId, teamId), sql`lower(${users.name}) = ${normalizedName}`);
+    ? and(eq(teamMembers.teamId, storageScopeId), sql`lower(${users.name}) = ${normalizedName}`, ne(users.id, userId))
+    : and(eq(teamMembers.teamId, storageScopeId), sql`lower(${users.name}) = ${normalizedName}`);
   const [nameOwner] = await db
     .select({ id: users.id })
     .from(teamMembers)
@@ -91,7 +95,8 @@ async function assertUniqueTeamUserName(teamId: string, userId: string | null, n
   }
 }
 
-async function isReferencedByOrfRecords(teamId: string, name: string) {
+async function isReferencedByOrfRecords(scope: RuntimeScope, name: string) {
+  const storageScopeId = runtimeScopeStorageId(scope);
   const objectiveRows = await db
     .select({
       challengers: objectives.challengers,
@@ -99,7 +104,7 @@ async function isReferencedByOrfRecords(teamId: string, name: string) {
       challengeApplications: objectives.challengeApplications,
     })
     .from(objectives)
-    .where(eq(objectives.teamId, teamId));
+    .where(eq(objectives.teamId, storageScopeId));
   if (
     objectiveRows.some(
       (objective) =>
@@ -117,7 +122,7 @@ async function isReferencedByOrfRecords(teamId: string, name: string) {
       allocations: objectiveContributionReviews.allocations,
     })
     .from(objectiveContributionReviews)
-    .where(eq(objectiveContributionReviews.teamId, teamId));
+    .where(eq(objectiveContributionReviews.teamId, storageScopeId));
   if (
     contributionRows.some(
       (review) =>
@@ -132,40 +137,40 @@ async function isReferencedByOrfRecords(teamId: string, name: string) {
     db
       .select({ id: results.id })
       .from(results)
-      .where(and(eq(results.teamId, teamId), eq(results.definer, name)))
+      .where(and(eq(results.teamId, storageScopeId), eq(results.definer, name)))
       .limit(1),
     db
       .select({ id: tasks.id })
       .from(tasks)
-      .where(and(eq(tasks.teamId, teamId), eq(tasks.assignee, name)))
+      .where(and(eq(tasks.teamId, storageScopeId), eq(tasks.assignee, name)))
       .limit(1),
     db
       .select({ id: feedback.id })
       .from(feedback)
-      .where(and(eq(feedback.teamId, teamId), eq(feedback.owner, name)))
+      .where(and(eq(feedback.teamId, storageScopeId), eq(feedback.owner, name)))
       .limit(1),
     db
       .select({ id: objectiveLoot.id })
       .from(objectiveLoot)
-      .where(and(eq(objectiveLoot.teamId, teamId), eq(objectiveLoot.submittedBy, name)))
+      .where(and(eq(objectiveLoot.teamId, storageScopeId), eq(objectiveLoot.submittedBy, name)))
       .limit(1),
     db
       .select({ id: pointLedger.id })
       .from(pointLedger)
-      .where(and(eq(pointLedger.teamId, teamId), eq(pointLedger.memberName, name)))
+      .where(and(eq(pointLedger.teamId, storageScopeId), eq(pointLedger.memberName, name)))
       .limit(1),
   ]);
 
   return [resultRef, taskRef, feedbackRef, lootRef, ledgerRef].some((rows) => rows.length > 0);
 }
 
-async function assertCanRenameUser(teamId: string, userId: string, nextName: string) {
+async function assertCanRenameUser(scope: RuntimeScope, userId: string, nextName: string) {
   const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
   if (!user || user.name === nextName) {
     return;
   }
 
-  if (await isReferencedByOrfRecords(teamId, user.name)) {
+  if (await isReferencedByOrfRecords(scope, user.name)) {
     throw Object.assign(new Error("User name is referenced by ORF records"), { statusCode: 409 });
   }
 }
@@ -176,18 +181,19 @@ function assertCanChangeRole(actorUserId: string, userId: string, nextRole: User
   }
 }
 
-async function assertCanDeleteUser(teamId: string, actorUserId: string, userId: string) {
+async function assertCanDeleteUser(scope: RuntimeScope, actorUserId: string, userId: string) {
   if (actorUserId === userId) {
     throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
   }
 
   const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
-  if (user && (await isReferencedByOrfRecords(teamId, user.name))) {
+  if (user && (await isReferencedByOrfRecords(scope, user.name))) {
     throw Object.assign(new Error("User is referenced by ORF records"), { statusCode: 409 });
   }
 }
 
-export async function getTeamUsers(teamId: string): Promise<OrfUser[]> {
+export async function getScopedUsers(scope: RuntimeScope): Promise<OrfUser[]> {
+  const storageScopeId = runtimeScopeStorageId(scope);
   const rows = await db
     .select({
       id: users.id,
@@ -199,7 +205,7 @@ export async function getTeamUsers(teamId: string): Promise<OrfUser[]> {
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(eq(teamMembers.teamId, teamId))
+    .where(eq(teamMembers.teamId, storageScopeId))
     .orderBy(asc(users.name));
 
   return rows.map((row) => ({
@@ -212,7 +218,8 @@ export async function getTeamUsers(teamId: string): Promise<OrfUser[]> {
   }));
 }
 
-export async function getRegistrationRequests(teamId: string): Promise<OrfUser[]> {
+export async function getRegistrationRequests(scope: RuntimeScope): Promise<OrfUser[]> {
+  const storageScopeId = runtimeScopeStorageId(scope);
   const rows = await db
     .select({
       id: users.id,
@@ -224,7 +231,7 @@ export async function getRegistrationRequests(teamId: string): Promise<OrfUser[]
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
-    .where(and(eq(teamMembers.teamId, teamId), eq(users.status, "pending")))
+    .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "pending")))
     .orderBy(asc(users.createdAt), asc(users.name));
 
   return rows.map((row) => ({
@@ -237,7 +244,7 @@ export async function getRegistrationRequests(teamId: string): Promise<OrfUser[]
   }));
 }
 
-export async function createTeamUser(teamId: string, actorUserId: string, input: UserInput): Promise<OrfUser[]> {
+export async function createScopedUser(scope: RuntimeScope, actorUserId: string, input: UserInput): Promise<OrfUser[]> {
   const normalized = normalizeInput(input);
   if (!normalized.name || !normalized.email) {
     throw Object.assign(new Error("Name and email are required"), { statusCode: 400 });
@@ -245,21 +252,22 @@ export async function createTeamUser(teamId: string, actorUserId: string, input:
 
   const [matchedUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${normalized.email}`).limit(1);
   let matchedMembership: { role: string } | undefined;
+  const storageScopeId = runtimeScopeStorageId(scope);
   if (matchedUser) {
     [matchedMembership] = await db
       .select({ role: teamMembers.role })
       .from(teamMembers)
-      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, matchedUser.id)))
+      .where(and(eq(teamMembers.teamId, storageScopeId), eq(teamMembers.userId, matchedUser.id)))
       .limit(1);
 
     if (matchedMembership) {
       assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
-      await assertCanRenameUser(teamId, matchedUser.id, normalized.name);
+      await assertCanRenameUser(scope, matchedUser.id, normalized.name);
     }
   }
 
-  await assertUniqueTeamUserName(teamId, matchedUser?.id ?? null, normalized.name);
-  if (!matchedMembership && (await isReferencedByOrfRecords(teamId, normalized.name))) {
+  await assertUniqueUserNameInScope(scope, matchedUser?.id ?? null, normalized.name);
+  if (!matchedMembership && (await isReferencedByOrfRecords(scope, normalized.name))) {
     throw Object.assign(new Error("Name is referenced by ORF records"), { statusCode: 409 });
   }
 
@@ -281,28 +289,28 @@ export async function createTeamUser(teamId: string, actorUserId: string, input:
 
     await tx
       .insert(teamMembers)
-      .values({ teamId, userId, role: normalized.role })
+      .values({ teamId: storageScopeId, userId, role: normalized.role })
       .onConflictDoUpdate({
         target: [teamMembers.teamId, teamMembers.userId],
         set: { role: normalized.role },
       });
   });
 
-  return getTeamUsers(teamId);
+  return getScopedUsers(scope);
 }
 
-export async function updateTeamUser(teamId: string, actorUserId: string, userId: string, input: UserInput): Promise<OrfUser[]> {
+export async function updateScopedUser(scope: RuntimeScope, actorUserId: string, userId: string, input: UserInput): Promise<OrfUser[]> {
   const normalized = normalizeInput(input);
   assertCanChangeRole(actorUserId, userId, normalized.role);
-  return updateTeamUserRecord(teamId, userId, normalized);
+  return updateScopedUserRecord(scope, userId, normalized);
 }
 
-async function updateTeamUserRecord(teamId: string, userId: string, normalized: UserInput): Promise<OrfUser[]> {
+async function updateScopedUserRecord(scope: RuntimeScope, userId: string, normalized: UserInput): Promise<OrfUser[]> {
   if (!normalized.name || !normalized.email) {
     throw Object.assign(new Error("Name and email are required"), { statusCode: 400 });
   }
 
-  await assertMembershipExists(teamId, userId);
+  await assertMembershipExists(scope, userId);
 
   const [emailOwner] = await db
     .select({ id: users.id })
@@ -314,42 +322,45 @@ async function updateTeamUserRecord(teamId: string, userId: string, normalized: 
     throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
   }
 
-  await assertCanRenameUser(teamId, userId, normalized.name);
-  await assertUniqueTeamUserName(teamId, userId, normalized.name);
+  await assertCanRenameUser(scope, userId, normalized.name);
+  await assertUniqueUserNameInScope(scope, userId, normalized.name);
 
   await db.transaction(async (tx) => {
     await tx.update(users).set({ name: normalized.name, email: normalized.email }).where(eq(users.id, userId));
-    await tx.update(teamMembers).set({ role: normalized.role }).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
+    await tx
+      .update(teamMembers)
+      .set({ role: normalized.role })
+      .where(and(eq(teamMembers.teamId, runtimeScopeStorageId(scope)), eq(teamMembers.userId, userId)));
   });
 
-  return getTeamUsers(teamId);
+  return getScopedUsers(scope);
 }
 
-export async function deleteTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
-  await assertMembershipExists(teamId, userId);
-  await assertCanDeleteUser(teamId, actorUserId, userId);
+export async function deleteScopedUser(scope: RuntimeScope, actorUserId: string, userId: string): Promise<OrfUser[]> {
+  await assertMembershipExists(scope, userId);
+  await assertCanDeleteUser(scope, actorUserId, userId);
 
-  await db.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId)));
-  return getTeamUsers(teamId);
+  await db.delete(teamMembers).where(and(eq(teamMembers.teamId, runtimeScopeStorageId(scope)), eq(teamMembers.userId, userId)));
+  return getScopedUsers(scope);
 }
 
-export async function approveRegistrationRequest(teamId: string, userId: string): Promise<OrfUser[]> {
-  await assertMembershipExists(teamId, userId);
+export async function approveRegistrationRequest(scope: RuntimeScope, userId: string): Promise<OrfUser[]> {
+  await assertMembershipExists(scope, userId);
   await db.update(users).set({ status: "active" }).where(eq(users.id, userId));
-  return getTeamUsers(teamId);
+  return getScopedUsers(scope);
 }
 
-export async function rejectRegistrationRequest(teamId: string, userId: string): Promise<OrfUser[]> {
-  await assertMembershipExists(teamId, userId);
+export async function rejectRegistrationRequest(scope: RuntimeScope, userId: string): Promise<OrfUser[]> {
+  await assertMembershipExists(scope, userId);
   await db.update(users).set({ status: "rejected" }).where(eq(users.id, userId));
-  return getTeamUsers(teamId);
+  return getScopedUsers(scope);
 }
 
-export async function disableTeamUser(teamId: string, actorUserId: string, userId: string): Promise<OrfUser[]> {
-  await assertMembershipExists(teamId, userId);
+export async function disableScopedUser(scope: RuntimeScope, actorUserId: string, userId: string): Promise<OrfUser[]> {
+  await assertMembershipExists(scope, userId);
   if (actorUserId === userId) {
     throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
   }
   await db.update(users).set({ status: "disabled" }).where(eq(users.id, userId));
-  return getTeamUsers(teamId);
+  return getScopedUsers(scope);
 }

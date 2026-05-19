@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
-import { teamMembers, teams, users } from "../db/schema";
+import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
+import { getDefaultRuntimeScope, runtimeScopeStorageId } from "../repositories/runtimeScope";
 
 export type AuthenticatedOrfUser = {
   id: string;
@@ -164,7 +165,7 @@ async function nextUserId(email: string, identityId: string) {
   }
 }
 
-async function existingTeamRole(userId: string): Promise<AuthenticatedOrfUser["role"] | null> {
+async function existingMembershipRole(userId: string): Promise<AuthenticatedOrfUser["role"] | null> {
   const existingMemberships = await db.select({ role: teamMembers.role }).from(teamMembers).where(sql`${teamMembers.userId} = ${userId}`);
   if (existingMemberships.length > 0) {
     return existingMemberships.some((membership) => membership.role === "admin") ? "admin" : "member";
@@ -173,13 +174,13 @@ async function existingTeamRole(userId: string): Promise<AuthenticatedOrfUser["r
   return null;
 }
 
-async function createDefaultTeamMembership(userId: string): Promise<AuthenticatedOrfUser["role"]> {
-  const [team] = await db.select({ id: teams.id }).from(teams).limit(1);
-  if (!team) {
+async function createDefaultScopeMembership(userId: string): Promise<AuthenticatedOrfUser["role"]> {
+  const scope = await getDefaultRuntimeScope();
+  if (!scope) {
     return "member";
   }
 
-  await db.insert(teamMembers).values({ teamId: team.id, userId, role: "member" }).onConflictDoNothing();
+  await db.insert(teamMembers).values({ teamId: runtimeScopeStorageId(scope), userId, role: "member" }).onConflictDoNothing();
   return "member";
 }
 
@@ -201,9 +202,9 @@ async function upsertOrfUser(
       await db.update(users).set({ lastLoginAt }).where(sql`${users.id} = ${existing.id}`);
     }
 
-    const role = await existingTeamRole(existing.id);
+    const role = await existingMembershipRole(existing.id);
     if (!role) {
-      throw new Error("ORF user is not a member of any team");
+      throw new Error("ORF user is not in the default runtime scope");
     }
 
     return {
@@ -227,7 +228,7 @@ async function upsertOrfUser(
     lastLoginAt: createdLastLoginAt,
   });
 
-  const role = await createDefaultTeamMembership(id);
+  const role = await createDefaultScopeMembership(id);
   return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastLoginAt: createdLastLoginAt };
 }
 

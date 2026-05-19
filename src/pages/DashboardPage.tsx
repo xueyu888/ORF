@@ -37,7 +37,7 @@ export function DashboardPage() {
   return (
     <PageScaffold
       title="ORF 仪表盘"
-      subtitle="面向大模型应用团队的目标驱动执行工作台"
+      subtitle="面向大模型应用的目标驱动执行工作台"
       action={<div className="orf-control border orf-secondary-action px-3 py-2 text-sm font-medium">{summary.latestCycle ?? "暂无周期"}</div>}
     >
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

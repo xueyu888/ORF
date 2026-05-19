@@ -3,7 +3,9 @@ import { hasRolePermission, normalizePermissionKeys, permissionKeys, type Permis
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { PermissionRule, UserRole } from "../../src/types/orf";
 import { db } from "../db/client";
-import { rolePermissions, teamMembers, teams } from "../db/schema";
+import { rolePermissions } from "../db/schema";
+import type { RuntimeScope } from "./runtimeScope";
+import { runtimeScopeStorageId } from "./runtimeScope";
 
 export { hasRolePermission, permissionKeys };
 
@@ -37,27 +39,18 @@ function permissionRulesFromRows(role: UserRole, rows: { stage: string; resource
   return [{ role, permissions: normalizePermissionKeys(storedRule.actions) }];
 }
 
-export async function getPrimaryTeamIdForUser(userId: string): Promise<string | null> {
-  const [membership] = await db.select({ teamId: teamMembers.teamId }).from(teamMembers).where(eq(teamMembers.userId, userId)).limit(1);
-  if (membership) {
-    return membership.teamId;
-  }
-
-  const [team] = await db.select({ id: teams.id }).from(teams).limit(1);
-  return team?.id ?? null;
-}
-
-export async function ensureDefaultPermissionRules(teamId: string): Promise<void> {
+export async function ensureDefaultPermissionRules(scope: RuntimeScope): Promise<void> {
   const defaultRules = persistedPermissionRoles.flatMap((role) => defaultPermissionRulesForRole(role));
   if (defaultRules.length === 0) {
     return;
   }
+  const storageScopeId = runtimeScopeStorageId(scope);
 
   await db
     .insert(rolePermissions)
     .values(
       defaultRules.map((rule) => ({
-        teamId,
+        teamId: storageScopeId,
         role: rule.role,
         stage: permissionStorageStage,
         resource: permissionStorageResource,
@@ -67,10 +60,10 @@ export async function ensureDefaultPermissionRules(teamId: string): Promise<void
     .onConflictDoNothing();
 }
 
-export async function getPermissionRulesForTeam(teamId: string): Promise<PermissionRule[]> {
-  await ensureDefaultPermissionRules(teamId);
+export async function getPermissionRulesForScope(scope: RuntimeScope): Promise<PermissionRule[]> {
+  await ensureDefaultPermissionRules(scope);
 
-  const rows = await db.select().from(rolePermissions).where(eq(rolePermissions.teamId, teamId));
+  const rows = await db.select().from(rolePermissions).where(eq(rolePermissions.teamId, runtimeScopeStorageId(scope)));
 
   return persistedPermissionRoles.flatMap((role) =>
     permissionRulesFromRows(
@@ -86,19 +79,20 @@ export async function getPermissionRulesForTeam(teamId: string): Promise<Permiss
   );
 }
 
-export async function replaceRolePermissionRules(teamId: string, role: UserRole, rules: readonly PermissionRule[]): Promise<PermissionRule[]> {
+export async function replaceRolePermissionRules(scope: RuntimeScope, role: UserRole, rules: readonly PermissionRule[]): Promise<PermissionRule[]> {
   if (!(persistedPermissionRoles as readonly UserRole[]).includes(role)) {
     throw new Error(`Role permissions are not persisted for ${role}`);
   }
 
   const normalizedRules = normalizePermissionRules(role, rules);
+  const storageScopeId = runtimeScopeStorageId(scope);
 
   await db.transaction(async (tx) => {
-    await tx.delete(rolePermissions).where(and(eq(rolePermissions.teamId, teamId), eq(rolePermissions.role, role)));
+    await tx.delete(rolePermissions).where(and(eq(rolePermissions.teamId, storageScopeId), eq(rolePermissions.role, role)));
 
     await tx.insert(rolePermissions).values(
       normalizedRules.map((rule) => ({
-        teamId,
+        teamId: storageScopeId,
         role: rule.role,
         stage: permissionStorageStage,
         resource: permissionStorageResource,
@@ -107,10 +101,10 @@ export async function replaceRolePermissionRules(teamId: string, role: UserRole,
     );
   });
 
-  return getPermissionRulesForTeam(teamId);
+  return getPermissionRulesForScope(scope);
 }
 
-export async function getRolePermissionKeysForTeam(teamId: string, role: UserRole): Promise<PermissionKey[]> {
-  const rules = await getPermissionRulesForTeam(teamId);
+export async function getRolePermissionKeysForScope(scope: RuntimeScope, role: UserRole): Promise<PermissionKey[]> {
+  const rules = await getPermissionRulesForScope(scope);
   return normalizePermissionKeys(rules.find((rule) => rule.role === role)?.permissions ?? []);
 }

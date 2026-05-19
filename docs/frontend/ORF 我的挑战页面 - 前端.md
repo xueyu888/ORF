@@ -20,7 +20,7 @@ currentUser in Objective.challengers
 
 | 区域 | 内容 |
 | --- | --- |
-| 团队概览 | 管理员在所有挑战视图下可见：已结算、目标总体进度、待征召、待验收 |
+| 全局概览 | 管理员在所有挑战视图下可见：已结算、目标总体进度、待征召、待验收 |
 | 工具栏 | 所有挑战 / 我的挑战、周期、筛选 |
 | 挑战树 | `Objective -> Result -> Task -> TaskChecklistItem` |
 

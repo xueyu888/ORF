@@ -28,7 +28,7 @@ export function ObjectivesPage() {
   return (
     <PageScaffold
       title="目标"
-      subtitle="管理 ORF 的 O 层。目标定义团队想要改变的状态。"
+      subtitle="管理 ORF 的 O 层。目标定义想要改变的状态。"
       action={canCreateObjective ? <Button onClick={() => openModal({ type: "newObjective" })}><Plus className="h-4 w-4" />新建目标</Button> : undefined}
     >
       <Card className="flex flex-wrap items-center gap-3 orf-card-padding">

@@ -31,7 +31,7 @@
 | 战利品与验收异常 | `loot submission rejects incomplete or out-of-state payloads` / `review rejects invalid state and missing loot` | 提交和验收的非法状态、漏 claim、外部 Result、缺失 loot 均应拒绝 |
 | 多挑战者结算 | `settlement normalizes multi-challenger contribution ratios and supports overdelivery` | 多挑战者贡献比例来自匿名互评并归一化，超预期完成按 1.5 倍结算 |
 | API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、验收、全量挑战视图权限 |
-| API 跨团队写保护 | `API mutations enforce team boundaries even for administrators` | 管理员不能通过其他团队的目标、指标、评论或反馈 ID 改写跨团队数据 |
+| API 跨作用域写保护 | `API mutations enforce runtime scope boundaries even for administrators` | 管理员不能通过其他底层作用域的目标、指标、评论或反馈 ID 改写数据 |
 | API 指标管理权限 | `API result management routes keep privileged operations behind role permissions` | `managerDefined` 创建、confidence、update-proposal、排序、删除等高权限指标操作 |
 
 测试直接调用 `server/repositories/orfRepository.ts` 的公开函数。
@@ -44,7 +44,7 @@
 | 挑战者 | `challenger` | 查看悬赏、申请、接受征召、在 `reestimating` 提出 / 编辑具体 Result、查看我的挑战、提交战利品、参与匿名互评 |
 | 旁观成员 | `observer` | 验证未被授权成员不能接受征召或提交战利品 |
 
-每个测试创建独立的 `team`、`users` 和 `team_members`，ID 使用 `test-orf-flow-*` 前缀。测试结束后删除该前缀下的测试数据。
+每个测试创建独立的底层存储 scope、`users` 和成员关系，ID 使用 `test-orf-flow-*` 前缀。测试结束后删除该前缀下的测试数据。
 
 ## 指标规则
 
@@ -152,15 +152,15 @@ flowchart TD
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
 | ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`。 | API 输入归一化 |
 | ORF-BE-R040 | `Objective.stage` 是兼容字段，旧接口不能写入与 `flowStatus` 冲突的阶段；生命周期状态只能由 ORF 流程接口推进。 | API stage 兼容保护 |
-| ORF-BE-R041 | 指标更新提案携带的 `feedbackId`、任务创建携带的 `feedbackOriginId` 必须和当前指标同团队、同指标；合法指标或任务请求不能连带改写或挂接其他团队或其他指标的反馈。 | API 跨团队写保护 |
-| ORF-BE-R042 | 目标结算写入 `pointLedger.userId` 时，只能在目标所属团队内解析挑战者；跨团队同名用户不能抢占积分流水身份。 | 积分流水团队边界 |
-| ORF-BE-R043 | 用户管理创建和编辑成员时，同一团队内的显示名必须大小写不敏感唯一；不能制造会混淆挑战者身份的同名成员。 | 用户身份唯一性 |
+| ORF-BE-R041 | 指标更新提案携带的 `feedbackId`、任务创建携带的 `feedbackOriginId` 必须和当前指标同默认作用域、同指标；合法指标或任务请求不能连带改写或挂接其他作用域或其他指标的反馈。 | API 跨作用域写保护 |
+| ORF-BE-R042 | 目标结算写入 `pointLedger.userId` 时，只能在目标所属默认作用域内解析挑战者；其他作用域同名用户不能抢占积分流水身份。 | 积分流水作用域边界 |
+| ORF-BE-R043 | 用户管理创建和编辑成员时，当前默认作用域内的显示名必须大小写不敏感唯一；不能制造会混淆挑战者身份的同名成员。 | 用户身份唯一性 |
 | ORF-BE-R044 | 已经被 ORF 业务记录引用的成员不能改名；否则会切断 `Objective.challengers`、互评和积分流水等按成员名关联的数据。 | 用户身份引用保护 |
-| ORF-BE-R045 | 已经被 ORF 业务记录引用的成员不能删除团队成员关系；必须用停用保留历史身份并阻止继续访问。 | 用户身份引用保护 |
-| ORF-BE-R046 | 即使当前团队成员关系缺失，仍被 ORF 历史记录引用的姓名也不能被新成员占用，避免新身份继承旧挑战。 | 用户身份引用保护 |
+| ORF-BE-R045 | 已经被 ORF 业务记录引用的成员不能删除默认作用域成员关系；必须用停用保留历史身份并阻止继续访问。 | 用户身份引用保护 |
+| ORF-BE-R046 | 即使当前默认作用域成员关系缺失，仍被 ORF 历史记录引用的姓名也不能被新成员占用，避免新身份继承旧挑战。 | 用户身份引用保护 |
 | ORF-BE-R047 | `POST /api/users` 对已有邮箱的 upsert 不能绕过成员改名引用保护；它必须和 `PATCH /api/users/:userId` 使用同一身份规则。 | 用户身份引用保护 |
-| ORF-BE-R048 | 征召 API 只能写入当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名必须被拒绝，不能进入 `assignedChallengers`。 | 征召成员边界 |
-| ORF-BE-R049 | 反馈创建只能把 `owner` 指向当前团队内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为可处理人。 | 反馈处理人边界 |
+| ORF-BE-R048 | 征召 API 只能写入当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的姓名必须被拒绝，不能进入 `assignedChallengers`。 | 征召成员边界 |
+| ORF-BE-R049 | 反馈创建只能把 `owner` 指向当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为可处理人。 | 反馈处理人边界 |
 | ORF-BE-R050 | 行动项并发创建必须生成不重复的 `ORF-*` ID；不能只依赖毫秒级时间戳或短伪随机数作为主键。 | API 输入归一化 |
 | ORF-BE-R051 | 密码登录不能把首次进入 ORF 的 Ory identity 自动审批为 `active`，也不能用 Ory traits 覆盖已存在 ORF 用户的显示名。 | 用户身份引用保护 |
 | ORF-BE-R052 | 评论线程标题必须由后端根据真实目标、指标、任务或子任务解析；客户端提交的 `targetTitle` 不能伪造评论归属。 | 评论数据一致性 |
@@ -184,7 +184,7 @@ flowchart TD
 | 审核申请 | 申请状态变为 `approved`，目标进入 `reestimating` |
 | 冻结目标 | 已有 Result 的 `reestimating` 目标可进入 `flowStatus=frozen`，挑战者指标调整资格变为 `false` |
 | 验收战利品 | 每个指标写入验收结论，目标结果由指标结论汇总，`flowStatus=settled`，写入基础分和结算分 |
-| 积分流水 | `pointLedger` 写入挑战者、团队内用户 ID、积分和结算原因 |
+| 积分流水 | `pointLedger` 写入挑战者、默认作用域内用户 ID、积分和结算原因 |
 
 ### 挑战者视角
 
@@ -204,7 +204,7 @@ flowchart TD
 
 - 本文件用 Fastify `inject` 验证 API 权限，但不覆盖真实 Ory 服务、真实浏览器 Cookie、前端页面按钮显隐和端到端交互。
 - 当前 `PATCH /api/results/:resultId` 只覆盖标题编辑；如果后续增加指标口径、基线、目标值等编辑路由，需要追加同样的重估窗口测试。
-- 当前测试只覆盖单团队测试数据；如果后续支持多团队隔离，需要追加跨团队越权用例。
+- 当前测试覆盖单默认作用域业务口径，并用多个底层存储 scope 验证越权保护；如果后续支持多团队产品能力，需要追加团队切换和多团队可见性用例。
 
 ## 回归保护项
 
