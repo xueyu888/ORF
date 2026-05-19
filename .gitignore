@@ -19,10 +19,10 @@ gf-foundation-ui-kit.zip
 
 .DS_Store
 .artifacts/
+test-results/
 .orf/
 .playwright-mcp/
-playwright-report/
-test-results/
+test-reports/
 ory/.runtime/
 
 public/settings/backgrounds/*/user/*

@@ -17,11 +17,16 @@ if (baseHost === "127.0.0.1" || baseHost === "localhost") {
 }
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./testd",
+  outputDir: ".artifacts/playwright-test-results",
   timeout: 30_000,
   expect: {
     timeout: 5_000,
   },
+  reporter: [
+    ["list", { printSteps: true }],
+    ["./testd/_framework/reporter.ts"],
+  ],
   fullyParallel: !realSystemEnabled,
   workers: realSystemEnabled ? 1 : undefined,
   use: {
