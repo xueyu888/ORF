@@ -10,7 +10,7 @@ export type AuthenticatedOrfUser = {
   email: string;
   role: "admin" | "member";
   status: "pending" | "active" | "rejected" | "disabled";
-  lastLoginAt: string | null;
+  lastOnlineAt: string | null;
 };
 
 type OryIdentity = {
@@ -186,7 +186,7 @@ async function createDefaultScopeMembership(userId: string): Promise<Authenticat
 
 async function upsertOrfUser(
   identity: OryIdentity,
-  options: { newUserStatus?: AuthenticatedOrfUser["status"]; recordLogin?: boolean } = {},
+  options: { newUserStatus?: AuthenticatedOrfUser["status"]; recordOnline?: boolean } = {},
 ): Promise<AuthenticatedOrfUser> {
   const email = identityEmail(identity);
   if (!email) {
@@ -195,11 +195,11 @@ async function upsertOrfUser(
 
   const identityDisplayName = identityName(identity, email);
   const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
-  const lastLoginAt = options.recordLogin ? new Date().toISOString() : undefined;
+  const lastOnlineAt = options.recordOnline ? new Date().toISOString() : undefined;
 
   if (existing) {
-    if (lastLoginAt) {
-      await db.update(users).set({ lastLoginAt }).where(sql`${users.id} = ${existing.id}`);
+    if (lastOnlineAt) {
+      await db.update(users).set({ lastOnlineAt }).where(sql`${users.id} = ${existing.id}`);
     }
 
     const role = await existingMembershipRole(existing.id);
@@ -213,23 +213,23 @@ async function upsertOrfUser(
       email: existing.email ?? email,
       role,
       status: existing.status ?? "active",
-      lastLoginAt: lastLoginAt ?? existing.lastLoginAt,
+      lastOnlineAt: lastOnlineAt ?? existing.lastOnlineAt,
     };
   }
 
   const id = await nextUserId(email, identity.id);
-  const createdLastLoginAt = lastLoginAt ?? null;
+  const createdLastOnlineAt = lastOnlineAt ?? null;
   await db.insert(users).values({
     id,
     name: identityDisplayName,
     email,
     status: options.newUserStatus ?? "pending",
     createdAt: new Date().toISOString().slice(0, 10),
-    lastLoginAt: createdLastLoginAt,
+    lastOnlineAt: createdLastOnlineAt,
   });
 
   const role = await createDefaultScopeMembership(id);
-  return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastLoginAt: createdLastLoginAt };
+  return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastOnlineAt: createdLastOnlineAt };
 }
 
 export async function getAuthenticatedOrfUser(cookie: string | undefined): Promise<AuthenticatedOrfUser | null> {
@@ -365,7 +365,7 @@ export async function loginWithPassword(identifier: string, password: string) {
     throw new Error("Ory login did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordLogin: true });
+  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordOnline: true });
   return { sessionToken: auth.session_token, user };
 }
 
@@ -385,7 +385,7 @@ export async function registerWithPassword(input: { name: string; email: string;
     throw new Error("Ory registration did not return a session token");
   }
 
-  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordLogin: true });
+  const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordOnline: true });
   return { sessionToken: auth.session_token, user };
 }
 

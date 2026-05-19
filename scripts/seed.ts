@@ -32,7 +32,7 @@ type SeedUser = {
   email: string;
   status: "active";
   createdAt: string;
-  lastLoginAt: string | null;
+  lastOnlineAt: string | null;
 };
 const bootstrapAdmin: SeedUser = {
   id: "user-xueyu",
@@ -40,7 +40,7 @@ const bootstrapAdmin: SeedUser = {
   email: "xueyu@qq.com",
   status: "active",
   createdAt: "2026-04-01",
-  lastLoginAt: "2026-05-05T09:42:00.000Z",
+  lastOnlineAt: "2026-05-05T09:42:00.000Z",
 };
 
 function userIdForName(name: string) {
@@ -104,11 +104,11 @@ async function seed() {
         {
           id: userIdForName(name),
           name,
-          email: emailForName(name),
-          status: "active",
-          createdAt: "2026-04-01",
-          lastLoginAt: "2026-05-01T11:06:00.000Z",
-        },
+	          email: emailForName(name),
+	          status: "active",
+	          createdAt: "2026-04-01",
+	          lastOnlineAt: "2026-05-01T11:06:00.000Z",
+	        },
       ]),
     );
     userRowsById.set(bootstrapAdmin.id, bootstrapAdmin);

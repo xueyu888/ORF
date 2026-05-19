@@ -22,6 +22,7 @@ export type UserInput = {
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
+const ONLINE_ACTIVITY_WRITE_INTERVAL_MS = 60_000;
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
@@ -201,7 +202,7 @@ export async function getScopedUsers(scope: RuntimeScope): Promise<OrfUser[]> {
       email: users.email,
       role: teamMembers.role,
       status: users.status,
-      lastLoginAt: users.lastLoginAt,
+      lastOnlineAt: users.lastOnlineAt,
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
@@ -214,7 +215,7 @@ export async function getScopedUsers(scope: RuntimeScope): Promise<OrfUser[]> {
     email: row.email ?? "",
     role: normalizeRole(row.role),
     status: row.status ?? "active",
-    lastLoginAt: row.lastLoginAt,
+    lastOnlineAt: row.lastOnlineAt,
   }));
 }
 
@@ -227,7 +228,7 @@ export async function getRegistrationRequests(scope: RuntimeScope): Promise<OrfU
       email: users.email,
       role: teamMembers.role,
       status: users.status,
-      lastLoginAt: users.lastLoginAt,
+      lastOnlineAt: users.lastOnlineAt,
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
@@ -240,7 +241,7 @@ export async function getRegistrationRequests(scope: RuntimeScope): Promise<OrfU
     email: row.email ?? "",
     role: normalizeRole(row.role),
     status: row.status ?? "pending",
-    lastLoginAt: row.lastLoginAt,
+    lastOnlineAt: row.lastOnlineAt,
   }));
 }
 
@@ -363,4 +364,21 @@ export async function disableScopedUser(scope: RuntimeScope, actorUserId: string
   }
   await db.update(users).set({ status: "disabled" }).where(eq(users.id, userId));
   return getScopedUsers(scope);
+}
+
+export async function recordUserOnlineActivity(userId: string) {
+  const [user] = await db.select({ lastOnlineAt: users.lastOnlineAt }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) {
+    throw Object.assign(new Error("User not found"), { statusCode: 404 });
+  }
+
+  const now = new Date();
+  const lastOnlineAt = user.lastOnlineAt ? Date.parse(user.lastOnlineAt) : 0;
+  if (lastOnlineAt && now.getTime() - lastOnlineAt < ONLINE_ACTIVITY_WRITE_INTERVAL_MS) {
+    return { updated: false, lastOnlineAt: user.lastOnlineAt };
+  }
+
+  const nextLastOnlineAt = now.toISOString();
+  await db.update(users).set({ lastOnlineAt: nextLastOnlineAt }).where(eq(users.id, userId));
+  return { updated: true, lastOnlineAt: nextLastOnlineAt };
 }

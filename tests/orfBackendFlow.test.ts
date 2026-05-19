@@ -1522,6 +1522,59 @@ test("API user management normalizes email whitespace before validation", async 
   });
 });
 
+test("API users expose recent online timestamps", async () => {
+  const fixture = await createFixture("api-user-recent-online-field");
+
+  await withApiServer(fixture, async (app) => {
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+
+    const payload = userList.json() as { users: Array<Record<string, unknown>> };
+    const commander = payload.users.find((user) => user.id === fixture.commander.id);
+    assert.ok(commander);
+    assert.equal(Object.hasOwn(commander, "lastOnlineAt"), true);
+  });
+});
+
+test("recent online activity endpoint updates the current user with server time and throttles repeats", async () => {
+  const fixture = await createFixture("api-user-recent-online-activity");
+
+  await withApiServer(fixture, async (app) => {
+    const startedAt = Date.now();
+    const activity = await apiInject(app, fixture.challenger, "POST", "/api/users/me/activity");
+    const finishedAt = Date.now();
+    assert.equal(activity.statusCode, 200);
+
+    const afterFirst = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(afterFirst.statusCode, 200);
+
+    const firstPayload = afterFirst.json() as { users: Array<Record<string, unknown>> };
+    const challenger = firstPayload.users.find((user) => user.id === fixture.challenger.id);
+    const commander = firstPayload.users.find((user) => user.id === fixture.commander.id);
+    assert.ok(challenger);
+    assert.ok(commander);
+    assert.equal(commander.lastOnlineAt, null);
+
+    const firstOnlineAt = challenger.lastOnlineAt;
+    assert.equal(typeof firstOnlineAt, "string");
+    if (typeof firstOnlineAt !== "string") {
+      throw new Error("lastOnlineAt should be a server timestamp");
+    }
+    const onlineAtMs = Date.parse(firstOnlineAt);
+    assert.equal(Number.isNaN(onlineAtMs), false);
+    assert.ok(onlineAtMs >= startedAt - 1000);
+    assert.ok(onlineAtMs <= finishedAt + 1000);
+
+    const duplicate = await apiInject(app, fixture.challenger, "POST", "/api/users/me/activity");
+    assert.equal(duplicate.statusCode, 200);
+
+    const afterDuplicate = await apiInject(app, fixture.commander, "GET", "/api/users");
+    const duplicatePayload = afterDuplicate.json() as { users: Array<Record<string, unknown>> };
+    const challengerAfterDuplicate = duplicatePayload.users.find((user) => user.id === fixture.challenger.id);
+    assert.equal(challengerAfterDuplicate?.lastOnlineAt, firstOnlineAt);
+  });
+});
+
 test("auth API normalizes login credentials at the route boundary", async () => {
   const fixture = await createFixture("auth-route-login-normalize");
   const email = `${fixture.prefix}-external-login@orf.test`;
@@ -2418,9 +2471,9 @@ async function createFixture(label: string) {
 
   await db.insert(teams).values({ id: teamId, name: `${prefix} Team`, createdAt: "2999-01-01" });
   await db.insert(users).values([
-    { id: commander.id, name: commander.name, email: commander.email, status: "active", createdAt: "2999-01-01", lastLoginAt: null },
-    { id: challenger.id, name: challenger.name, email: challenger.email, status: "active", createdAt: "2999-01-01", lastLoginAt: null },
-    { id: observer.id, name: observer.name, email: observer.email, status: "active", createdAt: "2999-01-01", lastLoginAt: null },
+    { id: commander.id, name: commander.name, email: commander.email, status: "active", createdAt: "2999-01-01", lastOnlineAt: null },
+    { id: challenger.id, name: challenger.name, email: challenger.email, status: "active", createdAt: "2999-01-01", lastOnlineAt: null },
+    { id: observer.id, name: observer.name, email: observer.email, status: "active", createdAt: "2999-01-01", lastOnlineAt: null },
   ]);
   await db.insert(teamMembers).values([
     { teamId, userId: commander.id, role: "admin" },

@@ -2,6 +2,10 @@ import { expect, test, type Route } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { OrfUser, UserRole } from "../../src/types/orf";
 
+type OnlineUser = OrfUser & {
+  lastOnlineAt?: string | null;
+};
+
 function taskManagementData() {
   return {
     objectives: initialOrfState.objectives,
@@ -28,6 +32,64 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+test("member list shows recent online timestamps from lastOnlineAt", async ({ page }) => {
+  const users: OnlineUser[] = [
+    {
+      ...initialOrfState.users[0],
+      lastOnlineAt: "2026-05-19T10:11:00.000",
+    },
+    {
+      ...initialOrfState.users[1],
+      lastOnlineAt: null,
+    },
+  ];
+
+  await page.route("**/api/users", async (route: Route) => {
+    await route.fulfill({ json: { users } });
+  });
+
+  await page.goto("/members");
+
+  await expect(page.getByRole("columnheader", { name: "最近在线" })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Alex Chen/ })).toContainText("2026-05-19 10:11");
+  await expect(page.getByRole("row", { name: /Mia Zhang/ })).toContainText("未在线");
+});
+
+test("member page reports recent online only after real user activity", async ({ page }) => {
+  const activityRequests: Array<{ body: string | null; method: string }> = [];
+  const reportedAt = "2026-05-19T10:12:00.000";
+
+  await page.route("**/api/users", async (route: Route) => {
+    await route.fulfill({ json: { users: initialOrfState.users } });
+  });
+  await page.route("**/api/users/me/activity", async (route: Route) => {
+    activityRequests.push({
+      body: route.request().postData(),
+      method: route.request().method(),
+    });
+    await route.fulfill({ json: { ok: true, lastOnlineAt: reportedAt } });
+  });
+
+  await page.goto("/members");
+  await expect(page.getByRole("button", { name: "新增用户" })).toBeVisible();
+  await expect.poll(() => activityRequests.length, { timeout: 500 }).toBe(0);
+
+  await page.mouse.click(12, 12);
+
+  await expect.poll(() => activityRequests.length).toBe(1);
+  expect(activityRequests[0]?.method).toBe("POST");
+  expect(activityRequests[0]?.body ?? "").not.toContain("lastOnlineAt");
+  expect(activityRequests[0]?.body ?? "").not.toContain("timestamp");
+  await expect(page.getByRole("row", { name: /Alex Chen/ })).toContainText("2026-05-19 10:12");
+
+  await page.mouse.wheel(0, 120);
+  await page.keyboard.press("A");
+  await page.mouse.click(20, 20);
+  await page.waitForTimeout(100);
+
+  expect(activityRequests).toHaveLength(1);
+});
+
 test("member dialog trims identity fields before creating users", async ({ page }) => {
   let submittedBody: { name: string; email: string; role: UserRole } | null = null;
   let users: OrfUser[] = [...initialOrfState.users];
@@ -40,11 +102,11 @@ test("member dialog trims identity fields before creating users", async ({ page 
         {
           id: "user-trimmed-member",
           name: submittedBody.name,
-          email: submittedBody.email,
-          role: submittedBody.role,
-          status: "active",
-          lastLoginAt: null,
-        },
+	          email: submittedBody.email,
+	          role: submittedBody.role,
+	          status: "active",
+	          lastOnlineAt: null,
+	        },
       ];
     }
 

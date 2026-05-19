@@ -20,7 +20,7 @@ const bootstrapAdmin = {
   name: "xueyu",
   email: "xueyu@qq.com",
   createdAt: "2026-04-01",
-  lastLoginAt: "2026-05-05T09:42:00.000Z",
+  lastOnlineAt: "2026-05-05T09:42:00.000Z",
 };
 
 function userIdForName(name: string) {
@@ -58,11 +58,11 @@ async function seedBountyHall() {
         userIdForName(name),
         {
           id: userIdForName(name),
-          name,
-          email: emailForName(name),
-          createdAt: "2026-04-01",
-          lastLoginAt: "2026-05-01T11:06:00.000Z",
-        },
+	          name,
+	          email: emailForName(name),
+	          createdAt: "2026-04-01",
+	          lastOnlineAt: "2026-05-01T11:06:00.000Z",
+	        },
       ]),
     );
     userRowsById.set(bootstrapAdmin.id, bootstrapAdmin);
