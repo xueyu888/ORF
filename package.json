@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
+  "bin": {
+    "orf": "./bin/orf.mjs"
+  },
   "type": "module",
   "packageManager": "npm@10.9.2",
   "scripts": {
+    "orf": "node bin/orf.mjs",
     "check:env": "uv --version && node --version && npm --version",
     "dev": "vite --host 0.0.0.0",
     "dev:web": "vite --host 0.0.0.0",
