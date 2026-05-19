@@ -27,6 +27,15 @@ type ReportResult = ExplorerRunResult & {
   topNoChangeEventRows?: NoChangeEventRow[];
 };
 
+export type EventOutcomeBreakdown = {
+  total: number;
+  newState: number;
+  newTransition: number;
+  knownChange: number;
+  noChange: number;
+  issue: number;
+};
+
 export async function writeExplorerReport(result: ExplorerRunResult) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const runDir = path.join(result.config.reportDir, `${timestamp}-seed-${safeFilePart(result.seed)}`);
@@ -75,14 +84,12 @@ function mergeExplorerResults(
   const canonicalCandidateEvents = new Set<string>();
   const testedCanonicalCandidateEvents = new Set<string>();
   const untestedFallback = new Map<string, ExplorerRunResult["untestedCandidateEvents"][number]>();
-  const records: StepRecord[] = [];
-  let stepOffset = 0;
+  const recordsByWorker: Array<StepRecord & { workerIndex: number; localStep: number }> = [];
   let fallbackTargetCoverageWeighted = 0;
   let fallbackPayloadCoverageWeighted = 0;
   let fallbackCoverageWeight = 0;
 
-  for (const result of results) {
-    const stateIdsInShard = new Set(result.stateTable.map((state) => state.id));
+  for (const [workerIndex, result] of results.entries()) {
     for (const state of result.stateTable) {
       const existing = stateMap.get(state.id);
       if (!existing) {
@@ -156,14 +163,15 @@ function mergeExplorerResults(
     fallbackCoverageWeight += result.summary.executedSteps;
 
     for (const record of result.eventSequence) {
-      records.push({
+      recordsByWorker.push({
         ...record,
-        step: stepOffset + record.step,
-        newState: record.newState && stateIdsInShard.has(record.afterStateId),
+        workerIndex,
+        localStep: record.step,
       });
     }
-    stepOffset += result.eventSequence.length;
   }
+
+  const records = recomputeMergedRecords(recordsByWorker);
 
   for (const state of stateMap.values()) {
     if (state.candidates.length > 0) {
@@ -287,6 +295,31 @@ function compactReportResult(result: ExplorerRunResult): ReportResult {
     })),
     topNoChangeEventRows,
   };
+}
+
+function recomputeMergedRecords(records: Array<StepRecord & { workerIndex: number; localStep: number }>): StepRecord[] {
+  const seenStates = new Set<string>();
+  const seenTransitions = new Set<string>();
+  const ordered = [...records].sort(
+    (left, right) => left.localStep - right.localStep || left.workerIndex - right.workerIndex,
+  );
+
+  return ordered.map((record, index) => {
+    seenStates.add(record.beforeStateId);
+    const transitionKey = `${record.beforeStateId}->${record.afterStateId}:${record.eventSignature}`;
+    const newState = !seenStates.has(record.afterStateId);
+    const newTransition = !seenTransitions.has(transitionKey);
+    seenStates.add(record.afterStateId);
+    seenTransitions.add(transitionKey);
+
+    const { workerIndex: _workerIndex, localStep: _localStep, ...stepRecord } = record;
+    return {
+      ...stepRecord,
+      step: index,
+      newState,
+      newTransition,
+    };
+  });
 }
 
 function compactStateNode(state: StateNode): StateNode {
@@ -455,6 +488,7 @@ function renderHtml(result: ReportResult) {
     .frontier-item { display: grid; grid-template-columns: 72px 1fr 72px; gap: 10px; align-items: center; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
     .frontier-id { font-weight: 800; font-size: 12px; }
     .frontier-route { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .outcome-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
     .table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
     table { width: 100%; border-collapse: collapse; min-width: 760px; }
     th, td { border-bottom: 1px solid #edf2f7; padding: 9px 10px; text-align: left; font-size: 13px; vertical-align: top; }
@@ -470,11 +504,13 @@ function renderHtml(result: ReportResult) {
     @media (max-width: 960px) {
       .hero, .section-grid, .split, .explain { grid-template-columns: 1fr; }
       .cards, .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .outcome-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .bar-row { grid-template-columns: 118px 1fr 54px; }
     }
     @media (max-width: 560px) {
       main { padding-inline: 12px; }
       .cards, .meta-grid { grid-template-columns: 1fr; }
+      .outcome-cards { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -534,8 +570,8 @@ function renderHtml(result: ReportResult) {
         <div class="legend" style="margin-top: 14px">
           <span><i class="dot" style="background: var(--green)"></i>新状态</span>
           <span><i class="dot" style="background: var(--blue)"></i>新转移</span>
+          <span><i class="dot" style="background: var(--cyan)"></i>已知变化</span>
           <span><i class="dot" style="background: var(--amber)"></i>无变化</span>
-          <span><i class="dot" style="background: var(--red)"></i>异常</span>
         </div>
       </div>
     </section>
@@ -640,13 +676,13 @@ function progressRow(label: string, value: number, color: string, valueLabel = p
   return `<div class="bar-row"><div class="chart-label">${escapeHtml(label)}</div><div class="bar"><span class="${escapeHtml(color)}" style="width:${clamped * 100}%"></span></div><strong>${escapeHtml(valueLabel)}</strong></div>`;
 }
 
-function stackedOutcome(outcome: ReturnType<typeof outcomeBreakdown>) {
+function stackedOutcome(outcome: EventOutcomeBreakdown) {
   const total = Math.max(1, outcome.total);
   const segments = [
     { value: outcome.newState, color: "var(--green)", label: "新状态" },
-    { value: outcome.newTransitionOnly, color: "var(--blue)", label: "新转移" },
+    { value: outcome.newTransition, color: "var(--blue)", label: "新转移" },
+    { value: outcome.knownChange, color: "var(--cyan)", label: "已知变化" },
     { value: outcome.noChange, color: "var(--amber)", label: "无变化" },
-    { value: outcome.issue, color: "var(--red)", label: "异常" },
   ];
   return `<div class="bar" style="height: 22px; display:flex">
     ${segments
@@ -656,11 +692,12 @@ function stackedOutcome(outcome: ReturnType<typeof outcomeBreakdown>) {
       )
       .join("")}
   </div>
-  <div class="cards" style="grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 12px">
+  <div class="outcome-cards">
     ${metric("新状态", outcome.newState, "产生新状态节点")}
-    ${metric("仅新转移", outcome.newTransitionOnly, "未产生新状态但产生新边")}
-    ${metric("无变化", outcome.noChange, "状态未变化")}
-    ${metric("异常", outcome.issue, "含普通或严重异常")}
+    ${metric("新转移", outcome.newTransition, "进入已知状态但形成新边")}
+    ${metric("已知变化", outcome.knownChange, "状态变化但不是新状态或新边")}
+    ${metric("无变化", outcome.noChange, "执行后状态未变化")}
+    ${metric("异常事件", outcome.issue, "含普通或严重异常，可与其他结果重叠")}
   </div>`;
 }
 
@@ -859,13 +896,14 @@ function operationBreakdown(result: ExplorerRunResult) {
     .sort((left, right) => right.count - left.count);
 }
 
-function outcomeBreakdown(result: ExplorerRunResult) {
+export function outcomeBreakdown(result: Pick<ExplorerRunResult, "eventSequence">): EventOutcomeBreakdown {
   const total = result.eventSequence.length;
   const newState = result.eventSequence.filter((record) => record.newState).length;
-  const newTransitionOnly = result.eventSequence.filter((record) => !record.newState && record.newTransition).length;
+  const newTransition = result.eventSequence.filter((record) => !record.newState && record.newTransition && !record.noChange).length;
+  const knownChange = result.eventSequence.filter((record) => !record.newState && !record.newTransition && !record.noChange).length;
   const noChange = result.eventSequence.filter((record) => record.noChange).length;
   const issue = result.eventSequence.filter((record) => record.issues.length > 0).length;
-  return { total, newState, newTransitionOnly, noChange, issue };
+  return { total, newState, newTransition, knownChange, noChange, issue };
 }
 
 function operationLabel(operation: UiOperation) {
