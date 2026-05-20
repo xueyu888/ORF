@@ -8,6 +8,7 @@ export type UiOperation =
   | "clear"
   | "pressKey"
   | "modifiedKey"
+  | "selectOption"
   | "wheel"
   | "backgroundClick"
   | "refresh"
@@ -54,6 +55,7 @@ export type RectBucket = {
 
 export type UiTarget = {
   id: string;
+  routePattern: string;
   signature: string;
   selector: string;
   kind: string;
@@ -77,6 +79,7 @@ export type EventParams = {
   pointBucket?: string;
   durationMs?: number;
   count?: number;
+  optionBucket?: "first" | "next" | "last";
 };
 
 export type UiEvent = {
@@ -203,6 +206,7 @@ export type CoverageSummary = {
 };
 
 export type ExplorerConfig = {
+  safetyProfile: string;
   targetPath: string;
   steps: number;
   seed: string;
@@ -213,10 +217,11 @@ export type ExplorerConfig = {
   allowedPathPatterns: string[];
   blockedPathPatterns: string[];
   blockedOperationKinds: UiOperation[];
+  blockedTargetTextPatterns: string[];
   maxStepDuration: number;
   resetOnRouteEscape: boolean;
   stopOnRouteEscape: boolean;
-  stateMode: "normal" | "coarse";
+  stateAbstractor: string;
   epsilon: number;
 };
 

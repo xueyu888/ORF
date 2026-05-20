@@ -38,6 +38,7 @@ test_case/
 docs/testing/
 !docs/testing/
 !docs/testing/ui-random-explorer.md
+docs/random_test/
 tests/testing/
 reports/
 todo/

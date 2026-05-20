@@ -84,6 +84,9 @@ async function runEvent(page: Page, event: UiEvent, config: ExplorerConfig) {
       }
       await page.keyboard.press(modifiedKeyFor(event.params), { delay: 5 });
       return;
+    case "selectOption":
+      await selectOption(page, event, config);
+      return;
     case "wheel":
       await wheel(page, event);
       return;
@@ -143,6 +146,30 @@ async function wheel(page: Page, event: UiEvent) {
   const deltaX = direction === "left" ? -distance : direction === "right" ? distance : 0;
   const deltaY = direction === "up" ? -distance : direction === "down" ? distance : 0;
   await page.mouse.wheel(deltaX, deltaY);
+}
+
+async function selectOption(page: Page, event: UiEvent, config: ExplorerConfig) {
+  const locator = locatorFor(page, event);
+  const optionIndex = await locator.evaluate((element, bucket) => {
+    if (!(element instanceof HTMLSelectElement) || element.options.length === 0) {
+      return null;
+    }
+
+    const current = Math.max(0, element.selectedIndex);
+    if (bucket === "last") {
+      return element.options.length - 1;
+    }
+    if (bucket === "next") {
+      return Math.min(element.options.length - 1, current + 1);
+    }
+    return 0;
+  }, event.params.optionBucket ?? "next");
+
+  if (optionIndex === null) {
+    throw new Error("selectOption requires a select element.");
+  }
+
+  await locator.selectOption({ index: optionIndex }, { timeout: config.maxStepDuration });
 }
 
 async function backgroundClick(page: Page, params: EventParams) {

@@ -1,33 +1,25 @@
-import { createHash } from "node:crypto";
 import type { Page } from "@playwright/test";
-import type { InputValueKind, NormalizedState } from "./types";
+import { abstractState, type StateDomSnapshot } from "./stateAbstractorRegistry";
+import type { NormalizedState } from "./types";
 
-export type StateDomSnapshot = {
-  url: string;
-  title: string;
-  visibleText: string;
-  focusedSignature: string | null;
-  targets: Array<{
-    signature: string;
-    kind: string;
-    disabled: boolean;
-    value?: string;
-  }>;
-  flags: {
-    hasError: boolean;
-    hasToast: boolean;
-    hasModal: boolean;
-    hasLoading: boolean;
-    hasDrawer: boolean;
-  };
-  bodyChildCount: number;
-  networkPendingCount?: number;
-};
+export type { StateDomSnapshot, StateAbstractor, StateAbstraction } from "./stateAbstractorRegistry";
+export {
+  classifyInputValue,
+  createNormalizedState,
+  getStateAbstractor,
+  normalizeRoutePattern,
+  registerStateAbstractor,
+  registeredStateAbstractorNames,
+  sanitizeSignature,
+  sanitizeVisibleText,
+  shortHash,
+  stableStringify,
+} from "./stateAbstractorRegistry";
 
 export async function normalizeState(
   page: Page,
   networkPendingCount = 0,
-  mode: "normal" | "coarse" = "normal",
+  abstractorName = "normal",
 ): Promise<NormalizedState> {
   const snapshot = await page.evaluate(() => {
     const viewportWidth = Math.max(1, window.innerWidth);
@@ -81,12 +73,19 @@ export async function normalizeState(
             "input",
             "textarea",
             "select",
+            "summary",
             "[role=button]",
             "[role=link]",
             "[role=checkbox]",
             "[role=radio]",
+            "[role=menuitem]",
+            "[role=option]",
+            "[role=tab]",
+            "[role=switch]",
+            "[role=combobox]",
             "[contenteditable=true]",
             "[tabindex]",
+            "[aria-haspopup]",
           ].join(","),
         ),
       );
@@ -174,160 +173,12 @@ export async function normalizeState(
     };
   });
 
-  return normalizeDomSnapshot({ ...snapshot, networkPendingCount }, mode);
+  return normalizeDomSnapshot({ ...snapshot, networkPendingCount }, abstractorName);
 }
 
 export function normalizeDomSnapshot(
   snapshot: StateDomSnapshot,
-  mode: "normal" | "coarse" = "normal",
+  abstractorName = "normal",
 ): NormalizedState {
-  const routePattern = normalizeRoutePattern(new URL(snapshot.url).pathname);
-  const inputValueKinds = snapshot.targets
-    .map((target) => (target.value === undefined ? null : classifyInputValue(target.value)))
-    .filter((value): value is InputValueKind => value !== null)
-    .sort();
-  const visibleTargetSummary = snapshot.targets.reduce<Record<string, number>>((summary, target) => {
-    summary[target.kind] = (summary[target.kind] ?? 0) + 1;
-    return summary;
-  }, {});
-  const enabled = snapshot.targets.filter((target) => !target.disabled).length;
-  const disabled = snapshot.targets.length - enabled;
-  const targetSignatures = Array.from(
-    new Set(snapshot.targets.map((target) => sanitizeSignature(target.signature) ?? target.signature)),
-  ).sort();
-  const sanitizedText = sanitizeVisibleText(snapshot.visibleText);
-  const stateWithoutId = {
-    routePattern,
-    visibleTargetSummary,
-    interactableStructure: Object.entries(visibleTargetSummary)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([kind, count]) => `${kind}:${count}`),
-    focusedTargetSignature: sanitizeSignature(snapshot.focusedSignature),
-    inputValueKinds,
-    flags: {
-      ...snapshot.flags,
-      isWhiteScreen: sanitizedText.length === 0 && snapshot.targets.length === 0 && snapshot.bodyChildCount <= 1,
-    },
-    disabledSummary: { enabled, disabled },
-    networkPendingSummary: networkPendingBucket(snapshot.networkPendingCount ?? 0),
-    mainVisibleTextHash: shortHash(sanitizedText),
-    targetSignatures,
-  };
-  if (mode === "coarse") {
-    const coarseStateWithoutId = {
-      routePattern,
-      visibleTargetSummary,
-      interactableStructure: stateWithoutId.interactableStructure,
-      focusedTargetSignature: null,
-      inputValueKinds: [],
-      flags: stateWithoutId.flags,
-      disabledSummary: stateWithoutId.disabledSummary,
-      networkPendingSummary: "coarse",
-      mainVisibleTextHash: "coarse",
-      targetSignatures: [],
-    };
-    const fingerprint = stableStringify(coarseStateWithoutId);
-    const id = `S-${shortHash(fingerprint)}`;
-    return { id, fingerprint, ...coarseStateWithoutId };
-  }
-  const fingerprint = stableStringify(stateWithoutId);
-  const id = `S-${shortHash(fingerprint)}`;
-  return { id, fingerprint, ...stateWithoutId };
-}
-
-export function classifyInputValue(value: string): InputValueKind {
-  if (value.length === 0) {
-    return "empty";
-  }
-  if (/^\s+$/.test(value)) {
-    return "whitespaceOnly";
-  }
-  if (value.includes("\n")) {
-    return "multiLine";
-  }
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-    return "emailLike";
-  }
-  if (/^-?\d+(\.\d+)?$/.test(value.trim())) {
-    return "numberLike";
-  }
-  if (/<script\b/i.test(value) || /[{[(<][^}\])>]*$/.test(value)) {
-    return "malformed";
-  }
-  if (/^\s*[{[]/.test(value) || /^https?:\/\//i.test(value) || /<\/?[a-z][\s\S]*>/i.test(value)) {
-    return "structured";
-  }
-  if (/\p{Extended_Pictographic}/u.test(value)) {
-    return "emoji";
-  }
-  if (/[^\u0000-\u007f]/.test(value)) {
-    return "unicode";
-  }
-  if (value.length > 500) {
-    return "veryLong";
-  }
-  if (value.length > 100) {
-    return "long";
-  }
-  return "short";
-}
-
-export function normalizeRoutePattern(pathname: string) {
-  return pathname
-    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, ":uuid")
-    .replace(/[0-9a-f]{8,}/gi, ":hex")
-    .replace(/\b\d+\b/g, ":num")
-    .replace(/\/+/g, "/")
-    .replace(/\/$/, "") || "/";
-}
-
-export function sanitizeVisibleText(text: string) {
-  return text
-    .replace(/https?:\/\/\S+/gi, " url ")
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, " email ")
-    .replace(/[0-9a-f]{8}-[0-9a-f-]{27}/gi, " uuid ")
-    .replace(/[0-9a-f]{12,}/gi, " token ")
-    .replace(/\b\d{4}[-/年]\d{1,2}[-/月]\d{1,2}[日]?\b/g, " date ")
-    .replace(/\b\d{1,2}:\d{2}(:\d{2})?\b/g, " time ")
-    .replace(/\d+/g, "0")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 2000);
-}
-
-export function sanitizeSignature(signature: string | null) {
-  return signature
-    ?.replace(/https?:\/\/\S+/gi, "url")
-    .replace(/[0-9a-f]{8,}/gi, "hex")
-    .replace(/\d+/g, "0") ?? null;
-}
-
-export function shortHash(value: string) {
-  return createHash("sha256").update(value).digest("hex").slice(0, 12);
-}
-
-export function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${stableStringify(child)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function networkPendingBucket(count: number) {
-  if (count <= 0) {
-    return "none";
-  }
-  if (count <= 2) {
-    return "low";
-  }
-  if (count <= 8) {
-    return "medium";
-  }
-  return "high";
+  return abstractState(snapshot, abstractorName);
 }

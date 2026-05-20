@@ -1,11 +1,14 @@
 import type { ExplorerConfig, UiEvent, UiOperation } from "./types";
+import { resolveExplorerSafetyProfile } from "./safetyBoundaryConfig";
 
 export function readExplorerConfig(baseURLFromPlaywright?: string): ExplorerConfig {
   const baseURL = process.env.UI_EXPLORER_BASE_URL ?? baseURLFromPlaywright ?? "http://127.0.0.1:5173";
-  const targetPath = process.env.UI_EXPLORER_TARGET_PATH ?? "/auth";
+  const safety = resolveExplorerSafetyProfile(process.env.UI_EXPLORER_SAFETY_PROFILE, process.env.UI_EXPLORER_TARGET_PATH);
+  const targetPath = process.env.UI_EXPLORER_TARGET_PATH ?? safety.profile.targetPath;
   const seed = process.env.UI_EXPLORER_SEED ?? String(Date.now());
   const targetUrl = new URL(targetPath, baseURL);
   return {
+    safetyProfile: safety.name,
     targetPath,
     steps: readPositiveInteger("UI_EXPLORER_STEPS", 200),
     seed,
@@ -13,18 +16,14 @@ export function readExplorerConfig(baseURLFromPlaywright?: string): ExplorerConf
     maxNoChange: readPositiveInteger("UI_EXPLORER_MAX_NO_CHANGE", 30),
     baseURL,
     allowedOrigins: splitEnv("UI_EXPLORER_ALLOWED_ORIGINS", [targetUrl.origin]),
-    allowedPathPatterns: splitEnv("UI_EXPLORER_ALLOWED_PATH_PATTERNS", [escapePattern(targetUrl.pathname)]),
-    blockedPathPatterns: splitEnv("UI_EXPLORER_BLOCKED_PATH_PATTERNS", [
-      "/payment",
-      "/checkout",
-      "/billing",
-      "/delete",
-    ]),
-    blockedOperationKinds: splitEnv("UI_EXPLORER_BLOCKED_OPERATION_KINDS", []) as UiOperation[],
+    allowedPathPatterns: splitEnv("UI_EXPLORER_ALLOWED_PATH_PATTERNS", safety.profile.allowedPathPatterns),
+    blockedPathPatterns: splitEnv("UI_EXPLORER_BLOCKED_PATH_PATTERNS", safety.profile.blockedPathPatterns),
+    blockedOperationKinds: splitEnv("UI_EXPLORER_BLOCKED_OPERATION_KINDS", safety.profile.blockedOperationKinds) as UiOperation[],
+    blockedTargetTextPatterns: splitEnv("UI_EXPLORER_BLOCKED_TARGET_TEXT_PATTERNS", safety.profile.blockedTargetTextPatterns),
     maxStepDuration: readPositiveInteger("UI_EXPLORER_MAX_STEP_DURATION_MS", 1500),
     resetOnRouteEscape: process.env.UI_EXPLORER_RESET_ON_ROUTE_ESCAPE !== "0",
     stopOnRouteEscape: process.env.UI_EXPLORER_STOP_ON_ROUTE_ESCAPE === "1",
-    stateMode: process.env.UI_EXPLORER_STATE_MODE === "coarse" ? "coarse" : "normal",
+    stateAbstractor: process.env.UI_EXPLORER_STATE_ABSTRACTOR ?? legacyStateModeAbstractor(),
     epsilon: readFraction("UI_EXPLORER_EPSILON", 0.2),
   };
 }
@@ -50,7 +49,13 @@ export function isInAllowedScope(url: string, config: ExplorerConfig) {
 }
 
 export function shouldRunEvent(event: UiEvent, config: ExplorerConfig) {
-  return !config.blockedOperationKinds.includes(event.operation);
+  if (config.blockedOperationKinds.includes(event.operation)) {
+    return false;
+  }
+  if (!event.target) {
+    return true;
+  }
+  return !config.blockedTargetTextPatterns.some((pattern) => targetMatchesTextPattern(event.target!, pattern));
 }
 
 export function matchesPathPattern(pathname: string, pattern: string) {
@@ -90,10 +95,21 @@ function splitEnv(name: string, fallback: string[]) {
     .filter(Boolean);
 }
 
-function escapePattern(pathname: string) {
-  return pathname || "/";
+function legacyStateModeAbstractor() {
+  return process.env.UI_EXPLORER_STATE_MODE === "coarse" ? "coarse" : "normal";
 }
 
 function escapeRegex(value: string) {
   return value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+}
+
+function targetMatchesTextPattern(target: UiEvent["target"], pattern: string) {
+  if (!target) {
+    return false;
+  }
+  const normalizedPattern = pattern.trim().toLowerCase();
+  if (!normalizedPattern) {
+    return false;
+  }
+  return [target.textBucket, target.labelBucket, target.placeholderBucket].some((value) => value.includes(normalizedPattern));
 }

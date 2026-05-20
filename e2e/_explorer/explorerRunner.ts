@@ -24,7 +24,7 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
       await resetToTarget(page, config);
     }
 
-    const before = await normalizeState(page, diagnostics.pendingCount(), config.stateMode);
+    const before = await normalizeState(page, diagnostics.pendingCount(), config.stateAbstractor);
     const targets = await collectTargets(page);
     const candidates = generateCandidateEvents(targets).filter((candidate) => shouldRunEvent(candidate, config));
     graph.observeState(before, candidates, step);
@@ -57,9 +57,9 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
       mergedExecution.ok = true;
     }
 
-    let after = await normalizeState(page, diagnostics.pendingCount(), config.stateMode).catch(async () => {
+    let after = await normalizeState(page, diagnostics.pendingCount(), config.stateAbstractor).catch(async () => {
       await resetToTarget(page, config);
-      return normalizeState(page, diagnostics.pendingCount(), config.stateMode);
+      return normalizeState(page, diagnostics.pendingCount(), config.stateAbstractor);
     });
 
     if (after.flags.isWhiteScreen && !mergedExecution.routeEscape) {
@@ -105,7 +105,7 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
       mergedExecution.issues.some((issue) => issue.severity === "severe")
     ) {
       await resetToTarget(page, config);
-      after = await normalizeState(page, diagnostics.pendingCount(), config.stateMode);
+      after = await normalizeState(page, diagnostics.pendingCount(), config.stateAbstractor);
       graph.observeState(
         after,
         generateCandidateEvents(await collectTargets(page)).filter((candidate) => shouldRunEvent(candidate, config)),
@@ -132,8 +132,10 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
     testedCanonicalCandidateEvents: canonicalCoverage.tested,
     eventSequence: records,
     replayCommand: [
+      `UI_EXPLORER_SAFETY_PROFILE=${shellQuote(config.safetyProfile)}`,
       `UI_EXPLORER_SEED=${shellQuote(config.seed)}`,
       `UI_EXPLORER_STEPS=${config.steps}`,
+      `UI_EXPLORER_STATE_ABSTRACTOR=${shellQuote(config.stateAbstractor)}`,
       `UI_EXPLORER_TARGET_PATH=${shellQuote(config.targetPath)}`,
       `UI_EXPLORER_BASE_URL=${shellQuote(config.baseURL)}`,
       "npm run test:e2e:explorer",

@@ -80,7 +80,8 @@ async function runShard(index: number, baseURL: string, children: ChildProcess[]
   const args = [
     "playwright",
     "test",
-    "e2e/ui-random-explorer.spec.ts",
+    "--config=e2e/playwright.config.ts",
+    "ui-random-explorer.spec.ts",
     "--workers=1",
     "--reporter=line",
     `--output=${shardOutputDir}`,
@@ -200,11 +201,14 @@ function walk(dir: string, visit: (file: string) => void) {
 
 function replayCommand(workers: number, steps: number, seed: string) {
   return [
+    process.env.UI_EXPLORER_SAFETY_PROFILE ? `UI_EXPLORER_SAFETY_PROFILE=${shellQuote(process.env.UI_EXPLORER_SAFETY_PROFILE)}` : "",
+    process.env.UI_EXPLORER_STATE_ABSTRACTOR_MODULE ? `UI_EXPLORER_STATE_ABSTRACTOR_MODULE=${shellQuote(process.env.UI_EXPLORER_STATE_ABSTRACTOR_MODULE)}` : "",
+    process.env.UI_EXPLORER_STATE_ABSTRACTOR ? `UI_EXPLORER_STATE_ABSTRACTOR=${shellQuote(process.env.UI_EXPLORER_STATE_ABSTRACTOR)}` : "",
     `UI_EXPLORER_WORKERS=${workers}`,
     `UI_EXPLORER_STEPS=${steps}`,
     `UI_EXPLORER_SEED=${shellQuote(seed)}`,
     "npm run test:e2e:explorer:fast",
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 }
 
 function positiveInt(value: string | undefined, fallback: number) {
