@@ -94,11 +94,38 @@ test("bounty hall summarizes cycles from API objectives", async ({ page }) => {
   await expect(page.getByText("当前周期 · 2999 Q1")).toHaveCount(0);
 });
 
+test("bounty hall keeps objective creation available for authorized users", async ({ page }) => {
+  const bounties: BountyHallData = {
+    availableItems: [],
+    recruitmentItems: [],
+    objectiveOptions: [],
+    contribution: { points: 0 },
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/bounties", async (route) => {
+    await route.fulfill({ json: bounties });
+  });
+
+  await page.goto("/bounties");
+
+  await expect(page.getByRole("heading", { name: "悬赏大厅" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建目标" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建反馈" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "新建目标" }).click();
+  await expect(page.getByRole("dialog", { name: "新建目标" })).toBeVisible();
+});
+
 test("bounty hall labels resultless objectives as pending metrics", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,
     id: "objective-bounty-resultless",
     title: "真实待定义指标悬赏",
+    flowStatus: "open",
     resultIds: [],
   };
   const bounties: BountyHallData = {
