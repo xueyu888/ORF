@@ -2702,19 +2702,68 @@ button:disabled {
 }
 
 .orf-app-shell {
+  --orf-app-shell-bg-image: none;
+  --orf-app-shell-bg-position-x: calc(var(--orf-sidebar-width) - 30.86vh);
+  position: relative;
+  isolation: isolate;
   min-width: 1180px;
-  background:
-    radial-gradient(circle at 72% 8%, rgba(82, 215, 246, 0.2) 0 12%, transparent 34%),
-    radial-gradient(circle at 16% 24%, rgba(246, 212, 130, 0.22) 0 10%, transparent 32%),
-    linear-gradient(115deg, rgba(34, 197, 186, 0.07) 0%, transparent 30%),
-    linear-gradient(245deg, rgba(215, 173, 95, 0.1) 0%, transparent 36%),
-    var(--orf-bg-app);
+  background: var(--orf-bg-app);
   color: var(--orf-text-primary);
+}
+
+.orf-app-shell[data-sidebar-collapsed="true"] {
+  --orf-app-shell-bg-position-x: calc(var(--orf-sidebar-collapsed-width) - 30.86vh);
+}
+
+.orf-app-shell::before {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(255, 248, 232, 0.02) 0%, rgba(255, 248, 232, 0.14) 36%, rgba(255, 248, 232, 0.42) 100%),
+    var(--orf-app-shell-bg-image),
+    radial-gradient(circle at 72% 8%, rgba(82, 215, 246, 0.16) 0 12%, transparent 34%),
+    radial-gradient(circle at 16% 24%, rgba(246, 212, 130, 0.18) 0 10%, transparent 32%),
+    linear-gradient(115deg, rgba(34, 197, 186, 0.06) 0%, transparent 30%),
+    linear-gradient(245deg, rgba(215, 173, 95, 0.08) 0%, transparent 36%),
+    var(--orf-bg-app);
+  background-position:
+    center,
+    var(--orf-app-shell-bg-position-x) top,
+    center,
+    center,
+    center,
+    center,
+    center;
+  background-repeat:
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    repeat;
+  background-size:
+    cover,
+    auto 100vh,
+    auto,
+    auto,
+    auto,
+    auto,
+    auto;
+  pointer-events: none;
+}
+
+.orf-shell-body {
+  position: relative;
+  z-index: 1;
 }
 
 .orf-sidebar {
   position: sticky;
   top: 0;
+  z-index: 2;
   align-self: flex-start;
   isolation: isolate;
   overflow: hidden;
@@ -2765,11 +2814,10 @@ button:disabled {
 .orf-topbar {
   height: var(--orf-topbar-height);
   background:
-    radial-gradient(circle at 4% 50%, rgba(255, 229, 163, 0.18) 0 4%, transparent 18%),
-    radial-gradient(circle at 82% 0%, rgba(82, 215, 246, 0.14) 0 18%, transparent 42%),
-    linear-gradient(90deg, rgba(32, 48, 73, 0.96) 0%, rgba(56, 95, 136, 0.9) 46%, rgba(30, 43, 62, 0.94) 100%),
-    var(--orf-bg-header);
-  backdrop-filter: blur(18px);
+    radial-gradient(circle at 4% 50%, rgba(255, 229, 163, 0.16) 0 4%, transparent 18%),
+    radial-gradient(circle at 82% 0%, rgba(82, 215, 246, 0.12) 0 18%, transparent 42%),
+    linear-gradient(90deg, rgba(32, 48, 73, 0.82) 0%, rgba(56, 95, 136, 0.58) 46%, rgba(30, 43, 62, 0.72) 100%);
+  backdrop-filter: blur(18px) saturate(1.08);
   box-shadow: 0 1px 0 rgba(215, 173, 95, 0.54), 0 16px 34px rgba(21, 29, 43, 0.2), inset 0 -1px 0 rgba(255, 244, 209, 0.12);
 }
 
@@ -3122,9 +3170,7 @@ button:disabled {
 
 .orf-main-content {
   min-height: calc(100vh - var(--orf-topbar-height));
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.3), transparent 22%),
-    repeating-linear-gradient(135deg, rgba(215, 173, 95, 0.045) 0 1px, transparent 1px 28px);
+  background: transparent;
   color: var(--orf-text-primary);
   padding: var(--orf-page-padding-y) var(--orf-page-padding-x);
 }
@@ -3484,6 +3530,7 @@ button:disabled {
   }
 
   .orf-app-shell {
+    --orf-app-shell-bg-position-x: calc(-30.86vh);
     display: block;
     min-width: 0;
   }

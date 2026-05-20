@@ -1,6 +1,6 @@
 import { Plus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
@@ -8,14 +8,29 @@ import { GlobalModals } from "./GlobalModals";
 import { NotificationBell } from "./NotificationBell";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
+import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
+import { useVisualBackground } from "../hooks/useVisualBackground";
 import { useOrf } from "../state/OrfProvider";
+
+const defaultSidebarBackgroundUrl = "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png";
+
+function appShellBackgroundUrlFor(sidebarBackgroundUrl: string) {
+  const background = orfAssetLibrary.appShell.nikeExtendedBackground;
+  return sidebarBackgroundUrl.endsWith(background.sourceSidebarUrl) ? background.src : null;
+}
 
 export function AppShell() {
   const location = useLocation();
   const { currentUser, openModal, state } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarBackgroundUrl = useVisualBackground("sidebar_background", defaultSidebarBackgroundUrl);
+  const appShellBackgroundUrl = appShellBackgroundUrlFor(sidebarBackgroundUrl);
+  const shellStyle = {
+    "--orf-app-shell-bg-image": appShellBackgroundUrl ? toCssImageUrl(appShellBackgroundUrl) : "none",
+  } as CSSProperties;
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const isBountyHall = location.pathname.startsWith("/bounties");
@@ -33,9 +48,14 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="orf-app-shell flex min-h-screen">
-      <Sidebar onCommand={() => setCommandOpen(true)} />
-      <div className="min-w-0 flex-1">
+    <div className="orf-app-shell flex min-h-screen" data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"} style={shellStyle}>
+      <Sidebar
+        backgroundUrl={sidebarBackgroundUrl}
+        collapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
+        onCommand={() => setCommandOpen(true)}
+      />
+      <div className="orf-shell-body min-w-0 flex-1">
         <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-3 border-b orf-border">
           <div className="orf-topbar-title orf-text-primary min-w-[180px] text-2xl font-semibold tracking-tight" role="heading" aria-level={1}>
             {isBountyHall && (
