@@ -660,6 +660,25 @@ function renderHtml(result: ReportResult) {
     }
     .hero-copy { padding: 24px; }
     .eyebrow { color: var(--blue); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .subject-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin: 14px 0 18px;
+      padding: 12px;
+      border: 1px solid #dbe4f0;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .74);
+    }
+    .subject-item { min-width: 0; }
+    .subject-label { color: var(--muted); font-size: 12px; }
+    .subject-value {
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #1e293b;
+      overflow-wrap: anywhere;
+    }
     .meta-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
     .settings-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
     .meta { padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
@@ -1377,6 +1396,7 @@ function renderHtml(result: ReportResult) {
     .graph-edge-label.selected { display: block; }
     @media (max-width: 960px) {
       .hero, .section-grid, .split, .explain, .graph-layout { grid-template-columns: 1fr; }
+      .subject-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .cards, .meta-grid, .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .outcome-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .bar-row { grid-template-columns: 118px 1fr 54px; }
@@ -1393,6 +1413,7 @@ function renderHtml(result: ReportResult) {
     }
     @media (max-width: 560px) {
       main { padding-inline: 12px; }
+      .subject-strip { grid-template-columns: 1fr; }
       .cards, .meta-grid, .settings-grid { grid-template-columns: 1fr; }
       .outcome-cards { grid-template-columns: 1fr; }
     }
@@ -1405,6 +1426,7 @@ function renderHtml(result: ReportResult) {
         <div class="eyebrow">Coverage-Guided UI Random Explorer</div>
         <h1>通用 UI 随机探索报告</h1>
         <p class="muted">这份报告优先回答本次随机探索测到了多少、哪些状态被发现、有没有异常、覆盖程度如何。配置和实现口径放在报告后部，避免干扰结果判断。</p>
+        ${testedObjectStrip(result)}
         <div class="meta-grid">
           ${meta("执行事件", String(latestStepCount))}
           ${meta("成功事件", String(successStepCount))}
@@ -1539,8 +1561,8 @@ function renderHtml(result: ReportResult) {
     ${repeatableRegionExplorationSection(result)}
     ${repeatableRegionSection(repeatableRegions)}
 
-    <h2>测试设置与复现</h2>
-    ${settingsSection(result)}
+    <h2>测试环境与复现</h2>
+    ${environmentSection(result)}
     <h3 style="margin-top: 18px">复现命令</h3>
     <pre>${escapeHtml(result.replayCommand)}</pre>
     <script type="application/json" id="ui-explorer-result">${data}</script>
@@ -3033,26 +3055,89 @@ function metric(label: string, value: string | number, hint: string) {
   return `<div class="metric"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(String(value))}</div><div class="hint">${escapeHtml(hint)}</div></div>`;
 }
 
-function settingsSection(result: ReportResult) {
+function testedObjectStrip(result: ReportResult) {
+  const testKind = result.config.testKind ?? "stateExploration";
+  return `
+    <section class="subject-strip" aria-label="被测对象">
+      ${subjectItem("被测工程", projectLabel())}
+      ${subjectItem("被测应用", "ORF 前端主应用")}
+      ${subjectItem("入口 URL", targetEntryUrl(result.config))}
+      ${subjectItem("测试类型", testKindLabel(testKind))}
+      ${subjectItem("SEED", result.seed)}
+    </section>
+  `;
+}
+
+function subjectItem(label: string, value: string) {
+  return `<div class="subject-item"><div class="subject-label">${escapeHtml(label)}</div><div class="subject-value">${escapeHtml(value)}</div></div>`;
+}
+
+function environmentSection(result: ReportResult) {
   const legacyConfig = result.config as ExplorerConfig & { stateMode?: string };
   const safetyProfile = result.config.safetyProfile ?? "legacy";
   const testKind = result.config.testKind ?? "stateExploration";
   const stateAbstractor = result.config.stateAbstractor ?? legacyConfig.stateMode ?? "stateExploration";
   return `
     <section class="panel chart">
-      <h3>测试设置</h3>
+      <h3>被测对象</h3>
       <div class="settings-grid">
-        ${meta("测试类型", testKindLabel(testKind))}
+        ${meta("被测工程", projectLabel())}
+        ${meta("被测应用", "ORF 前端主应用")}
+        ${meta("入口 URL", targetEntryUrl(result.config))}
         ${meta("目标路径", result.config.targetPath)}
         ${meta("随机种子", result.seed)}
+        ${meta("测试类型", testKindLabel(testKind))}
+        ${meta("报告生成时间", new Date().toISOString())}
+      </div>
+      <h3 style="margin-top: 18px">测试环境</h3>
+      <div class="settings-grid">
+        ${meta("Base URL", result.config.baseURL)}
+        ${meta("浏览器", "chromium / Desktop Chrome")}
+        ${meta("Node.js", process.version)}
+        ${meta("包管理器", packageManagerLabel())}
         ${meta("执行步数", `${result.summary.executedSteps} / ${result.summary.totalSteps}`)}
         ${meta("时间预算", durationBudgetLabel(result.config.maxDurationMs))}
+        ${meta("单步超时", `${result.config.maxStepDuration} ms`)}
         ${meta("安全边界", safetyProfile)}
         ${meta("状态抽象", stateAbstractor)}
         ${meta("可重复组件测试", result.config.runRepeatableRegionTests ? "开启" : "关闭")}
+        ${meta("允许来源", compactList(result.config.allowedOrigins))}
+        ${meta("允许路径", compactList(result.config.allowedPathPatterns))}
+        ${meta("禁用操作", compactList(result.config.blockedOperationKinds))}
+        ${meta("禁用目标文本", compactList(result.config.blockedTargetTextPatterns))}
       </div>
     </section>
   `;
+}
+
+function projectLabel() {
+  const name = process.env.npm_package_name || "orf";
+  const version = process.env.npm_package_version;
+  return version ? `${name}@${version}` : name;
+}
+
+function packageManagerLabel() {
+  const userAgent = process.env.npm_config_user_agent;
+  if (!userAgent) {
+    return "npm";
+  }
+  return userAgent.split(" ")[0] || "npm";
+}
+
+function targetEntryUrl(config: ExplorerConfig) {
+  try {
+    return new URL(config.targetPath, config.baseURL).toString();
+  } catch {
+    return `${config.baseURL}${config.targetPath}`;
+  }
+}
+
+function compactList(values: string[]) {
+  if (values.length === 0) {
+    return "-";
+  }
+  const visible = values.slice(0, 4).join(", ");
+  return values.length > 4 ? `${visible}, +${values.length - 4}` : visible;
 }
 
 function durationBudgetLabel(maxDurationMs: number | undefined) {

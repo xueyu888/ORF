@@ -139,9 +139,13 @@ test("explorer report prioritizes result summary and embeds path replay data", a
   const paths = await writeExplorerReport(result);
   const html = await fs.readFile(paths.htmlReportPath, "utf8");
   const graphIndex = html.indexOf("<h2>状态图</h2>");
-  const settingsIndex = html.indexOf("<h2>测试设置与复现</h2>");
+  const settingsIndex = html.indexOf("<h2>测试环境与复现</h2>");
   const safetyIndex = html.indexOf("安全边界");
 
+  assert.ok(html.includes("被测对象"));
+  assert.ok(html.includes("被测工程"));
+  assert.ok(html.includes("入口 URL"));
+  assert.ok(html.includes("SEED"));
   assert.ok(html.includes("成功事件"));
   assert.ok(html.includes("异常事件"));
   assert.ok(html.includes("探索路径回放"));
@@ -150,6 +154,9 @@ test("explorer report prioritizes result summary and embeds path replay data", a
   assert.ok(graphIndex >= 0);
   assert.ok(settingsIndex > graphIndex);
   assert.ok(safetyIndex > settingsIndex);
+  assert.ok(html.includes("Base URL"));
+  assert.ok(html.includes("浏览器"));
+  assert.ok(html.includes("Node.js"));
   assert.equal(html.includes("<h2>详细数据</h2>"), false);
   assert.equal(html.includes("<h2>无变化事件</h2>"), false);
   assert.equal(html.includes("<h2>状态截图</h2>"), false);
