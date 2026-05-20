@@ -48,12 +48,18 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="orf-app-shell flex min-h-screen" data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"} style={shellStyle}>
+    <div
+      className="orf-app-shell flex min-h-screen"
+      data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
+      data-unified-background={appShellBackgroundUrl ? "true" : "false"}
+      style={shellStyle}
+    >
       <Sidebar
         backgroundUrl={sidebarBackgroundUrl}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
         onCommand={() => setCommandOpen(true)}
+        unifiedBackgroundUrl={appShellBackgroundUrl}
       />
       <div className="orf-shell-body min-w-0 flex-1">
         <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-3 border-b orf-border">
