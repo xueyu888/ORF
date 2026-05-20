@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
+import { NotificationBell } from "./NotificationBell";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
 import { hasPermission } from "../config/permissions";
@@ -61,12 +62,15 @@ export function AppShell() {
               </Button>}
             </>
           )}
-          {canCreateObjective && (
-            <Button className={isBountyHall ? "ml-auto" : undefined} onClick={() => openModal({ type: "newObjective" })}>
-              <Plus className="h-4 w-4" />
-              新建目标
-            </Button>
-          )}
+          <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-2">
+            {canCreateObjective && (
+              <Button onClick={() => openModal({ type: "newObjective" })}>
+                <Plus className="h-4 w-4" />
+                新建目标
+              </Button>
+            )}
+            <NotificationBell />
+          </div>
         </header>
         <main className="orf-main-content">
           <Outlet />

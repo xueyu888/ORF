@@ -56,6 +56,12 @@ import {
   users,
 } from "../db/schema";
 import { getPermissionRulesForScope } from "./permissionRepository";
+import {
+  createNotifications,
+  getActiveAdminNotificationRecipients,
+  getActiveMemberNotificationRecipientsByNames,
+  getUserNameById,
+} from "./notificationRepository";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
@@ -231,6 +237,74 @@ async function getActiveMemberNameSetInScope(storageScopeId: string, values: Arr
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "active"), inArray(users.name, memberNames)));
   return new Set(rows.map((member) => member.name));
+}
+
+async function notifyAdminsOfChallengeApplication(input: {
+  actorUserId?: string | null;
+  applicant: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  await createNotifications({
+    actorName: input.applicant,
+    actorUserId: input.actorUserId,
+    body: `${input.applicant} 申请挑战「${input.objectiveTitle}」，需要指挥官确认。`,
+    kind: "challenge.application.created",
+    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
+    targetHref: "/tasks",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "新的挑战申请",
+  });
+}
+
+async function notifyMembersOfRecruitment(input: {
+  actorUserId: string;
+  memberNames: string[];
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `你被征召挑战「${input.objectiveTitle}」，请在悬赏大厅接受或拒绝。`,
+    kind: "objective.recruitment.created",
+    metadata: { objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, input.memberNames),
+    targetHref: "/bounties",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "新的征召",
+  });
+}
+
+async function notifyAdminsOfObjectiveLoot(input: {
+  actorName: string;
+  actorUserId: string;
+  lootId: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  await createNotifications({
+    actorName: input.actorName,
+    actorUserId: input.actorUserId,
+    body: `${input.actorName} 已提交「${input.objectiveTitle}」的目标战利品，需要指挥官验收。`,
+    kind: "objective.loot.submitted",
+    metadata: { objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
+    targetHref: `/objectives/${encodeURIComponent(input.objectiveId)}/loot`,
+    targetId: input.lootId,
+    targetType: "objectiveLoot",
+    teamId: input.teamId,
+    title: "战利品待验收",
+  });
 }
 
 function uncertaintyScore(level: UncertaintyLevel | null) {
@@ -906,7 +980,7 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "closed" }
   | { status: "notFound" };
 
-export async function applyForObjectiveChallenge(objectiveId: string, applicant: string): Promise<ApplyObjectiveChallengeOutcome> {
+export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId?: string | null): Promise<ApplyObjectiveChallengeOutcome> {
   const nextApplicant = applicant.trim();
   if (!nextApplicant) {
     return { status: "notFound" };
@@ -948,12 +1022,24 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "applied" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "applied" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId,
+        applicant: nextApplicant,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
 
   if (appliedResult.status !== "applied") {
     return appliedResult;
   }
+
+  await notifyAdminsOfChallengeApplication(appliedResult.notification);
 
   const data = await getTaskManagementData({ scope: appliedResult.scope });
   const applied = data.objectives.find((item) => item.id === objectiveId);
@@ -1088,8 +1174,22 @@ export async function recruitObjectiveChallengers(
         updatedBy: actorId,
       })
       .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "ok" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        memberNames: recruitMembers,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
+
+  if (recruitedResult.status === "ok") {
+    await notifyMembersOfRecruitment(recruitedResult.notification);
+  }
 
   return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.scope) : recruitedResult;
 }
@@ -2049,6 +2149,15 @@ export async function submitObjectiveLoot(
   if (!submitted) {
     return { status: "closed" };
   }
+
+  await notifyAdminsOfObjectiveLoot({
+    actorName: actor.name,
+    actorUserId: actor.id,
+    lootId,
+    objectiveId: objective.id,
+    objectiveTitle: objective.title,
+    teamId: objective.teamId,
+  });
 
   const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
   const loot = data.objectiveLoot.find((item) => item.id === lootId);

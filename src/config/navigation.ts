@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Bell,
   CheckSquare,
   Flag,
   Inbox,
@@ -14,6 +15,7 @@ export const navItems = [
   { label: "悬赏大厅", path: "/bounties", icon: Trophy },
   { label: "我的挑战", path: "/tasks", icon: CheckSquare },
   { label: "反馈", path: "/feedback", icon: Inbox },
+  { label: "消息", path: "/notifications", icon: Bell },
   { label: "统计", path: "/reports", icon: BarChart3 },
   { label: "成员管理", path: "/members", icon: UsersRound },
   { label: "权限管理", path: "/permissions", icon: ShieldCheck },

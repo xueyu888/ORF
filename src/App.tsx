@@ -13,6 +13,7 @@ import { FantasyUiPreviewPage } from "./features/fantasy-ui";
 import { GenshinUIKitPreviewPage } from "./features/genshin-ui-kit";
 import { LootSubmitPage } from "./pages/LootSubmitPage";
 import { MembersPage } from "./pages/MembersPage";
+import { NotificationsPage } from "./pages/NotificationsPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
 import { ObjectivesPage } from "./pages/ObjectivesPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
@@ -40,6 +41,7 @@ export function App() {
         <Route path="genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
         <Route path="feedback" element={<FeedbackInboxPage />} />
         <Route path="feedback/:feedbackId" element={<FeedbackDetailPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="strategy-map" element={<StrategyMapPage />} />
         <Route path="ai-evaluation" element={<AIEvaluationPage />} />
         <Route path="reports" element={<ReportsPage />} />
