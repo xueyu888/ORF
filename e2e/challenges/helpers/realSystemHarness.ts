@@ -232,7 +232,7 @@ function createFixture(workerIndex: number): RealFixture {
     observer: user("observer", "观察成员", "member"),
     pendingMember: user("pending", "待审核成员", "member", "pending"),
     rejectedApplicant: user("rejected-applicant", "被拒申请人", "member"),
-    reluctantMember: user("reluctant", "拒绝征召人", "member"),
+    reluctantMember: user("reluctant", "待确认征召人", "member"),
     runLabel,
     runSlug,
     teamId: `team-${runSlug}`,

@@ -40,7 +40,6 @@ import {
   deleteObjective,
   deleteResult,
   deleteTask,
-  declineObjectiveChallenge,
   freezeObjectiveAfterReestimate,
   getBountyHallData,
   getMyChallengesData,
@@ -1147,11 +1146,23 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/tasks", async (request, reply) => {
     const body = createTaskBodySchema.parse(request.body);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "result", id: body.linkedResultId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "result", id: body.linkedResultId });
+    if (!user) {
       return reply;
     }
 
-    const task = await createTask(body);
+    const scope = await getDefaultRuntimeScopeForUser(user.id);
+    if (!scope) {
+      return reply.code(404).send({ error: "Runtime scope not found" });
+    }
+
+    const assignee = body.assignee?.trim() || user.name;
+    const activeUsers = await getScopedUsers(scope);
+    if (!activeUsers.some((item) => item.status === "active" && item.name === assignee)) {
+      return reply.code(400).send({ error: "Task assignee must be an active member" });
+    }
+
+    const task = await createTask({ ...body, assignee });
 
     if (!task) {
       return reply.code(404).send({ error: "Result or feedback not found" });
@@ -1417,20 +1428,6 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     return { objective: outcome.objective };
-  });
-
-  app.patch("/api/objectives/:objectiveId/challenge/decline", async (request, reply) => {
-    const params = objectiveParamsSchema.parse(request.params);
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-    const { user, scope } = context;
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
-      return reply;
-    }
-
-    return sendObjectiveFlowOutcome(reply, await declineObjectiveChallenge(params.objectiveId, user.name, user.id));
   });
 
   app.post("/api/objectives/:objectiveId/challenge-applications", async (request, reply) => {

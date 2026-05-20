@@ -14,7 +14,7 @@ export class RealScenarioDsl {
 
   async openTasks(page: Page) {
     await page.goto("/tasks");
-    await expect(page.getByRole("heading", { name: "挑战" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "我的挑战" })).toBeVisible();
   }
 
   async openReports(page: Page) {
@@ -115,10 +115,6 @@ export class RealScenarioDsl {
     await row.getByRole("button", { name: "接受挑战" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "接受挑战" }).click();
     await expect(page).toHaveURL(/\/tasks$/);
-  }
-
-  async declineRecruitment(user: RealUser, objectiveId: string) {
-    return this.real.apiAs(user, `/api/objectives/${encodeURIComponent(objectiveId)}/challenge/decline`, { method: "PATCH" });
   }
 
   async proposeMetric(page: Page, title: string, metricTitle: string, metricName = "挑战者校准达成率") {

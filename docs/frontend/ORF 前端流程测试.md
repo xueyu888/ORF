@@ -17,6 +17,7 @@
 | 评论 E2E | `e2e/comments/comment-persistence.spec.ts` | 评论提交后在当前页面保持可见 |
 | 真实评论布局 E2E | `e2e/challenges/orf-real-comment-layout.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证目标评论数量入口贴近标题文本 |
 | 真实评论上下文 E2E | `e2e/challenges/orf-real-comment-context.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证切换评论对象会清空旧回复草稿，发送会写入当前对象 |
+| 成员管理 E2E | `e2e/members/member-management.spec.ts` | 成员列表、最近在线、预批准成员输入归一化、已绑定成员邮箱锁定、删除用户入口 |
 
 ## 角色视角
 
@@ -117,6 +118,7 @@ flowchart TD
 - `open` 悬赏目标显示“申请挑战”。
 - 已申请但未通过时，成员只在悬赏大厅看到“已申请 / 等待确认”，不进入 `/tasks`。
 - `recruiting` 且当前成员被征召时，显示“征召令”和“接受挑战”。
+- 被征召成员不显示“拒绝征召”；有异议时线下找指挥官处理。
 - 悬赏大厅不出现指标编辑、任务树、目标战利品提交入口。
 
 ### 悬赏目标挑战工作台：指挥官视角
@@ -161,6 +163,7 @@ flowchart TD
 - `/tasks` 可以提醒 `candidate/applying/recruiting`，但这些是待处理提醒，不是工作台主体。
 - 工作台主体是 `reestimating/frozen/submitted/settled`。
 - 不能把 `/bounties` 的完整大厅功能搬进 `/tasks`。
+- `reestimating` 目标没有任何指标时不展示冻结入口，避免点击必失败动作。
 - `frozen` 阶段表达为“查看目标是否已提交战利品 / 催促挑战者提交”，不写成“谁还没提交”。
 - 每个目标行必须能看到目标基础分和目标结算分。
 
@@ -286,6 +289,7 @@ flowchart TD
 | 指挥官点击发布 | 目标从“候选中”变成“可申请”，发布按钮消失；成员能在悬赏大厅看到申请入口 | 调用发布 mutation；成功后必须刷新业务数据；页面只能按刷新数据展示 |
 | 成员申请挑战 | 弹窗说明等待确认；成功后按钮变“已申请”且禁用 | 调用申请 mutation；成功后刷新悬赏大厅数据；失败时不能显示已申请 |
 | 成员接受征召 | 成功后跳转 `/tasks` 工作台，目标显示“重估中”，当前用户成为挑战者 | 调用接受 mutation；成功后刷新悬赏大厅和我的挑战数据 |
+| 成员查看征召 | 只显示 `接受挑战`，不显示拒绝入口 | 前端不调用拒绝征召 API；后端不暴露拒绝征召接口 |
 | 指挥官通过申请 | 申请审核条消失，目标显示“重估中”，冻结按钮出现 | 调用通过申请 mutation；成功后刷新 `/tasks` 工作台数据 |
 | 指挥官拒绝申请 | 被拒绝申请人从审核条消失；已接受挑战者不能被误退回悬赏大厅状态 | 调用拒绝申请 mutation；成功后按刷新数据展示 |
 | 挑战者提出或编辑指标 | 重估截止前显示“提出指标”入口，已有指标显示编辑入口；提交或保存后目标树更新 | 创建 Result 时必须是 `source=memberProposed`；编辑已有 Result 时走更新流程；只允许正式挑战者在重估截止前提交或保存 |
@@ -332,7 +336,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | --- | --- | --- |
 | `orf-real-golden-flow.spec.ts` | 两个周期、两轮目标、两个挑战者，从发布、申请、审批、重估、冻结、战利品、匿名互评到验收结算 | 已结算目标从 `/bounties` 下架；观察成员 `/tasks` 看不到非本人挑战；`/reports` 累计积分正确 |
 | `orf-real-multi-state-dashboard.spec.ts` | 同时制造 candidate / open / applying / recruiting / reestimating / frozen / submitted / settled | 指挥官 `/tasks` 可总控；挑战者 `/tasks` 只看自己的目标；`/bounties` 只展示普通可申请目标和当前用户自己的征召令 |
-| `orf-real-recruitment.spec.ts` | 指挥官征召 A/B/C，A 和 B 连续接受，C 拒绝，观察者越权接受 | A 接受后 B 仍能看到征召令；最终 challengers 只包含 A/B；越权接受返回 403 |
+| `orf-real-recruitment.spec.ts` | 指挥官征召 A/B/C，A 和 B 连续接受，C 只保留接受入口，观察者越权接受 | A 接受后 B/C 仍能看到征召令；拒绝入口不可见；越权接受返回 403 |
 | `orf-real-reestimate-window.spec.ts` | 多挑战者在重估窗口内提出 / 编辑指标、加任务、加子任务，然后时间加速到窗口过期并冻结 | 窗口内可操作；过期后按钮不可见且 API 403；冻结后仍不可编辑指标 |
 | `orf-real-time-acceleration.spec.ts` | 不等待真实时间，直接推进重估截止和最终截止 | 准时、逾期、超额、放弃的 multiplier 与积分一致 |
 | `orf-real-settlement-ledger.spec.ts` | 三挑战者匿名互评、缺评时指挥官汇总确认、结算入账 | `objectiveBasePoints`、`objectiveSettlementPoints`、`pointLedger`、`/reports` 展示一致 |
@@ -356,7 +360,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | 权限边界 | 成员不能看到指挥官动作；非挑战者不能提交；非指挥官不能验收；搜索、目标列表和深链页面也必须按当前用户可见目标收敛 |
 | 时间边界 | 只有正式挑战者能在重估截止前提出 / 编辑指标；截止后和冻结后入口关闭 |
 | 表单交互 | 空战利品、无指标、无 latest loot、取消弹窗、关闭 modal、重复点击都不能产生伪状态；征召、提交战利品、匿名互评、验收结算和成员管理写入必须在请求进行中禁用提交入口 |
-| 全局新建弹窗 | 新建目标、指标、反馈、行动项和指标更新必须等待 API 成功后再关闭；API 失败时弹窗保留当前输入并展示失败提示 |
+| 全局新建弹窗 | 新建目标、指标、反馈、行动项和指标更新必须等待 API 成功后再关闭；API 失败时弹窗保留当前输入并展示失败提示；新建目标成功后进入工作台继续发布 |
 | 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
 | 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss、目标行评论数量入口贴近标题文本、切换评论对象后清空旧回复状态都要有可见断言 |
@@ -382,6 +386,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - 页面断言优先基于用户可见文案、按钮和链接，少量使用稳定 class 定位目标面板。
 - 每个测试开始清空 localStorage，避免 legacy 本地状态污染 API 优先契约。
 - 已登录应用内的命令菜单只放业务页面和业务对象；`/auth` 仍是公共路由，但不能作为“注册登录”入口出现在命令菜单里。
+- 命令菜单里的 `新建目标` 是动作，不是 `/objectives` 页面别名；选择后必须打开新建目标弹窗。
 - `/dashboard` 只能展示从当前 ORF state 汇总出的目标、指标、反馈和个人任务；不能混入演示偏移、硬编码待办或会在空数据下产生 `NaN` 的指标。
 - `/ai-evaluation` 和目标详情页的评估页签只能展示从 `EvalRun` 汇总出的指标；没有评估运行、评估场景或失败样本时必须显示空态，不能展示演示准确率、幻觉率、时延或成本。
 - 目标详情页的“相关 AI 系统”只能从当前目标关联的证据来源和评估运行配置推导；没有关联记录时显示空态，不能展示固定演示系统。

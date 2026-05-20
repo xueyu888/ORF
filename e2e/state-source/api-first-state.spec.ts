@@ -94,11 +94,38 @@ test("bounty hall summarizes cycles from API objectives", async ({ page }) => {
   await expect(page.getByText("当前周期 · 2999 Q1")).toHaveCount(0);
 });
 
+test("bounty hall keeps objective creation available for authorized users", async ({ page }) => {
+  const bounties: BountyHallData = {
+    availableItems: [],
+    recruitmentItems: [],
+    objectiveOptions: [],
+    contribution: { points: 0 },
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/bounties", async (route) => {
+    await route.fulfill({ json: bounties });
+  });
+
+  await page.goto("/bounties");
+
+  await expect(page.getByRole("heading", { name: "悬赏大厅" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建目标" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建反馈" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "新建目标" }).click();
+  await expect(page.getByRole("dialog", { name: "新建目标" })).toBeVisible();
+});
+
 test("bounty hall labels resultless objectives as pending metrics", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,
     id: "objective-bounty-resultless",
     title: "真实待定义指标悬赏",
+    flowStatus: "open",
     resultIds: [],
   };
   const bounties: BountyHallData = {
@@ -218,6 +245,81 @@ test("command menu does not expose the auth route inside the authenticated app",
   await expect(menu).toBeVisible();
   await expect(menu.getByText("悬赏大厅")).toBeVisible();
   await expect(menu.getByText("注册登录")).toHaveCount(0);
+});
+
+test("command menu creates objectives as actions and lands on the workbench", async ({ page }) => {
+  const createdObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-command-created",
+    title: "命令菜单候选目标",
+    whyItMatters: "验证新建目标不是伪页面跳转。",
+    cycle: "2999 Q4",
+    boundary: "测试边界",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  let objectives: Objective[] = [];
+  let createRequestCount = 0;
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/objectives", async (route) => {
+    if (route.request().method() === "POST") {
+      createRequestCount += 1;
+      objectives = [createdObjective];
+      await route.fulfill({ json: { objective: createdObjective } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/reports");
+  await page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." }).click();
+  const menu = page.locator(".orf-draggable-floating");
+  await menu.getByPlaceholder("搜索页面、目标、指标、行动项、反馈...").fill("新建目标");
+  await menu.getByRole("button", { name: /新建目标/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "新建目标" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("目标标题").fill(createdObjective.title);
+  await dialog.getByLabel("为什么重要").fill(createdObjective.whyItMatters);
+  await dialog.getByLabel("周期").fill(createdObjective.cycle);
+  await dialog.getByLabel("最终截止时间").fill("2999-12-31");
+  await dialog.getByLabel("边界 / 不做什么").fill(createdObjective.boundary);
+  await dialog.getByRole("button", { name: "保存目标" }).click();
+
+  await expect.poll(() => createRequestCount).toBe(1);
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByText(createdObjective.title)).toBeVisible();
+});
+
+test("challenge workbench hides freeze until reestimating objectives have metrics", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-no-freeze-without-metrics",
+    title: "无指标不能冻结的目标",
+    flowStatus: "reestimating",
+    stage: "orfReestimate",
+    challengers: [initialOrfState.users[0]!.name],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [objective], results: [], tasks: [], feedback: [] }) });
+  });
+
+  await page.goto("/tasks");
+
+  await expect(page.getByText(objective.title)).toBeVisible();
+  await expect(page.getByRole("button", { name: "冻结" })).toHaveCount(0);
+  await expect(page.getByText("待定义指标")).toBeVisible();
 });
 
 test("ignores stale business data in legacy localStorage", async ({ page }) => {

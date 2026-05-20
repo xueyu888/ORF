@@ -36,7 +36,7 @@ const tabs = [
 ];
 
 const sidebarItems = [
-  { active: true, icon: CheckSquare, label: "计划" },
+  { active: true, icon: CheckSquare, label: "我的挑战" },
   { icon: Clock3, label: "周复盘" },
   { icon: Inbox, label: "反馈" },
   { icon: Archive, label: "统计" },

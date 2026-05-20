@@ -17,7 +17,6 @@ import {
   createResult,
   createTask,
   deleteResult,
-  declineObjectiveChallenge,
   freezeObjectiveAfterReestimate,
   getBountyHallData,
   getMyChallengesData,
@@ -707,7 +706,7 @@ test("accepting stale recruitment cannot reopen a frozen objective", async () =>
   assert.deepEqual(unchanged?.challengers, [fixture.challenger.name]);
 });
 
-test("concurrent recruitment responses preserve every member transition", async () => {
+test("concurrent recruitment acceptances preserve every member transition", async () => {
   const fixture = await createFixture("concurrent-recruitment-responses");
   const acceptedObjective = await createPublishedObjective(fixture, "concurrent recruitment accept guard");
   await createTestResult(acceptedObjective.id, fixture.commander.name, `${fixture.prefix} concurrent accept result`);
@@ -733,51 +732,24 @@ test("concurrent recruitment responses preserve every member transition", async 
   assert.deepEqual(finalizedAcceptedObjective?.challengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
   assert.deepEqual(finalizedAcceptedObjective?.assignedChallengers, []);
   assert.equal(finalizedAcceptedObjective?.flowStatus, "reestimating");
-
-  const declinedObjective = await createPublishedObjective(fixture, "concurrent recruitment decline guard");
-  assert.equal(
-    (await recruitObjectiveChallengers(declinedObjective.id, [fixture.challenger.name, fixture.observer.name], fixture.commander.id)).status,
-    "ok",
-  );
-  const declines = await Promise.all([
-    declineObjectiveChallenge(declinedObjective.id, fixture.challenger.name, fixture.challenger.id),
-    declineObjectiveChallenge(declinedObjective.id, fixture.observer.name, fixture.observer.id),
-  ]);
-  assert.deepEqual(declines.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
-
-  data = await getTaskManagementData({ scope: fixture.scope });
-  const finalizedDeclinedObjective = data.objectives.find((item) => item.id === declinedObjective.id);
-  assert.deepEqual(finalizedDeclinedObjective?.assignedChallengers, []);
-  assert.equal(finalizedDeclinedObjective?.flowStatus, "open");
 });
 
-test("unassigned members cannot decline recruitment outside the recruiting state", async () => {
-  const fixture = await createFixture("decline-unassigned-guard");
-  const objective = await createPublishedObjective(fixture, "decline unassigned guard");
-
-  const unrelatedDecline = await declineObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
-  assert.equal(unrelatedDecline.status, "invalid");
-
-  const data = await getTaskManagementData();
-  const unchanged = data.objectives.find((item) => item.id === objective.id);
-  assert.equal(unchanged?.flowStatus, "open");
-  assert.deepEqual(unchanged?.assignedChallengers, []);
-});
-
-test("assigned members can decline recruitment exactly once", async () => {
-  const fixture = await createFixture("decline-assigned-guard");
-  const objective = await createPublishedObjective(fixture, "decline assigned guard");
+test("recruitment decline is not an available API action", async () => {
+  const fixture = await createFixture("decline-disabled-guard");
+  const objective = await createPublishedObjective(fixture, "decline disabled guard");
 
   const recruited = await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id);
   assert.equal(recruited.status, "ok");
 
-  const assignedDecline = await declineObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
-  assert.equal(assignedDecline.status, "ok");
-  assert.equal(assignedDecline.objective.flowStatus, "open");
-  assert.deepEqual(assignedDecline.objective.assignedChallengers, []);
+  await withApiServer(fixture, async (app) => {
+    const decline = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/challenge/decline`);
+    assert.equal(decline.statusCode, 404);
+  });
 
-  const repeatedDecline = await declineObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
-  assert.equal(repeatedDecline.status, "invalid");
+  const data = await getTaskManagementData({ scope: fixture.scope });
+  const unchanged = data.objectives.find((item) => item.id === objective.id);
+  assert.equal(unchanged?.flowStatus, "recruiting");
+  assert.deepEqual(unchanged?.assignedChallengers, [fixture.challenger.name]);
 });
 
 test("freezing after reestimate requires at least one concrete result", async () => {
@@ -1315,6 +1287,15 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     });
     assert.equal(invalidTaskDueDate.statusCode, 400);
 
+    const invalidTaskAssignee = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: "valid task title",
+      assignee: `${fixture.prefix} Missing Assignee`,
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    });
+    assert.equal(invalidTaskAssignee.statusCode, 400);
+    assert.equal((invalidTaskAssignee.json() as { error?: string }).error, "Task assignee must be an active member");
+
     const trimmedTask = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
       title: "  trimmed action title  ",
       description: "   ",
@@ -1327,7 +1308,7 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     const trimmedTaskPayload = trimmedTask.json() as { task: { id: string; title: string; description: string; assignee: string; dueDate: string } };
     assert.equal(trimmedTaskPayload.task.title, "trimmed action title");
     assert.equal(trimmedTaskPayload.task.description, "执行支撑关联指标的下一步动作。");
-    assert.equal(trimmedTaskPayload.task.assignee, "User");
+    assert.equal(trimmedTaskPayload.task.assignee, fixture.challenger.name);
     assert.equal(trimmedTaskPayload.task.dueDate, "2999-02-28");
 
     const defaultLabel = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(trimmedTaskPayload.task.id)}/checklist`, {
@@ -1631,6 +1612,50 @@ test("auth API normalizes registration traits at the route boundary", async () =
   });
 });
 
+test("password login binds a preapproved ORF member to the Ory identity id", async () => {
+  const fixture = await createFixture("auth-login-bind-preapproved");
+  const identity = {
+    id: `${fixture.prefix}-ory-challenger`,
+    traits: {
+      email: fixture.challenger.email,
+      name: `${fixture.prefix} Ory Challenger`,
+    },
+  };
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(fixture.challenger.email, "password");
+    assert.equal(auth.user.id, fixture.challenger.id);
+    assert.equal(auth.user.name, fixture.challenger.name);
+    assert.equal(auth.user.status, "active");
+  });
+
+  const [stored] = await db.select({ oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+  assert.equal(stored?.oryIdentityId, identity.id);
+});
+
+test("password login resolves bound ORF users by Ory identity id before email", async () => {
+  const fixture = await createFixture("auth-login-bound-identity-first");
+  const identity = {
+    id: `${fixture.prefix}-ory-stable-id`,
+    traits: {
+      email: `${fixture.prefix}-ory-renamed@orf.test`,
+      name: `${fixture.prefix} Ory Renamed`,
+    },
+  };
+  const orfEmail = `${fixture.prefix}-orf-contact@orf.test`;
+  await db.update(users).set({ oryIdentityId: identity.id, email: orfEmail }).where(eq(users.id, fixture.challenger.id));
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(String(identity.traits.email), "password");
+    assert.equal(auth.user.id, fixture.challenger.id);
+    assert.equal(auth.user.email, orfEmail);
+    assert.equal(auth.user.status, "active");
+  });
+
+  const duplicateRows = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${identity.traits.email}`);
+  assert.equal(duplicateRows.length, 0);
+});
+
 test("password login does not auto-approve first-time ORF users", async () => {
   const fixture = await createFixture("auth-login-new-user-pending");
   const email = `${fixture.prefix}-external-login@orf.test`;
@@ -1645,8 +1670,9 @@ test("password login does not auto-approve first-time ORF users", async () => {
     assert.equal(auth.user.role, "member");
   });
 
-  const [created] = await db.select({ status: users.status }).from(users).where(eq(users.email, email)).limit(1);
+  const [created] = await db.select({ status: users.status, oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.email, email)).limit(1);
   assert.equal(created?.status, "pending");
+  assert.equal(created?.oryIdentityId, identity.id);
 });
 
 test("password login preserves existing ORF display names", async () => {
@@ -1688,6 +1714,29 @@ test("API user management prevents renaming members referenced by ORF records", 
 
     const myChallenges = await getMyChallengesData(fixture.challenger.name);
     assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
+test("API user management rejects email changes for Ory-bound members", async () => {
+  const fixture = await createFixture("api-user-bound-email-change");
+  await db.update(users).set({ oryIdentityId: fixture.challenger.id }).where(eq(users.id, fixture.challenger.id));
+
+  await withApiServer(fixture, async (app) => {
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const boundUser = (userList.json() as { users: Array<{ id: string; authLinked?: boolean }> }).users.find((user) => user.id === fixture.challenger.id);
+    assert.equal(boundUser?.authLinked, true);
+
+    const update = await apiInject(app, fixture.commander, "PATCH", `/api/users/${encodeURIComponent(fixture.challenger.id)}`, {
+      name: fixture.challenger.name,
+      email: `${fixture.prefix}-renamed-login@orf.test`,
+      role: "member",
+    });
+    assert.equal(update.statusCode, 409);
+    assert.equal((update.json() as { error?: string }).error, "Bound login email cannot be changed");
+
+    const [stored] = await db.select({ email: users.email }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+    assert.equal(stored?.email, fixture.challenger.email);
   });
 });
 

@@ -18,13 +18,13 @@
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
 | API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
-| API 输入归一化 | `API work item creation trims labels and prevents blank persisted titles` | 指标、任务、子任务创建接口会 trim 用户输入，拒绝空白必填标题，选填空白字段回落默认值，非法日期返回 400 |
+| API 输入归一化 | `API work item creation trims labels and prevents blank persisted titles` | 指标、任务、子任务创建接口会 trim 用户输入，拒绝空白必填标题，非法日期和非 active 成员执行人返回 400，空执行人回落为当前用户 |
 | API stage 兼容保护 | `API objective stage updates cannot violate lifecycle compatibility` | 旧 stage 接口不能把重估目标标成冻结阶段，也不能把冻结后目标改回重估阶段 |
 | 发布前征召保护 | `recruitment is only allowed after an objective is published` | `candidate` 目标不能被征召，必须先发布 |
 | 冻结后旧申请保护 | `approving stale pending applications cannot mutate a frozen objective` / `rejecting stale pending applications cannot reopen a frozen objective` | 冻结后不能通过或拒绝旧申请来改写目标状态 |
 | 已接受后旧申请保护 | `rejecting remaining pending applications keeps an accepted objective in reestimate` | 目标已有挑战者后，继续拒绝剩余 pending application 不能把目标退回悬赏大厅 |
 | 冻结后旧征召保护 | `accepting stale recruitment cannot reopen a frozen objective` | 冻结后旧 assigned recruitment 不能再被接受并改写目标状态 |
-| 征召拒绝保护 | `unassigned members cannot decline recruitment outside the recruiting state` / `assigned members can decline recruitment exactly once` | 只有被征召成员能在征召期拒绝，重复拒绝无效 |
+| 征召拒绝禁用 | `recruitment decline is not an available API action` | 当前不开放成员拒绝征召接口，旧拒绝路径不能改写待征召成员 |
 | 冻结前指标保护 | `freezing after reestimate requires at least one concrete result` | 没有具体 Result 的目标不能冻结，避免后续无法提交战利品 |
 | 申请与接受守卫 | `challenge application duplicate and closed-state guards are enforced` / `challenge acceptance guards duplicate, due-date, unauthorized, and closed states` | 重复申请、已接受、非法接受、截止时间过近、已关闭状态都应被保护 |
 | 冻结/退回保护 | `freeze rejects invalid source states and reopen requests stay disabled` | 只有 `reestimating` 且已有 Result 可冻结；当前不开放退回重估 |
@@ -135,8 +135,8 @@ flowchart TD
 | ORF-BE-R021 | 指挥官只能征召已发布目标，`candidate` 目标不能直接进入 `recruiting`。 | 发布前征召保护 |
 | ORF-BE-R022 | 目标冻结后，旧 pending application 不能再被批准，也不能把 `frozen` 改回 `reestimating`。 | 冻结后旧申请保护 |
 | ORF-BE-R023 | 目标冻结后，旧 pending application 不能再被拒绝；目标已有挑战者后，拒绝剩余 pending application 也不能把 `reestimating` 改回 `open/applying/recruiting`。 | 冻结后旧申请保护、已接受后旧申请保护 |
-| ORF-BE-R024 | 未被征召成员不能调用拒绝征召；非 `recruiting` 状态下拒绝征召应无效。 | 征召拒绝保护 |
-| ORF-BE-R025 | 被征召成员成功拒绝后应从 `assignedChallengers` 移除；重复拒绝应无效。 | 征召拒绝保护 |
+| ORF-BE-R024 | 当前不开放成员拒绝征召；被征召成员只能接受，异议由线下找指挥官处理。 | 征召拒绝禁用 |
+| ORF-BE-R025 | 旧拒绝征召 API 不应存在，也不能从 `assignedChallengers` 移除成员。 | 征召拒绝禁用 |
 | ORF-BE-R026 | 当前不开放从 `frozen` 退回 `reestimating`；退回请求应被拒绝，`confirmationDueAt` 不续期。 | 冻结/退回保护 |
 | ORF-BE-R027 | `reestimating` 目标冻结前必须至少有一个具体 Result。 | 冻结前指标保护 |
 | ORF-BE-R028 | 同一成员重复申请同一目标应返回 `alreadyApplied`；已成为挑战者后再次申请应返回 `alreadyAccepted`。 | 申请与接受守卫 |
@@ -150,7 +150,7 @@ flowchart TD
 | ORF-BE-R036 | 发布、征召、申请审核、冻结、验收均应保持指挥官权限边界。 | API 流程权限 |
 | ORF-BE-R037 | `/api/my-challenges?scope=all` 只能由指挥官读取。 | API 流程权限 |
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
-| ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`。 | API 输入归一化 |
+| ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`；行动项执行人必须是当前作用域 active 成员，空执行人回落为当前用户。 | API 输入归一化 |
 | ORF-BE-R040 | `Objective.stage` 是兼容字段，旧接口不能写入与 `flowStatus` 冲突的阶段；生命周期状态只能由 ORF 流程接口推进。 | API stage 兼容保护 |
 | ORF-BE-R041 | 指标更新提案携带的 `feedbackId`、任务创建携带的 `feedbackOriginId` 必须和当前指标同默认作用域、同指标；合法指标或任务请求不能连带改写或挂接其他作用域或其他指标的反馈。 | API 跨作用域写保护 |
 | ORF-BE-R042 | 目标结算写入 `pointLedger.userId` 时，只能在目标所属默认作用域内解析挑战者；其他作用域同名用户不能抢占积分流水身份。 | 积分流水作用域边界 |
@@ -167,11 +167,13 @@ flowchart TD
 | ORF-BE-R053 | 评论回复只能引用同一线程内真实存在的消息，`replyToAuthor` 必须由后端按真实作者回填。 | 评论数据一致性 |
 | ORF-BE-R054 | 删除被回复的评论消息后，保留下来的消息不能继续引用已删除的 `replyToMessageId`。 | 评论数据一致性 |
 | ORF-BE-R055 | 多名成员并发申请同一目标时，`challengeApplications` 必须保留所有申请，不能发生 JSON 数组读改写覆盖。 | 申请并发一致性 |
-| ORF-BE-R056 | 并发审批申请、征召、接受征召和拒绝征召时，目标上的挑战者、待征召成员和申请记录必须保留所有成员状态变化。 | 挑战生命周期并发一致性 |
+| ORF-BE-R056 | 并发审批申请、征召和接受征召时，目标上的挑战者、待征召成员和申请记录必须保留所有成员状态变化。 | 挑战生命周期并发一致性 |
 | ORF-BE-R057 | 并发新增指标、任务和子任务时，兄弟项 `sortOrder` 必须连续且不重复，移动操作也必须和新增操作使用同一父级锁。 | 执行协作排序一致性 |
 | ORF-BE-R058 | 并发新增同一目标下的评论时，只能复用同一个 open thread，并且保留每条根评论消息。 | 评论线程并发一致性 |
 | ORF-BE-R059 | 登录、注册、创建成员和编辑成员 API 必须在后端请求边界裁剪邮箱首尾空白并统一小写；注册姓名和成员姓名也必须裁剪后再校验和写入。 | API 输入归一化 |
 | ORF-BE-R060 | 最近在线只写 `lastOnlineAt`；登录、注册和 `/api/users/me/activity` 使用服务端时间更新，并且同一用户 60 秒内重复上报不能反复写库。 | 用户在线状态 |
+| ORF-BE-R061 | Ory session 必须优先按 `users.ory_identity_id` 映射 ORF 用户；只有未绑定预批准成员和历史数据可以按邮箱回退并完成绑定。 | 用户身份绑定 |
+| ORF-BE-R062 | 已绑定 Ory identity 的 ORF 用户不能通过用户管理接口修改邮箱；未绑定预批准成员仍可按现有唯一性规则编辑邮箱。 | 用户身份绑定 |
 
 ## 关键断言
 
@@ -215,7 +217,7 @@ flowchart TD
 - 冻结后旧 pending application 不能再被批准或拒绝，避免改写 `frozen` 状态。
 - 已进入 `reestimating` 的目标拒绝剩余 pending application 时，不能回到悬赏大厅状态。
 - 冻结后旧 assigned recruitment 不能再接受，避免改写 `frozen` 状态。
-- 拒绝征召只允许真正被征召成员在 `recruiting` 阶段执行，重复拒绝无效。
+- 当前不开放成员拒绝征召；旧拒绝路径不能改写 `assignedChallengers`。
 - 当前不开放退回重估；重估截止后不续期，冻结后也不返回 `reestimating`。
 - `reestimating` 目标至少有一个具体 Result 后才能冻结。
 

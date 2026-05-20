@@ -9,6 +9,7 @@ import type {
   ObjectiveContributionReview,
   OrfUser,
   PermissionRule,
+  Result,
 } from "../../../types/orf";
 
 type MetricCreationAction = {
@@ -69,6 +70,17 @@ export function canProposeObjectiveMetric(
 
 export function canMutateObjectiveWorkItems(objective: Objective | undefined): boolean {
   return Boolean(objective && objectiveWorkItemMutationStatuses.has(objective.flowStatus));
+}
+
+export function canFreezeObjectiveAfterReestimate(
+  objective: Objective | undefined,
+  results: readonly Pick<Result, "objectiveId">[],
+): boolean {
+  return Boolean(
+    objective &&
+      objective.flowStatus === "reestimating" &&
+      results.some((result) => result.objectiveId === objective.id),
+  );
 }
 
 export function metricCreationActionForObjective({

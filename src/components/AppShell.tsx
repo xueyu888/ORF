@@ -61,8 +61,8 @@ export function AppShell() {
               </Button>}
             </>
           )}
-          {!isBountyHall && canCreateObjective && (
-            <Button onClick={() => openModal({ type: "newObjective" })}>
+          {canCreateObjective && (
+            <Button className={isBountyHall ? "ml-auto" : undefined} onClick={() => openModal({ type: "newObjective" })}>
               <Plus className="h-4 w-4" />
               新建目标
             </Button>
