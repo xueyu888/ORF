@@ -8,6 +8,7 @@ import type {
   CommentThread,
   CommentTargetType,
   Feedback,
+  Objective,
   FeedbackStatus,
   LootResultClaim,
   OrfState,
@@ -26,6 +27,7 @@ export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
 type OnlineActivityResponse = { ok: boolean; lastOnlineAt?: string | null };
+type CreateObjectiveResponse = { objective: Objective };
 type SubmitLootInput = {
   objectiveId: string;
   body: string;
@@ -72,7 +74,7 @@ interface OrfContextValue {
   notify: (message: string) => void;
   removeToast: (id: string) => void;
   resetState: () => void;
-  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<boolean> : never;
+  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<Objective | null> : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<boolean>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
@@ -80,7 +82,6 @@ interface OrfContextValue {
   rejectChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   applyForBounty: (objectiveId: string) => Promise<boolean>;
   acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
-  declineBountyChallenge: (objectiveId: string) => Promise<boolean>;
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
@@ -302,7 +303,27 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
-      return "这个悬赏目标已经有挑战者";
+      if (error.message === "Objective already includes this challenger") {
+        return "你已经是这个目标的挑战者";
+      }
+
+      if (error.message === "Challenge application already exists") {
+        return "你已经申请过这个目标";
+      }
+
+      if (error.message === "Objective final due date is too close to start confirmation") {
+        return "目标截止时间太近，不能接受征召";
+      }
+
+      if (
+        error.message === "Objective is not open for challenge acceptance" ||
+        error.message === "Objective is not open for challenge applications" ||
+        error.message === "Objective status does not allow this operation"
+      ) {
+        return "目标状态已变化，请刷新后再试";
+      }
+
+      return error.message || "目标状态已变化，请刷新后再试";
     }
 
     return error.message || fallback;
@@ -613,21 +634,21 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       createObjective: async (input) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");
-          return false;
+          return null;
         }
 
         try {
-          await apiRequest("/api/objectives", {
+          const data = await apiJson<CreateObjectiveResponse>("/api/objectives", {
             method: "POST",
             body: JSON.stringify(input),
           });
           await refreshTaskManagementData();
           notify("目标已创建");
-          return true;
+          return data.objective;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "目标创建失败"));
           void refreshTaskManagementData().catch(() => undefined);
-          return false;
+          return null;
         }
       },
       createResult: async (input) => {
@@ -757,18 +778,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return true;
         } catch (error) {
           notify(bountyMutationFailureMessage(error, "接受挑战失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      declineBountyChallenge: async (objectiveId) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge/decline`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("已拒绝征召");
-          return true;
-        } catch (error) {
-          notify(bountyMutationFailureMessage(error, "拒绝征召失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

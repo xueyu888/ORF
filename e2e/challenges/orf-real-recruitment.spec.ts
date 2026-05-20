@@ -6,7 +6,7 @@ test.describe("ORF real recruitment flow", () => {
   test.skip(!realSystemEnabled, "Set ORF_REAL_E2E=1 to run against the real Fastify API and database.");
   test.describe.configure({ mode: "serial", timeout: 180_000 });
 
-  test("commander recruits A/B/C, A and B accept in sequence, C declines, observer cannot accept", async ({ browser, real }, testInfo) => {
+  test("commander recruits A/B/C, recruited members can only accept, observer cannot accept", async ({ browser, real }, testInfo) => {
     const dsl = new RealScenarioDsl(real);
     const commander = await real.newLoggedInPage(browser, real.fixture.commander);
     const challengerA = await real.newLoggedInPage(browser, real.fixture.challengerA);
@@ -28,14 +28,19 @@ test.describe("ORF real recruitment flow", () => {
       await assertBountyHallVisibility(real, real.fixture.challengerB, { recruitments: [title] });
       await dsl.acceptRecruitment(challengerB.page, title);
 
-      const declined = await dsl.declineRecruitment(real.fixture.reluctantMember, objectiveId);
-      expect(declined.status).toBe(200);
+      await dsl.openBounties(reluctant.page);
+      const reluctantRow = reluctant.page.locator(".bounty-list-row").filter({ hasText: title });
+      await expect(reluctantRow).toContainText("征召令");
+      await expect(reluctantRow.getByRole("button", { name: "接受挑战" })).toBeVisible();
+      await expect(reluctantRow.getByRole("button", { name: "拒绝征召" })).toHaveCount(0);
+      const legacyDecline = await real.apiAs(real.fixture.reluctantMember, `/api/objectives/${encodeURIComponent(objectiveId)}/challenge/decline`, { method: "PATCH" });
+      expect(legacyDecline.status).toBe(404);
       const observerAccept = await dsl.acceptRecruitmentViaApi(real.fixture.observer, objectiveId);
       expect(observerAccept.status).toBe(403);
 
       const objective = await dsl.objective(objectiveId);
       expect(objective.challengers).toEqual([real.fixture.challengerA.name, real.fixture.challengerB.name]);
-      expect(objective.assignedChallengers).toEqual([]);
+      expect(objective.assignedChallengers).toEqual([real.fixture.reluctantMember.name]);
       expect(objective.challengers).not.toContain(real.fixture.reluctantMember.name);
       expect(objective.challengers).not.toContain(real.fixture.observer.name);
 

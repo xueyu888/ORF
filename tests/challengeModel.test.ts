@@ -11,6 +11,7 @@ import {
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
+import { canFreezeObjectiveAfterReestimate } from "../src/features/challenge/model/orfFlowCapabilities";
 import {
   canViewObjectiveRecord,
   filterFeedbackForVisibleObjectives,
@@ -257,6 +258,16 @@ test("bounty and objective statuses follow the ORF frontend flow", () => {
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "frozen" })), "已冻结");
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "submitted" })), "待验收");
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "settled" })), "已结算");
+});
+
+test("freeze action requires reestimating objectives with concrete metrics", () => {
+  const reestimating = objective({ flowStatus: "reestimating" });
+  const frozen = objective({ flowStatus: "frozen" });
+
+  assert.equal(canFreezeObjectiveAfterReestimate(reestimating, []), false);
+  assert.equal(canFreezeObjectiveAfterReestimate(reestimating, [result({ objectiveId: reestimating.id })]), true);
+  assert.equal(canFreezeObjectiveAfterReestimate(frozen, [result({ objectiveId: frozen.id })]), false);
+  assert.equal(canFreezeObjectiveAfterReestimate(undefined, [result()]), false);
 });
 
 test("challenge permission helpers map target resources to configured permissions", () => {

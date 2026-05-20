@@ -104,5 +104,5 @@ test("disabled users see a disabled account state instead of pending review", as
   await expect(page.getByRole("heading", { name: "账号已停用" })).toBeVisible();
   await expect(page.getByText("你的账号已停用。请联系管理员恢复访问。")).toBeVisible();
   await expect(page.getByText("等待注册审核")).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "挑战" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "我的挑战" })).toHaveCount(0);
 });

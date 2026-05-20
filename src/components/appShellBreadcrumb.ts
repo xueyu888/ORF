@@ -2,7 +2,7 @@ const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
   bounties: "悬赏大厅",
   objectives: "目标",
-  tasks: "挑战",
+  tasks: "我的挑战",
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",
   feedback: "反馈",

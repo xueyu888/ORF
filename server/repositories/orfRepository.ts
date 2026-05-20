@@ -1094,37 +1094,6 @@ export async function recruitObjectiveChallengers(
   return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.scope) : recruitedResult;
 }
 
-export async function declineObjectiveChallenge(objectiveId: string, member: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
-  const nextMember = member.trim();
-  if (!nextMember) return { status: "invalid" };
-
-  const declinedResult = await db.transaction(async (tx) => {
-    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
-    if (!objective) return { status: "notFound" as const };
-    if (!challengeAcceptanceFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
-
-    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
-    if (!assignedChallengers.includes(nextMember)) return { status: "invalid" as const };
-
-    const nextAssigned = assignedChallengers.filter((item) => item !== nextMember);
-    const applications = objective.challengeApplications ?? [];
-    const challengers = uniqueMembers(objective.challengers ?? []);
-    await tx
-      .update(objectives)
-      .set({
-        assignedChallengers: nextAssigned,
-        challengeApplications: applications,
-        flowStatus: challengers.length > 0 ? "reestimating" : nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
-        updatedAt: today(),
-        updatedBy: actorId,
-      })
-      .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
-  });
-
-  return declinedResult.status === "ok" ? objectiveOutcome(objectiveId, declinedResult.scope) : declinedResult;
-}
-
 export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
   const frozen = await db.transaction(async (tx) => {
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackSource, Impact, Priority } from "../types/orf";
@@ -126,6 +127,7 @@ function hasBlankRequiredValues(values: string[]) {
 
 function NewObjectiveModal() {
   const { createObjective, closeModal, notify } = useOrf();
+  const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [whyItMatters, setWhyItMatters] = useState("");
   const [cycle, setCycle] = useState(() => defaultCycleLabel());
@@ -146,14 +148,17 @@ function NewObjectiveModal() {
           if (submitting) return;
           setSubmitting(true);
           try {
-            const ok = await createObjective({
+            const objective = await createObjective({
               title: title.trim(),
               whyItMatters: whyItMatters.trim(),
               cycle: cycle.trim(),
               boundary: boundary.trim(),
               finalDueAt,
             });
-            if (ok) closeModal();
+            if (objective) {
+              closeModal();
+              navigate("/tasks");
+            }
           } finally {
             setSubmitting(false);
           }
@@ -276,7 +281,9 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
 
 function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: string; resultId?: string; feedbackId?: string }) {
   const { state, createTask, closeModal, currentUser, notify } = useOrf();
-  const defaultAssignee = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
+  const assigneeOptions = (currentUser?.role === "admin" ? state.users : currentUser ? [currentUser] : state.users)
+    .filter((user, index, users) => user.status === "active" && users.findIndex((item) => item.id === user.id) === index);
+  const defaultAssignee = assigneeOptions.find((user) => user.id === currentUser?.id)?.name ?? assigneeOptions[0]?.name ?? "";
   const linkedFeedback = state.feedback.find((item) => item.id === feedbackId);
   const resultOptions = objectiveId ? state.results.filter((result) => result.objectiveId === objectiveId) : state.results;
   const requestedResultId = resultId ?? linkedFeedback?.linkedResultId;
@@ -295,7 +302,7 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
         className="grid gap-4"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (hasBlankRequiredValues([title, linkedResultId])) {
+          if (hasBlankRequiredValues([title, linkedResultId, assignee])) {
             notify("请填写所有必填字段");
             return;
           }
@@ -326,7 +333,15 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
         <Field label="说明"><textarea className="orf-input min-h-24 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
         <Field label="关联指标"><select className="orf-input px-3 py-2" required value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="执行人"><input className="orf-input px-3 py-2" value={assignee} onChange={(event) => setAssignee(event.target.value)} /></Field>
+          <Field label="执行人">
+            <select className="orf-input px-3 py-2" required value={assignee} onChange={(event) => setAssignee(event.target.value)}>
+              {assigneeOptions.map((user) => (
+                <option key={user.id} value={user.name}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="优先级"><select className="orf-input px-3 py-2" value={priority} onChange={(event) => setPriority(event.target.value as Priority)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "紧急"}</option>)}</select></Field>
         </div>
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit" disabled={submitting}>保存行动项</Button></div>

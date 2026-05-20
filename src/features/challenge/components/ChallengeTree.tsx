@@ -20,7 +20,7 @@ import {
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
-import { workbenchActionForObjective } from "../model/orfFlowCapabilities";
+import { canFreezeObjectiveAfterReestimate, workbenchActionForObjective } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
@@ -170,7 +170,7 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
-        <ObjectiveFlowAction objective={group.objective} handlers={handlers} />
+        <ObjectiveFlowAction group={group} handlers={handlers} />
         <AvatarStack names={group.challengers} />
         <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
@@ -253,7 +253,8 @@ function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string 
   );
 }
 
-function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode["objective"]; handlers: RowHandlers }) {
+function ObjectiveFlowAction({ group, handlers }: { group: ObjectiveNode; handlers: RowHandlers }) {
+  const objective = group.objective;
   if (!handlers.canManageFlow) return <EmptySlot />;
 
   const actions: ReactNode[] = [];
@@ -276,7 +277,7 @@ function ObjectiveFlowAction({ objective, handlers }: { objective: ObjectiveNode
     );
   }
 
-  if (objective.flowStatus === "reestimating") {
+  if (canFreezeObjectiveAfterReestimate(objective, group.bounties.map((bounty) => bounty.result))) {
     actions.push(
       <button className="orf-flow-action-button orf-flow-action-primary" type="button" title="重估完成并冻结目标" onClick={() => void handlers.onFreezeObjective(objective.id)}>
         <CheckCircle2 className="h-3.5 w-3.5" />

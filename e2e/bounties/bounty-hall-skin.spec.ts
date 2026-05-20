@@ -93,3 +93,23 @@ test("renders the bounty hall list and expands details inline on hover", async (
   await costRoutingRow.click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
+
+test("recruited bounty rows only expose the accept path", async ({ page }) => {
+  let declineRequests = 0;
+
+  await page.route("**/api/bounties", async (route) => {
+    await route.fulfill({ json: bountyHallData });
+  });
+  await page.route("**/api/objectives/*/challenge/decline", async (route) => {
+    declineRequests += 1;
+    await route.fulfill({ status: 500, json: { error: "decline should not be called" } });
+  });
+
+  await page.goto("/bounties");
+
+  const recruitmentRow = page.locator(".bounty-list-row").filter({ hasText: "征召令" });
+  await expect(recruitmentRow.getByRole("button", { name: "接受挑战" })).toBeVisible();
+  await expect(recruitmentRow.getByRole("button", { name: "拒绝征召" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "拒绝征召" })).toHaveCount(0);
+  await expect.poll(() => declineRequests).toBe(0);
+});
