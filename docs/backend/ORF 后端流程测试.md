@@ -15,6 +15,7 @@
 | 目标无指标可见性 | `published objective without concrete results is visible in the bounty hall` | 指挥官只发布 Objective，不预先定义具体 Result，挑战者仍应在悬赏大厅看到该目标 |
 | 征召无指标可见性 | `recruited objective without concrete results is visible as a recruitment item` | 指挥官只发布 Objective 后征召成员，被征召成员仍应看到征召项 |
 | 申请到结算 | `commander and challenger can complete the application-to-settlement ORF backend flow` | 指挥官发布悬赏，挑战者申请，指挥官通过，挑战者在重估期提出 / 编辑指标，冻结，提交战利品，验收结算 |
+| 消息接口 | `notification API scopes messages to the current recipient and supports read state` | 申请挑战生成指挥官消息；当前用户只能读取和标记自己的消息 |
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
 | API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
@@ -174,6 +175,7 @@ flowchart TD
 | ORF-BE-R060 | 最近在线只写 `lastOnlineAt`；登录、注册和 `/api/users/me/activity` 使用服务端时间更新，并且同一用户 60 秒内重复上报不能反复写库。 | 用户在线状态 |
 | ORF-BE-R061 | Ory session 必须优先按 `users.ory_identity_id` 映射 ORF 用户；只有未绑定预批准成员和历史数据可以按邮箱回退并完成绑定。 | 用户身份绑定 |
 | ORF-BE-R062 | 已绑定 Ory identity 的 ORF 用户不能通过用户管理接口修改邮箱；未绑定预批准成员仍可按现有唯一性规则编辑邮箱。 | 用户身份绑定 |
+| ORF-BE-R063 | 申请挑战、征召和提交战利品必须生成接收人系统消息；消息按当前用户和默认作用域隔离，不能读取或标记他人消息。 | 消息接口、申请到结算、征召到接受 |
 
 ## 关键断言
 

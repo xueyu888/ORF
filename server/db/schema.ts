@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
   ContributionAllocation,
   LootResultClaim,
+  NotificationKind,
+  NotificationTargetType,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
   OrfStage,
@@ -156,6 +158,35 @@ export const pointLedger = pgTable("point_ledger", {
   reason: text("reason").notNull(),
   createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
 });
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    recipientUserId: text("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull().default(""),
+    kind: text("kind").$type<NotificationKind>().notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    targetType: text("target_type").$type<NotificationTargetType>().notNull(),
+    targetId: text("target_id").notNull(),
+    targetHref: text("target_href").notNull(),
+    readAt: timestamp("read_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, string>>().notNull().default({}),
+  },
+  (table) => ({
+    recipientCreatedAt: index("notifications_recipient_created_at_idx").on(table.recipientUserId, table.createdAt),
+    recipientUnread: index("notifications_recipient_unread_idx").on(table.recipientUserId, table.readAt),
+    teamCreatedAt: index("notifications_team_created_at_idx").on(table.teamId, table.createdAt),
+  }),
+);
 
 export const results = pgTable("results", {
   id: text("id").primaryKey(),

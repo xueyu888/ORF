@@ -9,6 +9,8 @@ export type MetricDirection = "increase" | "decrease";
 export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
+export type NotificationKind = "challenge.application.created" | "objective.recruitment.created" | "objective.loot.submitted";
+export type NotificationTargetType = "objective" | "objectiveLoot";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -46,6 +48,22 @@ export interface ChallengeApplication {
   createdAt: string;
   decidedAt?: string | null;
   decidedBy?: string | null;
+}
+
+export interface AppNotification {
+  id: string;
+  kind: NotificationKind;
+  recipientUserId: string;
+  actorUserId?: string | null;
+  actorName: string;
+  title: string;
+  body: string;
+  targetType: NotificationTargetType;
+  targetId: string;
+  targetHref: string;
+  readAt?: string | null;
+  createdAt: string;
+  metadata: Record<string, string>;
 }
 
 export interface ActivityItem {

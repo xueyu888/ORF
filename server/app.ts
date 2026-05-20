@@ -93,6 +93,12 @@ import {
   setDefaultVisualBackground,
   visualBackgroundError,
 } from "./settings/visualBackgrounds";
+import {
+  getUnreadNotificationCount,
+  listNotificationsForUser,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "./repositories/notificationRepository";
 import { isDateOnlyString } from "../src/utils/date";
 
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
@@ -132,6 +138,7 @@ const applicationParamsSchema = objectiveParamsSchema.extend({ applicationId: z.
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
 const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
+const notificationParamsSchema = z.object({ notificationId: z.string().min(1) });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
 const permissionRoleParamsSchema = z.object({ role: userRoleSchema });
 const dateOnlySchema = z.string().trim().refine(isDateOnlyString, { message: "Invalid date" });
@@ -874,6 +881,45 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     return getMyChallengesData(user.name, query.scope === "all", { scope });
   });
+  app.get("/api/notifications", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return {
+      notifications: await listNotificationsForUser(context.user.id, context.scope),
+      unreadCount: await getUnreadNotificationCount(context.user.id, context.scope),
+    };
+  });
+  app.patch("/api/notifications/:notificationId/read", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = notificationParamsSchema.parse(request.params);
+    const notification = await markNotificationRead(params.notificationId, context.user.id, context.scope);
+    if (!notification) {
+      return reply.code(404).send({ error: "Notification not found" });
+    }
+
+    return {
+      notification,
+      unreadCount: await getUnreadNotificationCount(context.user.id, context.scope),
+    };
+  });
+  app.patch("/api/notifications/read-all", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return {
+      updated: await markAllNotificationsRead(context.user.id, context.scope),
+      unreadCount: await getUnreadNotificationCount(context.user.id, context.scope),
+    };
+  });
   app.get("/api/orf-state", async (request, reply) => {
     const context = await requireAdminContext(request, reply);
     if (!context) {
@@ -1441,7 +1487,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
 
-    const outcome = await applyForObjectiveChallenge(params.objectiveId, user.name);
+    const outcome = await applyForObjectiveChallenge(params.objectiveId, user.name, user.id);
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Objective not found" });

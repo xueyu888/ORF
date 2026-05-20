@@ -96,6 +96,13 @@ test("sidebar keeps utility actions inside the user panel", () => {
   }
 });
 
+test("system messages stay out of the primary sidebar navigation", () => {
+  const navigationSource = readFileSync(path.resolve("src/config/navigation.ts"), "utf8");
+  const sidebarSource = readFileSync(path.resolve("src/components/Sidebar.tsx"), "utf8");
+  assert.match(navigationSource, /label: "消息"/, "Messages should remain reachable through global navigation data");
+  assert.doesNotMatch(sidebarSource, /labels: \[[^\]]*"消息"/, "Messages must not become a primary sidebar item");
+});
+
 test("feedback creation page actions use visible objective participation", () => {
   for (const file of [
     path.resolve("src/components/AppShell.tsx"),
