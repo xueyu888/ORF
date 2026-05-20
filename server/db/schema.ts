@@ -37,7 +37,7 @@ export const users = pgTable("users", {
   email: text("email"),
   status: text("status").$type<UserStatus>().notNull().default("active"),
   createdAt: date("created_at", { mode: "string" }).notNull(),
-  lastLoginAt: timestamp("last_login_at", { mode: "string", withTimezone: true }),
+  lastOnlineAt: timestamp("last_online_at", { mode: "string", withTimezone: true }),
 });
 
 export const teamMembers = pgTable(

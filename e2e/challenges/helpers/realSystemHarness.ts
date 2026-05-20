@@ -246,11 +246,11 @@ async function seedRealFixture(db: Runtime["db"], schema: Runtime["schema"], inp
     users.map((user) => ({
       id: user.id,
       name: user.name,
-      email: user.email,
-      status: user.status ?? "active",
-      createdAt: "2026-05-18",
-      lastLoginAt: null,
-    })),
+	      email: user.email,
+	      status: user.status ?? "active",
+	      createdAt: "2026-05-18",
+	      lastOnlineAt: null,
+	    })),
   );
   await db.insert(schema.teamMembers).values(users.map((user) => ({ teamId: input.teamId, userId: user.id, role: user.role })));
   await db.insert(schema.rolePermissions).values({

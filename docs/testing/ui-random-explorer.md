@@ -183,6 +183,8 @@ score = 100 * (
 )
 ```
 
+事件结果概览里的图表使用互斥分类：新状态、新转移、已知变化、无变化；异常事件单独计数，因为异常可以和其他结果同时发生。
+
 This score estimates exploration over the discovered UI state space. It does not prove complete path coverage.
 
 该分数只估算“已发现 UI 状态空间”的探索程度，不证明全系统路径已完整覆盖。

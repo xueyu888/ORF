@@ -161,7 +161,7 @@ function ObjectivePanel({
               value={group.objective.title}
             />
           ) : (
-            <div className={clsx("orf-objective-title min-w-0 flex-1 truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{group.objective.title}</div>
+            <div className={clsx("orf-objective-title min-w-0 truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{group.objective.title}</div>
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>

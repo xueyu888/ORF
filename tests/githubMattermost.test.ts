@@ -91,6 +91,7 @@ test("GitHub webhook rejects oversized payloads before signature processing", as
   const previousEnv = {
     GITHUB_WEBHOOK_SECRET: process.env.GITHUB_WEBHOOK_SECRET,
     MATTERMOST_CHANNEL_ID: process.env.MATTERMOST_CHANNEL_ID,
+    MATTERMOST_JIRA_REMINDER_ENABLED: process.env.MATTERMOST_JIRA_REMINDER_ENABLED,
     MATTERMOST_LOGIN_ID: process.env.MATTERMOST_LOGIN_ID,
     MATTERMOST_PASSWORD: process.env.MATTERMOST_PASSWORD,
     MATTERMOST_URL: process.env.MATTERMOST_URL,
@@ -101,6 +102,7 @@ test("GitHub webhook rejects oversized payloads before signature processing", as
   process.env.MATTERMOST_LOGIN_ID = "bot@example.com";
   process.env.MATTERMOST_PASSWORD = "password";
   process.env.MATTERMOST_URL = "https://mattermost.example.com";
+  process.env.MATTERMOST_JIRA_REMINDER_ENABLED = "false";
 
   const app = await buildServer({ logger: false, registerOptionalIntegrations: true });
   try {
