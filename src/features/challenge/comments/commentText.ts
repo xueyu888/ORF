@@ -22,6 +22,14 @@ export function parseCommentBodyLinks(body: string): CommentBodyToken[] {
 
     if (!href) continue;
 
+    const titleLink = titleLinkRangeFor(body, matchIndex, rawCandidate.length, href);
+    if (titleLink && titleLink.labelStart >= cursor) {
+      pushTextToken(tokens, body.slice(cursor, titleLink.labelStart));
+      tokens.push({ type: "link", value: titleLink.label, href });
+      cursor = titleLink.urlLineEnd;
+      continue;
+    }
+
     pushTextToken(tokens, body.slice(cursor, matchIndex));
     tokens.push({ type: "link", value: linkText, href });
     pushTextToken(tokens, trailingText);
@@ -30,6 +38,43 @@ export function parseCommentBodyLinks(body: string): CommentBodyToken[] {
 
   pushTextToken(tokens, body.slice(cursor));
   return tokens;
+}
+
+function titleLinkRangeFor(body: string, matchIndex: number, rawLength: number, href: string) {
+  const urlLineStart = body.lastIndexOf("\n", matchIndex - 1) + 1;
+  const rawEnd = matchIndex + rawLength;
+  const urlLineBreak = body.indexOf("\n", rawEnd);
+  const urlLineEnd = urlLineBreak === -1 ? body.length : urlLineBreak;
+  if (body.slice(rawEnd, urlLineEnd).trim()) return null;
+
+  const sameLineLabel = titleLabelRangeFor(body, urlLineStart, matchIndex);
+  if (sameLineLabel && isLikelyLinkTitle(sameLineLabel.label, href)) {
+    return { ...sameLineLabel, urlLineEnd };
+  }
+
+  const previousLineEnd = urlLineStart > 0 ? urlLineStart - 1 : -1;
+  if (previousLineEnd < 0) return null;
+
+  const previousLineStart = body.lastIndexOf("\n", previousLineEnd - 1) + 1;
+  const previousLineLabel = titleLabelRangeFor(body, previousLineStart, previousLineEnd);
+
+  if (!previousLineLabel || !isLikelyLinkTitle(previousLineLabel.label, href)) return null;
+
+  return {
+    ...previousLineLabel,
+    urlLineEnd,
+  };
+}
+
+function titleLabelRangeFor(body: string, lineStart: number, lineEnd: number) {
+  const rawLabelLine = body.slice(lineStart, lineEnd);
+  const label = rawLabelLine.trim();
+  if (!label) return null;
+
+  return {
+    label,
+    labelStart: lineStart + rawLabelLine.length - rawLabelLine.trimStart().length,
+  };
 }
 
 function splitTrailingLinkText(candidate: string) {
@@ -55,6 +100,22 @@ function splitTrailingLinkText(candidate: string) {
   }
 
   return { linkText, trailingText };
+}
+
+function isLikelyLinkTitle(label: string, href: string) {
+  if (label.length < 6) return false;
+  if (linkCandidatePattern.test(label)) {
+    linkCandidatePattern.lastIndex = 0;
+    return false;
+  }
+  linkCandidatePattern.lastIndex = 0;
+
+  try {
+    const url = new URL(href);
+    return label !== url.hostname && label !== url.toString();
+  } catch {
+    return true;
+  }
 }
 
 function linkHrefFor(value: string) {
