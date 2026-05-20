@@ -1,5 +1,5 @@
 import { payloadKinds } from "./payloads";
-import { shortHash, stableStringify } from "./stateNormalizer";
+import { shortHash, stableStringify } from "./stateAbstractorRegistry";
 import type { EventParams, UiEvent, UiOperation, UiTarget } from "./types";
 
 const pastePayloadKinds = new Set(["emojiText", "veryLongText", "structuredText", "malformedText", "multiLineText"]);
@@ -34,6 +34,12 @@ export function generateCandidateEvents(targets: UiTarget[]): UiEvent[] {
       events.push(event("pressKey", target, { key: "Space" }));
       events.push(event("repeatedClick", target, { button: "left", count: 2 }));
       events.push(event("repeatedClick", target, { button: "left", count: 4 }));
+    }
+
+    if (target.capabilities.includes("select")) {
+      events.push(event("selectOption", target, { optionBucket: "first" }));
+      events.push(event("selectOption", target, { optionBucket: "next" }));
+      events.push(event("selectOption", target, { optionBucket: "last" }));
     }
 
     if (target.capabilities.includes("scroll")) {

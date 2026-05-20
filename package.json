@@ -19,7 +19,7 @@
     "testd": "playwright test testd",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",
-    "test:e2e:explorer": "playwright test e2e/ui-random-explorer.spec.ts",
+    "test:e2e:explorer": "playwright test --config=e2e/playwright.config.ts ui-random-explorer.spec.ts",
     "test:e2e:explorer:fast": "tsx scripts/run-ui-explorer-parallel.ts",
     "verify": "npm run build && npm test && npm run test:e2e",
     "ory:dev": "tsx scripts/prepare-ory-env.ts && sg docker -c 'docker compose -f docker-compose.ory.yml up -d kratos'",

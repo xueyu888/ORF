@@ -240,6 +240,9 @@ export class CoverageGraph {
     );
     const targetCoverage = ratio(this.targetInteractions.size, this.discoveredTargets.size);
     const payloadKindCoverage = ratio(this.payloadInteractions.size, payloadKinds.length);
+    const repeatableRegionCount = new Set(
+      Array.from(this.states.values()).flatMap((state) => state.repeatableRegions.map((region) => region.signature)),
+    ).size;
     const noChangeRate = ratio(records.filter((record) => record.noChange).length, executedSteps);
     const routeEscapeCount = records.filter((record) => record.routeEscape).length;
     const runtimeErrorCount = records.reduce((sum, record) => sum + record.issues.length, 0);
@@ -277,6 +280,7 @@ export class CoverageGraph {
       discoveredSpaceExplorationScore,
       stateGrowthSaturation,
       transitionGrowthSaturation,
+      repeatableRegionCount,
     };
   }
 
@@ -324,6 +328,8 @@ export class CoverageGraph {
       noChangeCount: 0,
       newStateOutCount: 0,
       errorCount: 0,
+      repeatableRegionStates: [...state.repeatableRegionStates],
+      repeatableRegions: state.repeatableRegions.map((region) => ({ ...region })),
       candidates: [],
     };
     this.states.set(state.id, node);

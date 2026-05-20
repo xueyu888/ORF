@@ -23,6 +23,7 @@ test("event generator uses the reduced single input payload set", () => {
 function inputTarget(): UiTarget {
   return {
     id: "T-input",
+    routePattern: "/auth",
     signature: "input:textbox:email",
     selector: "input:nth-of-type(1)",
     kind: "input:textbox:email",

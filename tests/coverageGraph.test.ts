@@ -47,10 +47,10 @@ test("coverage graph tracks states, transitions, and candidate coverage", () => 
 
 test("coverage graph reports canonical candidate coverage across states", () => {
   const graph = new CoverageGraph();
-  const stateA = state("A");
-  const stateB = state("B");
-  const clickA = event("click:dynamic-a");
-  const clickB = event("click:dynamic-b");
+  const stateA = state("A", "/tasks");
+  const stateB = state("B", "/bounties");
+  const clickA = event("click:tasks-settings", {}, "/tasks");
+  const clickB = event("click:bounties-settings", {}, "/bounties");
 
   graph.observeState(stateA, [clickA], 0);
   graph.observeState(stateB, [clickB], 1);
@@ -60,16 +60,17 @@ test("coverage graph reports canonical candidate coverage across states", () => 
 
   assert.equal(summary.discoveredCandidateEventCount, 2);
   assert.equal(summary.testedCandidateEventCount, 1);
+  assert.equal(summary.targetCoverage, 0.5);
   assert.equal(summary.discoveredCanonicalCandidateEventCount, 1);
   assert.equal(summary.testedCanonicalCandidateEventCount, 1);
   assert.equal(summary.canonicalCandidateEventCoverage, 1);
 });
 
-function state(id: string): NormalizedState {
+function state(id: string, routePattern = "/auth"): NormalizedState {
   return {
     id: `S-${id}`,
     fingerprint: `fingerprint-${id}`,
-    routePattern: "/auth",
+    routePattern,
     visibleTargetSummary: {},
     interactableStructure: [],
     focusedTargetSignature: null,
@@ -79,13 +80,16 @@ function state(id: string): NormalizedState {
     networkPendingSummary: "none",
     mainVisibleTextHash: id,
     targetSignatures: [],
+    repeatableRegionStates: [],
+    repeatableRegions: [],
   };
 }
 
-function event(signature: string, params: UiEvent["params"] = {}): UiEvent {
+function event(signature: string, params: UiEvent["params"] = {}, routePattern = "/auth"): UiEvent {
   const target: UiTarget = {
     id: "T-a",
-    signature: "target-a",
+    routePattern,
+    signature: `route:${routePattern}|target-a`,
     selector: "button:nth-of-type(1)",
     kind: "button",
     tag: "button",

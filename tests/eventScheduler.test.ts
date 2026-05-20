@@ -44,12 +44,15 @@ function state(id: string): NormalizedState {
     networkPendingSummary: "none",
     mainVisibleTextHash: id,
     targetSignatures: [],
+    repeatableRegionStates: [],
+    repeatableRegions: [],
   };
 }
 
 function event(signature: string, operation: UiEvent["operation"], params: UiEvent["params"] = {}): UiEvent {
   const target: UiTarget = {
     id: "T-a",
+    routePattern: "/auth",
     signature: `target-${signature}`,
     selector: "input:nth-of-type(1)",
     kind: "input",

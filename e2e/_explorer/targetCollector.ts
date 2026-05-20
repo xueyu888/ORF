@@ -1,11 +1,15 @@
 import type { Page } from "@playwright/test";
 import type { TargetCapability, UiTarget } from "./types";
-import { shortHash } from "./stateNormalizer";
+import { normalizeRoutePattern, shortHash } from "./stateAbstractorRegistry";
 
-type BrowserTarget = Omit<UiTarget, "id">;
+type BrowserTarget = Omit<UiTarget, "id" | "routePattern">;
 
-export async function collectTargets(page: Page): Promise<UiTarget[]> {
-  const targets = await page.evaluate(() => {
+export type TargetCollectionScope = {
+  rootSelector?: string;
+};
+
+export async function collectTargets(page: Page, scope: TargetCollectionScope = {}): Promise<UiTarget[]> {
+  const targets = await page.evaluate((rootSelector) => {
     const viewportWidth = Math.max(1, window.innerWidth);
     const viewportHeight = Math.max(1, window.innerHeight);
 
@@ -61,6 +65,9 @@ export async function collectTargets(page: Page): Promise<UiTarget[]> {
       }
       if (tag === "select") {
         return "select";
+      }
+      if (tag === "summary") {
+        return "button";
       }
       if (tag === "textarea") {
         return "textbox";
@@ -120,11 +127,18 @@ export async function collectTargets(page: Page): Promise<UiTarget[]> {
       const clickable =
         tag === "button" ||
         tag === "a" ||
+        tag === "summary" ||
         role === "button" ||
         role === "link" ||
+        role === "menuitem" ||
+        role === "option" ||
+        role === "tab" ||
+        role === "combobox" ||
+        role === "switch" ||
+        element.hasAttribute("aria-haspopup") ||
         inputType === "button" ||
         inputType === "submit";
-      const toggle = role === "checkbox" || role === "radio" || inputType === "checkbox" || inputType === "radio";
+      const toggle = role === "checkbox" || role === "radio" || role === "switch" || inputType === "checkbox" || inputType === "radio";
       const textInput =
         tag === "textarea" ||
         element.getAttribute("contenteditable") === "true" ||
@@ -159,16 +173,27 @@ export async function collectTargets(page: Page): Promise<UiTarget[]> {
       "input",
       "textarea",
       "select",
+      "summary",
       "[role=button]",
       "[role=link]",
       "[role=checkbox]",
       "[role=radio]",
+      "[role=menuitem]",
+      "[role=option]",
+      "[role=tab]",
+      "[role=switch]",
+      "[role=combobox]",
       "[contenteditable=true]",
       "[tabindex]",
       "[aria-label]",
+      "[aria-haspopup]",
     ].join(",");
     const sameKindCounts = new Map<string, number>();
-    return Array.from(document.querySelectorAll(selector))
+    const root = rootSelector ? document.querySelector(rootSelector) : document;
+    if (!root) {
+      return [];
+    }
+    return Array.from(root.querySelectorAll(selector))
       .filter((element) => {
         if (!isElementEnabled(element) || !isVisibleAndReachable(element)) {
           return false;
@@ -221,7 +246,19 @@ export async function collectTargets(page: Page): Promise<UiTarget[]> {
           capabilities,
         };
       });
-  });
+  }, scope.rootSelector ?? null);
 
-  return (targets as BrowserTarget[]).map((target) => ({ ...target, id: `T-${shortHash(target.signature)}` }));
+  const routePattern = routePatternForUrl(page.url());
+  return (targets as BrowserTarget[]).map((target) => {
+    const signature = routeScopedTargetSignature(routePattern, target.signature);
+    return { ...target, routePattern, signature, id: `T-${shortHash(signature)}` };
+  });
+}
+
+function routePatternForUrl(url: string) {
+  return normalizeRoutePattern(new URL(url).pathname);
+}
+
+function routeScopedTargetSignature(routePattern: string, domSignature: string) {
+  return `route:${routePattern}|${domSignature}`;
 }

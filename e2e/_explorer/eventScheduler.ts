@@ -85,6 +85,7 @@ function baseWeight(operation: UiOperation) {
       return 3;
     case "pressKey":
     case "modifiedKey":
+    case "selectOption":
       return 2.5;
     case "doubleClick":
     case "repeatedClick":

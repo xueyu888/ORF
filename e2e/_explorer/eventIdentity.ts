@@ -1,4 +1,4 @@
-import { shortHash, stableStringify } from "./stateNormalizer";
+import { shortHash, stableStringify } from "./stateAbstractorRegistry";
 import type { EventParams, UiEvent, UiTarget } from "./types";
 
 export function canonicalEventSignature(event: UiEvent) {
@@ -37,6 +37,7 @@ function canonicalParams(params: EventParams) {
     pointBucket: params.pointBucket,
     durationBucket: durationBucket(params.durationMs),
     count: params.count,
+    optionBucket: params.optionBucket,
   };
 }
 
