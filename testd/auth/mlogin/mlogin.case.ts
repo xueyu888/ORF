@@ -22,22 +22,26 @@ export const mloginSuccessCase = {
       {
         id: "backend.ready",
         title: "后端服务可用",
-        operator: "api.health.ok",
+        object: "api.health",
+        operator: "ok",
       },
       {
         id: "db.ready",
         title: "数据库可连接",
-        operator: "db.ready",
+        object: "db",
+        operator: "ready",
       },
       {
         id: "ory.ready",
         title: "Ory Admin API 可用",
-        operator: "ory.admin.ready",
+        object: "ory.admin",
+        operator: "ready",
       },
       {
         id: "protected.redirects_to_auth",
         title: "受保护页面会回到登录页",
-        operator: "page.protected.redirects_to_auth",
+        object: "page.protected",
+        operator: "redirects_to_auth",
         params: {
           path: "/bounties",
           pattern: "/auth$",
@@ -46,17 +50,20 @@ export const mloginSuccessCase = {
       {
         id: "session.unauthenticated",
         title: "后端 session 未登录",
-        operator: "auth.session.unauthenticated",
+        object: "auth.session",
+        operator: "unauthenticated",
       },
       {
         id: "cookie.absent",
         title: "浏览器不存在登录 cookie",
-        operator: "browser.cookie.absent",
+        object: "browser.cookie",
+        operator: "absent",
       },
       {
         id: "storage.empty",
         title: "浏览器 storage 不含登录态",
-        operator: "browser.auth_storage.empty",
+        object: "browser.auth_storage",
+        operator: "empty",
       },
     ],
   },
@@ -67,7 +74,8 @@ export const mloginSuccessCase = {
       {
         id: "ory.identity.upsert",
         title: "准备 Ory 测试身份",
-        operator: "ory.identity.upsert",
+        object: "ory.identity",
+        operator: "upsert",
         params: {
           saveAs: "oryIdentity",
         },
@@ -75,7 +83,8 @@ export const mloginSuccessCase = {
       {
         id: "ory.sessions.revoke",
         title: "清理测试身份已有 Ory session",
-        operator: "ory.sessions.revoke",
+        object: "ory.sessions",
+        operator: "revoke",
         params: {
           identityIdFrom: "runtime.oryIdentity.id",
         },
@@ -83,7 +92,8 @@ export const mloginSuccessCase = {
       {
         id: "db.team.ensure",
         title: "准备测试团队",
-        operator: "db.team.ensure",
+        object: "db.team",
+        operator: "ensure",
         params: {
           saveAs: "teamId",
         },
@@ -91,7 +101,8 @@ export const mloginSuccessCase = {
       {
         id: "db.user.upsert",
         title: "准备 ORF 测试成员",
-        operator: "db.user.upsert",
+        object: "db.user",
+        operator: "upsert",
         params: {
           saveAs: "orfUser",
         },
@@ -99,12 +110,14 @@ export const mloginSuccessCase = {
       {
         id: "browser.clear",
         title: "清理浏览器状态",
-        operator: "browser.clear_state",
+        object: "browser",
+        operator: "clear_state",
       },
       {
         id: "page.goto.auth",
         title: "打开登录页",
-        operator: "page.goto",
+        object: "page",
+        operator: "goto",
         params: {
           path: "/auth",
         },
@@ -112,7 +125,8 @@ export const mloginSuccessCase = {
       {
         id: "button.sign_in.enabled",
         title: "登录按钮可点击",
-        operator: "page.enabled",
+        object: "page",
+        operator: "enabled",
         params: {
           role: "button",
           name: "Sign In",
@@ -127,7 +141,8 @@ export const mloginSuccessCase = {
       {
         id: "url.auth",
         title: "当前页面是登录页",
-        operator: "page.url.match",
+        object: "page.url",
+        operator: "match",
         params: {
           pattern: "/auth$",
         },
@@ -135,7 +150,8 @@ export const mloginSuccessCase = {
       {
         id: "heading.sign_in.visible",
         title: "登录页标题可见",
-        operator: "page.visible",
+        object: "page",
+        operator: "visible",
         params: {
           role: "heading",
           name: "Sign in",
@@ -144,7 +160,8 @@ export const mloginSuccessCase = {
       {
         id: "input.email.empty",
         title: "邮箱输入框为空",
-        operator: "input.value",
+        object: "input",
+        operator: "value",
         params: {
           label: "Email",
           value: "",
@@ -153,7 +170,8 @@ export const mloginSuccessCase = {
       {
         id: "input.password.empty",
         title: "密码输入框为空",
-        operator: "input.value",
+        object: "input",
+        operator: "value",
         params: {
           label: "Password",
           exact: true,
@@ -163,7 +181,8 @@ export const mloginSuccessCase = {
       {
         id: "button.sign_in.enabled",
         title: "登录按钮可点击",
-        operator: "page.enabled",
+        object: "page",
+        operator: "enabled",
         params: {
           role: "button",
           name: "Sign In",
@@ -172,17 +191,20 @@ export const mloginSuccessCase = {
       {
         id: "session.unauthenticated",
         title: "后端 session 未登录",
-        operator: "auth.session.unauthenticated",
+        object: "auth.session",
+        operator: "unauthenticated",
       },
       {
         id: "cookie.absent",
         title: "浏览器不存在登录 cookie",
-        operator: "browser.cookie.absent",
+        object: "browser.cookie",
+        operator: "absent",
       },
       {
         id: "ory.identity.exists",
         title: "Ory 测试身份存在",
-        operator: "ory.identity.exists",
+        object: "ory.identity",
+        operator: "exists",
         params: {
           emailFrom: "data.email",
         },
@@ -190,7 +212,8 @@ export const mloginSuccessCase = {
       {
         id: "db.member.matches",
         title: "ORF 普通成员关系存在",
-        operator: "db.member.matches",
+        object: "db.member",
+        operator: "matches",
         params: {
           userIdFrom: "runtime.orfUser.id",
           teamIdFrom: "data.teamId",
@@ -207,7 +230,8 @@ export const mloginSuccessCase = {
       {
         id: "capture.login_response",
         title: "开始捕获登录接口响应",
-        operator: "api.capture_response",
+        object: "api",
+        operator: "capture_response",
         params: {
           urlEndsWith: "/api/auth/login",
           method: "POST",
@@ -217,7 +241,8 @@ export const mloginSuccessCase = {
       {
         id: "fill.email",
         title: "输入邮箱",
-        operator: "page.fill",
+        object: "page",
+        operator: "fill",
         params: {
           label: "Email",
           valueFrom: "data.email",
@@ -226,7 +251,8 @@ export const mloginSuccessCase = {
       {
         id: "fill.password",
         title: "输入密码",
-        operator: "page.fill",
+        object: "page",
+        operator: "fill",
         params: {
           label: "Password",
           exact: true,
@@ -236,7 +262,8 @@ export const mloginSuccessCase = {
       {
         id: "click.sign_in",
         title: "点击登录按钮",
-        operator: "page.click",
+        object: "page",
+        operator: "click",
         params: {
           role: "button",
           name: "Sign In",
@@ -251,7 +278,8 @@ export const mloginSuccessCase = {
       {
         id: "login_response.ok",
         title: "登录接口响应成功",
-        operator: "api.response.ok",
+        object: "api.response",
+        operator: "ok",
         params: {
           responseFrom: "runtime.loginResponse",
           status: 200,
@@ -260,7 +288,8 @@ export const mloginSuccessCase = {
       {
         id: "url.bounties",
         title: "进入 bounties 页面",
-        operator: "page.url.match",
+        object: "page.url",
+        operator: "match",
         params: {
           pattern: "/bounties$",
         },
@@ -268,12 +297,14 @@ export const mloginSuccessCase = {
       {
         id: "cookie.present",
         title: "浏览器存在登录 cookie",
-        operator: "browser.cookie.present",
+        object: "browser.cookie",
+        operator: "present",
       },
       {
         id: "session.authenticated",
         title: "后端 session 已登录",
-        operator: "auth.session.authenticated",
+        object: "auth.session",
+        operator: "authenticated",
         params: {
           emailFrom: "data.email",
           roleFrom: "data.role",
@@ -282,7 +313,8 @@ export const mloginSuccessCase = {
       {
         id: "nav.visible",
         title: "主导航可见",
-        operator: "page.visible",
+        object: "page",
+        operator: "visible",
         params: {
           label: "主导航",
         },
@@ -290,7 +322,8 @@ export const mloginSuccessCase = {
       {
         id: "current_user.visible",
         title: "当前用户入口可见",
-        operator: "page.visible",
+        object: "page",
+        operator: "visible",
         params: {
           label: "当前用户",
         },
@@ -298,7 +331,8 @@ export const mloginSuccessCase = {
       {
         id: "logout.visible",
         title: "退出登录按钮可见",
-        operator: "page.visible",
+        object: "page",
+        operator: "visible",
         params: {
           role: "button",
           name: "退出登录",
@@ -307,7 +341,8 @@ export const mloginSuccessCase = {
       {
         id: "sign_in.absent",
         title: "登录按钮不再出现在当前页面",
-        operator: "page.count",
+        object: "page",
+        operator: "count",
         params: {
           role: "button",
           name: "Sign In",
@@ -317,7 +352,8 @@ export const mloginSuccessCase = {
       {
         id: "db.member.matches",
         title: "ORF 普通成员关系仍然存在",
-        operator: "db.member.matches",
+        object: "db.member",
+        operator: "matches",
         params: {
           userIdFrom: "runtime.orfUser.id",
           teamIdFrom: "data.teamId",
@@ -334,27 +370,31 @@ export const mloginSuccessCase = {
       {
         id: "auth.logout",
         title: "退出当前登录态",
-        operator: "auth.logout",
+        object: "auth",
+        operator: "logout",
       },
       {
         id: "browser.clear",
         title: "清理浏览器状态",
-        operator: "browser.clear_state",
+        object: "browser",
+        operator: "clear_state",
       },
       {
-        id: "db.restore_last_login_at",
-        title: "恢复 last_login_at",
-        operator: "db.user.restore_last_login_at",
+        id: "db.restore_last_online_at",
+        title: "恢复 last_online_at",
+        object: "db.user",
+        operator: "restore_last_online_at",
         params: {
           userIdFrom: "runtime.orfUser.id",
-          lastLoginAtFrom: "runtime.orfUser.previousLastLoginAt",
+          lastOnlineAtFrom: "runtime.orfUser.previousLastOnlineAt",
           optional: true,
         },
       },
       {
         id: "ory.sessions.revoke",
         title: "撤销测试身份 Ory session",
-        operator: "ory.sessions.revoke",
+        object: "ory.sessions",
+        operator: "revoke",
         params: {
           identityIdFrom: "runtime.oryIdentity.id",
           optional: true,

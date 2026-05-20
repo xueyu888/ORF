@@ -165,18 +165,18 @@ export async function upsertOrfMember(
   data: Pick<MloginCaseData, "email" | "name" | "role" | "userId">,
 ) {
   const [existingByEmail] = await db
-    .select({ id: users.id, lastLoginAt: users.lastLoginAt })
+    .select({ id: users.id, lastOnlineAt: users.lastOnlineAt })
     .from(users)
     .where(sql`lower(${users.email}) = ${data.email.toLowerCase()}`)
     .limit(1);
   const [existingById] = await db
-    .select({ id: users.id, lastLoginAt: users.lastLoginAt })
+    .select({ id: users.id, lastOnlineAt: users.lastOnlineAt })
     .from(users)
     .where(eq(users.id, data.userId))
     .limit(1);
   const existing = existingByEmail ?? existingById;
   const userId = existing?.id ?? data.userId;
-  const previousLastLoginAt = existing?.lastLoginAt ?? null;
+  const previousLastOnlineAt = existing?.lastOnlineAt ?? null;
 
   if (existing) {
     await db.update(users).set({ name: data.name, email: data.email }).where(eq(users.id, userId));
@@ -186,7 +186,7 @@ export async function upsertOrfMember(
       name: data.name,
       email: data.email,
       createdAt: today(),
-      lastLoginAt: null,
+      lastOnlineAt: null,
     });
   }
 
@@ -198,11 +198,11 @@ export async function upsertOrfMember(
       set: { role: data.role },
     });
 
-  return { id: userId, previousLastLoginAt };
+  return { id: userId, previousLastOnlineAt };
 }
 
-export async function restoreLastLoginAt(userId: string, lastLoginAt: string | null) {
-  await db.update(users).set({ lastLoginAt }).where(eq(users.id, userId));
+export async function restoreLastOnlineAt(userId: string, lastOnlineAt: string | null) {
+  await db.update(users).set({ lastOnlineAt }).where(eq(users.id, userId));
 }
 
 export async function readOrfMembership(userId: string, teamId: string) {
@@ -210,7 +210,7 @@ export async function readOrfMembership(userId: string, teamId: string) {
     .select({
       email: users.email,
       role: teamMembers.role,
-      lastLoginAt: users.lastLoginAt,
+      lastOnlineAt: users.lastOnlineAt,
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))

@@ -29,232 +29,292 @@ type CapturedResponse = {
 };
 
 export const objectiveCommentOperators = {
-  "api.health.ok": async ({ ctx }) => {
-    await expect.poll(() => isBackendReady(ctx.page)).toBe(true);
+  "api.health": {
+    ok: async ({ ctx }) => {
+      await expect.poll(() => isBackendReady(ctx.page)).toBe(true);
+    },
   },
 
-  "db.ready": async () => {
-    await expect.poll(() => isDatabaseReady()).toBe(true);
+  db: {
+    ready: async () => {
+      await expect.poll(() => isDatabaseReady()).toBe(true);
+    },
   },
 
-  "ory.admin.ready": async () => {
-    await expect.poll(() => isOryAdminReady()).toBe(true);
+  "ory.admin": {
+    ready: async () => {
+      await expect.poll(() => isOryAdminReady()).toBe(true);
+    },
   },
 
-  "ory.identity.exists": async ({ params }) => {
-    const email = requiredString(params, "email");
-    await expect.poll(async () => (await findOryIdentityByEmail(email))?.traits?.email ?? null).toBe(email);
+  "ory.identity": {
+    exists: async ({ params }) => {
+      const email = requiredString(params, "email");
+      await expect.poll(async () => (await findOryIdentityByEmail(email))?.traits?.email ?? null).toBe(email);
+    },
   },
 
-  "db.member.fixture.exists": async ({ data }) => {
-    await expect.poll(() => testMemberFixtureExists(data)).toBe(true);
+  "db.member.fixture": {
+    exists: async ({ data }) => {
+      await expect.poll(() => testMemberFixtureExists(data)).toBe(true);
+    },
   },
 
-  "db.objective.fixture.exists": async ({ data }) => {
-    await expect.poll(() => visibleObjectiveFixtureExists(data)).toBe(true);
+  "db.objective.fixture": {
+    exists: async ({ data }) => {
+      await expect.poll(() => visibleObjectiveFixtureExists(data)).toBe(true);
+    },
   },
 
-  "db.test_comments.absent": async ({ params }) => {
-    await expect.poll(() => testCommentBodiesAbsent(requiredString(params, "prefix"))).toBe(true);
+  "db.test_comments": {
+    absent: async ({ params }) => {
+      await expect.poll(() => testCommentBodiesAbsent(requiredString(params, "prefix"))).toBe(true);
+    },
+
+    delete: async ({ params }) => {
+      await removeTestComments(requiredString(params, "prefix"));
+    },
   },
 
-  "db.test_comments.delete": async ({ params }) => {
-    await removeTestComments(requiredString(params, "prefix"));
+  "db.comment": {
+    persisted: async ({ params }) => {
+      await expect
+        .poll(() =>
+          persistedObjectiveCommentExists(
+            requiredObjectiveCommentTarget(params, "target"),
+            requiredString(params, "body"),
+            requiredString(params, "email"),
+          ),
+        )
+        .toBe(true);
+    },
   },
 
-  "db.comment.persisted": async ({ params }) => {
-    await expect
-      .poll(() =>
-        persistedObjectiveCommentExists(
-          requiredObjectiveCommentTarget(params, "target"),
-          requiredString(params, "body"),
-          requiredString(params, "email"),
-        ),
-      )
-      .toBe(true);
+  "auth.session": {
+    unauthenticated: async ({ ctx }) => {
+      await expect.poll(() => readBrowserSession(ctx.page)).toMatchObject({
+        status: 200,
+        body: { authenticated: false, user: null },
+      });
+    },
+
+    authenticated: async ({ ctx, params }) => {
+      const email = requiredString(params, "email");
+      const role = requiredString(params, "role");
+
+      await expect.poll(() => readBrowserSession(ctx.page)).toMatchObject({
+        status: 200,
+        body: {
+          authenticated: true,
+          user: { email, role },
+        },
+      });
+    },
   },
 
-  "auth.session.unauthenticated": async ({ ctx }) => {
-    await expect.poll(() => readBrowserSession(ctx.page)).toMatchObject({
-      status: 200,
-      body: { authenticated: false, user: null },
-    });
+  auth: {
+    logout: async ({ ctx }) => {
+      await ctx.page
+        .evaluate(async () => {
+          await fetch("/api/auth/logout", {
+            method: "POST",
+            credentials: "include",
+          });
+        })
+        .catch(() => undefined);
+    },
   },
 
-  "auth.session.authenticated": async ({ ctx, params }) => {
-    const email = requiredString(params, "email");
-    const role = requiredString(params, "role");
-
-    await expect.poll(() => readBrowserSession(ctx.page)).toMatchObject({
-      status: 200,
-      body: {
-        authenticated: true,
-        user: { email, role },
-      },
-    });
+  browser: {
+    clear_state: async ({ ctx }) => {
+      await ctx.context.clearCookies();
+      await clearBrowserState(ctx.page);
+    },
   },
 
-  "auth.logout": async ({ ctx }) => {
-    await ctx.page
-      .evaluate(async () => {
-        await fetch("/api/auth/logout", {
-          method: "POST",
-          credentials: "include",
-        });
-      })
-      .catch(() => undefined);
+  "browser.cookie": {
+    absent: async ({ ctx }) => {
+      await expect.poll(() => hasSessionCookie(ctx.context)).toBe(false);
+    },
   },
 
-  "browser.clear_state": async ({ ctx }) => {
-    await ctx.context.clearCookies();
-    await clearBrowserState(ctx.page);
+  "browser.auth_storage": {
+    empty: async ({ ctx }) => {
+      await expect.poll(() => readBrowserAuthStorageState(ctx.page)).toEqual({
+        localStorageAuthKeys: [],
+        sessionStorageAuthKeys: [],
+      });
+    },
   },
 
-  "browser.cookie.absent": async ({ ctx }) => {
-    await expect.poll(() => hasSessionCookie(ctx.context)).toBe(false);
+  "page.protected": {
+    redirects_to_auth: async ({ ctx, params }) => {
+      await ctx.page.goto(requiredString(params, "path"));
+      await expect(ctx.page).toHaveURL(new RegExp(optionalString(params, "pattern") ?? "/auth$"));
+    },
   },
 
-  "browser.auth_storage.empty": async ({ ctx }) => {
-    await expect.poll(() => readBrowserAuthStorageState(ctx.page)).toEqual({
-      localStorageAuthKeys: [],
-      sessionStorageAuthKeys: [],
-    });
+  page: {
+    goto: async ({ ctx, params }) => {
+      await ctx.page.goto(requiredString(params, "path"));
+    },
+
+    fill: async ({ ctx, params }) => {
+      await locatorFromParams(ctx.page, params).fill(requiredString(params, "value"));
+    },
+
+    click: async ({ ctx, params }) => {
+      await locatorFromParams(ctx.page, params).click();
+    },
   },
 
-  "page.protected.redirects_to_auth": async ({ ctx, params }) => {
-    await ctx.page.goto(requiredString(params, "path"));
-    await expect(ctx.page).toHaveURL(new RegExp(optionalString(params, "pattern") ?? "/auth$"));
+  "page.url": {
+    match: async ({ ctx, params }) => {
+      await expect(ctx.page).toHaveURL(new RegExp(requiredString(params, "pattern")));
+    },
   },
 
-  "page.goto": async ({ ctx, params }) => {
-    await ctx.page.goto(requiredString(params, "path"));
+  "api.my_challenges": {
+    select_objective_target: async ({ ctx, data }) =>
+      selectObjectiveCommentTarget(ctx.page, myChallengesScopeFor(data.role)),
   },
 
-  "page.url.match": async ({ ctx, params }) => {
-    await expect(ctx.page).toHaveURL(new RegExp(requiredString(params, "pattern")));
+  "api.my_challenges.objective_target": {
+    present: async ({ ctx, data, params }) => {
+      const target = requiredObjectiveCommentTarget(params, "target");
+      await expect
+        .poll(() => myChallengesHasObjectiveTarget(ctx.page, target, myChallengesScopeFor(data.role)))
+        .toBe(true);
+    },
   },
 
-  "page.fill": async ({ ctx, params }) => {
-    await locatorFromParams(ctx.page, params).fill(requiredString(params, "value"));
+  "api.my_challenges.comment": {
+    present: async ({ ctx, data, params }) => {
+      const target = requiredObjectiveCommentTarget(params, "target");
+      const body = requiredString(params, "body");
+      const author = requiredString(params, "author");
+      await expect.poll(() => myChallengesHasComment(ctx.page, target, body, author, myChallengesScopeFor(data.role))).toBe(true);
+    },
   },
 
-  "page.click": async ({ ctx, params }) => {
-    await locatorFromParams(ctx.page, params).click();
+  api: {
+    capture_response: async ({ ctx, runtime, params }) => {
+      const saveAs = requiredString(params, "saveAs");
+      const urlEndsWith = requiredString(params, "urlEndsWith");
+      const method = optionalString(params, "method")?.toUpperCase();
+
+      runtime.values[saveAs] = ctx.page
+        .waitForResponse((response) => {
+          const methodMatches = !method || response.request().method().toUpperCase() === method;
+          return methodMatches && response.url().endsWith(urlEndsWith);
+        })
+        .then(async (response): Promise<CapturedResponse> => ({
+          ok: response.ok(),
+          status: response.status(),
+          url: response.url(),
+          method: response.request().method(),
+          body: await readResponseBody(response),
+        }));
+    },
   },
 
-  "api.my_challenges.select_objective_target": async ({ ctx, data }) =>
-    selectObjectiveCommentTarget(ctx.page, myChallengesScopeFor(data.role)),
+  "api.comment_response": {
+    matches: async ({ params }) => {
+      const response = await requiredCapturedResponse(params, "response");
+      const target = requiredObjectiveCommentTarget(params, "target");
+      const body = requiredString(params, "body");
 
-  "api.my_challenges.objective_target.present": async ({ ctx, data, params }) => {
-    const target = requiredObjectiveCommentTarget(params, "target");
-    await expect.poll(() => myChallengesHasObjectiveTarget(ctx.page, target, myChallengesScopeFor(data.role))).toBe(true);
+      expect(response.ok).toBe(true);
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        ok: true,
+        commentThread: {
+          targetType: target.type,
+          targetId: target.id,
+          targetTitle: target.title,
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              body,
+            }),
+          ]),
+        },
+      });
+    },
   },
 
-  "api.my_challenges.comment.present": async ({ ctx, data, params }) => {
-    const target = requiredObjectiveCommentTarget(params, "target");
-    const body = requiredString(params, "body");
-    const author = requiredString(params, "author");
-    await expect.poll(() => myChallengesHasComment(ctx.page, target, body, author, myChallengesScopeFor(data.role))).toBe(true);
+  "page.objective_comment": {
+    open: async ({ ctx, params }) => {
+      await openObjectiveCommentPanel(ctx.page, requiredObjectiveCommentTarget(params, "target"));
+    },
   },
 
-  "api.capture_response": async ({ ctx, runtime, params }) => {
-    const saveAs = requiredString(params, "saveAs");
-    const urlEndsWith = requiredString(params, "urlEndsWith");
-    const method = optionalString(params, "method")?.toUpperCase();
-
-    runtime.values[saveAs] = ctx.page
-      .waitForResponse((response) => {
-        const methodMatches = !method || response.request().method().toUpperCase() === method;
-        return methodMatches && response.url().endsWith(urlEndsWith);
-      })
-      .then(async (response): Promise<CapturedResponse> => ({
-        ok: response.ok(),
-        status: response.status(),
-        url: response.url(),
-        method: response.request().method(),
-        body: await readResponseBody(response),
-      }));
+  "page.objective_row": {
+    visible: async ({ ctx, params }) => {
+      await expect(objectiveRowByTitle(ctx.page, requiredObjectiveCommentTarget(params, "target").title)).toBeVisible();
+    },
   },
 
-  "api.comment_response.matches": async ({ params }) => {
-    const response = await requiredCapturedResponse(params, "response");
-    const target = requiredObjectiveCommentTarget(params, "target");
-    const body = requiredString(params, "body");
+  "page.comment_panel": {
+    title: async ({ ctx, params }) => {
+      const target = requiredObjectiveCommentTarget(params, "target");
+      await expect(commentPanel(ctx.page).locator(".orf-comment-context-title")).toHaveText(target.title);
+    },
 
-    expect(response.ok).toBe(true);
-    expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      ok: true,
-      commentThread: {
-        targetType: target.type,
-        targetId: target.id,
-        targetTitle: target.title,
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            body,
-          }),
-        ]),
-      },
-    });
+    close: async ({ ctx, params }) => {
+      const button = ctx.page.getByRole("button", { name: "关闭评论窗口" });
+      if (params.optional === true && (await button.count()) === 0) {
+        return;
+      }
+      await button.click();
+      await expect(commentPanel(ctx.page)).toHaveCount(0);
+    },
   },
 
-  "page.objective_comment.open": async ({ ctx, params }) => {
-    await openObjectiveCommentPanel(ctx.page, requiredObjectiveCommentTarget(params, "target"));
+  "page.comment_composer": {
+    ready: async ({ ctx }) => {
+      await expect(commentComposer(ctx.page)).toBeVisible();
+    },
+
+    fill: async ({ ctx, params }) => {
+      await commentComposer(ctx.page).fill(requiredString(params, "value"));
+    },
+
+    submit: async ({ ctx }) => {
+      await ctx.page.getByRole("button", { name: "发送评论" }).click();
+    },
+
+    empty: async ({ ctx }) => {
+      await expect(commentComposer(ctx.page)).toHaveValue("");
+    },
   },
 
-  "page.objective_row.visible": async ({ ctx, params }) => {
-    await expect(objectiveRowByTitle(ctx.page, requiredObjectiveCommentTarget(params, "target").title)).toBeVisible();
+  "page.comment_send": {
+    disabled: async ({ ctx }) => {
+      await expect(ctx.page.getByRole("button", { name: "发送评论" })).toBeDisabled();
+    },
   },
 
-  "page.comment_panel.title": async ({ ctx, params }) => {
-    const target = requiredObjectiveCommentTarget(params, "target");
-    await expect(commentPanel(ctx.page).locator(".orf-comment-context-title")).toHaveText(target.title);
+  "page.comment_author": {
+    visible: async ({ ctx, params }) => {
+      await expect(commentPanel(ctx.page).getByText(requiredString(params, "author"), { exact: true }).first()).toBeVisible();
+    },
   },
 
-  "page.comment_composer.ready": async ({ ctx }) => {
-    await expect(commentComposer(ctx.page)).toBeVisible();
+  "page.comment_body": {
+    visible: async ({ ctx, params }) => {
+      await expect(commentPanel(ctx.page).getByText(requiredString(params, "body"), { exact: true })).toBeVisible();
+    },
   },
 
-  "page.comment_send.disabled": async ({ ctx }) => {
-    await expect(ctx.page.getByRole("button", { name: "发送评论" })).toBeDisabled();
-  },
+  "page.objective_comment_badge": {
+    visible: async ({ ctx, params }) => {
+      await expect(objectiveCommentBadge(ctx.page, requiredObjectiveCommentTarget(params, "target"))).toBeVisible();
+    },
 
-  "page.comment_composer.fill": async ({ ctx, params }) => {
-    await commentComposer(ctx.page).fill(requiredString(params, "value"));
-  },
-
-  "page.comment_composer.submit": async ({ ctx }) => {
-    await ctx.page.getByRole("button", { name: "发送评论" }).click();
-  },
-
-  "page.comment_author.visible": async ({ ctx, params }) => {
-    await expect(commentPanel(ctx.page).getByText(requiredString(params, "author"), { exact: true }).first()).toBeVisible();
-  },
-
-  "page.comment_body.visible": async ({ ctx, params }) => {
-    await expect(commentPanel(ctx.page).getByText(requiredString(params, "body"), { exact: true })).toBeVisible();
-  },
-
-  "page.comment_composer.empty": async ({ ctx }) => {
-    await expect(commentComposer(ctx.page)).toHaveValue("");
-  },
-
-  "page.comment_panel.close": async ({ ctx, params }) => {
-    const button = ctx.page.getByRole("button", { name: "关闭评论窗口" });
-    if (params.optional === true && (await button.count()) === 0) {
-      return;
-    }
-    await button.click();
-    await expect(commentPanel(ctx.page)).toHaveCount(0);
-  },
-
-  "page.objective_comment_badge.visible": async ({ ctx, params }) => {
-    await expect(objectiveCommentBadge(ctx.page, requiredObjectiveCommentTarget(params, "target"))).toBeVisible();
-  },
-
-  "page.objective_comment_badge.open": async ({ ctx, params }) => {
-    await objectiveCommentBadge(ctx.page, requiredObjectiveCommentTarget(params, "target")).click();
-    await expect(commentPanel(ctx.page)).toBeVisible();
+    open: async ({ ctx, params }) => {
+      await objectiveCommentBadge(ctx.page, requiredObjectiveCommentTarget(params, "target")).click();
+      await expect(commentPanel(ctx.page)).toBeVisible();
+    },
   },
 } satisfies OperatorRegistry<TestContext, ObjectiveCommentCaseData>;
 

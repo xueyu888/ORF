@@ -51,7 +51,7 @@ export type SetupState = {
   identityId: string;
   teamId: string;
   userId: string;
-  previousLastLoginAt: string | null;
+  previousLastOnlineAt: string | null;
 };
 
 export type ActionResult = {

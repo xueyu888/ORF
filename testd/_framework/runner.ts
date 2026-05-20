@@ -109,9 +109,9 @@ export async function runStateCase<
 
   async function runStep(stage: StateCaseRunStageName, step: StepSpec) {
     await test.step(`${step.id}: ${step.title}`, async () => {
-      const operator = options.operators[step.operator];
+      const operator = options.operators[step.object]?.[step.operator];
       if (!operator) {
-        throw new Error(`未注册测试算子: ${step.operator}`);
+        throw new Error(`未注册测试算子: ${formatStepOperator(step)}`);
       }
 
       const params = resolveStepParams(step.params ?? {}, testCase.data, runtime);
@@ -131,6 +131,10 @@ export async function runStateCase<
       }
     });
   }
+}
+
+function formatStepOperator(step: StepSpec) {
+  return `${step.object}.${step.operator}`;
 }
 
 function resolveStepParams(params: StepParams, data: Record<string, unknown>, runtime: StateCaseRuntime): StepParams {
