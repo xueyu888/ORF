@@ -1,0 +1,227 @@
+import { STATE_CASE_MODEL, type StateCaseSpec } from "../../_framework/types";
+import type { ApplyChallengeCaseData } from "./_support/apply-challenge.context";
+
+export const applyChallengeCase = {
+  id: "bounties.apply-challenge.member",
+  title: "普通成员可以在悬赏大厅申请挑战",
+  model: STATE_CASE_MODEL,
+  tags: ["bounties", "challenge-application", "member", "happy-path"],
+
+  data: {
+    email: "orf-member-e2e@orf.local",
+    password: "OrfMemberE2E!2026",
+    name: "ORF Member E2E",
+    role: "member",
+  },
+
+  B: {
+    description: "普通成员账号可用，存在可申请悬赏目标，浏览器未登录且没有申请残留",
+    assertions: [
+      { id: "backend.ready", title: "后端服务可用", object: "api.health", operator: "ok" },
+      { id: "db.ready", title: "数据库可连接", object: "db", operator: "ready" },
+      { id: "ory.ready", title: "Ory Admin API 可用", object: "ory.admin", operator: "ready" },
+      {
+        id: "ory.member_identity.exists",
+        title: "普通成员 Ory 身份存在",
+        object: "ory.identity",
+        operator: "exists",
+        params: { emailFrom: "data.email" },
+      },
+      { id: "db.member.active", title: "预置普通成员账号可用", object: "db.member", operator: "active" },
+      {
+        id: "db.bounty_target.available",
+        title: "存在当前成员可申请的悬赏目标",
+        object: "db.bounty_target",
+        operator: "available",
+      },
+      { id: "session.unauthenticated", title: "后端 session 未登录", object: "auth.session", operator: "unauthenticated" },
+      { id: "cookie.absent", title: "浏览器不存在登录 cookie", object: "browser.cookie", operator: "absent" },
+      { id: "storage.empty", title: "浏览器 storage 不含登录态", object: "browser.auth_storage", operator: "empty" },
+    ],
+  },
+
+  Setup: {
+    description: "登录普通成员，进入悬赏大厅并选择一个可申请目标",
+    steps: [
+      { id: "browser.clear", title: "清理浏览器状态", object: "browser", operator: "clear_state" },
+      { id: "page.goto.auth", title: "打开登录页", object: "page", operator: "goto", params: { path: "/auth" } },
+      { id: "fill.email", title: "输入邮箱", object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.email" } },
+      {
+        id: "fill.password",
+        title: "输入密码",
+        object: "page",
+        operator: "fill",
+        params: { label: "Password", exact: true, valueFrom: "data.password" },
+      },
+      {
+        id: "click.sign_in",
+        title: "点击登录按钮",
+        object: "page",
+        operator: "click",
+        params: { role: "button", name: "Sign In" },
+      },
+      {
+        id: "session.authenticated",
+        title: "等待普通成员 session 已登录",
+        object: "auth.session",
+        operator: "authenticated",
+        params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
+      },
+      { id: "page.goto.bounties", title: "打开悬赏大厅", object: "page", operator: "goto", params: { path: "/bounties" } },
+      {
+        id: "api.bounties.select_target",
+        title: "选择当前成员可申请目标",
+        object: "api.bounties",
+        operator: "select_available_target",
+        params: { saveAs: "bountyTarget" },
+      },
+    ],
+  },
+
+  S0: {
+    description: "悬赏大厅中所选目标可申请，数据库中尚无当前成员的待处理申请",
+    assertions: [
+      {
+        id: "session.authenticated",
+        title: "后端 session 已登录",
+        object: "auth.session",
+        operator: "authenticated",
+        params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
+      },
+      { id: "url.bounties", title: "当前页面是悬赏大厅", object: "page.url", operator: "match", params: { pattern: "/bounties$" } },
+      { id: "nav.visible", title: "主导航可见", object: "page", operator: "visible", params: { label: "主导航" } },
+      { id: "current_user.visible", title: "当前用户入口可见", object: "page", operator: "visible", params: { label: "当前用户" } },
+      {
+        id: "api.bounties.target_present",
+        title: "悬赏接口返回所选目标且尚未申请",
+        object: "api.bounties",
+        operator: "target_present",
+        params: { targetFrom: "runtime.bountyTarget" },
+      },
+      {
+        id: "bounty_row.visible",
+        title: "所选目标行可见",
+        object: "page.bounty_row",
+        operator: "visible",
+        params: { targetFrom: "runtime.bountyTarget" },
+      },
+      {
+        id: "bounty_row.apply_enabled",
+        title: "所选目标申请按钮可点击",
+        object: "page.bounty_row",
+        operator: "apply_enabled",
+        params: { targetFrom: "runtime.bountyTarget" },
+      },
+      {
+        id: "db.bounty_target.no_pending_application",
+        title: "数据库中不存在当前成员待处理申请",
+        object: "db.bounty_target",
+        operator: "no_pending_application",
+        params: { targetFrom: "runtime.bountyTarget", applicantFrom: "data.name" },
+      },
+    ],
+  },
+
+  Action: {
+    description: "对所选悬赏目标提交挑战申请",
+    steps: [
+      {
+        id: "bounty_row.apply",
+        title: "点击申请挑战",
+        object: "page.bounty_row",
+        operator: "apply",
+        params: { targetFrom: "runtime.bountyTarget" },
+      },
+      {
+        id: "challenge_dialog.visible",
+        title: "确认弹窗可见",
+        object: "page.challenge_application_dialog",
+        operator: "visible",
+      },
+      {
+        id: "capture.application_response",
+        title: "挑战申请响应捕获",
+        object: "api.challenge_application",
+        operator: "capture_response",
+        params: { targetFrom: "runtime.bountyTarget", saveAs: "applicationResponse" },
+      },
+      {
+        id: "challenge_dialog.confirm",
+        title: "确认申请挑战",
+        object: "page.challenge_application_dialog",
+        operator: "confirm",
+      },
+    ],
+  },
+
+  S1: {
+    description: "挑战申请已提交，接口、页面和数据库都显示当前成员已申请",
+    assertions: [
+      {
+        id: "application_response.matches",
+        title: "挑战申请接口响应成功且目标匹配",
+        object: "api.challenge_application",
+        operator: "matches",
+        params: { responseFrom: "runtime.applicationResponse", targetFrom: "runtime.bountyTarget" },
+      },
+      {
+        id: "db.bounty_target.pending_application",
+        title: "数据库中新增待处理挑战申请",
+        object: "db.bounty_target",
+        operator: "pending_application",
+        params: { targetFrom: "runtime.bountyTarget", applicantFrom: "data.name" },
+      },
+      {
+        id: "db.bounty_target.flow_matches_application",
+        title: "目标流转状态匹配申请结果",
+        object: "db.bounty_target",
+        operator: "flow_matches_application",
+        params: { targetFrom: "runtime.bountyTarget" },
+      },
+      {
+        id: "api.bounties.has_current_application",
+        title: "悬赏接口显示当前成员已申请",
+        object: "api.bounties",
+        operator: "has_current_application",
+        params: { targetFrom: "runtime.bountyTarget" },
+      },
+      {
+        id: "bounty_row.applied_disabled",
+        title: "页面显示已申请且不可重复点击",
+        object: "page.bounty_row",
+        operator: "applied_disabled",
+        params: { targetFrom: "runtime.bountyTarget" },
+      },
+    ],
+  },
+
+  Clean: {
+    description: "删除本次挑战申请并退出登录，保留预置普通成员和目标数据",
+    steps: [
+      {
+        id: "db.bounty_target.remove_pending_application",
+        title: "删除本次挑战申请",
+        object: "db.bounty_target",
+        operator: "remove_pending_application",
+        params: { targetFrom: "runtime.bountyTarget", applicantFrom: "data.name" },
+      },
+      { id: "auth.logout", title: "退出当前登录态", object: "auth", operator: "logout" },
+      { id: "browser.clear", title: "清理浏览器状态", object: "browser", operator: "clear_state" },
+      {
+        id: "ory.member_identity.exists",
+        title: "普通成员 Ory 身份仍然存在",
+        object: "ory.identity",
+        operator: "exists",
+        params: { emailFrom: "data.email" },
+      },
+      { id: "db.member.active", title: "预置普通成员账号仍然可用", object: "db.member", operator: "active" },
+      {
+        id: "db.bounty_target.clean",
+        title: "目标不存在本用例申请残留",
+        object: "db.bounty_target",
+        operator: "clean",
+        params: { targetFrom: "runtime.bountyTarget", applicantFrom: "data.name" },
+      },
+    ],
+  },
+} satisfies StateCaseSpec<ApplyChallengeCaseData>;

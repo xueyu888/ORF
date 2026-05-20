@@ -55,12 +55,17 @@ export function createCommonOperators<
       authenticated: async ({ ctx, params }) => {
         const email = requiredString(params, "email");
         const role = requiredString(params, "role");
+        const status = optionalString(params, "status");
 
         await expect.poll(() => readBrowserSession(ctx.page)).toMatchObject({
           status: 200,
           body: {
             authenticated: true,
-            user: { email, role },
+            user: {
+              email,
+              role,
+              ...(status ? { status } : {}),
+            },
           },
         });
       },

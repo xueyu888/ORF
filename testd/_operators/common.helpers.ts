@@ -31,20 +31,28 @@ export async function clearBrowserState(page: Page) {
 }
 
 export async function readBrowserSession(page: Page): Promise<BrowserSession> {
-  return page.evaluate(async () => {
-    const response = await fetch("/api/auth/session", { credentials: "include" });
-    return {
-      status: response.status,
-      body: await response.json(),
-    };
-  });
+  const response = await page.request.get("/api/auth/session");
+  return {
+    status: response.status(),
+    body: await response.json(),
+  };
 }
 
 export async function readBrowserAuthStorageState(page: Page): Promise<BrowserAuthStorageState> {
-  return page.evaluate(() => ({
-    localStorageAuthKeys: Object.keys(window.localStorage).filter((key) => /auth|session|token|ory/i.test(key)),
-    sessionStorageAuthKeys: Object.keys(window.sessionStorage).filter((key) => /auth|session|token|ory/i.test(key)),
-  }));
+  return page.evaluate(() => {
+    const safeStorageKeys = (readStorage: () => Storage) => {
+      try {
+        return Object.keys(readStorage());
+      } catch {
+        return [];
+      }
+    };
+
+    return {
+      localStorageAuthKeys: safeStorageKeys(() => window.localStorage).filter((key) => /auth|session|token|ory/i.test(key)),
+      sessionStorageAuthKeys: safeStorageKeys(() => window.sessionStorage).filter((key) => /auth|session|token|ory/i.test(key)),
+    };
+  });
 }
 
 export async function hasSessionCookie(context: BrowserContext) {
