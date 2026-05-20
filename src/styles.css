@@ -3197,7 +3197,6 @@ button:disabled {
 }
 
 .orf-sidebar-link,
-.orf-sidebar-command,
 .orf-sidebar-user-name {
   font-size: 14px;
   font-weight: 600;
@@ -3206,26 +3205,6 @@ button:disabled {
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.48);
 }
 
-.orf-sidebar-command {
-  min-height: 40px;
-  gap: 12px;
-  padding: 0 12px;
-  border-color: rgba(125, 211, 252, 0.18);
-  border-radius: 0;
-  background: var(--orf-sidebar-control-bg);
-  color: var(--orf-sidebar-command-text);
-  clip-path: var(--orf-control-cut);
-  box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.14), 0 8px 18px rgba(3, 105, 161, 0.1);
-}
-
-.orf-sidebar-command:hover {
-  background: var(--orf-sidebar-control-hover-bg);
-  color: #ffffff;
-  box-shadow: 0 12px 22px rgba(3, 105, 161, 0.16), inset 0 1px 0 rgba(125, 211, 252, 0.22);
-  transform: translateY(-1px);
-}
-
-.orf-sidebar-command:hover .orf-sidebar-icon,
 .orf-sidebar-link-active .orf-sidebar-icon,
 .orf-sidebar-link-inactive:hover .orf-sidebar-icon {
   color: #ffffff;
@@ -3270,13 +3249,6 @@ button:disabled {
   padding: 16px 0;
 }
 
-.orf-sidebar-collapsed .orf-sidebar-command {
-  width: 48px;
-  height: 40px;
-  justify-content: center;
-  padding: 0;
-}
-
 .orf-sidebar-collapsed .orf-sidebar-user {
   justify-content: center;
 }
@@ -3318,6 +3290,7 @@ button:disabled {
 
 .orf-sidebar-user {
   min-height: 40px;
+  padding: 8px;
   color: #ffffff;
   border-radius: var(--orf-radius-control);
   transition:
@@ -3328,6 +3301,49 @@ button:disabled {
 .orf-sidebar-user:hover {
   background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.16);
+}
+
+.orf-sidebar-user-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.orf-sidebar-user-action {
+  width: 30px;
+  height: 30px;
+  color: var(--orf-sidebar-command-text);
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  border-radius: var(--orf-radius-control);
+  background: var(--orf-sidebar-control-bg);
+  box-shadow: inset 0 1px 0 rgba(125, 211, 252, 0.12);
+}
+
+.orf-sidebar-user-action:hover,
+.orf-sidebar-user-action-active {
+  color: #ffffff;
+  background: var(--orf-sidebar-control-hover-bg);
+  box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.orf-sidebar-user-action svg {
+  color: currentColor;
+}
+
+.orf-sidebar-collapsed .orf-sidebar-user {
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 6px;
+}
+
+.orf-sidebar-collapsed .orf-sidebar-user-actions {
+  flex-direction: column;
+}
+
+.orf-sidebar-collapsed .orf-sidebar-user-action {
+  width: 34px;
+  height: 34px;
 }
 
 .orf-sidebar-user-menu {
@@ -5861,7 +5877,7 @@ a.orf-secondary-action,
 a.orf-sidebar-link,
 a.orf-row-loot-action,
 .orf-search-trigger,
-.orf-sidebar-command,
+.orf-sidebar-user-action,
 .orf-floating-control,
 .orf-scope-tab,
 .orf-permission-view-tabs button,
@@ -5887,7 +5903,7 @@ a.orf-secondary-action,
 a.orf-sidebar-link,
 a.orf-row-loot-action,
 .orf-search-trigger,
-.orf-sidebar-command,
+.orf-sidebar-user-action,
 .orf-floating-control,
 .orf-scope-tabs,
 .orf-scope-tab,

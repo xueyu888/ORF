@@ -13,7 +13,7 @@ import { Avatar } from "./ui";
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
 const defaultSidebarBackgroundUrl = "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png";
 const sidebarGroups = [
-  { title: "work", labels: ["悬赏大厅", "计划"] },
+  { title: "work", labels: ["悬赏大厅", "我的挑战"] },
   { title: "report", labels: ["反馈", "统计"] },
   { title: "admin", labels: ["成员管理", "权限管理"] },
 ].map((group) => ({
@@ -117,41 +117,47 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         ))}
       </nav>
 
-      <div className="orf-sidebar-footer space-y-3 border-t p-4">
-        <button
-          onClick={onCommand}
-          className="orf-sidebar-command flex w-full items-center border text-left transition"
-          aria-label="搜索"
-          title="搜索"
-        >
-          <Command className="orf-sidebar-icon h-5 w-5 shrink-0" />
-          <span className="orf-sidebar-label flex-1">搜索</span>
-        </button>
-        {canShowFrontend(currentUser, "nav.settings") && (
-          <NavLink
-            to="/settings"
-            className="orf-sidebar-command flex w-full items-center border text-left transition"
-            aria-label="设置"
-            title="设置"
-          >
-            <Settings className="orf-sidebar-icon h-5 w-5 shrink-0" />
-            <span className="orf-sidebar-label flex-1">设置</span>
-          </NavLink>
-        )}
-        <button
-          onClick={logout}
-          className="orf-sidebar-command flex w-full items-center border text-left transition"
-          aria-label="退出登录"
-          title="退出登录"
-        >
-          <LogOut className="orf-sidebar-icon h-5 w-5 shrink-0" />
-          <span className="orf-sidebar-label flex-1">退出</span>
-        </button>
+      <div className="orf-sidebar-footer border-t p-4">
         <div className="orf-sidebar-user-wrap relative">
-          <div className="orf-sidebar-user flex w-full items-center gap-3 px-2 text-left" title={currentUser?.name ?? "User"} aria-label="当前用户">
+          <div className="orf-sidebar-user flex w-full items-center gap-3 text-left" title={currentUser?.name ?? "User"} aria-label="当前用户">
             <Avatar name={currentUser?.name ?? "User"} />
-            <div className="orf-sidebar-label min-w-0">
+            <div className="orf-sidebar-label min-w-0 flex-1">
               <div className="orf-sidebar-user-name truncate">{currentUser?.name ?? "User"}</div>
+            </div>
+            <div className="orf-sidebar-user-actions" aria-label="用户操作">
+              <button
+                type="button"
+                onClick={onCommand}
+                className="orf-sidebar-user-action inline-flex items-center justify-center transition"
+                aria-label="搜索"
+                title="搜索"
+              >
+                <Command className="h-4 w-4" />
+              </button>
+              {canShowFrontend(currentUser, "nav.settings") && (
+                <NavLink
+                  to="/settings"
+                  className={({ isActive }) =>
+                    [
+                      "orf-sidebar-user-action inline-flex items-center justify-center transition",
+                      isActive ? "orf-sidebar-user-action-active" : "",
+                    ].join(" ")
+                  }
+                  aria-label="设置"
+                  title="设置"
+                >
+                  <Settings className="h-4 w-4" />
+                </NavLink>
+              )}
+              <button
+                type="button"
+                onClick={logout}
+                className="orf-sidebar-user-action inline-flex items-center justify-center transition"
+                aria-label="退出登录"
+                title="退出登录"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </div>
         </div>
