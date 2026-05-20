@@ -21,7 +21,7 @@ test.describe("ORF real stale UI and duplicate mutation guards", () => {
       await dsl.acceptRecruitmentViaApi(real.fixture.challengerA, staleBounty.objectiveId);
       await bountyRow(staleApplicant.page, staleBountyTitle).getByRole("button", { name: "申请挑战" }).click();
       await staleApplicant.page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-      await expect(staleApplicant.page.getByText("这个悬赏目标已经有挑战者")).toBeVisible();
+      await expect(staleApplicant.page.getByText("目标状态已变化，请刷新后再试")).toBeVisible();
       await staleApplicant.page.reload();
       await expect(bountyRow(staleApplicant.page, staleBountyTitle)).toHaveCount(0);
       await real.attachScreenshot(staleApplicant.page, testInfo, "stale-bounty-application-rejected");

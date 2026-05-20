@@ -240,7 +240,7 @@ test.describe("ORF real lifecycle simulation", () => {
         expect(accepted.status).toBe(200);
         await bountyRow(world.page("member4"), world.objective("q1StaleBounty").title).getByRole("button", { name: "申请挑战" }).click();
         await world.page("member4").getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-        await expect(world.page("member4").getByText("这个悬赏目标已经有挑战者")).toBeVisible();
+        await expect(world.page("member4").getByText("目标状态已变化，请刷新后再试")).toBeVisible();
         await world.page("member4").reload();
         await expect(bountyRow(world.page("member4"), world.objective("q1StaleBounty").title)).toHaveCount(0);
       });
