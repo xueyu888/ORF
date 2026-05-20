@@ -11,6 +11,7 @@ export type StepParams = Record<string, unknown>;
 export type StepSpec<TParams extends StepParams = StepParams> = {
   id: string;
   title: string;
+  object: string;
   operator: string;
   params?: TParams;
 };
@@ -64,4 +65,4 @@ export type StateCaseOperator<
 export type OperatorRegistry<
   TContext,
   TData extends Record<string, unknown> = Record<string, unknown>,
-> = Record<string, StateCaseOperator<TContext, TData>>;
+> = Record<string, Record<string, StateCaseOperator<TContext, TData>>>;

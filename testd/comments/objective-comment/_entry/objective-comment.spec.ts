@@ -1,8 +1,10 @@
 import { test } from "@playwright/test";
+import { createCommonOperators } from "../../../_operators/common.operators";
+import { mergeOperatorRegistries } from "../../../_operators/registry";
 import { runStateCase } from "../../../_framework/runner";
 import { objectiveCommentCreateCase } from "../objective-comment.case";
 import { objectiveCommentOperators } from "../objective-comment.operators";
-import type { TestContext } from "../_support/objective-comment.context";
+import type { ObjectiveCommentCaseData, TestContext } from "../_support/objective-comment.context";
 import { closeObjectiveCommentTestDb } from "../_support/objective-comment.helpers";
 
 test.describe("目标新增评论测试用例", () => {
@@ -14,7 +16,10 @@ test.describe("目标新增评论测试用例", () => {
     const ctx: TestContext = { context, page };
 
     await runStateCase(objectiveCommentCreateCase, ctx, {
-      operators: objectiveCommentOperators,
+      operators: mergeOperatorRegistries(
+        createCommonOperators<TestContext, ObjectiveCommentCaseData>(),
+        objectiveCommentOperators,
+      ),
       testInfo,
     });
   });

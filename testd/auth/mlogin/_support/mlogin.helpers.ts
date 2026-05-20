@@ -1,102 +1,12 @@
-import type { BrowserContext, Page } from "@playwright/test";
 import { and, eq, sql } from "drizzle-orm";
+import { ORY_ADMIN_URL, type OryIdentity } from "../../../_operators/common.context";
+import { findOryIdentityByEmail, oryAdminFetch } from "../../../_operators/common.helpers";
 import { closeDb, db } from "../../../../server/db/client";
 import { teamMembers, teams, users } from "../../../../server/db/schema";
-import {
-  ORF_SESSION_COOKIE,
-  ORY_ADMIN_URL,
-  type BrowserAuthStorageState,
-  type BrowserSession,
-  type MloginCaseData,
-  type OryIdentity,
-} from "./mlogin.context";
+import type { MloginCaseData } from "./mlogin.context";
 
 export async function closeMloginTestDb() {
   await closeDb();
-}
-
-export async function clearBrowserState(page: Page) {
-  await page.addInitScript(() => {
-    try {
-      window.localStorage.clear();
-      window.sessionStorage.clear();
-    } catch {
-      // Opaque origins such as about:blank can deny storage access.
-    }
-  });
-  await page
-    .evaluate(() => {
-      try {
-        window.localStorage.clear();
-        window.sessionStorage.clear();
-      } catch {
-        // Opaque origins such as about:blank can deny storage access.
-      }
-    })
-    .catch(() => undefined);
-}
-
-export async function readBrowserSession(page: Page): Promise<BrowserSession> {
-  return page.evaluate(async () => {
-    const response = await fetch("/api/auth/session", { credentials: "include" });
-    return {
-      status: response.status,
-      body: await response.json(),
-    };
-  });
-}
-
-export async function readBrowserAuthStorageState(page: Page): Promise<BrowserAuthStorageState> {
-  return page.evaluate(() => ({
-    localStorageAuthKeys: Object.keys(window.localStorage).filter((key) => /auth|session|token|ory/i.test(key)),
-    sessionStorageAuthKeys: Object.keys(window.sessionStorage).filter((key) => /auth|session|token|ory/i.test(key)),
-  }));
-}
-
-export async function hasSessionCookie(context: BrowserContext) {
-  const cookies = await context.cookies();
-  return cookies.some((cookie) => cookie.name === ORF_SESSION_COOKIE && cookie.value.length > 0);
-}
-
-export async function isBackendReady(page: Page) {
-  try {
-    const response = await page.request.get("/health");
-    if (!response.ok()) {
-      return false;
-    }
-
-    const body = await response.json();
-    return body?.ok === true && body?.service === "orf-api";
-  } catch {
-    return false;
-  }
-}
-
-export async function isDatabaseReady() {
-  try {
-    await db.execute(sql`select 1`);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export async function isOryAdminReady() {
-  try {
-    const response = await fetch(`${ORY_ADMIN_URL}/health/ready`, {
-      headers: { accept: "application/json" },
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-export async function findOryIdentityByEmail(email: string) {
-  const identities = await oryAdminFetch<OryIdentity[]>(
-    `/admin/identities?credentials_identifier=${encodeURIComponent(email)}`,
-  );
-  return identities.find((identity) => identity.traits?.email?.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
 export async function upsertOryIdentity(data: Pick<MloginCaseData, "email" | "name" | "password">) {
@@ -165,18 +75,18 @@ export async function upsertOrfMember(
   data: Pick<MloginCaseData, "email" | "name" | "role" | "userId">,
 ) {
   const [existingByEmail] = await db
-    .select({ id: users.id, lastLoginAt: users.lastLoginAt })
+    .select({ id: users.id, lastOnlineAt: users.lastOnlineAt })
     .from(users)
     .where(sql`lower(${users.email}) = ${data.email.toLowerCase()}`)
     .limit(1);
   const [existingById] = await db
-    .select({ id: users.id, lastLoginAt: users.lastLoginAt })
+    .select({ id: users.id, lastOnlineAt: users.lastOnlineAt })
     .from(users)
     .where(eq(users.id, data.userId))
     .limit(1);
   const existing = existingByEmail ?? existingById;
   const userId = existing?.id ?? data.userId;
-  const previousLastLoginAt = existing?.lastLoginAt ?? null;
+  const previousLastOnlineAt = existing?.lastOnlineAt ?? null;
 
   if (existing) {
     await db.update(users).set({ name: data.name, email: data.email }).where(eq(users.id, userId));
@@ -186,7 +96,7 @@ export async function upsertOrfMember(
       name: data.name,
       email: data.email,
       createdAt: today(),
-      lastLoginAt: null,
+      lastOnlineAt: null,
     });
   }
 
@@ -198,11 +108,11 @@ export async function upsertOrfMember(
       set: { role: data.role },
     });
 
-  return { id: userId, previousLastLoginAt };
+  return { id: userId, previousLastOnlineAt };
 }
 
-export async function restoreLastLoginAt(userId: string, lastLoginAt: string | null) {
-  await db.update(users).set({ lastLoginAt }).where(eq(users.id, userId));
+export async function restoreLastOnlineAt(userId: string, lastOnlineAt: string | null) {
+  await db.update(users).set({ lastOnlineAt }).where(eq(users.id, userId));
 }
 
 export async function readOrfMembership(userId: string, teamId: string) {
@@ -210,7 +120,7 @@ export async function readOrfMembership(userId: string, teamId: string) {
     .select({
       email: users.email,
       role: teamMembers.role,
-      lastLoginAt: users.lastLoginAt,
+      lastOnlineAt: users.lastOnlineAt,
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
@@ -218,23 +128,6 @@ export async function readOrfMembership(userId: string, teamId: string) {
     .limit(1);
 
   return membership ?? null;
-}
-
-async function oryAdminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${ORY_ADMIN_URL}${path}`, {
-    ...init,
-    headers: {
-      accept: "application/json",
-      ...(init.body ? { "content-type": "application/json" } : {}),
-      ...init.headers,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ory Admin API failed with ${response.status}: ${await response.text()}`);
-  }
-
-  return response.json() as Promise<T>;
 }
 
 function today() {

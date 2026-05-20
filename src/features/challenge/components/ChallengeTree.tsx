@@ -107,6 +107,7 @@ function ObjectivePanel({
   const actionId = `objective:${group.objective.id}`;
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
+  const hasOpenRowMenu = objectivePanelHasOpenRowMenu(group, handlers.openActionId);
   const isFrozen = shouldRenderObjectiveAsFrozen(group.objective);
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const workbenchAction = workbenchActionForObjective({
@@ -128,7 +129,11 @@ function ObjectivePanel({
     .join(";");
 
   return (
-    <section ref={setObjectiveElement} className={clsx("orf-objective-panel relative", isFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable")}>
+    <section
+      ref={setObjectiveElement}
+      className={clsx("orf-objective-panel relative", isFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable")}
+      data-has-open-row-menu={hasOpenRowMenu ? "true" : undefined}
+    >
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
       <div
         className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
@@ -210,6 +215,20 @@ function ObjectivePanel({
       </div>
     </section>
   );
+}
+
+function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string | null): boolean {
+  if (!openActionId) return false;
+  if (openActionId === `objective:${group.objective.id}`) return true;
+
+  return group.bounties.some((bounty) => {
+    if (openActionId === `bounty:${bounty.result.id}`) return true;
+
+    return bounty.actions.some((action) => {
+      if (openActionId === `action:${action.id}`) return true;
+      return action.checklist.some((item) => openActionId === `subAction:${action.id}:${item.id}`);
+    });
+  });
 }
 
 function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string }) {

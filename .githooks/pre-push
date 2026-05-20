@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -u
+
+echo "Running npm run testd before push..."
+
+if ! npm run testd; then
+  echo >&2 "npm run testd failed. Push aborted."
+  exit 1
+fi
+
+exit 0

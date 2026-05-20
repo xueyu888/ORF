@@ -36,9 +36,37 @@ npm install
 npm run cli:link
 ```
 
+首次运行 Playwright E2E 测试前，需要安装 Chromium 测试浏览器：
+
+```bash
+npx playwright install chromium
+```
+
+如果在 Linux/WSL 环境中运行，首次安装还需要补齐 Chromium 系统依赖：
+
+```bash
+sudo npx playwright install-deps chromium
+```
+
 `cli:link` 会把当前仓库的 `orf` 命令链接到用户级 `~/.local/bin/orf`。如果 `~/.local/bin` 不在 `PATH`，脚本会提示你补到 shell 配置里。也可以不链接，改用 `npm run orf -- <command>`。
 
-### 2) 配置并验证数据库
+### 2) 安装 Git Hooks
+
+仓库提供了 `.githooks/pre-push` 钩子，用于在 `git push` 前自动运行：
+
+```bash
+npm run testd
+```
+
+如果测试失败，推送会被阻止。Git 不会在 clone 仓库后自动启用仓库内的 hooks，因此首次克隆后需要手动安装一次：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+安装后，每次执行 `git push` 都会自动触发该检查。
+
+### 3) 配置并验证数据库
 
 ```bash
 cp .env.example .env
@@ -49,7 +77,7 @@ npm run db:seed
 
 `db:seed` 会写入悬赏大厅、我的挑战、冻结提交、待验收和已结算等演示状态，便于本地检查完整 ORF 流程界面。
 
-### 3) 一键启动
+### 4) 一键启动
 
 后台启动后端和前端：
 

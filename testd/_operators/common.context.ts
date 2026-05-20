@@ -3,20 +3,9 @@ import type { BrowserContext, Page } from "@playwright/test";
 export const ORY_ADMIN_URL = (process.env.ORY_ADMIN_URL ?? "http://127.0.0.1:4434").replace(/\/+$/, "");
 export const ORF_SESSION_COOKIE = "orf_ory_session";
 
-export type TestContext = {
+export type BrowserTestContext = {
   context: BrowserContext;
   page: Page;
-};
-
-export type TeamRole = "admin" | "member" | "readonly" | "supervisor";
-
-export type MloginCaseData = {
-  email: string;
-  password: string;
-  name: string;
-  userId: string;
-  teamId: string;
-  role: TeamRole;
 };
 
 export type OryIdentity = {
@@ -47,15 +36,10 @@ export type BrowserAuthStorageState = {
   sessionStorageAuthKeys: string[];
 };
 
-export type SetupState = {
-  identityId: string;
-  teamId: string;
-  userId: string;
-  previousLastOnlineAt: string | null;
-};
-
-export type ActionResult = {
+export type CapturedResponse = {
   ok: boolean;
   status: number;
-  body: BrowserSession["body"];
+  url: string;
+  method: string;
+  body: unknown;
 };
