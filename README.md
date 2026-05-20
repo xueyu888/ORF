@@ -33,6 +33,7 @@ ORF 是一个基于 ORF 思想设计的项目管理工具。它在产品理念�
 
 ```bash
 npm install
+npm run cli:link
 ```
 
 首次运行 Playwright E2E 测试前，需要安装 Chromium 测试浏览器：
@@ -47,6 +48,8 @@ npx playwright install chromium
 sudo npx playwright install-deps chromium
 ```
 
+`cli:link` 会把当前仓库的 `orf` 命令链接到用户级 `~/.local/bin/orf`。如果 `~/.local/bin` 不在 `PATH`，脚本会提示你补到 shell 配置里。也可以不链接，改用 `npm run orf -- <command>`。
+
 ### 2) 配置并验证数据库
 
 ```bash
@@ -58,29 +61,44 @@ npm run db:seed
 
 `db:seed` 会写入悬赏大厅、我的挑战、冻结提交、待验收和已结算等演示状态，便于本地检查完整 ORF 流程界面。
 
-### 3) 启动后端
+### 3) 一键启动
 
-自动监听变更：
+后台启动后端和前端：
 
 ```bash
-npm run server:dev
+orf up
 ```
 
-不监听变更：
+查看状态和日志：
 
 ```bash
-npm run server:start
+orf status
+orf logs backend
+orf logs frontend
+```
+
+停止后台服务：
+
+```bash
+orf down
+```
+
+前端地址：`http://127.0.0.1:5173`；后端地址：`http://127.0.0.1:8787`。
+
+如果不想后台运行，可以用前台开发模式：
+
+```bash
+orf dev
+```
+
+也可以单独运行：
+
+```bash
+orf backend
+orf frontend
 ```
 
 说明：当前 `.env` 中已启用 GitHub 提交和 Issues 同步到 Mattermost（`GITHUB_SYNC_ENABLED=true`，`GITHUB_ISSUES_SYNC_ENABLED=true`），提交同步监听所有分支。
-
-### 4) 启动前端
-
-```bash
-npm run dev
-```
-
-前端默认通过同源 `/api` 访问后端，请确保后端已启动。
 
 ## Feedback
 
