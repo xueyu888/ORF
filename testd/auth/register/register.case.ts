@@ -317,13 +317,6 @@ export const registerApprovalLoginCase = {
         params: { emailFrom: "data.email" },
       },
       {
-        id: "ory.sessions.revoke.admin",
-        title: "撤销管理员残留 Ory session",
-        object: "ory.sessions",
-        operator: "revoke_by_email",
-        params: { emailFrom: "data.adminEmail" },
-      },
-      {
         id: "ory.admin_identity.exists",
         title: "管理员 Ory 身份仍然存在",
         object: "ory.identity",
