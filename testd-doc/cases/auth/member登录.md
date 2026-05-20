@@ -57,5 +57,5 @@
   - [api] 在当前浏览器上下文中调用 `/api/auth/logout`，撤销本次登录产生的 Ory session。
   - [playwright] 清空当前浏览器上下文的 cookies/localStorage/sessionStorage。
   - [prisma] 如本用例修改了 `last_online_at` 等非基准字段，将其恢复为 Setup 前记录的值。
-  - [api] 若测试 Ory 身份由本用例临时创建，则删除该身份；若属于共享测试夹具，则保留。
-  - [prisma] 若 ORF 测试用户和 `member` 成员关系由本用例临时创建，则删除；若属于共享测试夹具，则保留。
+  - [api] 若测试 Ory 身份由本用例临时创建，则删除该身份；若属于共享测试身份，则保留。
+  - [prisma] 若 ORF 测试用户和 `member` 成员关系由本用例临时创建，则删除；若属于预置测试账号，则保留。

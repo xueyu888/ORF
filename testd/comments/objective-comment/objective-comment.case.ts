@@ -48,13 +48,13 @@ export const objectiveCommentCreateCase = {
       },
       {
         id: "db.member.fixture.exists",
-        title: "ORF 管理员基准夹具存在",
+        title: "ORF 预置管理员账号存在",
         object: "db.member.fixture",
         operator: "exists",
       },
       {
         id: "db.objective.fixture.exists",
-        title: "当前用户可见目标基准夹具存在",
+        title: "当前用户可见预置目标存在",
         object: "db.objective.fixture",
         operator: "exists",
       },
@@ -389,7 +389,7 @@ export const objectiveCommentCreateCase = {
   },
 
   Clean: {
-    description: "删除本用例评论并退出登录，保留目标数据和管理员夹具",
+    description: "删除本用例评论并退出登录，保留目标数据和预置管理员账号",
     steps: [
       {
         id: "comment_panel.close",
@@ -432,13 +432,13 @@ export const objectiveCommentCreateCase = {
       },
       {
         id: "db.member.fixture.exists",
-        title: "管理员夹具仍然存在",
+        title: "预置管理员账号仍然存在",
         object: "db.member.fixture",
         operator: "exists",
       },
       {
         id: "db.objective.fixture.exists",
-        title: "可见目标夹具仍然存在",
+        title: "可见预置目标仍然存在",
         object: "db.objective.fixture",
         operator: "exists",
       },
