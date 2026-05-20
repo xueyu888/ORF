@@ -1,11 +1,12 @@
 import { ArrowLeft, ChevronRight, Pencil, Reply, Send, Trash2, X } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { clsx } from "clsx";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentMessage, CommentThread } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
+import { parseCommentBodyLinks } from "./commentText";
 
 type CommentEntry = {
   message: CommentMessage;
@@ -297,7 +298,7 @@ function CommentMessageRow({
         </div>
         <p className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
           {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
-          {message.body}
+          <CommentBodyText body={message.body} />
         </p>
         {showReplyEntry && entry.replyCount > 0 && (
           <button type="button" className="orf-comment-reply-count" onClick={(event) => { event.stopPropagation(); onEnterReplies?.(); }}>
@@ -307,6 +308,30 @@ function CommentMessageRow({
         )}
       </div>
     </article>
+  );
+}
+
+function CommentBodyText({ body }: { body: string }) {
+  return (
+    <>
+      {parseCommentBodyLinks(body).map((token, index) =>
+        token.type === "link" ? (
+          <a
+            key={`${token.href}:${index}`}
+            className="orf-comment-link"
+            href={token.href}
+            rel="noreferrer noopener"
+            target="_blank"
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            {token.value}
+          </a>
+        ) : (
+          <Fragment key={`${token.value}:${index}`}>{token.value}</Fragment>
+        ),
+      )}
+    </>
   );
 }
 

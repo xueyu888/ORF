@@ -5844,6 +5844,18 @@ body[data-dragging-floating="true"] {
   font-weight: 800;
 }
 
+.orf-comment-link {
+  color: #0b63ce;
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.orf-comment-link:hover {
+  color: #064a9f;
+}
+
 .orf-comment-reply-count {
   display: inline-flex;
   align-items: center;
