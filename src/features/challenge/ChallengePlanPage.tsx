@@ -403,6 +403,7 @@ export function ChallengePlanPage() {
 
       {commentTarget && (
         <CommentPanel
+          key={`${commentTarget.type}:${commentTarget.id}`}
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
           targetTitle={commentTarget.title}
