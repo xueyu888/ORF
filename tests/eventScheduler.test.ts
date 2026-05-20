@@ -44,6 +44,8 @@ function state(id: string): NormalizedState {
     networkPendingSummary: "none",
     mainVisibleTextHash: id,
     targetSignatures: [],
+    repeatableRegionStates: [],
+    repeatableRegions: [],
   };
 }
 

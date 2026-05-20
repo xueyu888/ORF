@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Request, Response } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { CoverageGraph } from "./coverageGraph";
 import { executeEvent } from "./eventExecutor";
 import { generateCandidateEvents } from "./eventGenerator";
@@ -6,20 +6,29 @@ import { EventScheduler } from "./eventScheduler";
 import { normalizeState } from "./stateNormalizer";
 import { collectTargets } from "./targetCollector";
 import { SeededRandom } from "./seededRandom";
-import { isInAllowedScope, shouldRunEvent, targetUrl } from "./safety";
-import type { ExecutionIssue, ExecutionResult, ExplorerConfig, ExplorerRunResult, StepRecord } from "./types";
+import { isInAllowedScope, shouldRunEvent } from "./safety";
+import { runRepeatableRegionExplorer } from "./repeatableRegionRunner";
+import { attachDiagnostics, resetToTarget, shellQuote } from "./runnerSupport";
+import { ScreenshotCollector } from "./screenshotCollector";
+import type { ExecutionResult, ExplorerConfig, ExplorerRunResult, StepRecord } from "./types";
 
 export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise<ExplorerRunResult> {
   const rng = new SeededRandom(config.seed);
   const graph = new CoverageGraph();
   const scheduler = new EventScheduler({ epsilon: config.epsilon });
   const diagnostics = attachDiagnostics(page.context(), page);
+  const screenshots = new ScreenshotCollector(page, config);
   const records: StepRecord[] = [];
   let noChangeStreak = 0;
+  const startedAt = Date.now();
 
   await resetToTarget(page, config);
 
   for (let step = 0; step < config.steps; step += 1) {
+    if (isTimeBudgetExhausted(startedAt, config.maxDurationMs)) {
+      break;
+    }
+
     if (!isInAllowedScope(page.url(), config)) {
       await resetToTarget(page, config);
     }
@@ -27,7 +36,10 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
     const before = await normalizeState(page, diagnostics.pendingCount(), config.stateAbstractor);
     const targets = await collectTargets(page);
     const candidates = generateCandidateEvents(targets).filter((candidate) => shouldRunEvent(candidate, config));
-    graph.observeState(before, candidates, step);
+    const observed = graph.observeState(before, candidates, step);
+    if (observed.isNewState) {
+      await screenshots.captureState(before, step);
+    }
 
     if (candidates.length === 0) {
       await resetToTarget(page, config);
@@ -73,6 +85,12 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
     }
 
     const update = graph.addTransition(before, event, after, mergedExecution, step);
+    if (update.newState) {
+      await screenshots.captureState(after, step);
+    }
+    if (mergedExecution.issues.length > 0) {
+      await screenshots.captureIssue(after, step, mergedExecution.issues);
+    }
     const noChange = before.id === after.id;
     noChangeStreak = noChange ? noChangeStreak + 1 : 0;
     scheduler.update(event);
@@ -111,6 +129,7 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
         generateCandidateEvents(await collectTargets(page)).filter((candidate) => shouldRunEvent(candidate, config)),
         step,
       );
+      await screenshots.captureState(after, step);
       noChangeStreak = 0;
     }
   }
@@ -118,7 +137,7 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
   diagnostics.detach();
   const summary = graph.summarize(config.steps, records);
   const canonicalCoverage = graph.getCanonicalCandidateCoverage();
-  return {
+  const result: ExplorerRunResult = {
     config,
     seed: config.seed,
     summary,
@@ -131,96 +150,27 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
     canonicalCandidateEvents: canonicalCoverage.discovered,
     testedCanonicalCandidateEvents: canonicalCoverage.tested,
     eventSequence: records,
+    screenshotArtifacts: screenshots.list(),
     replayCommand: [
+      `UI_EXPLORER_TEST_KIND=${shellQuote(config.testKind)}`,
       `UI_EXPLORER_SAFETY_PROFILE=${shellQuote(config.safetyProfile)}`,
       `UI_EXPLORER_SEED=${shellQuote(config.seed)}`,
       `UI_EXPLORER_STEPS=${config.steps}`,
+      config.maxDurationMs > 0 ? `UI_EXPLORER_MAX_DURATION_MS=${config.maxDurationMs}` : "",
       `UI_EXPLORER_STATE_ABSTRACTOR=${shellQuote(config.stateAbstractor)}`,
       `UI_EXPLORER_TARGET_PATH=${shellQuote(config.targetPath)}`,
       `UI_EXPLORER_BASE_URL=${shellQuote(config.baseURL)}`,
       "npm run test:e2e:explorer",
-    ].join(" "),
-  };
-}
-
-async function resetToTarget(page: Page, config: ExplorerConfig) {
-  await page.goto(targetUrl(config), { waitUntil: "domcontentloaded", timeout: 15_000 });
-  await page.waitForTimeout(100);
-}
-
-function attachDiagnostics(context: BrowserContext, page: Page) {
-  const issues: ExecutionIssue[] = [];
-  const pending = new Set<Request>();
-
-  const onConsole = (message: { type: () => string; text: () => string }) => {
-    if (message.type() === "error") {
-      issues.push({ severity: "ordinary", type: "console-error", message: message.text().slice(0, 500), url: page.url() });
-    }
-  };
-  const onPageError = (error: Error) => {
-    issues.push({ severity: "severe", type: "pageerror", message: error.message.slice(0, 500), url: page.url() });
-  };
-  const onRequest = (request: Request) => {
-    if (request.url().startsWith("http")) {
-      pending.add(request);
-    }
-  };
-  const onRequestFinished = (request: Request) => {
-    pending.delete(request);
-  };
-  const onRequestFailed = (request: Request) => {
-    pending.delete(request);
-    issues.push({
-      severity: "ordinary",
-      type: "request-failed",
-      message: `${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`.slice(0, 500),
-      url: request.url(),
-    });
-  };
-  const onResponse = (response: Response) => {
-    if (response.status() >= 500) {
-      issues.push({
-        severity: "ordinary",
-        type: "server-error-response",
-        message: `${response.status()} ${response.url()}`.slice(0, 500),
-        url: response.url(),
-      });
-    }
-  };
-  const onNewPage = async (newPage: Page) => {
-    if (newPage !== page) {
-      issues.push({ severity: "ordinary", type: "new-window", message: `Closed new page: ${newPage.url()}` });
-      await newPage.close().catch(() => undefined);
-    }
+    ].filter(Boolean).join(" "),
   };
 
-  page.on("console", onConsole);
-  page.on("pageerror", onPageError);
-  page.on("request", onRequest);
-  page.on("requestfinished", onRequestFinished);
-  page.on("requestfailed", onRequestFailed);
-  page.on("response", onResponse);
-  context.on("page", onNewPage);
-
-  return {
-    cursor: () => issues.length,
-    readSince: (cursor: number) => issues.slice(cursor),
-    pendingCount: () => pending.size,
-    detach: () => {
-      page.off("console", onConsole);
-      page.off("pageerror", onPageError);
-      page.off("request", onRequest);
-      page.off("requestfinished", onRequestFinished);
-      page.off("requestfailed", onRequestFailed);
-      page.off("response", onResponse);
-      context.off("page", onNewPage);
-    },
-  };
-}
-
-function shellQuote(value: string) {
-  if (/^[a-zA-Z0-9_./:-]+$/.test(value)) {
-    return value;
+  if (config.runRepeatableRegionTests && config.testKind === "stateExploration") {
+    result.repeatableRegionExploration = await runRepeatableRegionExplorer(page, config, result);
   }
-  return `'${value.replace(/'/g, "'\\''")}'`;
+
+  return result;
+}
+
+function isTimeBudgetExhausted(startedAt: number, maxDurationMs: number) {
+  return maxDurationMs > 0 && Date.now() - startedAt >= maxDurationMs;
 }

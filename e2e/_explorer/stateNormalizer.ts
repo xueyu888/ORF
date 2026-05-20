@@ -37,6 +37,25 @@ export async function normalizeState(
         .slice(0, 36);
     }
 
+    function longTextBucket(text: string | null | undefined) {
+      const normalized = (text ?? "").replace(/\s+/g, " ").trim();
+      if (!normalized) {
+        return "none";
+      }
+      return normalized
+        .toLowerCase()
+        .replace(/[0-9a-f]{8,}/gi, "hex")
+        .replace(/\d+/g, "0")
+        .slice(0, 220);
+    }
+
+    function directText(element: Element) {
+      return Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent ?? "")
+        .join(" ");
+    }
+
     function rectBucket(rect: DOMRect) {
       return [
         Math.floor((rect.left / viewportWidth) * 10),
@@ -58,8 +77,27 @@ export async function normalizeState(
       if (tag === "a") {
         return "link";
       }
+      if (tag === "select") {
+        return "select";
+      }
+      if (tag === "summary") {
+        return "button";
+      }
+      if (tag === "textarea") {
+        return "textbox";
+      }
       if (tag === "input") {
-        return (element as HTMLInputElement).type || "input";
+        const type = (element as HTMLInputElement).type || "text";
+        if (type === "checkbox") {
+          return "checkbox";
+        }
+        if (type === "radio") {
+          return "radio";
+        }
+        if (type === "button" || type === "submit") {
+          return "button";
+        }
+        return "textbox";
       }
       return tag;
     }
@@ -89,6 +127,51 @@ export async function normalizeState(
           ].join(","),
         ),
       );
+    }
+
+    function dataAttributes(element: Element) {
+      return Array.from(element.attributes).reduce<Record<string, string>>((result, attribute) => {
+        if (attribute.name.startsWith("data-")) {
+          result[attribute.name] = attribute.value.slice(0, 80);
+        }
+        return result;
+      }, {});
+    }
+
+    function cssPath(element: Element) {
+      const segments: string[] = [];
+      let current: Element | null = element;
+      while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.documentElement) {
+        const tag = current.tagName.toLowerCase();
+        const parent: Element | null = current.parentElement;
+        if (!parent) {
+          break;
+        }
+        const currentTag = current.tagName;
+        const sameTagSiblings = Array.from(parent.children).filter((child): child is Element => child.tagName === currentTag);
+        const index = sameTagSiblings.indexOf(current) + 1;
+        segments.unshift(`${tag}:nth-of-type(${index})`);
+        current = parent;
+      }
+      return segments.length > 0 ? segments.join(" > ") : element.tagName.toLowerCase();
+    }
+
+    function domTree(element: Element, depth = 0, budget = { count: 0 }): unknown {
+      budget.count += 1;
+      if (depth > 8 || budget.count > 450) {
+        return null;
+      }
+      const visibleChildren = Array.from(element.children).filter(isVisible).slice(0, 80);
+      return {
+        tag: element.tagName.toLowerCase(),
+        role: explicitRole(element),
+        selector: cssPath(element),
+        classTokens: Array.from(element.classList).slice(0, 24),
+        dataAttributes: dataAttributes(element),
+        textBucket: longTextBucket(directText(element)),
+        subtreeTextBucket: longTextBucket(element.textContent),
+        children: visibleChildren.map((child) => domTree(child, depth + 1, budget)).filter(Boolean),
+      };
     }
 
     function isVisible(element: Element) {
@@ -170,6 +253,7 @@ export async function normalizeState(
       targets,
       flags,
       bodyChildCount: document.body?.children.length ?? 0,
+      domTree: document.body ? domTree(document.body) : null,
     };
   });
 

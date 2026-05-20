@@ -52,6 +52,10 @@ async function main() {
     });
     console.log(`[ui-explorer:parallel] merged JSON: ${merged.reportPath}`);
     console.log(`[ui-explorer:parallel] merged HTML: ${merged.htmlReportPath}`);
+    if (merged.repeatableRegionReportPath && merged.repeatableRegionHtmlReportPath) {
+      console.log(`[ui-explorer:parallel] repeatable-region JSON: ${merged.repeatableRegionReportPath}`);
+      console.log(`[ui-explorer:parallel] repeatable-region HTML: ${merged.repeatableRegionHtmlReportPath}`);
+    }
     console.log(
       `[ui-explorer:parallel] states=${merged.result.summary.discoveredStateCount} transitions=${merged.result.summary.discoveredTransitionCount} score=${merged.result.summary.discoveredSpaceExplorationScore.toFixed(2)} severe=${merged.result.summary.severeFailureCount}`,
     );
@@ -146,7 +150,7 @@ function computePerWorkerSteps(workers: number) {
   if (totalSteps > 0) {
     return Math.max(1, Math.ceil(totalSteps / workers));
   }
-  return positiveInt(process.env.UI_EXPLORER_STEPS, 200);
+  return positiveInt(process.env.UI_EXPLORER_STEPS, 1000);
 }
 
 async function waitForHttp(url: string, timeoutMs: number) {
@@ -201,9 +205,11 @@ function walk(dir: string, visit: (file: string) => void) {
 
 function replayCommand(workers: number, steps: number, seed: string) {
   return [
+    process.env.UI_EXPLORER_TEST_KIND ? `UI_EXPLORER_TEST_KIND=${shellQuote(process.env.UI_EXPLORER_TEST_KIND)}` : "",
     process.env.UI_EXPLORER_SAFETY_PROFILE ? `UI_EXPLORER_SAFETY_PROFILE=${shellQuote(process.env.UI_EXPLORER_SAFETY_PROFILE)}` : "",
     process.env.UI_EXPLORER_STATE_ABSTRACTOR_MODULE ? `UI_EXPLORER_STATE_ABSTRACTOR_MODULE=${shellQuote(process.env.UI_EXPLORER_STATE_ABSTRACTOR_MODULE)}` : "",
     process.env.UI_EXPLORER_STATE_ABSTRACTOR ? `UI_EXPLORER_STATE_ABSTRACTOR=${shellQuote(process.env.UI_EXPLORER_STATE_ABSTRACTOR)}` : "",
+    process.env.UI_EXPLORER_MAX_DURATION_MS ? `UI_EXPLORER_MAX_DURATION_MS=${shellQuote(process.env.UI_EXPLORER_MAX_DURATION_MS)}` : "",
     `UI_EXPLORER_WORKERS=${workers}`,
     `UI_EXPLORER_STEPS=${steps}`,
     `UI_EXPLORER_SEED=${shellQuote(seed)}`,

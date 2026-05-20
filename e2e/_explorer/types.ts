@@ -46,6 +46,24 @@ export type InputValueKind =
   | "structured"
   | "malformed";
 
+export type ExplorerTestKind = "stateExploration" | "repeatableRegion";
+
+export type RepeatableRegionRecord = {
+  id: string;
+  signature: string;
+  abstractionKey: string;
+  routePattern: string;
+  selector?: string;
+  kind: "comment" | "hierarchy" | "list";
+  label: string;
+  componentName?: string;
+  parentComponentName?: string;
+  presence: "none" | "some";
+  itemShape: string;
+  businessTags: string[];
+  hierarchyLayers: string[];
+};
+
 export type RectBucket = {
   x: number;
   y: number;
@@ -112,6 +130,8 @@ export type NormalizedState = {
   networkPendingSummary: string;
   mainVisibleTextHash: string;
   targetSignatures: string[];
+  repeatableRegionStates: string[];
+  repeatableRegions: RepeatableRegionRecord[];
 };
 
 export type CandidateEventRecord = {
@@ -139,6 +159,8 @@ export type StateNode = {
   noChangeCount: number;
   newStateOutCount: number;
   errorCount: number;
+  repeatableRegionStates: string[];
+  repeatableRegions: RepeatableRegionRecord[];
   candidates: CandidateEventRecord[];
 };
 
@@ -183,6 +205,19 @@ export type StepRecord = {
   issues: ExecutionIssue[];
 };
 
+export type ScreenshotArtifact = {
+  id: string;
+  kind: "state" | "issue";
+  path: string;
+  relativePath?: string;
+  fileName: string;
+  stateId?: string;
+  routePattern?: string;
+  step?: number;
+  issueType?: string;
+  severity?: ExecutionIssue["severity"];
+};
+
 export type CoverageSummary = {
   totalSteps: number;
   executedSteps: number;
@@ -203,12 +238,15 @@ export type CoverageSummary = {
   discoveredSpaceExplorationScore: number;
   stateGrowthSaturation: number;
   transitionGrowthSaturation: number;
+  repeatableRegionCount: number;
 };
 
 export type ExplorerConfig = {
+  testKind: ExplorerTestKind;
   safetyProfile: string;
   targetPath: string;
   steps: number;
+  maxDurationMs: number;
   seed: string;
   reportDir: string;
   maxNoChange: number;
@@ -223,6 +261,75 @@ export type ExplorerConfig = {
   stopOnRouteEscape: boolean;
   stateAbstractor: string;
   epsilon: number;
+  runRepeatableRegionTests: boolean;
+  repeatableRegionMaxObjects: number;
+  repeatableRegionStepsPerObject: number;
+  screenshotDir: string;
+  stateScreenshotLimit: number;
+  issueScreenshotLimit: number;
+};
+
+export type RepeatableRegionTestObject = {
+  id: string;
+  key: string;
+  region: RepeatableRegionRecord;
+  representativeStateId: string;
+  representativeStateFirstSeenStep: number;
+};
+
+export type RepeatableRegionStepRecord = {
+  step: number;
+  beforeStateId: string;
+  afterStateId: string;
+  eventSignature: string;
+  operation: UiOperation;
+  targetSignature?: string;
+  params: EventParams;
+  noChange: boolean;
+  routeEscape: boolean;
+  leftRegion: boolean;
+  issues: ExecutionIssue[];
+};
+
+export type RepeatableRegionObjectResult = {
+  object: RepeatableRegionTestObject;
+  skippedReason?: string;
+  discoveredCandidateEventCount: number;
+  testedCandidateEventCount: number;
+  executedSteps: number;
+  noChangeCount: number;
+  stateChangeCount: number;
+  routeEscapeCount: number;
+  leftRegionCount: number;
+  runtimeErrorCount: number;
+  severeFailureCount: number;
+  events: RepeatableRegionStepRecord[];
+};
+
+export type RepeatableRegionExplorationSummary = {
+  enabled: boolean;
+  testObjectCount: number;
+  testedObjectCount: number;
+  skippedObjectCount: number;
+  executedSteps: number;
+  discoveredCandidateEventCount: number;
+  testedCandidateEventCount: number;
+  candidateEventCoverage: number;
+  noChangeRate: number;
+  stateChangeCount: number;
+  routeEscapeCount: number;
+  leftRegionCount: number;
+  runtimeErrorCount: number;
+  severeFailureCount: number;
+};
+
+export type RepeatableRegionExplorationResult = {
+  summary: RepeatableRegionExplorationSummary;
+  maxObjects: number;
+  stepsPerObject: number;
+  seed: string;
+  objects: RepeatableRegionObjectResult[];
+  replayCommand: string;
 };
 
 export type ExplorerRunResult = {
@@ -243,7 +350,11 @@ export type ExplorerRunResult = {
   canonicalCandidateEvents: string[];
   testedCanonicalCandidateEvents: string[];
   eventSequence: StepRecord[];
+  screenshotArtifacts: ScreenshotArtifact[];
   replayCommand: string;
+  repeatableRegionExploration?: RepeatableRegionExplorationResult;
   reportPath?: string;
   htmlReportPath?: string;
+  repeatableRegionReportPath?: string;
+  repeatableRegionHtmlReportPath?: string;
 };

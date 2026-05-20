@@ -42,7 +42,8 @@ UI_EXPLORER_WORKERS=4 UI_EXPLORER_TOTAL_STEPS=4000 npm run test:e2e:explorer:fas
 
 ```bash
 UI_EXPLORER_TARGET_PATH=/tasks \
-UI_EXPLORER_STEPS=200 \
+UI_EXPLORER_STEPS=1000 \
+UI_EXPLORER_MAX_DURATION_MS=600000 \
 UI_EXPLORER_SEED=20260519 \
 npm run test:e2e:explorer
 ```
@@ -57,14 +58,38 @@ npm run test:e2e:explorer
 
 - `result.json`
 - `report.html`
+- `repeatable-regions.json`
+- `repeatable-regions.html`
+- `screenshots/states/*.png`
+- `screenshots/issues/*.png`
+
+`report.html` 的展示顺序按结果判断组织：
+
+```text
+结果总览
+状态图
+异常情况
+覆盖进度
+可重复组件局部测试
+可重复区域
+测试设置与复现
+```
+
+首页只放执行数量、成功事件、异常事件、严重失败、状态数、覆盖率和探索分数。安全边界、状态抽象、目标路径、随机种子等属于测试设置，放在报告后部。
+
+状态图提供“探索路径回放”：根据本次 `eventSequence` 的实际步骤顺序，依次高亮对应的起点状态、终点状态和状态转移边。异常卡片复用这套回放能力，点击异常卡片里的定位按钮会跳回状态图对应步骤。
+
+报告不再展示状态截图独立区块、未测试候选事件、无变化事件、前沿状态和“不是业务 E2E”说明卡。这些信息仍保留在 `result.json` 里，供需要排查时查看。
 
 ## 配置
 
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `UI_EXPLORER_SAFETY_PROFILE` | `authenticatedApp` | 安全边界和测试数据场景名；`authenticatedApp` 测登录后主应用，`auth` 测未登录登录页 |
+| `UI_EXPLORER_TEST_KIND` | `stateExploration` | 主测试类型；默认用粗粒度状态探索，第二阶段由 `UI_EXPLORER_REPEATABLE_REGION_TESTS` 自动派生 |
 | `UI_EXPLORER_TARGET_PATH` | `/tasks` | 探索入口路径 |
-| `UI_EXPLORER_STEPS` | `200` | 最大探索步数 |
+| `UI_EXPLORER_STEPS` | `1000` | 最大探索步数；与时间预算谁先到谁结束 |
+| `UI_EXPLORER_MAX_DURATION_MS` | `0` | 主状态探索最大运行时长，单位毫秒；`0` 表示不按时间结束 |
 | `UI_EXPLORER_SEED` | `Date.now()` | 随机种子 |
 | `UI_EXPLORER_REPORT_DIR` | `.artifacts/ui-explorer` | 报告目录 |
 | `UI_EXPLORER_MAX_NO_CHANGE` | `30` | 连续无状态变化后的 reset 阈值 |
@@ -76,9 +101,14 @@ npm run test:e2e:explorer
 | `UI_EXPLORER_STOP_ON_ROUTE_ESCAPE` | 未开启 | 设置为 `1` 时，离开安全路径后结束本轮探索 |
 | `UI_EXPLORER_BLOCKED_OPERATION_KINDS` | 空 | 逗号分隔的禁用操作，例如 `back` |
 | `UI_EXPLORER_BLOCKED_TARGET_TEXT_PATTERNS` | `退出登录,logout,log out,sign out` | 逗号分隔的目标文本过滤，默认避免随机点退出登录后回到 `/auth` |
-| `UI_EXPLORER_STATE_ABSTRACTOR` | `normal` | 状态合并策略名；当前内置 `normal` 和 `coarse` |
+| `UI_EXPLORER_STATE_ABSTRACTOR` | `stateExploration` | 状态合并策略名；当前内置 `stateExploration`、`normal` 和 `coarse` |
 | `UI_EXPLORER_STATE_ABSTRACTOR_MODULE` | 未设置 | 可选注册模块；模块加载后可调用 `registerStateAbstractor()` 注册自定义策略 |
 | `UI_EXPLORER_STATE_MODE` | `normal` | 兼容旧参数；未设置 `UI_EXPLORER_STATE_ABSTRACTOR` 时，`coarse` 会映射到同名抽象器 |
+| `UI_EXPLORER_REPEATABLE_REGION_TESTS` | `1` | 是否在状态探索后自动执行可重复组件局部测试；设置为 `0` 关闭 |
+| `UI_EXPLORER_REPEATABLE_REGION_MAX_OBJECTS` | `12` | 第二阶段最多测试多少个去重后的可重复组件对象 |
+| `UI_EXPLORER_REPEATABLE_REGION_STEPS` | `8` | 每个可重复组件对象最多执行多少个组件内事件 |
+| `UI_EXPLORER_STATE_SCREENSHOT_LIMIT` | `200` | 最多保存多少张状态首次出现截图；`0` 表示不保存 |
+| `UI_EXPLORER_ISSUE_SCREENSHOT_LIMIT` | `80` | 最多保存多少张异常步骤截图；`0` 表示不保存 |
 
 ## 事件模型
 
@@ -122,10 +152,11 @@ Wait(duration)
 - enabled / disabled summary
 - network pending bucket
 - 主文本 hash
+- 可重复增长区域摘要
 
 会过滤时间戳、随机 ID、图片 URL、背景图 URL、session id、token、精确坐标和随机输入原值。
 
-状态合并策略通过 `stateAbstractorRegistry` 注册。浏览器端只采集 DOM snapshot，Node 端用注册的状态抽象函数把 snapshot 转成状态指纹。内置的 `normal` 是默认策略，`coarse` 会进一步忽略焦点、输入值类别、主文本 hash 和 target signature，只保留路径、组件结构、关键 UI flag 和 enabled/disabled 汇总。
+状态合并策略通过 `stateAbstractorRegistry` 注册。浏览器端只采集 DOM snapshot，Node 端用注册的状态抽象函数把 snapshot 转成状态指纹。内置的 `stateExploration` 是默认策略，它不会把每个可重复区域条目逐个放进状态 ID，而是把可重复区域再汇总成“评论有无 + 业务标签集合 + ORF 层级集合”。普通列表或布局容器只会记录到 `repeatableRegions`，交给局部测试，不参与全局状态 ID。`normal` 保留更接近原始 DOM 摘要的口径，`coarse` 会进一步忽略焦点、输入值类别、主文本 hash 和 target signature。
 
 自定义策略示例：
 
@@ -143,6 +174,8 @@ registerStateAbstractor("routeOnly", (snapshot) => ({
   networkPendingSummary: "custom",
   mainVisibleTextHash: "custom",
   targetSignatures: [],
+  repeatableRegionStates: [],
+  repeatableRegions: [],
 }));
 ```
 
@@ -164,6 +197,38 @@ npm run test:e2e:explorer
 - `canonicalCandidateEventCoverage`：按 `operation + 组件结构 + 参数类别` 归一后统计，忽略状态重复、动态 selector 和坐标差异，适合看底层事件族是否被探索过。
 
 `targetCoverage` 按 `routePattern + DOM 目标签名` 统计。两个页面上外观相同的按钮，如果分别位于 `/tasks` 和 `/bounties`，会被视为两个不同目标；这保证路径入口不会因为组件外观相同而被压成一个覆盖点。
+
+## 可重复组件局部测试
+
+状态探索完成后，测试程序会自动读取本轮发现的 `repeatableRegions`，派生第二阶段的组件局部测试。
+
+第二阶段只处理第一阶段已经发现的可重复区域：
+
+```text
+评论面板
+列表
+目标 / 指标 / 任务 / 子任务等层级容器
+```
+
+它按下面维度去重：
+
+```text
+路径
+组件作用域
+无 / 有
+业务标签
+层级标签
+```
+
+同一组件里的多条相同结构数据不会重复展开；不同业务标签、不同层级容器会保留为不同测试对象。局部测试会恢复到代表状态，只采集组件 selector 内部的可交互目标，并且不执行 `refresh`、`back`、`backgroundClick` 这类页面级事件。
+
+第二阶段输出单独报告：
+
+```text
+repeatable-regions.html
+```
+
+这份报告不展示状态图，只展示测试对象、组件内事件、候选覆盖、离开组件次数和异常。它的目标是验证可重复组件局部稳定性，不证明整站路径覆盖。
 
 报告中的分数叫：
 

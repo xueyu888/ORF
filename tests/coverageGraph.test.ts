@@ -80,6 +80,8 @@ function state(id: string, routePattern = "/auth"): NormalizedState {
     networkPendingSummary: "none",
     mainVisibleTextHash: id,
     targetSignatures: [],
+    repeatableRegionStates: [],
+    repeatableRegions: [],
   };
 }
 

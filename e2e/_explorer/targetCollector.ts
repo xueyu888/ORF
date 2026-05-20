@@ -4,8 +4,12 @@ import { normalizeRoutePattern, shortHash } from "./stateAbstractorRegistry";
 
 type BrowserTarget = Omit<UiTarget, "id" | "routePattern">;
 
-export async function collectTargets(page: Page): Promise<UiTarget[]> {
-  const targets = await page.evaluate(() => {
+export type TargetCollectionScope = {
+  rootSelector?: string;
+};
+
+export async function collectTargets(page: Page, scope: TargetCollectionScope = {}): Promise<UiTarget[]> {
+  const targets = await page.evaluate((rootSelector) => {
     const viewportWidth = Math.max(1, window.innerWidth);
     const viewportHeight = Math.max(1, window.innerHeight);
 
@@ -185,7 +189,11 @@ export async function collectTargets(page: Page): Promise<UiTarget[]> {
       "[aria-haspopup]",
     ].join(",");
     const sameKindCounts = new Map<string, number>();
-    return Array.from(document.querySelectorAll(selector))
+    const root = rootSelector ? document.querySelector(rootSelector) : document;
+    if (!root) {
+      return [];
+    }
+    return Array.from(root.querySelectorAll(selector))
       .filter((element) => {
         if (!isElementEnabled(element) || !isVisibleAndReachable(element)) {
           return false;
@@ -238,7 +246,7 @@ export async function collectTargets(page: Page): Promise<UiTarget[]> {
           capabilities,
         };
       });
-  });
+  }, scope.rootSelector ?? null);
 
   const routePattern = routePatternForUrl(page.url());
   return (targets as BrowserTarget[]).map((target) => {

@@ -1,7 +1,10 @@
-import { createHash } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { InputValueKind, NormalizedState } from "./types";
+import { analyzeRepeatableRegions, type DomTreeNodeSnapshot } from "./repeatableRegionDetector";
+import type { InputValueKind, NormalizedState, RepeatableRegionRecord } from "./types";
+import { shortHash, stableStringify } from "./stableHash";
+
+export { shortHash, stableStringify } from "./stableHash";
 
 export type StateDomSnapshot = {
   url: string;
@@ -23,9 +26,11 @@ export type StateDomSnapshot = {
   };
   bodyChildCount: number;
   networkPendingCount?: number;
+  domTree?: DomTreeNodeSnapshot | null;
 };
 
-export type StateAbstraction = Omit<NormalizedState, "id" | "fingerprint">;
+export type StateAbstraction = Omit<NormalizedState, "id" | "fingerprint" | "repeatableRegionStates" | "repeatableRegions"> &
+  Partial<Pick<NormalizedState, "repeatableRegionStates" | "repeatableRegions">>;
 export type StateAbstractor = (snapshot: StateDomSnapshot) => StateAbstraction;
 
 const stateAbstractors = new Map<string, StateAbstractor>();
@@ -67,17 +72,28 @@ export function abstractState(snapshot: StateDomSnapshot, abstractorName: string
 }
 
 export function createNormalizedState(state: StateAbstraction): NormalizedState {
-  const fingerprint = stableStringify(state);
+  const completeState = {
+    repeatableRegionStates: [],
+    repeatableRegions: [],
+    ...state,
+  };
+  const identityState: Partial<typeof completeState> = { ...completeState };
+  delete identityState.repeatableRegions;
+  const fingerprint = stableStringify(identityState);
   const id = `S-${shortHash(fingerprint)}`;
-  return { id, fingerprint, ...state };
+  return { id, fingerprint, ...completeState };
 }
 
 function normalStateAbstractor(snapshot: StateDomSnapshot): StateAbstraction {
   return abstractNormalState(snapshot);
 }
 
+function stateExplorationStateAbstractor(snapshot: StateDomSnapshot): StateAbstraction {
+  return abstractStateExploration(snapshot);
+}
+
 function coarseStateAbstractor(snapshot: StateDomSnapshot): StateAbstraction {
-  const normalState = abstractNormalState(snapshot);
+  const normalState = abstractStateExploration(snapshot);
   return {
     routePattern: normalState.routePattern,
     visibleTargetSummary: normalState.visibleTargetSummary,
@@ -89,11 +105,14 @@ function coarseStateAbstractor(snapshot: StateDomSnapshot): StateAbstraction {
     networkPendingSummary: "coarse",
     mainVisibleTextHash: "coarse",
     targetSignatures: [],
+    repeatableRegionStates: normalState.repeatableRegionStates,
+    repeatableRegions: normalState.repeatableRegions,
   };
 }
 
 function abstractNormalState(snapshot: StateDomSnapshot): StateAbstraction {
   const routePattern = normalizeRoutePattern(new URL(snapshot.url).pathname);
+  const repeatable = repeatableRegionAnalysis(snapshot, routePattern);
   const inputValueKinds = snapshot.targets
     .map((target) => (target.value === undefined ? null : classifyInputValue(target.value)))
     .filter((value): value is InputValueKind => value !== null)
@@ -125,6 +144,41 @@ function abstractNormalState(snapshot: StateDomSnapshot): StateAbstraction {
     networkPendingSummary: networkPendingBucket(snapshot.networkPendingCount ?? 0),
     mainVisibleTextHash: shortHash(sanitizedText),
     targetSignatures,
+    repeatableRegionStates: fullRepeatableRegionStates(repeatable.regions),
+    repeatableRegions: repeatable.regions,
+  };
+}
+
+function abstractStateExploration(snapshot: StateDomSnapshot): StateAbstraction {
+  const routePattern = normalizeRoutePattern(new URL(snapshot.url).pathname);
+  const repeatable = repeatableRegionAnalysis(snapshot, routePattern);
+  const visibleTargetSummary = snapshot.targets.reduce<Record<string, number>>((summary, target) => {
+    summary[target.kind] = 1;
+    return summary;
+  }, {});
+  const enabledCount = snapshot.targets.filter((target) => !target.disabled).length;
+  const disabledCount = snapshot.targets.length - enabledCount;
+  const collapsedText = repeatable.collapsedVisibleText || snapshot.visibleText;
+  const sanitizedText = sanitizeVisibleText(collapsedText);
+
+  return {
+    routePattern,
+    visibleTargetSummary,
+    interactableStructure: Object.keys(visibleTargetSummary)
+      .sort()
+      .map((kind) => `${kind}:present`),
+    focusedTargetSignature: null,
+    inputValueKinds: [],
+    flags: {
+      ...snapshot.flags,
+      isWhiteScreen: sanitizedText.length === 0 && snapshot.targets.length === 0 && snapshot.bodyChildCount <= 1,
+    },
+    disabledSummary: { enabled: enabledCount > 0 ? 1 : 0, disabled: disabledCount > 0 ? 1 : 0 },
+    networkPendingSummary: networkPendingBucket(snapshot.networkPendingCount ?? 0),
+    mainVisibleTextHash: stateExplorationTextMarker(sanitizedText),
+    targetSignatures: [],
+    repeatableRegionStates: stateExplorationRepeatableRegionStates(repeatable.regions),
+    repeatableRegions: repeatable.regions,
   };
 }
 
@@ -195,21 +249,64 @@ export function sanitizeSignature(signature: string | null) {
     .replace(/\d+/g, "0") ?? null;
 }
 
-export function shortHash(value: string) {
-  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+function targetFamilySignature(signature: string | null) {
+  return sanitizeSignature(signature)
+    ?.replace(/rect:[^|]+/g, "rect:*")
+    .replace(/index:[^|]+/g, "index:*") ?? null;
 }
 
-export function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+function repeatableRegionAnalysis(snapshot: StateDomSnapshot, routePattern: string) {
+  return analyzeRepeatableRegions(snapshot.domTree ?? null, routePattern);
+}
+
+function fullRepeatableRegionStates(regions: RepeatableRegionRecord[]) {
+  return regions.map((region) => region.abstractionKey).sort();
+}
+
+function stateExplorationRepeatableRegionStates(regions: RepeatableRegionRecord[]) {
+  const meaningful = regions.filter((region) => region.kind === "comment" || region.businessTags.length > 0 || region.hierarchyLayers.length > 0);
+  if (meaningful.length === 0) {
+    return [];
   }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, child]) => `${JSON.stringify(key)}:${stableStringify(child)}`)
-      .join(",")}}`;
+
+  const byRoute = new Map<string, RepeatableRegionRecord[]>();
+  for (const region of meaningful) {
+    byRoute.set(region.routePattern, [...(byRoute.get(region.routePattern) ?? []), region]);
   }
-  return JSON.stringify(value);
+
+  return Array.from(byRoute.entries())
+    .map(([routePattern, routeRegions]) => {
+      const commentPresence = unionSorted(routeRegions.filter((region) => region.kind === "comment").map((region) => region.presence));
+      const businessTags = unionSorted(routeRegions.flatMap((region) => region.businessTags));
+      const hierarchyLayers = unionSorted(routeRegions.flatMap((region) => region.hierarchyLayers));
+      return stableStringify({
+        routePattern,
+        commentPresence,
+        businessTags,
+        hierarchyLayers,
+        hasTaggedRepeatableRegion: businessTags.length > 0,
+        hasHierarchyRepeatableRegion: hierarchyLayers.length > 0,
+      });
+    })
+    .sort();
+}
+
+function stateExplorationTextMarker(text: string) {
+  const markers = [
+    /\berror\b|错误|失败|无权限|invalid|failed/i.test(text) ? "error" : "",
+    /暂无评论|暂无回复|no comments|no replies/i.test(text) ? "empty-comment" : "",
+    /待征召|征召中|招募中/.test(text) ? "status:pendingRecruitment" : "",
+    /挑战中|进行中/.test(text) ? "status:challenging" : "",
+    /已完成|完成/.test(text) ? "status:completed" : "",
+    /已关闭|关闭/.test(text) ? "status:closed" : "",
+    /评审中|审核中/.test(text) ? "status:reviewing" : "",
+    /已解决|resolved/i.test(text) ? "status:resolved" : "",
+  ].filter(Boolean);
+  return markers.length > 0 ? markers.sort().join("|") : "stable";
+}
+
+function unionSorted<T extends string>(values: T[]) {
+  return Array.from(new Set(values)).sort();
 }
 
 function networkPendingBucket(count: number) {
@@ -237,4 +334,5 @@ function resolveRegistrationModule(moduleSpecifier: string) {
 }
 
 registerStateAbstractor("normal", normalStateAbstractor);
+registerStateAbstractor("stateExploration", stateExplorationStateAbstractor);
 registerStateAbstractor("coarse", coarseStateAbstractor);
