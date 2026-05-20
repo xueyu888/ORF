@@ -247,6 +247,48 @@ test("member dialog preserves in-flight user writes until the API responds", asy
   await expect(dialog.getByRole("button", { name: "新增用户" })).toBeEnabled();
 });
 
+test("member page deletes unreferenced users through the user DELETE endpoint", async ({ page }) => {
+  const removableUser: OrfUser = {
+    ...initialOrfState.users[2]!,
+    id: "user-removable-member",
+    name: "Removable Member",
+    email: "removable.member@orf.test",
+    role: "member",
+    status: "active",
+  };
+  let users: OrfUser[] = [initialOrfState.users[0]!, removableUser];
+  let deleteRequests = 0;
+
+  page.on("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("删除用户");
+    await dialog.accept();
+  });
+
+  await page.route("**/api/users", async (route: Route) => {
+    await route.fulfill({ json: { users } });
+  });
+  await page.route("**/api/users/*", async (route: Route) => {
+    if (route.request().method() === "DELETE") {
+      deleteRequests += 1;
+      users = users.filter((user) => user.id !== removableUser.id);
+      await route.fulfill({ json: { users } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/members");
+
+  const removableRow = page.getByRole("row", { name: /Removable Member/ });
+  await expect(removableRow.getByRole("button", { name: "删除" })).toBeVisible();
+  await removableRow.getByRole("button", { name: "删除" }).click();
+
+  await expect.poll(() => deleteRequests).toBe(1);
+  await expect(page.getByRole("row", { name: /Removable Member/ })).toHaveCount(0);
+  await expect(page.getByRole("row", { name: /Alex Chen/ }).getByRole("button", { name: "删除" })).toBeDisabled();
+});
+
 function createDeferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;

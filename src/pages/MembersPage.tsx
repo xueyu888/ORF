@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, X, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, Trash2, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfUser, UserRole } from "../types/orf";
@@ -52,6 +52,7 @@ export function MembersPage() {
     approveRegistrationRequest,
     createUser,
     currentUser,
+    deleteUser,
     disableUser,
     notify,
     rejectRegistrationRequest,
@@ -161,6 +162,20 @@ export function MembersPage() {
     setProcessingUserId(null);
   };
 
+  const handleDelete = async (user: OrfUser) => {
+    if (isCurrentUser(user) || processingUserId) {
+      return;
+    }
+
+    if (!window.confirm(`删除用户「${user.name}」？如果该成员已被 ORF 业务记录引用，后端会拒绝删除。`)) {
+      return;
+    }
+
+    setProcessingUserId(user.id);
+    await deleteUser(user.id);
+    setProcessingUserId(null);
+  };
+
   return (
     <div className="orf-user-management-page">
       <section className="orf-user-management-grid">
@@ -266,6 +281,16 @@ export function MembersPage() {
                             停用
                           </button>
                         )}
+                        <button
+                          type="button"
+                          className="orf-user-delete-action"
+                          disabled={isCurrentUser(user) || processingUserId === user.id}
+                          title={isCurrentUser(user) ? "不能删除自己" : "删除"}
+                          onClick={() => void handleDelete(user)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          删除
+                        </button>
                       </div>
                     </td>
                   </tr>
