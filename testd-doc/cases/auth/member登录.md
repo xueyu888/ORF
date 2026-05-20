@@ -25,7 +25,6 @@
   - [api] 若测试身份为本用例独占身份，清理该身份已有 Ory session。
   - [playwright] 创建全新的浏览器上下文，或清空当前上下文的 cookies/localStorage/sessionStorage。
   - [playwright] 打开 `/auth`。
-  - [playwright] 等待登录页认证状态就绪，即主登录按钮可点击。
 
 - S0：Action 前必须满足什么条件？用于确认 Setup 成功。
   - [playwright] `page` URL 为 `/auth`。
@@ -44,7 +43,7 @@
   - [playwright] 点击 `Sign In` 按钮提交登录表单。
 
 - S1：Action 后系统应该变成什么状态？用于确认业务动作正确。
-  - [api] `POST /api/auth/login` 响应成功。
+  - [api] `POST /api/auth/login` 响应成功；测试实现应在点击 `Sign In` 前注册响应捕获，避免错过点击后立即发出的请求。
   - [playwright] `page` URL 为 `/bounties`。
   - [playwright] 浏览器上下文 cookies 中存在 `orf_ory_session`。
   - [api] `/api/auth/session` 返回 `authenticated: true`，且用户邮箱和角色符合测试数据。

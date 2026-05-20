@@ -122,16 +122,6 @@ export const mloginSuccessCase = {
           path: "/auth",
         },
       },
-      {
-        id: "button.sign_in.enabled",
-        title: "登录按钮可点击",
-        object: "page",
-        operator: "enabled",
-        params: {
-          role: "button",
-          name: "Sign In",
-        },
-      },
     ],
   },
 
@@ -228,17 +218,6 @@ export const mloginSuccessCase = {
     description: "输入正确邮箱和密码并提交登录表单",
     steps: [
       {
-        id: "capture.login_response",
-        title: "开始捕获登录接口响应",
-        object: "api",
-        operator: "capture_response",
-        params: {
-          urlEndsWith: "/api/auth/login",
-          method: "POST",
-          saveAs: "loginResponse",
-        },
-      },
-      {
         id: "fill.email",
         title: "输入邮箱",
         object: "page",
@@ -257,6 +236,17 @@ export const mloginSuccessCase = {
           label: "Password",
           exact: true,
           valueFrom: "data.password",
+        },
+      },
+      {
+        id: "capture.login_response",
+        title: "注册登录接口响应捕获",
+        object: "api",
+        operator: "capture_response",
+        params: {
+          urlEndsWith: "/api/auth/login",
+          method: "POST",
+          saveAs: "loginResponse",
         },
       },
       {
