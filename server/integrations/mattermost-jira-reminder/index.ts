@@ -12,6 +12,7 @@ const optionalNonEmptyString = z
     return trimmed || undefined;
   })
   .pipe(z.string().min(1).optional());
+const optionalUrlString = optionalNonEmptyString.pipe(z.string().url().optional());
 const booleanEnvSchema = z.enum(["true", "false"]).default("false").transform((value) => value === "true");
 const defaultTrueBooleanEnvSchema = z.enum(["true", "false"]).default("true").transform((value) => value === "true");
 const reminderTimeSchema = z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
@@ -36,6 +37,7 @@ const mattermostJiraReminderConfigSchema = z
     MATTERMOST_JIRA_REMINDER_REQUIRE_BOT: defaultTrueBooleanEnvSchema,
     MATTERMOST_JIRA_REMINDER_SKIP_BOTS: defaultTrueBooleanEnvSchema,
     MATTERMOST_JIRA_REMINDER_STATE_FILE: z.string().trim().min(1).default(".artifacts/mattermost-jira-reminder-state.json"),
+    JIRA_TEMPO_MY_WORK_URL: optionalUrlString,
   })
   .transform((value) => ({
     MATTERMOST_URL: value.MATTERMOST_URL,
@@ -51,6 +53,7 @@ const mattermostJiraReminderConfigSchema = z
     requireBot: value.MATTERMOST_JIRA_REMINDER_REQUIRE_BOT,
     skipBots: value.MATTERMOST_JIRA_REMINDER_SKIP_BOTS,
     stateFile: value.MATTERMOST_JIRA_REMINDER_STATE_FILE,
+    tempoMyWorkUrl: value.JIRA_TEMPO_MY_WORK_URL,
   }));
 
 const mattermostJiraReminderStateSchema = z.object({
@@ -153,7 +156,16 @@ export function shouldRunMattermostJiraReminder(config: MattermostJiraReminderCo
 }
 
 export function formatMattermostJiraReminderMessage(config: MattermostJiraReminderConfig, snapshot: ReminderLocalSnapshot) {
-  return config.message.replaceAll("{{date}}", snapshot.dateKey).replaceAll("{{time}}", config.time);
+  let message = config.message.replaceAll("{{date}}", snapshot.dateKey).replaceAll("{{time}}", config.time);
+
+  if (message.includes("{{tempoUrl}}")) {
+    if (!config.tempoMyWorkUrl) {
+      throw new Error("Mattermost Jira reminder Tempo URL is not configured");
+    }
+    message = message.replaceAll("{{tempoUrl}}", () => config.tempoMyWorkUrl ?? "");
+  }
+
+  return message;
 }
 
 export async function getMattermostJiraReminderRecipients(
