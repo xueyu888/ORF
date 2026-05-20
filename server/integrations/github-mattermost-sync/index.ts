@@ -6,6 +6,7 @@ import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { hasMattermostChannelPostConfig, postMattermostChannelMessage } from "../mattermost";
 
 const execFileAsync = promisify(execFile);
 const gitFieldSeparator = "\x1f";
@@ -156,10 +157,6 @@ function readConfig() {
   return configSchema.parse(process.env);
 }
 
-function trimTrailingSlash(value: string) {
-  return value.replace(/\/+$/, "");
-}
-
 function shortSha(sha: string | undefined) {
   return sha ? sha.slice(0, 7) : "unknown";
 }
@@ -274,7 +271,7 @@ export function formatGitHubIssuesMessage(input: { repository: string; issues: G
 }
 
 function hasMattermostConfig(config: GitHubMattermostSyncConfig) {
-  return Boolean(config.MATTERMOST_URL && config.MATTERMOST_LOGIN_ID && config.MATTERMOST_PASSWORD && config.MATTERMOST_CHANNEL_ID);
+  return hasMattermostChannelPostConfig(config);
 }
 
 function webhookConfigured(config: GitHubMattermostSyncConfig) {
@@ -335,51 +332,8 @@ function requireWebhookSignature(config: GitHubMattermostSyncConfig, request: Fa
   return true;
 }
 
-async function mattermostLogin(config: GitHubMattermostSyncConfig) {
-  if (!config.MATTERMOST_URL || !config.MATTERMOST_LOGIN_ID || !config.MATTERMOST_PASSWORD) {
-    throw new Error("Mattermost login is not configured");
-  }
-
-  const response = await fetch(`${trimTrailingSlash(config.MATTERMOST_URL)}/api/v4/users/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ login_id: config.MATTERMOST_LOGIN_ID, password: config.MATTERMOST_PASSWORD }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Mattermost login failed with HTTP ${response.status}`);
-  }
-
-  const token = response.headers.get("token");
-  if (!token) {
-    throw new Error("Mattermost login did not return a token");
-  }
-
-  return token;
-}
-
 async function postToMattermost(config: GitHubMattermostSyncConfig, message: string) {
-  if (!config.MATTERMOST_URL || !config.MATTERMOST_CHANNEL_ID) {
-    throw new Error("Mattermost target channel is not configured");
-  }
-
-  const token = await mattermostLogin(config);
-  const response = await fetch(`${trimTrailingSlash(config.MATTERMOST_URL)}/api/v4/posts`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      channel_id: config.MATTERMOST_CHANNEL_ID,
-      message,
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Mattermost post failed with HTTP ${response.status}${text ? `: ${text.slice(0, 200)}` : ""}`);
-  }
+  await postMattermostChannelMessage(config, message);
 }
 
 function syncStateKey(config: GitHubMattermostSyncConfig, branch: string) {

@@ -80,6 +80,7 @@ import {
   disableScopedUser,
   getRegistrationRequests,
   getScopedUsers,
+  recordUserOnlineActivity,
   rejectRegistrationRequest,
   updateScopedUser,
 } from "./repositories/userRepository";
@@ -941,6 +942,16 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     return { users: await getRegistrationRequests(scope) };
+  });
+
+  app.post("/api/users/me/activity", async (request, reply) => {
+    const user = await requireApiUser(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const activity = await recordUserOnlineActivity(user.id);
+    return { ok: true, lastOnlineAt: activity.lastOnlineAt };
   });
 
   app.post("/api/users", async (request, reply) => {

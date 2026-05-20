@@ -25,7 +25,7 @@ export interface OrfUser {
   email: string;
   role: UserRole;
   status: UserStatus;
-  lastLoginAt?: string | null;
+  lastOnlineAt?: string | null;
 }
 
 export interface PermissionRule {

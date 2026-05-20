@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { hasPermission } from "../config/permissions";
 import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
@@ -25,6 +25,7 @@ type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "res
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
+type OnlineActivityResponse = { ok: boolean; lastOnlineAt?: string | null };
 type SubmitLootInput = {
   objectiveId: string;
   body: string;
@@ -136,6 +137,7 @@ const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
 const AUTH_PASSWORD_TIMEOUT_MS = 2000;
+const ONLINE_ACTIVITY_THROTTLE_MS = 60_000;
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return normalizeState({
@@ -373,6 +375,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme());
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const lastOnlineActivitySentAt = useRef(0);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
   const currentUserRole = currentUser?.role ?? null;
   const isAuthenticated = currentUser !== null;
@@ -487,6 +490,59 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAuthenticated, isApproved]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) {
+      lastOnlineActivitySentAt.current = 0;
+      return undefined;
+    }
+
+    const reportActivity = (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastOnlineActivitySentAt.current < ONLINE_ACTIVITY_THROTTLE_MS) {
+        return;
+      }
+
+      lastOnlineActivitySentAt.current = now;
+      void apiJson<OnlineActivityResponse>("/api/users/me/activity", { method: "POST", keepalive: force })
+        .then((activity) => {
+          if (!activity.lastOnlineAt || !authUserId) {
+            return;
+          }
+
+          setState((current) => ({
+            ...current,
+            users: current.users.map((user) => (user.id === authUserId ? { ...user, lastOnlineAt: activity.lastOnlineAt } : user)),
+          }));
+        })
+        .catch(() => undefined);
+    };
+    const reportVisibleActivity = () => {
+      if (document.visibilityState === "visible") {
+        reportActivity();
+      }
+    };
+    const handleActivity = () => reportActivity();
+    const reportFinalActivity = () => reportActivity(true);
+
+    document.addEventListener("pointerdown", handleActivity, { capture: true });
+    document.addEventListener("keydown", handleActivity, { capture: true });
+    document.addEventListener("wheel", handleActivity, { capture: true, passive: true });
+    document.addEventListener("touchstart", handleActivity, { capture: true, passive: true });
+    window.addEventListener("focus", handleActivity);
+    window.addEventListener("pagehide", reportFinalActivity);
+    document.addEventListener("visibilitychange", reportVisibleActivity);
+
+    return () => {
+      document.removeEventListener("pointerdown", handleActivity, { capture: true });
+      document.removeEventListener("keydown", handleActivity, { capture: true });
+      document.removeEventListener("wheel", handleActivity, { capture: true });
+      document.removeEventListener("touchstart", handleActivity, { capture: true });
+      window.removeEventListener("focus", handleActivity);
+      window.removeEventListener("pagehide", reportFinalActivity);
+      document.removeEventListener("visibilitychange", reportVisibleActivity);
+    };
+  }, [authReady, authUserId, isAuthenticated, isApproved]);
 
   const commit = (next: OrfState, message?: string) => {
     setState(next);

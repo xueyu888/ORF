@@ -42,6 +42,7 @@ docs/
 | [权限管理 - 前端.md](./frontend/权限管理%20-%20前端.md) | 权限管理页面 UI |
 | [权限管理 - 后端.md](./backend/权限管理%20-%20后端.md) | 权限管理 RBAC 模型和接口口径 |
 | [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push webhook 转发到 Mattermost ORF 频道 |
+| [Mattermost Jira 提醒 - 后端.md](./backend/Mattermost%20Jira%20提醒%20-%20后端.md) | 每日 Jira 提醒私信发送规则 |
 | [ORF 悬赏目标流程设计.md](./rules/ORF%20悬赏目标流程设计.md) | 悬赏目标流程的产品术语、核心原则和状态流转 |
 | [ORF 思路记录.md](./rules/ORF%20思路记录.md) | ORF 产品方法中待沉淀的原则和思路 |
 | [积分结算规则.md](./rules/积分结算规则.md) | 积分结算后端规则口径 |

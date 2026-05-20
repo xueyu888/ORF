@@ -29,9 +29,9 @@ const userStatusLabel: Record<OrfUser["status"], string> = {
   disabled: "已停用",
 };
 
-function formatLastLoginAt(value: string | null | undefined) {
+function formatLastOnlineAt(value: string | null | undefined) {
   if (!value) {
-    return "未登录";
+    return "未在线";
   }
 
   const date = new Date(value);
@@ -206,7 +206,7 @@ export function MembersPage() {
                   <th>邮箱</th>
                   <th>角色</th>
                   <th>状态</th>
-                  <th>最近登录</th>
+                  <th>最近在线</th>
                   <th>操作</th>
                 </tr>
               </thead>
@@ -234,7 +234,7 @@ export function MembersPage() {
                       <span className={clsx("orf-user-status", `orf-user-status-${user.status}`)}>{userStatusLabel[user.status]}</span>
                     </td>
                     <td>
-                      <span className="orf-user-last-login">{formatLastLoginAt(user.lastLoginAt)}</span>
+                      <span className="orf-user-last-online">{formatLastOnlineAt(user.lastOnlineAt)}</span>
                     </td>
                     <td>
                       <div className="orf-user-actions orf-user-actions-text">

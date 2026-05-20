@@ -150,9 +150,9 @@ const confidenceTrend = [
 
 const legacyInitialOrfState: LegacyInitialState = {
   users: [
-    { id: "user-alex", name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastLoginAt: "2026-05-05T09:42:00.000Z" },
-    { id: "user-mia", name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastLoginAt: "2026-05-04T18:10:00.000Z" },
-    { id: "user-ethan", name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastLoginAt: "2026-05-03T14:25:00.000Z" },
+    { id: "user-alex", name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastOnlineAt: "2026-05-05T09:42:00.000Z" },
+    { id: "user-mia", name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-04T18:10:00.000Z" },
+    { id: "user-ethan", name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-03T14:25:00.000Z" },
   ],
   currentUserId: "user-alex",
   permissionRules: defaultPermissionRules,

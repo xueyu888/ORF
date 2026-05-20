@@ -358,6 +358,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
 | 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss 都要有可见断言 |
+| 最近在线 | 成员管理展示 `最近在线`；在线上报只由用户交互、窗口 focus 或页面可见性变化触发，不使用轮询，也不提交客户端时间 |
 | 可访问控件名 | 征召、申请、提出指标、提交战利品和验收等关键流程控件必须有稳定可访问名称，真实流程测试按控件语义定位，不依赖 CSS 或拼接文本 |
 | 弹窗长列表 | 新建、征召、指标和反馈等全局弹窗必须限制在视口内，内容区可滚动，长候选人列表不能把提交按钮或后续选项挤出可操作区域 |
 | 数据一致性 | mutation 成功但刷新旧数据或刷新失败时，前端不能靠本地推断制造成功状态 |
