@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
@@ -31,14 +31,21 @@ export const teams = pgTable("teams", {
   createdAt: date("created_at", { mode: "string" }).notNull(),
 });
 
-export const users = pgTable("users", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email"),
-  status: text("status").$type<UserStatus>().notNull().default("active"),
-  createdAt: date("created_at", { mode: "string" }).notNull(),
-  lastOnlineAt: timestamp("last_online_at", { mode: "string", withTimezone: true }),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email"),
+    oryIdentityId: text("ory_identity_id"),
+    status: text("status").$type<UserStatus>().notNull().default("active"),
+    createdAt: date("created_at", { mode: "string" }).notNull(),
+    lastOnlineAt: timestamp("last_online_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    oryIdentityIdUnique: uniqueIndex("users_ory_identity_id_unique").on(table.oryIdentityId),
+  }),
+);
 
 export const teamMembers = pgTable(
   "team_members",

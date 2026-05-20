@@ -132,6 +132,57 @@ test("member dialog trims identity fields before creating users", async ({ page 
   await expect(page.getByText("Trimmed Member")).toBeVisible();
 });
 
+test("member dialog locks email for users already bound to a login identity", async ({ page }) => {
+  const users: OrfUser[] = [
+    initialOrfState.users[0],
+    {
+      ...initialOrfState.users[1],
+      authLinked: true,
+    },
+  ];
+
+  await page.route("**/api/users", async (route: Route) => {
+    await route.fulfill({ json: { users } });
+  });
+
+  await page.goto("/members");
+
+  await page.getByRole("row", { name: /Mia Zhang/ }).getByRole("button", { name: "编辑" }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑用户" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("邮箱")).toBeDisabled();
+  await expect(dialog.getByLabel("姓名")).toBeEnabled();
+});
+
+test("member dialog preserves edits when backend rejects login email changes", async ({ page }) => {
+  let updateRequests = 0;
+
+  await page.route("**/api/users", async (route: Route) => {
+    await route.fulfill({ json: { users: initialOrfState.users } });
+  });
+  await page.route("**/api/users/*", async (route: Route) => {
+    if (route.request().method() === "PATCH") {
+      updateRequests += 1;
+      await route.fulfill({ status: 409, json: { error: "Bound login email cannot be changed" } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/members");
+
+  await page.getByRole("row", { name: /Mia Zhang/ }).getByRole("button", { name: "编辑" }).click();
+  const dialog = page.getByRole("dialog", { name: "编辑用户" });
+  await dialog.getByLabel("邮箱").fill("mia-renamed@orf.local");
+  await dialog.getByRole("button", { name: "保存" }).click();
+
+  await expect.poll(() => updateRequests).toBe(1);
+  await expect(page.getByText("已绑定登录身份的邮箱不能在成员管理中修改")).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByLabel("邮箱")).toHaveValue("mia-renamed@orf.local");
+});
+
 test("member dialog rejects blank required values before writing to API", async ({ page }) => {
   let createRequests = 0;
 

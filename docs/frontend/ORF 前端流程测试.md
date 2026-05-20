@@ -17,6 +17,7 @@
 | 评论 E2E | `e2e/comments/comment-persistence.spec.ts` | 评论提交后在当前页面保持可见 |
 | 真实评论布局 E2E | `e2e/challenges/orf-real-comment-layout.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证目标评论数量入口贴近标题文本 |
 | 真实评论上下文 E2E | `e2e/challenges/orf-real-comment-context.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证切换评论对象会清空旧回复草稿，发送会写入当前对象 |
+| 成员管理 E2E | `e2e/members/member-management.spec.ts` | 成员列表、最近在线、预批准成员输入归一化、已绑定成员邮箱锁定 |
 
 ## 角色视角
 

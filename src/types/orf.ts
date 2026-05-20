@@ -25,6 +25,7 @@ export interface OrfUser {
   email: string;
   role: UserRole;
   status: UserStatus;
+  authLinked?: boolean;
   lastOnlineAt?: string | null;
 }
 

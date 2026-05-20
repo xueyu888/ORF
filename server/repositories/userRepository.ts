@@ -200,6 +200,7 @@ export async function getScopedUsers(scope: RuntimeScope): Promise<OrfUser[]> {
       id: users.id,
       name: users.name,
       email: users.email,
+      oryIdentityId: users.oryIdentityId,
       role: teamMembers.role,
       status: users.status,
       lastOnlineAt: users.lastOnlineAt,
@@ -215,6 +216,7 @@ export async function getScopedUsers(scope: RuntimeScope): Promise<OrfUser[]> {
     email: row.email ?? "",
     role: normalizeRole(row.role),
     status: row.status ?? "active",
+    authLinked: Boolean(row.oryIdentityId),
     lastOnlineAt: row.lastOnlineAt,
   }));
 }
@@ -226,6 +228,7 @@ export async function getRegistrationRequests(scope: RuntimeScope): Promise<OrfU
       id: users.id,
       name: users.name,
       email: users.email,
+      oryIdentityId: users.oryIdentityId,
       role: teamMembers.role,
       status: users.status,
       lastOnlineAt: users.lastOnlineAt,
@@ -241,6 +244,7 @@ export async function getRegistrationRequests(scope: RuntimeScope): Promise<OrfU
     email: row.email ?? "",
     role: normalizeRole(row.role),
     status: row.status ?? "pending",
+    authLinked: Boolean(row.oryIdentityId),
     lastOnlineAt: row.lastOnlineAt,
   }));
 }
@@ -312,6 +316,14 @@ async function updateScopedUserRecord(scope: RuntimeScope, userId: string, norma
   }
 
   await assertMembershipExists(scope, userId);
+  const [currentUser] = await db.select({ email: users.email, oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.id, userId)).limit(1);
+  if (!currentUser) {
+    throw Object.assign(new Error("User not found"), { statusCode: 404 });
+  }
+
+  if (currentUser.oryIdentityId && normalizeEmail(currentUser.email ?? "") !== normalized.email) {
+    throw Object.assign(new Error("Bound login email cannot be changed"), { statusCode: 409 });
+  }
 
   const [emailOwner] = await db
     .select({ id: users.id })

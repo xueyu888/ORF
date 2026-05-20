@@ -2482,6 +2482,13 @@ button:disabled {
   padding: 0 14px;
 }
 
+.orf-user-dialog input:disabled,
+.orf-user-dialog select:disabled {
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.42);
+  color: #60758d;
+}
+
 .orf-user-dialog button {
   border: 0;
   background: transparent;

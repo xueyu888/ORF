@@ -194,12 +194,25 @@ async function upsertOrfUser(
   }
 
   const identityDisplayName = identityName(identity, email);
-  const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  const [identityUser] = await db.select().from(users).where(sql`${users.oryIdentityId} = ${identity.id}`).limit(1);
+  const [emailUser] = identityUser ? [undefined] : await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  const existing = identityUser ?? emailUser;
   const lastOnlineAt = options.recordOnline ? new Date().toISOString() : undefined;
 
   if (existing) {
+    if (existing.oryIdentityId && existing.oryIdentityId !== identity.id) {
+      throw new Error("Ory identity email is already bound to another ORF user");
+    }
+
+    const update: { lastOnlineAt?: string; oryIdentityId?: string } = {};
     if (lastOnlineAt) {
-      await db.update(users).set({ lastOnlineAt }).where(sql`${users.id} = ${existing.id}`);
+      update.lastOnlineAt = lastOnlineAt;
+    }
+    if (!existing.oryIdentityId) {
+      update.oryIdentityId = identity.id;
+    }
+    if (Object.keys(update).length > 0) {
+      await db.update(users).set(update).where(sql`${users.id} = ${existing.id}`);
     }
 
     const role = await existingMembershipRole(existing.id);
@@ -223,6 +236,7 @@ async function upsertOrfUser(
     id,
     name: identityDisplayName,
     email,
+    oryIdentityId: identity.id,
     status: options.newUserStatus ?? "pending",
     createdAt: new Date().toISOString().slice(0, 10),
     lastOnlineAt: createdLastOnlineAt,

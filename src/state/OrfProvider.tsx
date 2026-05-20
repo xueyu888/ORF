@@ -270,6 +270,10 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
         return "该姓名已被 ORF 历史记录占用，不能创建新成员";
       }
 
+      if (error.message === "Bound login email cannot be changed") {
+        return "已绑定登录身份的邮箱不能在成员管理中修改";
+      }
+
       return error.message;
     }
 

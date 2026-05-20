@@ -1631,6 +1631,50 @@ test("auth API normalizes registration traits at the route boundary", async () =
   });
 });
 
+test("password login binds a preapproved ORF member to the Ory identity id", async () => {
+  const fixture = await createFixture("auth-login-bind-preapproved");
+  const identity = {
+    id: `${fixture.prefix}-ory-challenger`,
+    traits: {
+      email: fixture.challenger.email,
+      name: `${fixture.prefix} Ory Challenger`,
+    },
+  };
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(fixture.challenger.email, "password");
+    assert.equal(auth.user.id, fixture.challenger.id);
+    assert.equal(auth.user.name, fixture.challenger.name);
+    assert.equal(auth.user.status, "active");
+  });
+
+  const [stored] = await db.select({ oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+  assert.equal(stored?.oryIdentityId, identity.id);
+});
+
+test("password login resolves bound ORF users by Ory identity id before email", async () => {
+  const fixture = await createFixture("auth-login-bound-identity-first");
+  const identity = {
+    id: `${fixture.prefix}-ory-stable-id`,
+    traits: {
+      email: `${fixture.prefix}-ory-renamed@orf.test`,
+      name: `${fixture.prefix} Ory Renamed`,
+    },
+  };
+  const orfEmail = `${fixture.prefix}-orf-contact@orf.test`;
+  await db.update(users).set({ oryIdentityId: identity.id, email: orfEmail }).where(eq(users.id, fixture.challenger.id));
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(String(identity.traits.email), "password");
+    assert.equal(auth.user.id, fixture.challenger.id);
+    assert.equal(auth.user.email, orfEmail);
+    assert.equal(auth.user.status, "active");
+  });
+
+  const duplicateRows = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${identity.traits.email}`);
+  assert.equal(duplicateRows.length, 0);
+});
+
 test("password login does not auto-approve first-time ORF users", async () => {
   const fixture = await createFixture("auth-login-new-user-pending");
   const email = `${fixture.prefix}-external-login@orf.test`;
@@ -1645,8 +1689,9 @@ test("password login does not auto-approve first-time ORF users", async () => {
     assert.equal(auth.user.role, "member");
   });
 
-  const [created] = await db.select({ status: users.status }).from(users).where(eq(users.email, email)).limit(1);
+  const [created] = await db.select({ status: users.status, oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.email, email)).limit(1);
   assert.equal(created?.status, "pending");
+  assert.equal(created?.oryIdentityId, identity.id);
 });
 
 test("password login preserves existing ORF display names", async () => {
@@ -1688,6 +1733,29 @@ test("API user management prevents renaming members referenced by ORF records", 
 
     const myChallenges = await getMyChallengesData(fixture.challenger.name);
     assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
+test("API user management rejects email changes for Ory-bound members", async () => {
+  const fixture = await createFixture("api-user-bound-email-change");
+  await db.update(users).set({ oryIdentityId: fixture.challenger.id }).where(eq(users.id, fixture.challenger.id));
+
+  await withApiServer(fixture, async (app) => {
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const boundUser = (userList.json() as { users: Array<{ id: string; authLinked?: boolean }> }).users.find((user) => user.id === fixture.challenger.id);
+    assert.equal(boundUser?.authLinked, true);
+
+    const update = await apiInject(app, fixture.commander, "PATCH", `/api/users/${encodeURIComponent(fixture.challenger.id)}`, {
+      name: fixture.challenger.name,
+      email: `${fixture.prefix}-renamed-login@orf.test`,
+      role: "member",
+    });
+    assert.equal(update.statusCode, 409);
+    assert.equal((update.json() as { error?: string }).error, "Bound login email cannot be changed");
+
+    const [stored] = await db.select({ email: users.email }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+    assert.equal(stored?.email, fixture.challenger.email);
   });
 });
 
