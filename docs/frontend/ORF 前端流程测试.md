@@ -16,6 +16,7 @@
 | 挑战工作台 E2E | `e2e/challenges/orf-frontend-flow.spec.ts` | `/tasks` 悬赏目标挑战工作台中的流程按钮、审核条、范围过滤、目标树和冻结后入口 |
 | 评论 E2E | `e2e/comments/comment-persistence.spec.ts` | 评论提交后在当前页面保持可见 |
 | 真实评论布局 E2E | `e2e/challenges/orf-real-comment-layout.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证目标评论数量入口贴近标题文本 |
+| 真实评论上下文 E2E | `e2e/challenges/orf-real-comment-context.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证切换评论对象会清空旧回复草稿，发送会写入当前对象 |
 
 ## 角色视角
 
@@ -358,7 +359,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | 全局新建弹窗 | 新建目标、指标、反馈、行动项和指标更新必须等待 API 成功后再关闭；API 失败时弹窗保留当前输入并展示失败提示 |
 | 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
 | 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
-| UI 状态 | loading、empty、API error、processing disabled、toast dismiss、目标行评论数量入口贴近标题文本都要有可见断言 |
+| UI 状态 | loading、empty、API error、processing disabled、toast dismiss、目标行评论数量入口贴近标题文本、切换评论对象后清空旧回复状态都要有可见断言 |
 | 最近在线 | 成员管理展示 `最近在线`；在线上报只由用户交互、窗口 focus 或页面可见性变化触发，不使用轮询，也不提交客户端时间 |
 | 可访问控件名 | 征召、申请、提出指标、提交战利品和验收等关键流程控件必须有稳定可访问名称，真实流程测试按控件语义定位，不依赖 CSS 或拼接文本 |
 | 弹窗长列表 | 新建、征召、指标和反馈等全局弹窗必须限制在视口内，内容区可滚动，长候选人列表不能把提交按钮或后续选项挤出可操作区域 |
