@@ -21,6 +21,7 @@
 npm run test:e2e
 npm run test:e2e:explorer
 npm run test:e2e:explorer:fast
+npm run test:e2e:explorer:live
 ```
 
 ## 前置条件
@@ -84,6 +85,22 @@ npm run test:e2e:explorer:fast
 http://127.0.0.1:5673
 ```
 
+### 运行实时 UI 随机探索
+
+```bash
+npm run test:e2e:explorer:live
+```
+
+实时模式会在启动时立即创建报告目录，并打印一个本地报告地址：
+
+```text
+http://127.0.0.1:5681/report.html
+```
+
+实时报告保持普通报告的完整结构。结果指标、异常情况、覆盖进度、探索曲线和可重复组件信息会实时刷新；状态图、测试环境和复现信息不会自动重绘，避免大图重排拖慢测试和浏览器。页面里的“更新完整报告”按钮会重新加载当前已落盘的完整报告，用于手动查看状态图等非实时区域的最新版本。没有设置 `UI_EXPLORER_STEPS` 时，实时模式默认不按步数结束，可以用 `Ctrl+C` 手动停止，停止时会写入最后一次 `result.json` 和完整 `report.html`。
+
+实时观察测试进展时使用控制台打印的 `http://127.0.0.1:5681/report.html` 地址。测试结束后，报告目录里的 `report.html` 会是最终完整报告，可以直接从文件系统打开查看最终数据。
+
 ## 指定被测地址
 
 如果已经手动启动了前端，使用 `PLAYWRIGHT_BASE_URL` 指向现有地址：
@@ -134,6 +151,15 @@ ORF_REAL_E2E=1 npm run test:e2e
 | `UI_EXPLORER_TOTAL_STEPS` | 未设置 | 总探索步数；设置后会按 worker 平分 |
 | `UI_EXPLORER_PORT` | `5673` | 并行版自启动 Vite 的端口 |
 
+实时版额外读取：
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `UI_EXPLORER_LIVE_PORT` | `5681` | 实时报告本地服务端口 |
+| `UI_EXPLORER_LIVE_FLUSH_INTERVAL_MS` | `1000` | 实时指标刷新间隔 |
+| `UI_EXPLORER_LIVE_RESULT_FLUSH_INTERVAL_MS` | `5000` | 完整 `result.json` 和 `report.html` 落盘间隔 |
+| `UI_EXPLORER_LIVE_REPEATABLE_REGION_TESTS` | 未设置 | 设置为 `1` 时，主探索自然结束后执行可重复区域局部测试；实时无限探索默认关闭 |
+
 ## 示例命令
 
 按时间跑 10 分钟，入口为 `/tasks`：
@@ -161,6 +187,14 @@ npm run test:e2e:explorer:fast
 UI_EXPLORER_SAFETY_PROFILE=auth \
 UI_EXPLORER_TARGET_PATH=/auth \
 npm run test:e2e:explorer
+```
+
+实时观察，手动停止：
+
+```bash
+UI_EXPLORER_TARGET_PATH=/tasks \
+UI_EXPLORER_SEED=live-tasks \
+npm run test:e2e:explorer:live
 ```
 
 ## 自定义状态合并策略

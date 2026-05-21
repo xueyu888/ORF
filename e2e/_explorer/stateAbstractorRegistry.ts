@@ -1,10 +1,13 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { createNormalizedState, type StateAbstraction } from "./mergeStrategy";
 import { analyzeRepeatableRegions, type DomTreeNodeSnapshot } from "./repeatableRegionDetector";
 import type { InputValueKind, NormalizedState, RepeatableRegionRecord } from "./types";
 import { shortHash, stableStringify } from "./stableHash";
 
 export { shortHash, stableStringify } from "./stableHash";
+export { createNormalizedState, fingerprintStateAbstraction } from "./mergeStrategy";
+export type { StateAbstraction } from "./mergeStrategy";
 
 export type StateDomSnapshot = {
   url: string;
@@ -29,8 +32,6 @@ export type StateDomSnapshot = {
   domTree?: DomTreeNodeSnapshot | null;
 };
 
-export type StateAbstraction = Omit<NormalizedState, "id" | "fingerprint" | "repeatableRegionStates" | "repeatableRegions"> &
-  Partial<Pick<NormalizedState, "repeatableRegionStates" | "repeatableRegions">>;
 export type StateAbstractor = (snapshot: StateDomSnapshot) => StateAbstraction;
 
 const stateAbstractors = new Map<string, StateAbstractor>();
@@ -69,19 +70,6 @@ export async function loadStateAbstractorRegistration(moduleSpecifier: string | 
 
 export function abstractState(snapshot: StateDomSnapshot, abstractorName: string): NormalizedState {
   return createNormalizedState(getStateAbstractor(abstractorName)(snapshot));
-}
-
-export function createNormalizedState(state: StateAbstraction): NormalizedState {
-  const completeState = {
-    repeatableRegionStates: [],
-    repeatableRegions: [],
-    ...state,
-  };
-  const identityState: Partial<typeof completeState> = { ...completeState };
-  delete identityState.repeatableRegions;
-  const fingerprint = stableStringify(identityState);
-  const id = `S-${shortHash(fingerprint)}`;
-  return { id, fingerprint, ...completeState };
 }
 
 function normalStateAbstractor(snapshot: StateDomSnapshot): StateAbstraction {

@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { CoverageGraph } from "./coverageGraph";
 import { executeEvent } from "./eventExecutor";
 import { generateCandidateEvents } from "./eventGenerator";
-import { EventScheduler } from "./eventScheduler";
+import { CoverageGuidedRandomStrategy } from "./randomStrategy";
 import { SeededRandom } from "./seededRandom";
 import { isInAllowedScope, shouldRunEvent } from "./safety";
 import { normalizeState } from "./stateNormalizer";
@@ -104,7 +104,7 @@ async function runObjectProbe(
 ): Promise<RepeatableRegionObjectResult> {
   const diagnostics = attachDiagnostics(page.context(), page);
   const graph = new CoverageGraph();
-  const scheduler = new EventScheduler({ epsilon: config.epsilon });
+  const scheduler = new CoverageGuidedRandomStrategy({ epsilon: config.epsilon });
   const records: RepeatableRegionStepRecord[] = [];
   const discoveredCandidateEvents = new Set<string>();
   const testedCandidateEvents = new Set<string>();

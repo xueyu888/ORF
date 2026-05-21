@@ -1,9 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { canonicalEventSignature } from "./eventIdentity";
-import { payloadKinds } from "./payloads";
+import { mergeExplorerResults } from "./mergeStrategy";
 import type {
-  CandidateEventRecord,
   CoverageSummary,
   ExplorerConfig,
   ExplorerRunResult,
@@ -12,7 +10,6 @@ import type {
   ScreenshotArtifact,
   StateNode,
   StepRecord,
-  TransitionEdge,
   UiOperation,
 } from "./types";
 
@@ -26,8 +23,33 @@ type NoChangeEventRow = {
   attempts: number;
 };
 
-type ReportResult = ExplorerRunResult & {
+export type ReportResult = ExplorerRunResult & {
   topNoChangeEventRows?: NoChangeEventRow[];
+};
+
+export type LiveReportStatus = "running" | "completed" | "stopped" | "failed";
+
+export type LiveReportSnapshot = {
+  status: LiveReportStatus;
+  revision: number;
+  updatedAt: string;
+  startedAt?: string;
+  runDir?: string;
+  reportPath?: string;
+  resultPath?: string;
+  seed: string;
+  latestStepCount: number;
+  html: {
+    testedObject: string;
+    heroMetrics: string;
+    score: string;
+    cards: string;
+    issues: string;
+    coverage: string;
+    curves: string;
+    repeatableExploration: string;
+    repeatableRegions: string;
+  };
 };
 
 export type EventOutcomeBreakdown = {
@@ -107,216 +129,6 @@ export async function writeMergedExplorerReport(
   };
 }
 
-function mergeExplorerResults(
-  results: ExplorerRunResult[],
-  options: { reportDir: string; seed: string; replayCommand: string; label?: string },
-): ExplorerRunResult {
-  if (results.length === 0) {
-    throw new Error("Cannot merge an empty UI explorer result set.");
-  }
-
-  const first = results[0];
-  const stateMap = new Map<string, StateNode>();
-  const edgeMap = new Map<string, TransitionEdge>();
-  const discoveredTargets = new Set<string>();
-  const interactedTargets = new Set<string>();
-  const payloadKindsHit = new Set<string>();
-  const canonicalCandidateEvents = new Set<string>();
-  const testedCanonicalCandidateEvents = new Set<string>();
-  const untestedFallback = new Map<string, ExplorerRunResult["untestedCandidateEvents"][number]>();
-  const recordsByWorker: Array<StepRecord & { workerIndex: number; localStep: number }> = [];
-  let fallbackTargetCoverageWeighted = 0;
-  let fallbackPayloadCoverageWeighted = 0;
-  let fallbackCoverageWeight = 0;
-
-  for (const [workerIndex, result] of results.entries()) {
-    for (const state of result.stateTable) {
-      const existing = stateMap.get(state.id);
-      if (!existing) {
-        stateMap.set(state.id, cloneStateNode(state));
-      } else {
-        existing.visits += state.visits;
-        existing.firstSeenStep = Math.min(existing.firstSeenStep, state.firstSeenStep);
-        existing.lastSeenStep = Math.max(existing.lastSeenStep, state.lastSeenStep);
-        existing.noChangeCount += state.noChangeCount;
-        existing.newStateOutCount += state.newStateOutCount;
-        existing.errorCount += state.errorCount;
-        existing.repeatableRegionStates = Array.from(new Set([...existing.repeatableRegionStates, ...state.repeatableRegionStates])).sort();
-        existing.repeatableRegions = mergeRepeatableRegions(existing.repeatableRegions, state.repeatableRegions);
-        if (existing.candidates.length > 0 && state.candidates.length > 0) {
-          existing.candidates = mergeCandidateRecords(existing.candidates, state.candidates);
-        } else if (existing.candidates.length === 0 && state.candidates.length > 0) {
-          existing.candidates = mergeCandidateRecords([], state.candidates);
-        } else {
-          existing.candidateCount = Math.max(existing.candidateCount, state.candidateCount);
-          existing.testedCandidateCount = Math.min(
-            existing.candidateCount,
-            existing.testedCandidateCount + state.testedCandidateCount,
-          );
-          existing.untestedCandidateCount = Math.max(0, existing.candidateCount - existing.testedCandidateCount);
-        }
-      }
-    }
-
-    for (const transition of result.transitionTable) {
-      const key = `${transition.fromStateId}->${transition.toStateId}:${transition.eventSignature}`;
-      const existing = edgeMap.get(key);
-      if (!existing) {
-        edgeMap.set(key, { ...transition });
-      } else {
-        existing.count += transition.count;
-        existing.firstSeenStep = Math.min(existing.firstSeenStep, transition.firstSeenStep);
-        existing.lastSeenStep = Math.max(existing.lastSeenStep, transition.lastSeenStep);
-        existing.reward = Math.max(existing.reward, transition.reward);
-      }
-    }
-
-    for (const state of result.stateTable) {
-      for (const candidate of state.candidates) {
-        const canonicalSignature = canonicalEventSignature(candidate.event);
-        canonicalCandidateEvents.add(canonicalSignature);
-        if (candidate.attempts > 0) {
-          testedCanonicalCandidateEvents.add(canonicalSignature);
-        }
-        if (candidate.event.target) {
-          discoveredTargets.add(candidate.event.target.signature);
-          if (candidate.attempts > 0) {
-            interactedTargets.add(candidate.event.target.signature);
-          }
-        }
-        if (candidate.event.params.payloadKind && candidate.attempts > 0) {
-          payloadKindsHit.add(candidate.event.params.payloadKind);
-        }
-      }
-    }
-    for (const signature of result.canonicalCandidateEvents ?? []) {
-      canonicalCandidateEvents.add(signature);
-    }
-    for (const signature of result.testedCanonicalCandidateEvents ?? []) {
-      testedCanonicalCandidateEvents.add(signature);
-    }
-
-    for (const item of result.untestedCandidateEvents) {
-      untestedFallback.set(`${item.stateId}:${item.eventSignature}`, item);
-    }
-
-    fallbackTargetCoverageWeighted += result.summary.targetCoverage * result.summary.executedSteps;
-    fallbackPayloadCoverageWeighted += result.summary.payloadKindCoverage * result.summary.executedSteps;
-    fallbackCoverageWeight += result.summary.executedSteps;
-
-    for (const record of result.eventSequence) {
-      recordsByWorker.push({
-        ...record,
-        workerIndex,
-        localStep: record.step,
-      });
-    }
-  }
-
-  const records = recomputeMergedRecords(recordsByWorker);
-
-  for (const state of stateMap.values()) {
-    if (state.candidates.length > 0) {
-      refreshCandidateStats(state);
-    } else {
-      state.untestedCandidateCount = Math.max(0, state.candidateCount - state.testedCandidateCount);
-    }
-  }
-
-  const stateTable = Array.from(stateMap.values()).sort((left, right) => left.firstSeenStep - right.firstSeenStep);
-  const transitionTable = Array.from(edgeMap.values()).sort((left, right) => left.firstSeenStep - right.firstSeenStep);
-  const repeatableRegionCount = new Set(
-    stateTable.flatMap((state) => state.repeatableRegions.map((region) => region.signature)),
-  ).size;
-  const discoveredCandidateEventCount = stateTable.reduce((sum, state) => sum + state.candidateCount, 0);
-  const testedCandidateEventCount = stateTable.reduce((sum, state) => sum + state.testedCandidateCount, 0);
-  const totalSteps = results.reduce((sum, result) => sum + result.summary.totalSteps, 0);
-  const executedSteps = records.length;
-  const routeEscapeCount = records.filter((record) => record.routeEscape).length;
-  const runtimeErrorCount = records.reduce((sum, record) => sum + record.issues.length, 0);
-  const severeFailureCount = records.reduce(
-    (sum, record) => sum + record.issues.filter((issue) => issue.severity === "severe").length,
-    0,
-  );
-  const candidateEventCoverage = ratio(testedCandidateEventCount, discoveredCandidateEventCount);
-  const fallbackDiscoveredCanonicalCandidateEventCount = results.reduce(
-    (sum, result) => sum + (result.summary.discoveredCanonicalCandidateEventCount ?? 0),
-    0,
-  );
-  const fallbackTestedCanonicalCandidateEventCount = results.reduce(
-    (sum, result) => sum + (result.summary.testedCanonicalCandidateEventCount ?? 0),
-    0,
-  );
-  const discoveredCanonicalCandidateEventCount =
-    canonicalCandidateEvents.size || fallbackDiscoveredCanonicalCandidateEventCount || discoveredCandidateEventCount;
-  const testedCanonicalCandidateEventCount =
-    testedCanonicalCandidateEvents.size || fallbackTestedCanonicalCandidateEventCount || testedCandidateEventCount;
-  const canonicalCandidateEventCoverage = ratio(
-    testedCanonicalCandidateEventCount,
-    discoveredCanonicalCandidateEventCount,
-  );
-  const payloadKindCoverage =
-    payloadKindsHit.size > 0 ? ratio(payloadKindsHit.size, payloadKinds.length) : ratio(fallbackPayloadCoverageWeighted, fallbackCoverageWeight);
-  const targetCoverage =
-    discoveredTargets.size > 0 ? ratio(interactedTargets.size, discoveredTargets.size) : ratio(fallbackTargetCoverageWeighted, fallbackCoverageWeight);
-  const noChangeRate = ratio(records.filter((record) => record.noChange).length, executedSteps);
-  const stateGrowthSaturation = growthSaturation(records.map((record) => record.newState));
-  const transitionGrowthSaturation = growthSaturation(records.map((record) => record.newTransition));
-  const discoveredSpaceExplorationScore =
-    100 *
-    (0.3 * candidateEventCoverage +
-      0.2 * targetCoverage +
-      0.2 * payloadKindCoverage +
-      0.15 * transitionGrowthSaturation +
-      0.15 * stateGrowthSaturation);
-  const summary: CoverageSummary = {
-    totalSteps,
-    executedSteps,
-    discoveredStateCount: stateTable.length,
-    discoveredTransitionCount: transitionTable.length,
-    discoveredCandidateEventCount,
-    testedCandidateEventCount,
-    candidateEventCoverage,
-    discoveredCanonicalCandidateEventCount,
-    testedCanonicalCandidateEventCount,
-    canonicalCandidateEventCoverage,
-    payloadKindCoverage,
-    targetCoverage,
-    noChangeRate,
-    routeEscapeCount,
-    runtimeErrorCount,
-    severeFailureCount,
-    discoveredSpaceExplorationScore,
-    stateGrowthSaturation,
-    transitionGrowthSaturation,
-    repeatableRegionCount,
-  };
-  const config: ExplorerConfig = {
-    ...first.config,
-    steps: totalSteps,
-    seed: options.seed,
-    reportDir: options.reportDir,
-  };
-
-  return {
-    config,
-    seed: options.seed,
-    summary,
-    newStateCurve: cumulative(records.map((record) => record.newState)),
-    newTransitionCurve: cumulative(records.map((record) => record.newTransition)),
-    stateTable,
-    transitionTable,
-    frontierStates: frontierStates(stateTable),
-    untestedCandidateEvents: untestedCandidateEvents(stateTable, Array.from(untestedFallback.values())),
-    canonicalCandidateEvents: Array.from(canonicalCandidateEvents).sort(),
-    testedCanonicalCandidateEvents: Array.from(testedCanonicalCandidateEvents).sort(),
-    eventSequence: records,
-    screenshotArtifacts: results.flatMap((result) => result.screenshotArtifacts ?? []),
-    replayCommand: options.replayCommand,
-    repeatableRegionExploration: mergeRepeatableRegionExplorations(results, options.seed, options.replayCommand),
-  };
-}
-
 function compactReportResult(result: ExplorerRunResult): ReportResult {
   const topNoChangeEventRows = collectTopNoChangeEventRows(result.stateTable);
   const stateTable = result.stateTable.map(compactStateNode);
@@ -375,123 +187,6 @@ async function archiveScreenshotArtifacts(result: ExplorerRunResult, runDir: str
     await fs.rm(result.config.screenshotDir, { recursive: true, force: true }).catch(() => undefined);
   }
   return { ...result, screenshotArtifacts: archived };
-}
-
-function mergeRepeatableRegionExplorations(
-  results: ExplorerRunResult[],
-  seed: string,
-  replayCommand: string,
-): RepeatableRegionExplorationResult | undefined {
-  const explorations = results
-    .map((result) => result.repeatableRegionExploration)
-    .filter((result): result is RepeatableRegionExplorationResult => Boolean(result));
-  if (explorations.length === 0) {
-    return undefined;
-  }
-
-  const objectMap = new Map<string, RepeatableRegionObjectResult>();
-  for (const exploration of explorations) {
-    for (const objectResult of exploration.objects) {
-      const existing = objectMap.get(objectResult.object.key);
-      if (!existing) {
-        objectMap.set(objectResult.object.key, cloneRepeatableObjectResult(objectResult));
-        continue;
-      }
-      existing.object.representativeStateFirstSeenStep = Math.min(
-        existing.object.representativeStateFirstSeenStep,
-        objectResult.object.representativeStateFirstSeenStep,
-      );
-      existing.skippedReason =
-        existing.executedSteps === 0 && objectResult.executedSteps === 0
-          ? existing.skippedReason ?? objectResult.skippedReason
-          : undefined;
-      existing.discoveredCandidateEventCount += objectResult.discoveredCandidateEventCount;
-      existing.testedCandidateEventCount += objectResult.testedCandidateEventCount;
-      existing.executedSteps += objectResult.executedSteps;
-      existing.noChangeCount += objectResult.noChangeCount;
-      existing.stateChangeCount += objectResult.stateChangeCount;
-      existing.routeEscapeCount += objectResult.routeEscapeCount;
-      existing.leftRegionCount += objectResult.leftRegionCount;
-      existing.runtimeErrorCount += objectResult.runtimeErrorCount;
-      existing.severeFailureCount += objectResult.severeFailureCount;
-      existing.events.push(...objectResult.events.map((event) => ({ ...event, step: existing.events.length + event.step })));
-    }
-  }
-
-  const objects = Array.from(objectMap.values()).sort(
-    (left, right) =>
-      left.object.representativeStateFirstSeenStep - right.object.representativeStateFirstSeenStep ||
-      left.object.id.localeCompare(right.object.id),
-  );
-  const executedSteps = objects.reduce((sum, object) => sum + object.executedSteps, 0);
-  const discoveredCandidateEventCount = objects.reduce((sum, object) => sum + object.discoveredCandidateEventCount, 0);
-  const testedCandidateEventCount = objects.reduce((sum, object) => sum + object.testedCandidateEventCount, 0);
-  const skippedObjectCount = objects.filter((object) => object.skippedReason).length;
-  const testedObjectCount = objects.filter((object) => !object.skippedReason && object.executedSteps > 0).length;
-
-  return {
-    summary: {
-      enabled: true,
-      testObjectCount: objects.length,
-      testedObjectCount,
-      skippedObjectCount,
-      executedSteps,
-      discoveredCandidateEventCount,
-      testedCandidateEventCount,
-      candidateEventCoverage: ratio(testedCandidateEventCount, discoveredCandidateEventCount),
-      noChangeRate: ratio(objects.reduce((sum, object) => sum + object.noChangeCount, 0), executedSteps),
-      stateChangeCount: objects.reduce((sum, object) => sum + object.stateChangeCount, 0),
-      routeEscapeCount: objects.reduce((sum, object) => sum + object.routeEscapeCount, 0),
-      leftRegionCount: objects.reduce((sum, object) => sum + object.leftRegionCount, 0),
-      runtimeErrorCount: objects.reduce((sum, object) => sum + object.runtimeErrorCount, 0),
-      severeFailureCount: objects.reduce((sum, object) => sum + object.severeFailureCount, 0),
-    },
-    maxObjects: explorations.reduce((max, exploration) => Math.max(max, exploration.maxObjects), 0),
-    stepsPerObject: explorations.reduce((max, exploration) => Math.max(max, exploration.stepsPerObject), 0),
-    seed,
-    objects,
-    replayCommand,
-  };
-}
-
-function cloneRepeatableObjectResult(result: RepeatableRegionObjectResult): RepeatableRegionObjectResult {
-  return {
-    ...result,
-    object: {
-      ...result.object,
-      region: {
-        ...result.object.region,
-        businessTags: [...result.object.region.businessTags],
-        hierarchyLayers: [...result.object.region.hierarchyLayers],
-      },
-    },
-    events: result.events.map((event) => ({ ...event, issues: event.issues.map((issue) => ({ ...issue })) })),
-  };
-}
-
-function recomputeMergedRecords(records: Array<StepRecord & { workerIndex: number; localStep: number }>): StepRecord[] {
-  const seenStates = new Set<string>();
-  const seenTransitions = new Set<string>();
-  const ordered = [...records].sort(
-    (left, right) => left.localStep - right.localStep || left.workerIndex - right.workerIndex,
-  );
-
-  return ordered.map((record, index) => {
-    seenStates.add(record.beforeStateId);
-    const transitionKey = `${record.beforeStateId}->${record.afterStateId}:${record.eventSignature}`;
-    const newState = !seenStates.has(record.afterStateId);
-    const newTransition = !seenTransitions.has(transitionKey);
-    seenStates.add(record.afterStateId);
-    seenTransitions.add(transitionKey);
-
-    const { workerIndex: _workerIndex, localStep: _localStep, ...stepRecord } = record;
-    return {
-      ...stepRecord,
-      step: index,
-      newState,
-      newTransition,
-    };
-  });
 }
 
 function compactStateNode(state: StateNode): StateNode {
@@ -617,21 +312,460 @@ function embeddedReportData(result: ReportResult) {
   };
 }
 
-function renderHtml(result: ReportResult) {
-  const data = JSON.stringify(embeddedReportData(result)).replace(/</g, "\\u003c");
-  const summary = result.summary;
-  const outcome = outcomeBreakdown(result);
+function heroMetrics(result: ReportResult, outcome = outcomeBreakdown(result)) {
   const issueStepCount = outcome.issue;
   const successStepCount = Math.max(0, outcome.total - issueStepCount);
-  const latestStepCount = result.eventSequence.length;
+  return `
+    <div class="meta-grid">
+      ${meta("执行事件", String(result.eventSequence.length))}
+      ${meta("成功事件", String(successStepCount))}
+      ${meta("异常事件", String(issueStepCount))}
+      ${meta("严重失败", String(result.summary.severeFailureCount))}
+    </div>
+  `;
+}
+
+function scorePanelContent(summary: CoverageSummary) {
+  return `
+    ${scoreGauge(summary.discoveredSpaceExplorationScore)}
+    <h3>已发现空间探索分数</h3>
+    <p class="gauge-caption">该分数只估算已发现 UI 状态空间的探索程度，不证明全系统路径已完整覆盖。</p>
+  `;
+}
+
+function summaryCards(result: ReportResult) {
+  const summary = result.summary;
+  return `
+    ${metric("状态节点", summary.discoveredStateCount, "规范化后发现的页面状态数量")}
+    ${metric("状态转移", summary.discoveredTransitionCount, "执行事件后形成的状态边数量")}
+    ${metric(
+      "覆盖率",
+      percent(summary.canonicalCandidateEventCoverage),
+      `规范化候选 ${summary.testedCanonicalCandidateEventCount} / ${summary.discoveredCanonicalCandidateEventCount}`,
+    )}
+    ${metric("目标覆盖", percent(summary.targetCoverage), "被操作过的路径内目标 / 已发现路径内目标")}
+    ${metric("状态内候选覆盖", percent(summary.candidateEventCoverage), `${summary.testedCandidateEventCount} / ${summary.discoveredCandidateEventCount}`)}
+    ${metric("无变化比例", percent(summary.noChangeRate), "执行后状态未变化的事件占比")}
+    ${metric("路径逃逸", summary.routeEscapeCount, "跳出安全作用域后会 reset")}
+    ${metric("运行异常", summary.runtimeErrorCount, "普通异常会记录，不一定 fail")}
+  `;
+}
+
+function coverageProgressSection(result: ReportResult) {
+  const summary = result.summary;
+  const outcome = outcomeBreakdown(result);
+  return `
+    <h2>覆盖进度</h2>
+    <section class="section-grid">
+      <div class="panel chart">
+        <h3>核心覆盖指标</h3>
+        <div class="bars">
+          ${progressRow("状态内候选覆盖", summary.candidateEventCoverage, "blue")}
+          ${progressRow("规范化候选覆盖", summary.canonicalCandidateEventCoverage, "cyan")}
+          ${progressRow("目标组件覆盖", summary.targetCoverage, "cyan")}
+          ${progressRow("输入类别覆盖", summary.payloadKindCoverage, "green")}
+          ${progressRow("状态增长饱和", summary.stateGrowthSaturation, "amber")}
+          ${progressRow("转移增长饱和", summary.transitionGrowthSaturation, "violet")}
+        </div>
+      </div>
+      <div class="panel chart">
+        <h3>事件结果概览</h3>
+        ${stackedOutcome(outcome)}
+        <div class="legend" style="margin-top: 14px">
+          <span><i class="dot" style="background: var(--green)"></i>新状态</span>
+          <span><i class="dot" style="background: var(--blue)"></i>新转移</span>
+          <span><i class="dot" style="background: var(--cyan)"></i>已知变化</span>
+          <span><i class="dot" style="background: var(--amber)"></i>无变化</span>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function explorationCurveSection(result: ReportResult) {
+  return `
+    <h2>探索曲线</h2>
+    <section class="split">
+      <div class="panel chart">
+        <h3>累计新状态</h3>
+        ${curveSvg(result.newStateCurve, "var(--green)")}
+      </div>
+      <div class="panel chart">
+        <h3>累计新转移</h3>
+        ${curveSvg(result.newTransitionCurve, "var(--blue)")}
+      </div>
+    </section>
+  `;
+}
+
+export function liveReportSnapshot(
+  result: ExplorerRunResult,
+  status: LiveReportStatus,
+  options: { revision: number; startedAt?: number; runDir?: string; reportPath?: string; resultPath?: string },
+): LiveReportSnapshot {
+  const reportResult = compactReportResult(result);
+  const repeatableRegions = uniqueRepeatableRegions(reportResult.stateTable).slice(0, 16);
+  return {
+    status,
+    revision: options.revision,
+    updatedAt: new Date().toISOString(),
+    startedAt: options.startedAt ? new Date(options.startedAt).toISOString() : undefined,
+    runDir: options.runDir,
+    reportPath: options.reportPath,
+    resultPath: options.resultPath,
+    seed: reportResult.seed,
+    latestStepCount: reportResult.eventSequence.length,
+    html: {
+      testedObject: testedObjectStrip(reportResult),
+      heroMetrics: heroMetrics(reportResult),
+      score: scorePanelContent(reportResult.summary),
+      cards: summaryCards(reportResult),
+      issues: issueOverviewSection(reportResult),
+      coverage: coverageProgressSection(reportResult),
+      curves: explorationCurveSection(reportResult),
+      repeatableExploration: repeatableRegionExplorationSection(reportResult),
+      repeatableRegions: repeatableRegionSection(repeatableRegions),
+    },
+  };
+}
+
+export function renderLiveReportHtml(result: ExplorerRunResult, snapshot: LiveReportSnapshot) {
+  return renderHtml(compactReportResult(result), { liveSnapshot: snapshot });
+}
+
+function liveReportClientScript() {
+  return `
+    const liveState = { timer: null, lastRevision: -1 };
+    const liveStatusLabels = { running: "运行中", completed: "已完成", stopped: "已停止", failed: "失败" };
+    function readInitialLiveSnapshot() {
+      try {
+        return JSON.parse(document.getElementById("live-initial")?.textContent || "{}");
+      } catch {
+        return null;
+      }
+    }
+    function setLiveHtml(id, value) {
+      const element = document.getElementById(id);
+      if (element) element.innerHTML = value || "";
+    }
+    function applyLiveSnapshot(snapshot) {
+      if (!snapshot || snapshot.revision === liveState.lastRevision) return;
+      liveState.lastRevision = snapshot.revision;
+      const status = document.getElementById("liveStatus");
+      if (status) {
+        status.textContent = liveStatusLabels[snapshot.status] || snapshot.status || "未知";
+        status.className = "live-status " + (snapshot.status || "running");
+      }
+      const updatedAt = document.getElementById("liveUpdatedAt");
+      if (updatedAt) updatedAt.textContent = snapshot.updatedAt ? "实时区更新：" + new Date(snapshot.updatedAt).toLocaleString() : "";
+      const revision = document.getElementById("liveRevision");
+      if (revision) revision.textContent = "revision " + String(snapshot.revision ?? 0);
+      setLiveHtml("liveTestedObject", snapshot.html?.testedObject);
+      setLiveHtml("liveHeroMetrics", snapshot.html?.heroMetrics);
+      setLiveHtml("liveScore", snapshot.html?.score);
+      setLiveHtml("liveCards", snapshot.html?.cards);
+      setLiveHtml("liveIssues", snapshot.html?.issues);
+      setLiveHtml("liveCoverage", snapshot.html?.coverage);
+      setLiveHtml("liveCurves", snapshot.html?.curves);
+      setLiveHtml("liveRepeatableExploration", snapshot.html?.repeatableExploration);
+      setLiveHtml("liveRepeatableRegions", snapshot.html?.repeatableRegions);
+    }
+    async function refreshLiveSnapshot() {
+      try {
+        const response = await fetch("live-summary.json?ts=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) return;
+        applyLiveSnapshot(await response.json());
+      } catch {
+        // File-system opens cannot poll live-summary.json. The embedded snapshot remains usable.
+      }
+    }
+    const liveReloadButton = document.getElementById("liveReloadReport");
+    liveReloadButton?.addEventListener("click", () => window.location.reload());
+    applyLiveSnapshot(readInitialLiveSnapshot());
+    liveState.timer = window.setInterval(refreshLiveSnapshot, 1000);
+    refreshLiveSnapshot();
+  `;
+}
+
+function renderLegacyLiveReportHtml(snapshot: LiveReportSnapshot) {
+  const data = JSON.stringify(snapshot).replace(/</g, "\\u003c");
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UI 随机探索实时报告</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #162033;
+      --muted: #65758b;
+      --line: #d9e2ec;
+      --panel: #ffffff;
+      --page: #f4f7fb;
+      --blue: #2563eb;
+      --cyan: #0891b2;
+      --green: #16a34a;
+      --amber: #d97706;
+      --red: #dc2626;
+      --violet: #7c3aed;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #eef5ff 0, rgba(238, 245, 255, 0) 320px), var(--page);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    main { max-width: 1240px; margin: 0 auto; padding: 28px 20px 56px; }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { font-size: 32px; line-height: 1.15; margin-bottom: 10px; }
+    h2 { font-size: 21px; margin: 34px 0 14px; }
+    h3 { font-size: 16px; margin-bottom: 10px; }
+    p { line-height: 1.65; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .muted { color: var(--muted); }
+    .compact { font-size: 13px; }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+    .panel {
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 12px 32px rgba(15, 23, 42, .06);
+    }
+    .hero-copy { padding: 24px; }
+    .eyebrow { color: var(--blue); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .live-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .live-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-weight: 800;
+    }
+    .live-status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+    }
+    .live-status.stopped::before,
+    .live-status.completed::before { background: var(--blue); }
+    .live-status.failed::before { background: var(--red); }
+    .subject-strip {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin: 14px 0 18px;
+      padding: 12px;
+      border: 1px solid #dbe4f0;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .74);
+    }
+    .subject-item { min-width: 0; }
+    .subject-label, .label { color: var(--muted); font-size: 12px; }
+    .subject-value {
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #1e293b;
+      overflow-wrap: anywhere;
+    }
+    .meta-grid, .cards { display: grid; gap: 10px; }
+    .meta-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 18px; }
+    .meta, .metric { background: #f8fbff; border: 1px solid #dbe4f0; border-radius: 8px; padding: 12px; }
+    .meta .value, .metric .value { margin-top: 4px; font-size: 20px; font-weight: 900; color: #0f172a; }
+    .score-panel { display: grid; place-items: center; text-align: center; padding: 26px; }
+    .gauge {
+      width: 190px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+      background: conic-gradient(var(--blue) calc(var(--score, 0) * 1%), #dbe7f7 0);
+      position: relative;
+    }
+    .gauge::before {
+      content: "";
+      position: absolute;
+      inset: 18px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: inset 0 0 0 1px #e2e8f0;
+    }
+    .gauge-value { position: relative; z-index: 1; font-size: 42px; font-weight: 900; }
+    .gauge-caption { color: var(--muted); line-height: 1.5; }
+    .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 18px; }
+    .metric { padding: 15px; background: var(--panel); }
+    .metric .value { font-size: 26px; margin: 5px 0; }
+    .metric .hint { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .section-grid, .split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+    .chart { padding: 18px; }
+    .bars { display: grid; gap: 14px; }
+    .bar-row { display: grid; grid-template-columns: 150px 1fr 64px; gap: 10px; align-items: center; }
+    .bar { height: 12px; background: #e7eef8; border-radius: 999px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .28); }
+    .bar span { display: block; height: 100%; width: 0; background: var(--blue); }
+    .bar span.green { background: var(--green); }
+    .bar span.amber { background: var(--amber); }
+    .bar span.cyan { background: var(--cyan); }
+    .bar span.violet { background: var(--violet); }
+    .curve-card { padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .curve-card svg { width: 100%; height: 142px; display: block; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 12px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+    .outcome-bar { display: flex; width: 100%; height: 22px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+    .outcome-bar span { display: block; min-width: 2px; }
+    .outcome-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 14px; }
+    .outcome-card { padding: 12px; border: 1px solid #dbe4f0; border-radius: 8px; }
+    .issue-scroll { max-height: min(720px, 72vh); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-right: 6px; }
+    .issue-grid { display: grid; gap: 12px; }
+    .issue-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 14px; padding: 14px; border: 1px solid #fecaca; border-left: 4px solid var(--red); border-radius: 8px; background: #fffafa; }
+    .issue-card h3 { margin: 0 0 6px; }
+    .issue-card p { margin-bottom: 0; }
+    .issue-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; color: #475569; font-size: 12px; }
+    .issue-meta span { padding: 4px 7px; border-radius: 999px; background: #fff; border: 1px solid #e5eaf2; }
+    .issue-actions { display: grid; gap: 8px; align-content: start; justify-items: end; }
+    .issue-actions button, .issue-actions a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 32px;
+      padding: 0 10px;
+      border-radius: 8px;
+      border: 1px solid #d7deea;
+      background: #fff;
+      color: #1f2937;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .issue-actions button { background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 800; }
+    .table-wrap { overflow-x: auto; border: 1px solid #dbe4f0; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 9px 10px; border-bottom: 1px solid #e5edf7; text-align: left; white-space: nowrap; }
+    th { background: #f1f5f9; color: #475569; }
+    @media (max-width: 960px) {
+      .hero, .section-grid, .split { grid-template-columns: 1fr; }
+      .subject-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cards, .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .outcome-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 560px) {
+      main { padding-inline: 12px; }
+      .subject-strip, .cards, .meta-grid, .outcome-cards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="panel hero-copy">
+        <div class="eyebrow">Coverage-Guided UI Random Explorer</div>
+        <h1>通用 UI 随机探索实时报告</h1>
+        <div class="live-strip">
+          <span id="liveStatus" class="live-status">运行中</span>
+          <span id="liveUpdatedAt">等待数据刷新</span>
+          <span id="liveRevision">revision 0</span>
+        </div>
+        <p class="muted">该页面只实时刷新结果指标、异常、覆盖进度、探索曲线和可重复组件信息。状态图不参与实时刷新，避免大图重排拖慢测试和浏览器。</p>
+        <div id="liveTestedObject"></div>
+        <div id="liveHeroMetrics"></div>
+      </div>
+      <div id="liveScore" class="panel score-panel"></div>
+    </section>
+    <section id="liveCards" class="cards"></section>
+    <div id="liveIssues"></div>
+    <div id="liveCoverage"></div>
+    <div id="liveCurves"></div>
+    <div id="liveRepeatableExploration"></div>
+    <div id="liveRepeatableRegions"></div>
+  </main>
+  <script type="application/json" id="live-initial">${data}</script>
+  <script>
+    const state = { timer: null, lastRevision: -1 };
+    const statusLabels = { running: "运行中", completed: "已完成", stopped: "已停止", failed: "失败" };
+    function readInitial() {
+      try {
+        return JSON.parse(document.getElementById("live-initial").textContent || "{}");
+      } catch {
+        return null;
+      }
+    }
+    function setHtml(id, value) {
+      const element = document.getElementById(id);
+      if (element) element.innerHTML = value || "";
+    }
+    function applySnapshot(snapshot) {
+      if (!snapshot || snapshot.revision === state.lastRevision) return;
+      state.lastRevision = snapshot.revision;
+      const status = document.getElementById("liveStatus");
+      if (status) {
+        status.textContent = statusLabels[snapshot.status] || snapshot.status || "未知";
+        status.className = "live-status " + (snapshot.status || "running");
+      }
+      const updatedAt = document.getElementById("liveUpdatedAt");
+      if (updatedAt) updatedAt.textContent = snapshot.updatedAt ? "更新：" + new Date(snapshot.updatedAt).toLocaleString() : "";
+      const revision = document.getElementById("liveRevision");
+      if (revision) revision.textContent = "revision " + String(snapshot.revision ?? 0);
+      setHtml("liveTestedObject", snapshot.html?.testedObject);
+      setHtml("liveHeroMetrics", snapshot.html?.heroMetrics);
+      setHtml("liveScore", snapshot.html?.score);
+      setHtml("liveCards", snapshot.html?.cards);
+      setHtml("liveIssues", snapshot.html?.issues);
+      setHtml("liveCoverage", snapshot.html?.coverage);
+      setHtml("liveCurves", snapshot.html?.curves);
+      setHtml("liveRepeatableExploration", snapshot.html?.repeatableExploration);
+      setHtml("liveRepeatableRegions", snapshot.html?.repeatableRegions);
+    }
+    async function refresh() {
+      try {
+        const response = await fetch("live-summary.json?ts=" + Date.now(), { cache: "no-store" });
+        if (!response.ok) return;
+        applySnapshot(await response.json());
+      } catch {
+        // The runner may be flushing the next snapshot. Keep the current view.
+      }
+    }
+    applySnapshot(readInitial());
+    state.timer = window.setInterval(refresh, 1000);
+    refresh();
+  </script>
+</body>
+</html>`;
+}
+
+function renderHtml(result: ReportResult, options: { liveSnapshot?: LiveReportSnapshot } = {}) {
+  const data = JSON.stringify(embeddedReportData(result)).replace(/</g, "\\u003c");
+  const liveData = options.liveSnapshot ? JSON.stringify(options.liveSnapshot).replace(/</g, "\\u003c") : undefined;
+  const summary = result.summary;
+  const outcome = outcomeBreakdown(result);
   const repeatableRegions = uniqueRepeatableRegions(result.stateTable).slice(0, 16);
+  const dynamic = options.liveSnapshot?.html;
 
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>UI 随机探索报告</title>
+  <title>${options.liveSnapshot ? "UI 随机探索实时报告" : "UI 随机探索报告"}</title>
   <style>
     :root {
       color-scheme: light;
@@ -678,6 +812,46 @@ function renderHtml(result: ReportResult) {
     }
     .hero-copy { padding: 24px; }
     .eyebrow { color: var(--blue); font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .live-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin: 12px 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .live-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #bfdbfe;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-weight: 800;
+    }
+    .live-status::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+    }
+    .live-status.stopped::before,
+    .live-status.completed::before { background: var(--blue); }
+    .live-status.failed::before { background: var(--red); }
+    .live-reload {
+      height: 32px;
+      border: 1px solid #d7deea;
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #fff;
+      color: #1f2937;
+      cursor: pointer;
+      font-size: 13px;
+    }
     .subject-strip {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -1449,36 +1623,32 @@ function renderHtml(result: ReportResult) {
     <section class="hero">
       <div class="panel hero-copy">
         <div class="eyebrow">Coverage-Guided UI Random Explorer</div>
-        <h1>通用 UI 随机探索报告</h1>
-        <p class="muted">这份报告优先回答本次随机探索测到了多少、哪些状态被发现、有没有异常、覆盖程度如何。配置和实现口径放在报告后部，避免干扰结果判断。</p>
-        ${testedObjectStrip(result)}
-        <div class="meta-grid">
-          ${meta("执行事件", String(latestStepCount))}
-          ${meta("成功事件", String(successStepCount))}
-          ${meta("异常事件", String(issueStepCount))}
-          ${meta("严重失败", String(summary.severeFailureCount))}
-        </div>
+        <h1>${options.liveSnapshot ? "通用 UI 随机探索实时报告" : "通用 UI 随机探索报告"}</h1>
+        ${
+          options.liveSnapshot
+            ? `<div class="live-strip">
+          <span id="liveStatus" class="live-status">运行中</span>
+          <span id="liveUpdatedAt">等待实时区刷新</span>
+          <span id="liveRevision">revision 0</span>
+          <button id="liveReloadReport" class="live-reload" type="button">更新完整报告</button>
+        </div>`
+            : ""
+        }
+        <p class="muted">${
+          options.liveSnapshot
+            ? "这份报告保持完整报告结构。结果指标、异常、覆盖进度、探索曲线和可重复组件信息会实时刷新；状态图和测试环境等完整报告内容通过“更新完整报告”或测试结束后的最终文件查看。"
+            : "这份报告优先回答本次随机探索测到了多少、哪些状态被发现、有没有异常、覆盖程度如何。配置和实现口径放在报告后部，避免干扰结果判断。"
+        }</p>
+        <div id="liveTestedObject">${dynamic?.testedObject ?? testedObjectStrip(result)}</div>
+        <div id="liveHeroMetrics">${dynamic?.heroMetrics ?? heroMetrics(result, outcome)}</div>
       </div>
       <div class="panel score-panel">
-        ${scoreGauge(summary.discoveredSpaceExplorationScore)}
-        <h3>已发现空间探索分数</h3>
-        <p class="gauge-caption">该分数只估算已发现 UI 状态空间的探索程度，不证明全系统路径已完整覆盖。</p>
+        <div id="liveScore">${dynamic?.score ?? scorePanelContent(summary)}</div>
       </div>
     </section>
 
-    <section class="cards">
-      ${metric("状态节点", summary.discoveredStateCount, "规范化后发现的页面状态数量")}
-      ${metric("状态转移", summary.discoveredTransitionCount, "执行事件后形成的状态边数量")}
-      ${metric(
-        "覆盖率",
-        percent(summary.canonicalCandidateEventCoverage),
-        `规范化候选 ${summary.testedCanonicalCandidateEventCount} / ${summary.discoveredCanonicalCandidateEventCount}`,
-      )}
-      ${metric("目标覆盖", percent(summary.targetCoverage), "被操作过的路径内目标 / 已发现路径内目标")}
-      ${metric("状态内候选覆盖", percent(summary.candidateEventCoverage), `${summary.testedCandidateEventCount} / ${summary.discoveredCandidateEventCount}`)}
-      ${metric("无变化比例", percent(summary.noChangeRate), "执行后状态未变化的事件占比")}
-      ${metric("路径逃逸", summary.routeEscapeCount, "跳出安全作用域后会 reset")}
-      ${metric("运行异常", summary.runtimeErrorCount, "普通异常会记录，不一定 fail")}
+    <section id="liveCards" class="cards">
+      ${dynamic?.cards ?? summaryCards(result)}
     </section>
 
     <h2>状态图</h2>
@@ -1544,47 +1714,13 @@ function renderHtml(result: ReportResult) {
     </section>
 
     <h2>异常情况</h2>
-    ${issueOverviewSection(result)}
+    <div id="liveIssues">${dynamic?.issues ?? issueOverviewSection(result)}</div>
 
-    <h2>覆盖进度</h2>
-    <section class="section-grid">
-      <div class="panel chart">
-        <h3>核心覆盖指标</h3>
-        <div class="bars">
-          ${progressRow("状态内候选覆盖", summary.candidateEventCoverage, "blue")}
-          ${progressRow("规范化候选覆盖", summary.canonicalCandidateEventCoverage, "cyan")}
-          ${progressRow("目标组件覆盖", summary.targetCoverage, "cyan")}
-          ${progressRow("输入类别覆盖", summary.payloadKindCoverage, "green")}
-          ${progressRow("状态增长饱和", summary.stateGrowthSaturation, "amber")}
-          ${progressRow("转移增长饱和", summary.transitionGrowthSaturation, "violet")}
-        </div>
-      </div>
-      <div class="panel chart">
-        <h3>事件结果概览</h3>
-        ${stackedOutcome(outcome)}
-        <div class="legend" style="margin-top: 14px">
-          <span><i class="dot" style="background: var(--green)"></i>新状态</span>
-          <span><i class="dot" style="background: var(--blue)"></i>新转移</span>
-          <span><i class="dot" style="background: var(--cyan)"></i>已知变化</span>
-          <span><i class="dot" style="background: var(--amber)"></i>无变化</span>
-        </div>
-      </div>
-    </section>
+    <div id="liveCoverage">${dynamic?.coverage ?? coverageProgressSection(result)}</div>
+    <div id="liveCurves">${dynamic?.curves ?? explorationCurveSection(result)}</div>
 
-    <h2>探索曲线</h2>
-    <section class="split">
-      <div class="panel chart">
-        <h3>累计新状态</h3>
-        ${curveSvg(result.newStateCurve, "var(--green)")}
-      </div>
-      <div class="panel chart">
-        <h3>累计新转移</h3>
-        ${curveSvg(result.newTransitionCurve, "var(--blue)")}
-      </div>
-    </section>
-
-    ${repeatableRegionExplorationSection(result)}
-    ${repeatableRegionSection(repeatableRegions)}
+    <div id="liveRepeatableExploration">${dynamic?.repeatableExploration ?? repeatableRegionExplorationSection(result)}</div>
+    <div id="liveRepeatableRegions">${dynamic?.repeatableRegions ?? repeatableRegionSection(repeatableRegions)}</div>
 
     <h2>测试环境与复现</h2>
     ${environmentSection(result)}
@@ -1592,6 +1728,7 @@ function renderHtml(result: ReportResult) {
     <pre>${escapeHtml(result.replayCommand)}</pre>
     <script type="application/json" id="ui-explorer-result">${data}</script>
     <script>${graphClientScript()}</script>
+    ${liveData ? `<script type="application/json" id="live-initial">${liveData}</script><script>${liveReportClientScript()}</script>` : ""}
   </main>
 </body>
 </html>`;
@@ -3531,118 +3668,6 @@ function curveSvg(values: number[], color: string) {
     <text x="${padding}" y="${padding - 4}" fill="#64748b" font-size="12">max ${max}</text>
     <text x="${width - padding - 70}" y="${height - 6}" fill="#64748b" font-size="12">${values.length} steps</text>
   </svg>`;
-}
-
-function cloneStateNode(state: StateNode): StateNode {
-  return {
-    ...state,
-    repeatableRegionStates: [...state.repeatableRegionStates],
-    repeatableRegions: state.repeatableRegions.map((region) => ({ ...region })),
-    candidates: state.candidates.map((candidate) => ({
-      ...candidate,
-      event: {
-        ...candidate.event,
-        params: { ...candidate.event.params },
-        target: candidate.event.target ? { ...candidate.event.target, capabilities: [...candidate.event.target.capabilities] } : undefined,
-      },
-    })),
-  };
-}
-
-function mergeRepeatableRegions(left: StateNode["repeatableRegions"], right: StateNode["repeatableRegions"]) {
-  const regions = new Map<string, StateNode["repeatableRegions"][number]>();
-  for (const region of [...left, ...right]) {
-    regions.set(region.signature, { ...region });
-  }
-  return Array.from(regions.values()).sort((leftRegion, rightRegion) =>
-    leftRegion.abstractionKey.localeCompare(rightRegion.abstractionKey),
-  );
-}
-
-function mergeCandidateRecords(left: CandidateEventRecord[], right: CandidateEventRecord[]) {
-  const records = new Map<string, CandidateEventRecord>();
-  for (const candidate of [...left, ...right]) {
-    const existing = records.get(candidate.eventSignature);
-    if (!existing) {
-      records.set(candidate.eventSignature, {
-        ...candidate,
-        event: {
-          ...candidate.event,
-          params: { ...candidate.event.params },
-          target: candidate.event.target ? { ...candidate.event.target, capabilities: [...candidate.event.target.capabilities] } : undefined,
-        },
-      });
-      continue;
-    }
-    existing.attempts += candidate.attempts;
-    existing.successCount += candidate.successCount;
-    existing.noChangeCount += candidate.noChangeCount;
-    existing.newStateCount += candidate.newStateCount;
-    existing.errorCount += candidate.errorCount;
-    existing.routeEscapeCount += candidate.routeEscapeCount;
-    existing.lastReward = Math.max(existing.lastReward, candidate.lastReward);
-  }
-  return Array.from(records.values());
-}
-
-function refreshCandidateStats(state: StateNode) {
-  state.candidateCount = state.candidates.length;
-  state.testedCandidateCount = state.candidates.filter((candidate) => candidate.attempts > 0).length;
-  state.untestedCandidateCount = state.candidateCount - state.testedCandidateCount;
-}
-
-function frontierStates(states: StateNode[]) {
-  return states
-    .filter((state) => state.untestedCandidateCount > 0)
-    .sort((left, right) => {
-      const leftRatio = left.untestedCandidateCount / Math.max(1, left.candidateCount);
-      const rightRatio = right.untestedCandidateCount / Math.max(1, right.candidateCount);
-      return rightRatio - leftRatio || right.newStateOutCount - left.newStateOutCount || left.visits - right.visits;
-    })
-    .slice(0, 50);
-}
-
-function untestedCandidateEvents(states: StateNode[], fallback: ExplorerRunResult["untestedCandidateEvents"] = []) {
-  const fromCandidates = states
-    .flatMap((state) =>
-      state.candidates
-        .filter((candidate) => candidate.attempts === 0)
-        .map((candidate) => ({
-          stateId: state.id,
-          eventSignature: candidate.eventSignature,
-          operation: candidate.event.operation,
-          targetSignature: candidate.event.target?.signature,
-        })),
-    )
-    .slice(0, 100);
-  return fromCandidates.length > 0 ? fromCandidates : fallback.slice(0, 100);
-}
-
-function ratio(numerator: number, denominator: number) {
-  if (denominator <= 0) {
-    return 0;
-  }
-  return numerator / denominator;
-}
-
-function growthSaturation(values: boolean[]) {
-  if (values.length === 0) {
-    return 0;
-  }
-  const tailLength = Math.max(1, Math.ceil(values.length * 0.2));
-  const tail = values.slice(-tailLength);
-  const newRate = tail.filter(Boolean).length / tail.length;
-  return Math.max(0, Math.min(1, 1 - newRate / 0.2));
-}
-
-function cumulative(values: boolean[]) {
-  let count = 0;
-  return values.map((value) => {
-    if (value) {
-      count += 1;
-    }
-    return count;
-  });
 }
 
 export function outcomeBreakdown(result: Pick<ExplorerRunResult, "eventSequence">): EventOutcomeBreakdown {

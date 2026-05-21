@@ -1,4 +1,4 @@
-import { shortHash, stableStringify } from "./stateAbstractorRegistry";
+import { shortHash, stableStringify } from "./stableHash";
 import type { EventParams, UiEvent, UiTarget } from "./types";
 
 export function canonicalEventSignature(event: UiEvent) {

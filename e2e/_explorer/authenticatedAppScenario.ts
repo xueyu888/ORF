@@ -112,7 +112,7 @@ export async function installAuthenticatedAppScenario(page: Page) {
     if (statusMatch && method === "PATCH") {
       const body = safePostJson<{ status?: CommentStatus }>(route);
       const threadId = decodeURIComponent(statusMatch[1]!);
-      const status = body.status === "resolved" ? "resolved" : "open";
+      const status: CommentStatus = body.status === "resolved" ? "resolved" : "open";
       const commentThread = comments.find((thread) => thread.id === threadId) ?? null;
       if (!commentThread) {
         await route.fulfill({ status: 404, json: { error: "Comment thread not found" } });

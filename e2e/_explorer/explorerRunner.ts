@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { CoverageGraph } from "./coverageGraph";
 import { executeEvent } from "./eventExecutor";
 import { generateCandidateEvents } from "./eventGenerator";
-import { EventScheduler } from "./eventScheduler";
+import { CoverageGuidedRandomStrategy } from "./randomStrategy";
 import { normalizeState } from "./stateNormalizer";
 import { collectTargets } from "./targetCollector";
 import { SeededRandom } from "./seededRandom";
@@ -12,19 +12,42 @@ import { attachDiagnostics, resetToTarget, shellQuote } from "./runnerSupport";
 import { ScreenshotCollector } from "./screenshotCollector";
 import type { ExecutionResult, ExplorerConfig, ExplorerRunResult, StepRecord } from "./types";
 
-export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise<ExplorerRunResult> {
+export type UiExplorerProgressContext = {
+  config: ExplorerConfig;
+  step: number;
+  startedAt: number;
+  record: StepRecord;
+  createResult: () => ExplorerRunResult;
+};
+
+export type UiExplorerRunObserver = {
+  onStart?: (input: { config: ExplorerConfig; startedAt: number }) => void | Promise<void>;
+  onStep?: (input: UiExplorerProgressContext) => void | Promise<void>;
+  onComplete?: (result: ExplorerRunResult) => void | Promise<void>;
+};
+
+export type UiExplorerRunOptions = {
+  observer?: UiExplorerRunObserver;
+  signal?: AbortSignal;
+};
+
+export async function runUiExplorer(page: Page, config: ExplorerConfig, options: UiExplorerRunOptions = {}): Promise<ExplorerRunResult> {
   const rng = new SeededRandom(config.seed);
   const graph = new CoverageGraph();
-  const scheduler = new EventScheduler({ epsilon: config.epsilon });
+  const scheduler = new CoverageGuidedRandomStrategy({ epsilon: config.epsilon });
   const diagnostics = attachDiagnostics(page.context(), page);
   const screenshots = new ScreenshotCollector(page, config);
   const records: StepRecord[] = [];
   let noChangeStreak = 0;
   const startedAt = Date.now();
 
+  await options.observer?.onStart?.({ config, startedAt });
   await resetToTarget(page, config);
 
-  for (let step = 0; step < config.steps; step += 1) {
+  for (let step = 0; config.steps <= 0 || step < config.steps; step += 1) {
+    if (options.signal?.aborted) {
+      break;
+    }
     if (isTimeBudgetExhausted(startedAt, config.maxDurationMs)) {
       break;
     }
@@ -111,6 +134,13 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
       issues: mergedExecution.issues,
     };
     records.push(record);
+    await options.observer?.onStep?.({
+      config,
+      step,
+      startedAt,
+      record,
+      createResult: () => buildExplorerResult(config, graph, records, screenshots),
+    });
 
     if (mergedExecution.routeEscape && config.stopOnRouteEscape) {
       break;
@@ -135,9 +165,25 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
   }
 
   diagnostics.detach();
+  const result = buildExplorerResult(config, graph, records, screenshots);
+
+  if (!options.signal?.aborted && config.runRepeatableRegionTests && config.testKind === "stateExploration") {
+    result.repeatableRegionExploration = await runRepeatableRegionExplorer(page, config, result);
+  }
+  await options.observer?.onComplete?.(result);
+
+  return result;
+}
+
+function buildExplorerResult(
+  config: ExplorerConfig,
+  graph: CoverageGraph,
+  records: StepRecord[],
+  screenshots: ScreenshotCollector,
+): ExplorerRunResult {
   const summary = graph.summarize(config.steps, records);
   const canonicalCoverage = graph.getCanonicalCandidateCoverage();
-  const result: ExplorerRunResult = {
+  return {
     config,
     seed: config.seed,
     summary,
@@ -151,24 +197,22 @@ export async function runUiExplorer(page: Page, config: ExplorerConfig): Promise
     testedCanonicalCandidateEvents: canonicalCoverage.tested,
     eventSequence: records,
     screenshotArtifacts: screenshots.list(),
-    replayCommand: [
-      `UI_EXPLORER_TEST_KIND=${shellQuote(config.testKind)}`,
-      `UI_EXPLORER_SAFETY_PROFILE=${shellQuote(config.safetyProfile)}`,
-      `UI_EXPLORER_SEED=${shellQuote(config.seed)}`,
-      `UI_EXPLORER_STEPS=${config.steps}`,
-      config.maxDurationMs > 0 ? `UI_EXPLORER_MAX_DURATION_MS=${config.maxDurationMs}` : "",
-      `UI_EXPLORER_STATE_ABSTRACTOR=${shellQuote(config.stateAbstractor)}`,
-      `UI_EXPLORER_TARGET_PATH=${shellQuote(config.targetPath)}`,
-      `UI_EXPLORER_BASE_URL=${shellQuote(config.baseURL)}`,
-      "npm run test:e2e:explorer",
-    ].filter(Boolean).join(" "),
+    replayCommand: replayCommand(config),
   };
+}
 
-  if (config.runRepeatableRegionTests && config.testKind === "stateExploration") {
-    result.repeatableRegionExploration = await runRepeatableRegionExplorer(page, config, result);
-  }
-
-  return result;
+function replayCommand(config: ExplorerConfig) {
+  return [
+    `UI_EXPLORER_TEST_KIND=${shellQuote(config.testKind)}`,
+    `UI_EXPLORER_SAFETY_PROFILE=${shellQuote(config.safetyProfile)}`,
+    `UI_EXPLORER_SEED=${shellQuote(config.seed)}`,
+    `UI_EXPLORER_STEPS=${config.steps}`,
+    config.maxDurationMs > 0 ? `UI_EXPLORER_MAX_DURATION_MS=${config.maxDurationMs}` : "",
+    `UI_EXPLORER_STATE_ABSTRACTOR=${shellQuote(config.stateAbstractor)}`,
+    `UI_EXPLORER_TARGET_PATH=${shellQuote(config.targetPath)}`,
+    `UI_EXPLORER_BASE_URL=${shellQuote(config.baseURL)}`,
+    "npm run test:e2e:explorer",
+  ].filter(Boolean).join(" ");
 }
 
 function isTimeBudgetExhausted(startedAt: number, maxDurationMs: number) {
