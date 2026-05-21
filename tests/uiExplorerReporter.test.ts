@@ -131,8 +131,18 @@ test("explorer report prioritizes result summary and embeds path replay data", a
   const result = runResult(
     "seed-layout",
     [root, next],
-    [transition(root.id, next.id, "click:open")],
-    [stepRecord({ beforeStateId: root.id, afterStateId: next.id, eventSignature: "click:open", newState: true })],
+    [transition(root.id, next.id, "repeatedClick:settings")],
+    [
+      stepRecord({
+        beforeStateId: root.id,
+        afterStateId: next.id,
+        eventSignature: "repeatedClick:settings",
+        operation: "repeatedClick",
+        params: { count: 4 },
+        targetSignature: "route:/tasks|tag:a|role:link|type:none|label:设置|placeholder:none|text:设置|rect:0.9.3.1|index:5|cap:click.focus.keyboard",
+        newState: true,
+      }),
+    ],
   );
   result.config.reportDir = reportDir;
 
@@ -150,6 +160,7 @@ test("explorer report prioritizes result summary and embeds path replay data", a
   assert.ok(html.includes("异常事件"));
   assert.ok(html.includes("探索路径回放"));
   assert.ok(html.includes("退出回放"));
+  assert.ok(html.includes("连续点击 4 次：链接「设置」"));
   assert.ok(html.includes('"replaySteps"'));
   assert.ok(graphIndex >= 0);
   assert.ok(settingsIndex > graphIndex);
@@ -171,7 +182,9 @@ test("explorer report describes issues in human terms and links them to graph re
       step: 7,
       beforeStateId: root.id,
       afterStateId: root.id,
-      eventSignature: "click:stale-target",
+      eventSignature: "doubleClick:search",
+      operation: "doubleClick",
+      targetSignature: "route:/tasks|tag:button|role:button|type:none|label:搜索|placeholder:none|text:搜索|rect:0.8.3.1|index:1|cap:click.focus.keyboard",
       noChange: true,
       issues: [{ severity: "ordinary", type: "timeout", message: "locator.click: Timeout 1500ms exceeded" }],
     }),
@@ -183,6 +196,9 @@ test("explorer report describes issues in human terms and links them to graph re
 
   assert.ok(html.includes("本次发现 1 个异常步骤"));
   assert.ok(html.includes("操作超时"));
+  assert.ok(html.includes("双击：按钮「搜索」时操作超时"));
+  assert.ok(html.includes("对象：按钮「搜索」"));
+  assert.ok(html.includes("issue-scroll"));
   assert.ok(html.includes("在状态图中定位"));
   assert.ok(html.includes('data-replay-step="7"'));
   assert.equal(html.includes("locator.click: Timeout 1500ms exceeded"), false);

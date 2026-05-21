@@ -534,6 +534,13 @@ function embeddedReportData(result: ReportResult) {
       .filter((artifact) => artifact.kind === "state" && artifact.stateId)
       .map((artifact) => [artifact.stateId!, artifact.relativePath ?? artifact.path]),
   );
+  const eventRecordByTransition = new Map<string, StepRecord>();
+  for (const record of result.eventSequence) {
+    const key = transitionEventKey(record.beforeStateId, record.afterStateId, record.eventSignature);
+    if (!eventRecordByTransition.has(key)) {
+      eventRecordByTransition.set(key, record);
+    }
+  }
   return {
     seed: result.seed,
     summary: result.summary,
@@ -552,15 +559,23 @@ function embeddedReportData(result: ReportResult) {
       errorCount: state.errorCount,
       repeatableRegions: state.repeatableRegions,
     })),
-    transitions: result.transitionTable.map((transition) => ({
-      fromStateId: transition.fromStateId,
-      toStateId: transition.toStateId,
-      eventSignature: transition.eventSignature,
-      count: transition.count,
-      firstSeenStep: transition.firstSeenStep,
-      lastSeenStep: transition.lastSeenStep,
-      reward: transition.reward,
-    })),
+    transitions: result.transitionTable.map((transition) => {
+      const eventRecord = eventRecordByTransition.get(
+        transitionEventKey(transition.fromStateId, transition.toStateId, transition.eventSignature),
+      );
+      return {
+        fromStateId: transition.fromStateId,
+        toStateId: transition.toStateId,
+        eventSignature: transition.eventSignature,
+        targetSignature: eventRecord?.targetSignature,
+        targetLabel: targetLabelFromSignature(eventRecord?.targetSignature),
+        eventLabel: eventRecord ? eventDisplayLabel(eventRecord) : undefined,
+        count: transition.count,
+        firstSeenStep: transition.firstSeenStep,
+        lastSeenStep: transition.lastSeenStep,
+        reward: transition.reward,
+      };
+    }),
     newStateCurve: result.newStateCurve,
     newTransitionCurve: result.newTransitionCurve,
     frontierStates: result.frontierStates.slice(0, 20).map((state) => ({
@@ -579,6 +594,9 @@ function embeddedReportData(result: ReportResult) {
       afterStateId: record.afterStateId,
       eventSignature: record.eventSignature,
       operation: record.operation,
+      targetSignature: record.targetSignature,
+      targetLabel: targetLabelFromSignature(record.targetSignature),
+      eventLabel: eventDisplayLabel(record),
       newState: record.newState,
       newTransition: record.newTransition,
       noChange: record.noChange,
@@ -736,6 +754,13 @@ function renderHtml(result: ReportResult) {
     .frontier-item { display: grid; grid-template-columns: 72px 1fr 72px; gap: 10px; align-items: center; padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
     .frontier-id { font-weight: 800; font-size: 12px; }
     .frontier-route { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .issue-scroll {
+      max-height: min(720px, 72vh);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      padding-right: 6px;
+    }
     .issue-grid { display: grid; gap: 12px; }
     .issue-card {
       display: grid;
@@ -1757,6 +1782,9 @@ type ReportGraphReplayStep = {
   afterStateId?: string;
   eventSignature?: string;
   operation?: string;
+  targetSignature?: string;
+  targetLabel?: string;
+  eventLabel?: string;
   newState?: boolean;
   newTransition?: boolean;
   noChange?: boolean;
@@ -1789,6 +1817,9 @@ type ReportGraphTransition = {
   fromStateId?: string;
   toStateId?: string;
   eventSignature?: string;
+  targetSignature?: string;
+  targetLabel?: string;
+  eventLabel?: string;
   count?: number;
   firstSeenStep?: number;
   lastSeenStep?: number;
@@ -1814,6 +1845,9 @@ type ReportGraphEvent = {
   lastSeenStep?: number;
   reward?: number;
   operation: string;
+  targetSignature?: string;
+  targetLabel?: string;
+  eventLabel?: string;
   _key: string;
 };
 
@@ -1904,6 +1938,9 @@ function reportGraphClient() {
         from: String(edge.fromStateId ?? ""),
         to: String(edge.toStateId ?? ""),
         eventSignature: String(edge.eventSignature ?? ""),
+        targetSignature: edge.targetSignature,
+        targetLabel: edge.targetLabel,
+        eventLabel: edge.eventLabel,
         count: edge.count,
         firstSeenStep: edge.firstSeenStep,
         lastSeenStep: edge.lastSeenStep,
@@ -1940,7 +1977,31 @@ function reportGraphClient() {
   }
 
   function edgeDisplayLabel(edge: ReportGraphEdge) {
-    return edge.events.length === 1 ? operationLabel(edge.events[0].operation) : `${edge.events.length} 个事件`;
+    if (edge.events.length === 1) {
+      return eventDisplayLabel(edge.events[0]);
+    }
+    const targetLabels = uniqueText(edge.events.map((event) => event.targetLabel).filter(Boolean) as string[]);
+    if (targetLabels.length > 0) {
+      const suffix = targetLabels.length > 2 ? "等" : "";
+      return `${edge.events.length} 个事件：${targetLabels.slice(0, 2).join("、")}${suffix}`;
+    }
+    return `${edge.events.length} 个事件`;
+  }
+
+  function eventDisplayLabel(event: Pick<ReportGraphEvent, "operation" | "targetLabel" | "eventLabel">) {
+    if (event.eventLabel) {
+      return event.eventLabel;
+    }
+    const operation = operationLabel(event.operation);
+    return event.targetLabel ? `${operation}：${event.targetLabel}` : operation;
+  }
+
+  function edgeDisplayTitle(edge: ReportGraphEdge) {
+    return edge.events.map((event) => `${eventDisplayLabel(event)}\n${event.eventSignature}`).join("\n\n");
+  }
+
+  function uniqueText(values: string[]) {
+    return Array.from(new Set(values.filter(Boolean)));
   }
 
   function edgeVisibleEvents(edge: ReportGraphEdge) {
@@ -2105,6 +2166,9 @@ function reportGraphClient() {
         lastSeenStep: item.lastSeenStep,
         reward: item.reward,
         operation: item.operation,
+        targetSignature: item.targetSignature,
+        targetLabel: item.targetLabel,
+        eventLabel: item.eventLabel,
         _key: item._key,
       };
       if (!existing) {
@@ -2768,7 +2832,7 @@ function reportGraphClient() {
               .map(
                 (event) => `
                   <button type="button" class="graph-ladder-rung" title="${escapeHtmlLocal(event.eventSignature)}">
-                    <span>${escapeHtmlLocal(operationLabel(event.operation))}</span>
+                    <span>${escapeHtmlLocal(eventDisplayLabel(event))}</span>
                     <small>${event.count ?? 0} 次</small>
                   </button>
                 `,
@@ -2844,7 +2908,7 @@ function reportGraphClient() {
       steps.push(`<span class="graph-path-state">${escapeHtmlLocal(stateId)}</span>`);
       const edge = path.edges[index];
       if (edge) {
-        steps.push(`<span class="graph-path-event" title="${escapeHtmlLocal(edge.events.map((event) => event.eventSignature).join("\\n"))}">${escapeHtmlLocal(edgeDisplayLabel(edge))}</span>`);
+        steps.push(`<span class="graph-path-event" title="${escapeHtmlLocal(edgeDisplayTitle(edge))}">${escapeHtmlLocal(edgeDisplayLabel(edge))}</span>`);
       }
     });
     pathDetails.innerHTML = `<div class="graph-path-steps">${steps.join("")}</div>`;
@@ -2899,7 +2963,7 @@ function reportGraphClient() {
       <strong>步骤 ${escapeHtmlLocal(step.step ?? replayIndex)}</strong>
       <span class="muted"> ${escapeHtmlLocal(resultLabel)}</span><br />
       <code>${escapeHtmlLocal(step.beforeStateId)}</code>
-      → <span class="pill">${escapeHtmlLocal(operationLabel(String(step.operation || "event")))}</span>
+      → <span class="pill">${escapeHtmlLocal(step.eventLabel || operationLabel(String(step.operation || "event")))}</span>
       → <code>${escapeHtmlLocal(step.afterStateId)}</code><br />
       <code>${escapeHtmlLocal(step.eventSignature || "")}</code>
     `;
@@ -3242,19 +3306,21 @@ function issueOverviewSection(result: ReportResult) {
     <section class="panel chart">
       <h3>本次发现 ${issueRows.length} 个异常步骤</h3>
       <p class="muted">异常已按“在哪个状态、执行什么操作、发生什么问题”整理。点击“在状态图中定位”会把状态图切到对应步骤。</p>
+      <div class="issue-scroll">
       <div class="issue-grid">
         ${issueRows
-          .slice(0, 12)
           .map(({ record, primaryIssue, screenshot }) => {
             const title = humanIssueTitle(primaryIssue.type);
             const description = humanIssueDescription(primaryIssue.type);
+            const targetLabel = targetLabelFromSignature(record.targetSignature);
             return `
               <article class="issue-card">
                 <div>
-                  <h3>步骤 ${record.step}：${escapeHtml(operationLabel(record.operation))} 时${escapeHtml(title)}</h3>
+                  <h3>步骤 ${record.step}：${escapeHtml(eventDisplayLabel(record))}时${escapeHtml(title)}</h3>
                   <p>${escapeHtml(description)}</p>
                   <div class="issue-meta">
                     <span>状态 <code>${escapeHtml(record.beforeStateId)}</code></span>
+                    <span>对象：${escapeHtml(targetLabel ?? "无固定对象")}</span>
                     <span>结果：${escapeHtml(stepOutcomeLabel(record))}</span>
                     <span>级别：${escapeHtml(severityLabel(primaryIssue.severity))}</span>
                     <span>路径：${escapeHtml(stateRouteLabel(result, record.beforeStateId))}</span>
@@ -3269,7 +3335,7 @@ function issueOverviewSection(result: ReportResult) {
           })
           .join("")}
       </div>
-      ${issueRows.length > 12 ? `<p class="muted compact" style="margin-top: 12px">这里只展示前 12 个异常步骤，完整原始记录在 result.json。</p>` : ""}
+      </div>
     </section>
   `;
 }
@@ -3609,6 +3675,104 @@ function operationLabel(operation: UiOperation) {
     repeatedClick: "连续点击",
   };
   return labels[operation];
+}
+
+function eventDisplayLabel(record: Pick<StepRecord, "operation" | "params" | "targetSignature">) {
+  const operation = eventOperationLabel(record);
+  const target = targetLabelFromSignature(record.targetSignature);
+  return target ? `${operation}：${target}` : operation;
+}
+
+function eventOperationLabel(record: Pick<StepRecord, "operation" | "params">) {
+  const base = operationLabel(record.operation);
+  if (record.operation === "repeatedClick" && record.params.count) {
+    return `${base} ${record.params.count} 次`;
+  }
+  if (record.operation === "pressKey" && record.params.key) {
+    return `${base} ${record.params.key}`;
+  }
+  if (record.operation === "modifiedKey" && record.params.key) {
+    const modifiers = record.params.modifierSet?.join("+");
+    return modifiers ? `${base} ${modifiers}+${record.params.key}` : `${base} ${record.params.key}`;
+  }
+  if (record.operation === "insertText" || record.operation === "pasteText") {
+    return record.params.payloadKind ? `${base} ${record.params.payloadKind}` : base;
+  }
+  if (record.operation === "wheel" && record.params.direction) {
+    return `${base} ${record.params.direction}`;
+  }
+  return base;
+}
+
+function targetLabelFromSignature(signature?: string) {
+  const parts = parseTargetSignature(signature);
+  if (!parts) {
+    return undefined;
+  }
+  const kind = targetKindLabel(parts);
+  const text = firstMeaningful(parts.label, parts.text, parts.placeholder);
+  if (text) {
+    return `${kind}「${trimTargetText(text)}」`;
+  }
+  const route = firstMeaningful(parts.route);
+  const index = firstMeaningful(parts.index);
+  const fallback = [route, index ? `序号 ${index}` : undefined].filter(Boolean).join("，");
+  return fallback ? `${kind}（${fallback}）` : kind;
+}
+
+function parseTargetSignature(signature?: string) {
+  if (!signature) {
+    return undefined;
+  }
+  const parts: Record<string, string> = {};
+  for (const segment of signature.split("|")) {
+    const separator = segment.indexOf(":");
+    if (separator <= 0) {
+      continue;
+    }
+    parts[segment.slice(0, separator)] = segment.slice(separator + 1);
+  }
+  return parts;
+}
+
+function targetKindLabel(parts: Record<string, string>) {
+  const role = firstMeaningful(parts.role);
+  const tag = firstMeaningful(parts.tag);
+  const type = firstMeaningful(parts.type);
+  if (role === "button" || tag === "button") {
+    return "按钮";
+  }
+  if (role === "link" || tag === "a") {
+    return "链接";
+  }
+  if (role === "textbox" || tag === "input" || tag === "textarea") {
+    return type && type !== "text" ? `${type} 输入框` : "输入框";
+  }
+  if (role === "select" || tag === "select") {
+    return "下拉框";
+  }
+  if (role === "article" || tag === "article") {
+    return "卡片";
+  }
+  if (role === "dialog") {
+    return "弹窗";
+  }
+  if (tag === "aside" || tag === "main" || tag === "section") {
+    return "区域";
+  }
+  return role ?? tag ?? "组件";
+}
+
+function firstMeaningful(...values: Array<string | undefined>) {
+  return values.find((value) => value && value !== "none");
+}
+
+function trimTargetText(value: string) {
+  return trimText(value.replace(/\s+/g, " ").trim(), 48);
+}
+
+function transitionEventKey(fromStateId: string, toStateId: string, eventSignature: string) {
+  return `${fromStateId}->${toStateId}:${eventSignature}`;
 }
 
 function severityLabel(severity: string) {
