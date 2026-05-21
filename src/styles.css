@@ -2702,19 +2702,81 @@ button:disabled {
 }
 
 .orf-app-shell {
+  --orf-app-shell-bg-image: none;
+  --orf-app-shell-bg-position-x: calc(var(--orf-sidebar-width) - 30.86vh);
+  --orf-app-shell-bg-position: var(--orf-app-shell-bg-position-x) top;
+  --orf-app-shell-bg-size: auto 100vh;
+  position: relative;
+  isolation: isolate;
   min-width: 1180px;
-  background:
-    radial-gradient(circle at 72% 8%, rgba(82, 215, 246, 0.2) 0 12%, transparent 34%),
-    radial-gradient(circle at 16% 24%, rgba(246, 212, 130, 0.22) 0 10%, transparent 32%),
-    linear-gradient(115deg, rgba(34, 197, 186, 0.07) 0%, transparent 30%),
-    linear-gradient(245deg, rgba(215, 173, 95, 0.1) 0%, transparent 36%),
-    var(--orf-bg-app);
+  background: var(--orf-bg-app);
   color: var(--orf-text-primary);
+}
+
+.orf-app-shell[data-unified-background="true"] {
+  --orf-app-shell-bg-position: left top;
+  --orf-app-shell-bg-size: min(max(100vw, calc(100vh * 16 / 9)), 3456px) auto;
+  background: #f4c89e;
+}
+
+.orf-app-shell[data-sidebar-collapsed="true"] {
+  --orf-app-shell-bg-position-x: calc(var(--orf-sidebar-collapsed-width) - 30.86vh);
+}
+
+.orf-app-shell::before {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(255, 248, 232, 0.02) 0%, rgba(255, 248, 232, 0.12) 36%, rgba(255, 248, 232, 0.34) 100%),
+    var(--orf-app-shell-bg-image),
+    radial-gradient(circle at 72% 8%, rgba(82, 215, 246, 0.16) 0 12%, transparent 34%),
+    radial-gradient(circle at 16% 24%, rgba(246, 212, 130, 0.18) 0 10%, transparent 32%),
+    linear-gradient(115deg, rgba(34, 197, 186, 0.06) 0%, transparent 30%),
+    linear-gradient(245deg, rgba(215, 173, 95, 0.08) 0%, transparent 36%),
+    linear-gradient(105deg, #e99ea7 0%, #eeb19f 34%, #f4c99b 70%, #f8deb0 100%);
+  background-position:
+    center,
+    var(--orf-app-shell-bg-position),
+    center,
+    center,
+    center,
+    center,
+    center;
+  background-repeat:
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    repeat;
+  background-size:
+    cover,
+    var(--orf-app-shell-bg-size),
+    auto,
+    auto,
+    auto,
+    auto,
+    auto;
+  pointer-events: none;
+}
+
+.orf-shell-body {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+}
+
+.orf-app-shell[data-unified-background="true"] .orf-shell-body::before {
+  display: none;
 }
 
 .orf-sidebar {
   position: sticky;
   top: 0;
+  z-index: 2;
   align-self: flex-start;
   isolation: isolate;
   overflow: hidden;
@@ -2738,10 +2800,11 @@ button:disabled {
   content: "";
   background-image: var(--orf-sidebar-bg-image);
   background-position: var(--orf-sidebar-bg-position);
-  background-size: cover;
+  background-size: var(--orf-sidebar-bg-size, cover);
+  background-attachment: var(--orf-sidebar-bg-attachment, scroll);
   filter: var(--orf-sidebar-bg-filter);
   opacity: 1;
-  transform: scale(1.03);
+  transform: var(--orf-sidebar-bg-transform, scale(1.03));
 }
 
 .orf-sidebar::after {
@@ -2751,6 +2814,21 @@ button:disabled {
   content: "";
   background: var(--orf-sidebar-bg-overlay);
   pointer-events: none;
+}
+
+.orf-sidebar[data-unified-background="true"] {
+  background: transparent;
+  border-right-color: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.orf-sidebar[data-unified-background="true"]::before {
+  display: none;
+}
+
+.orf-sidebar[data-unified-background="true"]::after {
+  display: none;
 }
 
 .orf-sidebar > * {
@@ -2765,12 +2843,26 @@ button:disabled {
 .orf-topbar {
   height: var(--orf-topbar-height);
   background:
-    radial-gradient(circle at 4% 50%, rgba(255, 229, 163, 0.18) 0 4%, transparent 18%),
-    radial-gradient(circle at 82% 0%, rgba(82, 215, 246, 0.14) 0 18%, transparent 42%),
-    linear-gradient(90deg, rgba(32, 48, 73, 0.96) 0%, rgba(56, 95, 136, 0.9) 46%, rgba(30, 43, 62, 0.94) 100%),
-    var(--orf-bg-header);
-  backdrop-filter: blur(18px);
+    radial-gradient(circle at 4% 50%, rgba(255, 229, 163, 0.16) 0 4%, transparent 18%),
+    radial-gradient(circle at 82% 0%, rgba(82, 215, 246, 0.12) 0 18%, transparent 42%),
+    linear-gradient(90deg, rgba(32, 48, 73, 0.82) 0%, rgba(56, 95, 136, 0.58) 46%, rgba(30, 43, 62, 0.72) 100%);
+  backdrop-filter: blur(18px) saturate(1.08);
   box-shadow: 0 1px 0 rgba(215, 173, 95, 0.54), 0 16px 34px rgba(21, 29, 43, 0.2), inset 0 -1px 0 rgba(255, 244, 209, 0.12);
+}
+
+.orf-app-shell[data-unified-background="true"] .orf-topbar {
+  background: transparent;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+.orf-app-shell[data-unified-background="true"] .orf-topbar::before {
+  display: none;
+}
+
+.orf-app-shell[data-unified-background="true"] .orf-topbar::after {
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(215, 173, 95, 0.24) 22%, rgba(82, 215, 246, 0.22) 50%, rgba(215, 173, 95, 0.2) 78%, transparent 100%);
 }
 
 .orf-topbar::after {
@@ -3121,10 +3213,10 @@ button:disabled {
 }
 
 .orf-main-content {
+  position: relative;
+  z-index: 1;
   min-height: calc(100vh - var(--orf-topbar-height));
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.3), transparent 22%),
-    repeating-linear-gradient(135deg, rgba(215, 173, 95, 0.045) 0 1px, transparent 1px 28px);
+  background: transparent;
   color: var(--orf-text-primary);
   padding: var(--orf-page-padding-y) var(--orf-page-padding-x);
 }
@@ -3484,6 +3576,7 @@ button:disabled {
   }
 
   .orf-app-shell {
+    --orf-app-shell-bg-position-x: calc(-30.86vh);
     display: block;
     min-width: 0;
   }
@@ -3524,6 +3617,10 @@ button:disabled {
 
   .orf-main-content {
     min-height: auto;
+  }
+
+  .orf-app-shell[data-unified-background="true"] .orf-shell-body::before {
+    display: none;
   }
 }
 
@@ -5745,6 +5842,18 @@ body[data-dragging-floating="true"] {
 .orf-comment-reply-prefix {
   color: #0b8f7f;
   font-weight: 800;
+}
+
+.orf-comment-link {
+  color: #0b63ce;
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.orf-comment-link:hover {
+  color: #064a9f;
 }
 
 .orf-comment-reply-count {

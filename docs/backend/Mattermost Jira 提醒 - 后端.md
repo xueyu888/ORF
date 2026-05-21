@@ -20,11 +20,12 @@ ORF 后端常驻运行时，每天在配置时间向 `LLM Application Group` 成
 | `MATTERMOST_JIRA_REMINDER_SOURCE_CHANNEL_ID` | 成员来源频道 ID，配置为 `LLM Application Group` 对应频道。 |
 | `MATTERMOST_JIRA_REMINDER_TIME` | 每日提醒时间，`HH:mm` 格式，默认 `17:00`。 |
 | `MATTERMOST_JIRA_REMINDER_TIME_ZONE` | 提醒时间所属时区，默认 `Asia/Shanghai`。 |
-| `MATTERMOST_JIRA_REMINDER_MESSAGE` | 私信内容，默认 `今天 {{time}} 了，请记得填写 Jira。`。支持 `{{date}}`、`{{time}}`。 |
+| `MATTERMOST_JIRA_REMINDER_MESSAGE` | 私信内容，默认 `今天 {{time}} 了，请记得填写 Jira。`。支持 `{{date}}`、`{{time}}`、`{{tempoUrl}}`，可写 Mattermost Markdown 链接。 |
 | `MATTERMOST_JIRA_REMINDER_CHECK_INTERVAL_SECONDS` | 后台检查间隔，默认 30 秒。 |
 | `MATTERMOST_JIRA_REMINDER_REQUIRE_BOT` | 是否要求发送账号必须是 bot，默认 `true`。 |
 | `MATTERMOST_JIRA_REMINDER_SKIP_BOTS` | 是否跳过 bot 用户，默认 `true`。 |
 | `MATTERMOST_JIRA_REMINDER_STATE_FILE` | 已发送状态文件，默认 `.artifacts/mattermost-jira-reminder-state.json`。 |
+| `JIRA_TEMPO_MY_WORK_URL` | `{{tempoUrl}}` 使用的 Tempo 填写页面地址。带 `#` 时在 `.env` 中必须加引号。 |
 
 ## 运行规则
 

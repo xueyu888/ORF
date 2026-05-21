@@ -7,7 +7,7 @@ import {
   ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
 import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
@@ -49,8 +49,10 @@ export function BountyHallPage() {
   const {
     acceptBountyChallenge,
     applyForBounty,
+    notifications,
   } = useOrf();
   const navigate = useNavigate();
+  const bountyDataRequestRef = useRef(0);
   const [bountyData, setBountyData] = useState<BountyHallData | null>(null);
   const [loadingBounties, setLoadingBounties] = useState(true);
   const [query, setQuery] = useState("");
@@ -61,19 +63,40 @@ export function BountyHallPage() {
   const now = useMinuteNow();
 
   const loadBountyData = useCallback(async () => {
+    const requestId = bountyDataRequestRef.current + 1;
+    bountyDataRequestRef.current = requestId;
     setLoadingBounties(true);
     try {
-      setBountyData(await getBountyHallData());
+      const nextBountyData = await getBountyHallData();
+      if (bountyDataRequestRef.current === requestId) {
+        setBountyData(nextBountyData);
+      }
     } catch {
-      setBountyData(null);
+      if (bountyDataRequestRef.current === requestId) {
+        setBountyData(null);
+      }
     } finally {
-      setLoadingBounties(false);
+      if (bountyDataRequestRef.current === requestId) {
+        setLoadingBounties(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void loadBountyData();
   }, [loadBountyData]);
+
+  const recruitmentNotificationKey = useMemo(() => {
+    return notifications
+      .filter((notification) => notification.kind === "objective.recruitment.created")
+      .map((notification) => `${notification.id}:${notification.targetId}:${notification.createdAt}`)
+      .join("|");
+  }, [notifications]);
+
+  useEffect(() => {
+    if (!recruitmentNotificationKey) return;
+    void loadBountyData();
+  }, [loadBountyData, recruitmentNotificationKey]);
 
   const recruitmentItems = useMemo(
     () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),

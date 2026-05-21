@@ -284,6 +284,28 @@ async function notifyMembersOfRecruitment(input: {
   });
 }
 
+async function notifyAdminsOfChallengeAcceptance(input: {
+  actorUserId?: string | null;
+  challenger: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  await createNotifications({
+    actorName: input.challenger,
+    actorUserId: input.actorUserId,
+    body: `${input.challenger} 已接受「${input.objectiveTitle}」的挑战，目标已进入重估。`,
+    kind: "objective.challenge.accepted",
+    metadata: { challenger: input.challenger, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
+    targetHref: "/tasks",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "挑战已接受",
+  });
+}
+
 async function notifyAdminsOfObjectiveLoot(input: {
   actorName: string;
   actorUserId: string;
@@ -961,12 +983,24 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "accepted" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "accepted" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        challenger: nextChallenger,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
 
   if (acceptedResult.status !== "accepted") {
     return acceptedResult;
   }
+
+  await notifyAdminsOfChallengeAcceptance(acceptedResult.notification);
 
   const data = await getTaskManagementData({ scope: acceptedResult.scope });
   const accepted = data.objectives.find((item) => item.id === objectiveId);

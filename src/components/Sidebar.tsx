@@ -1,17 +1,14 @@
 import { Command, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
-import { getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
-const defaultSidebarBackgroundUrl = "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png";
 const sidebarGroups = [
   { title: "work", labels: ["悬赏大厅", "我的挑战"] },
   { title: "report", labels: ["反馈", "统计"] },
@@ -21,59 +18,33 @@ const sidebarGroups = [
   items: group.labels.map((label) => navItemByLabel.get(label)).filter((item) => item !== undefined),
 }));
 
-export function Sidebar({ onCommand }: { onCommand: () => void }) {
+export function Sidebar({
+  backgroundUrl,
+  collapsed,
+  onCollapsedChange,
+  onCommand,
+  unifiedBackgroundUrl,
+}: {
+  backgroundUrl: string;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+  onCommand: () => void;
+  unifiedBackgroundUrl?: string | null;
+}) {
   const { currentUser, logout } = useOrf();
-  const [collapsed, setCollapsed] = useState(false);
-  const [configuredSidebarBackgroundUrl, setConfiguredSidebarBackgroundUrl] = useState(defaultSidebarBackgroundUrl);
   const visibleGroups = sidebarGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
   const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
-
-  useEffect(() => {
-    let cancelled = false;
-    let intervalId: number | null = null;
-
-    const clearRotationTimer = () => {
-      if (intervalId) {
-        window.clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const loadSidebarBackground = () => {
-      clearRotationTimer();
-      void getVisualBackgrounds("sidebar_background")
-        .then((data) => {
-          if (cancelled) {
-            return;
-          }
-          setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? defaultSidebarBackgroundUrl);
-
-          const intervalMs = visualBackgroundIntervalMs(data);
-          if (intervalMs) {
-            intervalId = window.setInterval(() => {
-              setConfiguredSidebarBackgroundUrl(pickVisualBackground(data)?.url ?? defaultSidebarBackgroundUrl);
-            }, intervalMs);
-          }
-        })
-        .catch(() => undefined);
-    };
-
-    loadSidebarBackground();
-    const unsubscribe = subscribeVisualBackgroundChanged("sidebar_background", loadSidebarBackground);
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-      clearRotationTimer();
-    };
-  }, []);
+  const useUnifiedBackground = Boolean(unifiedBackgroundUrl);
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-image": toCssImageUrl(configuredSidebarBackgroundUrl || sidebarBackground.src),
-    "--orf-sidebar-bg-position": sidebarBackground.position,
-    "--orf-sidebar-bg-filter": sidebarBackground.filter,
+    "--orf-sidebar-bg-image": toCssImageUrl((useUnifiedBackground ? unifiedBackgroundUrl : backgroundUrl) || sidebarBackground.src),
+    "--orf-sidebar-bg-position": useUnifiedBackground ? "left top" : sidebarBackground.position,
+    "--orf-sidebar-bg-size": useUnifiedBackground ? "var(--orf-app-shell-bg-size)" : "cover",
+    "--orf-sidebar-bg-attachment": useUnifiedBackground ? "fixed" : "scroll",
+    "--orf-sidebar-bg-transform": useUnifiedBackground ? "none" : "scale(1.03)",
+    "--orf-sidebar-bg-filter": useUnifiedBackground ? "none" : sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
   } as CSSProperties;
 
@@ -84,6 +55,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
         collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded",
       ].join(" ")}
       style={sidebarStyle}
+      data-unified-background={useUnifiedBackground ? "true" : "false"}
       aria-label="主导航"
     >
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-5">
@@ -98,7 +70,7 @@ export function Sidebar({ onCommand }: { onCommand: () => void }) {
           type="button"
           aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
           title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
-          onClick={() => setCollapsed((current) => !current)}
+          onClick={() => onCollapsedChange(!collapsed)}
         >
           {collapsed ? <PanelLeftOpen className="h-6 w-6" /> : <PanelLeftClose className="h-6 w-6" />}
         </button>

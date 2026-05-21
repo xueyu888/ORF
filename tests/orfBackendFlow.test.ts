@@ -380,6 +380,10 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   assert.deepEqual(accepted.objective.challengers, [fixture.challenger.name]);
   assert.deepEqual(accepted.objective.assignedChallengers, []);
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), true);
+  const acceptanceNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
+  assert.equal(acceptanceNotifications[0]?.kind, "objective.challenge.accepted");
+  assert.equal(acceptanceNotifications[0]?.targetId, objective.id);
+  assert.equal(acceptanceNotifications[0]?.metadata.challenger, fixture.challenger.name);
 
   const myChallenges = await getMyChallengesData(fixture.challenger.name);
   assert.deepEqual(myChallenges.objectives.map((item) => item.id), [objective.id]);
