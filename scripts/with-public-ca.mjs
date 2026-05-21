@@ -17,10 +17,13 @@ if (args.length === 0) {
 const env = { ...process.env };
 const fileEnv = readEnvFile(envFile);
 const publicCaCert = env.ORF_PUBLIC_CA_CERT ?? fileEnv.ORF_PUBLIC_CA_CERT;
+const localBin = path.join(rootDir, "node_modules", ".bin");
 
 if (!env.NODE_EXTRA_CA_CERTS && publicCaCert && fs.existsSync(publicCaCert)) {
   env.NODE_EXTRA_CA_CERTS = publicCaCert;
 }
+
+env.PATH = [localBin, env.PATH].filter(Boolean).join(path.delimiter);
 
 const child = spawn(args[0], args.slice(1), {
   cwd: rootDir,

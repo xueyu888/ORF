@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "../server/auth/errors";
 import { authDependencyUnavailablePayload } from "../server/auth/routes";
@@ -8,6 +11,7 @@ import {
   checkDatabaseHealth,
   createPgPoolConfig as createScriptPgPoolConfig,
   databaseDisplayUrl,
+  loadEnvFile,
 } from "../scripts/db-connection.mjs";
 
 test("Postgres pool config strips SSL query parameters and applies timeout tuning", () => {
@@ -38,6 +42,38 @@ test("ORF CLI database helper reports missing database configuration", async () 
   assert.equal(health.ok, false);
   assert.equal(health.message, "missing DATABASE_URL or REMOTE_DATABASE_URL");
   assert.equal(databaseDisplayUrl({}), "DATABASE_URL");
+});
+
+test("ORF CLI env loader matches dotenv quote handling", () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "orf-env-"));
+  const envFile = path.join(directory, ".env");
+  const doubleQuotedKey = `ORF_TEST_DOUBLE_QUOTED_${process.pid}`;
+  const singleQuotedKey = `ORF_TEST_SINGLE_QUOTED_${process.pid}`;
+
+  delete process.env[doubleQuotedKey];
+  delete process.env[singleQuotedKey];
+  fs.writeFileSync(
+    envFile,
+    [
+      `${doubleQuotedKey}="postgresql://user:pass@example.com:5432/orf?sslmode=verify-full&options=-csearch_path%3Dorf_current%2Cpublic"`,
+      `${singleQuotedKey}='value with spaces'`,
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    loadEnvFile(envFile);
+
+    assert.equal(
+      process.env[doubleQuotedKey],
+      "postgresql://user:pass@example.com:5432/orf?sslmode=verify-full&options=-csearch_path%3Dorf_current%2Cpublic",
+    );
+    assert.equal(process.env[singleQuotedKey], "value with spaces");
+  } finally {
+    delete process.env[doubleQuotedKey];
+    delete process.env[singleQuotedKey];
+    fs.rmSync(directory, { force: true, recursive: true });
+  }
 });
 
 test("ORF CLI database helper strips secrets from display URL", () => {
