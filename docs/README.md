@@ -53,4 +53,5 @@ docs/
 | [积分结算规则 - 前端.md](./frontend/积分结算规则%20-%20前端.md) | 积分结算前端展示和交互 |
 | [设计原则.md](./design/设计原则.md) | ORF 业务原则、基础流程和积分规则 |
 | [environment.md](./project/environment.md) | uv 和 npm 环境说明 |
+| [public-ip-infra.md](./project/public-ip-infra.md) | 无域名公网 IP 共享 PG/Ory/MinIO 的部署约定 |
 | [code-standards.md](./project/code-standards.md) | 代码原则 |
