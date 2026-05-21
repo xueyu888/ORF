@@ -13,7 +13,7 @@
 | `GET` | `/api/tasks-page` | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据 |
 | `GET` | `/api/bounties` | 返回悬赏大厅数据 |
 | `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
-| `POST` | `/api/objectives` | 创建候选目标，默认 `flowStatus=candidate` |
+| `POST` | `/api/objectives` | 挑战页创建候选目标，默认 `flowStatus=candidate` |
 | `PATCH` | `/api/objectives/:objectiveId` | 指挥官更新目标标题 |
 | `PATCH` | `/api/objectives/:objectiveId/publish` | 指挥官发布目标，进入 `open` |
 | `POST` | `/api/objectives/:objectiveId/recruitments` | 指挥官征召成员，进入 `recruiting` |
