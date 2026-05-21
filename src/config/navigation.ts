@@ -27,7 +27,7 @@ export const quickPages = [
 ];
 
 export const quickActions = [
-  { label: "新建目标", action: "newObjective" as const, icon: Flag, permission: "objective.create" satisfies PermissionKey },
+  { label: "新建目标", action: "createObjective" as const, icon: Flag, permission: "objective.create" satisfies PermissionKey },
 ];
 
 export const quickCommands = [

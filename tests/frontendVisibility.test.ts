@@ -51,7 +51,7 @@ test("quick command configuration keeps creation actions separate from pages", (
     "New objective must be a command action, not a fake page link",
   );
   assert.equal(
-    quickActions.some((item) => item.action === "newObjective"),
+    quickActions.some((item) => item.action === "createObjective"),
     true,
     "Command menu must expose new objective as an executable action",
   );

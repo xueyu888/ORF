@@ -1,11 +1,9 @@
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { useOrf } from "../state/OrfProvider";
 import type { FeedbackSource, Impact, Priority } from "../types/orf";
-import { localDateString } from "../utils/date";
 import { Button, Field } from "./ui";
 
 function ModalFrame({ title, children }: { title: string; children: ReactNode }) {
@@ -38,7 +36,6 @@ function ModalFrame({ title, children }: { title: string; children: ReactNode })
 export function GlobalModals() {
   const { modal } = useOrf();
 
-  if (modal.type === "newObjective") return <NewObjectiveModal />;
   if (modal.type === "newResult") return <NewResultModal objectiveId={modal.objectiveId} source={modal.source} />;
   if (modal.type === "newFeedback") return <NewFeedbackModal objectiveId={modal.objectiveId} resultId={modal.resultId} />;
   if (modal.type === "newTask") return <NewTaskModal objectiveId={modal.objectiveId} resultId={modal.resultId} feedbackId={modal.feedbackId} />;
@@ -109,72 +106,8 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
   );
 }
 
-function defaultFinalDueAt() {
-  const date = new Date();
-  date.setDate(date.getDate() + 14);
-  return localDateString(date);
-}
-
-function defaultCycleLabel() {
-  const date = new Date();
-  const quarter = Math.floor(date.getMonth() / 3) + 1;
-  return `${date.getFullYear()} Q${quarter}`;
-}
-
 function hasBlankRequiredValues(values: string[]) {
   return values.some((value) => value.trim().length === 0);
-}
-
-function NewObjectiveModal() {
-  const { createObjective, closeModal, notify } = useOrf();
-  const navigate = useNavigate();
-  const [title, setTitle] = useState("");
-  const [whyItMatters, setWhyItMatters] = useState("");
-  const [cycle, setCycle] = useState(() => defaultCycleLabel());
-  const [boundary, setBoundary] = useState("");
-  const [finalDueAt, setFinalDueAt] = useState(() => defaultFinalDueAt());
-  const [submitting, setSubmitting] = useState(false);
-
-  return (
-    <ModalFrame title="新建目标">
-      <form
-        className="grid gap-4"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (hasBlankRequiredValues([title, whyItMatters, cycle, boundary])) {
-            notify("请填写所有必填字段");
-            return;
-          }
-          if (submitting) return;
-          setSubmitting(true);
-          try {
-            const objective = await createObjective({
-              title: title.trim(),
-              whyItMatters: whyItMatters.trim(),
-              cycle: cycle.trim(),
-              boundary: boundary.trim(),
-              finalDueAt,
-            });
-            if (objective) {
-              closeModal();
-              navigate("/tasks");
-            }
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
-        <Field label="目标标题"><input className="orf-input px-3 py-2" required value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
-        <Field label="为什么重要"><textarea className="orf-input min-h-24 px-3 py-2" required value={whyItMatters} onChange={(event) => setWhyItMatters(event.target.value)} /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="周期"><input className="orf-input px-3 py-2" required value={cycle} onChange={(event) => setCycle(event.target.value)} /></Field>
-          <Field label="最终截止时间"><input className="orf-input px-3 py-2" type="date" value={finalDueAt} onChange={(event) => setFinalDueAt(event.target.value)} required /></Field>
-        </div>
-        <Field label="边界 / 不做什么"><textarea className="orf-input min-h-20 px-3 py-2" required value={boundary} onChange={(event) => setBoundary(event.target.value)} /></Field>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit" disabled={submitting}>保存目标</Button></div>
-      </form>
-    </ModalFrame>
-  );
 }
 
 function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveId?: string; source?: "managerDefined" | "memberProposed" }) {

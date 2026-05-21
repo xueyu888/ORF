@@ -36,7 +36,7 @@ import type {
   UserRole,
 } from "../types/orf";
 
-type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | "recruitChallengers" | null;
+type ModalType = "newResult" | "newFeedback" | "newTask" | "resultUpdate" | "recruitChallengers" | null;
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };

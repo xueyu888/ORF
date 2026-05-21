@@ -18,7 +18,7 @@ import { commandTypeLabel } from "../utils/labels";
 
 export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
-  const { currentUser, openModal, state } = useOrf();
+  const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
   const drag = useDraggableFloating<HTMLDivElement>({ disabled: !open, resetKey: open ? "open" : "closed" });
 
@@ -69,7 +69,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
               key={`${item.type}-${"path" in item ? item.path : item.action}-${item.label}`}
               onClick={() => {
                 if ("action" in item) {
-                  if (item.action === "newObjective") openModal({ type: "newObjective" });
+                  if (item.action === "createObjective") navigate("/tasks?create=objective");
                 } else {
                   navigate(item.path);
                 }

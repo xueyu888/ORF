@@ -38,6 +38,7 @@ type RowHandlers = {
   canMutateMetrics: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
+  draftObjectiveId?: string;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
@@ -54,7 +55,7 @@ type RowHandlers = {
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
-  onSaveTitle: (target: ChallengeTarget, title: string) => void;
+  onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
   onToggleBounty: (bountyId: string) => void;
@@ -108,6 +109,7 @@ function ObjectivePanel({
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const hasOpenRowMenu = objectivePanelHasOpenRowMenu(group, handlers.openActionId);
+  const isDraftObjective = group.objective.id === handlers.draftObjectiveId;
   const isFrozen = shouldRenderObjectiveAsFrozen(group.objective);
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const workbenchAction = workbenchActionForObjective({
@@ -148,7 +150,7 @@ function ObjectivePanel({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel={handlers.metricActionLabel(group.objective)}
+          addLabel={isDraftObjective ? null : handlers.metricActionLabel(group.objective)}
           left={rowActionLeft.objective}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -170,9 +172,9 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
-        <ObjectiveFlowAction group={group} handlers={handlers} />
+        {isDraftObjective ? <EmptySlot /> : <ObjectiveFlowAction group={group} handlers={handlers} />}
         <AvatarStack names={group.challengers} />
-        <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
+        {isDraftObjective ? <StatusChip tone="open">草稿</StatusChip> : <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>}
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />

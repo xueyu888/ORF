@@ -1,5 +1,5 @@
 import { Plus, Search, Shield } from "lucide-react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { type CSSProperties, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Button } from "./ui";
@@ -23,6 +23,7 @@ function appShellBackgroundUrlFor(sidebarBackgroundUrl: string) {
 
 export function AppShell() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { currentUser, openModal, state } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -90,7 +91,7 @@ export function AppShell() {
           )}
           <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-2">
             {canCreateObjective && (
-              <Button onClick={() => openModal({ type: "newObjective" })}>
+              <Button onClick={() => navigate("/tasks?create=objective")}>
                 <Plus className="h-4 w-4" />
                 新建目标
               </Button>
