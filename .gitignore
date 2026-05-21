@@ -11,6 +11,7 @@ coverage/
 .env.*
 !.env.example
 orf-team-database-config-*.zip
+orf-team-shared-infra-*.zip
 anemo-foundation-ui-kit-v*.zip
 gf-foundation-ui-kit.zip
 
@@ -30,6 +31,8 @@ infra/public-ip/letsencrypt/
 infra/public-ip/acme.sh/
 infra/public-ip/nginx/conf.d/
 infra/public-ip/nginx/snippets/
+certs/orf-public-ca.crt
+certs/postgres-root.crt
 
 public/settings/backgrounds/*/user/*
 public/settings/user/*
