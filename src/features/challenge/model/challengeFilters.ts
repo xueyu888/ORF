@@ -1,7 +1,7 @@
 import type { ObjectiveNode, BountyStatus } from "./types";
 
 export type ChallengeCycleFilter = "all" | string;
-export type ChallengeStatusFilter = "all" | BountyStatus;
+export type ChallengeStatusFilter = "all" | "unassigned" | BountyStatus;
 
 export interface ChallengeFilters {
   cycle: ChallengeCycleFilter;
@@ -20,10 +20,17 @@ export function filterChallengeGroups(groups: readonly ObjectiveNode[], filters:
         return group;
       }
 
+      if (filters.status === "unassigned") {
+        return group.challengers.length === 0 ? group : null;
+      }
+
       return {
         ...group,
         bounties: group.bounties.filter((bounty) => bounty.status === filters.status),
       };
     })
-    .filter((group) => filters.status === "all" || group.bounties.length > 0);
+    .filter((group): group is ObjectiveNode => {
+      if (!group) return false;
+      return filters.status === "all" || filters.status === "unassigned" || group.bounties.length > 0;
+    });
 }

@@ -30,6 +30,26 @@ test("filterChallengeGroups filters by cycle and bounty status", () => {
   assert.deepEqual(filtered[0]?.bounties.map((item) => item.status), ["review"]);
 });
 
+test("filterChallengeGroups filters unassigned objectives at objective level", () => {
+  const groups = [
+    group({
+      objective: objective({ id: "objective-unassigned", challengers: [] }),
+      bounties: [bounty({ status: "active" }), bounty({ status: "review" })],
+      challengers: [],
+    }),
+    group({
+      objective: objective({ id: "objective-assigned", challengers: ["Kai Wang"] }),
+      bounties: [bounty({ status: "active" })],
+      challengers: ["Kai Wang"],
+    }),
+  ];
+
+  const filtered = filterChallengeGroups(groups, { cycle: "all", status: "unassigned" });
+
+  assert.deepEqual(filtered.map((item) => item.objective.id), ["objective-unassigned"]);
+  assert.deepEqual(filtered[0]?.bounties.map((item) => item.status), ["active", "review"]);
+});
+
 function group(input: Partial<ObjectiveNode> = {}): ObjectiveNode {
   const objectiveItem = input.objective ?? objective();
   return {

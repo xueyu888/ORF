@@ -944,7 +944,7 @@ test("result detail shows empty states instead of inferred criteria for sparse l
   await expect(page.getByText("目标战利品说明支持")).toHaveCount(0);
 });
 
-test("tasks page cycle filter is functional and API-derived", async ({ page }) => {
+test("tasks page cycle and status filters are functional and API-derived", async ({ page }) => {
   const q1Objective: Objective = {
     ...initialOrfState.objectives[0]!,
     id: "objective-task-q1",
@@ -954,6 +954,7 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
     resultIds: ["result-task-q1"],
     taskIds: [],
     feedbackIds: [],
+    challengers: ["Kai Wang"],
   };
   const q2Objective: Objective = {
     ...initialOrfState.objectives[0]!,
@@ -964,6 +965,18 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
     resultIds: ["result-task-q2"],
     taskIds: [],
     feedbackIds: [],
+    challengers: ["Kai Wang"],
+  };
+  const unassignedObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-task-unassigned",
+    title: "真实未分配挑战",
+    cycle: "2999 Q2",
+    flowStatus: "candidate",
+    resultIds: [],
+    taskIds: [],
+    feedbackIds: [],
+    challengers: [],
   };
   const q1Result: Result = {
     ...initialOrfState.results[0]!,
@@ -978,7 +991,7 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
     title: "真实挑战指标 Q2",
   };
   const taskData = taskManagementDataWith({
-    objectives: [q1Objective, q2Objective],
+    objectives: [q1Objective, q2Objective, unassignedObjective],
     results: [q1Result, q2Result],
     tasks: [],
     feedback: [],
@@ -996,16 +1009,24 @@ test("tasks page cycle filter is functional and API-derived", async ({ page }) =
   await expect(page.getByRole("button", { name: "筛选" })).toHaveCount(0);
   await expect(page.getByText("真实挑战 Q1")).toBeVisible();
   await expect(page.getByText("真实挑战 Q2")).toBeVisible();
+  await expect(page.getByText("真实未分配挑战")).toBeVisible();
 
   await page.getByLabel("挑战周期").selectOption("2999 Q2");
 
   await expect(page.getByText("真实挑战 Q2")).toBeVisible();
+  await expect(page.getByText("真实未分配挑战")).toBeVisible();
   await expect(page.getByText("真实挑战 Q1")).toHaveCount(0);
 
   await page.getByLabel("挑战状态").selectOption("settled");
 
   await expect(page.getByText("没有符合筛选条件的挑战目标。")).toBeVisible();
   await expect(page.getByText("当前还没有挑战内容。")).toHaveCount(0);
+
+  await page.getByLabel("挑战状态").selectOption("unassigned");
+
+  await expect(page.getByText("真实未分配挑战")).toBeVisible();
+  await expect(page.getByText("真实挑战 Q2")).toHaveCount(0);
+  await expect(page.getByText("待定义指标")).toBeVisible();
 });
 
 test("tasks page labels resultless objectives as pending metrics", async ({ page }) => {
