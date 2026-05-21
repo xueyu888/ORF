@@ -14,8 +14,7 @@ docs/
 ├─ rules/        跨页面业务规则
 ├─ design/       设计原则和 UI 参考
 ├─ project/      工程环境和代码规范
-├─ legacy/       旧入口或历史说明
-└─ AI考试/       AI 考核资料
+└─ testing/      测试工具和测试策略
 ```
 
 ## 常用入口
