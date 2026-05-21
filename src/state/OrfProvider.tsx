@@ -12,6 +12,7 @@ import {
   type PermissionRulesResponse,
   type TaskManagementData,
   type UsersResponse,
+  uploadCommentAttachment as uploadCommentAttachmentRequest,
 } from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
@@ -144,6 +145,7 @@ interface OrfContextValue {
     replyToMessageId?: string;
     replyToAuthor?: string;
   }) => void;
+  uploadCommentAttachment: (input: { file: File; targetId: string; targetType: CommentTargetType }) => Promise<string | null>;
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
@@ -1283,6 +1285,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             notify(commentMutationFailureMessage(error, "评论添加失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
+      },
+      uploadCommentAttachment: async (input) => {
+        try {
+          const response = await uploadCommentAttachmentRequest(input);
+          return response.markdown;
+        } catch (error) {
+          notify(commentMutationFailureMessage(error, "图片上传失败"));
+          return null;
+        }
       },
       updateCommentThreadStatus: (threadId, status) => {
         void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/status`, {

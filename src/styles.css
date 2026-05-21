@@ -5856,6 +5856,22 @@ body[data-dragging-floating="true"] {
   color: #064a9f;
 }
 
+.orf-comment-attachment {
+  display: block;
+  margin: 8px 0 2px;
+  white-space: normal;
+}
+
+.orf-comment-attachment-image {
+  display: block;
+  max-height: 260px;
+  max-width: 100%;
+  border: 1px solid rgba(218, 224, 232, 0.9);
+  border-radius: 8px;
+  background: #f8fafc;
+  object-fit: contain;
+}
+
 .orf-comment-reply-count {
   display: inline-flex;
   align-items: center;
@@ -5907,8 +5923,17 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-comment-hint {
+  min-width: 0;
+  flex: 1;
   font-size: 13px;
   font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-comment-upload-error {
+  color: #b95a4f;
 }
 
 .orf-comment-draft-target {
