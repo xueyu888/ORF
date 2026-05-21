@@ -14,6 +14,9 @@ const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 dotenv.config({ path: resolve(rootDir, '.env'), quiet: true });
 
+const authBaseUrl = process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433';
+const storageBaseUrl = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000';
+
 const appServices = {
   backend: {
     script: 'server:dev',
@@ -33,14 +36,14 @@ const dependencyServices = {
     displayUrl: databaseDisplayUrl(),
   },
   auth: {
-    script: 'ory:dev',
-    url: `${trimSlash(process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433')}/health/ready`,
-    displayUrl: process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433',
+    script: isLocalServiceUrl(authBaseUrl) ? 'ory:dev' : undefined,
+    url: `${trimSlash(authBaseUrl)}/health/ready`,
+    displayUrl: authBaseUrl,
   },
   storage: {
-    script: 'storage:dev',
-    url: `${trimSlash(process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000')}/minio/health/live`,
-    displayUrl: process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000',
+    script: isLocalServiceUrl(storageBaseUrl) ? 'storage:dev' : undefined,
+    url: `${trimSlash(storageBaseUrl)}/minio/health/live`,
+    displayUrl: storageBaseUrl,
   },
 };
 
@@ -332,6 +335,8 @@ async function prepareRuntimeDependencies() {
       console.error(`${name} is not healthy: ${health.message}`);
       if (name === 'database') {
         console.error('Set DATABASE_URL or REMOTE_DATABASE_URL in .env, then run node scripts/verify-db.mjs.');
+      } else {
+        console.error(`${name} is configured as a shared/remote dependency at ${service.displayUrl}; not starting a local replacement.`);
       }
       process.exitCode = 1;
       return false;
@@ -494,7 +499,49 @@ function trimSlash(value) {
   return value.replace(/\/+$/, '');
 }
 
-main().catch((error) => {
-  console.error(error?.stack ?? error?.message ?? String(error));
-  process.exitCode = 1;
-});
+function isLocalServiceUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1';
+  } catch {
+    return false;
+  }
+}
+
+if (!bootstrapPublicCa()) {
+  main().catch((error) => {
+    console.error(error?.stack ?? error?.message ?? String(error));
+    process.exitCode = 1;
+  });
+}
+
+function bootstrapPublicCa() {
+  if (process.env.ORF_SKIP_PUBLIC_CA_BOOTSTRAP === '1' || process.env.NODE_EXTRA_CA_CERTS) {
+    return false;
+  }
+
+  const publicCaCert = process.env.ORF_PUBLIC_CA_CERT;
+  if (!publicCaCert || !existsSync(publicCaCert)) {
+    return false;
+  }
+
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      NODE_EXTRA_CA_CERTS: publicCaCert,
+      ORF_SKIP_PUBLIC_CA_BOOTSTRAP: '1',
+    },
+    stdio: 'inherit',
+  });
+
+  child.on('exit', (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
+
+  return true;
+}

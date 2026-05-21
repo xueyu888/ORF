@@ -24,6 +24,12 @@ gf-foundation-ui-kit.zip
 playwright-report/
 test-results/
 ory/.runtime/
+infra/public-ip/bootstrap-certs/
+infra/public-ip/certbot/
+infra/public-ip/letsencrypt/
+infra/public-ip/acme.sh/
+infra/public-ip/nginx/conf.d/
+infra/public-ip/nginx/snippets/
 
 public/settings/backgrounds/*/user/*
 public/settings/user/*

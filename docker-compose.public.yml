@@ -1,0 +1,43 @@
+services:
+  kratos:
+    command: serve -c /etc/config/kratos/kratos.yml
+
+  public-gateway:
+    image: ${PUBLIC_GATEWAY_IMAGE:-nginx:1.29-alpine}
+    depends_on:
+      kratos:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    ports:
+      - "${ORY_PUBLIC_EXTERNAL_PORT:-18443}:18443"
+      - "${OBJECT_STORAGE_EXTERNAL_PORT:-19443}:19443"
+    volumes:
+      - ./infra/public-ip/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infra/public-ip/nginx/snippets:/etc/nginx/snippets:ro
+      - ./infra/public-ip/certbot/www:/var/www/certbot:ro
+      - ./infra/public-ip/letsencrypt:/etc/letsencrypt:ro
+      - ./infra/public-ip/bootstrap-certs:/etc/nginx/bootstrap-certs:ro
+    restart: unless-stopped
+
+  acme-http-gateway:
+    image: ${PUBLIC_GATEWAY_IMAGE:-nginx:1.29-alpine}
+    profiles:
+      - certbot
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/public-ip/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./infra/public-ip/nginx/snippets:/etc/nginx/snippets:ro
+      - ./infra/public-ip/certbot/www:/var/www/certbot:ro
+      - ./infra/public-ip/letsencrypt:/etc/letsencrypt:ro
+      - ./infra/public-ip/bootstrap-certs:/etc/nginx/bootstrap-certs:ro
+
+  certbot:
+    image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
+    profiles:
+      - certbot
+    volumes:
+      - ./infra/public-ip/certbot/www:/var/www/certbot
+      - ./infra/public-ip/letsencrypt:/etc/letsencrypt
