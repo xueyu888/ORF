@@ -355,20 +355,30 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
 
 function commentMutationFailureMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
+    const isImageMutation = fallback.includes("图片");
+
     if (error.status === 401) {
       return "登录已过期，请重新登录";
     }
 
     if (error.status === 403) {
-      return "只能编辑或删除自己的评论";
+      return isImageMutation ? "没有权限上传这个评论图片" : "只能编辑或删除自己的评论";
     }
 
     if (error.status === 404) {
       return "评论对象不存在，已刷新数据";
     }
 
+    if (error.status === 413) {
+      return "图片过大，请压缩后再上传";
+    }
+
+    if (error.status === 415) {
+      return "只能上传 PNG、JPEG、GIF 或 WebP 图片";
+    }
+
     if (error.status === 400) {
-      return "评论内容不能为空";
+      return isImageMutation ? "图片文件无效" : "评论内容不能为空";
     }
 
     return error.message || fallback;

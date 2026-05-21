@@ -717,7 +717,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
   await app.register(multipart, {
     limits: {
-      fileSize: 10 * 1024 * 1024,
+      fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES,
       files: 1,
     },
   });

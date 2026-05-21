@@ -1949,7 +1949,7 @@ test.describe("ORF frontend guard coverage", () => {
     await expect(page.getByRole("button", { name: "共 1 条回复" })).toBeVisible();
   });
 
-  test("comment panel opens image attachments in a preview dialog", async ({ page }) => {
+  test("comment panel opens image attachments in a preview dialog", async ({ page }, testInfo) => {
     const objective = objectiveFixture({ id: "obj-ui-comment-image-preview", title: "前端测试 评论图片预览目标", flowStatus: "reestimating", stage: "orfReestimate", challengers: [memberUser.name], resultIds: ["res-ui-comment-image-preview"] });
     const result = resultFixture({ id: "res-ui-comment-image-preview", objectiveId: objective.id, title: "前端测试 评论图片预览指标" });
     const imageUrl =
@@ -2002,6 +2002,7 @@ test.describe("ORF frontend guard coverage", () => {
     const preview = page.getByRole("dialog", { name: "proof.png" });
     await expect(preview).toBeVisible();
     await expect(preview.getByRole("img", { name: "证据图" })).toBeVisible();
+    await attachAuditScreenshot(page, testInfo, "comment-image-preview-fixed");
 
     await page.keyboard.press("Escape");
     await expect(preview).toHaveCount(0);
