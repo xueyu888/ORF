@@ -57,7 +57,7 @@ test("buildChallengeTree filters objectives and preserves objective result order
   assert.equal(tree[0]?.bounties[0]?.difficulty, "5 星");
   assert.equal(tree[0]?.bounties[0]?.status, "active");
   assert.equal(tree[0]?.bounties[0]?.progress, 30);
-  assert.deepEqual(tree[0]?.bounties[1]?.actions.map((item) => item.id), ["task-a"]);
+  assert.deepEqual(tree[0]?.actions.map((item) => item.id), ["task-a", "task-b"]);
 });
 
 test("buildChallengeTree keeps resultless ORF objectives visible", () => {
@@ -238,19 +238,19 @@ test("date and status helpers keep challenge display boundaries stable", () => {
   assert.equal(addDays("2026-05-14", 3), "2026-05-17");
   assert.equal(remainingTime("2026-05-16", new Date("2026-05-16T23:00:00")), "剩余 59 分钟");
   assert.equal(remainingTime("2026-05-15", new Date("2026-05-16T00:30:00")), "已超时 31 分钟");
-  assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [{ date: "2026-05-12", value: 1 }] }), [action], [feedbackItem], [evidenceItem]), "2026-05-18");
-  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "submitted" })), "review");
+  assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [{ date: "2026-05-12", value: 1 }] }), [feedbackItem], [evidenceItem]), "2026-05-18");
+  assert.equal(bountyStatus(result(), objective({ flowStatus: "submitted" })), "review");
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "recruiting" })), "征召中");
   assert.equal(objectiveStatusTone(objective({ flowStatus: "frozen" })), "active");
   assert.equal(subActionVisualStatus(action, action.checklist[1]!, 1), "active");
 });
 
 test("bounty and objective statuses follow the ORF frontend flow", () => {
-  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "open" })), "open");
-  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "reestimating", challengers: ["Kai Wang"] })), "active");
-  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "frozen", challengers: ["Kai Wang"] })), "active");
-  assert.equal(bountyStatus(result(), [], objective({ flowStatus: "submitted", challengers: ["Kai Wang"] })), "review");
-  assert.equal(bountyStatus(result({ acceptedResult: "completed" }), [], objective({ flowStatus: "settled", challengers: ["Kai Wang"] })), "settled");
+  assert.equal(bountyStatus(result(), objective({ flowStatus: "open" })), "open");
+  assert.equal(bountyStatus(result(), objective({ flowStatus: "reestimating", challengers: ["Kai Wang"] })), "active");
+  assert.equal(bountyStatus(result(), objective({ flowStatus: "frozen", challengers: ["Kai Wang"] })), "active");
+  assert.equal(bountyStatus(result(), objective({ flowStatus: "submitted", challengers: ["Kai Wang"] })), "review");
+  assert.equal(bountyStatus(result({ acceptedResult: "completed" }), objective({ flowStatus: "settled", challengers: ["Kai Wang"] })), "settled");
 
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "candidate" })), "候选中");
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "applying" })), "申请中");
@@ -302,7 +302,7 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     pointLedger: [],
     causeCategories: [],
     rules: {
-      requireResultForTask: true,
+      requireResultForTask: false,
       requireEvidenceForFeedback: true,
       weeklyFeedbackCadence: true,
       autoCreateReviewSummary: true,

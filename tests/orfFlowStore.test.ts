@@ -196,31 +196,27 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
   assert.deepEqual(next.comments.map((item) => item.id), ["comment-keep"]);
 });
 
-test("moveTask moves across results and refreshes objective/result task indexes", () => {
+test("moveTask reorders tasks inside the same objective without changing result ownership", () => {
   const current = state({
-    objectives: [
-      objective({ id: "obj-a", resultIds: ["res-a"], taskIds: ["task-a"] }),
-      objective({ id: "obj-b", resultIds: ["res-b"], taskIds: ["task-b"] }),
-    ],
+    objectives: [objective({ id: "obj-a", resultIds: ["res-a", "res-b"], taskIds: ["task-a", "task-b"] })],
     results: [
       result({ id: "res-a", objectiveId: "obj-a", taskIds: ["task-a"] }),
-      result({ id: "res-b", objectiveId: "obj-b", taskIds: ["task-b"] }),
+      result({ id: "res-b", objectiveId: "obj-a", taskIds: ["task-b"] }),
     ],
     tasks: [
       task({ id: "task-a", linkedObjectiveId: "obj-a", linkedResultId: "res-a" }),
-      task({ id: "task-b", linkedObjectiveId: "obj-b", linkedResultId: "res-b" }),
+      task({ id: "task-b", linkedObjectiveId: "obj-a", linkedResultId: "res-b" }),
     ],
   });
 
-  const next = store.moveTask(current, { taskId: "task-a", toResultId: "res-b", referenceTaskId: "task-b", placement: "after" });
+  const next = store.moveTask(current, { taskId: "task-a", objectiveId: "obj-a", referenceTaskId: "task-b", placement: "after" });
 
   assert.deepEqual(next.tasks.map((item) => item.id), ["task-b", "task-a"]);
-  assert.equal(next.tasks.find((item) => item.id === "task-a")?.linkedObjectiveId, "obj-b");
-  assert.equal(next.tasks.find((item) => item.id === "task-a")?.linkedResultId, "res-b");
-  assert.deepEqual(next.objectives.find((item) => item.id === "obj-a")?.taskIds, []);
-  assert.deepEqual(next.objectives.find((item) => item.id === "obj-b")?.taskIds, ["task-b", "task-a"]);
-  assert.deepEqual(next.results.find((item) => item.id === "res-a")?.taskIds, []);
-  assert.deepEqual(next.results.find((item) => item.id === "res-b")?.taskIds, ["task-b", "task-a"]);
+  assert.equal(next.tasks.find((item) => item.id === "task-a")?.linkedObjectiveId, "obj-a");
+  assert.equal(next.tasks.find((item) => item.id === "task-a")?.linkedResultId, "res-a");
+  assert.deepEqual(next.objectives.find((item) => item.id === "obj-a")?.taskIds, ["task-b", "task-a"]);
+  assert.deepEqual(next.results.find((item) => item.id === "res-a")?.taskIds, ["task-a"]);
+  assert.deepEqual(next.results.find((item) => item.id === "res-b")?.taskIds, ["task-b"]);
 });
 
 test("moveResult refuses to move a result outside its objective", () => {
@@ -405,7 +401,7 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     pointLedger: [],
     causeCategories: [],
     rules: {
-      requireResultForTask: true,
+      requireResultForTask: false,
       requireEvidenceForFeedback: true,
       weeklyFeedbackCadence: true,
       autoCreateReviewSummary: true,

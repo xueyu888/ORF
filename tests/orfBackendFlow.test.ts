@@ -1353,7 +1353,7 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     assert.equal(trimmedTask.statusCode, 200);
     const trimmedTaskPayload = trimmedTask.json() as { task: { id: string; title: string; description: string; assignee: string; dueDate: string } };
     assert.equal(trimmedTaskPayload.task.title, "trimmed action title");
-    assert.equal(trimmedTaskPayload.task.description, "执行支撑关联指标的下一步动作。");
+    assert.equal(trimmedTaskPayload.task.description, "执行支撑目标的下一步技术任务。");
     assert.equal(trimmedTaskPayload.task.assignee, fixture.challenger.name);
     assert.equal(trimmedTaskPayload.task.dueDate, "2999-02-28");
 
@@ -1946,6 +1946,7 @@ test("API mutations enforce runtime scope boundaries even for administrators", a
 
     const intruderTaskWithOwnerFeedback = await apiInject(app, intruder.commander, "POST", "/api/tasks", {
       title: `${intruder.prefix} cross-scope feedback origin task`,
+      linkedObjectiveId: intruderWorkResult.objectiveId,
       linkedResultId: intruderWorkResult.id,
       feedbackOriginId: ownerFeedbackId,
     });

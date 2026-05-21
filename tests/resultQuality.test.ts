@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildResultQualityChecks } from "../src/features/results/model/resultQuality";
-import type { Feedback, Objective, Result, Task } from "../src/types/orf";
+import type { Feedback, Objective, Result } from "../src/types/orf";
 
 test("buildResultQualityChecks marks unsupported result quality checks as pending", () => {
   const checks = buildResultQualityChecks({
@@ -13,7 +13,6 @@ test("buildResultQualityChecks marks unsupported result quality checks as pendin
       sampleSet: "",
       measurementScope: "",
     }),
-    tasks: [],
     feedback: [],
   });
 
@@ -22,7 +21,6 @@ test("buildResultQualityChecks marks unsupported result quality checks as pendin
     有目标战利品入口: true,
     已关联目标: true,
     反馈已更新: false,
-    有行动项支撑: false,
     口径清楚: false,
     无模糊词: false,
   });
@@ -38,11 +36,10 @@ test("buildResultQualityChecks passes when result context is complete", () => {
       sampleSet: "2999 Q1 样本",
       measurementScope: "固定测试环境",
     }),
-    tasks: [task()],
     feedback: [feedback()],
   });
 
-  assert.deepEqual(checks.map((item) => item.passed), [true, true, true, true, true, true, true]);
+  assert.deepEqual(checks.map((item) => item.passed), [true, true, true, true, true, true]);
 });
 
 function objective(input: Partial<Objective> = {}): Objective {
@@ -99,25 +96,6 @@ function result(input: Partial<Result> = {}): Result {
     feedbackIds: [],
     trend: [],
     reviewCadence: "",
-    ...input,
-  };
-}
-
-function task(input: Partial<Task> = {}): Task {
-  return {
-    id: "task",
-    title: "Task",
-    description: "",
-    status: "Todo",
-    priority: "Medium",
-    assignee: "Kai Wang",
-    linkedObjectiveId: "objective",
-    linkedResultId: "result",
-    dueDate: "2999-01-10",
-    tags: [],
-    checklist: [],
-    createdAt: "2999-01-01T00:00:00.000Z",
-    updatedAt: "2999-01-01T00:00:00.000Z",
     ...input,
   };
 }
