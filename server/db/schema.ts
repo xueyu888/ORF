@@ -357,3 +357,33 @@ export const commentMessages = pgTable("comment_messages", {
   replyToAuthor: text("reply_to_author"),
   sortOrder: integer("sort_order").notNull().default(0),
 });
+
+export const commentAttachments = pgTable(
+  "comment_attachments",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    targetType: commentTargetTypeEnum("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    messageId: text("message_id").references(() => commentMessages.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: integer("file_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    attachedAt: timestamp("attached_at", { mode: "string", withTimezone: true }),
+    expiresAt: timestamp("expires_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    message: index("comment_attachments_message_idx").on(table.messageId),
+    pendingByCreator: index("comment_attachments_pending_creator_idx").on(table.createdBy, table.targetType, table.targetId, table.expiresAt),
+    teamTarget: index("comment_attachments_team_target_idx").on(table.teamId, table.targetType, table.targetId),
+  }),
+);

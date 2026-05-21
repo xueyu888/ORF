@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, or } from "drizzle-orm";
+import type { Readable } from "node:stream";
+import { and, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
+  CommentAttachment,
   BountySource,
   ChallengeApplication,
   CommentStatus,
@@ -38,6 +40,7 @@ import {
 } from "../../src/domain/orfLifecycle";
 import { db } from "../db/client";
 import {
+  commentAttachments,
   commentMessages,
   commentThreads,
   evidence,
@@ -66,6 +69,8 @@ import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
+import { objectStorage } from "../storage/objectStorage";
+import { validateImageUpload } from "../storage/images";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -91,6 +96,7 @@ type CommentMutationOutcome =
   | { status: "invalid" };
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
+type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
 
 const today = () => localDateString(new Date());
 let lastNowMs = 0;
@@ -105,8 +111,11 @@ const nextIdCounter = () => {
   return idCounter.toString(36);
 };
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomUUID()}`;
+const makeCommentAttachmentId = () => `catt_${Date.now()}_${nextIdCounter()}_${randomUUID()}`;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
+const PENDING_COMMENT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
+const COMMENT_ATTACHMENT_TOKEN_PATTERN = /!\[[^\]\n]*\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
 const uncertaintyScores: Record<UncertaintyLevel, number> = {
   入门: 10,
   进阶: 30,
@@ -131,6 +140,71 @@ const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "set
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
+}
+
+function commentAttachmentContentUrl(id: string) {
+  return `/api/comments/attachments/${encodeURIComponent(id)}/content`;
+}
+
+function commentAttachmentDto(row: CommentAttachmentRow): CommentAttachment {
+  return {
+    id: row.id,
+    fileName: row.fileName,
+    mimeType: row.mimeType,
+    fileSize: row.fileSize,
+    width: optional(row.width),
+    height: optional(row.height),
+    contentUrl: commentAttachmentContentUrl(row.id),
+  };
+}
+
+function groupCommentAttachmentsByMessage(rows: CommentAttachmentRow[]) {
+  const grouped = new Map<string, CommentAttachment[]>();
+  for (const row of rows) {
+    if (!row.messageId) continue;
+    const attachments = grouped.get(row.messageId) ?? [];
+    attachments.push(commentAttachmentDto(row));
+    grouped.set(row.messageId, attachments);
+  }
+  return grouped;
+}
+
+function extractCommentAttachmentIds(body: string) {
+  const ids = new Set<string>();
+  for (const match of body.matchAll(COMMENT_ATTACHMENT_TOKEN_PATTERN)) {
+    if (match[1]) {
+      ids.add(match[1]);
+    }
+  }
+  return Array.from(ids);
+}
+
+function pendingCommentAttachmentExpiresAt(createdAt: string) {
+  return new Date(new Date(createdAt).getTime() + PENDING_COMMENT_ATTACHMENT_TTL_MS).toISOString();
+}
+
+function sanitizeFileName(fileName: string, extension: string) {
+  const leafName = fileName.split(/[\\/]/).pop()?.trim() ?? "";
+  const sanitized = leafName.replace(/[^\w.\-()\u4e00-\u9fff ]+/g, "_").slice(0, 120).trim();
+  return sanitized || `image.${extension}`;
+}
+
+function commentAttachmentObjectKey(input: {
+  attachmentId: string;
+  extension: string;
+  storageScopeId: string;
+  targetId: string;
+  targetType: CommentTargetType;
+}) {
+  const safeTargetId = input.targetId.replace(/[^A-Za-z0-9_-]+/g, "_");
+  const now = new Date();
+  const year = now.getUTCFullYear().toString();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `comments/${input.storageScopeId}/${input.targetType}/${safeTargetId}/${year}/${month}/${input.attachmentId}.${input.extension}`;
+}
+
+async function deleteStoredCommentAttachmentObjects(rows: CommentAttachmentRow[]) {
+  await Promise.allSettled(rows.map((row) => objectStorage.deleteObject(row.objectKey)));
 }
 
 function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
@@ -176,7 +250,7 @@ function storageScope(id: string | null | undefined): RuntimeScope | null {
   return storageId ? runtimeScope(storageId) : null;
 }
 
-async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[CommentThreadRow[], CommentMessageRow[]]> {
+async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]> {
   try {
     const storageScopeId = scopedStorageId(scope);
     const threadRows = storageScopeId
@@ -187,11 +261,16 @@ async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[Com
       threadIds.length > 0
         ? await db.select().from(commentMessages).where(inArray(commentMessages.threadId, threadIds))
         : [];
+    const messageIds = messageRows.map((message) => message.id);
+    const attachmentRows =
+      messageIds.length > 0
+        ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIds))
+        : [];
 
-    return [threadRows, messageRows];
+    return [threadRows, messageRows, attachmentRows];
   } catch (error) {
     if (isMissingCommentStorageError(error)) {
-      return [[], []];
+      return [[], [], []];
     }
 
     throw error;
@@ -405,7 +484,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const trendRows = await getResultTrendRows(resultIds);
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIds);
-  const [commentThreadRows, commentMessageRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
+  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
   const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();
@@ -432,6 +511,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const messagesByThread = new Map<string, CommentThread["messages"]>();
+  const attachmentsByMessage = groupCommentAttachmentsByMessage(commentAttachmentRows);
   for (const message of [...commentMessageRows].sort(
     (left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt),
   )) {
@@ -440,6 +520,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       id: message.id,
       author: message.author,
       body: message.body,
+      attachments: attachmentsByMessage.get(message.id) ?? [],
       createdAt: message.createdAt,
       parentMessageId: optional(message.parentMessageId),
       replyToMessageId: optional(message.replyToMessageId),
@@ -1747,6 +1828,37 @@ async function canMutateObjectiveComment(
     : "forbidden";
 }
 
+async function canReadObjectiveComment(
+  actor: CommentActor,
+  objectiveId: string,
+): Promise<ObjectiveWorkItemMutationOutcome> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
+  const [objective] = await db
+    .select({
+      assignedChallengers: objectives.assignedChallengers,
+      challengers: objectives.challengers,
+      teamId: objectives.teamId,
+    })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+  if (!objective) {
+    return "notFound";
+  }
+
+  if (storageScopeId && objective.teamId !== storageScopeId) {
+    return "notFound";
+  }
+
+  if (actor.role === "admin" || actor.canManageAllComments === true) {
+    return "allowed";
+  }
+
+  const member = actor.name.trim();
+  const participants = uniqueMembers([...(objective.challengers ?? []), ...(objective.assignedChallengers ?? [])]);
+  return member && participants.includes(member) ? "allowed" : "forbidden";
+}
+
 async function resolveCommentTarget(targetType: CommentTargetType, targetId: string): Promise<CommentTarget | null> {
   if (targetType === "objective") {
     const [target] = await db
@@ -1791,6 +1903,12 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
   }
 
   const messages = await db.select().from(commentMessages).where(eq(commentMessages.threadId, thread.id));
+  const messageIds = messages.map((message) => message.id);
+  const attachmentRows =
+    messageIds.length > 0
+      ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIds))
+      : [];
+  const attachmentsByMessage = groupCommentAttachmentsByMessage(attachmentRows);
   return {
     id: thread.id,
     targetType: thread.targetType,
@@ -1806,6 +1924,7 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
         id: message.id,
         author: message.author,
         body: message.body,
+        attachments: attachmentsByMessage.get(message.id) ?? [],
         createdAt: message.createdAt,
         parentMessageId: optional(message.parentMessageId),
         replyToMessageId: optional(message.replyToMessageId),
@@ -1816,6 +1935,151 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
 
 function canManageComment(actor: CommentActor, ownerUserId: string) {
   return actor.role === "admin" || actor.canManageAllComments === true || actor.id === ownerUserId;
+}
+
+export type UploadCommentAttachmentInput = {
+  body: Buffer;
+  fileName: string;
+  mimeType: string;
+  targetId: string;
+  targetType: CommentTargetType;
+};
+
+export type CommentAttachmentUploadOutcome =
+  | { status: "ok"; attachment: CommentAttachment; markdown: string }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalid" }
+  | { status: "tooLarge" }
+  | { status: "unsupported" };
+
+export type CommentAttachmentContentOutcome =
+  | { status: "ok"; body: Readable; contentLength?: number; contentType: string }
+  | { status: "notFound" }
+  | { status: "forbidden" };
+
+export async function uploadCommentAttachment(
+  input: UploadCommentAttachmentInput,
+  actor: CommentActor,
+): Promise<CommentAttachmentUploadOutcome> {
+  if (!input.body.byteLength || !input.fileName.trim()) {
+    return { status: "invalid" };
+  }
+
+  await deleteExpiredPendingCommentAttachments().catch(() => 0);
+
+  const target = await resolveCommentTarget(input.targetType, input.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
+  }
+
+  const validation = validateImageUpload({ buffer: input.body, contentType: input.mimeType });
+  if (validation.status !== "ok") {
+    return { status: validation.status };
+  }
+
+  const attachmentId = makeCommentAttachmentId();
+  const createdAt = nowIso();
+  const objectKey = commentAttachmentObjectKey({
+    attachmentId,
+    extension: validation.metadata.extension,
+    storageScopeId: target.storageScopeId,
+    targetId: input.targetId,
+    targetType: input.targetType,
+  });
+  const fileName = sanitizeFileName(input.fileName, validation.metadata.extension);
+
+  await objectStorage.putObject({
+    body: input.body,
+    contentLength: input.body.byteLength,
+    contentType: validation.metadata.mimeType,
+    key: objectKey,
+  });
+
+  try {
+    const [row] = await db
+      .insert(commentAttachments)
+      .values({
+        id: attachmentId,
+        teamId: target.storageScopeId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        messageId: null,
+        objectKey,
+        fileName,
+        mimeType: validation.metadata.mimeType,
+        fileSize: input.body.byteLength,
+        width: validation.metadata.width ?? null,
+        height: validation.metadata.height ?? null,
+        createdBy: actor.id,
+        createdAt,
+        attachedAt: null,
+        expiresAt: pendingCommentAttachmentExpiresAt(createdAt),
+      })
+      .returning();
+
+    return {
+      status: "ok",
+      attachment: commentAttachmentDto(row),
+      markdown: `![${fileName}](orf-attachment:${attachmentId})`,
+    };
+  } catch (error) {
+    await deleteStoredCommentAttachmentObjects([
+      {
+        id: attachmentId,
+        teamId: target.storageScopeId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        messageId: null,
+        objectKey,
+        fileName,
+        mimeType: validation.metadata.mimeType,
+        fileSize: input.body.byteLength,
+        width: validation.metadata.width ?? null,
+        height: validation.metadata.height ?? null,
+        createdBy: actor.id,
+        createdAt,
+        attachedAt: null,
+        expiresAt: pendingCommentAttachmentExpiresAt(createdAt),
+      },
+    ]);
+    throw error;
+  }
+}
+
+export async function getCommentAttachmentContent(
+  attachmentId: string,
+  actor: CommentActor,
+): Promise<CommentAttachmentContentOutcome> {
+  const [attachment] = await db.select().from(commentAttachments).where(eq(commentAttachments.id, attachmentId)).limit(1);
+  if (!attachment) {
+    return { status: "notFound" };
+  }
+
+  const target = await resolveCommentTarget(attachment.targetType, attachment.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+  const access = await canReadObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
+  }
+
+  const stored = await objectStorage.getObject(attachment.objectKey);
+  if (!stored) {
+    return { status: "notFound" };
+  }
+
+  return {
+    status: "ok",
+    body: stored.body,
+    contentLength: stored.contentLength,
+    contentType: stored.contentType ?? attachment.mimeType,
+  };
 }
 
 export async function createComment(input: CreateCommentInput, actor: CommentActor): Promise<CommentMutationOutcome> {
@@ -1838,6 +2102,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
 
   const targetTitle = target.title;
   const createdAt = nowIso();
+  const attachmentIds = extractCommentAttachmentIds(body);
   const threadId = await db.transaction(async (tx) => {
     const [lockedObjective] = await tx
       .select({ id: objectives.id })
@@ -1848,6 +2113,37 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     if (!lockedObjective) {
       return null;
     }
+
+    const arePendingAttachmentsAvailable = async () => {
+      if (attachmentIds.length === 0) {
+        return true;
+      }
+
+      const rows = await tx
+        .select({ id: commentAttachments.id })
+        .from(commentAttachments)
+        .where(
+          and(
+            inArray(commentAttachments.id, attachmentIds),
+            eq(commentAttachments.createdBy, actor.id),
+            eq(commentAttachments.targetType, input.targetType),
+            eq(commentAttachments.targetId, input.targetId),
+            isNull(commentAttachments.messageId),
+            gt(commentAttachments.expiresAt, createdAt),
+          ),
+        );
+      return rows.length === attachmentIds.length;
+    };
+    const bindMessageAttachments = async (messageId: string) => {
+      if (attachmentIds.length === 0) {
+        return;
+      }
+
+      await tx
+        .update(commentAttachments)
+        .set({ attachedAt: createdAt, messageId })
+        .where(inArray(commentAttachments.id, attachmentIds));
+    };
 
     if (input.parentMessageId) {
       const [parent] = await tx
@@ -1882,14 +2178,19 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         replyToAuthor = replyTarget.author;
       }
 
+      if (!(await arePendingAttachmentsAvailable())) {
+        return null;
+      }
+
       const messageRows = await tx
         .select({ sortOrder: commentMessages.sortOrder })
         .from(commentMessages)
         .where(eq(commentMessages.threadId, parent.threadId));
       const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
+      const nextMessageId = makeId("cmsg");
 
       await tx.insert(commentMessages).values({
-        id: makeId("cmsg"),
+        id: nextMessageId,
         threadId: parent.threadId,
         authorUserId: actor.id,
         author: actor.name,
@@ -1900,6 +2201,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         replyToAuthor,
         sortOrder,
       });
+      await bindMessageAttachments(nextMessageId);
       await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
       return parent.threadId;
     }
@@ -1910,6 +2212,10 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       .where(and(eq(commentThreads.targetType, input.targetType), eq(commentThreads.targetId, input.targetId), eq(commentThreads.status, "open")))
       .limit(1);
     const nextThreadId = openThread?.id ?? makeId("cthread");
+
+    if (!(await arePendingAttachmentsAvailable())) {
+      return null;
+    }
 
     if (!openThread) {
       await tx.insert(commentThreads).values({
@@ -1932,9 +2238,10 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       .from(commentMessages)
       .where(eq(commentMessages.threadId, nextThreadId));
     const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
+    const nextMessageId = makeId("cmsg");
 
     await tx.insert(commentMessages).values({
-      id: makeId("cmsg"),
+      id: nextMessageId,
       threadId: nextThreadId,
       authorUserId: actor.id,
       author: actor.name,
@@ -1945,6 +2252,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       replyToAuthor: null,
       sortOrder,
     });
+    await bindMessageAttachments(nextMessageId);
 
     return nextThreadId;
   });
@@ -2020,14 +2328,56 @@ export async function updateCommentMessage(
     return { status: "forbidden" };
   }
 
-  await db.transaction(async (tx) => {
+  const nextAttachmentIds = extractCommentAttachmentIds(nextBody);
+  const existingAttachments = await db.select().from(commentAttachments).where(eq(commentAttachments.messageId, messageId));
+  const existingAttachmentIds = new Set(existingAttachments.map((attachment) => attachment.id));
+  const attachmentsToDelete = existingAttachments.filter((attachment) => !nextAttachmentIds.includes(attachment.id));
+  const pendingAttachmentIds = nextAttachmentIds.filter((attachmentId) => !existingAttachmentIds.has(attachmentId));
+
+  const updateResult = await db.transaction(async (tx) => {
     const updatedAt = nowIso();
+    if (pendingAttachmentIds.length > 0) {
+      const pendingRows = await tx
+        .select({ id: commentAttachments.id })
+        .from(commentAttachments)
+        .where(
+          and(
+            inArray(commentAttachments.id, pendingAttachmentIds),
+            eq(commentAttachments.createdBy, actor.id),
+            eq(commentAttachments.targetType, thread.targetType),
+            eq(commentAttachments.targetId, thread.targetId),
+            isNull(commentAttachments.messageId),
+            gt(commentAttachments.expiresAt, updatedAt),
+          ),
+        );
+      if (pendingRows.length !== pendingAttachmentIds.length) {
+        return "notFound" as const;
+      }
+    }
+
+    if (attachmentsToDelete.length > 0) {
+      await tx.delete(commentAttachments).where(inArray(commentAttachments.id, attachmentsToDelete.map((attachment) => attachment.id)));
+    }
+
+    if (pendingAttachmentIds.length > 0) {
+      await tx
+        .update(commentAttachments)
+        .set({ attachedAt: updatedAt, messageId })
+        .where(inArray(commentAttachments.id, pendingAttachmentIds));
+    }
+
     await tx
       .update(commentMessages)
       .set({ body: nextBody })
       .where(and(eq(commentMessages.threadId, threadId), eq(commentMessages.id, messageId)));
     await tx.update(commentThreads).set({ updatedAt }).where(eq(commentThreads.id, threadId));
+    return "ok" as const;
   });
+  if (updateResult === "notFound") {
+    return { status: "notFound" };
+  }
+
+  await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
 
   return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
@@ -2063,6 +2413,21 @@ export async function deleteCommentMessage(
     return { status: "forbidden" };
   }
 
+  const messagesToDelete = await db
+    .select({ id: commentMessages.id })
+    .from(commentMessages)
+    .where(
+      and(
+        eq(commentMessages.threadId, threadId),
+        or(eq(commentMessages.id, messageId), eq(commentMessages.parentMessageId, messageId)),
+      ),
+    );
+  const messageIdsToDelete = messagesToDelete.map((item) => item.id);
+  const attachmentsToDelete =
+    messageIdsToDelete.length > 0
+      ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIdsToDelete))
+      : [];
+
   const threadRemoved = await db.transaction(async (tx) => {
     await tx
       .delete(commentMessages)
@@ -2086,8 +2451,23 @@ export async function deleteCommentMessage(
     await tx.update(commentThreads).set({ updatedAt: nowIso() }).where(eq(commentThreads.id, threadId));
     return false;
   });
+  await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
 
   return threadRemoved ? { status: "ok" } : { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
+}
+
+export async function deleteExpiredPendingCommentAttachments(referenceTime = nowIso()) {
+  const expiredRows = await db
+    .select()
+    .from(commentAttachments)
+    .where(and(isNull(commentAttachments.messageId), lt(commentAttachments.expiresAt, referenceTime)));
+  if (expiredRows.length === 0) {
+    return 0;
+  }
+
+  await db.delete(commentAttachments).where(inArray(commentAttachments.id, expiredRows.map((row) => row.id)));
+  await deleteStoredCommentAttachmentObjects(expiredRows);
+  return expiredRows.length;
 }
 
 export interface SubmitObjectiveLootInput {

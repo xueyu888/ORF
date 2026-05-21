@@ -120,6 +120,13 @@
       "when": 1779260000000,
       "tag": "0016_system_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1779340000000,
+      "tag": "0017_comment_attachments",
+      "breakpoints": true
     }
   ]
 }

@@ -299,7 +299,7 @@ export const normalizeState = (state: OrfState): OrfState => {
     currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
     comments: (state.comments ?? []).map((thread) => ({
       ...thread,
-      messages: thread.messages ?? [],
+      messages: (thread.messages ?? []).map((message) => ({ ...message, attachments: message.attachments ?? [] })),
     })),
     objectives: state.objectives.map((objective) => normalizeObjective(objective, legacyResults, tasks)),
     results: legacyResults.map(normalizeResult),
@@ -1017,6 +1017,7 @@ export class OrfFlowStore {
       id: makeId("cmsg"),
       author,
       body,
+      attachments: [],
       createdAt: now,
       parentMessageId: input.parentMessageId,
       replyToMessageId: input.replyToMessageId,
