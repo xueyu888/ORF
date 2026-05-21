@@ -82,11 +82,13 @@ test("auth service unavailable errors are classified for 503 responses", () => {
   assert.equal(isAuthServiceUnavailableError(new Error("Ory login failed with 503")), true);
   assert.equal(isAuthServiceUnavailableError(new Error("fetch failed: ECONNREFUSED 127.0.0.1:4433")), true);
   assert.deepEqual(authServiceUnavailablePayload(), { error: "认证服务暂时不可用，请稍后重试。" });
+  assert.equal(isAuthServiceUnavailableError(new Error("Ory login failed with 400")), false);
   assert.equal(isAuthServiceUnavailableError(new Error("Ory login failed with 401")), false);
 });
 
 test("auth routes distinguish database outages from credential failures", () => {
   assert.deepEqual(authDependencyUnavailablePayload(new Error("connect ETIMEDOUT 203.0.113.10:54321")), databaseUnavailablePayload());
   assert.deepEqual(authDependencyUnavailablePayload(new Error("Ory login failed with 503")), authServiceUnavailablePayload());
+  assert.equal(authDependencyUnavailablePayload(new Error("Ory login failed with 400")), null);
   assert.equal(authDependencyUnavailablePayload(new Error("Ory login failed with 401")), null);
 });
