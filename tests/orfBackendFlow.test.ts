@@ -39,6 +39,10 @@ import { runtimeScope } from "../server/repositories/runtimeScope";
 const runId = `test-orf-flow-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const farFutureDueDate = "2999-12-31";
 const expiredConfirmationDueAt = "2000-01-01T00:00:00.000Z";
+const tinyPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l0p8WQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 before(async () => {
   await cleanupRun();
@@ -2066,6 +2070,132 @@ test("task and comment API writes require objective participation", async () => 
   });
 });
 
+test("comment image attachments upload, bind, and read through authorized comment APIs", async () => {
+  const fixture = await createFixture("api-comment-image");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "image attachment objective");
+
+  await withApiServer(fixture, async (app) => {
+    const upload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "proof.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(upload.statusCode, 200);
+
+    const uploadPayload = upload.json() as {
+      markdown: string;
+      attachment: {
+        id: string;
+        fileName: string;
+        mimeType: string;
+        fileSize: number;
+        width?: number;
+        height?: number;
+        contentUrl: string;
+      };
+    };
+    assert.match(uploadPayload.attachment.id, /^catt_/);
+    assert.equal(uploadPayload.attachment.fileName, "proof.png");
+    assert.equal(uploadPayload.attachment.mimeType, "image/png");
+    assert.equal(uploadPayload.attachment.fileSize, tinyPng.byteLength);
+    assert.equal(uploadPayload.attachment.contentUrl.includes("127.0.0.1:9000"), false);
+    assert.equal(uploadPayload.attachment.contentUrl.includes("orf-comment-attachments"), false);
+    assert.equal(uploadPayload.markdown, `![proof.png](orf-attachment:${uploadPayload.attachment.id})`);
+
+    const comment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: uploadPayload.markdown,
+    });
+    assert.equal(comment.statusCode, 200);
+
+    const commentPayload = comment.json() as {
+      commentThread: {
+        messages: Array<{
+          body: string;
+          attachments: Array<{
+            id: string;
+            fileName: string;
+            mimeType: string;
+            fileSize: number;
+            contentUrl: string;
+          }>;
+        }>;
+      };
+    };
+    const message = commentPayload.commentThread.messages.find((item) => item.body === uploadPayload.markdown);
+    assert.ok(message);
+    assert.equal(message.attachments.length, 1);
+    assert.equal(message.attachments[0]?.id, uploadPayload.attachment.id);
+    assert.equal(message.attachments[0]?.contentUrl.includes(`/api/comments/attachments/${uploadPayload.attachment.id}/content`), true);
+
+    const image = await apiInject(app, fixture.challenger, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
+    assert.equal(image.statusCode, 200);
+    assert.match(image.headers["content-type"]?.toString() ?? "", /^image\/png\b/);
+    assert.equal(Buffer.from(image.rawPayload).subarray(0, 8).equals(tinyPng.subarray(0, 8)), true);
+
+    const observerImage = await apiInject(app, fixture.observer, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
+    assert.equal(observerImage.statusCode, 403);
+  });
+});
+
+test("comment image attachment upload rejects unauthorized users and invalid image payloads", async () => {
+  const fixture = await createFixture("api-comment-image-reject");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "image attachment rejection objective");
+
+  await withApiServer(fixture, async (app) => {
+    const observerUpload = await apiMultipartInject(app, fixture.observer, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "proof.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(observerUpload.statusCode, 403);
+
+    const textUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "notes.txt",
+        mimeType: "text/plain",
+        content: Buffer.from("plain text is not a comment image", "utf8"),
+      },
+    });
+    assert.equal([400, 415].includes(textUpload.statusCode), true);
+
+    const spoofedUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "spoofed.png",
+        mimeType: "image/png",
+        content: Buffer.from("<script>alert(1)</script>", "utf8"),
+      },
+    });
+    assert.equal([400, 415].includes(spoofedUpload.statusCode), true);
+  });
+});
+
 test("concurrent comments on the same target share one open thread", async () => {
   const fixture = await createFixture("api-comment-thread-race");
   const { objective } = await createApprovedObjectiveWithResult(fixture, "concurrent comment target");
@@ -2858,6 +2988,56 @@ async function apiInject(
     headers: { cookie: apiCookie(user) },
     ...(payload === undefined ? {} : { payload }),
   });
+}
+
+async function apiMultipartInject(
+  app: FastifyInstance,
+  user: FixtureUser,
+  url: string,
+  input: {
+    fields: Record<string, string>;
+    file: {
+      fieldName: string;
+      fileName: string;
+      mimeType: string;
+      content: Buffer;
+    };
+  },
+) {
+  const boundary = `----orf-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const chunks: Buffer[] = [];
+  const push = (value: string | Buffer) => {
+    chunks.push(typeof value === "string" ? Buffer.from(value, "utf8") : value);
+  };
+
+  for (const [name, value] of Object.entries(input.fields)) {
+    push(`--${boundary}\r\n`);
+    push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+    push(`${value}\r\n`);
+  }
+
+  push(`--${boundary}\r\n`);
+  push(
+    `Content-Disposition: form-data; name="${input.file.fieldName}"; filename="${input.file.fileName}"\r\n` +
+      `Content-Type: ${input.file.mimeType}\r\n\r\n`,
+  );
+  push(input.file.content);
+  push(`\r\n--${boundary}--\r\n`);
+
+  return app.inject({
+    method: "POST",
+    url,
+    headers: {
+      cookie: apiCookie(user),
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    },
+    payload: Buffer.concat(chunks),
+  });
+}
+
+function attachmentContentPath(contentUrl: string) {
+  const parsed = new URL(contentUrl, "http://127.0.0.1");
+  return `${parsed.pathname}${parsed.search}`;
 }
 
 async function postResult(
