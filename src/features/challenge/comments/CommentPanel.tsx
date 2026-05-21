@@ -14,6 +14,12 @@ type CommentEntry = {
   threadId: string;
 };
 
+type CommentImagePreview = {
+  alt: string;
+  fileName: string;
+  src: string;
+};
+
 type CommentDraftMode =
   | { type: "default" }
   | { type: "reply"; rootMessageId: string; targetAuthor: string; targetMessageId: string }
@@ -55,6 +61,7 @@ export function CommentPanel({
   const [body, setBody] = useState("");
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
   const [activeRootMessageId, setActiveRootMessageId] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<CommentImagePreview | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: targetTitle });
   const commentEntries = useMemo<CommentEntry[]>(() => {
@@ -97,6 +104,23 @@ export function CommentPanel({
       setBody("");
     }
   }, [activeRootMessageId, rootEntries]);
+
+  useEffect(() => {
+    setImagePreview(null);
+  }, [targetId, targetType]);
+
+  useEffect(() => {
+    if (!imagePreview) return undefined;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setImagePreview(null);
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [imagePreview]);
 
   const resetDraft = () => {
     setDraftMode({ type: "default" });
@@ -160,96 +184,102 @@ export function CommentPanel({
   };
 
   return (
-    <aside
-      ref={panelDrag.ref}
-      style={panelDrag.style}
-      data-comment-panel="true"
-      className="orf-comment-panel orf-draggable-floating fixed bottom-4 right-4 z-[90] w-[382px] max-w-[calc(100vw-24px)]"
-    >
-      <div className="orf-comment-box">
-        <div className="orf-comment-panel-header orf-drag-handle" {...panelDrag.handleProps}>
-          <div className="orf-comment-context-title" title={targetTitle}>{targetTitle}</div>
-          <button type="button" className="orf-comment-icon-button" aria-label="关闭评论窗口" title="关闭" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="orf-comment-view">
-          {activeRootEntry ? (
-            <div className="orf-comment-reply-detail-view">
-              <div className="orf-comment-detail-header">
-                <button type="button" className="orf-comment-icon-button" aria-label="返回外层评论列表" title="返回" onClick={() => { setActiveRootMessageId(null); resetDraft(); }}>
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-                <span>回复详情</span>
-              </div>
-              <div className="orf-comment-fixed-root">
-                <CommentMessageRow
-                  entry={activeRootEntry}
-                  canManageAllComments={canManageAllComments}
-                  currentMember={currentMember}
-                  selected={selectedMessageId === activeRootEntry.message.id}
-                  onSelect={setSelectedMessageId}
-                  onReply={(message) => handleReply(activeRootEntry.message.id, message)}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              </div>
-              {replyEntries.length > 0 ? (
-                <div className="orf-comment-message-list">
-                  {replyEntries.map((entry) => (
-                    <CommentMessageRow
-                      key={`${entry.threadId}:${entry.message.id}`}
-                      entry={entry}
-                      canManageAllComments={canManageAllComments}
-                      currentMember={currentMember}
-                      selected={selectedMessageId === entry.message.id}
-                      onSelect={setSelectedMessageId}
-                      onReply={(message) => handleReply(activeRootEntry.message.id, message)}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                    />
-                  ))}
+    <>
+      <aside
+        ref={panelDrag.ref}
+        style={panelDrag.style}
+        data-comment-panel="true"
+        className="orf-comment-panel orf-draggable-floating fixed bottom-4 right-4 z-[90] w-[382px] max-w-[calc(100vw-24px)]"
+      >
+        <div className="orf-comment-box">
+          <div className="orf-comment-panel-header orf-drag-handle" {...panelDrag.handleProps}>
+            <div className="orf-comment-context-title" title={targetTitle}>{targetTitle}</div>
+            <button type="button" className="orf-comment-icon-button" aria-label="关闭评论窗口" title="关闭" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="orf-comment-view">
+            {activeRootEntry ? (
+              <div className="orf-comment-reply-detail-view">
+                <div className="orf-comment-detail-header">
+                  <button type="button" className="orf-comment-icon-button" aria-label="返回外层评论列表" title="返回" onClick={() => { setActiveRootMessageId(null); resetDraft(); }}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <span>回复详情</span>
                 </div>
-              ) : (
-                <div className="orf-comment-empty-state">暂无回复</div>
-              )}
-            </div>
-          ) : rootEntries.length > 0 ? (
-            <div className="orf-comment-message-list">
-              {rootEntries.map((entry) => (
-                <CommentMessageRow
-                  key={`${entry.threadId}:${entry.message.id}`}
-                  entry={entry}
-                  canManageAllComments={canManageAllComments}
-                  currentMember={currentMember}
-                  selected={selectedMessageId === entry.message.id}
-                  showReplyEntry
-                  onSelect={setSelectedMessageId}
-                  onReply={(message) => handleReply(entry.message.id, message)}
-                  onEnterReplies={() => openReplyDetail(entry)}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="orf-comment-empty-state">暂无评论</div>
-          )}
+                <div className="orf-comment-fixed-root">
+                  <CommentMessageRow
+                    entry={activeRootEntry}
+                    canManageAllComments={canManageAllComments}
+                    currentMember={currentMember}
+                    selected={selectedMessageId === activeRootEntry.message.id}
+                    onOpenImage={setImagePreview}
+                    onSelect={setSelectedMessageId}
+                    onReply={(message) => handleReply(activeRootEntry.message.id, message)}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                </div>
+                {replyEntries.length > 0 ? (
+                  <div className="orf-comment-message-list">
+                    {replyEntries.map((entry) => (
+                      <CommentMessageRow
+                        key={`${entry.threadId}:${entry.message.id}`}
+                        entry={entry}
+                        canManageAllComments={canManageAllComments}
+                        currentMember={currentMember}
+                        selected={selectedMessageId === entry.message.id}
+                        onOpenImage={setImagePreview}
+                        onSelect={setSelectedMessageId}
+                        onReply={(message) => handleReply(activeRootEntry.message.id, message)}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="orf-comment-empty-state">暂无回复</div>
+                )}
+              </div>
+            ) : rootEntries.length > 0 ? (
+              <div className="orf-comment-message-list">
+                {rootEntries.map((entry) => (
+                  <CommentMessageRow
+                    key={`${entry.threadId}:${entry.message.id}`}
+                    entry={entry}
+                    canManageAllComments={canManageAllComments}
+                    currentMember={currentMember}
+                    selected={selectedMessageId === entry.message.id}
+                    showReplyEntry
+                    onOpenImage={setImagePreview}
+                    onSelect={setSelectedMessageId}
+                    onReply={(message) => handleReply(entry.message.id, message)}
+                    onEnterReplies={() => openReplyDetail(entry)}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="orf-comment-empty-state">暂无评论</div>
+            )}
+          </div>
+          <CommentComposer
+            body={body}
+            currentMember={currentMember}
+            defaultReplyAuthor={activeRootEntry?.message.author}
+            mode={draftMode}
+            onBodyChange={setBody}
+            onCancelMode={resetDraft}
+            onSubmit={handleSubmit}
+            onUploadAttachment={onUploadAttachment}
+            targetId={targetId}
+            targetType={targetType}
+          />
         </div>
-        <CommentComposer
-          body={body}
-          currentMember={currentMember}
-          defaultReplyAuthor={activeRootEntry?.message.author}
-          mode={draftMode}
-          onBodyChange={setBody}
-          onCancelMode={resetDraft}
-          onSubmit={handleSubmit}
-          onUploadAttachment={onUploadAttachment}
-          targetId={targetId}
-          targetType={targetType}
-        />
-      </div>
-    </aside>
+      </aside>
+      {imagePreview && <CommentImagePreviewDialog preview={imagePreview} onClose={() => setImagePreview(null)} />}
+    </>
   );
 }
 
@@ -260,6 +290,7 @@ function CommentMessageRow({
   onDelete,
   onEdit,
   onEnterReplies,
+  onOpenImage,
   onReply,
   onSelect,
   selected,
@@ -271,6 +302,7 @@ function CommentMessageRow({
   onDelete: (threadId: string, messageId: string) => void;
   onEdit: (threadId: string, message: CommentMessage) => void;
   onEnterReplies?: () => void;
+  onOpenImage: (preview: CommentImagePreview) => void;
   onReply: (message: CommentMessage) => void;
   onSelect: (messageId: string) => void;
   selected: boolean;
@@ -309,7 +341,7 @@ function CommentMessageRow({
         </div>
         <div className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
           {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
-          <CommentBodyText attachments={message.attachments ?? []} body={message.body} />
+          <CommentBodyText attachments={message.attachments ?? []} body={message.body} onOpenImage={onOpenImage} />
         </div>
         {showReplyEntry && entry.replyCount > 0 && (
           <button type="button" className="orf-comment-reply-count" onClick={(event) => { event.stopPropagation(); onEnterReplies?.(); }}>
@@ -319,6 +351,25 @@ function CommentMessageRow({
         )}
       </div>
     </article>
+  );
+}
+
+function CommentImagePreviewDialog({ onClose, preview }: { onClose: () => void; preview: CommentImagePreview }) {
+  return (
+    <div className="orf-comment-image-preview-backdrop" role="presentation" onMouseDown={onClose}>
+      <div
+        className="orf-comment-image-preview-dialog"
+        role="dialog"
+        aria-label={preview.fileName}
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button type="button" className="orf-comment-image-preview-close" aria-label="关闭图片预览" title="关闭" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </button>
+        <img className="orf-comment-image-preview" src={preview.src} alt={preview.alt} />
+      </div>
+    </div>
   );
 }
 
@@ -346,7 +397,15 @@ function CommentTextFragment({ value }: { value: string }) {
   );
 }
 
-function CommentBodyText({ attachments, body }: { attachments: CommentAttachment[]; body: string }) {
+function CommentBodyText({
+  attachments,
+  body,
+  onOpenImage,
+}: {
+  attachments: CommentAttachment[];
+  body: string;
+  onOpenImage: (preview: CommentImagePreview) => void;
+}) {
   const attachmentsById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
   const nodes: ReactNode[] = [];
   let lastIndex = 0;
@@ -364,14 +423,19 @@ function CommentBodyText({ attachments, body }: { attachments: CommentAttachment
     nodes.push(
       attachment ? (
         <figure key={`attachment:${attachment.id}`} className="orf-comment-attachment">
-          <img
-            className="orf-comment-attachment-image"
-            src={attachment.contentUrl}
-            alt={alt}
-            loading="lazy"
-            onClick={(event) => event.stopPropagation()}
+          <button
+            type="button"
+            className="orf-comment-attachment-preview-button"
+            aria-label={`查看图片 ${attachment.fileName || alt}`}
+            title="查看图片"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenImage({ alt, fileName: attachment.fileName || alt, src: attachment.contentUrl });
+            }}
             onDoubleClick={(event) => event.stopPropagation()}
-          />
+          >
+            <img className="orf-comment-attachment-image" src={attachment.contentUrl} alt={alt} loading="lazy" />
+          </button>
         </figure>
       ) : (
         <CommentTextFragment key={`missing:${index}`} value={token} />

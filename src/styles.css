@@ -5862,6 +5862,20 @@ body[data-dragging-floating="true"] {
   white-space: normal;
 }
 
+.orf-comment-attachment-preview-button {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+
+.orf-comment-attachment-preview-button:focus-visible {
+  outline: 2px solid rgba(47, 156, 137, 0.55);
+  outline-offset: 3px;
+}
+
 .orf-comment-attachment-image {
   display: block;
   max-height: 260px;
@@ -5870,6 +5884,64 @@ body[data-dragging-floating="true"] {
   border-radius: 8px;
   background: #f8fafc;
   object-fit: contain;
+}
+
+.orf-comment-attachment-preview-button:hover .orf-comment-attachment-image {
+  border-color: rgba(47, 156, 137, 0.42);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+}
+
+.orf-comment-image-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.72);
+  pointer-events: auto;
+}
+
+.orf-comment-image-preview-dialog {
+  position: relative;
+  display: flex;
+  max-height: calc(100vh - 48px);
+  width: min(1100px, 100%);
+  align-items: center;
+  justify-content: center;
+}
+
+.orf-comment-image-preview {
+  display: block;
+  max-height: calc(100vh - 48px);
+  max-width: 100%;
+  border-radius: 8px;
+  background: #f8fafc;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.32);
+  object-fit: contain;
+}
+
+.orf-comment-image-preview-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #475467;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+}
+
+.orf-comment-image-preview-close:hover {
+  color: #0b8f7f;
 }
 
 .orf-comment-reply-count {
