@@ -2144,6 +2144,25 @@ test("comment image attachments upload, bind, and read through authorized commen
 
     const observerImage = await apiInject(app, fixture.observer, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
     assert.equal(observerImage.statusCode, 403);
+
+    await db.update(objectives).set({ flowStatus: "closed" }).where(eq(objectives.id, objective.id));
+
+    const archivedImage = await apiInject(app, fixture.challenger, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
+    assert.equal(archivedImage.statusCode, 200);
+
+    const lockedUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "locked.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(lockedUpload.statusCode, 403);
   });
 });
 
