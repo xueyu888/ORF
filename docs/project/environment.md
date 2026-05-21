@@ -51,6 +51,54 @@
 
 维护脚本也不能内置真实密码。`scripts/rebuild-wechatvm.ps1` 需要通过 `-LocalPassword` 参数或 `WECHATVM_PASSWORD` 环境变量传入本地 VM 密码；其他 WeChat VM 维护脚本需要通过 `-Password` 参数或同一个环境变量传入密码。
 
+## Local Object Storage
+
+ORF 用户上传文件使用 S3-compatible 对象存储。本地开发和本地服务器迁移目标先使用 MinIO，应用代码只依赖通用 S3 配置。
+
+启动本地 MinIO：
+
+```bash
+npm run storage:dev
+```
+
+`orf up` 也会检查 MinIO；如果 MinIO 未启动，会自动运行 `npm run storage:dev`。
+
+默认地址：
+
+```text
+S3 API: http://127.0.0.1:9000
+Console: http://127.0.0.1:9001
+Bucket: orf-comment-attachments
+```
+
+`.env` 需要配置 `OBJECT_STORAGE_*`，本地示例见 `.env.example`。MinIO bucket 必须保持私有，ORF 后端负责鉴权后读取文件。
+
+停止：
+
+```bash
+npm run storage:down
+```
+
+## Local Service Health
+
+`orf status` 检查本地开发依赖和应用服务：
+
+```bash
+orf status
+```
+
+检查范围：
+
+| 服务 | 检查方式 |
+| --- | --- |
+| PostgreSQL | 使用 `DATABASE_URL` 或 `REMOTE_DATABASE_URL` 执行 `select 1`。 |
+| Ory | 请求 `ORY_PUBLIC_URL` 的 `/health/ready`。 |
+| MinIO | 请求 `OBJECT_STORAGE_ENDPOINT` 的 `/minio/health/live`。 |
+| Backend | 请求 `http://127.0.0.1:8787/health`。 |
+| Frontend | 通过 Vite 代理请求 `http://127.0.0.1:5173/health`。 |
+
+`orf up` 会在启动应用前执行同一组依赖检查。PostgreSQL 缺配置或不可连接时直接失败；Ory 和 MinIO 不健康时会先运行对应的本地启动脚本。
+
 以后需要打开本地前端页面时，先识别当前是否在 WSL：
 
 ```bash

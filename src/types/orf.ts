@@ -286,10 +286,21 @@ export interface OrfRules {
 export type CommentTargetType = "objective" | "result" | "task" | "subtask";
 export type CommentStatus = "open" | "resolved";
 
+export interface CommentAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  width?: number;
+  height?: number;
+  contentUrl: string;
+}
+
 export interface CommentMessage {
   id: string;
   author: string;
   body: string;
+  attachments: CommentAttachment[];
   createdAt: string;
   parentMessageId?: string;
   replyToMessageId?: string;

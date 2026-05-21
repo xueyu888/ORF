@@ -4,6 +4,11 @@ import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "..
 import { authDependencyUnavailablePayload } from "../server/auth/routes";
 import { createPgPoolConfig } from "../server/db/connectionOptions";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../server/db/errors";
+import {
+  checkDatabaseHealth,
+  createPgPoolConfig as createScriptPgPoolConfig,
+  databaseDisplayUrl,
+} from "../scripts/db-connection.mjs";
 
 test("Postgres pool config strips SSL query parameters and applies timeout tuning", () => {
   const config = createPgPoolConfig(
@@ -21,6 +26,45 @@ test("Postgres pool config strips SSL query parameters and applies timeout tunin
   assert.equal(config.query_timeout, 8000);
   assert.equal(config.statement_timeout, 8000);
   assert.equal(config.idleTimeoutMillis, 9000);
+  assert.equal(config.allowExitOnIdle, true);
+  assert.ok(String(config.connectionString).includes("options=-csearch_path%3Dorf_current%2Cpublic"));
+  assert.equal(String(config.connectionString).includes("sslmode"), false);
+  assert.equal(String(config.connectionString).includes("sslrootcert"), false);
+});
+
+test("ORF CLI database helper reports missing database configuration", async () => {
+  const health = await checkDatabaseHealth({});
+
+  assert.equal(health.ok, false);
+  assert.equal(health.message, "missing DATABASE_URL or REMOTE_DATABASE_URL");
+  assert.equal(databaseDisplayUrl({}), "DATABASE_URL");
+});
+
+test("ORF CLI database helper strips secrets from display URL", () => {
+  const displayUrl = databaseDisplayUrl({
+    DATABASE_URL:
+      "postgresql://orf_user:secret-pass@example.com:5432/orf?sslmode=verify-full&sslrootcert=./certs/orf-postgres-root.crt",
+  });
+
+  assert.equal(displayUrl, "postgresql://orf_user@example.com:5432/orf");
+  assert.equal(displayUrl.includes("secret-pass"), false);
+});
+
+test("ORF CLI database helper uses the same SSL query handling as verification scripts", () => {
+  const config = createScriptPgPoolConfig(
+    "postgresql://user:pass@example.com:5432/orf?sslmode=verify-full&sslrootcert=./certs/orf-postgres-root.crt&options=-csearch_path%3Dorf_current%2Cpublic",
+    {
+      connectionTimeoutMillis: 1234,
+      queryTimeoutMillis: 5678,
+      idleTimeoutMillis: 9012,
+    },
+  );
+
+  assert.equal(config.max, 1);
+  assert.equal(config.connectionTimeoutMillis, 1234);
+  assert.equal(config.query_timeout, 5678);
+  assert.equal(config.statement_timeout, 5678);
+  assert.equal(config.idleTimeoutMillis, 9012);
   assert.equal(config.allowExitOnIdle, true);
   assert.ok(String(config.connectionString).includes("options=-csearch_path%3Dorf_current%2Cpublic"));
   assert.equal(String(config.connectionString).includes("sslmode"), false);

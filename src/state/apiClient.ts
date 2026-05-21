@@ -1,4 +1,4 @@
-import type { AppNotification, BountySource, Objective, OrfState, OrfUser, Result } from "../types/orf";
+import type { AppNotification, BountySource, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -19,6 +19,11 @@ export type NotificationReadResponse = {
 export type NotificationsReadAllResponse = {
   updated: number;
   unreadCount: number;
+};
+export type CommentAttachmentUploadResponse = {
+  ok: true;
+  attachment: CommentAttachment;
+  markdown: string;
 };
 export type BountyHallItem = {
   uncertaintyPoints: number;
@@ -151,6 +156,18 @@ export async function markNotificationReadRequest(notificationId: string) {
 
 export async function markAllNotificationsReadRequest() {
   return apiJson<NotificationsReadAllResponse>("/api/notifications/read-all", { method: "PATCH" });
+}
+
+export async function uploadCommentAttachment(input: { file: File; targetId: string; targetType: CommentTargetType }) {
+  const formData = new FormData();
+  formData.set("targetType", input.targetType);
+  formData.set("targetId", input.targetId);
+  formData.set("file", input.file);
+
+  return apiJson<CommentAttachmentUploadResponse>("/api/comments/attachments", {
+    method: "POST",
+    body: formData,
+  });
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {

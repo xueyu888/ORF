@@ -41,9 +41,11 @@ docs/
 | [用户管理 - 后端.md](./backend/用户管理%20-%20后端.md) | 用户管理认证、用户模型和接口口径 |
 | [权限管理 - 前端.md](./frontend/权限管理%20-%20前端.md) | 权限管理页面 UI |
 | [权限管理 - 后端.md](./backend/权限管理%20-%20后端.md) | 权限管理 RBAC 模型和接口口径 |
+| [对象存储 - 后端.md](./backend/对象存储%20-%20后端.md) | S3/MinIO 对象存储、上传文件和迁移契约 |
 | [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push webhook 转发到 Mattermost ORF 频道 |
 | [Mattermost Jira 提醒 - 后端.md](./backend/Mattermost%20Jira%20提醒%20-%20后端.md) | 每日 Jira 提醒私信发送规则 |
 | [消息系统开发.md](./project/消息系统开发.md) | 系统内消息模型、投递事件、接口和前端入口 |
+| [评论图片附件迁移方案.md](./project/评论图片附件迁移方案.md) | 评论图片附件的 S3/MinIO 分阶段迁移方案 |
 | [ORF 悬赏目标流程设计.md](./rules/ORF%20悬赏目标流程设计.md) | 悬赏目标流程的产品术语、核心原则和状态流转 |
 | [ORF 思路记录.md](./rules/ORF%20思路记录.md) | ORF 产品方法中待沉淀的原则和思路 |
 | [积分结算规则.md](./rules/积分结算规则.md) | 积分结算后端规则口径 |

@@ -15,6 +15,14 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   ORF_APP_URL: z.string().url().default("http://127.0.0.1:5173"),
   ORY_PUBLIC_URL: z.string().url().default("http://127.0.0.1:4433"),
+  OBJECT_STORAGE_DRIVER: z.enum(["s3"]).default("s3"),
+  OBJECT_STORAGE_ENDPOINT: z.string().url().default("http://127.0.0.1:9000"),
+  OBJECT_STORAGE_REGION: z.string().trim().min(1).default("us-east-1"),
+  OBJECT_STORAGE_BUCKET: z.string().trim().min(1).default("orf-comment-attachments"),
+  OBJECT_STORAGE_ACCESS_KEY: z.string().trim().min(1).default("orf-dev-minio"),
+  OBJECT_STORAGE_SECRET_KEY: z.string().trim().min(1).default("orf-dev-minio-secret"),
+  OBJECT_STORAGE_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
+  OBJECT_STORAGE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 

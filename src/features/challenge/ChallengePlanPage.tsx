@@ -44,6 +44,7 @@ export function ChallengePlanPage() {
     updateTaskChecklistItem,
     updateTaskChecklistItemLabel,
     updateTaskTitle,
+    uploadCommentAttachment,
   } = useOrf();
   const role = currentUser?.role;
   const currentMember = currentUser?.name ?? "User";
@@ -406,7 +407,9 @@ export function ChallengePlanPage() {
           key={`${commentTarget.type}:${commentTarget.id}`}
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
+          targetId={commentTarget.id}
           targetTitle={commentTarget.title}
+          targetType={commentTarget.type}
           threads={challengeState.comments.filter((thread) => thread.targetType === commentTarget.type && thread.targetId === commentTarget.id)}
           onAddComment={(body, replyInput?: CommentReplyInput) =>
             addComment({
@@ -423,6 +426,7 @@ export function ChallengePlanPage() {
           onClose={() => setCommentTarget(null)}
           onDeleteComment={deleteCommentMessage}
           onUpdateComment={updateCommentMessage}
+          onUploadAttachment={(file) => uploadCommentAttachment({ file, targetId: commentTarget.id, targetType: commentTarget.type })}
         />
       )}
     </div>
