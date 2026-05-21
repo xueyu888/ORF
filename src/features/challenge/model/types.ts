@@ -40,7 +40,6 @@ export type DragDropController = {
 };
 
 export interface BountyNode {
-  deadline: string;
   difficulty: string;
   progress: number;
   result: Result;

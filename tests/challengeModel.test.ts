@@ -57,6 +57,7 @@ test("buildChallengeTree filters objectives and preserves objective result order
   assert.equal(tree[0]?.bounties[0]?.difficulty, "5 星");
   assert.equal(tree[0]?.bounties[0]?.status, "active");
   assert.equal(tree[0]?.bounties[0]?.progress, 30);
+  assert.equal("deadline" in tree[0]!.bounties[0]!, false);
   assert.deepEqual(tree[0]?.actions.map((item) => item.id), ["task-a", "task-b"]);
 });
 

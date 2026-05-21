@@ -132,7 +132,6 @@ function group(objectiveItem: Objective, actions: Task[] = [], ...bounties: Boun
 
 function bounty(resultItem: Result): BountyNode {
   return {
-    deadline: date,
     difficulty: "3 星",
     progress: 25,
     result: resultItem,

@@ -23,7 +23,6 @@ export function buildChallengeTree(
       const bounties = orderedResults.map((result) => ({
         result,
         status: bountyStatus(result, objective),
-        deadline: objective.finalDueAt,
         updatedAt: bountyUpdatedAt(result, input.feedback, input.evidence),
         progress: resultProgress(result),
         difficulty: bountyDifficulty(result),
@@ -37,7 +36,7 @@ export function buildChallengeTree(
         actions,
         bounties,
         challengers: objective.challengers,
-        deadline: objective.finalDueAt || latestDate([...bounties.map((bounty) => bounty.deadline), ...actions.map((action) => action.dueDate)]) || addDays(objective.updatedAt, 7),
+        deadline: objective.finalDueAt || latestDate(actions.map((action) => action.dueDate)) || addDays(objective.updatedAt, 7),
       };
     });
 }

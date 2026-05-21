@@ -441,8 +441,8 @@ function BountyRow({
         <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div>
         <EmptySlot />
         <StatusChip tone={bounty.status}>{bountyStatusLabel[bounty.status]}</StatusChip>
-        <TimeValue icon={Clock3} value={remainingTime(bounty.deadline, now)} />
-        <DateStack primary={bounty.deadline || "未设置"} secondary={bounty.updatedAt || "未设置"} />
+        <EmptySlot />
+        <DateStack primary={bounty.updatedAt || "未设置"} />
         <ProgressValue value={bounty.progress} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>

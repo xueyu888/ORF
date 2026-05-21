@@ -63,8 +63,6 @@ function group(input: Partial<ObjectiveNode> = {}): ObjectiveNode {
 
 function bounty(input: Partial<BountyNode> = {}): BountyNode {
   return {
-    actions: [],
-    deadline: "2999-03-31",
     difficulty: "进阶",
     progress: 0,
     result: result(),
