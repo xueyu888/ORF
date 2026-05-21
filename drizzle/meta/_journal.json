@@ -127,6 +127,13 @@
       "when": 1779340000000,
       "tag": "0017_comment_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1779420000000,
+      "tag": "0018_task_objective_ownership",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,7 @@ export const bountyStatusLabel: Record<BountyStatus, string> = {
   settled: "已结算",
 };
 
-export function bountyStatus(result: Result, actions: Task[], objective?: Objective): BountyStatus {
+export function bountyStatus(result: Result, objective?: Objective): BountyStatus {
   if (result.acceptedResult === "completed" || result.acceptedResult === "falsified") return "settled";
   if (objective?.flowStatus === "settled" || objective?.acceptedResult || objective?.objectiveSettlementPoints != null) return "settled";
   if (objective?.flowStatus === "submitted" || objective?.lootSubmittedAt) return "review";

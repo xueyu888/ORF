@@ -537,7 +537,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     priority: task.priority,
     assignee: task.assignee,
     linkedObjectiveId: task.linkedObjectiveId,
-    linkedResultId: task.linkedResultId,
+    linkedResultId: optional(task.linkedResultId) ?? null,
     feedbackOriginId: optional(task.feedbackOriginId),
     dueDate: task.dueDate,
     tags: task.tags,
@@ -601,7 +601,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     uncertaintyScore: result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel),
     acceptedResult: result.acceptedResult ?? "unreviewed",
     evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
-    taskIds: taskItems.filter((task) => task.linkedResultId === result.id).map((task) => task.id),
+    taskIds: [],
     feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
     trend: trendByResult.get(result.id) ?? [],
     reviewCadence: result.reviewCadence,
@@ -724,7 +724,7 @@ export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): 
     comments: data.comments,
     causeCategories: Array.from(new Set(data.feedback.flatMap((item) => item.causeCategories))),
     rules: {
-      requireResultForTask: true,
+      requireResultForTask: false,
       requireEvidenceForFeedback: true,
       weeklyFeedbackCadence: true,
       autoCreateReviewSummary: false,
@@ -848,7 +848,7 @@ export async function getMyChallengesData(member: string, includeAll = false, sc
   const objectiveIds = new Set(objectivesForMember.map((objective) => objective.id));
   const resultsForMember = data.results.filter((result) => objectiveIds.has(result.objectiveId));
   const resultIds = new Set(resultsForMember.map((result) => result.id));
-  const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId) || resultIds.has(task.linkedResultId));
+  const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId));
   const taskIds = new Set(tasksForMember.map((task) => task.id));
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
 
@@ -886,8 +886,8 @@ export interface CreateTaskInput {
   description?: string;
   assignee?: string;
   priority?: Priority;
-  linkedObjectiveId?: string;
-  linkedResultId: string;
+  linkedObjectiveId: string;
+  linkedResultId?: string | null;
   dueDate?: string;
   feedbackOriginId?: string;
 }
@@ -2767,38 +2767,49 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
   }
 
   const created = await db.transaction(async (tx) => {
-    const [result] = await tx.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1).for("update");
-    if (!result) {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, input.linkedObjectiveId)).limit(1).for("update");
+    if (!objective) {
+      return null;
+    }
+    const linkedResultId = input.linkedResultId?.trim() || null;
+    const [linkedResult] = linkedResultId
+      ? await tx
+          .select({ id: results.id, objectiveId: results.objectiveId, teamId: results.teamId })
+          .from(results)
+          .where(eq(results.id, linkedResultId))
+          .limit(1)
+      : [null];
+    if (linkedResultId && (!linkedResult || linkedResult.teamId !== objective.teamId || linkedResult.objectiveId !== objective.id)) {
       return null;
     }
 
     const feedbackOriginId = input.feedbackOriginId?.trim() || null;
     if (feedbackOriginId) {
       const [originFeedback] = await tx
-        .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
+        .select({ id: feedback.id, teamId: feedback.teamId, linkedObjectiveId: feedback.linkedObjectiveId })
         .from(feedback)
         .where(eq(feedback.id, feedbackOriginId))
         .limit(1);
-      if (!originFeedback || originFeedback.teamId !== result.teamId || originFeedback.linkedResultId !== result.id) {
+      if (!originFeedback || originFeedback.teamId !== objective.teamId || originFeedback.linkedObjectiveId !== objective.id) {
         return null;
       }
     }
 
-    const siblingRows = await tx.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedResultId, result.id));
+    const siblingRows = await tx.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedObjectiveId, objective.id));
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("ORF");
     const now = today();
 
     await tx.insert(tasks).values({
       id,
-      teamId: result.teamId,
+      teamId: objective.teamId,
       title,
-      description: input.description?.trim() || "执行支撑关联指标的下一步动作。",
+      description: input.description?.trim() || "执行支撑目标的下一步技术任务。",
       status: "Todo",
       priority: input.priority ?? "Medium",
       assignee: input.assignee?.trim() || "User",
-      linkedObjectiveId: result.objectiveId,
-      linkedResultId: result.id,
+      linkedObjectiveId: objective.id,
+      linkedResultId,
       feedbackOriginId,
       dueDate: dueDate ?? now,
       tags: ["ORF"],
@@ -2807,7 +2818,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       sortOrder,
     });
 
-    return { id, scope: runtimeScope(result.teamId) };
+    return { id, scope: runtimeScope(objective.teamId) };
   });
 
   if (!created) {
@@ -3033,21 +3044,8 @@ export async function deleteResult(resultId: string): Promise<boolean> {
       return false;
     }
 
-    const taskRows = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.linkedResultId, resultId));
-    const taskIds = taskRows.map((task) => task.id);
-    const checklistRows =
-      taskIds.length > 0
-        ? await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(inArray(taskChecklistItems.taskId, taskIds))
-        : [];
-    const checklistIds = checklistRows.map((item) => item.id);
-
-    if (checklistIds.length > 0) {
-      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), inArray(commentThreads.targetId, checklistIds)));
-    }
-    if (taskIds.length > 0) {
-      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), inArray(commentThreads.targetId, taskIds)));
-    }
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
+    await tx.update(tasks).set({ linkedResultId: null }).where(eq(tasks.linkedResultId, resultId));
 
     const deleted = await tx.delete(results).where(eq(results.id, resultId)).returning({ id: results.id });
     return deleted.length > 0;
@@ -3137,51 +3135,34 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
   });
 }
 
-export async function moveTask(taskId: string, input: { toResultId: string; referenceTaskId?: string; placement?: "before" | "after" }): Promise<boolean> {
+export async function moveTask(taskId: string, input: { objectiveId: string; referenceTaskId?: string; placement?: "before" | "after" }): Promise<boolean> {
   return db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
-    const [targetResult] = await tx.select().from(results).where(eq(results.id, input.toResultId)).limit(1);
-    if (!task || !targetResult) {
-      return false;
-    }
-    const affectedResultIds = Array.from(new Set([task.linkedResultId, targetResult.id])).sort();
-    const lockedResults = await tx
-      .select({ id: results.id })
-      .from(results)
-      .where(inArray(results.id, affectedResultIds))
-      .for("update");
-    if (lockedResults.length !== affectedResultIds.length) {
+    const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
+    if (!task || !objective || task.linkedObjectiveId !== objective.id) {
       return false;
     }
     if (input.referenceTaskId) {
       const [referenceTask] = await tx.select().from(tasks).where(eq(tasks.id, input.referenceTaskId)).limit(1);
-      if (!referenceTask || referenceTask.linkedResultId !== targetResult.id || referenceTask.id === task.id) {
+      if (!referenceTask || referenceTask.linkedObjectiveId !== objective.id || referenceTask.id === task.id) {
         return false;
       }
     }
 
-    await tx
-      .update(tasks)
-      .set({ linkedResultId: targetResult.id, linkedObjectiveId: targetResult.objectiveId, updatedAt: today() })
-      .where(eq(tasks.id, taskId));
+    await tx.update(tasks).set({ updatedAt: today() }).where(eq(tasks.id, taskId));
 
-    for (const resultId of affectedResultIds) {
-      const rows = await tx
-        .select({ id: tasks.id })
-        .from(tasks)
-        .where(eq(tasks.linkedResultId, resultId))
-        .orderBy(tasks.sortOrder);
-      const ids = rows.map((row) => row.id);
-      const orderedIds =
-        resultId === targetResult.id && input.referenceTaskId
-          ? reorderIds(ids, taskId, input.referenceTaskId, input.placement ?? "after")
-          : resultId === targetResult.id
-            ? ids.filter((id) => id !== taskId).concat(taskId)
-            : ids.filter((id) => id !== taskId);
+    const rows = await tx
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(eq(tasks.linkedObjectiveId, objective.id))
+      .orderBy(tasks.sortOrder);
+    const ids = rows.map((row) => row.id);
+    const orderedIds = input.referenceTaskId
+      ? reorderIds(ids, taskId, input.referenceTaskId, input.placement ?? "after")
+      : ids.filter((id) => id !== taskId).concat(taskId);
 
-      for (const [index, id] of orderedIds.entries()) {
-        await tx.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id));
-      }
+    for (const [index, id] of orderedIds.entries()) {
+      await tx.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id));
     }
 
     return true;

@@ -1,4 +1,4 @@
-import type { Feedback, Objective, Result, Task } from "../../../types/orf";
+import type { Feedback, Objective, Result } from "../../../types/orf";
 
 export interface ResultQualityCheck {
   label: string;
@@ -9,13 +9,12 @@ interface ResultQualityInput {
   feedback: readonly Feedback[];
   objective: Objective | undefined;
   result: Result;
-  tasks: readonly Task[];
 }
 
 const vagueTerms = ["尽量", "大概", "较好", "明显", "适当", "若干", "相关优化"];
 
 export function buildResultQualityChecks(input: ResultQualityInput): ResultQualityCheck[] {
-  const { feedback, objective, result, tasks } = input;
+  const { feedback, objective, result } = input;
 
   return [
     {
@@ -33,10 +32,6 @@ export function buildResultQualityChecks(input: ResultQualityInput): ResultQuali
     {
       label: "反馈已更新",
       passed: feedback.length > 0,
-    },
-    {
-      label: "有行动项支撑",
-      passed: tasks.length > 0,
     },
     {
       label: "口径清楚",

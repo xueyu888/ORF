@@ -105,7 +105,7 @@ interface OrfContextValue {
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => Promise<boolean>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>) => Promise<boolean>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
@@ -911,7 +911,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
               phenomenon: input.phenomenon,
               causeCategories: input.causeCategories,
               impact: input.impact,
-              linkedResultId: input.linkedResultId,
+              linkedResultId: input.linkedResultId ?? null,
               suggestedAdjustment: input.suggestedAdjustment,
               source: input.source,
               owner: input.owner,
@@ -1064,7 +1064,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       moveTask: (input) => {
         void apiRequest(`/api/tasks/${encodeURIComponent(input.taskId)}/move`, {
           method: "PATCH",
-          body: JSON.stringify({ toResultId: input.toResultId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
+          body: JSON.stringify({ objectiveId: input.objectiveId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
         })
           .then(refreshTaskManagementData)
           .then(() => notify("行动项位置已更新"))

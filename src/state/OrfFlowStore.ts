@@ -5,7 +5,7 @@ import { addCalendarDays, localDateString } from "../utils/date";
 
 type Placement = "before" | "after";
 type MoveResultInput = { resultId: string; objectiveId: string; referenceResultId: string; placement: Placement };
-type MoveTaskInput = { taskId: string; toResultId: string; referenceTaskId?: string; placement?: Placement };
+type MoveTaskInput = { taskId: string; objectiveId: string; referenceTaskId?: string; placement?: Placement };
 type MoveSubtaskInput = { itemId: string; fromTaskId: string; toTaskId: string; referenceItemId?: string; placement?: Placement };
 type SubmitLootInput = {
   objectiveId: string;
@@ -130,7 +130,7 @@ const insertTaskByReference = (tasks: Task[], movingTask: Task, referenceTaskId?
     }
   }
 
-  const lastTargetIndex = withoutMoving.reduce((lastIndex, item, index) => (item.linkedResultId === task.linkedResultId ? index : lastIndex), -1);
+  const lastTargetIndex = withoutMoving.reduce((lastIndex, item, index) => (item.linkedObjectiveId === task.linkedObjectiveId ? index : lastIndex), -1);
   const insertIndex = lastTargetIndex >= 0 ? lastTargetIndex + 1 : withoutMoving.length;
   return [...withoutMoving.slice(0, insertIndex), task, ...withoutMoving.slice(insertIndex)];
 };
@@ -185,7 +185,7 @@ const collectCascadeTargets = (
   }
 
   for (const task of state.tasks) {
-    if (objectiveIds.has(task.linkedObjectiveId) || resultIds.has(task.linkedResultId)) {
+    if (objectiveIds.has(task.linkedObjectiveId)) {
       taskIds.add(task.id);
     }
   }
@@ -495,11 +495,12 @@ export class OrfFlowStore {
     };
   }
 
-  createTask(state: OrfState, input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>): OrfState {
-    const result = state.results.find((item) => item.id === input.linkedResultId);
-    if (!result) {
+  createTask(state: OrfState, input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>): OrfState {
+    const objective = state.objectives.find((item) => item.id === input.linkedObjectiveId);
+    if (!objective) {
       return state;
     }
+    const linkedResultId = input.linkedResultId && state.results.some((item) => item.id === input.linkedResultId && item.objectiveId === objective.id) ? input.linkedResultId : null;
 
     const nextNumber = 128 + state.tasks.length + 1;
     const now = currentDate();
@@ -510,8 +511,8 @@ export class OrfFlowStore {
       status: input.status ?? "Todo",
       priority: input.priority,
       assignee: input.assignee || currentUserName(state),
-      linkedObjectiveId: result.objectiveId,
-      linkedResultId: input.linkedResultId,
+      linkedObjectiveId: objective.id,
+      linkedResultId,
       feedbackOriginId: input.feedbackOriginId,
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
@@ -525,9 +526,6 @@ export class OrfFlowStore {
       tasks: [task, ...state.tasks],
       objectives: state.objectives.map((objective) =>
         objective.id === task.linkedObjectiveId ? { ...objective, taskIds: [task.id, ...objective.taskIds] } : objective,
-      ),
-      results: state.results.map((result) =>
-        result.id === task.linkedResultId ? { ...result, taskIds: [task.id, ...result.taskIds] } : result,
       ),
     };
   }
@@ -811,29 +809,25 @@ export class OrfFlowStore {
 
   moveTask(state: OrfState, input: MoveTaskInput): OrfState {
     const task = state.tasks.find((item) => item.id === input.taskId);
-    const targetResult = state.results.find((item) => item.id === input.toResultId);
-    if (!task || !targetResult) {
+    const objective = state.objectives.find((item) => item.id === input.objectiveId);
+    if (!task || !objective || task.linkedObjectiveId !== objective.id) {
       return state;
     }
 
-    if (input.referenceTaskId === input.taskId && task.linkedResultId === input.toResultId) {
+    if (input.referenceTaskId === input.taskId) {
       return state;
     }
 
     if (input.referenceTaskId) {
       const referenceTask = state.tasks.find((item) => item.id === input.referenceTaskId);
-      if (!referenceTask || referenceTask.linkedResultId !== targetResult.id || referenceTask.id === task.id) {
+      if (!referenceTask || referenceTask.linkedObjectiveId !== objective.id || referenceTask.id === task.id) {
         return state;
       }
     }
 
     const now = currentDate();
-    const previousResultId = task.linkedResultId;
-    const previousObjectiveId = task.linkedObjectiveId;
     const movedTask: Task = {
       ...task,
-      linkedObjectiveId: targetResult.objectiveId,
-      linkedResultId: targetResult.id,
       updatedAt: now,
     };
     const nextTasks = insertTaskByReference(state.tasks, movedTask, input.referenceTaskId, input.placement);
@@ -841,27 +835,9 @@ export class OrfFlowStore {
     return {
       ...state,
       tasks: nextTasks,
-      objectives: state.objectives.map((objective) => {
-        if (objective.id !== previousObjectiveId && objective.id !== targetResult.objectiveId) {
-          return objective;
-        }
-
-        const taskIds = objective.id === targetResult.objectiveId
-          ? nextTasks.filter((item) => item.linkedObjectiveId === objective.id).map((item) => item.id)
-          : objective.taskIds.filter((id) => id !== task.id);
-
-        return { ...objective, taskIds, updatedAt: now };
-      }),
-      results: state.results.map((result) => {
-        if (result.id !== previousResultId && result.id !== targetResult.id) {
-          return result;
-        }
-
-        return {
-          ...result,
-          taskIds: nextTasks.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
-        };
-      }),
+      objectives: state.objectives.map((item) =>
+        item.id === objective.id ? { ...item, taskIds: nextTasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id), updatedAt: now } : item,
+      ),
     };
   }
 

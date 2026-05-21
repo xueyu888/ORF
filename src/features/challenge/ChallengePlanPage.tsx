@@ -8,7 +8,7 @@ import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
-import type { Objective, Result } from "../../types/orf";
+import type { Objective } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
@@ -73,6 +73,7 @@ function draftObjective(title: string): Objective {
 function draftObjectiveNode(title: string): ObjectiveNode {
   const objective = draftObjective(title);
   return {
+    actions: [],
     bounties: [],
     challengers: [],
     deadline: objective.finalDueAt,
@@ -267,12 +268,12 @@ export function ChallengePlanPage() {
     openModal({ type: "newResult", objectiveId, source: action.source });
   };
 
-  const addAction = (bounty: Result) => {
-    if (!canMutateWorkItemsForObjective(bounty.objectiveId)) {
+  const addAction = (objectiveId: string) => {
+    if (!canMutateWorkItemsForObjective(objectiveId)) {
       notify("目标当前阶段不能新增行动项");
       return;
     }
-    openModal({ type: "newTask", objectiveId: bounty.objectiveId, resultId: bounty.id });
+    openModal({ type: "newTask", objectiveId });
   };
 
   const addSubAction = (actionId: string, afterItemId?: string) => {
@@ -447,11 +448,11 @@ export function ChallengePlanPage() {
       }
 
       if (dragItem.type === "action") {
-        if (target.type === "bountyActions") {
-          moveTask({ taskId: dragItem.id, toResultId: target.bountyId });
+        if (target.type === "objectiveActions") {
+          moveTask({ taskId: dragItem.id, objectiveId: target.objectiveId });
         }
         if (target.type === "action") {
-          moveTask({ taskId: dragItem.id, toResultId: target.bountyId, referenceTaskId: target.actionId, placement: target.placement });
+          moveTask({ taskId: dragItem.id, objectiveId: target.objectiveId, referenceTaskId: target.actionId, placement: target.placement });
         }
       }
 

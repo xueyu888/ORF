@@ -1,11 +1,9 @@
-import type { Evidence, Feedback, Result, Task } from "../../../types/orf";
+import type { Evidence, Feedback, Result } from "../../../types/orf";
 import { addCalendarDays } from "../../../utils/date";
 
-export function bountyUpdatedAt(result: Result, actions: Task[], feedback: Feedback[], evidence: Evidence[]) {
+export function bountyUpdatedAt(result: Result, feedback: Feedback[], evidence: Evidence[]) {
   return latestDate([
     result.trend.at(-1)?.date,
-    ...actions.map((action) => action.updatedAt),
-    ...actions.flatMap((action) => action.checklist.map((item) => item.updatedAt)),
     ...feedback.filter((item) => item.linkedResultId === result.id).map((item) => item.updatedAt),
     ...evidence.filter((item) => item.linkedResultId === result.id).map((item) => item.date),
   ]);

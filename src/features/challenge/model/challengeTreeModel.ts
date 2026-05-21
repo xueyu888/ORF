@@ -20,25 +20,24 @@ export function buildChallengeTree(
       const orderedResults = input.results
         .filter((result) => result.objectiveId === objective.id)
         .sort((left, right) => orderIndex(objective.resultIds, left.id) - orderIndex(objective.resultIds, right.id));
-      const bounties = orderedResults.map((result) => {
-        const actions = input.tasks.filter((task) => task.linkedResultId === result.id);
-
-        return {
-          result,
-          actions,
-          status: bountyStatus(result, actions, objective),
-          deadline: objective.finalDueAt,
-          updatedAt: bountyUpdatedAt(result, actions, input.feedback, input.evidence),
-          progress: resultProgress(result),
-          difficulty: bountyDifficulty(result),
-        } satisfies BountyNode;
-      });
+      const bounties = orderedResults.map((result) => ({
+        result,
+        status: bountyStatus(result, objective),
+        deadline: objective.finalDueAt,
+        updatedAt: bountyUpdatedAt(result, input.feedback, input.evidence),
+        progress: resultProgress(result),
+        difficulty: bountyDifficulty(result),
+      }) satisfies BountyNode);
+      const actions = input.tasks
+        .filter((task) => task.linkedObjectiveId === objective.id)
+        .sort((left, right) => orderIndex(objective.taskIds, left.id) - orderIndex(objective.taskIds, right.id));
 
       return {
         objective,
+        actions,
         bounties,
         challengers: objective.challengers,
-        deadline: objective.finalDueAt || latestDate(bounties.map((bounty) => bounty.deadline)) || addDays(objective.updatedAt, 7),
+        deadline: objective.finalDueAt || latestDate([...bounties.map((bounty) => bounty.deadline), ...actions.map((action) => action.dueDate)]) || addDays(objective.updatedAt, 7),
       };
     });
 }

@@ -1646,7 +1646,7 @@ const legacyInitialOrfState: LegacyInitialState = {
     },
   ],
   rules: {
-    requireResultForTask: true,
+    requireResultForTask: false,
     requireEvidenceForFeedback: true,
     weeklyFeedbackCadence: true,
     autoCreateReviewSummary: true,

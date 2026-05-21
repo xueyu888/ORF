@@ -218,11 +218,11 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
     .filter((user, index, users) => user.status === "active" && users.findIndex((item) => item.id === user.id) === index);
   const defaultAssignee = assigneeOptions.find((user) => user.id === currentUser?.id)?.name ?? assigneeOptions[0]?.name ?? "";
   const linkedFeedback = state.feedback.find((item) => item.id === feedbackId);
-  const resultOptions = objectiveId ? state.results.filter((result) => result.objectiveId === objectiveId) : state.results;
-  const requestedResultId = resultId ?? linkedFeedback?.linkedResultId;
-  const initialResultId = requestedResultId && resultOptions.some((result) => result.id === requestedResultId) ? requestedResultId : resultOptions[0]?.id ?? state.results[0]?.id ?? "";
-  const [linkedResultId, setLinkedResultId] = useState(initialResultId);
-  const selectedResult = resultOptions.find((result) => result.id === linkedResultId) ?? (!objectiveId ? state.results.find((result) => result.id === linkedResultId) : undefined);
+  const requestedObjectiveId = objectiveId ?? (resultId ? state.results.find((result) => result.id === resultId)?.objectiveId : undefined) ?? linkedFeedback?.linkedObjectiveId;
+  const objectiveOptions = requestedObjectiveId ? state.objectives.filter((objective) => objective.id === requestedObjectiveId) : state.objectives;
+  const initialObjectiveId = requestedObjectiveId && objectiveOptions.some((objective) => objective.id === requestedObjectiveId) ? requestedObjectiveId : objectiveOptions[0]?.id ?? "";
+  const [linkedObjectiveId, setLinkedObjectiveId] = useState(initialObjectiveId);
+  const selectedObjective = objectiveOptions.find((objective) => objective.id === linkedObjectiveId) ?? state.objectives.find((objective) => objective.id === linkedObjectiveId);
   const [title, setTitle] = useState(linkedFeedback ? `处理反馈：${linkedFeedback.causeCategories.join(" + ")}` : "");
   const [description, setDescription] = useState(linkedFeedback?.suggestedAdjustment ?? "");
   const [assignee, setAssignee] = useState(defaultAssignee);
@@ -235,12 +235,12 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
         className="grid gap-4"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (hasBlankRequiredValues([title, linkedResultId, assignee])) {
+          if (hasBlankRequiredValues([title, linkedObjectiveId, assignee])) {
             notify("请填写所有必填字段");
             return;
           }
-          if (!selectedResult) {
-            notify("请选择关联指标");
+          if (!selectedObjective) {
+            notify("请选择关联目标");
             return;
           }
           if (submitting) return;
@@ -252,8 +252,7 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
               description: description.trim(),
               assignee: assignee.trim(),
               priority,
-              linkedObjectiveId: selectedResult.objectiveId,
-              linkedResultId,
+              linkedObjectiveId: selectedObjective.id,
               feedbackOriginId: feedbackId,
             });
             if (ok) closeModal();
@@ -264,7 +263,7 @@ function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: str
       >
         <Field label="行动项标题"><input className="orf-input px-3 py-2" required value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
         <Field label="说明"><textarea className="orf-input min-h-24 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-        <Field label="关联指标"><select className="orf-input px-3 py-2" required value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
+        <Field label="关联目标"><select className="orf-input px-3 py-2" required value={linkedObjectiveId} onChange={(event) => setLinkedObjectiveId(event.target.value)}>{objectiveOptions.map((objective) => <option key={objective.id} value={objective.id}>{objective.title}</option>)}</select></Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="执行人">
             <select className="orf-input px-3 py-2" required value={assignee} onChange={(event) => setAssignee(event.target.value)}>

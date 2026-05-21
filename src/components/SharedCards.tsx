@@ -70,7 +70,6 @@ export function ResultCard({ result }: { result: Result }) {
         <div className="mt-4 flex items-center justify-between text-xs orf-text-muted">
           <span>{result.evidenceIds.length} 个证据</span>
           <span>{result.feedbackIds.length} 条反馈</span>
-          <span>{result.taskIds.length} 个行动项</span>
         </div>
       </Card>
     </Link>
@@ -95,13 +94,13 @@ export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; re
   );
 }
 
-export function TaskRow({ task, resultTitle, onStatusChange }: { task: Task; resultTitle?: string; onStatusChange: (status: Task["status"]) => void }) {
+export function TaskRow({ task, objectiveTitle, onStatusChange }: { task: Task; objectiveTitle?: string; onStatusChange: (status: Task["status"]) => void }) {
   return (
     <div className="orf-table-row grid grid-cols-[78px_minmax(240px,1fr)_120px_88px_108px_112px] items-center gap-3 px-3 py-3 text-sm">
       <div className="font-mono text-xs orf-text-muted">{task.id}</div>
       <div className="min-w-0">
         <div className="truncate font-medium orf-text-primary">{task.title}</div>
-        <div className="mt-1 truncate text-xs orf-text-muted">{resultTitle ? `支撑指标：${resultTitle}` : "未关联指标"}</div>
+        <div className="mt-1 truncate text-xs orf-text-muted">{objectiveTitle ? `所属目标：${objectiveTitle}` : "未关联目标"}</div>
       </div>
       <select className="orf-input px-2 py-1 text-xs" value={task.status} onChange={(event) => onStatusChange(event.target.value as Task["status"])}>
         {["Backlog", "Todo", "In Progress", "In Review", "Done"].map((status) => <option key={status} value={status}>{taskStatusLabel[status as Task["status"]]}</option>)}
@@ -118,7 +117,7 @@ export function IntegrityCheck({ hasFeedback, hasTasks, resultRiskCount }: { has
     { label: "目标是挑战导向", state: "通过" },
     { label: "指标可度量", state: resultRiskCount > 0 ? "提醒" : "通过" },
     { label: "本周有反馈更新", state: hasFeedback ? "通过" : "未通过" },
-    { label: "行动项已关联指标", state: hasTasks ? "通过" : "提醒" },
+    { label: "目标有执行任务", state: hasTasks ? "通过" : "提醒" },
   ];
 
   return (
