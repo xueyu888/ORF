@@ -22,24 +22,28 @@ export const mloginSuccessCase = {
       {
         id: "backend.ready",
         title: "后端服务可用",
+        source: { caseStepId: "B-1", method: "api" },
         object: "api.health",
         operator: "ok",
       },
       {
         id: "db.ready",
         title: "数据库可连接",
+        source: { caseStepId: "B-2", method: "prisma" },
         object: "db",
         operator: "ready",
       },
       {
         id: "ory.ready",
         title: "Ory Admin API 可用",
+        source: { caseStepId: "B-3", method: "api" },
         object: "ory.admin",
         operator: "ready",
       },
       {
         id: "protected.redirects_to_auth",
         title: "受保护页面会回到登录页",
+        source: { caseStepId: "B-7", method: "playwright" },
         object: "page.protected",
         operator: "redirects_to_auth",
         params: {
@@ -50,18 +54,21 @@ export const mloginSuccessCase = {
       {
         id: "session.unauthenticated",
         title: "后端 session 未登录",
+        source: { caseStepId: "B-4", method: "api" },
         object: "auth.session",
         operator: "unauthenticated",
       },
       {
         id: "cookie.absent",
         title: "浏览器不存在登录 cookie",
+        source: { caseStepId: "B-5", method: "playwright" },
         object: "browser.cookie",
         operator: "absent",
       },
       {
         id: "storage.empty",
         title: "浏览器 storage 不含登录态",
+        source: { caseStepId: "B-6", method: "playwright" },
         object: "browser.auth_storage",
         operator: "empty",
       },
@@ -74,6 +81,7 @@ export const mloginSuccessCase = {
       {
         id: "ory.identity.upsert",
         title: "准备 Ory 测试身份",
+        source: { caseStepId: "Setup-1", method: "api" },
         object: "ory.identity",
         operator: "upsert",
         params: {
@@ -83,6 +91,7 @@ export const mloginSuccessCase = {
       {
         id: "ory.sessions.revoke",
         title: "清理测试身份已有 Ory session",
+        source: { caseStepId: "Setup-4", method: "api" },
         object: "ory.sessions",
         operator: "revoke",
         params: {
@@ -92,6 +101,7 @@ export const mloginSuccessCase = {
       {
         id: "db.team.ensure",
         title: "准备测试团队",
+        source: { caseStepId: "Setup-2", method: "prisma" },
         object: "db.team",
         operator: "ensure",
         params: {
@@ -101,6 +111,7 @@ export const mloginSuccessCase = {
       {
         id: "db.user.upsert",
         title: "准备 ORF 测试成员",
+        source: { caseStepId: "Setup-2", method: "prisma" },
         object: "db.user",
         operator: "upsert",
         params: {
@@ -110,12 +121,14 @@ export const mloginSuccessCase = {
       {
         id: "browser.clear",
         title: "清理浏览器状态",
+        source: { caseStepId: "Setup-5", method: "playwright" },
         object: "browser",
         operator: "clear_state",
       },
       {
         id: "page.goto.auth",
         title: "打开登录页",
+        source: { caseStepId: "Setup-6", method: "playwright" },
         object: "page",
         operator: "goto",
         params: {
@@ -131,6 +144,7 @@ export const mloginSuccessCase = {
       {
         id: "url.auth",
         title: "当前页面是登录页",
+        source: { caseStepId: "S0-1", method: "playwright" },
         object: "page.url",
         operator: "match",
         params: {
@@ -140,6 +154,7 @@ export const mloginSuccessCase = {
       {
         id: "heading.sign_in.visible",
         title: "登录页标题可见",
+        source: { caseStepId: "S0-2", method: "playwright" },
         object: "page",
         operator: "visible",
         params: {
@@ -150,6 +165,7 @@ export const mloginSuccessCase = {
       {
         id: "input.email.empty",
         title: "邮箱输入框为空",
+        source: { caseStepId: "S0-3", method: "playwright" },
         object: "input",
         operator: "value",
         params: {
@@ -160,6 +176,7 @@ export const mloginSuccessCase = {
       {
         id: "input.password.empty",
         title: "密码输入框为空",
+        source: { caseStepId: "S0-4", method: "playwright" },
         object: "input",
         operator: "value",
         params: {
@@ -171,6 +188,7 @@ export const mloginSuccessCase = {
       {
         id: "button.sign_in.enabled",
         title: "登录按钮可点击",
+        source: { caseStepId: "S0-5", method: "playwright" },
         object: "page",
         operator: "enabled",
         params: {
@@ -181,18 +199,21 @@ export const mloginSuccessCase = {
       {
         id: "session.unauthenticated",
         title: "后端 session 未登录",
+        source: { caseStepId: "S0-6", method: "api" },
         object: "auth.session",
         operator: "unauthenticated",
       },
       {
         id: "cookie.absent",
         title: "浏览器不存在登录 cookie",
+        source: { caseStepId: "S0-7", method: "playwright" },
         object: "browser.cookie",
         operator: "absent",
       },
       {
         id: "ory.identity.exists",
         title: "Ory 测试身份存在",
+        source: { caseStepId: "S0-8", method: "api" },
         object: "ory.identity",
         operator: "exists",
         params: {
@@ -202,6 +223,7 @@ export const mloginSuccessCase = {
       {
         id: "db.member.matches",
         title: "ORF 普通成员关系存在",
+        source: { caseStepId: "S0-9", method: "prisma" },
         object: "db.member",
         operator: "matches",
         params: {
@@ -220,6 +242,7 @@ export const mloginSuccessCase = {
       {
         id: "fill.email",
         title: "输入邮箱",
+        source: { caseStepId: "Action-1", method: "playwright" },
         object: "page",
         operator: "fill",
         params: {
@@ -230,6 +253,7 @@ export const mloginSuccessCase = {
       {
         id: "fill.password",
         title: "输入密码",
+        source: { caseStepId: "Action-2", method: "playwright" },
         object: "page",
         operator: "fill",
         params: {
@@ -241,6 +265,7 @@ export const mloginSuccessCase = {
       {
         id: "capture.login_response",
         title: "注册登录接口响应捕获",
+        source: { caseStepId: "S1-1", method: "api" },
         object: "api",
         operator: "capture_response",
         params: {
@@ -252,6 +277,7 @@ export const mloginSuccessCase = {
       {
         id: "click.sign_in",
         title: "点击登录按钮",
+        source: { caseStepId: "Action-3", method: "playwright" },
         object: "page",
         operator: "click",
         params: {
@@ -268,6 +294,7 @@ export const mloginSuccessCase = {
       {
         id: "login_response.ok",
         title: "登录接口响应成功",
+        source: { caseStepId: "S1-1", method: "api" },
         object: "api.response",
         operator: "ok",
         params: {
@@ -278,6 +305,7 @@ export const mloginSuccessCase = {
       {
         id: "url.bounties",
         title: "进入 bounties 页面",
+        source: { caseStepId: "S1-2", method: "playwright" },
         object: "page.url",
         operator: "match",
         params: {
@@ -287,12 +315,14 @@ export const mloginSuccessCase = {
       {
         id: "cookie.present",
         title: "浏览器存在登录 cookie",
+        source: { caseStepId: "S1-3", method: "playwright" },
         object: "browser.cookie",
         operator: "present",
       },
       {
         id: "session.authenticated",
         title: "后端 session 已登录",
+        source: { caseStepId: "S1-4", method: "api" },
         object: "auth.session",
         operator: "authenticated",
         params: {
@@ -303,6 +333,7 @@ export const mloginSuccessCase = {
       {
         id: "nav.visible",
         title: "主导航可见",
+        source: { caseStepId: "S1-5", method: "playwright" },
         object: "page",
         operator: "visible",
         params: {
@@ -312,6 +343,7 @@ export const mloginSuccessCase = {
       {
         id: "current_user.visible",
         title: "当前用户入口可见",
+        source: { caseStepId: "S1-6", method: "playwright" },
         object: "page",
         operator: "visible",
         params: {
@@ -321,6 +353,7 @@ export const mloginSuccessCase = {
       {
         id: "logout.visible",
         title: "退出登录按钮可见",
+        source: { caseStepId: "S1-7", method: "playwright" },
         object: "page",
         operator: "visible",
         params: {
@@ -331,6 +364,7 @@ export const mloginSuccessCase = {
       {
         id: "sign_in.absent",
         title: "登录按钮不再出现在当前页面",
+        source: { caseStepId: "S1-8", method: "playwright" },
         object: "page",
         operator: "count",
         params: {
@@ -342,6 +376,7 @@ export const mloginSuccessCase = {
       {
         id: "db.member.matches",
         title: "ORF 普通成员关系仍然存在",
+        source: { caseStepId: "S1-9", method: "prisma" },
         object: "db.member",
         operator: "matches",
         params: {
@@ -360,18 +395,21 @@ export const mloginSuccessCase = {
       {
         id: "auth.logout",
         title: "退出当前登录态",
+        source: { caseStepId: "Clean-1", method: "api" },
         object: "auth",
         operator: "logout",
       },
       {
         id: "browser.clear",
         title: "清理浏览器状态",
+        source: { caseStepId: "Clean-2", method: "playwright" },
         object: "browser",
         operator: "clear_state",
       },
       {
         id: "db.restore_last_online_at",
         title: "恢复 last_online_at",
+        source: { caseStepId: "Clean-3", method: "prisma" },
         object: "db.user",
         operator: "restore_last_online_at",
         params: {
@@ -383,6 +421,7 @@ export const mloginSuccessCase = {
       {
         id: "ory.sessions.revoke",
         title: "撤销测试身份 Ory session",
+        source: { caseStepId: "Clean-4", method: "api" },
         object: "ory.sessions",
         operator: "revoke",
         params: {

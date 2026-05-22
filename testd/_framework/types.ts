@@ -18,7 +18,7 @@ export type StepSource = {
 export type StepSpec<TParams extends StepParams = StepParams> = {
   id: string;
   title: string;
-  source?: StepSource;
+  source: StepSource;
   object: string;
   operator: string;
   params?: TParams;

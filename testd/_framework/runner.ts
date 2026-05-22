@@ -134,8 +134,7 @@ export async function runStateCase<
 }
 
 function formatStepTitle(step: StepSpec) {
-  const source = step.source ? `[${step.source.caseStepId}][${step.source.method}] ` : "";
-  return `${source}${step.id}: ${step.title}`;
+  return `[${step.source.caseStepId}][${step.source.method}] ${step.id}: ${step.title}`;
 }
 
 function formatStepOperator(step: StepSpec) {

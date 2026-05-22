@@ -20,12 +20,13 @@ export const registerApprovalLoginCase = {
   B: {
     description: "系统服务可用，预置管理员存在，注册测试用户不存在，浏览器未登录",
     assertions: [
-      { id: "backend.ready", title: "后端服务可用", object: "api.health", operator: "ok" },
-      { id: "db.ready", title: "数据库可连接", object: "db", operator: "ready" },
-      { id: "ory.ready", title: "Ory Admin API 可用", object: "ory.admin", operator: "ready" },
+      { id: "backend.ready", title: "后端服务可用", source: { caseStepId: "B-1", method: "api" }, object: "api.health", operator: "ok" },
+      { id: "db.ready", title: "数据库可连接", source: { caseStepId: "B-2", method: "prisma" }, object: "db", operator: "ready" },
+      { id: "ory.ready", title: "Ory Admin API 可用", source: { caseStepId: "B-3", method: "api" }, object: "ory.admin", operator: "ready" },
       {
         id: "ory.admin_identity.exists",
         title: "管理员 Ory 身份存在",
+        source: { caseStepId: "B-4", method: "api" },
         object: "ory.identity",
         operator: "exists",
         params: { emailFrom: "data.adminEmail" },
@@ -33,6 +34,7 @@ export const registerApprovalLoginCase = {
       {
         id: "db.admin.active",
         title: "预置管理员账号可用",
+        source: { caseStepId: "B-5", method: "prisma" },
         object: "db.admin",
         operator: "active",
         params: { emailFrom: "data.adminEmail" },
@@ -40,6 +42,7 @@ export const registerApprovalLoginCase = {
       {
         id: "ory.register_identity.absent",
         title: "注册测试 Ory 身份不存在",
+        source: { caseStepId: "B-6", method: "api" },
         object: "ory.identity",
         operator: "absent",
         params: { emailFrom: "data.email" },
@@ -47,24 +50,26 @@ export const registerApprovalLoginCase = {
       {
         id: "db.registered_user.absent",
         title: "注册测试用户不存在",
+        source: { caseStepId: "B-7", method: "prisma" },
         object: "db.registered_user",
         operator: "absent",
         params: { emailFrom: "data.email" },
       },
-      { id: "session.unauthenticated", title: "后端 session 未登录", object: "auth.session", operator: "unauthenticated" },
-      { id: "cookie.absent", title: "浏览器不存在登录 cookie", object: "browser.cookie", operator: "absent" },
-      { id: "storage.empty", title: "浏览器 storage 不含登录态", object: "browser.auth_storage", operator: "empty" },
+      { id: "session.unauthenticated", title: "后端 session 未登录", source: { caseStepId: "B-8", method: "api" }, object: "auth.session", operator: "unauthenticated" },
+      { id: "cookie.absent", title: "浏览器不存在登录 cookie", source: { caseStepId: "B-9", method: "playwright" }, object: "browser.cookie", operator: "absent" },
+      { id: "storage.empty", title: "浏览器 storage 不含登录态", source: { caseStepId: "B-10", method: "playwright" }, object: "browser.auth_storage", operator: "empty" },
     ],
   },
 
   Setup: {
     description: "清理浏览器并进入注册模式",
     steps: [
-      { id: "browser.clear", title: "清理浏览器状态", object: "browser", operator: "clear_state" },
-      { id: "page.goto.auth", title: "打开登录页", object: "page", operator: "goto", params: { path: "/auth" } },
+      { id: "browser.clear", title: "清理浏览器状态", source: { caseStepId: "Setup-1", method: "playwright" }, object: "browser", operator: "clear_state" },
+      { id: "page.goto.auth", title: "打开登录页", source: { caseStepId: "Setup-2", method: "playwright" }, object: "page", operator: "goto", params: { path: "/auth" } },
       {
         id: "switch.register",
         title: "切换到注册模式",
+        source: { caseStepId: "Setup-3", method: "playwright" },
         object: "page",
         operator: "click",
         params: { role: "button", name: "Register" },
@@ -75,19 +80,21 @@ export const registerApprovalLoginCase = {
   S0: {
     description: "注册表单可用，测试用户尚不存在，当前浏览器仍未登录",
     assertions: [
-      { id: "url.auth", title: "当前页面是登录页", object: "page.url", operator: "match", params: { pattern: "/auth$" } },
+      { id: "url.auth", title: "当前页面是登录页", source: { caseStepId: "S0-1", method: "playwright" }, object: "page.url", operator: "match", params: { pattern: "/auth$" } },
       {
         id: "heading.register.visible",
         title: "注册页标题可见",
+        source: { caseStepId: "S0-2", method: "playwright" },
         object: "page",
         operator: "visible",
         params: { role: "heading", name: "Register" },
       },
-      { id: "input.name.empty", title: "姓名输入框为空", object: "input", operator: "value", params: { label: "Name", value: "" } },
-      { id: "input.email.empty", title: "邮箱输入框为空", object: "input", operator: "value", params: { label: "Email", value: "" } },
+      { id: "input.name.empty", title: "姓名输入框为空", source: { caseStepId: "S0-3", method: "playwright" }, object: "input", operator: "value", params: { label: "Name", value: "" } },
+      { id: "input.email.empty", title: "邮箱输入框为空", source: { caseStepId: "S0-4", method: "playwright" }, object: "input", operator: "value", params: { label: "Email", value: "" } },
       {
         id: "input.password.empty",
         title: "密码输入框为空",
+        source: { caseStepId: "S0-5", method: "playwright" },
         object: "input",
         operator: "value",
         params: { label: "Password", exact: true, value: "" },
@@ -95,14 +102,16 @@ export const registerApprovalLoginCase = {
       {
         id: "button.create_account.enabled",
         title: "创建账号按钮可点击",
+        source: { caseStepId: "S0-6", method: "playwright" },
         object: "page",
         operator: "enabled",
         params: { role: "button", name: "Create Account" },
       },
-      { id: "session.unauthenticated", title: "后端 session 未登录", object: "auth.session", operator: "unauthenticated" },
+      { id: "session.unauthenticated", title: "后端 session 未登录", source: { caseStepId: "S0-7", method: "api" }, object: "auth.session", operator: "unauthenticated" },
       {
         id: "ory.register_identity.absent",
         title: "注册测试 Ory 身份不存在",
+        source: { caseStepId: "S0-8", method: "api" },
         object: "ory.identity",
         operator: "absent",
         params: { emailFrom: "data.email" },
@@ -110,6 +119,7 @@ export const registerApprovalLoginCase = {
       {
         id: "db.registered_user.absent",
         title: "注册测试用户不存在",
+        source: { caseStepId: "S0-9", method: "prisma" },
         object: "db.registered_user",
         operator: "absent",
         params: { emailFrom: "data.email" },
@@ -120,11 +130,12 @@ export const registerApprovalLoginCase = {
   Action: {
     description: "提交注册申请、管理员通过后再用注册用户登录",
     steps: [
-      { id: "fill.name", title: "输入姓名", object: "page", operator: "fill", params: { label: "Name", valueFrom: "data.name" } },
-      { id: "fill.email", title: "输入邮箱", object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.email" } },
+      { id: "fill.name", title: "输入姓名", source: { caseStepId: "Action-1", method: "playwright" }, object: "page", operator: "fill", params: { label: "Name", valueFrom: "data.name" } },
+      { id: "fill.email", title: "输入邮箱", source: { caseStepId: "Action-1", method: "playwright" }, object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.email" } },
       {
         id: "fill.password",
         title: "输入密码",
+        source: { caseStepId: "Action-1", method: "playwright" },
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.password" },
@@ -132,6 +143,7 @@ export const registerApprovalLoginCase = {
       {
         id: "capture.registration_response",
         title: "注册账号响应捕获",
+        source: { caseStepId: "Action-2", method: "playwright" },
         object: "api",
         operator: "capture_response",
         params: { urlEndsWith: "/api/auth/registration", method: "POST", saveAs: "registrationResponse" },
@@ -139,6 +151,7 @@ export const registerApprovalLoginCase = {
       {
         id: "click.create_account",
         title: "提交注册申请",
+        source: { caseStepId: "Action-3", method: "playwright" },
         object: "page",
         operator: "click",
         params: { role: "button", name: "Create Account" },
@@ -146,6 +159,7 @@ export const registerApprovalLoginCase = {
       {
         id: "approval_pending.visible",
         title: "记录等待审核状态可见",
+        source: { caseStepId: "Action-4", method: "playwright" },
         object: "page.approval_pending",
         operator: "visible",
         params: { saveAs: "approvalPendingSeen" },
@@ -153,6 +167,7 @@ export const registerApprovalLoginCase = {
       {
         id: "registration_response.record_user",
         title: "记录注册响应用户",
+        source: { caseStepId: "S1-1", method: "api" },
         object: "api.registration_response",
         operator: "record_user",
         params: { responseFrom: "runtime.registrationResponse", saveAs: "registeredUser" },
@@ -160,16 +175,18 @@ export const registerApprovalLoginCase = {
       {
         id: "db.registered_user.pending",
         title: "记录注册用户待审核状态",
+        source: { caseStepId: "S1-3", method: "prisma" },
         object: "db.registered_user",
         operator: "pending",
         params: { emailFrom: "data.email", saveAs: "pendingRegisteredUser" },
       },
-      { id: "auth.logout.pending_user", title: "退出注册用户会话", object: "auth", operator: "logout" },
-      { id: "browser.clear.pending_user", title: "清理注册用户浏览器状态", object: "browser", operator: "clear_state" },
-      { id: "page.goto.auth.admin", title: "打开登录页", object: "page", operator: "goto", params: { path: "/auth" } },
+      { id: "auth.logout.pending_user", title: "退出注册用户会话", source: { caseStepId: "Action-4", method: "playwright" }, object: "auth", operator: "logout" },
+      { id: "browser.clear.pending_user", title: "清理注册用户浏览器状态", source: { caseStepId: "Action-4", method: "playwright" }, object: "browser", operator: "clear_state" },
+      { id: "page.goto.auth.admin", title: "打开登录页", source: { caseStepId: "Action-5", method: "playwright" }, object: "page", operator: "goto", params: { path: "/auth" } },
       {
         id: "fill.admin.email",
         title: "输入管理员邮箱",
+        source: { caseStepId: "Action-5", method: "playwright" },
         object: "page",
         operator: "fill",
         params: { label: "Email", valueFrom: "data.adminEmail" },
@@ -177,6 +194,7 @@ export const registerApprovalLoginCase = {
       {
         id: "fill.admin.password",
         title: "输入管理员密码",
+        source: { caseStepId: "Action-5", method: "playwright" },
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.adminPassword" },
@@ -184,6 +202,7 @@ export const registerApprovalLoginCase = {
       {
         id: "click.admin.sign_in",
         title: "管理员登录",
+        source: { caseStepId: "Action-5", method: "playwright" },
         object: "page",
         operator: "click",
         params: { role: "button", name: "Sign In" },
@@ -191,14 +210,16 @@ export const registerApprovalLoginCase = {
       {
         id: "session.admin.authenticated",
         title: "等待管理员 session 已登录",
+        source: { caseStepId: "Action-5", method: "playwright" },
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" },
       },
-      { id: "page.goto.members", title: "打开成员管理页", object: "page", operator: "goto", params: { path: "/members" } },
+      { id: "page.goto.members", title: "打开成员管理页", source: { caseStepId: "Action-6", method: "playwright" }, object: "page", operator: "goto", params: { path: "/members" } },
       {
         id: "member_row.visible",
         title: "注册用户行可见",
+        source: { caseStepId: "Action-6", method: "playwright" },
         object: "page.member_row",
         operator: "visible",
         params: { emailFrom: "data.email", nameFrom: "data.name" },
@@ -206,6 +227,7 @@ export const registerApprovalLoginCase = {
       {
         id: "capture.approval_response",
         title: "注册通过响应捕获",
+        source: { caseStepId: "Action-7", method: "playwright" },
         object: "api.registration_approval",
         operator: "capture_response",
         params: { userIdFrom: "runtime.registeredUser.id", saveAs: "approvalResponse" },
@@ -213,6 +235,7 @@ export const registerApprovalLoginCase = {
       {
         id: "member_row.approve",
         title: "通过注册申请",
+        source: { caseStepId: "Action-8", method: "playwright" },
         object: "page.member_row",
         operator: "approve",
         params: { emailFrom: "data.email", nameFrom: "data.name" },
@@ -220,17 +243,19 @@ export const registerApprovalLoginCase = {
       {
         id: "approval_response.await_ok",
         title: "等待注册通过接口响应成功",
+        source: { caseStepId: "S1-4", method: "api" },
         object: "api.registration_approval",
         operator: "ok",
         params: { responseFrom: "runtime.approvalResponse" },
       },
-      { id: "auth.logout.admin", title: "管理员退出登录", object: "auth", operator: "logout" },
-      { id: "browser.clear.admin", title: "清理管理员浏览器状态", object: "browser", operator: "clear_state" },
-      { id: "page.goto.auth.member", title: "打开登录页", object: "page", operator: "goto", params: { path: "/auth" } },
-      { id: "fill.member.email", title: "输入注册用户邮箱", object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.email" } },
+      { id: "auth.logout.admin", title: "管理员退出登录", source: { caseStepId: "Action-9", method: "playwright" }, object: "auth", operator: "logout" },
+      { id: "browser.clear.admin", title: "清理管理员浏览器状态", source: { caseStepId: "Action-9", method: "playwright" }, object: "browser", operator: "clear_state" },
+      { id: "page.goto.auth.member", title: "打开登录页", source: { caseStepId: "Action-10", method: "playwright" }, object: "page", operator: "goto", params: { path: "/auth" } },
+      { id: "fill.member.email", title: "输入注册用户邮箱", source: { caseStepId: "Action-10", method: "playwright" }, object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.email" } },
       {
         id: "fill.member.password",
         title: "输入注册用户密码",
+        source: { caseStepId: "Action-10", method: "playwright" },
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.password" },
@@ -238,6 +263,7 @@ export const registerApprovalLoginCase = {
       {
         id: "click.member.sign_in",
         title: "注册用户再次登录",
+        source: { caseStepId: "Action-10", method: "playwright" },
         object: "page",
         operator: "click",
         params: { role: "button", name: "Sign In" },
@@ -251,6 +277,7 @@ export const registerApprovalLoginCase = {
       {
         id: "registration_response.pending",
         title: "注册响应为待审核普通成员",
+        source: { caseStepId: "S1-1", method: "api" },
         object: "api.registration_response",
         operator: "pending",
         params: { responseFrom: "runtime.registrationResponse", emailFrom: "data.email" },
@@ -258,6 +285,7 @@ export const registerApprovalLoginCase = {
       {
         id: "approval_pending.seen",
         title: "注册后曾显示等待审核",
+        source: { caseStepId: "S1-2", method: "playwright" },
         object: "runtime.boolean",
         operator: "true",
         params: { valueFrom: "runtime.approvalPendingSeen" },
@@ -265,6 +293,7 @@ export const registerApprovalLoginCase = {
       {
         id: "pending_user.recorded",
         title: "注册用户曾处于待审核状态",
+        source: { caseStepId: "S1-3", method: "prisma" },
         object: "runtime.registered_user",
         operator: "pending",
         params: { userFrom: "runtime.pendingRegisteredUser", emailFrom: "data.email" },
@@ -272,6 +301,7 @@ export const registerApprovalLoginCase = {
       {
         id: "approval_response.ok",
         title: "注册通过接口响应成功",
+        source: { caseStepId: "S1-4", method: "api" },
         object: "api.registration_approval",
         operator: "ok",
         params: { responseFrom: "runtime.approvalResponse" },
@@ -279,6 +309,7 @@ export const registerApprovalLoginCase = {
       {
         id: "db.registered_user.active",
         title: "注册用户已启用",
+        source: { caseStepId: "S1-5", method: "prisma" },
         object: "db.registered_user",
         operator: "active",
         params: { emailFrom: "data.email" },
@@ -286,25 +317,27 @@ export const registerApprovalLoginCase = {
       {
         id: "session.member.authenticated",
         title: "注册用户 session 已登录",
+        source: { caseStepId: "S1-6", method: "api" },
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
       },
-      { id: "url.tasks", title: "进入登录后页面", object: "page.url", operator: "match", params: { pattern: "/(tasks|bounties)$" } },
-      { id: "nav.visible", title: "主导航可见", object: "page", operator: "visible", params: { label: "主导航" } },
-      { id: "current_user.visible", title: "当前用户入口可见", object: "page", operator: "visible", params: { label: "当前用户" } },
-      { id: "members.nav.absent", title: "成员管理入口不可见", object: "page", operator: "count", params: { text: "成员管理", count: 0 } },
+      { id: "url.tasks", title: "进入登录后页面", source: { caseStepId: "S1-7", method: "playwright" }, object: "page.url", operator: "match", params: { pattern: "/(tasks|bounties)$" } },
+      { id: "nav.visible", title: "主导航可见", source: { caseStepId: "S1-8", method: "playwright" }, object: "page", operator: "visible", params: { label: "主导航" } },
+      { id: "current_user.visible", title: "当前用户入口可见", source: { caseStepId: "S1-8", method: "playwright" }, object: "page", operator: "visible", params: { label: "当前用户" } },
+      { id: "members.nav.absent", title: "成员管理入口不可见", source: { caseStepId: "S1-9", method: "playwright" }, object: "page", operator: "count", params: { text: "成员管理", count: 0 } },
     ],
   },
 
   Clean: {
     description: "删除注册测试用户和 Ory 身份，恢复未登录基准状态",
     steps: [
-      { id: "browser.clear", title: "清理浏览器状态", object: "browser", operator: "clear_state" },
-      { id: "page.goto.blank", title: "停止前端页面", object: "page", operator: "goto", params: { path: "about:blank" } },
+      { id: "browser.clear", title: "清理浏览器状态", source: { caseStepId: "Clean-2", method: "playwright" }, object: "browser", operator: "clear_state" },
+      { id: "page.goto.blank", title: "停止前端页面", source: { caseStepId: "Clean-2", method: "playwright" }, object: "page", operator: "goto", params: { path: "about:blank" } },
       {
         id: "ory.sessions.revoke.registered_user",
         title: "撤销注册测试身份 Ory session",
+        source: { caseStepId: "Clean-6", method: "api" },
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -312,6 +345,7 @@ export const registerApprovalLoginCase = {
       {
         id: "ory.register_identity.delete",
         title: "删除注册测试 Ory 身份",
+        source: { caseStepId: "Clean-5", method: "api" },
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
@@ -319,6 +353,7 @@ export const registerApprovalLoginCase = {
       {
         id: "db.registered_user.delete",
         title: "删除注册测试用户",
+        source: { caseStepId: "Clean-4", method: "prisma" },
         object: "db.registered_user",
         operator: "delete",
         params: { emailFrom: "data.email" },
@@ -326,6 +361,7 @@ export const registerApprovalLoginCase = {
       {
         id: "ory.admin_identity.exists",
         title: "管理员 Ory 身份仍然存在",
+        source: { caseStepId: "Clean-7", method: "api" },
         object: "ory.identity",
         operator: "exists",
         params: { emailFrom: "data.adminEmail" },
@@ -333,6 +369,7 @@ export const registerApprovalLoginCase = {
       {
         id: "db.admin.active",
         title: "预置管理员账号仍然可用",
+        source: { caseStepId: "Clean-8", method: "prisma" },
         object: "db.admin",
         operator: "active",
         params: { emailFrom: "data.adminEmail" },
