@@ -733,8 +733,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             method: "POST",
             body: JSON.stringify(input),
           });
-          await refreshTaskManagementData();
           notify("目标已创建");
+          void refreshTaskManagementData().catch((error) => {
+            notify(businessMutationFailureMessage(error, "目标已创建，但数据刷新失败"));
+          });
           return data.objective;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "目标创建失败"));

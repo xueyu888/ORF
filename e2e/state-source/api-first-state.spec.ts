@@ -566,6 +566,84 @@ test("objective creation exits title editing immediately while the create API is
   expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
 });
 
+test("objective creation renders the POST response before task data refresh completes", async ({ page }) => {
+  const creationDates = defaultObjectiveCreationDates();
+  const createdObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    ...creationDates,
+    id: "objective-create-before-refresh",
+    title: "刷新前已显示目标",
+    cycle: "2999 Q4",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  let objectiveCreated = false;
+  let refreshRequestCount = 0;
+  let refreshResolved = false;
+  let resolveRefreshResponse: (() => void) | null = null;
+  const refreshResponse = new Promise<void>((resolve) => {
+    resolveRefreshResponse = () => {
+      refreshResolved = true;
+      resolve();
+    };
+  });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    if (objectiveCreated) {
+      refreshRequestCount += 1;
+      await refreshResponse;
+      await route.fulfill({ json: taskManagementDataWith({ objectives: [createdObjective], results: [], tasks: [], feedback: [] }) });
+      return;
+    }
+
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({
+      json: taskManagementDataWith({
+        objectives: objectiveCreated && refreshResolved ? [createdObjective] : [],
+        results: [],
+        tasks: [],
+        feedback: [],
+      }),
+    });
+  });
+  await page.route("**/api/objectives", async (route) => {
+    if (route.request().method() === "POST") {
+      objectiveCreated = true;
+      await route.fulfill({ json: { objective: createdObjective } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+  const titleInput = page.getByLabel("编辑目标标题");
+  await titleInput.fill(createdObjective.title);
+  const draftIndex = (await objectivePanelTitles(page)).indexOf(createdObjective.title);
+
+  await titleInput.press("Enter");
+
+  await expect.poll(() => refreshRequestCount).toBe(1);
+  expect(refreshResolved).toBe(false);
+  const createdPanel = page.locator(".orf-objective-panel", { hasText: createdObjective.title });
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  await expect(createdPanel.getByRole("button", { name: "发布" })).toBeEnabled();
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+
+  resolveRefreshResponse?.();
+  await expect(createdPanel.getByRole("button", { name: "发布" })).toBeEnabled();
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+});
+
 test("objective creation submits the draft title when the input loses focus", async ({ page }) => {
   const creationDates = defaultObjectiveCreationDates();
   const createdObjective: Objective = {
