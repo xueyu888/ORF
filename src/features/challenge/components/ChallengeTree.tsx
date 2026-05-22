@@ -170,7 +170,6 @@ function ObjectivePanel({
               onDraftChange={isDraftObjective ? handlers.onDraftTitleChange : undefined}
               onCancel={handlers.onCancelEdit}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
-              submitOnBlur={!isDraftObjective}
               value={group.objective.title}
             />
           ) : (

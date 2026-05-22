@@ -504,6 +504,121 @@ test("objective creation keeps the active draft anchored while its title changes
   expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
 });
 
+test("objective creation exits title editing immediately while the create API is pending", async ({ page }) => {
+  const creationDates = defaultObjectiveCreationDates();
+  const createdObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    ...creationDates,
+    id: "objective-create-pending-edit-exit",
+    title: "延迟创建仍退出编辑目标",
+    cycle: "2999 Q4",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  let objectives: Objective[] = [];
+  let createRequestCount = 0;
+  let resolveCreateResponse: (() => void) | null = null;
+  const createResponse = new Promise<void>((resolve) => {
+    resolveCreateResponse = resolve;
+  });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/objectives", async (route) => {
+    if (route.request().method() === "POST") {
+      createRequestCount += 1;
+      await createResponse;
+      objectives = [createdObjective];
+      await route.fulfill({ json: { objective: createdObjective } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+
+  const titleInput = page.getByLabel("编辑目标标题");
+  await titleInput.fill(createdObjective.title);
+  const draftIndex = (await objectivePanelTitles(page)).indexOf(createdObjective.title);
+
+  await titleInput.press("Enter");
+
+  await expect.poll(() => createRequestCount).toBe(1);
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+
+  resolveCreateResponse?.();
+  const createdPanel = page.locator(".orf-objective-panel", { hasText: createdObjective.title });
+  await expect(createdPanel.getByRole("button", { name: "发布" })).toBeEnabled();
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+});
+
+test("objective creation submits the draft title when the input loses focus", async ({ page }) => {
+  const creationDates = defaultObjectiveCreationDates();
+  const createdObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    ...creationDates,
+    id: "objective-create-on-blur",
+    title: "失焦创建目标",
+    cycle: "2999 Q4",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  let objectives: Objective[] = [];
+  let createRequestCount = 0;
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/objectives", async (route) => {
+    if (route.request().method() === "POST") {
+      createRequestCount += 1;
+      objectives = [createdObjective];
+      await route.fulfill({ json: { objective: createdObjective } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+
+  const titleInput = page.getByLabel("编辑目标标题");
+  await titleInput.fill(createdObjective.title);
+  const draftIndex = (await objectivePanelTitles(page)).indexOf(createdObjective.title);
+
+  await page.getByRole("button", { name: "我的挑战" }).click();
+
+  await expect.poll(() => createRequestCount).toBe(1);
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  const createdPanel = page.locator(".orf-objective-panel", { hasText: createdObjective.title });
+  await expect(createdPanel.getByRole("button", { name: "发布" })).toBeEnabled();
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+});
+
 test("objective creation keeps the created objective anchored when API order differs from the draft source order", async ({ page }) => {
   const creationDates = defaultObjectiveCreationDates();
   const baseObjective: Objective = {

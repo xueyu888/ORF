@@ -40,6 +40,7 @@ export function InlineTitleEditor({
     const accepted = onSubmit(draft);
     if (accepted === false) {
       finishedRef.current = false;
+      window.requestAnimationFrame(() => inputRef.current?.focus());
     }
   };
 

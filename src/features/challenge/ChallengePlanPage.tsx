@@ -400,6 +400,7 @@ export function ChallengePlanPage() {
 
     setDraftObjectiveTitle(value);
     const orderAnchor = draftOrderAnchor(displayedGroups);
+    setEditingTarget(null);
     setCreatingDraftObjective(true);
     void createObjective({
       title: value,
@@ -413,7 +414,6 @@ export function ChallengePlanPage() {
         setDraftObjectiveTitle(null);
         setDraftReturnContext(null);
         setObjectiveOrderAnchor(orderAnchor ? { ...orderAnchor, objectiveId: objective.id } : null);
-        setEditingTarget(null);
         if (canShowAllChallenges) setScope("all");
       } else {
         setEditingTarget({ type: "objective", id: draftObjectiveId, title: value });
@@ -421,7 +421,7 @@ export function ChallengePlanPage() {
     }).finally(() => {
       setCreatingDraftObjective(false);
     });
-    return false;
+    return true;
   };
 
   const restoreDraftReturnContext = useCallback(() => {
