@@ -13,7 +13,7 @@ import { localDateString } from "../../utils/date";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
-import { challengeCycleOptions, filterChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
+import { challengeCycleOptions, filterChallengeGroups, sortChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
 import { canMutateObjectiveWorkItems, canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
@@ -124,6 +124,7 @@ export function ChallengePlanPage() {
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
   const [draftObjectiveTitle, setDraftObjectiveTitle] = useState<string | null>(null);
+  const [creatingDraftObjective, setCreatingDraftObjective] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
@@ -188,8 +189,8 @@ export function ChallengePlanPage() {
     [challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
   );
   const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
-  const filteredGroups = useMemo(() => filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter }), [cycleFilter, groups, statusFilter]);
-  const displayedGroups = useMemo(() => (draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
+  const filteredGroups = useMemo(() => sortChallengeGroups(filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter })), [cycleFilter, groups, statusFilter]);
+  const displayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
   const hasActiveFilters = cycleFilter !== "all" || statusFilter !== "all";
   const emptyText = hasActiveFilters
@@ -293,15 +294,19 @@ export function ChallengePlanPage() {
     setOpenActionId(null);
   };
 
-  const saveDraftObjectiveTitle = (title: string) => {
+  const createDraftObjective = (title: string) => {
+    if (creatingDraftObjective) return false;
+
     const value = title.trim();
     if (!value) {
       notify("标题不能为空");
+      setDraftObjectiveTitle(title);
+      setEditingTarget({ type: "objective", id: draftObjectiveId, title });
       return false;
     }
 
     setDraftObjectiveTitle(value);
-    setEditingTarget(null);
+    setCreatingDraftObjective(true);
     void createObjective({
       title: value,
       whyItMatters: "待补充",
@@ -311,12 +316,15 @@ export function ChallengePlanPage() {
     }).then((objective) => {
       if (objective) {
         setDraftObjectiveTitle(null);
+        setEditingTarget(null);
         if (canShowAllChallenges) setScope("all");
       } else {
         setEditingTarget({ type: "objective", id: draftObjectiveId, title: value });
       }
+    }).finally(() => {
+      setCreatingDraftObjective(false);
     });
-    return true;
+    return false;
   };
 
   const cancelEdit = () => {
@@ -327,7 +335,7 @@ export function ChallengePlanPage() {
   };
 
   const saveTitle = (target: ChallengeTarget, title: string) => {
-    if (target.type === "objective" && target.id === draftObjectiveId) return saveDraftObjectiveTitle(title);
+    if (target.type === "objective" && target.id === draftObjectiveId) return createDraftObjective(title);
 
     const value = title.trim();
     if (!value) {
@@ -526,6 +534,7 @@ export function ChallengePlanPage() {
           onAddSubAction: addSubAction,
           onApproveApplication: approveChallengeApplication,
           onCancelEdit: cancelEdit,
+          onDraftTitleChange: setDraftObjectiveTitle,
           onEditTarget: beginEdit,
           onFreezeObjective: freezeObjective,
           onOpenActionChange: setOpenActionId,

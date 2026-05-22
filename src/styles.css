@@ -5011,7 +5011,7 @@ body[data-dragging-floating="true"] {
   padding-left: 10px;
 }
 
-.orf-flow-action-button:hover {
+.orf-flow-action-button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 

@@ -13,7 +13,7 @@
 | `GET` | `/api/tasks-page` | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据 |
 | `GET` | `/api/bounties` | 返回悬赏大厅数据 |
 | `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
-| `POST` | `/api/objectives` | 挑战页创建候选目标，默认 `flowStatus=candidate` |
+| `POST` | `/api/objectives` | 挑战页按 Enter 快速创建候选目标，默认 `flowStatus=candidate` |
 | `PATCH` | `/api/objectives/:objectiveId` | 指挥官更新目标标题 |
 | `PATCH` | `/api/objectives/:objectiveId/publish` | 指挥官发布目标，进入 `open` |
 | `POST` | `/api/objectives/:objectiveId/recruitments` | 指挥官征召成员，进入 `recruiting` |
@@ -44,6 +44,8 @@
 读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。
+
+`POST /api/objectives` 只对应挑战页草稿目标标题输入框的 Enter 快速创建动作。失焦不应调用该接口；创建前的本地草稿和创建成功后的真实目标都由前端保持同一套目标面板结构，包含待定义指标和待创建行动项。API 只返回业务数据，不承诺视觉顺序；挑战页必须用统一目标排序规则渲染草稿和真实目标，避免 API 成功前后因为数据库返回顺序发生详情态重排。
 
 ## 术语
 
