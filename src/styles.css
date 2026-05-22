@@ -3214,11 +3214,16 @@ button:disabled {
 
 .orf-main-content {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   min-height: calc(100vh - var(--orf-topbar-height));
   background: transparent;
   color: var(--orf-text-primary);
   padding: var(--orf-page-padding-y) var(--orf-page-padding-x);
+}
+
+.orf-shell-body {
+  position: relative;
+  z-index: 3;
 }
 
 .orf-shell-x-padding {

@@ -645,7 +645,7 @@ test("ignores stale business data in legacy localStorage", async ({ page }) => {
   await expect(page.getByText("当前没有可申请或待接受的悬赏目标")).toBeVisible();
 });
 
-test("keeps task status unchanged until the API write succeeds and refreshed data arrives", async ({ page }) => {
+test("keeps objective task status unchanged until the API write succeeds and refreshed data arrives", async ({ page }) => {
   let tasks = structuredClone(initialOrfState.tasks);
   let failNextStatusWrite = true;
 
@@ -669,9 +669,11 @@ test("keeps task status unchanged until the API write succeeds and refreshed dat
     await route.fulfill({ json: { ok: true } });
   });
 
-  await page.goto("/objectives/obj-engineering/results/res-rag-recall");
+  await page.goto("/objectives/obj-engineering");
+  await page.getByRole("button", { name: "行动项", exact: true }).click();
 
   const taskRow = page.locator(".orf-table-row", { hasText: "构建 RAG 召回评估脚本" });
+  await expect(taskRow).toBeVisible();
   const statusSelect = taskRow.locator("select");
   await expect(statusSelect).toHaveValue("In Progress");
 
@@ -1136,7 +1138,7 @@ test("objectives page derives cycle filters from API objectives", async ({ page 
   await expect(page.getByText("真实 Q1 目标")).toHaveCount(0);
 });
 
-test("result detail derives linked records and quality checks from API relations", async ({ page }) => {
+test("result detail derives feedback and quality checks from API relations", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,
     id: "objective-result-quality",
@@ -1187,11 +1189,10 @@ test("result detail derives linked records and quality checks from API relations
   await page.goto(`/objectives/${objective.id}/results/${result.id}`);
 
   await expect(page.getByRole("heading", { name: "真实质量指标" })).toBeVisible();
-  await expect(page.getByText("真实关联行动项")).toBeVisible();
+  await expect(page.getByText("真实关联行动项")).toHaveCount(0);
   await expect(page.getByText("真实关联反馈")).toBeVisible();
   const quality = page.locator(".orf-card-padding", { hasText: "ORF 质量检查" });
   await expect(quality.locator("div.flex", { hasText: "反馈已更新" }).getByText("通过")).toBeVisible();
-  await expect(quality.locator("div.flex", { hasText: "有行动项支撑" }).getByText("通过")).toBeVisible();
   await expect(quality.locator("div.flex", { hasText: "口径清楚" }).getByText("待补")).toBeVisible();
 });
 
@@ -1234,7 +1235,6 @@ test("result detail shows empty states instead of inferred criteria for sparse l
 
   await expect(page.getByRole("heading", { name: "真实空态指标" })).toBeVisible();
   await expect(page.getByText("暂无趋势数据。")).toBeVisible();
-  await expect(page.getByText("暂无关联行动项。")).toBeVisible();
   await expect(page.getByText("暂无反馈历史。")).toBeVisible();
   await expect(page.getByText("待补充")).toHaveCount(5);
   await expect(page.getByText("标准评估集")).toHaveCount(0);
