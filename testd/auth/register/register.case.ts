@@ -217,6 +217,13 @@ export const registerApprovalLoginCase = {
         operator: "approve",
         params: { emailFrom: "data.email", nameFrom: "data.name" },
       },
+      {
+        id: "approval_response.await_ok",
+        title: "等待注册通过接口响应成功",
+        object: "api.registration_approval",
+        operator: "ok",
+        params: { responseFrom: "runtime.approvalResponse" },
+      },
       { id: "auth.logout.admin", title: "管理员退出登录", object: "auth", operator: "logout" },
       { id: "browser.clear.admin", title: "清理管理员浏览器状态", object: "browser", operator: "clear_state" },
       { id: "page.goto.auth.member", title: "打开登录页", object: "page", operator: "goto", params: { path: "/auth" } },
@@ -293,8 +300,8 @@ export const registerApprovalLoginCase = {
   Clean: {
     description: "删除注册测试用户和 Ory 身份，恢复未登录基准状态",
     steps: [
-      { id: "auth.logout", title: "退出当前登录态", object: "auth", operator: "logout" },
       { id: "browser.clear", title: "清理浏览器状态", object: "browser", operator: "clear_state" },
+      { id: "page.goto.blank", title: "停止前端页面", object: "page", operator: "goto", params: { path: "about:blank" } },
       {
         id: "ory.sessions.revoke.registered_user",
         title: "撤销注册测试身份 Ory session",
@@ -303,17 +310,17 @@ export const registerApprovalLoginCase = {
         params: { emailFrom: "data.email" },
       },
       {
-        id: "db.registered_user.delete",
-        title: "删除注册测试用户",
-        object: "db.registered_user",
-        operator: "delete",
-        params: { emailFrom: "data.email" },
-      },
-      {
         id: "ory.register_identity.delete",
         title: "删除注册测试 Ory 身份",
         object: "ory.identity",
         operator: "delete_by_email",
+        params: { emailFrom: "data.email" },
+      },
+      {
+        id: "db.registered_user.delete",
+        title: "删除注册测试用户",
+        object: "db.registered_user",
+        operator: "delete",
         params: { emailFrom: "data.email" },
       },
       {

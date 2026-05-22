@@ -13,6 +13,8 @@ import {
   revokeOrySessionsByEmail,
 } from "./_support/register.helpers";
 
+const APPROVAL_RESPONSE_TIMEOUT_MS = 5_000;
+
 export const registerOperators = {
   "ory.identity": {
     absent: async ({ params }) => {
@@ -20,7 +22,9 @@ export const registerOperators = {
     },
 
     delete_by_email: async ({ params }) => {
-      await deleteOryIdentityByEmail(requiredString(params, "email"));
+      const email = requiredString(params, "email");
+      await deleteOryIdentityByEmail(email);
+      await expect.poll(() => oryIdentityAbsent(email)).toBe(true);
     },
   },
 
@@ -64,7 +68,9 @@ export const registerOperators = {
     },
 
     delete: async ({ params }) => {
-      await deleteRegisteredUserByEmail(requiredString(params, "email"));
+      const email = requiredString(params, "email");
+      await deleteRegisteredUserByEmail(email);
+      await expect.poll(() => registeredUserAbsent(email)).toBe(true);
     },
   },
 
@@ -120,7 +126,7 @@ export const registerOperators = {
             response.request().method().toUpperCase() === "PATCH" &&
             response.url().endsWith(`/api/registration-requests/${encodeURIComponent(userId)}/approve`)
           );
-        })
+        }, { timeout: APPROVAL_RESPONSE_TIMEOUT_MS })
         .then(async (response) => ({
           ok: response.ok(),
           status: response.status(),
