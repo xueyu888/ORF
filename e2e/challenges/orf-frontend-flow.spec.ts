@@ -1319,7 +1319,7 @@ test("member reestimate metric proposal uses the member-proposed interaction con
   await panel.hover();
   await panel.getByRole("button", { name: "提出指标" }).click();
 
-  await expect(page.getByText("提出指标")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
   await page.getByLabel("指标标题").fill("前端测试 成员候选指标");
   await page.getByLabel("衡量指标").fill("候选指标");
   await page.getByRole("button", { name: "提交指标" }).click();
@@ -1594,7 +1594,7 @@ test.describe("ORF frontend guard coverage", () => {
     await panel.hover();
     await panel.getByRole("button", { name: "提出指标" }).click();
 
-    await expect(page.getByText("提出指标")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
     await page.getByLabel("指标标题").fill("前端测试 不应出现的候选指标");
     await page.getByLabel("衡量指标").fill("候选指标");
     await page.getByRole("button", { name: "提交指标" }).click();
@@ -1731,7 +1731,7 @@ test.describe("ORF frontend guard coverage", () => {
     const panel = objectivePanel(page, objective.title);
     await panel.hover();
     await panel.getByRole("button", { name: "提出指标" }).click();
-    await expect(page.getByText("提出指标")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
     await page.getByLabel("指标标题").fill("前端测试 截止前候选指标");
     await page.getByLabel("衡量指标").fill("候选指标");
     await page.getByRole("button", { name: "提交指标" }).click();
@@ -2054,9 +2054,9 @@ test.describe("ORF frontend guard coverage", () => {
     const panel = objectivePanel(page, objective.title);
     await panel.hover();
     await panel.getByRole("button", { name: "提出指标" }).click();
-    await expect(page.getByText("提出指标")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
     await page.getByRole("button").filter({ has: page.locator("svg") }).last().click();
-    await expect(page.getByText("提出指标")).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toHaveCount(0);
     await expect.poll(() => postCount).toBe(0);
   });
 

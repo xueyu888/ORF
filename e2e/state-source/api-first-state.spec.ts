@@ -365,6 +365,145 @@ test("command menu creates objectives as actions and lands on the workbench", as
   await expect(page.getByText(createdObjective.title)).toBeVisible();
 });
 
+test("commander can define a metric directly from the empty metric state after objective creation", async ({ page }) => {
+  const creationDates = defaultObjectiveCreationDates();
+  const createdObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-created-empty-metric-action",
+    title: "新建后直接定义指标目标",
+    whyItMatters: "验证空指标区可以直接定义指标。",
+    cycle: "2999 Q4",
+    boundary: "测试边界",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+    createdAt: creationDates.createdAt,
+    updatedAt: creationDates.createdAt,
+    finalDueAt: creationDates.finalDueAt,
+  };
+  const createdResult: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-created-empty-metric-action",
+    objectiveId: createdObjective.id,
+    title: "空态直接创建指标",
+    metricName: "空态指标覆盖率",
+    source: "managerDefined",
+  };
+  let objectives: Objective[] = [];
+  let results: Result[] = [];
+  let resultRequest: unknown = null;
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results, tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results, tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/objectives", async (route) => {
+    if (route.request().method() === "POST") {
+      objectives = [createdObjective];
+      await route.fulfill({ json: { objective: createdObjective } });
+      return;
+    }
+
+    await route.fallback();
+  });
+  await page.route("**/api/results", async (route) => {
+    if (route.request().method() === "POST") {
+      resultRequest = route.request().postDataJSON();
+      results = [createdResult];
+      objectives = [{ ...createdObjective, resultIds: [createdResult.id] }];
+      await route.fulfill({ json: { result: createdResult } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+  await page.getByLabel("编辑目标标题").fill(createdObjective.title);
+  await page.getByLabel("编辑目标标题").press("Enter");
+
+  const createdPanel = page.locator(".orf-objective-panel", { hasText: createdObjective.title });
+  const emptyMetricState = createdPanel.locator(".orf-objective-metric-empty");
+  await expect(emptyMetricState.getByRole("button", { name: "新增指标" })).toBeVisible();
+  await emptyMetricState.getByRole("button", { name: "新增指标" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "新增指标" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("指标标题").fill(createdResult.title);
+  await dialog.getByLabel("衡量指标").fill(createdResult.metricName);
+  await dialog.getByRole("button", { name: "保存指标" }).click();
+
+  await expect.poll(() => resultRequest).toMatchObject({
+    objectiveId: createdObjective.id,
+    title: createdResult.title,
+    metricName: createdResult.metricName,
+    source: "managerDefined",
+  });
+  await expect(createdPanel.getByText(createdResult.title)).toBeVisible();
+});
+
+test("commander can edit an existing metric title from the challenge tree", async ({ page }) => {
+  const objective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-existing-metric-edit",
+    title: "已有指标可编辑目标",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: ["result-existing-metric-edit"],
+    taskIds: [],
+    feedbackIds: [],
+  };
+  const result: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-existing-metric-edit",
+    objectiveId: objective.id,
+    title: "已有指标原标题",
+    metricName: "已有指标",
+  };
+  const updatedTitle = "已有指标新标题";
+  let results = [result];
+  let patchRequest: unknown = null;
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [objective], results, tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives: [objective], results, tasks: [], feedback: [] }) });
+  });
+  await page.route(`**/api/results/${result.id}`, async (route) => {
+    if (route.request().method() === "PATCH") {
+      patchRequest = route.request().postDataJSON();
+      results = [{ ...result, title: updatedTitle }];
+      await route.fulfill({ json: { ok: true } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/tasks");
+  const resultRow = page.locator(".orf-result-row", { hasText: result.title });
+  await resultRow.dblclick();
+  const titleInput = page.getByLabel("编辑指标标题");
+  await expect(titleInput).toBeFocused();
+  await titleInput.fill(updatedTitle);
+  await titleInput.press("Enter");
+
+  await expect.poll(() => patchRequest).toMatchObject({ title: updatedTitle });
+  await expect(page.getByText(updatedTitle)).toBeVisible();
+});
+
 test("objective creation entry scrolls to the sorted draft position when workbench is already scrolled", async ({ page }) => {
   const objectives: Objective[] = Array.from({ length: 24 }, (_, index) => ({
     ...initialOrfState.objectives[0]!,
