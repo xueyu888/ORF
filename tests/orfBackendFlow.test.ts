@@ -3150,6 +3150,12 @@ async function setFutureReestimateWindow(objectiveId: string) {
 }
 
 async function cleanupRun() {
+  const directRunPattern = `${runId}%`;
+  const generatedUserPattern = `user-${runId}%`;
+  const runEmailPattern = `${runId}%@orf.test`;
+
   await db.delete(teams).where(sql`${teams.id} like ${`${runId}%`}`);
-  await db.delete(users).where(sql`${users.id} like ${`${runId}%`}`);
+  await db
+    .delete(users)
+    .where(sql`${users.id} like ${directRunPattern} or ${users.id} like ${generatedUserPattern} or ${users.email} like ${runEmailPattern}`);
 }

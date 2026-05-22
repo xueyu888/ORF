@@ -331,7 +331,7 @@ flowchart TD
 ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=line --output="test-results/manual-real-system-suite-$(date +%Y%m%d-%H%M%S)"
 ```
 
-测试数据使用唯一 `real-e2e-*` 前缀写入真实数据库，默认保留，便于在悬赏大厅、挑战页、统计页面直接查看；只有设置 `ORF_REAL_E2E_CLEANUP=1` 时才清理本次 run 的数据。
+测试数据使用唯一 `real-e2e-*` 前缀写入真实数据库；套件结束时默认清理本次 run 的团队、用户和关联业务数据，避免测试用户残留。
 
 | 文件 | 场景 | 必须验证 |
 | --- | --- | --- |
