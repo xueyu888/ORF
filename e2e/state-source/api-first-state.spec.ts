@@ -493,6 +493,78 @@ test("objective creation keeps the active draft anchored while its title changes
   expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
 });
 
+test("objective creation keeps the created objective anchored when API order differs from the draft source order", async ({ page }) => {
+  const creationDates = defaultObjectiveCreationDates();
+  const baseObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    ...creationDates,
+    cycle: "2999 Q4",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const earlierObjective: Objective = {
+    ...baseObjective,
+    id: "objective-anchor-earlier-due",
+    title: "更早截止目标",
+    finalDueAt: "2000-01-01",
+  };
+  const sameKeyObjective: Objective = {
+    ...baseObjective,
+    id: "objective-anchor-same-key-before",
+    title: "同键旧目标",
+  };
+  const laterSameKeyObjective: Objective = {
+    ...baseObjective,
+    id: "objective-anchor-same-key-after",
+    title: "同键旧目标 B",
+  };
+  const createdObjective: Objective = {
+    ...baseObjective,
+    id: "objective-anchor-created-api-third",
+    title: "新目标第二变第三",
+  };
+  let objectives: Objective[] = [earlierObjective, sameKeyObjective, laterSameKeyObjective];
+  let createRequestCount = 0;
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/objectives", async (route) => {
+    if (route.request().method() === "POST") {
+      createRequestCount += 1;
+      objectives = [earlierObjective, sameKeyObjective, createdObjective, laterSameKeyObjective];
+      await route.fulfill({ json: { objective: createdObjective } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+
+  const titleInput = page.getByLabel("编辑目标标题");
+  await expect(titleInput).toBeVisible();
+  await titleInput.fill(createdObjective.title);
+  const draftIndex = (await objectivePanelTitles(page)).indexOf(createdObjective.title);
+  expect(draftIndex).toBe(1);
+
+  await titleInput.press("Enter");
+
+  await expect.poll(() => createRequestCount).toBe(1);
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+});
+
 test("challenge workbench hides freeze until reestimating objectives have metrics", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,

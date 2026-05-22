@@ -28,6 +28,17 @@ type DraftReturnContext = {
   status: ChallengeStatusFilter;
 };
 
+type ObjectiveOrderAnchor = {
+  createdAt: string;
+  deadline: string;
+  fallbackIndex: number;
+  flowStatus: Objective["flowStatus"];
+  nextObjectiveId: string | null;
+  objectiveId: string;
+  previousObjectiveId: string | null;
+  challengerCount: number;
+};
+
 function defaultFinalDueAt() {
   const date = new Date();
   date.setDate(date.getDate() + 14);
@@ -87,6 +98,52 @@ function draftObjectiveNode(title: string): ObjectiveNode {
   };
 }
 
+function draftOrderAnchor(groups: readonly ObjectiveNode[]) {
+  const draftIndex = groups.findIndex((group) => group.objective.id === draftObjectiveId);
+  if (draftIndex < 0) return null;
+  const draft = groups[draftIndex]!;
+  return {
+    challengerCount: draft.challengers.length,
+    createdAt: draft.objective.createdAt,
+    deadline: draft.deadline,
+    fallbackIndex: draftIndex,
+    flowStatus: draft.objective.flowStatus,
+    nextObjectiveId: groups[draftIndex + 1]?.objective.id ?? null,
+    previousObjectiveId: groups[draftIndex - 1]?.objective.id ?? null,
+  };
+}
+
+function applyObjectiveOrderAnchor(groups: readonly ObjectiveNode[], anchor: ObjectiveOrderAnchor | null): ObjectiveNode[] {
+  if (!anchor) return [...groups];
+  const currentIndex = groups.findIndex((group) => group.objective.id === anchor.objectiveId);
+  if (currentIndex < 0) return [...groups];
+
+  const anchoredGroup = groups[currentIndex]!;
+  if (
+    anchoredGroup.challengers.length !== anchor.challengerCount ||
+    anchoredGroup.deadline !== anchor.deadline ||
+    anchoredGroup.objective.createdAt !== anchor.createdAt ||
+    anchoredGroup.objective.flowStatus !== anchor.flowStatus
+  ) {
+    return [...groups];
+  }
+
+  const remainingGroups = groups.filter((_, index) => index !== currentIndex);
+  const previousIndex = anchor.previousObjectiveId ? remainingGroups.findIndex((group) => group.objective.id === anchor.previousObjectiveId) : -1;
+  const nextIndex = anchor.nextObjectiveId ? remainingGroups.findIndex((group) => group.objective.id === anchor.nextObjectiveId) : -1;
+  let targetIndex = Math.max(0, Math.min(anchor.fallbackIndex, remainingGroups.length));
+
+  if (previousIndex >= 0 && nextIndex >= 0 && previousIndex < nextIndex) {
+    targetIndex = previousIndex + 1;
+  } else if (nextIndex >= 0) {
+    targetIndex = nextIndex;
+  } else if (previousIndex >= 0) {
+    targetIndex = previousIndex + 1;
+  }
+
+  return [...remainingGroups.slice(0, targetIndex), anchoredGroup, ...remainingGroups.slice(targetIndex)];
+}
+
 export function ChallengePlanPage() {
   const {
     addComment,
@@ -132,6 +189,7 @@ export function ChallengePlanPage() {
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
   const [draftObjectiveTitle, setDraftObjectiveTitle] = useState<string | null>(null);
   const [draftReturnContext, setDraftReturnContext] = useState<DraftReturnContext | null>(null);
+  const [objectiveOrderAnchor, setObjectiveOrderAnchor] = useState<ObjectiveOrderAnchor | null>(null);
   const [creatingDraftObjective, setCreatingDraftObjective] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
@@ -198,7 +256,11 @@ export function ChallengePlanPage() {
   );
   const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
   const filteredGroups = useMemo(() => sortChallengeGroups(filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter })), [cycleFilter, groups, statusFilter]);
-  const displayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
+  const sortedDisplayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
+  const displayedGroups = useMemo(
+    () => (draftGroup ? sortedDisplayedGroups : applyObjectiveOrderAnchor(sortedDisplayedGroups, objectiveOrderAnchor)),
+    [draftGroup, objectiveOrderAnchor, sortedDisplayedGroups],
+  );
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
   const hasActiveFilters = cycleFilter !== "all" || statusFilter !== "all";
   const emptyText = hasActiveFilters
@@ -228,6 +290,7 @@ export function ChallengePlanPage() {
     }
 
     setDraftReturnContext((current) => current ?? { cycle: cycleFilter, scope, status: statusFilter });
+    setObjectiveOrderAnchor(null);
     if (canShowAllChallenges) setScope("all");
     setCycleFilter("all");
     setStatusFilter("unassigned");
@@ -317,6 +380,7 @@ export function ChallengePlanPage() {
     }
 
     setDraftObjectiveTitle(value);
+    const orderAnchor = draftOrderAnchor(displayedGroups);
     setCreatingDraftObjective(true);
     void createObjective({
       title: value,
@@ -328,6 +392,7 @@ export function ChallengePlanPage() {
       if (objective) {
         setDraftObjectiveTitle(null);
         setDraftReturnContext(null);
+        setObjectiveOrderAnchor(orderAnchor ? { ...orderAnchor, objectiveId: objective.id } : null);
         setEditingTarget(null);
         if (canShowAllChallenges) setScope("all");
       } else {
@@ -355,6 +420,21 @@ export function ChallengePlanPage() {
       return;
     }
     setEditingTarget(null);
+  };
+
+  const updateScope = (next: ChallengeScope) => {
+    setObjectiveOrderAnchor(null);
+    setScope(next);
+  };
+
+  const updateCycleFilter = (next: ChallengeCycleFilter) => {
+    setObjectiveOrderAnchor(null);
+    setCycleFilter(next);
+  };
+
+  const updateStatusFilter = (next: ChallengeStatusFilter) => {
+    setObjectiveOrderAnchor(null);
+    setStatusFilter(next);
   };
 
   const saveTitle = (target: ChallengeTarget, title: string) => {
@@ -515,9 +595,9 @@ export function ChallengePlanPage() {
         canShowAll={canShowAllChallenges}
         cycle={cycleFilter}
         cycleOptions={cycleOptions}
-        onCycleChange={setCycleFilter}
-        onScopeChange={setScope}
-        onStatusChange={setStatusFilter}
+        onCycleChange={updateCycleFilter}
+        onScopeChange={updateScope}
+        onStatusChange={updateStatusFilter}
         scope={scope}
         status={statusFilter}
       />
