@@ -7,7 +7,6 @@ import type { AddressInfo } from "node:net";
 export { expect };
 
 export const realSystemEnabled = process.env.ORF_REAL_E2E === "1";
-const cleanupRealData = process.env.ORF_REAL_E2E_CLEANUP === "1";
 
 export type RealUser = {
   email: string;
@@ -83,39 +82,72 @@ export class RealSystemHarness {
     process.env.ORY_PUBLIC_URL = fakeOry.url;
     process.env.ORF_APP_URL = process.env.ORF_APP_URL ?? "http://127.0.0.1:5173";
 
-    const [{ buildServer }, dbModule, schema, repository] = await Promise.all([
-      import("../../../server/app"),
-      import("../../../server/db/client"),
-      import("../../../server/db/schema"),
-      import("../../../server/repositories/orfRepository"),
-    ]);
+    let app: Runtime["app"] | null = null;
+    let dbModule: typeof import("../../../server/db/client") | null = null;
+    let schema: typeof import("../../../server/db/schema") | null = null;
+    try {
+      const [appModule, loadedDbModule, loadedSchema, repository] = await Promise.all([
+        import("../../../server/app"),
+        import("../../../server/db/client"),
+        import("../../../server/db/schema"),
+        import("../../../server/repositories/orfRepository"),
+      ]);
+      dbModule = loadedDbModule;
+      schema = loadedSchema;
 
-    await seedRealFixture(dbModule.db, schema, this.fixture);
-    const app = await buildServer({ logger: false, registerOptionalIntegrations: false });
-    await app.listen({ host: "127.0.0.1", port: 0 });
-    const address = app.server.address();
-    if (!address || typeof address === "string") {
-      throw new Error("Real ORF API test server did not expose a TCP address.");
+      await seedRealFixture(dbModule.db, schema, this.fixture);
+      app = await appModule.buildServer({ logger: false, registerOptionalIntegrations: false });
+      await app.listen({ host: "127.0.0.1", port: 0 });
+      const address = app.server.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Real ORF API test server did not expose a TCP address.");
+      }
+
+      this.runtime = {
+        apiBaseUrl: `http://127.0.0.1:${address.port}`,
+        app,
+        db: dbModule.db,
+        fakeOry: fakeOry.server,
+        repository,
+        schema,
+      };
+    } catch (error) {
+      const cleanupErrors: unknown[] = [];
+      try {
+        if (dbModule && schema) {
+          await cleanupFixtureData(dbModule.db, schema, this.fixture);
+        }
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+      try {
+        await app?.close();
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+      try {
+        await closeServer(fakeOry.server);
+      } catch (cleanupError) {
+        cleanupErrors.push(cleanupError);
+      }
+      if (cleanupErrors.length > 0) {
+        throw new AggregateError([error, ...cleanupErrors], "Real system setup failed and cleanup also failed");
+      }
+      throw error;
     }
-
-    this.runtime = {
-      apiBaseUrl: `http://127.0.0.1:${address.port}`,
-      app,
-      db: dbModule.db,
-      fakeOry: fakeOry.server,
-      repository,
-      schema,
-    };
   }
 
   async teardown() {
     if (!this.runtime) return;
-    if (cleanupRealData) {
-      await cleanupFixtureData(this.runtime.db, this.runtime.schema, this.fixture);
-    }
-    await this.runtime.app.close();
-    await new Promise<void>((resolve) => this.runtime?.fakeOry.close(() => resolve()));
+    const runtime = this.runtime;
     this.runtime = null;
+
+    try {
+      await cleanupFixtureData(runtime.db, runtime.schema, this.fixture);
+    } finally {
+      await runtime.app.close();
+      await closeServer(runtime.fakeOry);
+    }
   }
 
   async newLoggedInPage(browser: Browser, user: RealUser): Promise<LoggedInPage> {
@@ -270,6 +302,18 @@ async function cleanupFixtureData(db: Runtime["db"], schema: Runtime["schema"], 
 
 function isRealUser(value: unknown): value is RealUser {
   return Boolean(value && typeof value === "object" && "email" in value && "id" in value && "password" in value);
+}
+
+async function closeServer(server: Server) {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
 }
 
 async function startFakeOry(users: RealUser[]) {

@@ -3214,11 +3214,16 @@ button:disabled {
 
 .orf-main-content {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   min-height: calc(100vh - var(--orf-topbar-height));
   background: transparent;
   color: var(--orf-text-primary);
   padding: var(--orf-page-padding-y) var(--orf-page-padding-x);
+}
+
+.orf-shell-body {
+  position: relative;
+  z-index: 3;
 }
 
 .orf-shell-x-padding {
@@ -5011,7 +5016,7 @@ body[data-dragging-floating="true"] {
   padding-left: 10px;
 }
 
-.orf-flow-action-button:hover {
+.orf-flow-action-button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
@@ -5856,6 +5861,17 @@ body[data-dragging-floating="true"] {
   color: #064a9f;
 }
 
+.orf-comment-mention {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 5px;
+  background: rgba(47, 156, 137, 0.12);
+  color: #087567;
+  font-weight: 800;
+  padding: 0 3px;
+}
+
 .orf-comment-attachment {
   display: block;
   margin: 8px 0 2px;
@@ -5978,6 +5994,68 @@ body[data-dragging-floating="true"] {
   font-size: 14px;
   line-height: 1.72;
   outline: none;
+}
+
+.orf-comment-mention-menu {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: min(270px, 100%);
+  max-height: 196px;
+  padding: 5px;
+  overflow: auto;
+  border: 1px solid rgba(218, 224, 232, 0.92);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.14);
+}
+
+.orf-comment-mention-option {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.orf-comment-mention-option:hover,
+.orf-comment-mention-option-active {
+  background: rgba(47, 156, 137, 0.1);
+}
+
+.orf-comment-mention-name,
+.orf-comment-mention-email {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-comment-mention-name {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orf-comment-mention-email,
+.orf-comment-mention-empty {
+  color: #98a2b3;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.orf-comment-mention-empty {
+  padding: 8px;
 }
 
 .orf-comment-composer-footer {

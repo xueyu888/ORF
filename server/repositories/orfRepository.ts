@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
   CommentAttachment,
@@ -62,6 +62,7 @@ import { getPermissionRulesForScope } from "./permissionRepository";
 import {
   createNotifications,
   getActiveAdminNotificationRecipients,
+  getActiveMemberNotificationRecipientsByIds,
   getActiveMemberNotificationRecipientsByNames,
   getUserNameById,
 } from "./notificationRepository";
@@ -94,6 +95,10 @@ type CommentMutationOutcome =
   | { status: "notFound" }
   | { status: "forbidden" }
   | { status: "invalid" };
+type CommentMentionableUsersOutcome =
+  | { status: "ok"; users: OrfState["users"] }
+  | { status: "notFound" }
+  | { status: "forbidden" };
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
 type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
@@ -116,6 +121,7 @@ const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
 const PENDING_COMMENT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 const COMMENT_ATTACHMENT_TOKEN_PATTERN = /!\[[^\]\n]*\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
+const COMMENT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 const uncertaintyScores: Record<UncertaintyLevel, number> = {
   入门: 10,
   进阶: 30,
@@ -408,6 +414,59 @@ async function notifyAdminsOfObjectiveLoot(input: {
   });
 }
 
+function extractCommentMentionUserIds(body: string) {
+  const userIds: string[] = [];
+  for (const match of body.matchAll(COMMENT_MENTION_TOKEN_PATTERN)) {
+    const rawUserId = match[2]?.trim();
+    if (!rawUserId) continue;
+
+    try {
+      userIds.push(decodeURIComponent(rawUserId));
+    } catch {
+      userIds.push(rawUserId);
+    }
+  }
+  return Array.from(new Set(userIds));
+}
+
+async function notifyMentionedUsersOfComment(input: {
+  actorName: string;
+  actorUserId: string;
+  body: string;
+  commentMessageId: string;
+  commentThreadId: string;
+  targetId: string;
+  targetTitle: string;
+  targetType: CommentTargetType;
+  teamId: string;
+}) {
+  const mentionedUserIds = extractCommentMentionUserIds(input.body);
+  if (mentionedUserIds.length === 0) {
+    return;
+  }
+
+  await createNotifications({
+    actorName: input.actorName,
+    actorUserId: input.actorUserId,
+    body: `${input.actorName} 在「${input.targetTitle}」的评论中提到了你。`,
+    kind: "comment.mention.created",
+    metadata: {
+      commentMessageId: input.commentMessageId,
+      commentThreadId: input.commentThreadId,
+      mentionedUserIds: mentionedUserIds.join(","),
+      targetId: input.targetId,
+      targetTitle: input.targetTitle,
+      targetType: input.targetType,
+    },
+    recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, mentionedUserIds),
+    targetHref: "/tasks",
+    targetId: input.commentMessageId,
+    targetType: "comment",
+    teamId: input.teamId,
+    title: "评论提到了你",
+  });
+}
+
 function uncertaintyScore(level: UncertaintyLevel | null) {
   return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
 }
@@ -467,7 +526,9 @@ function objectiveAcceptedResultFromReviews(reviews: ResultAcceptedResult[]): Ob
 
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
   const storageScopeId = scopedStorageId(scope);
-  const objectiveRows = storageScopeId ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)) : await db.select().from(objectives);
+  const objectiveRows = storageScopeId
+    ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id))
+    : await db.select().from(objectives).orderBy(desc(objectives.createdAt), desc(objectives.id));
   const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
   const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
   const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
@@ -1937,6 +1998,27 @@ function canManageComment(actor: CommentActor, ownerUserId: string) {
   return actor.role === "admin" || actor.canManageAllComments === true || actor.id === ownerUserId;
 }
 
+export async function listCommentMentionableUsers(
+  input: Pick<UploadCommentAttachmentInput, "targetId" | "targetType">,
+  actor: CommentActor,
+): Promise<CommentMentionableUsersOutcome> {
+  const target = await resolveCommentTarget(input.targetType, input.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+
+  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
+  }
+
+  const scopedUsers = await getScopedUsers(runtimeScope(target.storageScopeId));
+  return {
+    status: "ok",
+    users: scopedUsers.filter((user) => user.status === "active"),
+  };
+}
+
 export type UploadCommentAttachmentInput = {
   body: Buffer;
   fileName: string;
@@ -2103,7 +2185,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   const targetTitle = target.title;
   const createdAt = nowIso();
   const attachmentIds = extractCommentAttachmentIds(body);
-  const threadId = await db.transaction(async (tx) => {
+  const createdComment = await db.transaction(async (tx) => {
     const [lockedObjective] = await tx
       .select({ id: objectives.id })
       .from(objectives)
@@ -2203,7 +2285,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       });
       await bindMessageAttachments(nextMessageId);
       await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
-      return parent.threadId;
+      return { messageId: nextMessageId, threadId: parent.threadId };
     }
 
     const [openThread] = await tx
@@ -2254,14 +2336,26 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     });
     await bindMessageAttachments(nextMessageId);
 
-    return nextThreadId;
+    return { messageId: nextMessageId, threadId: nextThreadId };
   });
 
-  if (!threadId) {
+  if (!createdComment) {
     return { status: "notFound" };
   }
 
-  return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
+  await notifyMentionedUsersOfComment({
+    actorName: actor.name,
+    actorUserId: actor.id,
+    body,
+    commentMessageId: createdComment.messageId,
+    commentThreadId: createdComment.threadId,
+    targetId: input.targetId,
+    targetTitle,
+    targetType: input.targetType,
+    teamId: target.storageScopeId,
+  });
+
+  return { status: "ok", thread: (await getCommentThread(createdComment.threadId)) ?? undefined };
 }
 
 export async function updateCommentThreadStatus(

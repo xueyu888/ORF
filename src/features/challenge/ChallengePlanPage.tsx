@@ -13,14 +13,33 @@ import { localDateString } from "../../utils/date";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
-import { challengeCycleOptions, filterChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
+import { challengeCycleOptions, filterChallengeGroups, sortChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
+import {
+  applyObjectiveOrderAnchor,
+  beginObjectiveCreationSession,
+  cancelObjectiveCreationSession,
+  clearSubmittedObjectiveCreation,
+  completeObjectiveCreationDraft,
+  draftObjectiveId,
+  draftOrderAnchor,
+  failObjectiveCreationDraft,
+  idleObjectiveCreationSession,
+  materializeSubmittedObjectiveCreation,
+  objectiveCreationDraftTitle,
+  objectiveCreationIsDraftEditing,
+  objectiveCreationIsSubmitting,
+  objectiveCreationSubmittedObjective,
+  objectiveCreationSubmittedOrderAnchor,
+  submitObjectiveCreationDraft,
+  updateObjectiveCreationDraftTitle,
+  type DraftReturnContext,
+  type ObjectiveCreationSession,
+} from "./model/objectiveCreationSession";
 import { canMutateObjectiveWorkItems, canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
 import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
 import type { ObjectiveNode } from "./model/types";
-
-const draftObjectiveId = "draft-objective";
 
 function defaultFinalDueAt() {
   const date = new Date();
@@ -71,11 +90,14 @@ function draftObjective(title: string): Objective {
 }
 
 function draftObjectiveNode(title: string): ObjectiveNode {
-  const objective = draftObjective(title);
+  return objectiveNode(draftObjective(title));
+}
+
+function objectiveNode(objective: Objective): ObjectiveNode {
   return {
     actions: [],
     bounties: [],
-    challengers: [],
+    challengers: objective.challengers,
     deadline: objective.finalDueAt,
     objective,
   };
@@ -100,6 +122,7 @@ export function ChallengePlanPage() {
     publishObjective,
     freezeObjective,
     createObjective,
+    loadCommentMentionableUsers,
     rejectChallengeApplication,
     setTaskCompletion,
     state,
@@ -123,7 +146,7 @@ export function ChallengePlanPage() {
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
-  const [draftObjectiveTitle, setDraftObjectiveTitle] = useState<string | null>(null);
+  const [objectiveCreationSession, setObjectiveCreationSession] = useState<ObjectiveCreationSession>(idleObjectiveCreationSession);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
@@ -168,7 +191,11 @@ export function ChallengePlanPage() {
 
   const sourceData = challengeData ?? state;
   const challengeState = useMemo(() => ({ ...state, ...sourceData }), [sourceData, state]);
-  const draftGroup = useMemo(() => (draftObjectiveTitle === null ? null : draftObjectiveNode(draftObjectiveTitle)), [draftObjectiveTitle]);
+  const draftTitle = objectiveCreationDraftTitle(objectiveCreationSession);
+  const draftGroup = useMemo(() => (draftTitle === null ? null : draftObjectiveNode(draftTitle)), [draftTitle]);
+  const draftIsEditing = objectiveCreationIsDraftEditing(objectiveCreationSession);
+  const draftIsSubmitting = objectiveCreationIsSubmitting(objectiveCreationSession);
+  const effectiveEditingTarget = draftIsEditing ? ({ type: "objective", id: draftObjectiveId, title: draftTitle ?? "" } satisfies ChallengeTarget) : editingTarget;
   const visibleObjectiveIds = useMemo(() => {
     if (showAll) return undefined;
     return new Set(challengeState.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id));
@@ -187,9 +214,23 @@ export function ChallengePlanPage() {
       ),
     [challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
   );
-  const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
-  const filteredGroups = useMemo(() => filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter }), [cycleFilter, groups, statusFilter]);
-  const displayedGroups = useMemo(() => (draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
+  const submittedObjective = objectiveCreationSubmittedObjective(objectiveCreationSession);
+  const submittedOrderAnchor = objectiveCreationSubmittedOrderAnchor(objectiveCreationSession);
+  const optimisticGroup = useMemo(() => {
+    if (!submittedObjective || groups.some((group) => group.objective.id === submittedObjective.id)) return null;
+    return objectiveNode(submittedObjective);
+  }, [groups, submittedObjective]);
+  const displaySourceGroups = useMemo(() => (optimisticGroup ? [optimisticGroup, ...groups] : groups), [groups, optimisticGroup]);
+  const cycleOptions = useMemo(() => challengeCycleOptions(displaySourceGroups), [displaySourceGroups]);
+  const filteredGroups = useMemo(
+    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, status: statusFilter })),
+    [cycleFilter, displaySourceGroups, statusFilter],
+  );
+  const sortedDisplayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
+  const displayedGroups = useMemo(
+    () => (draftGroup ? sortedDisplayedGroups : applyObjectiveOrderAnchor(sortedDisplayedGroups, submittedOrderAnchor)),
+    [draftGroup, submittedOrderAnchor, sortedDisplayedGroups],
+  );
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
   const hasActiveFilters = cycleFilter !== "all" || statusFilter !== "all";
   const emptyText = hasActiveFilters
@@ -203,6 +244,13 @@ export function ChallengePlanPage() {
       setCycleFilter("all");
     }
   }, [cycleFilter, cycleOptions]);
+  useEffect(() => {
+    const objective = objectiveCreationSubmittedObjective(objectiveCreationSession);
+    if (!objective) return;
+    if (groups.some((group) => group.objective.id === objective.id)) {
+      setObjectiveCreationSession(materializeSubmittedObjectiveCreation);
+    }
+  }, [groups, objectiveCreationSession]);
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
@@ -218,10 +266,12 @@ export function ChallengePlanPage() {
       return;
     }
 
+    setObjectiveCreationSession((current) => beginObjectiveCreationSession(current, { cycle: cycleFilter, scope, status: statusFilter }));
+    setEditingTarget(null);
     if (canShowAllChallenges) setScope("all");
-    setDraftObjectiveTitle((current) => current ?? "");
-    setEditingTarget({ type: "objective", id: draftObjectiveId, title: "" });
-  }, [canCreateObjective, canShowAllChallenges, notify, searchParams, setSearchParams]);
+    setCycleFilter("all");
+    setStatusFilter("unassigned");
+  }, [canCreateObjective, canShowAllChallenges, cycleFilter, notify, scope, searchParams, setSearchParams, statusFilter]);
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
@@ -293,15 +343,18 @@ export function ChallengePlanPage() {
     setOpenActionId(null);
   };
 
-  const saveDraftObjectiveTitle = (title: string) => {
+  const createDraftObjective = (title: string) => {
+    if (draftIsSubmitting) return false;
+
     const value = title.trim();
     if (!value) {
       notify("标题不能为空");
+      setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title));
       return false;
     }
 
-    setDraftObjectiveTitle(value);
-    setEditingTarget(null);
+    const orderAnchor = draftOrderAnchor(displayedGroups);
+    setObjectiveCreationSession((current) => submitObjectiveCreationDraft(current, value, orderAnchor));
     void createObjective({
       title: value,
       whyItMatters: "待补充",
@@ -310,24 +363,50 @@ export function ChallengePlanPage() {
       finalDueAt: defaultFinalDueAt(),
     }).then((objective) => {
       if (objective) {
-        setDraftObjectiveTitle(null);
+        setObjectiveCreationSession((current) => completeObjectiveCreationDraft(current, objective));
         if (canShowAllChallenges) setScope("all");
       } else {
-        setEditingTarget({ type: "objective", id: draftObjectiveId, title: value });
+        setObjectiveCreationSession((current) => failObjectiveCreationDraft(current, value));
       }
     });
     return true;
   };
 
+  const restoreDraftReturnContext = useCallback((returnContext: DraftReturnContext | null) => {
+    if (!returnContext) return;
+    setScope(returnContext.scope);
+    setCycleFilter(returnContext.cycle);
+    setStatusFilter(returnContext.status);
+  }, []);
+
   const cancelEdit = () => {
-    if (editingTarget?.type === "objective" && editingTarget.id === draftObjectiveId && !draftObjectiveTitle?.trim()) {
-      setDraftObjectiveTitle(null);
+    if (draftIsEditing) {
+      const cancelled = cancelObjectiveCreationSession(objectiveCreationSession);
+      setObjectiveCreationSession(cancelled.session);
+      restoreDraftReturnContext(cancelled.returnContext);
+      setEditingTarget(null);
+      return;
     }
     setEditingTarget(null);
   };
 
+  const updateScope = (next: ChallengeScope) => {
+    setObjectiveCreationSession(clearSubmittedObjectiveCreation);
+    setScope(next);
+  };
+
+  const updateCycleFilter = (next: ChallengeCycleFilter) => {
+    setObjectiveCreationSession(clearSubmittedObjectiveCreation);
+    setCycleFilter(next);
+  };
+
+  const updateStatusFilter = (next: ChallengeStatusFilter) => {
+    setObjectiveCreationSession(clearSubmittedObjectiveCreation);
+    setStatusFilter(next);
+  };
+
   const saveTitle = (target: ChallengeTarget, title: string) => {
-    if (target.type === "objective" && target.id === draftObjectiveId) return saveDraftObjectiveTitle(title);
+    if (target.type === "objective" && target.id === draftObjectiveId) return createDraftObjective(title);
 
     const value = title.trim();
     if (!value) {
@@ -345,7 +424,9 @@ export function ChallengePlanPage() {
 
   const deleteTarget = (target: ChallengeTarget) => {
     if (target.type === "objective" && target.id === draftObjectiveId) {
-      setDraftObjectiveTitle(null);
+      const cancelled = cancelObjectiveCreationSession(objectiveCreationSession);
+      setObjectiveCreationSession(cancelled.session);
+      restoreDraftReturnContext(cancelled.returnContext);
       setEditingTarget(null);
       return;
     }
@@ -376,6 +457,10 @@ export function ChallengePlanPage() {
 
   const handleRowAction = (action: ChallengeRowAction, target: ChallengeTarget) => {
     if (target.type === "objective" && target.id === draftObjectiveId) {
+      if (draftIsSubmitting) {
+        notify("目标正在创建，请稍后");
+        return;
+      }
       if (action === "edit") beginEdit(target);
       if (action === "delete") deleteTarget(target);
       if (action === "copyLink" || action === "comment") notify("请先完成目标标题");
@@ -484,9 +569,9 @@ export function ChallengePlanPage() {
         canShowAll={canShowAllChallenges}
         cycle={cycleFilter}
         cycleOptions={cycleOptions}
-        onCycleChange={setCycleFilter}
-        onScopeChange={setScope}
-        onStatusChange={setStatusFilter}
+        onCycleChange={updateCycleFilter}
+        onScopeChange={updateScope}
+        onStatusChange={updateStatusFilter}
         scope={scope}
         status={statusFilter}
       />
@@ -499,7 +584,7 @@ export function ChallengePlanPage() {
           collapsedBountyIds,
           commentCounts,
           dragDrop,
-          editingTarget,
+          editingTarget: effectiveEditingTarget,
           contributionReviews: challengeState.objectiveContributionReviews,
           currentUser,
           draftObjectiveId,
@@ -526,6 +611,7 @@ export function ChallengePlanPage() {
           onAddSubAction: addSubAction,
           onApproveApplication: approveChallengeApplication,
           onCancelEdit: cancelEdit,
+          onDraftTitleChange: (title) => setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title)),
           onEditTarget: beginEdit,
           onFreezeObjective: freezeObjective,
           onOpenActionChange: setOpenActionId,
@@ -548,6 +634,8 @@ export function ChallengePlanPage() {
           key={`${commentTarget.type}:${commentTarget.id}`}
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
+          currentUserId={currentUser?.id ?? ""}
+          onLoadMentionableUsers={loadCommentMentionableUsers}
           targetId={commentTarget.id}
           targetTitle={commentTarget.title}
           targetType={commentTarget.type}

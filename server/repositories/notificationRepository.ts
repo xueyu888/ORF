@@ -98,6 +98,20 @@ export async function getActiveMemberNotificationRecipientsByNames(teamId: strin
   return rows.map((row) => row.id);
 }
 
+export async function getActiveMemberNotificationRecipientsByIds(teamId: string, userIds: string[]): Promise<string[]> {
+  const ids = Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({ id: users.id })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, teamId), eq(users.status, "active"), inArray(users.id, ids)));
+  return rows.map((row) => row.id);
+}
+
 export async function getUserNameById(userId: string | null | undefined): Promise<string> {
   const id = userId?.trim();
   if (!id) {

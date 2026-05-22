@@ -6,14 +6,18 @@ import type { ChallengeTarget } from "../model/types";
 export function InlineTitleEditor({
   ariaLabel,
   className,
+  onDraftChange,
   onCancel,
   onSubmit,
+  submitOnBlur = true,
   value,
 }: {
   ariaLabel: string;
   className: string;
+  onDraftChange?: (value: string) => void;
   onCancel: () => void;
   onSubmit: (value: string) => boolean | void;
+  submitOnBlur?: boolean;
   value: string;
 }) {
   const [draft, setDraft] = useState(value);
@@ -36,6 +40,7 @@ export function InlineTitleEditor({
     const accepted = onSubmit(draft);
     if (accepted === false) {
       finishedRef.current = false;
+      window.requestAnimationFrame(() => inputRef.current?.focus());
     }
   };
 
@@ -52,8 +57,12 @@ export function InlineTitleEditor({
         ref={inputRef}
         aria-label={ariaLabel}
         className="orf-inline-title-input"
-        onBlur={commit}
-        onChange={(event) => setDraft(event.target.value)}
+        onBlur={submitOnBlur ? commit : undefined}
+        onChange={(event) => {
+          const next = event.target.value;
+          setDraft(next);
+          onDraftChange?.(next);
+        }}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
