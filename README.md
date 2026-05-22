@@ -70,6 +70,8 @@ git config core.hooksPath .githooks
 
 ```bash
 cp .env.example .env
+# 如果你接入共享 Ory/MinIO，再运行共享接入包里的 install-env.mjs，
+# 把 ORY_PUBLIC_URL、OBJECT_STORAGE_* 和 ORF_PUBLIC_CA_CERT 统一切到公共服务。
 node scripts/verify-db.mjs
 npm run db:migrate
 npm run db:seed
@@ -79,7 +81,7 @@ npm run db:seed
 
 ### 4) 一键启动
 
-后台启动会先检查 PostgreSQL，必要时启动 Ory 和 MinIO，再启动后端和前端：
+后台启动会先检查 PostgreSQL；当 `.env` 指向共享 Ory/MinIO 时，只启动后端和前端：
 
 ```bash
 orf up

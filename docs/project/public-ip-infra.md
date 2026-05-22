@@ -54,6 +54,8 @@ OBJECT_STORAGE_ACCESS_KEY=orf-app
 
 同时会生成 Ory 和 MinIO 密钥，但不会把密钥打印到终端。
 
+成员侧不需要执行这一步。成员机器应直接使用根目录 `orf-ory-minio-connect-*.tar.gz` 中的安装脚本，把现有 `.env` 切到共享 Ory / MinIO，并安装公共 CA 证书。
+
 准备反向代理配置：
 
 ```bash
