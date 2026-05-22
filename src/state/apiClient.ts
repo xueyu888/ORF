@@ -20,6 +20,7 @@ export type NotificationsReadAllResponse = {
   updated: number;
   unreadCount: number;
 };
+export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type CommentAttachmentUploadResponse = {
   ok: true;
   attachment: CommentAttachment;
@@ -168,6 +169,11 @@ export async function uploadCommentAttachment(input: { file: File; targetId: str
     method: "POST",
     body: formData,
   });
+}
+
+export async function getCommentMentionableUsers(input: { targetId: string; targetType: CommentTargetType }) {
+  const query = new URLSearchParams({ targetId: input.targetId, targetType: input.targetType });
+  return apiJson<CommentMentionableUsersResponse>(`/api/comments/mentionable-users?${query.toString()}`);
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {

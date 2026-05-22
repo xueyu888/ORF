@@ -2071,6 +2071,52 @@ test("task and comment API writes require objective participation", async () => 
   });
 });
 
+test("comment mentions resolve scoped active users and create recipient notifications", async () => {
+  const fixture = await createFixture("api-comment-mention");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "mention objective");
+  await db.update(users).set({ status: "disabled" }).where(eq(users.id, fixture.observer.id));
+
+  await withApiServer(fixture, async (app) => {
+    const mentionableUrl = `/api/comments/mentionable-users?targetType=objective&targetId=${encodeURIComponent(objective.id)}`;
+    const observerCandidates = await apiInject(app, fixture.observer, "GET", mentionableUrl);
+    assert.equal(observerCandidates.statusCode, 403);
+
+    const challengerCandidates = await apiInject(app, fixture.challenger, "GET", mentionableUrl);
+    assert.equal(challengerCandidates.statusCode, 200);
+    const candidatePayload = challengerCandidates.json() as { users: Array<{ id: string; status: string }> };
+    assert.equal(candidatePayload.users.some((user) => user.id === fixture.commander.id), true);
+    assert.equal(candidatePayload.users.some((user) => user.id === fixture.challenger.id), true);
+    assert.equal(candidatePayload.users.some((user) => user.id === fixture.observer.id), false);
+
+    const challengerMention = `@[${fixture.challenger.name}](orf-user:${fixture.challenger.id})`;
+    const comment = await apiInject(app, fixture.commander, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: `请 ${challengerMention} 看一下，重复 ${challengerMention}，自己 @[${fixture.commander.name}](orf-user:${fixture.commander.id})，禁用 @[${fixture.observer.name}](orf-user:${fixture.observer.id})，普通 @Ghost。`,
+    });
+    assert.equal(comment.statusCode, 200);
+  });
+
+  const challengerNotifications = (await listNotificationsForUser(fixture.challenger.id, fixture.scope)).filter(
+    (notification) => notification.kind === "comment.mention.created",
+  );
+  assert.equal(challengerNotifications.length, 1);
+  assert.equal(challengerNotifications[0]?.targetType, "comment");
+  assert.equal(challengerNotifications[0]?.targetHref, "/tasks");
+  assert.equal(challengerNotifications[0]?.metadata.targetId, objective.id);
+  assert.match(challengerNotifications[0]?.body ?? "", /评论中提到了你/);
+
+  const observerNotifications = (await listNotificationsForUser(fixture.observer.id, fixture.scope)).filter(
+    (notification) => notification.kind === "comment.mention.created",
+  );
+  const commanderNotifications = (await listNotificationsForUser(fixture.commander.id, fixture.scope)).filter(
+    (notification) => notification.kind === "comment.mention.created",
+  );
+  assert.equal(observerNotifications.length, 0);
+  assert.equal(commanderNotifications.length, 0);
+});
+
 test("comment image attachments upload, bind, and read through authorized comment APIs", async () => {
   const fixture = await createFixture("api-comment-image");
   const { objective } = await createApprovedObjectiveWithResult(fixture, "image attachment objective");

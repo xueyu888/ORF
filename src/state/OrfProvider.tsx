@@ -4,6 +4,7 @@ import {
   ApiError,
   apiJson,
   apiRequest,
+  getCommentMentionableUsers,
   getNotifications,
   markAllNotificationsReadRequest,
   markNotificationReadRequest,
@@ -145,6 +146,7 @@ interface OrfContextValue {
     replyToMessageId?: string;
     replyToAuthor?: string;
   }) => void;
+  loadCommentMentionableUsers: (input: { targetId: string; targetType: CommentTargetType }) => Promise<OrfUser[]>;
   uploadCommentAttachment: (input: { file: File; targetId: string; targetType: CommentTargetType }) => Promise<string | null>;
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
@@ -1295,6 +1297,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             notify(commentMutationFailureMessage(error, "评论添加失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
+      },
+      loadCommentMentionableUsers: async (input) => {
+        const response = await getCommentMentionableUsers(input);
+        return response.users;
       },
       uploadCommentAttachment: async (input) => {
         try {

@@ -9,8 +9,13 @@ export type MetricDirection = "increase" | "decrease";
 export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
-export type NotificationKind = "challenge.application.created" | "objective.recruitment.created" | "objective.challenge.accepted" | "objective.loot.submitted";
-export type NotificationTargetType = "objective" | "objectiveLoot";
+export type NotificationKind =
+  | "challenge.application.created"
+  | "objective.recruitment.created"
+  | "objective.challenge.accepted"
+  | "objective.loot.submitted"
+  | "comment.mention.created";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";

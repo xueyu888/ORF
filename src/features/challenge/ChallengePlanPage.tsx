@@ -100,6 +100,7 @@ export function ChallengePlanPage() {
     publishObjective,
     freezeObjective,
     createObjective,
+    loadCommentMentionableUsers,
     rejectChallengeApplication,
     setTaskCompletion,
     state,
@@ -220,6 +221,8 @@ export function ChallengePlanPage() {
     }
 
     if (canShowAllChallenges) setScope("all");
+    setCycleFilter("all");
+    setStatusFilter("unassigned");
     setDraftObjectiveTitle((current) => current ?? "");
     setEditingTarget({ type: "objective", id: draftObjectiveId, title: "" });
   }, [canCreateObjective, canShowAllChallenges, notify, searchParams, setSearchParams]);
@@ -557,6 +560,8 @@ export function ChallengePlanPage() {
           key={`${commentTarget.type}:${commentTarget.id}`}
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
+          currentUserId={currentUser?.id ?? ""}
+          onLoadMentionableUsers={loadCommentMentionableUsers}
           targetId={commentTarget.id}
           targetTitle={commentTarget.title}
           targetType={commentTarget.type}
