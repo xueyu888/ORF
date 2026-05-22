@@ -53,16 +53,16 @@ export function NotificationsPage() {
 
 function NotificationRow({ notification, onOpen }: { notification: AppNotification; onOpen: () => void }) {
   return (
-    <Card className="orf-card-padding">
-      <button type="button" className="flex w-full items-start gap-4 text-left" onClick={onOpen}>
+    <Card className={`orf-notification-row-card orf-card-padding ${notification.readAt ? "is-read" : "is-unread"}`}>
+      <button type="button" className="orf-notification-row flex w-full items-start gap-4 text-left" onClick={onOpen}>
         <span className={notification.readAt ? "orf-notification-dot-read mt-1" : "orf-notification-dot-unread mt-1"} />
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="text-base font-semibold orf-text-primary">{notification.title}</span>
-            {!notification.readAt && <span className="orf-status-tag orf-badge-info px-2 py-0.5 text-[11px] font-bold">未读</span>}
+            <span className="orf-notification-row-title text-base font-semibold orf-text-primary">{notification.title}</span>
+            {!notification.readAt && <span className="orf-notification-unread-tag orf-status-tag px-2 py-0.5 text-[11px] font-bold">未读</span>}
           </span>
-          <span className="mt-2 block text-sm orf-text-secondary">{notification.body}</span>
-          <span className="mt-3 flex flex-wrap items-center gap-3 text-xs orf-text-muted">
+          <span className="orf-notification-row-body mt-2 block text-sm orf-text-secondary">{notification.body}</span>
+          <span className="orf-notification-row-meta mt-3 flex flex-wrap items-center gap-3 text-xs orf-text-muted">
             <span>{notification.actorName || "系统"}</span>
             <span>{formatNotificationTime(notification.createdAt)}</span>
             <span className="inline-flex items-center gap-1">

@@ -76,7 +76,7 @@ export function NotificationBell() {
           </div>
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-2 border-t orf-border px-4 py-3 text-sm font-medium orf-text-primary orf-hover-muted"
+            className="orf-notification-footer-action flex w-full items-center justify-center gap-2 border-t orf-border px-4 py-3 text-sm font-medium orf-text-primary orf-hover-muted"
             onClick={() => {
               setOpen(false);
               navigate("/notifications");
@@ -93,12 +93,17 @@ export function NotificationBell() {
 
 function NotificationPreview({ notification, onOpen }: { notification: AppNotification; onOpen: () => void }) {
   return (
-    <button type="button" className="orf-notification-preview orf-hover-muted flex w-full gap-3 rounded-md px-3 py-2 text-left" onClick={onOpen}>
+    <button
+      type="button"
+      className="orf-notification-preview orf-hover-muted flex w-full gap-3 rounded-md px-3 py-2 text-left"
+      data-read={notification.readAt ? "true" : "false"}
+      onClick={onOpen}
+    >
       <span className={notification.readAt ? "orf-notification-dot-read" : "orf-notification-dot-unread"} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium orf-text-primary">{notification.title}</span>
-        <span className="mt-1 block line-clamp-2 text-xs orf-text-secondary">{notification.body}</span>
-        <span className="mt-2 block text-[11px] orf-text-muted">{formatNotificationTime(notification.createdAt)}</span>
+        <span className="orf-notification-preview-title block truncate text-sm font-medium orf-text-primary">{notification.title}</span>
+        <span className="orf-notification-preview-body mt-1 block line-clamp-2 text-xs orf-text-secondary">{notification.body}</span>
+        <span className="orf-notification-preview-time mt-2 block text-[11px] orf-text-muted">{formatNotificationTime(notification.createdAt)}</span>
       </span>
     </button>
   );
