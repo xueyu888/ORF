@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, or } from "drizzle-orm";
+import type { Readable } from "node:stream";
+import { and, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
+  CommentAttachment,
   BountySource,
   ChallengeApplication,
   CommentStatus,
@@ -38,6 +40,7 @@ import {
 } from "../../src/domain/orfLifecycle";
 import { db } from "../db/client";
 import {
+  commentAttachments,
   commentMessages,
   commentThreads,
   evidence,
@@ -56,10 +59,18 @@ import {
   users,
 } from "../db/schema";
 import { getPermissionRulesForScope } from "./permissionRepository";
+import {
+  createNotifications,
+  getActiveAdminNotificationRecipients,
+  getActiveMemberNotificationRecipientsByNames,
+  getUserNameById,
+} from "./notificationRepository";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
+import { objectStorage } from "../storage/objectStorage";
+import { validateImageUpload } from "../storage/images";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -85,6 +96,7 @@ type CommentMutationOutcome =
   | { status: "invalid" };
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
+type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
 
 const today = () => localDateString(new Date());
 let lastNowMs = 0;
@@ -99,8 +111,11 @@ const nextIdCounter = () => {
   return idCounter.toString(36);
 };
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomUUID()}`;
+const makeCommentAttachmentId = () => `catt_${Date.now()}_${nextIdCounter()}_${randomUUID()}`;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
+const PENDING_COMMENT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
+const COMMENT_ATTACHMENT_TOKEN_PATTERN = /!\[[^\]\n]*\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
 const uncertaintyScores: Record<UncertaintyLevel, number> = {
   入门: 10,
   进阶: 30,
@@ -125,6 +140,71 @@ const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "set
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
+}
+
+function commentAttachmentContentUrl(id: string) {
+  return `/api/comments/attachments/${encodeURIComponent(id)}/content`;
+}
+
+function commentAttachmentDto(row: CommentAttachmentRow): CommentAttachment {
+  return {
+    id: row.id,
+    fileName: row.fileName,
+    mimeType: row.mimeType,
+    fileSize: row.fileSize,
+    width: optional(row.width),
+    height: optional(row.height),
+    contentUrl: commentAttachmentContentUrl(row.id),
+  };
+}
+
+function groupCommentAttachmentsByMessage(rows: CommentAttachmentRow[]) {
+  const grouped = new Map<string, CommentAttachment[]>();
+  for (const row of rows) {
+    if (!row.messageId) continue;
+    const attachments = grouped.get(row.messageId) ?? [];
+    attachments.push(commentAttachmentDto(row));
+    grouped.set(row.messageId, attachments);
+  }
+  return grouped;
+}
+
+function extractCommentAttachmentIds(body: string) {
+  const ids = new Set<string>();
+  for (const match of body.matchAll(COMMENT_ATTACHMENT_TOKEN_PATTERN)) {
+    if (match[1]) {
+      ids.add(match[1]);
+    }
+  }
+  return Array.from(ids);
+}
+
+function pendingCommentAttachmentExpiresAt(createdAt: string) {
+  return new Date(new Date(createdAt).getTime() + PENDING_COMMENT_ATTACHMENT_TTL_MS).toISOString();
+}
+
+function sanitizeFileName(fileName: string, extension: string) {
+  const leafName = fileName.split(/[\\/]/).pop()?.trim() ?? "";
+  const sanitized = leafName.replace(/[^\w.\-()\u4e00-\u9fff ]+/g, "_").slice(0, 120).trim();
+  return sanitized || `image.${extension}`;
+}
+
+function commentAttachmentObjectKey(input: {
+  attachmentId: string;
+  extension: string;
+  storageScopeId: string;
+  targetId: string;
+  targetType: CommentTargetType;
+}) {
+  const safeTargetId = input.targetId.replace(/[^A-Za-z0-9_-]+/g, "_");
+  const now = new Date();
+  const year = now.getUTCFullYear().toString();
+  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+  return `comments/${input.storageScopeId}/${input.targetType}/${safeTargetId}/${year}/${month}/${input.attachmentId}.${input.extension}`;
+}
+
+async function deleteStoredCommentAttachmentObjects(rows: CommentAttachmentRow[]) {
+  await Promise.allSettled(rows.map((row) => objectStorage.deleteObject(row.objectKey)));
 }
 
 function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
@@ -170,7 +250,7 @@ function storageScope(id: string | null | undefined): RuntimeScope | null {
   return storageId ? runtimeScope(storageId) : null;
 }
 
-async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[CommentThreadRow[], CommentMessageRow[]]> {
+async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]> {
   try {
     const storageScopeId = scopedStorageId(scope);
     const threadRows = storageScopeId
@@ -181,11 +261,16 @@ async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[Com
       threadIds.length > 0
         ? await db.select().from(commentMessages).where(inArray(commentMessages.threadId, threadIds))
         : [];
+    const messageIds = messageRows.map((message) => message.id);
+    const attachmentRows =
+      messageIds.length > 0
+        ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIds))
+        : [];
 
-    return [threadRows, messageRows];
+    return [threadRows, messageRows, attachmentRows];
   } catch (error) {
     if (isMissingCommentStorageError(error)) {
-      return [[], []];
+      return [[], [], []];
     }
 
     throw error;
@@ -231,6 +316,96 @@ async function getActiveMemberNameSetInScope(storageScopeId: string, values: Arr
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "active"), inArray(users.name, memberNames)));
   return new Set(rows.map((member) => member.name));
+}
+
+async function notifyAdminsOfChallengeApplication(input: {
+  actorUserId?: string | null;
+  applicant: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  await createNotifications({
+    actorName: input.applicant,
+    actorUserId: input.actorUserId,
+    body: `${input.applicant} 申请挑战「${input.objectiveTitle}」，需要指挥官确认。`,
+    kind: "challenge.application.created",
+    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
+    targetHref: "/tasks",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "新的挑战申请",
+  });
+}
+
+async function notifyMembersOfRecruitment(input: {
+  actorUserId: string;
+  memberNames: string[];
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `你被征召挑战「${input.objectiveTitle}」，请在悬赏大厅接受或拒绝。`,
+    kind: "objective.recruitment.created",
+    metadata: { objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, input.memberNames),
+    targetHref: "/bounties",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "新的征召",
+  });
+}
+
+async function notifyAdminsOfChallengeAcceptance(input: {
+  actorUserId?: string | null;
+  challenger: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  await createNotifications({
+    actorName: input.challenger,
+    actorUserId: input.actorUserId,
+    body: `${input.challenger} 已接受「${input.objectiveTitle}」的挑战，目标已进入重估。`,
+    kind: "objective.challenge.accepted",
+    metadata: { challenger: input.challenger, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
+    targetHref: "/tasks",
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "挑战已接受",
+  });
+}
+
+async function notifyAdminsOfObjectiveLoot(input: {
+  actorName: string;
+  actorUserId: string;
+  lootId: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  await createNotifications({
+    actorName: input.actorName,
+    actorUserId: input.actorUserId,
+    body: `${input.actorName} 已提交「${input.objectiveTitle}」的目标战利品，需要指挥官验收。`,
+    kind: "objective.loot.submitted",
+    metadata: { objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
+    targetHref: `/objectives/${encodeURIComponent(input.objectiveId)}/loot`,
+    targetId: input.lootId,
+    targetType: "objectiveLoot",
+    teamId: input.teamId,
+    title: "战利品待验收",
+  });
 }
 
 function uncertaintyScore(level: UncertaintyLevel | null) {
@@ -309,7 +484,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const trendRows = await getResultTrendRows(resultIds);
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIds);
-  const [commentThreadRows, commentMessageRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
+  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
   const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();
@@ -336,6 +511,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const messagesByThread = new Map<string, CommentThread["messages"]>();
+  const attachmentsByMessage = groupCommentAttachmentsByMessage(commentAttachmentRows);
   for (const message of [...commentMessageRows].sort(
     (left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt),
   )) {
@@ -344,6 +520,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       id: message.id,
       author: message.author,
       body: message.body,
+      attachments: attachmentsByMessage.get(message.id) ?? [],
       createdAt: message.createdAt,
       parentMessageId: optional(message.parentMessageId),
       replyToMessageId: optional(message.replyToMessageId),
@@ -360,7 +537,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     priority: task.priority,
     assignee: task.assignee,
     linkedObjectiveId: task.linkedObjectiveId,
-    linkedResultId: task.linkedResultId,
+    linkedResultId: optional(task.linkedResultId) ?? null,
     feedbackOriginId: optional(task.feedbackOriginId),
     dueDate: task.dueDate,
     tags: task.tags,
@@ -424,7 +601,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     uncertaintyScore: result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel),
     acceptedResult: result.acceptedResult ?? "unreviewed",
     evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
-    taskIds: taskItems.filter((task) => task.linkedResultId === result.id).map((task) => task.id),
+    taskIds: [],
     feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
     trend: trendByResult.get(result.id) ?? [],
     reviewCadence: result.reviewCadence,
@@ -547,7 +724,7 @@ export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): 
     comments: data.comments,
     causeCategories: Array.from(new Set(data.feedback.flatMap((item) => item.causeCategories))),
     rules: {
-      requireResultForTask: true,
+      requireResultForTask: false,
       requireEvidenceForFeedback: true,
       weeklyFeedbackCadence: true,
       autoCreateReviewSummary: false,
@@ -671,7 +848,7 @@ export async function getMyChallengesData(member: string, includeAll = false, sc
   const objectiveIds = new Set(objectivesForMember.map((objective) => objective.id));
   const resultsForMember = data.results.filter((result) => objectiveIds.has(result.objectiveId));
   const resultIds = new Set(resultsForMember.map((result) => result.id));
-  const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId) || resultIds.has(task.linkedResultId));
+  const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId));
   const taskIds = new Set(tasksForMember.map((task) => task.id));
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
 
@@ -709,8 +886,8 @@ export interface CreateTaskInput {
   description?: string;
   assignee?: string;
   priority?: Priority;
-  linkedObjectiveId?: string;
-  linkedResultId: string;
+  linkedObjectiveId: string;
+  linkedResultId?: string | null;
   dueDate?: string;
   feedbackOriginId?: string;
 }
@@ -887,12 +1064,24 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "accepted" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "accepted" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        challenger: nextChallenger,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
 
   if (acceptedResult.status !== "accepted") {
     return acceptedResult;
   }
+
+  await notifyAdminsOfChallengeAcceptance(acceptedResult.notification);
 
   const data = await getTaskManagementData({ scope: acceptedResult.scope });
   const accepted = data.objectives.find((item) => item.id === objectiveId);
@@ -906,7 +1095,7 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "closed" }
   | { status: "notFound" };
 
-export async function applyForObjectiveChallenge(objectiveId: string, applicant: string): Promise<ApplyObjectiveChallengeOutcome> {
+export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId?: string | null): Promise<ApplyObjectiveChallengeOutcome> {
   const nextApplicant = applicant.trim();
   if (!nextApplicant) {
     return { status: "notFound" };
@@ -948,12 +1137,24 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "applied" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "applied" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId,
+        applicant: nextApplicant,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
 
   if (appliedResult.status !== "applied") {
     return appliedResult;
   }
+
+  await notifyAdminsOfChallengeApplication(appliedResult.notification);
 
   const data = await getTaskManagementData({ scope: appliedResult.scope });
   const applied = data.objectives.find((item) => item.id === objectiveId);
@@ -1088,41 +1289,24 @@ export async function recruitObjectiveChallengers(
         updatedBy: actorId,
       })
       .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "ok" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        memberNames: recruitMembers,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
+
+  if (recruitedResult.status === "ok") {
+    await notifyMembersOfRecruitment(recruitedResult.notification);
+  }
 
   return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.scope) : recruitedResult;
-}
-
-export async function declineObjectiveChallenge(objectiveId: string, member: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
-  const nextMember = member.trim();
-  if (!nextMember) return { status: "invalid" };
-
-  const declinedResult = await db.transaction(async (tx) => {
-    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
-    if (!objective) return { status: "notFound" as const };
-    if (!challengeAcceptanceFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
-
-    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
-    if (!assignedChallengers.includes(nextMember)) return { status: "invalid" as const };
-
-    const nextAssigned = assignedChallengers.filter((item) => item !== nextMember);
-    const applications = objective.challengeApplications ?? [];
-    const challengers = uniqueMembers(objective.challengers ?? []);
-    await tx
-      .update(objectives)
-      .set({
-        assignedChallengers: nextAssigned,
-        challengeApplications: applications,
-        flowStatus: challengers.length > 0 ? "reestimating" : nextAssigned.length > 0 ? "recruiting" : applications.some((item) => item.status === "pending") ? "applying" : "open",
-        updatedAt: today(),
-        updatedBy: actorId,
-      })
-      .where(eq(objectives.id, objectiveId));
-    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
-  });
-
-  return declinedResult.status === "ok" ? objectiveOutcome(objectiveId, declinedResult.scope) : declinedResult;
 }
 
 export async function freezeObjectiveAfterReestimate(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
@@ -1644,6 +1828,37 @@ async function canMutateObjectiveComment(
     : "forbidden";
 }
 
+async function canReadObjectiveComment(
+  actor: CommentActor,
+  objectiveId: string,
+): Promise<ObjectiveWorkItemMutationOutcome> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
+  const [objective] = await db
+    .select({
+      assignedChallengers: objectives.assignedChallengers,
+      challengers: objectives.challengers,
+      teamId: objectives.teamId,
+    })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+  if (!objective) {
+    return "notFound";
+  }
+
+  if (storageScopeId && objective.teamId !== storageScopeId) {
+    return "notFound";
+  }
+
+  if (actor.role === "admin" || actor.canManageAllComments === true) {
+    return "allowed";
+  }
+
+  const member = actor.name.trim();
+  const participants = uniqueMembers([...(objective.challengers ?? []), ...(objective.assignedChallengers ?? [])]);
+  return member && participants.includes(member) ? "allowed" : "forbidden";
+}
+
 async function resolveCommentTarget(targetType: CommentTargetType, targetId: string): Promise<CommentTarget | null> {
   if (targetType === "objective") {
     const [target] = await db
@@ -1688,6 +1903,12 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
   }
 
   const messages = await db.select().from(commentMessages).where(eq(commentMessages.threadId, thread.id));
+  const messageIds = messages.map((message) => message.id);
+  const attachmentRows =
+    messageIds.length > 0
+      ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIds))
+      : [];
+  const attachmentsByMessage = groupCommentAttachmentsByMessage(attachmentRows);
   return {
     id: thread.id,
     targetType: thread.targetType,
@@ -1703,6 +1924,7 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
         id: message.id,
         author: message.author,
         body: message.body,
+        attachments: attachmentsByMessage.get(message.id) ?? [],
         createdAt: message.createdAt,
         parentMessageId: optional(message.parentMessageId),
         replyToMessageId: optional(message.replyToMessageId),
@@ -1713,6 +1935,151 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
 
 function canManageComment(actor: CommentActor, ownerUserId: string) {
   return actor.role === "admin" || actor.canManageAllComments === true || actor.id === ownerUserId;
+}
+
+export type UploadCommentAttachmentInput = {
+  body: Buffer;
+  fileName: string;
+  mimeType: string;
+  targetId: string;
+  targetType: CommentTargetType;
+};
+
+export type CommentAttachmentUploadOutcome =
+  | { status: "ok"; attachment: CommentAttachment; markdown: string }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalid" }
+  | { status: "tooLarge" }
+  | { status: "unsupported" };
+
+export type CommentAttachmentContentOutcome =
+  | { status: "ok"; body: Readable; contentLength?: number; contentType: string }
+  | { status: "notFound" }
+  | { status: "forbidden" };
+
+export async function uploadCommentAttachment(
+  input: UploadCommentAttachmentInput,
+  actor: CommentActor,
+): Promise<CommentAttachmentUploadOutcome> {
+  if (!input.body.byteLength || !input.fileName.trim()) {
+    return { status: "invalid" };
+  }
+
+  await deleteExpiredPendingCommentAttachments().catch(() => 0);
+
+  const target = await resolveCommentTarget(input.targetType, input.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
+  }
+
+  const validation = validateImageUpload({ buffer: input.body, contentType: input.mimeType });
+  if (validation.status !== "ok") {
+    return { status: validation.status };
+  }
+
+  const attachmentId = makeCommentAttachmentId();
+  const createdAt = nowIso();
+  const objectKey = commentAttachmentObjectKey({
+    attachmentId,
+    extension: validation.metadata.extension,
+    storageScopeId: target.storageScopeId,
+    targetId: input.targetId,
+    targetType: input.targetType,
+  });
+  const fileName = sanitizeFileName(input.fileName, validation.metadata.extension);
+
+  await objectStorage.putObject({
+    body: input.body,
+    contentLength: input.body.byteLength,
+    contentType: validation.metadata.mimeType,
+    key: objectKey,
+  });
+
+  try {
+    const [row] = await db
+      .insert(commentAttachments)
+      .values({
+        id: attachmentId,
+        teamId: target.storageScopeId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        messageId: null,
+        objectKey,
+        fileName,
+        mimeType: validation.metadata.mimeType,
+        fileSize: input.body.byteLength,
+        width: validation.metadata.width ?? null,
+        height: validation.metadata.height ?? null,
+        createdBy: actor.id,
+        createdAt,
+        attachedAt: null,
+        expiresAt: pendingCommentAttachmentExpiresAt(createdAt),
+      })
+      .returning();
+
+    return {
+      status: "ok",
+      attachment: commentAttachmentDto(row),
+      markdown: `![${fileName}](orf-attachment:${attachmentId})`,
+    };
+  } catch (error) {
+    await deleteStoredCommentAttachmentObjects([
+      {
+        id: attachmentId,
+        teamId: target.storageScopeId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        messageId: null,
+        objectKey,
+        fileName,
+        mimeType: validation.metadata.mimeType,
+        fileSize: input.body.byteLength,
+        width: validation.metadata.width ?? null,
+        height: validation.metadata.height ?? null,
+        createdBy: actor.id,
+        createdAt,
+        attachedAt: null,
+        expiresAt: pendingCommentAttachmentExpiresAt(createdAt),
+      },
+    ]);
+    throw error;
+  }
+}
+
+export async function getCommentAttachmentContent(
+  attachmentId: string,
+  actor: CommentActor,
+): Promise<CommentAttachmentContentOutcome> {
+  const [attachment] = await db.select().from(commentAttachments).where(eq(commentAttachments.id, attachmentId)).limit(1);
+  if (!attachment) {
+    return { status: "notFound" };
+  }
+
+  const target = await resolveCommentTarget(attachment.targetType, attachment.targetId);
+  if (!target) {
+    return { status: "notFound" };
+  }
+  const access = await canReadObjectiveComment(actor, target.objectiveId);
+  if (access !== "allowed") {
+    return { status: access === "notFound" ? "notFound" : "forbidden" };
+  }
+
+  const stored = await objectStorage.getObject(attachment.objectKey);
+  if (!stored) {
+    return { status: "notFound" };
+  }
+
+  return {
+    status: "ok",
+    body: stored.body,
+    contentLength: stored.contentLength,
+    contentType: stored.contentType ?? attachment.mimeType,
+  };
 }
 
 export async function createComment(input: CreateCommentInput, actor: CommentActor): Promise<CommentMutationOutcome> {
@@ -1735,6 +2102,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
 
   const targetTitle = target.title;
   const createdAt = nowIso();
+  const attachmentIds = extractCommentAttachmentIds(body);
   const threadId = await db.transaction(async (tx) => {
     const [lockedObjective] = await tx
       .select({ id: objectives.id })
@@ -1745,6 +2113,37 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     if (!lockedObjective) {
       return null;
     }
+
+    const arePendingAttachmentsAvailable = async () => {
+      if (attachmentIds.length === 0) {
+        return true;
+      }
+
+      const rows = await tx
+        .select({ id: commentAttachments.id })
+        .from(commentAttachments)
+        .where(
+          and(
+            inArray(commentAttachments.id, attachmentIds),
+            eq(commentAttachments.createdBy, actor.id),
+            eq(commentAttachments.targetType, input.targetType),
+            eq(commentAttachments.targetId, input.targetId),
+            isNull(commentAttachments.messageId),
+            gt(commentAttachments.expiresAt, createdAt),
+          ),
+        );
+      return rows.length === attachmentIds.length;
+    };
+    const bindMessageAttachments = async (messageId: string) => {
+      if (attachmentIds.length === 0) {
+        return;
+      }
+
+      await tx
+        .update(commentAttachments)
+        .set({ attachedAt: createdAt, messageId })
+        .where(inArray(commentAttachments.id, attachmentIds));
+    };
 
     if (input.parentMessageId) {
       const [parent] = await tx
@@ -1779,14 +2178,19 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         replyToAuthor = replyTarget.author;
       }
 
+      if (!(await arePendingAttachmentsAvailable())) {
+        return null;
+      }
+
       const messageRows = await tx
         .select({ sortOrder: commentMessages.sortOrder })
         .from(commentMessages)
         .where(eq(commentMessages.threadId, parent.threadId));
       const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
+      const nextMessageId = makeId("cmsg");
 
       await tx.insert(commentMessages).values({
-        id: makeId("cmsg"),
+        id: nextMessageId,
         threadId: parent.threadId,
         authorUserId: actor.id,
         author: actor.name,
@@ -1797,6 +2201,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         replyToAuthor,
         sortOrder,
       });
+      await bindMessageAttachments(nextMessageId);
       await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
       return parent.threadId;
     }
@@ -1807,6 +2212,10 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       .where(and(eq(commentThreads.targetType, input.targetType), eq(commentThreads.targetId, input.targetId), eq(commentThreads.status, "open")))
       .limit(1);
     const nextThreadId = openThread?.id ?? makeId("cthread");
+
+    if (!(await arePendingAttachmentsAvailable())) {
+      return null;
+    }
 
     if (!openThread) {
       await tx.insert(commentThreads).values({
@@ -1829,9 +2238,10 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       .from(commentMessages)
       .where(eq(commentMessages.threadId, nextThreadId));
     const sortOrder = messageRows.reduce((max, message) => Math.max(max, message.sortOrder), -1) + 1;
+    const nextMessageId = makeId("cmsg");
 
     await tx.insert(commentMessages).values({
-      id: makeId("cmsg"),
+      id: nextMessageId,
       threadId: nextThreadId,
       authorUserId: actor.id,
       author: actor.name,
@@ -1842,6 +2252,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       replyToAuthor: null,
       sortOrder,
     });
+    await bindMessageAttachments(nextMessageId);
 
     return nextThreadId;
   });
@@ -1917,14 +2328,56 @@ export async function updateCommentMessage(
     return { status: "forbidden" };
   }
 
-  await db.transaction(async (tx) => {
+  const nextAttachmentIds = extractCommentAttachmentIds(nextBody);
+  const existingAttachments = await db.select().from(commentAttachments).where(eq(commentAttachments.messageId, messageId));
+  const existingAttachmentIds = new Set(existingAttachments.map((attachment) => attachment.id));
+  const attachmentsToDelete = existingAttachments.filter((attachment) => !nextAttachmentIds.includes(attachment.id));
+  const pendingAttachmentIds = nextAttachmentIds.filter((attachmentId) => !existingAttachmentIds.has(attachmentId));
+
+  const updateResult = await db.transaction(async (tx) => {
     const updatedAt = nowIso();
+    if (pendingAttachmentIds.length > 0) {
+      const pendingRows = await tx
+        .select({ id: commentAttachments.id })
+        .from(commentAttachments)
+        .where(
+          and(
+            inArray(commentAttachments.id, pendingAttachmentIds),
+            eq(commentAttachments.createdBy, actor.id),
+            eq(commentAttachments.targetType, thread.targetType),
+            eq(commentAttachments.targetId, thread.targetId),
+            isNull(commentAttachments.messageId),
+            gt(commentAttachments.expiresAt, updatedAt),
+          ),
+        );
+      if (pendingRows.length !== pendingAttachmentIds.length) {
+        return "notFound" as const;
+      }
+    }
+
+    if (attachmentsToDelete.length > 0) {
+      await tx.delete(commentAttachments).where(inArray(commentAttachments.id, attachmentsToDelete.map((attachment) => attachment.id)));
+    }
+
+    if (pendingAttachmentIds.length > 0) {
+      await tx
+        .update(commentAttachments)
+        .set({ attachedAt: updatedAt, messageId })
+        .where(inArray(commentAttachments.id, pendingAttachmentIds));
+    }
+
     await tx
       .update(commentMessages)
       .set({ body: nextBody })
       .where(and(eq(commentMessages.threadId, threadId), eq(commentMessages.id, messageId)));
     await tx.update(commentThreads).set({ updatedAt }).where(eq(commentThreads.id, threadId));
+    return "ok" as const;
   });
+  if (updateResult === "notFound") {
+    return { status: "notFound" };
+  }
+
+  await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
 
   return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
@@ -1960,6 +2413,21 @@ export async function deleteCommentMessage(
     return { status: "forbidden" };
   }
 
+  const messagesToDelete = await db
+    .select({ id: commentMessages.id })
+    .from(commentMessages)
+    .where(
+      and(
+        eq(commentMessages.threadId, threadId),
+        or(eq(commentMessages.id, messageId), eq(commentMessages.parentMessageId, messageId)),
+      ),
+    );
+  const messageIdsToDelete = messagesToDelete.map((item) => item.id);
+  const attachmentsToDelete =
+    messageIdsToDelete.length > 0
+      ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIdsToDelete))
+      : [];
+
   const threadRemoved = await db.transaction(async (tx) => {
     await tx
       .delete(commentMessages)
@@ -1983,8 +2451,23 @@ export async function deleteCommentMessage(
     await tx.update(commentThreads).set({ updatedAt: nowIso() }).where(eq(commentThreads.id, threadId));
     return false;
   });
+  await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
 
   return threadRemoved ? { status: "ok" } : { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
+}
+
+export async function deleteExpiredPendingCommentAttachments(referenceTime = nowIso()) {
+  const expiredRows = await db
+    .select()
+    .from(commentAttachments)
+    .where(and(isNull(commentAttachments.messageId), lt(commentAttachments.expiresAt, referenceTime)));
+  if (expiredRows.length === 0) {
+    return 0;
+  }
+
+  await db.delete(commentAttachments).where(inArray(commentAttachments.id, expiredRows.map((row) => row.id)));
+  await deleteStoredCommentAttachmentObjects(expiredRows);
+  return expiredRows.length;
 }
 
 export interface SubmitObjectiveLootInput {
@@ -2080,6 +2563,15 @@ export async function submitObjectiveLoot(
   if (!submitted) {
     return { status: "closed" };
   }
+
+  await notifyAdminsOfObjectiveLoot({
+    actorName: actor.name,
+    actorUserId: actor.id,
+    lootId,
+    objectiveId: objective.id,
+    objectiveTitle: objective.title,
+    teamId: objective.teamId,
+  });
 
   const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
   const loot = data.objectiveLoot.find((item) => item.id === lootId);
@@ -2275,38 +2767,49 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
   }
 
   const created = await db.transaction(async (tx) => {
-    const [result] = await tx.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1).for("update");
-    if (!result) {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, input.linkedObjectiveId)).limit(1).for("update");
+    if (!objective) {
+      return null;
+    }
+    const linkedResultId = input.linkedResultId?.trim() || null;
+    const [linkedResult] = linkedResultId
+      ? await tx
+          .select({ id: results.id, objectiveId: results.objectiveId, teamId: results.teamId })
+          .from(results)
+          .where(eq(results.id, linkedResultId))
+          .limit(1)
+      : [null];
+    if (linkedResultId && (!linkedResult || linkedResult.teamId !== objective.teamId || linkedResult.objectiveId !== objective.id)) {
       return null;
     }
 
     const feedbackOriginId = input.feedbackOriginId?.trim() || null;
     if (feedbackOriginId) {
       const [originFeedback] = await tx
-        .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
+        .select({ id: feedback.id, teamId: feedback.teamId, linkedObjectiveId: feedback.linkedObjectiveId })
         .from(feedback)
         .where(eq(feedback.id, feedbackOriginId))
         .limit(1);
-      if (!originFeedback || originFeedback.teamId !== result.teamId || originFeedback.linkedResultId !== result.id) {
+      if (!originFeedback || originFeedback.teamId !== objective.teamId || originFeedback.linkedObjectiveId !== objective.id) {
         return null;
       }
     }
 
-    const siblingRows = await tx.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedResultId, result.id));
+    const siblingRows = await tx.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedObjectiveId, objective.id));
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("ORF");
     const now = today();
 
     await tx.insert(tasks).values({
       id,
-      teamId: result.teamId,
+      teamId: objective.teamId,
       title,
-      description: input.description?.trim() || "执行支撑关联指标的下一步动作。",
+      description: input.description?.trim() || "执行支撑目标的下一步技术任务。",
       status: "Todo",
       priority: input.priority ?? "Medium",
       assignee: input.assignee?.trim() || "User",
-      linkedObjectiveId: result.objectiveId,
-      linkedResultId: result.id,
+      linkedObjectiveId: objective.id,
+      linkedResultId,
       feedbackOriginId,
       dueDate: dueDate ?? now,
       tags: ["ORF"],
@@ -2315,7 +2818,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       sortOrder,
     });
 
-    return { id, scope: runtimeScope(result.teamId) };
+    return { id, scope: runtimeScope(objective.teamId) };
   });
 
   if (!created) {
@@ -2541,21 +3044,8 @@ export async function deleteResult(resultId: string): Promise<boolean> {
       return false;
     }
 
-    const taskRows = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.linkedResultId, resultId));
-    const taskIds = taskRows.map((task) => task.id);
-    const checklistRows =
-      taskIds.length > 0
-        ? await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(inArray(taskChecklistItems.taskId, taskIds))
-        : [];
-    const checklistIds = checklistRows.map((item) => item.id);
-
-    if (checklistIds.length > 0) {
-      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), inArray(commentThreads.targetId, checklistIds)));
-    }
-    if (taskIds.length > 0) {
-      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), inArray(commentThreads.targetId, taskIds)));
-    }
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
+    await tx.update(tasks).set({ linkedResultId: null }).where(eq(tasks.linkedResultId, resultId));
 
     const deleted = await tx.delete(results).where(eq(results.id, resultId)).returning({ id: results.id });
     return deleted.length > 0;
@@ -2645,51 +3135,34 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
   });
 }
 
-export async function moveTask(taskId: string, input: { toResultId: string; referenceTaskId?: string; placement?: "before" | "after" }): Promise<boolean> {
+export async function moveTask(taskId: string, input: { objectiveId: string; referenceTaskId?: string; placement?: "before" | "after" }): Promise<boolean> {
   return db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
-    const [targetResult] = await tx.select().from(results).where(eq(results.id, input.toResultId)).limit(1);
-    if (!task || !targetResult) {
-      return false;
-    }
-    const affectedResultIds = Array.from(new Set([task.linkedResultId, targetResult.id])).sort();
-    const lockedResults = await tx
-      .select({ id: results.id })
-      .from(results)
-      .where(inArray(results.id, affectedResultIds))
-      .for("update");
-    if (lockedResults.length !== affectedResultIds.length) {
+    const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
+    if (!task || !objective || task.linkedObjectiveId !== objective.id) {
       return false;
     }
     if (input.referenceTaskId) {
       const [referenceTask] = await tx.select().from(tasks).where(eq(tasks.id, input.referenceTaskId)).limit(1);
-      if (!referenceTask || referenceTask.linkedResultId !== targetResult.id || referenceTask.id === task.id) {
+      if (!referenceTask || referenceTask.linkedObjectiveId !== objective.id || referenceTask.id === task.id) {
         return false;
       }
     }
 
-    await tx
-      .update(tasks)
-      .set({ linkedResultId: targetResult.id, linkedObjectiveId: targetResult.objectiveId, updatedAt: today() })
-      .where(eq(tasks.id, taskId));
+    await tx.update(tasks).set({ updatedAt: today() }).where(eq(tasks.id, taskId));
 
-    for (const resultId of affectedResultIds) {
-      const rows = await tx
-        .select({ id: tasks.id })
-        .from(tasks)
-        .where(eq(tasks.linkedResultId, resultId))
-        .orderBy(tasks.sortOrder);
-      const ids = rows.map((row) => row.id);
-      const orderedIds =
-        resultId === targetResult.id && input.referenceTaskId
-          ? reorderIds(ids, taskId, input.referenceTaskId, input.placement ?? "after")
-          : resultId === targetResult.id
-            ? ids.filter((id) => id !== taskId).concat(taskId)
-            : ids.filter((id) => id !== taskId);
+    const rows = await tx
+      .select({ id: tasks.id })
+      .from(tasks)
+      .where(eq(tasks.linkedObjectiveId, objective.id))
+      .orderBy(tasks.sortOrder);
+    const ids = rows.map((row) => row.id);
+    const orderedIds = input.referenceTaskId
+      ? reorderIds(ids, taskId, input.referenceTaskId, input.placement ?? "after")
+      : ids.filter((id) => id !== taskId).concat(taskId);
 
-      for (const [index, id] of orderedIds.entries()) {
-        await tx.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id));
-      }
+    for (const [index, id] of orderedIds.entries()) {
+      await tx.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id));
     }
 
     return true;

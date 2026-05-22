@@ -1,4 +1,4 @@
-import type { BountySource, Objective, OrfState, OrfUser, Result } from "../types/orf";
+import type { AppNotification, BountySource, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -8,6 +8,23 @@ export type AuthSession = { authenticated: false; user: null } | { authenticated
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
 export type RegistrationRequestsResponse = { users: OrfUser[] };
+export type NotificationsResponse = {
+  notifications: AppNotification[];
+  unreadCount: number;
+};
+export type NotificationReadResponse = {
+  notification: AppNotification;
+  unreadCount: number;
+};
+export type NotificationsReadAllResponse = {
+  updated: number;
+  unreadCount: number;
+};
+export type CommentAttachmentUploadResponse = {
+  ok: true;
+  attachment: CommentAttachment;
+  markdown: string;
+};
 export type BountyHallItem = {
   uncertaintyPoints: number;
   deadline: string;
@@ -127,6 +144,30 @@ export async function getBountyHallData() {
 export async function getMyChallengesData(scope: MyChallengesScope) {
   const query = new URLSearchParams({ scope });
   return apiJson<TaskManagementData>(`/api/my-challenges?${query.toString()}`);
+}
+
+export async function getNotifications() {
+  return apiJson<NotificationsResponse>("/api/notifications");
+}
+
+export async function markNotificationReadRequest(notificationId: string) {
+  return apiJson<NotificationReadResponse>(`/api/notifications/${encodeURIComponent(notificationId)}/read`, { method: "PATCH" });
+}
+
+export async function markAllNotificationsReadRequest() {
+  return apiJson<NotificationsReadAllResponse>("/api/notifications/read-all", { method: "PATCH" });
+}
+
+export async function uploadCommentAttachment(input: { file: File; targetId: string; targetType: CommentTargetType }) {
+  const formData = new FormData();
+  formData.set("targetType", input.targetType);
+  formData.set("targetId", input.targetId);
+  formData.set("file", input.file);
+
+  return apiJson<CommentAttachmentUploadResponse>("/api/comments/attachments", {
+    method: "POST",
+    body: formData,
+  });
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {

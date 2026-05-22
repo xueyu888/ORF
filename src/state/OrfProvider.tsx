@@ -1,6 +1,19 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { hasPermission } from "../config/permissions";
-import { ApiError, apiJson, apiRequest, type AuthSession, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
+import {
+  ApiError,
+  apiJson,
+  apiRequest,
+  getNotifications,
+  markAllNotificationsReadRequest,
+  markNotificationReadRequest,
+  type AuthSession,
+  type NotificationsResponse,
+  type PermissionRulesResponse,
+  type TaskManagementData,
+  type UsersResponse,
+  uploadCommentAttachment as uploadCommentAttachmentRequest,
+} from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
 import type {
@@ -8,6 +21,7 @@ import type {
   CommentThread,
   CommentTargetType,
   Feedback,
+  Objective,
   FeedbackStatus,
   LootResultClaim,
   OrfState,
@@ -18,14 +32,16 @@ import type {
   TaskStatus,
   BountySource,
   ContributionAllocation,
+  AppNotification,
   UserRole,
 } from "../types/orf";
 
-type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | "recruitChallengers" | null;
+type ModalType = "newResult" | "newFeedback" | "newTask" | "resultUpdate" | "recruitChallengers" | null;
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
 type OnlineActivityResponse = { ok: boolean; lastOnlineAt?: string | null };
+type CreateObjectiveResponse = { objective: Objective };
 type SubmitLootInput = {
   objectiveId: string;
   body: string;
@@ -64,6 +80,8 @@ interface OrfContextValue {
   isAdmin: boolean;
   modal: ModalState;
   toasts: ToastMessage[];
+  notifications: AppNotification[];
+  unreadNotificationCount: number;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
@@ -72,7 +90,10 @@ interface OrfContextValue {
   notify: (message: string) => void;
   removeToast: (id: string) => void;
   resetState: () => void;
-  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<boolean> : never;
+  refreshNotifications: () => Promise<void>;
+  markNotificationRead: (notificationId: string) => Promise<boolean>;
+  markAllNotificationsRead: () => Promise<boolean>;
+  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<Objective | null> : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<boolean>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
@@ -80,12 +101,11 @@ interface OrfContextValue {
   rejectChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   applyForBounty: (objectiveId: string) => Promise<boolean>;
   acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
-  declineBountyChallenge: (objectiveId: string) => Promise<boolean>;
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => Promise<boolean>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>) => Promise<boolean>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
@@ -125,6 +145,7 @@ interface OrfContextValue {
     replyToMessageId?: string;
     replyToAuthor?: string;
   }) => void;
+  uploadCommentAttachment: (input: { file: File; targetId: string; targetType: CommentTargetType }) => Promise<string | null>;
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
@@ -138,6 +159,7 @@ const THEME_STORAGE_KEY = "orf-flow-theme";
 const AUTH_SESSION_TIMEOUT_MS = 8000;
 const AUTH_PASSWORD_TIMEOUT_MS = 2000;
 const ONLINE_ACTIVITY_THROTTLE_MS = 60_000;
+const NOTIFICATION_POLL_MS = 30_000;
 
 function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return normalizeState({
@@ -270,6 +292,10 @@ function userMutationFailureMessage(error: unknown, fallback: string) {
         return "该姓名已被 ORF 历史记录占用，不能创建新成员";
       }
 
+      if (error.message === "Bound login email cannot be changed") {
+        return "已绑定登录身份的邮箱不能在成员管理中修改";
+      }
+
       return error.message;
     }
 
@@ -298,7 +324,27 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 409) {
-      return "这个悬赏目标已经有挑战者";
+      if (error.message === "Objective already includes this challenger") {
+        return "你已经是这个目标的挑战者";
+      }
+
+      if (error.message === "Challenge application already exists") {
+        return "你已经申请过这个目标";
+      }
+
+      if (error.message === "Objective final due date is too close to start confirmation") {
+        return "目标截止时间太近，不能接受征召";
+      }
+
+      if (
+        error.message === "Objective is not open for challenge acceptance" ||
+        error.message === "Objective is not open for challenge applications" ||
+        error.message === "Objective status does not allow this operation"
+      ) {
+        return "目标状态已变化，请刷新后再试";
+      }
+
+      return error.message || "目标状态已变化，请刷新后再试";
     }
 
     return error.message || fallback;
@@ -309,20 +355,30 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
 
 function commentMutationFailureMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
+    const isImageMutation = fallback.includes("图片");
+
     if (error.status === 401) {
       return "登录已过期，请重新登录";
     }
 
     if (error.status === 403) {
-      return "只能编辑或删除自己的评论";
+      return isImageMutation ? "没有权限上传这个评论图片" : "只能编辑或删除自己的评论";
     }
 
     if (error.status === 404) {
       return "评论对象不存在，已刷新数据";
     }
 
+    if (error.status === 413) {
+      return "图片过大，请压缩后再上传";
+    }
+
+    if (error.status === 415) {
+      return "只能上传 PNG、JPEG、GIF 或 WebP 图片";
+    }
+
     if (error.status === 400) {
-      return "评论内容不能为空";
+      return isImageMutation ? "图片文件无效" : "评论内容不能为空";
     }
 
     return error.message || fallback;
@@ -375,6 +431,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme());
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const lastOnlineActivitySentAt = useRef(0);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
   const currentUserRole = currentUser?.role ?? null;
@@ -437,6 +495,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     const data = await apiJson<UsersResponse>("/api/users");
     applyUsers(data);
   }, [applyUsers]);
+  const applyNotifications = useCallback((data: NotificationsResponse) => {
+    setNotifications(data.notifications);
+    setUnreadNotificationCount(data.unreadCount);
+  }, []);
+  const refreshNotifications = useCallback(async () => {
+    applyNotifications(await getNotifications());
+  }, [applyNotifications]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
@@ -449,6 +514,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
+      setNotifications([]);
+      setUnreadNotificationCount(0);
       return;
     }
 
@@ -467,6 +534,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           setDataReady(true);
         }
       });
+
+    void getNotifications()
+      .then((data) => {
+        if (!cancelled) {
+          applyNotifications(data);
+        }
+      })
+      .catch(() => undefined);
 
     if (shouldFetchAdminCollections(currentUserRole)) {
       void apiJson<PermissionRulesResponse>("/api/permissions")
@@ -489,7 +564,19 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAuthenticated, isApproved]);
+  }, [applyNotifications, applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAuthenticated, isApproved]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshNotifications().catch(() => undefined);
+    }, NOTIFICATION_POLL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [authReady, isAuthenticated, isApproved, refreshNotifications]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
@@ -594,6 +681,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isAdmin,
       modal,
       toasts,
+      notifications,
+      unreadNotificationCount,
       theme,
       setTheme: setThemeState,
       toggleTheme: () => setThemeState((current) => (current === "dark" ? "light" : "dark")),
@@ -606,24 +695,49 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           .then(() => notify("数据已从后端重新加载"))
           .catch((error) => notify(businessMutationFailureMessage(error, "重新加载数据失败")));
       },
+      refreshNotifications,
+      markNotificationRead: async (notificationId) => {
+        try {
+          const data = await markNotificationReadRequest(notificationId);
+          setNotifications((items) => items.map((item) => (item.id === data.notification.id ? data.notification : item)));
+          setUnreadNotificationCount(data.unreadCount);
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "消息状态更新失败"));
+          void refreshNotifications().catch(() => undefined);
+          return false;
+        }
+      },
+      markAllNotificationsRead: async () => {
+        try {
+          await markAllNotificationsReadRequest();
+          setNotifications((items) => items.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+          setUnreadNotificationCount(0);
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "消息状态更新失败"));
+          void refreshNotifications().catch(() => undefined);
+          return false;
+        }
+      },
       createObjective: async (input) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");
-          return false;
+          return null;
         }
 
         try {
-          await apiRequest("/api/objectives", {
+          const data = await apiJson<CreateObjectiveResponse>("/api/objectives", {
             method: "POST",
             body: JSON.stringify(input),
           });
           await refreshTaskManagementData();
           notify("目标已创建");
-          return true;
+          return data.objective;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "目标创建失败"));
           void refreshTaskManagementData().catch(() => undefined);
-          return false;
+          return null;
         }
       },
       createResult: async (input) => {
@@ -757,18 +871,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      declineBountyChallenge: async (objectiveId) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge/decline`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("已拒绝征召");
-          return true;
-        } catch (error) {
-          notify(bountyMutationFailureMessage(error, "拒绝征召失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
       freezeObjective: async (objectiveId) => {
         try {
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/freeze`, { method: "PATCH" });
@@ -819,7 +921,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
               phenomenon: input.phenomenon,
               causeCategories: input.causeCategories,
               impact: input.impact,
-              linkedResultId: input.linkedResultId,
+              linkedResultId: input.linkedResultId ?? null,
               suggestedAdjustment: input.suggestedAdjustment,
               source: input.source,
               owner: input.owner,
@@ -972,7 +1074,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       moveTask: (input) => {
         void apiRequest(`/api/tasks/${encodeURIComponent(input.taskId)}/move`, {
           method: "PATCH",
-          body: JSON.stringify({ toResultId: input.toResultId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
+          body: JSON.stringify({ objectiveId: input.objectiveId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
         })
           .then(refreshTaskManagementData)
           .then(() => notify("行动项位置已更新"))
@@ -1194,6 +1296,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
+      uploadCommentAttachment: async (input) => {
+        try {
+          const response = await uploadCommentAttachmentRequest(input);
+          return response.markdown;
+        } catch (error) {
+          notify(commentMutationFailureMessage(error, "图片上传失败"));
+          return null;
+        }
+      },
       updateCommentThreadStatus: (threadId, status) => {
         void apiJson<CommentMutationResponse>(`/api/comments/${encodeURIComponent(threadId)}/status`, {
           method: "PATCH",
@@ -1268,12 +1379,15 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isApproved,
       isAuthenticated,
       modal,
+      notifications,
+      refreshNotifications,
       refreshPermissionRules,
       refreshTaskManagementData,
       refreshUsers,
       state,
       theme,
       toasts,
+      unreadNotificationCount,
     ],
   );
 

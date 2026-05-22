@@ -79,6 +79,48 @@ test("Mattermost Jira reminder sends one DM per active non-bot channel member", 
   assert.equal(saveCount, 2);
 });
 
+test("Mattermost Jira reminder keeps configured Markdown links in DM content", async () => {
+  const config = readMattermostJiraReminderConfig({
+    ...baseEnv,
+    MATTERMOST_JIRA_REMINDER_MESSAGE: "今天 {{time}} 了，请记得填写 Jira Tempo：[打开 Tempo]({{tempoUrl}})",
+    JIRA_TEMPO_MY_WORK_URL: "http://199.199.199.108:808/secure/Tempo.jspa#/my-work/week?type=LIST",
+  });
+  const state = emptyMattermostJiraReminderState();
+  const client = new FakeMattermostClient();
+
+  await sendMattermostJiraReminder({
+    client,
+    config,
+    state,
+    now: new Date("2026-05-19T09:00:10Z"),
+  });
+
+  assert.deepEqual(client.posts, [
+    {
+      channelId: "dm-member-user",
+      message:
+        "今天 17:00 了，请记得填写 Jira Tempo：[打开 Tempo](http://199.199.199.108:808/secure/Tempo.jspa#/my-work/week?type=LIST)",
+    },
+  ]);
+});
+
+test("Mattermost Jira reminder requires Tempo URL when the message references it", async () => {
+  const config = readMattermostJiraReminderConfig({
+    ...baseEnv,
+    MATTERMOST_JIRA_REMINDER_MESSAGE: "今天 {{time}} 了，请记得填写 Jira Tempo：[打开 Tempo]({{tempoUrl}})",
+  });
+
+  await assert.rejects(
+    sendMattermostJiraReminder({
+      client: new FakeMattermostClient(),
+      config,
+      state: emptyMattermostJiraReminderState(),
+      now: new Date("2026-05-19T09:00:10Z"),
+    }),
+    /Tempo URL is not configured/,
+  );
+});
+
 test("Mattermost Jira reminder skips members already sent for the same day", async () => {
   const config = readMattermostJiraReminderConfig(baseEnv);
   const state = {

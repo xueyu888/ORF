@@ -1,10 +1,12 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
   ContributionAllocation,
   LootResultClaim,
+  NotificationKind,
+  NotificationTargetType,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
   OrfStage,
@@ -31,14 +33,21 @@ export const teams = pgTable("teams", {
   createdAt: date("created_at", { mode: "string" }).notNull(),
 });
 
-export const users = pgTable("users", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email"),
-  status: text("status").$type<UserStatus>().notNull().default("active"),
-  createdAt: date("created_at", { mode: "string" }).notNull(),
-  lastOnlineAt: timestamp("last_online_at", { mode: "string", withTimezone: true }),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email"),
+    oryIdentityId: text("ory_identity_id"),
+    status: text("status").$type<UserStatus>().notNull().default("active"),
+    createdAt: date("created_at", { mode: "string" }).notNull(),
+    lastOnlineAt: timestamp("last_online_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    oryIdentityIdUnique: uniqueIndex("users_ory_identity_id_unique").on(table.oryIdentityId),
+  }),
+);
 
 export const teamMembers = pgTable(
   "team_members",
@@ -150,6 +159,35 @@ export const pointLedger = pgTable("point_ledger", {
   createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
 });
 
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    recipientUserId: text("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull().default(""),
+    kind: text("kind").$type<NotificationKind>().notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    targetType: text("target_type").$type<NotificationTargetType>().notNull(),
+    targetId: text("target_id").notNull(),
+    targetHref: text("target_href").notNull(),
+    readAt: timestamp("read_at", { mode: "string", withTimezone: true }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, string>>().notNull().default({}),
+  },
+  (table) => ({
+    recipientCreatedAt: index("notifications_recipient_created_at_idx").on(table.recipientUserId, table.createdAt),
+    recipientUnread: index("notifications_recipient_unread_idx").on(table.recipientUserId, table.readAt),
+    teamCreatedAt: index("notifications_team_created_at_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
 export const results = pgTable("results", {
   id: text("id").primaryKey(),
   teamId: text("team_id")
@@ -208,8 +246,7 @@ export const tasks = pgTable("tasks", {
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
   linkedResultId: text("linked_result_id")
-    .notNull()
-    .references(() => results.id, { onDelete: "cascade" }),
+    .references(() => results.id, { onDelete: "set null" }),
   feedbackOriginId: text("feedback_origin_id"),
   dueDate: date("due_date", { mode: "string" }).notNull(),
   tags: jsonb("tags").$type<string[]>().notNull(),
@@ -319,3 +356,33 @@ export const commentMessages = pgTable("comment_messages", {
   replyToAuthor: text("reply_to_author"),
   sortOrder: integer("sort_order").notNull().default(0),
 });
+
+export const commentAttachments = pgTable(
+  "comment_attachments",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    targetType: commentTargetTypeEnum("target_type").notNull(),
+    targetId: text("target_id").notNull(),
+    messageId: text("message_id").references(() => commentMessages.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: integer("file_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    attachedAt: timestamp("attached_at", { mode: "string", withTimezone: true }),
+    expiresAt: timestamp("expires_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    message: index("comment_attachments_message_idx").on(table.messageId),
+    pendingByCreator: index("comment_attachments_pending_creator_idx").on(table.createdBy, table.targetType, table.targetId, table.expiresAt),
+    teamTarget: index("comment_attachments_team_target_idx").on(table.teamId, table.targetType, table.targetId),
+  }),
+);

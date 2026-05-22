@@ -145,7 +145,7 @@ test.describe("ORF real lifecycle simulation", () => {
             await expect(page.getByRole("heading", { name: inactive.expectedHeading })).toBeVisible();
             await expect(page.getByText(inactive.expectedCopy)).toBeVisible();
             await expect(page.getByRole("heading", { name: "悬赏大厅" })).toHaveCount(0);
-            await expect(page.getByRole("heading", { name: "挑战" })).toHaveCount(0);
+            await expect(page.getByRole("heading", { name: "我的挑战" })).toHaveCount(0);
           }
           expect(businessRequests, `${inactive.user.name} should not load business data in the UI`).toEqual([]);
 
@@ -216,15 +216,18 @@ test.describe("ORF real lifecycle simulation", () => {
         expect(objective.challengeApplications.some((application) => application.applicant === world.users.member5.name && application.status === "declined")).toBe(true);
       });
 
-      registerObjective("q1Reluctant", "2999 Q1", "只征召被拒目标");
-      await simulator.runStep({ action: "member6-declines-recruitment", actor: "member6", expectedState: "open", objectiveKey: "q1Reluctant" }, async () => {
-        const created = await createPublished("q1Reluctant", "入门");
+      registerObjective("q1PendingRecruitment", "2999 Q1", "只保留征召待确认目标");
+      await simulator.runStep({ action: "member6-keeps-recruitment-pending", actor: "member6", expectedState: "recruiting", objectiveKey: "q1PendingRecruitment" }, async () => {
+        const created = await createPublished("q1PendingRecruitment", "入门");
         await world.dsl.recruitViaApi(world.users.commander, created.objectiveId, [world.users.member6.name]);
-        const declined = await world.dsl.declineRecruitment(world.users.member6, created.objectiveId);
-        expect(declined.status).toBe(200);
+        await world.dsl.openBounties(world.page("member6"));
+        const row = bountyRow(world.page("member6"), world.objective("q1PendingRecruitment").title);
+        await expect(row).toContainText("征召令");
+        await expect(row.getByRole("button", { name: "接受挑战" })).toBeVisible();
+        await expect(row.getByRole("button", { name: "拒绝征召" })).toHaveCount(0);
         const objective = await world.dsl.objective(created.objectiveId);
         expect(objective.challengers).not.toContain(world.users.member6.name);
-        expect(objective.assignedChallengers).not.toContain(world.users.member6.name);
+        expect(objective.assignedChallengers).toContain(world.users.member6.name);
       });
 
       registerObjective("q1StaleBounty", "2999 Q1", "旧大厅失效申请目标");
@@ -237,7 +240,7 @@ test.describe("ORF real lifecycle simulation", () => {
         expect(accepted.status).toBe(200);
         await bountyRow(world.page("member4"), world.objective("q1StaleBounty").title).getByRole("button", { name: "申请挑战" }).click();
         await world.page("member4").getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-        await expect(world.page("member4").getByText("这个悬赏目标已经有挑战者")).toBeVisible();
+        await expect(world.page("member4").getByText("目标状态已变化，请刷新后再试")).toBeVisible();
         await world.page("member4").reload();
         await expect(bountyRow(world.page("member4"), world.objective("q1StaleBounty").title)).toHaveCount(0);
       });
@@ -302,12 +305,12 @@ test.describe("ORF real lifecycle simulation", () => {
         await rejectPendingApplication(real, world.users.commander, created.objectiveId, world.users.member5.name);
       });
 
-      registerObjective("q2Reluctant", "2999 Q2", "征召拒绝目标");
-      await simulator.runStep({ action: "member6-declines-recruitment-in-q2", actor: "member6", expectedState: "open", objectiveKey: "q2Reluctant" }, async () => {
-        const created = await createPublished("q2Reluctant", "入门");
+      registerObjective("q2PendingRecruitment", "2999 Q2", "征召待确认目标");
+      await simulator.runStep({ action: "member6-keeps-recruitment-pending-in-q2", actor: "member6", expectedState: "recruiting", objectiveKey: "q2PendingRecruitment" }, async () => {
+        const created = await createPublished("q2PendingRecruitment", "入门");
         await world.dsl.recruitViaApi(world.users.commander, created.objectiveId, [world.users.member6.name]);
-        const declined = await world.dsl.declineRecruitment(world.users.member6, created.objectiveId);
-        expect(declined.status).toBe(200);
+        const objective = await world.dsl.objective(created.objectiveId);
+        expect(objective.assignedChallengers).toContain(world.users.member6.name);
       });
 
       registerObjective("q2Expired", "2999 Q2", "重估窗口过期目标");
@@ -444,12 +447,12 @@ test.describe("ORF real lifecycle simulation", () => {
         await rejectPendingApplication(real, world.users.commander, created.objectiveId, world.users.member5.name);
       });
 
-      registerObjective("q3Reluctant", "2999 Q3", "征召拒绝目标");
-      await simulator.runStep({ action: "member6-declines-recruitment-in-q3", actor: "member6", expectedState: "open", objectiveKey: "q3Reluctant" }, async () => {
-        const created = await createPublished("q3Reluctant", "入门");
+      registerObjective("q3PendingRecruitment", "2999 Q3", "征召待确认目标");
+      await simulator.runStep({ action: "member6-keeps-recruitment-pending-in-q3", actor: "member6", expectedState: "recruiting", objectiveKey: "q3PendingRecruitment" }, async () => {
+        const created = await createPublished("q3PendingRecruitment", "入门");
         await world.dsl.recruitViaApi(world.users.commander, created.objectiveId, [world.users.member6.name]);
-        const declined = await world.dsl.declineRecruitment(world.users.member6, created.objectiveId);
-        expect(declined.status).toBe(200);
+        const objective = await world.dsl.objective(created.objectiveId);
+        expect(objective.assignedChallengers).toContain(world.users.member6.name);
       });
 
       registerObjective("q3Late", "2999 Q3", "截止后完成目标");

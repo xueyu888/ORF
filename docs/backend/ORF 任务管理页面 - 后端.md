@@ -13,7 +13,7 @@
 | `GET` | `/api/tasks-page` | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据 |
 | `GET` | `/api/bounties` | 返回悬赏大厅数据 |
 | `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
-| `POST` | `/api/objectives` | 创建候选目标，默认 `flowStatus=candidate` |
+| `POST` | `/api/objectives` | 挑战页创建候选目标，默认 `flowStatus=candidate` |
 | `PATCH` | `/api/objectives/:objectiveId` | 指挥官更新目标标题 |
 | `PATCH` | `/api/objectives/:objectiveId/publish` | 指挥官发布目标，进入 `open` |
 | `POST` | `/api/objectives/:objectiveId/recruitments` | 指挥官征召成员，进入 `recruiting` |
@@ -21,7 +21,6 @@
 | `PATCH` | `/api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，写入挑战者并进入 `reestimating` |
 | `PATCH` | `/api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
 | `PATCH` | `/api/objectives/:objectiveId/challenge` | 被征召成员接受，写入挑战者并进入 `reestimating` |
-| `PATCH` | `/api/objectives/:objectiveId/challenge/decline` | 被征召成员拒绝 |
 | `PATCH` | `/api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结，进入 `frozen` |
 | `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品，进入 `submitted` |
 | `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 目标挑战者提交匿名互评贡献比例 |
@@ -30,8 +29,10 @@
 | `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner`；仅管理员或目标挑战者可对目标下指标创建 |
 | `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
-| `POST` | `/api/tasks` | 创建任务 |
+| `POST` | `/api/tasks` | 在目标下创建任务 |
 | `PATCH` | `/api/tasks/:taskId` | 更新任务 |
+| `PATCH` | `/api/tasks/:taskId/move` | 在同一目标下调整任务顺序 |
+| `DELETE` | `/api/tasks/:taskId` | 删除任务和子任务 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务 |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId` | 更新子任务勾选状态 |
 | `GET` | `/api/users` | 管理员读取成员和注册状态 |
@@ -42,13 +43,15 @@
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
 读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。
 
-所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、执行人、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。
+所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。
 
 ## 术语
 
 - `Objective` 在业务文案中叫“悬赏目标”，是挑战、战利品和结算的绑定对象。
 - `Result` 在业务文案中统一叫“指标”，只定义悬赏目标的验收口径和计分基础。
+- `Task` 在业务文案中叫“任务”或“行动项”，只归属于悬赏目标，不归属于指标。
 - 只有悬赏目标可以有挑战者、申请、征召和状态流转；指标不表达挑战关系，也不直接分配个人积分。
+- 当前不记录任务影响了哪些指标；如果后续需要分析影响关系，应新增独立关联模型，而不是恢复任务到指标的父子归属。
 
 ## 返回集合
 
@@ -58,7 +61,7 @@
 | --- | --- |
 | `objectives` | 页面根节点，也是挑战对象 |
 | `results` | 目标下的指标 |
-| `tasks` | 指标下的任务和子任务 |
+| `tasks` | 目标下的任务和子任务 |
 | `evidence` | 证据 |
 | `feedback` | 系统或管理反馈，不驱动悬赏状态机 |
 | `comments` | 目标、指标、任务、子任务评论 |
@@ -141,7 +144,7 @@ type ObjectiveFlowStatus =
 - 反馈创建遵循目标可见边界；普通成员只能给自己参与目标下的指标创建反馈，不能通过猜测指标 ID 写入别人的目标。
 - 反馈 `owner` 必须是当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为反馈处理人。
 - 指标更新提案如果携带 `feedbackId`，该反馈必须属于同一默认作用域且绑定到当前指标；不能通过一个合法指标请求改写其他作用域或其他指标的反馈状态。
-- 任务创建如果携带 `feedbackOriginId`，该反馈必须属于同一默认作用域且绑定到任务所在指标；不能把其他作用域或其他指标的反馈挂成任务来源。
+- 任务创建基于目标授权和排序，不要求关联指标；创建时如果携带 `feedbackOriginId`，该反馈必须属于同一默认作用域且属于同一目标，不能把其他作用域或其他目标的反馈挂成任务来源。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
 - 当前不开放退回重估；重估截止后停止调整，不续期。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
@@ -151,11 +154,22 @@ type ObjectiveFlowStatus =
 - 并发给同一目标下的目标、指标、任务或子任务新增评论时，必须锁住目标后再查找或创建 open thread，避免同一目标生成多个打开中的根评论线程。
 - `申请挑战` 只表达意愿；指挥官通过后才写入 `Objective.challengers`。
 - 多名成员同时申请同一目标时，后端必须用行级锁保护 `challengeApplications` 的读改写，不能让后一次写入覆盖前一次申请。
-- 审批申请、征召、接受征召和拒绝征召都会同时读改写 `Objective.challengers` / `Objective.assignedChallengers` / `Objective.challengeApplications`，必须在同一行级锁事务内完成。
-- 并发新增或移动指标、任务、子任务时，后端必须锁住对应父级目标、指标或任务后再计算 `sortOrder`，避免重复排序号导致页面顺序不稳定。
+- 审批申请、征召和接受征召都会同时读改写 `Objective.challengers` / `Objective.assignedChallengers` / `Objective.challengeApplications`，必须在同一行级锁事务内完成。
+- 并发新增或移动指标、任务、子任务时，后端必须锁住对应父级目标或任务后再计算 `sortOrder`，避免重复排序号导致页面顺序不稳定；任务排序父级是目标，不是指标。
 - `征召挑战` 的成员必须是当前默认作用域内 `active` 用户；停用、待审核、拒绝或不存在的姓名不能写入 `Objective.assignedChallengers`。
-- `接受挑战` 只用于征召。
+- `接受挑战` 只用于征召；当前不开放成员拒绝征召，有异议时线下找指挥官处理。
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。
 - `验收结算` 仅允许指挥官在 `submitted` 状态执行。
 - 多挑战者目标结算优先使用匿名互评汇总；缺评、分歧或申诉需要指挥官处理。
 - 注册用户默认为 `pending`，只有 `active` 用户可访问业务 API。
+
+## 任务与指标解耦迁移
+
+任务从指标下移到目标下时，后端契约按以下方向收敛：
+
+- `Task.linkedObjectiveId` 是任务归属、权限、生命周期和排序边界。
+- `Task.linkedResultId` 不再作为任务归属；实现迁移时应从任务创建、移动、删除、DTO 映射和测试夹具中移除。
+- `Result.taskIds` 不再作为指标拥有任务的反向索引；指标删除不能删除目标下任务。
+- `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；没有指标的目标也可以创建任务。
+- `PATCH /api/tasks/:taskId/move` 只在同一目标下移动任务，不能通过移动任务改变指标归属。
+- 历史数据迁移应以旧 `tasks.linked_result_id -> results.objective_id` 回填 `tasks.linked_objective_id`，保留任务、子任务和评论；确认代码不再读取旧列后再删除旧外键和列。

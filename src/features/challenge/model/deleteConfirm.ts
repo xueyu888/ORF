@@ -10,9 +10,7 @@ export function deleteConfirmMessage(target: ChallengeTarget, state: OrfState) {
   }
 
   if (target.type === "bounty") {
-    const actions = state.tasks.filter((action) => action.linkedResultId === target.id);
-    const subActionCount = actions.reduce((count, action) => count + action.checklist.length, 0);
-    return `删除指标「${target.title}」会同时删除 ${actions.length} 个行动项和 ${subActionCount} 个子行动项。是否确认？`;
+    return `删除指标「${target.title}」不会删除目标下的行动项。是否确认？`;
   }
 
   if (target.type === "action") {

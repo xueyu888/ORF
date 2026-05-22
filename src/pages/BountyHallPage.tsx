@@ -7,7 +7,7 @@ import {
   ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
 import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
@@ -49,8 +49,10 @@ export function BountyHallPage() {
   const {
     acceptBountyChallenge,
     applyForBounty,
+    notifications,
   } = useOrf();
   const navigate = useNavigate();
+  const bountyDataRequestRef = useRef(0);
   const [bountyData, setBountyData] = useState<BountyHallData | null>(null);
   const [loadingBounties, setLoadingBounties] = useState(true);
   const [query, setQuery] = useState("");
@@ -61,19 +63,40 @@ export function BountyHallPage() {
   const now = useMinuteNow();
 
   const loadBountyData = useCallback(async () => {
+    const requestId = bountyDataRequestRef.current + 1;
+    bountyDataRequestRef.current = requestId;
     setLoadingBounties(true);
     try {
-      setBountyData(await getBountyHallData());
+      const nextBountyData = await getBountyHallData();
+      if (bountyDataRequestRef.current === requestId) {
+        setBountyData(nextBountyData);
+      }
     } catch {
-      setBountyData(null);
+      if (bountyDataRequestRef.current === requestId) {
+        setBountyData(null);
+      }
     } finally {
-      setLoadingBounties(false);
+      if (bountyDataRequestRef.current === requestId) {
+        setLoadingBounties(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void loadBountyData();
   }, [loadBountyData]);
+
+  const recruitmentNotificationKey = useMemo(() => {
+    return notifications
+      .filter((notification) => notification.kind === "objective.recruitment.created")
+      .map((notification) => `${notification.id}:${notification.targetId}:${notification.createdAt}`)
+      .join("|");
+  }, [notifications]);
+
+  useEffect(() => {
+    if (!recruitmentNotificationKey) return;
+    void loadBountyData();
+  }, [loadBountyData, recruitmentNotificationKey]);
 
   const recruitmentItems = useMemo(
     () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),
@@ -176,7 +199,7 @@ export function BountyHallPage() {
             items={filteredHallItems}
             now={now}
             processingBountyId={processingBountyId}
-            onAction={(item) => setConfirmTarget({ action: item.isRecruitment ? "accept" : "apply", item })}
+            onAction={(item, action) => setConfirmTarget({ action, item })}
           />
         ) : (
           <BountyEmptyState
@@ -191,7 +214,13 @@ export function BountyHallPage() {
           item={confirmTarget}
           processing={processingBountyId === confirmTarget.item.objective.id}
           onCancel={() => setConfirmTarget(null)}
-          onConfirm={() => void (confirmTarget.action === "accept" ? acceptChallenge(confirmTarget.item) : applyChallenge(confirmTarget.item))}
+          onConfirm={() =>
+            void (
+              confirmTarget.action === "accept"
+                ? acceptChallenge(confirmTarget.item)
+                : applyChallenge(confirmTarget.item)
+            )
+          }
         />
       )}
     </div>
@@ -297,7 +326,7 @@ function BountyObjectiveList({
   items: BountyItem[];
   now: Date;
   processingBountyId: string | null;
-  onAction: (item: BountyItem) => void;
+  onAction: (item: BountyItem, action: ChallengeAction) => void;
 }) {
   return (
     <div className="bounty-list-table" role="table" aria-label="悬赏目标">
@@ -314,7 +343,7 @@ function BountyObjectiveList({
           item={item}
           now={now}
           processing={processingBountyId === item.objective.id}
-          onAction={() => onAction(item)}
+          onAction={(action) => onAction(item, action)}
         />
       ))}
     </div>
@@ -330,7 +359,7 @@ function BountyListRow({
   item: BountyItem;
   now: Date;
   processing: boolean;
-  onAction: () => void;
+  onAction: (action: ChallengeAction) => void;
 }) {
   const actionLabel = item.isRecruitment ? "接受挑战" : item.hasCurrentApplication ? "已申请" : "申请挑战";
   const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
@@ -368,10 +397,17 @@ function BountyListRow({
         {item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}
       </div>
       <div className="bounty-row-actions" data-label="操作" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
-        <BountyButton variant={!item.isRecruitment && item.hasCurrentApplication ? "secondary" : "primary"} onClick={onAction} disabled={actionDisabled}>
-          {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : item.isRecruitment ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-          {actionLabel}
-        </BountyButton>
+        {item.isRecruitment ? (
+          <BountyButton onClick={() => onAction("accept")} disabled={actionDisabled}>
+            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            {actionLabel}
+          </BountyButton>
+        ) : (
+          <BountyButton variant={item.hasCurrentApplication ? "secondary" : "primary"} onClick={() => onAction("apply")} disabled={actionDisabled}>
+            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {actionLabel}
+          </BountyButton>
+        )}
       </div>
     </article>
   );

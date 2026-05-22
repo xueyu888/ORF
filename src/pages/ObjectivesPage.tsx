@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { ObjectiveCard } from "../components/SharedCards";
 import { Button, Card, EmptyState, ProgressBar, StatusBadge } from "../components/ui";
@@ -10,7 +10,8 @@ import { filterObjectives, objectiveCycleOptions, type ObjectiveStatusFilter } f
 import { useOrf } from "../state/OrfProvider";
 
 export function ObjectivesPage() {
-  const { currentUser, state, openModal } = useOrf();
+  const navigate = useNavigate();
+  const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ObjectiveStatusFilter>("All");
   const [cycle, setCycle] = useState("All");
@@ -29,7 +30,7 @@ export function ObjectivesPage() {
     <PageScaffold
       title="目标"
       subtitle="管理 ORF 的 O 层。目标定义想要改变的状态。"
-      action={canCreateObjective ? <Button onClick={() => openModal({ type: "newObjective" })}><Plus className="h-4 w-4" />新建目标</Button> : undefined}
+      action={canCreateObjective ? <Button onClick={() => navigate("/tasks?create=objective")}><Plus className="h-4 w-4" />新建目标</Button> : undefined}
     >
       <Card className="flex flex-wrap items-center gap-3 orf-card-padding">
         <input className="orf-input h-9 max-w-xs px-3 text-sm" placeholder="搜索目标..." value={query} onChange={(event) => setQuery(event.target.value)} />

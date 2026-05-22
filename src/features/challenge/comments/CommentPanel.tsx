@@ -1,16 +1,23 @@
-import { ArrowLeft, ChevronRight, Pencil, Reply, Send, Trash2, X } from "lucide-react";
-import type { FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, ChevronRight, ImagePlus, Pencil, Reply, Send, Trash2, X } from "lucide-react";
+import type { ClipboardEvent, FormEvent, ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
-import type { CommentMessage, CommentThread } from "../../../types/orf";
+import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
+import { parseCommentBodyLinks } from "./commentText";
 
 type CommentEntry = {
   message: CommentMessage;
   replyCount: number;
   threadId: string;
+};
+
+type CommentImagePreview = {
+  alt: string;
+  fileName: string;
+  src: string;
 };
 
 type CommentDraftMode =
@@ -24,6 +31,8 @@ export type CommentReplyInput = {
   replyToMessageId?: string;
 };
 
+const commentAttachmentTokenPattern = /!\[([^\]\n]*)\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
+
 export function CommentPanel({
   canManageAllComments = false,
   currentMember,
@@ -31,7 +40,10 @@ export function CommentPanel({
   onClose,
   onDeleteComment,
   onUpdateComment,
+  onUploadAttachment,
+  targetId,
   targetTitle,
+  targetType,
   threads,
 }: {
   canManageAllComments?: boolean;
@@ -40,12 +52,16 @@ export function CommentPanel({
   onClose: () => void;
   onDeleteComment: (threadId: string, messageId: string) => void;
   onUpdateComment: (threadId: string, messageId: string, body: string) => void;
+  onUploadAttachment: (file: File) => Promise<string | null>;
+  targetId: string;
   targetTitle: string;
+  targetType: CommentTargetType;
   threads: CommentThread[];
 }) {
   const [body, setBody] = useState("");
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
   const [activeRootMessageId, setActiveRootMessageId] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<CommentImagePreview | null>(null);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: targetTitle });
   const commentEntries = useMemo<CommentEntry[]>(() => {
@@ -88,6 +104,23 @@ export function CommentPanel({
       setBody("");
     }
   }, [activeRootMessageId, rootEntries]);
+
+  useEffect(() => {
+    setImagePreview(null);
+  }, [targetId, targetType]);
+
+  useEffect(() => {
+    if (!imagePreview) return undefined;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setImagePreview(null);
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [imagePreview]);
 
   const resetDraft = () => {
     setDraftMode({ type: "default" });
@@ -151,93 +184,102 @@ export function CommentPanel({
   };
 
   return (
-    <aside
-      ref={panelDrag.ref}
-      style={panelDrag.style}
-      data-comment-panel="true"
-      className="orf-comment-panel orf-draggable-floating fixed bottom-4 right-4 z-[90] w-[382px] max-w-[calc(100vw-24px)]"
-    >
-      <div className="orf-comment-box">
-        <div className="orf-comment-panel-header orf-drag-handle" {...panelDrag.handleProps}>
-          <div className="orf-comment-context-title" title={targetTitle}>{targetTitle}</div>
-          <button type="button" className="orf-comment-icon-button" aria-label="关闭评论窗口" title="关闭" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="orf-comment-view">
-          {activeRootEntry ? (
-            <div className="orf-comment-reply-detail-view">
-              <div className="orf-comment-detail-header">
-                <button type="button" className="orf-comment-icon-button" aria-label="返回外层评论列表" title="返回" onClick={() => { setActiveRootMessageId(null); resetDraft(); }}>
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-                <span>回复详情</span>
-              </div>
-              <div className="orf-comment-fixed-root">
-                <CommentMessageRow
-                  entry={activeRootEntry}
-                  canManageAllComments={canManageAllComments}
-                  currentMember={currentMember}
-                  selected={selectedMessageId === activeRootEntry.message.id}
-                  onSelect={setSelectedMessageId}
-                  onReply={(message) => handleReply(activeRootEntry.message.id, message)}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              </div>
-              {replyEntries.length > 0 ? (
-                <div className="orf-comment-message-list">
-                  {replyEntries.map((entry) => (
-                    <CommentMessageRow
-                      key={`${entry.threadId}:${entry.message.id}`}
-                      entry={entry}
-                      canManageAllComments={canManageAllComments}
-                      currentMember={currentMember}
-                      selected={selectedMessageId === entry.message.id}
-                      onSelect={setSelectedMessageId}
-                      onReply={(message) => handleReply(activeRootEntry.message.id, message)}
-                      onEdit={handleEdit}
-                      onDelete={handleDelete}
-                    />
-                  ))}
+    <>
+      <aside
+        ref={panelDrag.ref}
+        style={panelDrag.style}
+        data-comment-panel="true"
+        className="orf-comment-panel orf-draggable-floating fixed bottom-4 right-4 z-[90] w-[382px] max-w-[calc(100vw-24px)]"
+      >
+        <div className="orf-comment-box">
+          <div className="orf-comment-panel-header orf-drag-handle" {...panelDrag.handleProps}>
+            <div className="orf-comment-context-title" title={targetTitle}>{targetTitle}</div>
+            <button type="button" className="orf-comment-icon-button" aria-label="关闭评论窗口" title="关闭" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="orf-comment-view">
+            {activeRootEntry ? (
+              <div className="orf-comment-reply-detail-view">
+                <div className="orf-comment-detail-header">
+                  <button type="button" className="orf-comment-icon-button" aria-label="返回外层评论列表" title="返回" onClick={() => { setActiveRootMessageId(null); resetDraft(); }}>
+                    <ArrowLeft className="h-4 w-4" />
+                  </button>
+                  <span>回复详情</span>
                 </div>
-              ) : (
-                <div className="orf-comment-empty-state">暂无回复</div>
-              )}
-            </div>
-          ) : rootEntries.length > 0 ? (
-            <div className="orf-comment-message-list">
-              {rootEntries.map((entry) => (
-                <CommentMessageRow
-                  key={`${entry.threadId}:${entry.message.id}`}
-                  entry={entry}
-                  canManageAllComments={canManageAllComments}
-                  currentMember={currentMember}
-                  selected={selectedMessageId === entry.message.id}
-                  showReplyEntry
-                  onSelect={setSelectedMessageId}
-                  onReply={(message) => handleReply(entry.message.id, message)}
-                  onEnterReplies={() => openReplyDetail(entry)}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="orf-comment-empty-state">暂无评论</div>
-          )}
+                <div className="orf-comment-fixed-root">
+                  <CommentMessageRow
+                    entry={activeRootEntry}
+                    canManageAllComments={canManageAllComments}
+                    currentMember={currentMember}
+                    selected={selectedMessageId === activeRootEntry.message.id}
+                    onOpenImage={setImagePreview}
+                    onSelect={setSelectedMessageId}
+                    onReply={(message) => handleReply(activeRootEntry.message.id, message)}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                </div>
+                {replyEntries.length > 0 ? (
+                  <div className="orf-comment-message-list">
+                    {replyEntries.map((entry) => (
+                      <CommentMessageRow
+                        key={`${entry.threadId}:${entry.message.id}`}
+                        entry={entry}
+                        canManageAllComments={canManageAllComments}
+                        currentMember={currentMember}
+                        selected={selectedMessageId === entry.message.id}
+                        onOpenImage={setImagePreview}
+                        onSelect={setSelectedMessageId}
+                        onReply={(message) => handleReply(activeRootEntry.message.id, message)}
+                        onEdit={handleEdit}
+                        onDelete={handleDelete}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="orf-comment-empty-state">暂无回复</div>
+                )}
+              </div>
+            ) : rootEntries.length > 0 ? (
+              <div className="orf-comment-message-list">
+                {rootEntries.map((entry) => (
+                  <CommentMessageRow
+                    key={`${entry.threadId}:${entry.message.id}`}
+                    entry={entry}
+                    canManageAllComments={canManageAllComments}
+                    currentMember={currentMember}
+                    selected={selectedMessageId === entry.message.id}
+                    showReplyEntry
+                    onOpenImage={setImagePreview}
+                    onSelect={setSelectedMessageId}
+                    onReply={(message) => handleReply(entry.message.id, message)}
+                    onEnterReplies={() => openReplyDetail(entry)}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="orf-comment-empty-state">暂无评论</div>
+            )}
+          </div>
+          <CommentComposer
+            body={body}
+            currentMember={currentMember}
+            defaultReplyAuthor={activeRootEntry?.message.author}
+            mode={draftMode}
+            onBodyChange={setBody}
+            onCancelMode={resetDraft}
+            onSubmit={handleSubmit}
+            onUploadAttachment={onUploadAttachment}
+            targetId={targetId}
+            targetType={targetType}
+          />
         </div>
-        <CommentComposer
-          body={body}
-          currentMember={currentMember}
-          defaultReplyAuthor={activeRootEntry?.message.author}
-          mode={draftMode}
-          onBodyChange={setBody}
-          onCancelMode={resetDraft}
-          onSubmit={handleSubmit}
-        />
-      </div>
-    </aside>
+      </aside>
+      {imagePreview && <CommentImagePreviewDialog preview={imagePreview} onClose={() => setImagePreview(null)} />}
+    </>
   );
 }
 
@@ -248,6 +290,7 @@ function CommentMessageRow({
   onDelete,
   onEdit,
   onEnterReplies,
+  onOpenImage,
   onReply,
   onSelect,
   selected,
@@ -259,6 +302,7 @@ function CommentMessageRow({
   onDelete: (threadId: string, messageId: string) => void;
   onEdit: (threadId: string, message: CommentMessage) => void;
   onEnterReplies?: () => void;
+  onOpenImage: (preview: CommentImagePreview) => void;
   onReply: (message: CommentMessage) => void;
   onSelect: (messageId: string) => void;
   selected: boolean;
@@ -295,10 +339,10 @@ function CommentMessageRow({
             )}
           </div>
         </div>
-        <p className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
+        <div className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
           {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
-          {message.body}
-        </p>
+          <CommentBodyText attachments={message.attachments ?? []} body={message.body} onOpenImage={onOpenImage} />
+        </div>
         {showReplyEntry && entry.replyCount > 0 && (
           <button type="button" className="orf-comment-reply-count" onClick={(event) => { event.stopPropagation(); onEnterReplies?.(); }}>
             共 {entry.replyCount} 条回复
@@ -310,6 +354,103 @@ function CommentMessageRow({
   );
 }
 
+function CommentImagePreviewDialog({ onClose, preview }: { onClose: () => void; preview: CommentImagePreview }) {
+  return (
+    <div className="orf-comment-image-preview-backdrop" role="presentation" onMouseDown={onClose}>
+      <div
+        className="orf-comment-image-preview-dialog"
+        role="dialog"
+        aria-label={preview.fileName}
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <button type="button" className="orf-comment-image-preview-close" aria-label="关闭图片预览" title="关闭" onClick={onClose}>
+          <X className="h-4 w-4" />
+        </button>
+        <img className="orf-comment-image-preview" src={preview.src} alt={preview.alt} />
+      </div>
+    </div>
+  );
+}
+
+function CommentTextFragment({ value }: { value: string }) {
+  return (
+    <>
+      {parseCommentBodyLinks(value).map((token, index) =>
+        token.type === "link" ? (
+          <a
+            key={`${token.href}:${index}`}
+            className="orf-comment-link"
+            href={token.href}
+            rel="noreferrer noopener"
+            target="_blank"
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            {token.value}
+          </a>
+        ) : (
+          <Fragment key={`${token.value}:${index}`}>{token.value}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+function CommentBodyText({
+  attachments,
+  body,
+  onOpenImage,
+}: {
+  attachments: CommentAttachment[];
+  body: string;
+  onOpenImage: (preview: CommentImagePreview) => void;
+}) {
+  const attachmentsById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of body.matchAll(commentAttachmentTokenPattern)) {
+    const token = match[0];
+    const alt = match[1] || "评论图片";
+    const attachmentId = match[2];
+    const index = match.index ?? 0;
+    if (index > lastIndex) {
+      nodes.push(<CommentTextFragment key={`text:${lastIndex}`} value={body.slice(lastIndex, index)} />);
+    }
+
+    const attachment = attachmentId ? attachmentsById.get(attachmentId) : undefined;
+    nodes.push(
+      attachment ? (
+        <figure key={`attachment:${attachment.id}`} className="orf-comment-attachment">
+          <button
+            type="button"
+            className="orf-comment-attachment-preview-button"
+            aria-label={`查看图片 ${attachment.fileName || alt}`}
+            title="查看图片"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenImage({ alt, fileName: attachment.fileName || alt, src: attachment.contentUrl });
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            <img className="orf-comment-attachment-image" src={attachment.contentUrl} alt={alt} loading="lazy" />
+          </button>
+        </figure>
+      ) : (
+        <CommentTextFragment key={`missing:${index}`} value={token} />
+      ),
+    );
+    lastIndex = index + token.length;
+  }
+
+  if (lastIndex < body.length) {
+    nodes.push(<CommentTextFragment key={`text:${lastIndex}`} value={body.slice(lastIndex)} />);
+  }
+
+  return <>{nodes}</>;
+}
+
 function CommentComposer({
   body,
   currentMember,
@@ -318,6 +459,7 @@ function CommentComposer({
   onBodyChange,
   onCancelMode,
   onSubmit,
+  onUploadAttachment,
 }: {
   body: string;
   currentMember: string;
@@ -326,9 +468,58 @@ function CommentComposer({
   onBodyChange: (body: string) => void;
   onCancelMode: () => void;
   onSubmit: (event: FormEvent) => void;
+  onUploadAttachment: (file: File) => Promise<string | null>;
+  targetId: string;
+  targetType: CommentTargetType;
 }) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const placeholder = mode.type === "edit" ? "编辑评论..." : mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
   const submitLabel = mode.type === "edit" ? "保存评论" : mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";
+  const insertMarkdown = (markdown: string) => {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? body.length;
+    const end = textarea?.selectionEnd ?? body.length;
+    const before = body.slice(0, start);
+    const after = body.slice(end);
+    const prefix = before && !before.endsWith("\n") ? "\n" : "";
+    const suffix = after && !after.startsWith("\n") ? "\n" : "";
+    const nextBody = `${before}${prefix}${markdown}${suffix}${after}`;
+    const nextCursor = before.length + prefix.length + markdown.length;
+    onBodyChange(nextBody);
+    window.requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
+  const uploadImage = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      setUploadError("只能上传图片");
+      return;
+    }
+
+    setUploadingImage(true);
+    setUploadError("");
+    try {
+      const markdown = await onUploadAttachment(file);
+      if (markdown) {
+        insertMarkdown(markdown);
+      } else {
+        setUploadError("图片上传失败");
+      }
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const image = Array.from(event.clipboardData.files).find((file) => file.type.startsWith("image/"));
+    if (!image) return;
+
+    event.preventDefault();
+    void uploadImage(image);
+  };
 
   return (
     <form className="orf-comment-composer" onSubmit={onSubmit}>
@@ -343,6 +534,7 @@ function CommentComposer({
         )}
       </div>
       <textarea
+        ref={textareaRef}
         className="orf-comment-compose-field"
         onChange={(event) => onBodyChange(event.target.value)}
         onKeyDown={(event) => {
@@ -351,13 +543,37 @@ function CommentComposer({
             event.currentTarget.form?.requestSubmit();
           }
         }}
+        onPaste={handlePaste}
         placeholder={placeholder}
         rows={3}
         value={body}
       />
       <div className="orf-comment-composer-footer">
-        <span className="orf-comment-hint">Ctrl / Cmd + Enter 发送</span>
-        <button type="submit" className="orf-comment-send-button" disabled={!body.trim()} aria-label={submitLabel} title={submitLabel}>
+        <span className={clsx("orf-comment-hint", uploadError && "orf-comment-upload-error")}>
+          {uploadError || (uploadingImage ? "图片上传中..." : "Ctrl / Cmd + Enter 发送")}
+        </span>
+        <input
+          ref={fileInputRef}
+          accept="image/gif,image/jpeg,image/png,image/webp"
+          className="hidden"
+          type="file"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void uploadImage(file);
+          }}
+        />
+        <button
+          type="button"
+          className="orf-comment-icon-button"
+          disabled={uploadingImage}
+          aria-label="添加图片"
+          title="添加图片"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <ImagePlus className="h-4 w-4" />
+        </button>
+        <button type="submit" className="orf-comment-send-button" disabled={!body.trim() || uploadingImage} aria-label={submitLabel} title={submitLabel}>
           <Send className="h-4 w-4" />
         </button>
       </div>

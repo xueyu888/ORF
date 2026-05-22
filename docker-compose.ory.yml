@@ -22,7 +22,7 @@ services:
       - ./ory/kratos:/etc/config/kratos:ro
       - ./ory/.runtime/certs:/etc/ory/certs:ro
     ports:
-      - "4433:4433"
-      - "4434:4434"
+      - "127.0.0.1:${ORY_PUBLIC_PORT:-4433}:4433"
+      - "127.0.0.1:${ORY_ADMIN_PORT:-4434}:4434"
     command: serve -c /etc/config/kratos/kratos.yml --dev
     restart: unless-stopped

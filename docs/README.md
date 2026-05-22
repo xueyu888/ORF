@@ -14,8 +14,7 @@ docs/
 ├─ rules/        跨页面业务规则
 ├─ design/       设计原则和 UI 参考
 ├─ project/      工程环境和代码规范
-├─ legacy/       旧入口或历史说明
-└─ AI考试/       AI 考核资料
+└─ testing/      测试工具和测试策略
 ```
 
 ## 常用入口
@@ -41,8 +40,11 @@ docs/
 | [用户管理 - 后端.md](./backend/用户管理%20-%20后端.md) | 用户管理认证、用户模型和接口口径 |
 | [权限管理 - 前端.md](./frontend/权限管理%20-%20前端.md) | 权限管理页面 UI |
 | [权限管理 - 后端.md](./backend/权限管理%20-%20后端.md) | 权限管理 RBAC 模型和接口口径 |
+| [对象存储 - 后端.md](./backend/对象存储%20-%20后端.md) | S3/MinIO 对象存储、上传文件和迁移契约 |
 | [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push webhook 转发到 Mattermost ORF 频道 |
 | [Mattermost Jira 提醒 - 后端.md](./backend/Mattermost%20Jira%20提醒%20-%20后端.md) | 每日 Jira 提醒私信发送规则 |
+| [消息系统开发.md](./project/消息系统开发.md) | 系统内消息模型、投递事件、接口和前端入口 |
+| [评论图片附件迁移方案.md](./project/评论图片附件迁移方案.md) | 评论图片附件的 S3/MinIO 分阶段迁移方案 |
 | [ORF 悬赏目标流程设计.md](./rules/ORF%20悬赏目标流程设计.md) | 悬赏目标流程的产品术语、核心原则和状态流转 |
 | [ORF 思路记录.md](./rules/ORF%20思路记录.md) | ORF 产品方法中待沉淀的原则和思路 |
 | [积分结算规则.md](./rules/积分结算规则.md) | 积分结算后端规则口径 |
@@ -50,4 +52,5 @@ docs/
 | [积分结算规则 - 前端.md](./frontend/积分结算规则%20-%20前端.md) | 积分结算前端展示和交互 |
 | [设计原则.md](./design/设计原则.md) | ORF 业务原则、基础流程和积分规则 |
 | [environment.md](./project/environment.md) | uv 和 npm 环境说明 |
+| [public-ip-infra.md](./project/public-ip-infra.md) | 无域名公网 IP 共享 PG/Ory/MinIO 的部署约定 |
 | [code-standards.md](./project/code-standards.md) | 代码原则 |

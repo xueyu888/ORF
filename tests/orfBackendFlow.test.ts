@@ -17,7 +17,6 @@ import {
   createResult,
   createTask,
   deleteResult,
-  declineObjectiveChallenge,
   freezeObjectiveAfterReestimate,
   getBountyHallData,
   getMyChallengesData,
@@ -34,11 +33,16 @@ import {
   updateResultConfidence,
   updateResultTitle,
 } from "../server/repositories/orfRepository";
+import { listNotificationsForUser } from "../server/repositories/notificationRepository";
 import { runtimeScope } from "../server/repositories/runtimeScope";
 
 const runId = `test-orf-flow-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 const farFutureDueDate = "2999-12-31";
 const expiredConfirmationDueAt = "2000-01-01T00:00:00.000Z";
+const tinyPng = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/l0p8WQAAAABJRU5ErkJggg==",
+  "base64",
+);
 
 before(async () => {
   await cleanupRun();
@@ -176,12 +180,16 @@ test("commander and challenger can complete the application-to-settlement ORF ba
   assert.ok(availableItem, "challenger should see the published objective in the bounty hall");
   assert.equal(availableItem.hasCurrentApplication, false);
 
-  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
   assert.equal(applied.status, "applied");
   assert.equal(applied.objective.flowStatus, "applying");
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), false);
   const applicationId = applied.objective.challengeApplications.find((application) => application.applicant === fixture.challenger.name)?.id;
   assert.ok(applicationId);
+  const applicationNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
+  assert.equal(applicationNotifications[0]?.kind, "challenge.application.created");
+  assert.equal(applicationNotifications[0]?.targetId, objective.id);
+  assert.equal(applicationNotifications[0]?.readAt, null);
 
   const hallAfterApply = await getBountyHallData(fixture.challenger.name);
   assert.equal(
@@ -253,6 +261,9 @@ test("commander and challenger can complete the application-to-settlement ORF ba
   assert.equal(loot.status, "ok");
   assert.equal(loot.loot.objectiveId, objective.id);
   assert.equal(loot.loot.resultClaims[0]?.resultId, result.id);
+  const lootNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
+  assert.equal(lootNotifications[0]?.kind, "objective.loot.submitted");
+  assert.equal(lootNotifications[0]?.targetId, loot.loot.id);
 
   const submittedChallenges = await getMyChallengesData(fixture.challenger.name);
   assert.equal(submittedChallenges.objectives.find((item) => item.id === objective.id)?.flowStatus, "submitted");
@@ -288,6 +299,33 @@ test("commander and challenger can complete the application-to-settlement ORF ba
   const hallAfterSettlement = await getBountyHallData(fixture.challenger.name);
   assert.equal(hallAfterSettlement.availableItems.some((item) => item.objective.id === objective.id), false);
   assert.equal(hallAfterSettlement.recruitmentItems.some((item) => item.objective.id === objective.id), false);
+});
+
+test("notification API scopes messages to the current recipient and supports read state", async () => {
+  const fixture = await createFixture("notification-api");
+  const objective = await createPublishedObjective(fixture, "notification API objective");
+
+  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  assert.equal(applied.status, "applied");
+
+  await withApiServer(fixture, async (app) => {
+    const challengerList = await apiInject(app, fixture.challenger, "GET", "/api/notifications");
+    assert.equal(challengerList.statusCode, 200);
+    assert.deepEqual(challengerList.json().notifications, []);
+
+    const commanderList = await apiInject(app, fixture.commander, "GET", "/api/notifications");
+    assert.equal(commanderList.statusCode, 200);
+    const commanderPayload = commanderList.json() as { notifications: Array<{ id: string; kind: string; readAt: string | null }>; unreadCount: number };
+    assert.equal(commanderPayload.unreadCount, 1);
+    assert.equal(commanderPayload.notifications[0]?.kind, "challenge.application.created");
+
+    const read = await apiInject(app, fixture.commander, "PATCH", `/api/notifications/${encodeURIComponent(commanderPayload.notifications[0]!.id)}/read`);
+    assert.equal(read.statusCode, 200);
+    assert.equal(read.json().unreadCount, 0);
+
+    const missingForChallenger = await apiInject(app, fixture.challenger, "PATCH", `/api/notifications/${encodeURIComponent(commanderPayload.notifications[0]!.id)}/read`);
+    assert.equal(missingForChallenger.statusCode, 404);
+  });
 });
 
 test("commander recruitment appears as a recruitment item and the recruited challenger can accept it", async () => {
@@ -327,6 +365,9 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   assert.equal(recruited.status, "ok");
   assert.equal(recruited.objective.flowStatus, "recruiting");
   assert.deepEqual(recruited.objective.assignedChallengers, [fixture.challenger.name]);
+  const recruitmentNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
+  assert.equal(recruitmentNotifications[0]?.kind, "objective.recruitment.created");
+  assert.equal(recruitmentNotifications[0]?.targetId, objective.id);
 
   const hallForRecruited = await getBountyHallData(fixture.challenger.name);
   const recruitmentItem = hallForRecruited.recruitmentItems.find((item) => item.objective.id === objective.id);
@@ -343,6 +384,10 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   assert.deepEqual(accepted.objective.challengers, [fixture.challenger.name]);
   assert.deepEqual(accepted.objective.assignedChallengers, []);
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), true);
+  const acceptanceNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
+  assert.equal(acceptanceNotifications[0]?.kind, "objective.challenge.accepted");
+  assert.equal(acceptanceNotifications[0]?.targetId, objective.id);
+  assert.equal(acceptanceNotifications[0]?.metadata.challenger, fixture.challenger.name);
 
   const myChallenges = await getMyChallengesData(fixture.challenger.name);
   assert.deepEqual(myChallenges.objectives.map((item) => item.id), [objective.id]);
@@ -707,7 +752,7 @@ test("accepting stale recruitment cannot reopen a frozen objective", async () =>
   assert.deepEqual(unchanged?.challengers, [fixture.challenger.name]);
 });
 
-test("concurrent recruitment responses preserve every member transition", async () => {
+test("concurrent recruitment acceptances preserve every member transition", async () => {
   const fixture = await createFixture("concurrent-recruitment-responses");
   const acceptedObjective = await createPublishedObjective(fixture, "concurrent recruitment accept guard");
   await createTestResult(acceptedObjective.id, fixture.commander.name, `${fixture.prefix} concurrent accept result`);
@@ -733,51 +778,24 @@ test("concurrent recruitment responses preserve every member transition", async 
   assert.deepEqual(finalizedAcceptedObjective?.challengers.slice().sort(), [fixture.challenger.name, fixture.observer.name].sort());
   assert.deepEqual(finalizedAcceptedObjective?.assignedChallengers, []);
   assert.equal(finalizedAcceptedObjective?.flowStatus, "reestimating");
-
-  const declinedObjective = await createPublishedObjective(fixture, "concurrent recruitment decline guard");
-  assert.equal(
-    (await recruitObjectiveChallengers(declinedObjective.id, [fixture.challenger.name, fixture.observer.name], fixture.commander.id)).status,
-    "ok",
-  );
-  const declines = await Promise.all([
-    declineObjectiveChallenge(declinedObjective.id, fixture.challenger.name, fixture.challenger.id),
-    declineObjectiveChallenge(declinedObjective.id, fixture.observer.name, fixture.observer.id),
-  ]);
-  assert.deepEqual(declines.map((outcome) => outcome.status).sort(), ["ok", "ok"]);
-
-  data = await getTaskManagementData({ scope: fixture.scope });
-  const finalizedDeclinedObjective = data.objectives.find((item) => item.id === declinedObjective.id);
-  assert.deepEqual(finalizedDeclinedObjective?.assignedChallengers, []);
-  assert.equal(finalizedDeclinedObjective?.flowStatus, "open");
 });
 
-test("unassigned members cannot decline recruitment outside the recruiting state", async () => {
-  const fixture = await createFixture("decline-unassigned-guard");
-  const objective = await createPublishedObjective(fixture, "decline unassigned guard");
-
-  const unrelatedDecline = await declineObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
-  assert.equal(unrelatedDecline.status, "invalid");
-
-  const data = await getTaskManagementData();
-  const unchanged = data.objectives.find((item) => item.id === objective.id);
-  assert.equal(unchanged?.flowStatus, "open");
-  assert.deepEqual(unchanged?.assignedChallengers, []);
-});
-
-test("assigned members can decline recruitment exactly once", async () => {
-  const fixture = await createFixture("decline-assigned-guard");
-  const objective = await createPublishedObjective(fixture, "decline assigned guard");
+test("recruitment decline is not an available API action", async () => {
+  const fixture = await createFixture("decline-disabled-guard");
+  const objective = await createPublishedObjective(fixture, "decline disabled guard");
 
   const recruited = await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id);
   assert.equal(recruited.status, "ok");
 
-  const assignedDecline = await declineObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
-  assert.equal(assignedDecline.status, "ok");
-  assert.equal(assignedDecline.objective.flowStatus, "open");
-  assert.deepEqual(assignedDecline.objective.assignedChallengers, []);
+  await withApiServer(fixture, async (app) => {
+    const decline = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/challenge/decline`);
+    assert.equal(decline.statusCode, 404);
+  });
 
-  const repeatedDecline = await declineObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
-  assert.equal(repeatedDecline.status, "invalid");
+  const data = await getTaskManagementData({ scope: fixture.scope });
+  const unchanged = data.objectives.find((item) => item.id === objective.id);
+  assert.equal(unchanged?.flowStatus, "recruiting");
+  assert.deepEqual(unchanged?.assignedChallengers, [fixture.challenger.name]);
 });
 
 test("freezing after reestimate requires at least one concrete result", async () => {
@@ -1315,6 +1333,15 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     });
     assert.equal(invalidTaskDueDate.statusCode, 400);
 
+    const invalidTaskAssignee = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: "valid task title",
+      assignee: `${fixture.prefix} Missing Assignee`,
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    });
+    assert.equal(invalidTaskAssignee.statusCode, 400);
+    assert.equal((invalidTaskAssignee.json() as { error?: string }).error, "Task assignee must be an active member");
+
     const trimmedTask = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
       title: "  trimmed action title  ",
       description: "   ",
@@ -1326,8 +1353,8 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     assert.equal(trimmedTask.statusCode, 200);
     const trimmedTaskPayload = trimmedTask.json() as { task: { id: string; title: string; description: string; assignee: string; dueDate: string } };
     assert.equal(trimmedTaskPayload.task.title, "trimmed action title");
-    assert.equal(trimmedTaskPayload.task.description, "执行支撑关联指标的下一步动作。");
-    assert.equal(trimmedTaskPayload.task.assignee, "User");
+    assert.equal(trimmedTaskPayload.task.description, "执行支撑目标的下一步技术任务。");
+    assert.equal(trimmedTaskPayload.task.assignee, fixture.challenger.name);
     assert.equal(trimmedTaskPayload.task.dueDate, "2999-02-28");
 
     const defaultLabel = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(trimmedTaskPayload.task.id)}/checklist`, {
@@ -1631,6 +1658,50 @@ test("auth API normalizes registration traits at the route boundary", async () =
   });
 });
 
+test("password login binds a preapproved ORF member to the Ory identity id", async () => {
+  const fixture = await createFixture("auth-login-bind-preapproved");
+  const identity = {
+    id: `${fixture.prefix}-ory-challenger`,
+    traits: {
+      email: fixture.challenger.email,
+      name: `${fixture.prefix} Ory Challenger`,
+    },
+  };
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(fixture.challenger.email, "password");
+    assert.equal(auth.user.id, fixture.challenger.id);
+    assert.equal(auth.user.name, fixture.challenger.name);
+    assert.equal(auth.user.status, "active");
+  });
+
+  const [stored] = await db.select({ oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+  assert.equal(stored?.oryIdentityId, identity.id);
+});
+
+test("password login resolves bound ORF users by Ory identity id before email", async () => {
+  const fixture = await createFixture("auth-login-bound-identity-first");
+  const identity = {
+    id: `${fixture.prefix}-ory-stable-id`,
+    traits: {
+      email: `${fixture.prefix}-ory-renamed@orf.test`,
+      name: `${fixture.prefix} Ory Renamed`,
+    },
+  };
+  const orfEmail = `${fixture.prefix}-orf-contact@orf.test`;
+  await db.update(users).set({ oryIdentityId: identity.id, email: orfEmail }).where(eq(users.id, fixture.challenger.id));
+
+  await withMockOryLogin(identity, async () => {
+    const auth = await loginWithPassword(String(identity.traits.email), "password");
+    assert.equal(auth.user.id, fixture.challenger.id);
+    assert.equal(auth.user.email, orfEmail);
+    assert.equal(auth.user.status, "active");
+  });
+
+  const duplicateRows = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${identity.traits.email}`);
+  assert.equal(duplicateRows.length, 0);
+});
+
 test("password login does not auto-approve first-time ORF users", async () => {
   const fixture = await createFixture("auth-login-new-user-pending");
   const email = `${fixture.prefix}-external-login@orf.test`;
@@ -1645,8 +1716,9 @@ test("password login does not auto-approve first-time ORF users", async () => {
     assert.equal(auth.user.role, "member");
   });
 
-  const [created] = await db.select({ status: users.status }).from(users).where(eq(users.email, email)).limit(1);
+  const [created] = await db.select({ status: users.status, oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.email, email)).limit(1);
   assert.equal(created?.status, "pending");
+  assert.equal(created?.oryIdentityId, identity.id);
 });
 
 test("password login preserves existing ORF display names", async () => {
@@ -1688,6 +1760,29 @@ test("API user management prevents renaming members referenced by ORF records", 
 
     const myChallenges = await getMyChallengesData(fixture.challenger.name);
     assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
+test("API user management rejects email changes for Ory-bound members", async () => {
+  const fixture = await createFixture("api-user-bound-email-change");
+  await db.update(users).set({ oryIdentityId: fixture.challenger.id }).where(eq(users.id, fixture.challenger.id));
+
+  await withApiServer(fixture, async (app) => {
+    const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(userList.statusCode, 200);
+    const boundUser = (userList.json() as { users: Array<{ id: string; authLinked?: boolean }> }).users.find((user) => user.id === fixture.challenger.id);
+    assert.equal(boundUser?.authLinked, true);
+
+    const update = await apiInject(app, fixture.commander, "PATCH", `/api/users/${encodeURIComponent(fixture.challenger.id)}`, {
+      name: fixture.challenger.name,
+      email: `${fixture.prefix}-renamed-login@orf.test`,
+      role: "member",
+    });
+    assert.equal(update.statusCode, 409);
+    assert.equal((update.json() as { error?: string }).error, "Bound login email cannot be changed");
+
+    const [stored] = await db.select({ email: users.email }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+    assert.equal(stored?.email, fixture.challenger.email);
   });
 });
 
@@ -1851,6 +1946,7 @@ test("API mutations enforce runtime scope boundaries even for administrators", a
 
     const intruderTaskWithOwnerFeedback = await apiInject(app, intruder.commander, "POST", "/api/tasks", {
       title: `${intruder.prefix} cross-scope feedback origin task`,
+      linkedObjectiveId: intruderWorkResult.objectiveId,
       linkedResultId: intruderWorkResult.id,
       feedbackOriginId: ownerFeedbackId,
     });
@@ -1972,6 +2068,198 @@ test("task and comment API writes require objective participation", async () => 
       replyToAuthor: "Ghost",
     });
     assert.equal(brokenReply.statusCode, 404);
+  });
+});
+
+test("comment image attachments upload, bind, and read through authorized comment APIs", async () => {
+  const fixture = await createFixture("api-comment-image");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "image attachment objective");
+
+  await withApiServer(fixture, async (app) => {
+    const upload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "proof.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(upload.statusCode, 200);
+
+    const uploadPayload = upload.json() as {
+      markdown: string;
+      attachment: {
+        id: string;
+        fileName: string;
+        mimeType: string;
+        fileSize: number;
+        width?: number;
+        height?: number;
+        contentUrl: string;
+      };
+    };
+    assert.match(uploadPayload.attachment.id, /^catt_/);
+    assert.equal(uploadPayload.attachment.fileName, "proof.png");
+    assert.equal(uploadPayload.attachment.mimeType, "image/png");
+    assert.equal(uploadPayload.attachment.fileSize, tinyPng.byteLength);
+    assert.equal(uploadPayload.attachment.contentUrl.includes("127.0.0.1:9000"), false);
+    assert.equal(uploadPayload.attachment.contentUrl.includes("orf-comment-attachments"), false);
+    assert.equal(uploadPayload.markdown, `![proof.png](orf-attachment:${uploadPayload.attachment.id})`);
+
+    const comment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: uploadPayload.markdown,
+    });
+    assert.equal(comment.statusCode, 200);
+
+    const commentPayload = comment.json() as {
+      commentThread: {
+        id: string;
+        messages: Array<{
+          id: string;
+          body: string;
+          attachments: Array<{
+            id: string;
+            fileName: string;
+            mimeType: string;
+            fileSize: number;
+            contentUrl: string;
+          }>;
+        }>;
+      };
+    };
+    const message = commentPayload.commentThread.messages.find((item) => item.body === uploadPayload.markdown);
+    assert.ok(message);
+    assert.equal(message.attachments.length, 1);
+    assert.equal(message.attachments[0]?.id, uploadPayload.attachment.id);
+    assert.equal(message.attachments[0]?.contentUrl.includes(`/api/comments/attachments/${uploadPayload.attachment.id}/content`), true);
+
+    const image = await apiInject(app, fixture.challenger, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
+    assert.equal(image.statusCode, 200);
+    assert.match(image.headers["content-type"]?.toString() ?? "", /^image\/png\b/);
+    assert.equal(Buffer.from(image.rawPayload).subarray(0, 8).equals(tinyPng.subarray(0, 8)), true);
+
+    const observerImage = await apiInject(app, fixture.observer, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
+    assert.equal(observerImage.statusCode, 403);
+
+    const cleanupUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "cleanup.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(cleanupUpload.statusCode, 200);
+    const cleanupPayload = cleanupUpload.json() as typeof uploadPayload;
+    const cleanupComment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: cleanupPayload.markdown,
+    });
+    assert.equal(cleanupComment.statusCode, 200);
+    const cleanupCommentPayload = cleanupComment.json() as typeof commentPayload;
+    const cleanupMessage = cleanupCommentPayload.commentThread.messages.find((item) => item.body === cleanupPayload.markdown);
+    assert.ok(cleanupMessage);
+    assert.equal(cleanupMessage.attachments.length, 1);
+
+    const deleted = await apiInject(app, fixture.challenger, "DELETE", `/api/comments/${cleanupCommentPayload.commentThread.id}/messages/${cleanupMessage.id}`);
+    assert.equal(deleted.statusCode, 200);
+
+    const deletedImage = await apiInject(app, fixture.challenger, "GET", attachmentContentPath(cleanupMessage.attachments[0]?.contentUrl ?? ""));
+    assert.equal(deletedImage.statusCode, 404);
+
+    await db.update(objectives).set({ flowStatus: "closed" }).where(eq(objectives.id, objective.id));
+    const archivedImage = await apiInject(app, fixture.challenger, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
+    assert.equal(archivedImage.statusCode, 200);
+
+    const lockedUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "locked.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(lockedUpload.statusCode, 403);
+  });
+});
+
+test("comment image attachment upload rejects unauthorized users and invalid image payloads", async () => {
+  const fixture = await createFixture("api-comment-image-reject");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "image attachment rejection objective");
+
+  await withApiServer(fixture, async (app) => {
+    const observerUpload = await apiMultipartInject(app, fixture.observer, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "proof.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(observerUpload.statusCode, 403);
+
+    const textUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "notes.txt",
+        mimeType: "text/plain",
+        content: Buffer.from("plain text is not a comment image", "utf8"),
+      },
+    });
+    assert.equal([400, 415].includes(textUpload.statusCode), true);
+
+    const spoofedUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "spoofed.png",
+        mimeType: "image/png",
+        content: Buffer.from("<script>alert(1)</script>", "utf8"),
+      },
+    });
+    assert.equal([400, 415].includes(spoofedUpload.statusCode), true);
+
+    const oversizedUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "oversized.png",
+        mimeType: "image/png",
+        content: Buffer.concat([tinyPng, Buffer.alloc(10 * 1024 * 1024)]),
+      },
+    });
+    assert.equal(oversizedUpload.statusCode, 413);
   });
 });
 
@@ -2767,6 +3055,56 @@ async function apiInject(
     headers: { cookie: apiCookie(user) },
     ...(payload === undefined ? {} : { payload }),
   });
+}
+
+async function apiMultipartInject(
+  app: FastifyInstance,
+  user: FixtureUser,
+  url: string,
+  input: {
+    fields: Record<string, string>;
+    file: {
+      fieldName: string;
+      fileName: string;
+      mimeType: string;
+      content: Buffer;
+    };
+  },
+) {
+  const boundary = `----orf-test-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const chunks: Buffer[] = [];
+  const push = (value: string | Buffer) => {
+    chunks.push(typeof value === "string" ? Buffer.from(value, "utf8") : value);
+  };
+
+  for (const [name, value] of Object.entries(input.fields)) {
+    push(`--${boundary}\r\n`);
+    push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+    push(`${value}\r\n`);
+  }
+
+  push(`--${boundary}\r\n`);
+  push(
+    `Content-Disposition: form-data; name="${input.file.fieldName}"; filename="${input.file.fileName}"\r\n` +
+      `Content-Type: ${input.file.mimeType}\r\n\r\n`,
+  );
+  push(input.file.content);
+  push(`\r\n--${boundary}--\r\n`);
+
+  return app.inject({
+    method: "POST",
+    url,
+    headers: {
+      cookie: apiCookie(user),
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    },
+    payload: Buffer.concat(chunks),
+  });
+}
+
+function attachmentContentPath(contentUrl: string) {
+  const parsed = new URL(contentUrl, "http://127.0.0.1");
+  return `${parsed.pathname}${parsed.search}`;
 }
 
 async function postResult(

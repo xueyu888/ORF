@@ -9,6 +9,8 @@ export type MetricDirection = "increase" | "decrease";
 export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞升";
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
+export type NotificationKind = "challenge.application.created" | "objective.recruitment.created" | "objective.challenge.accepted" | "objective.loot.submitted";
+export type NotificationTargetType = "objective" | "objectiveLoot";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -25,6 +27,7 @@ export interface OrfUser {
   email: string;
   role: UserRole;
   status: UserStatus;
+  authLinked?: boolean;
   lastOnlineAt?: string | null;
 }
 
@@ -45,6 +48,22 @@ export interface ChallengeApplication {
   createdAt: string;
   decidedAt?: string | null;
   decidedBy?: string | null;
+}
+
+export interface AppNotification {
+  id: string;
+  kind: NotificationKind;
+  recipientUserId: string;
+  actorUserId?: string | null;
+  actorName: string;
+  title: string;
+  body: string;
+  targetType: NotificationTargetType;
+  targetId: string;
+  targetHref: string;
+  readAt?: string | null;
+  createdAt: string;
+  metadata: Record<string, string>;
 }
 
 export interface ActivityItem {
@@ -150,6 +169,7 @@ export interface Result {
   uncertaintyScore: number;
   acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
+  /** Deprecated compatibility field. Tasks belong to Objective, not Result. */
   taskIds: string[];
   feedbackIds: string[];
   trend: TrendPoint[];
@@ -190,7 +210,8 @@ export interface Task {
   priority: Priority;
   assignee: string;
   linkedObjectiveId: string;
-  linkedResultId: string;
+  /** Deprecated compatibility field. Task ownership is linkedObjectiveId. */
+  linkedResultId?: string | null;
   feedbackOriginId?: string;
   dueDate: string;
   tags: string[];
@@ -267,10 +288,21 @@ export interface OrfRules {
 export type CommentTargetType = "objective" | "result" | "task" | "subtask";
 export type CommentStatus = "open" | "resolved";
 
+export interface CommentAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  width?: number;
+  height?: number;
+  contentUrl: string;
+}
+
 export interface CommentMessage {
   id: string;
   author: string;
   body: string;
+  attachments: CommentAttachment[];
   createdAt: string;
   parentMessageId?: string;
   replyToMessageId?: string;

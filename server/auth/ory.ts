@@ -194,12 +194,25 @@ async function upsertOrfUser(
   }
 
   const identityDisplayName = identityName(identity, email);
-  const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  const [identityUser] = await db.select().from(users).where(sql`${users.oryIdentityId} = ${identity.id}`).limit(1);
+  const [emailUser] = identityUser ? [undefined] : await db.select().from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
+  const existing = identityUser ?? emailUser;
   const lastOnlineAt = options.recordOnline ? new Date().toISOString() : undefined;
 
   if (existing) {
+    if (existing.oryIdentityId && existing.oryIdentityId !== identity.id) {
+      throw new Error("Ory identity email is already bound to another ORF user");
+    }
+
+    const update: { lastOnlineAt?: string; oryIdentityId?: string } = {};
     if (lastOnlineAt) {
-      await db.update(users).set({ lastOnlineAt }).where(sql`${users.id} = ${existing.id}`);
+      update.lastOnlineAt = lastOnlineAt;
+    }
+    if (!existing.oryIdentityId) {
+      update.oryIdentityId = identity.id;
+    }
+    if (Object.keys(update).length > 0) {
+      await db.update(users).set(update).where(sql`${users.id} = ${existing.id}`);
     }
 
     const role = await existingMembershipRole(existing.id);
@@ -223,6 +236,7 @@ async function upsertOrfUser(
     id,
     name: identityDisplayName,
     email,
+    oryIdentityId: identity.id,
     status: options.newUserStatus ?? "pending",
     createdAt: new Date().toISOString().slice(0, 10),
     lastOnlineAt: createdLastOnlineAt,
@@ -352,6 +366,36 @@ async function submitApiFlow(flowType: "login" | "registration", body: unknown):
   }
 
   return response.json() as Promise<OryAuthResponse>;
+}
+
+export async function checkPasswordLoginFlowHealth() {
+  const flow = await createApiFlow("login");
+  if (!flow.ui?.action) {
+    throw new Error("Ory login flow is missing action URL");
+  }
+
+  const response = await fetchOry(flow.ui.action, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      method: "password",
+      identifier: "__orf_health_probe__@invalid.orf",
+      password: "__orf_health_probe_password__",
+    }),
+  });
+
+  if (response.status === 400 || response.status === 401) {
+    return;
+  }
+
+  if (response.ok) {
+    throw new Error("Ory login probe unexpectedly accepted invalid credentials");
+  }
+
+  throw new Error(`Ory login probe failed with ${response.status}`);
 }
 
 export async function loginWithPassword(identifier: string, password: string) {

@@ -4,16 +4,24 @@ import { spawn } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import dotenv from 'dotenv';
+import { checkDatabaseHealth, databaseDisplayUrl } from '../scripts/db-connection.mjs';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const runDir = resolve(rootDir, '.orf', 'run');
 const logDir = resolve(rootDir, '.orf', 'logs');
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-const services = {
+dotenv.config({ path: resolve(rootDir, '.env'), quiet: true });
+
+const authBaseUrl = process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433';
+const storageBaseUrl = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000';
+
+const appServices = {
   backend: {
     script: 'server:dev',
     url: 'http://127.0.0.1:8787/health',
+    check: checkBackendHealth,
     displayUrl: 'http://127.0.0.1:8787',
   },
   frontend: {
@@ -21,6 +29,28 @@ const services = {
     url: 'http://127.0.0.1:5173/health',
     displayUrl: 'http://127.0.0.1:5173',
   },
+};
+
+const dependencyServices = {
+  database: {
+    check: checkDatabaseHealth,
+    displayUrl: databaseDisplayUrl(),
+  },
+  auth: {
+    script: isLocalServiceUrl(authBaseUrl) ? 'ory:dev' : undefined,
+    url: `${trimSlash(authBaseUrl)}/health/ready`,
+    displayUrl: authBaseUrl,
+  },
+  storage: {
+    script: isLocalServiceUrl(storageBaseUrl) ? 'storage:dev' : undefined,
+    url: `${trimSlash(storageBaseUrl)}/minio/health/live`,
+    displayUrl: storageBaseUrl,
+  },
+};
+
+const statusChecks = {
+  ...dependencyServices,
+  ...appServices,
 };
 
 const command = process.argv[2] ?? 'help';
@@ -49,10 +79,16 @@ async function main() {
       await startDetached();
       return;
     case 'dev':
+      if (!(await prepareRuntimeDependencies())) {
+        return;
+      }
       await startForeground(['backend', 'frontend']);
       return;
     case 'server':
     case 'backend':
+      if (!(await prepareRuntimeDependencies())) {
+        return;
+      }
       await runNpmScript('server:dev', args);
       return;
     case 'web':
@@ -72,9 +108,15 @@ async function main() {
       await runNpmScript('verify', args);
       return;
     case 'migrate':
+      if (!validateDatabaseEnv()) {
+        return;
+      }
       await runNpmScript('db:migrate', args);
       return;
     case 'seed':
+      if (!validateDatabaseEnv()) {
+        return;
+      }
       await runNpmScript('db:seed', args);
       return;
     case 'logs':
@@ -91,10 +133,10 @@ function printHelp() {
   console.log(`ORF command line
 
 Usage:
-  orf up              Start backend and frontend in the background
+  orf up              Check PostgreSQL, start Ory, MinIO, backend, and frontend
   orf down            Stop background backend and frontend
   orf restart         Restart background backend and frontend
-  orf status          Check backend/frontend health
+  orf status          Check PostgreSQL, Ory, MinIO, backend, and frontend health
   orf dev             Run backend and frontend in the foreground
   orf backend         Run only the Fastify backend in the foreground
   orf frontend        Run only the Vite frontend in the foreground
@@ -114,8 +156,8 @@ Database:
 
 async function printStatus() {
   const rows = await Promise.all(
-    Object.entries(services).map(async ([name, service]) => {
-      const health = await checkHealth(service.url);
+    Object.entries(statusChecks).map(async ([name, service]) => {
+      const health = await checkServiceHealth(service);
       const pid = readPid(name);
       return { name, service, health, pid };
     }),
@@ -131,17 +173,22 @@ async function printStatus() {
 
 async function startDetached() {
   ensureRunDirs();
+  if (!(await prepareRuntimeDependencies())) {
+    return;
+  }
 
-  for (const [name, service] of Object.entries(services)) {
-    const health = await checkHealth(service.url);
+  for (const [name, service] of Object.entries(appServices)) {
+    const health = await checkServiceHealth(service);
     const pid = readPid(name);
     if (health.ok) {
       console.log(`${name} already healthy at ${service.displayUrl}`);
       continue;
     }
     if (pid && isAlive(pid)) {
-      console.log(`${name} process is running (pid ${pid}); waiting for health`);
-      continue;
+      console.log(`${name} process is running (pid ${pid}) but health check failed (${health.message}); restarting`);
+      killProcessTree(pid);
+      removePid(name);
+      await sleep(500);
     }
 
     removePid(name);
@@ -151,10 +198,10 @@ async function startDetached() {
   }
 
   const results = await Promise.all(
-    Object.entries(services).map(async ([name, service]) => ({
+    Object.entries(appServices).map(async ([name, service]) => ({
       name,
       service,
-      health: await waitForHealth(service.url, 30000),
+      health: await waitForServiceHealth(service, 30000),
     })),
   );
 
@@ -172,7 +219,7 @@ async function startDetached() {
 function stopDetached(options = {}) {
   ensureRunDirs();
   let stopped = 0;
-  for (const name of Object.keys(services)) {
+  for (const name of Object.keys(appServices)) {
     const pid = readPid(name);
     if (!pid) {
       continue;
@@ -194,7 +241,7 @@ function stopDetached(options = {}) {
 
 async function startForeground(names) {
   const children = names.map((name) => {
-    const service = services[name];
+    const service = appServices[name];
     const child = spawn(npmCmd, ['run', service.script], {
       cwd: rootDir,
       stdio: 'inherit',
@@ -259,12 +306,12 @@ async function runNpmScript(script, scriptArgs) {
 function printLogs(serviceName) {
   ensureRunDirs();
   if (!serviceName) {
-    for (const name of Object.keys(services)) {
+    for (const name of Object.keys(appServices)) {
       console.log(`${name}: ${logPath(name)}`);
     }
     return;
   }
-  if (!services[serviceName]) {
+  if (!appServices[serviceName]) {
     console.error(`Unknown service: ${serviceName}`);
     process.exitCode = 1;
     return;
@@ -279,11 +326,82 @@ function printLogs(serviceName) {
   console.log(text.slice(-20000));
 }
 
+async function prepareRuntimeDependencies() {
+  for (const [name, service] of Object.entries(dependencyServices)) {
+    const health = await checkServiceHealth(service);
+    if (health.ok) {
+      console.log(`${name} already healthy at ${service.displayUrl}`);
+      continue;
+    }
+
+    if (!service.script) {
+      console.error(`${name} is not healthy: ${health.message}`);
+      if (name === 'database') {
+        console.error('Set DATABASE_URL or REMOTE_DATABASE_URL in .env, then run node scripts/verify-db.mjs.');
+      } else {
+        console.error(`${name} is configured as a shared/remote dependency at ${service.displayUrl}; not starting a local replacement.`);
+      }
+      process.exitCode = 1;
+      return false;
+    }
+
+    console.log(`${name} is not healthy (${health.message}); running npm run ${service.script}`);
+    const code = await runNpmScriptCommand(service.script, []);
+    if (code !== 0) {
+      console.error(`${name} failed to start via npm run ${service.script}`);
+      process.exitCode = code;
+      return false;
+    }
+
+    const ready = await waitForHealth(service.url, 30000);
+    if (!ready.ok) {
+      console.error(`${name} did not become healthy: ${ready.message}`);
+      console.error(`Check npm run ${service.script} and ${service.displayUrl}`);
+      process.exitCode = 1;
+      return false;
+    }
+    console.log(`${name} ready at ${service.displayUrl}`);
+  }
+
+  return true;
+}
+
+function validateDatabaseEnv() {
+  if (process.env.DATABASE_URL || process.env.REMOTE_DATABASE_URL) {
+    return true;
+  }
+
+  console.error('Missing required ORF environment: DATABASE_URL or REMOTE_DATABASE_URL is required.');
+  console.error('Create .env from .env.example, set the database URL, then run node scripts/verify-db.mjs.');
+  process.exitCode = 1;
+  return false;
+}
+
+async function checkServiceHealth(service) {
+  if (service.check) {
+    return await service.check();
+  }
+  return await checkHealth(service.url);
+}
+
 async function waitForHealth(url, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let latest = { ok: false, message: 'not checked' };
   while (Date.now() < deadline) {
     latest = await checkHealth(url);
+    if (latest.ok) {
+      return latest;
+    }
+    await sleep(500);
+  }
+  return latest;
+}
+
+async function waitForServiceHealth(service, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = { ok: false, message: 'not checked' };
+  while (Date.now() < deadline) {
+    latest = await checkServiceHealth(service);
     if (latest.ok) {
       return latest;
     }
@@ -315,6 +433,47 @@ async function checkHealth(url) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function checkBackendHealth() {
+  const baseHealth = await checkHealth(appServices.backend.url);
+  if (!baseHealth.ok) {
+    return baseHealth;
+  }
+
+  const authHealth = await checkHealth(`${trimSlash(appServices.backend.displayUrl)}/health/auth`);
+  if (!authHealth.ok) {
+    return {
+      ...authHealth,
+      ms: baseHealth.ms + authHealth.ms,
+      message: `auth probe ${authHealth.message}`,
+    };
+  }
+
+  return {
+    ok: true,
+    status: baseHealth.status,
+    body: baseHealth.body,
+    ms: baseHealth.ms + authHealth.ms,
+    message: 'ok',
+  };
+}
+
+async function runNpmScriptCommand(script, scriptArgs) {
+  return await new Promise((resolvePromise) => {
+    const child = spawn(npmCmd, ['run', script, '--', ...scriptArgs], {
+      cwd: rootDir,
+      stdio: 'inherit',
+      env: process.env,
+    });
+    child.on('exit', (code, signal) => {
+      if (signal) {
+        resolvePromise(1);
+      } else {
+        resolvePromise(code ?? 0);
+      }
+    });
+  });
 }
 
 function ensureRunDirs() {
@@ -376,7 +535,53 @@ function sleep(ms) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 }
 
-main().catch((error) => {
-  console.error(error?.stack ?? error?.message ?? String(error));
-  process.exitCode = 1;
-});
+function trimSlash(value) {
+  return value.replace(/\/+$/, '');
+}
+
+function isLocalServiceUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1';
+  } catch {
+    return false;
+  }
+}
+
+if (!bootstrapPublicCa()) {
+  main().catch((error) => {
+    console.error(error?.stack ?? error?.message ?? String(error));
+    process.exitCode = 1;
+  });
+}
+
+function bootstrapPublicCa() {
+  if (process.env.ORF_SKIP_PUBLIC_CA_BOOTSTRAP === '1' || process.env.NODE_EXTRA_CA_CERTS) {
+    return false;
+  }
+
+  const publicCaCert = process.env.ORF_PUBLIC_CA_CERT;
+  if (!publicCaCert || !existsSync(publicCaCert)) {
+    return false;
+  }
+
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      NODE_EXTRA_CA_CERTS: publicCaCert,
+      ORF_SKIP_PUBLIC_CA_BOOTSTRAP: '1',
+    },
+    stdio: 'inherit',
+  });
+
+  child.on('exit', (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
+
+  return true;
+}

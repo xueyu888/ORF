@@ -4,7 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { breadcrumb } from "../src/components/appShellBreadcrumb";
 import { canShowFrontend, canShowFrontendPath, frontendVisibilityByPath, frontendVisibilityTable } from "../src/config/frontendVisibility";
-import { quickPages } from "../src/config/navigation";
+import { quickActions, quickPages } from "../src/config/navigation";
 import type { OrfUser } from "../src/types/orf";
 
 const adminUser: OrfUser = {
@@ -44,6 +44,19 @@ test("authenticated command pages do not include the auth route", () => {
   );
 });
 
+test("quick command configuration keeps creation actions separate from pages", () => {
+  assert.equal(
+    quickPages.some((item) => item.label === "新建目标"),
+    false,
+    "New objective must be a command action, not a fake page link",
+  );
+  assert.equal(
+    quickActions.some((item) => item.action === "createObjective"),
+    true,
+    "Command menu must expose new objective as an executable action",
+  );
+});
+
 test("app shell breadcrumb labels objective loot deep links", () => {
   assert.equal(breadcrumb("/objectives/objective-1/loot"), "目标战利品");
   assert.equal(breadcrumb("/objectives/objective-1/loot/"), "目标战利品");
@@ -52,6 +65,42 @@ test("app shell breadcrumb labels objective loot deep links", () => {
     /\/tasks\/bounties/,
     "AppShell must not keep obsolete bounty-task loot routes in topbar labels",
   );
+});
+
+test("sidebar keeps utility actions inside the user panel", () => {
+  const source = readFileSync(path.resolve("src/components/Sidebar.tsx"), "utf8");
+  const footerStart = source.indexOf('<div className="orf-sidebar-footer');
+  const footerEnd = source.indexOf("</aside>", footerStart);
+  assert.notEqual(footerStart, -1, "Sidebar must keep a footer region for the user panel");
+  assert.notEqual(footerEnd, -1, "Sidebar footer must stay inside the aside");
+
+  const footerSource = source.slice(footerStart, footerEnd);
+  const userActionsStart = footerSource.indexOf('className="orf-sidebar-user-actions"');
+  assert.notEqual(userActionsStart, -1, "Sidebar footer utilities must live inside the user panel action group");
+
+  assert.doesNotMatch(
+    footerSource.slice(0, userActionsStart),
+    /aria-label="(?:搜索|设置|退出登录)"/,
+    "Sidebar utilities must not return as separate footer controls above the user panel",
+  );
+  assert.doesNotMatch(
+    footerSource,
+    /className="orf-sidebar-command/,
+    "Sidebar utilities must not use full-width footer command buttons",
+  );
+  for (const label of ["搜索", "设置", "退出登录"]) {
+    assert.ok(
+      footerSource.indexOf(`aria-label="${label}"`, userActionsStart) > userActionsStart,
+      `Sidebar user panel must include ${label}`,
+    );
+  }
+});
+
+test("system messages stay out of the primary sidebar navigation", () => {
+  const navigationSource = readFileSync(path.resolve("src/config/navigation.ts"), "utf8");
+  const sidebarSource = readFileSync(path.resolve("src/components/Sidebar.tsx"), "utf8");
+  assert.match(navigationSource, /label: "消息"/, "Messages should remain reachable through global navigation data");
+  assert.doesNotMatch(sidebarSource, /labels: \[[^\]]*"消息"/, "Messages must not become a primary sidebar item");
 });
 
 test("feedback creation page actions use visible objective participation", () => {

@@ -3,14 +3,13 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import { Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
-import { FeedbackCard, TaskRow } from "../components/SharedCards";
+import { FeedbackCard } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
 import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { canCreateFeedbackForResult } from "../features/feedback/model/feedbackCapabilities";
 import { buildResultQualityChecks } from "../features/results/model/resultQuality";
 import { useOrf } from "../state/OrfProvider";
-import type { TaskStatus } from "../types/orf";
 import { metricValue, resultProgress } from "../utils/format";
 
 function EmptyPanel({ label }: { label: string }) {
@@ -19,7 +18,7 @@ function EmptyPanel({ label }: { label: string }) {
 
 export function ResultDetailPage() {
   const { resultId } = useParams();
-  const { currentUser, dataReady, state, openModal, updateTaskStatus, updateResultConfidence } = useOrf();
+  const { currentUser, dataReady, state, openModal, updateResultConfidence } = useOrf();
   const result = state.results.find((item) => item.id === resultId);
   if (!result) {
     return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载指标数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
@@ -30,7 +29,6 @@ export function ResultDetailPage() {
     return <Navigate to="/tasks" replace />;
   }
 
-  const tasks = state.tasks.filter((task) => task.linkedResultId === result.id);
   const feedback = state.feedback.filter((item) => item.linkedResultId === result.id);
   const metricRequirement = result.metricRequirement?.trim() || "待补充";
   const statisticalObject = result.statisticalObject?.trim() || "待补充";
@@ -45,7 +43,7 @@ export function ResultDetailPage() {
     permissionRules: state.permissionRules,
   });
   const canCreateFeedback = canCreateFeedbackForResult(objective, currentUser, result);
-  const qualityChecks = buildResultQualityChecks({ feedback, objective, result, tasks });
+  const qualityChecks = buildResultQualityChecks({ feedback, objective, result });
 
   return (
     <PageScaffold
@@ -80,12 +78,6 @@ export function ResultDetailPage() {
                 <EmptyPanel label="暂无趋势数据。" />
               )}
             </div>
-          </Card>
-
-          <Card className="overflow-hidden">
-            <div className="border-b orf-border p-4 text-sm font-semibold orf-text-primary">关联行动项</div>
-            {tasks.map((task) => <TaskRow key={task.id} task={task} resultTitle={result.title} onStatusChange={(status: TaskStatus) => updateTaskStatus(task.id, status)} />)}
-            {tasks.length === 0 && <div className="p-4"><EmptyPanel label="暂无关联行动项。" /></div>}
           </Card>
 
           <Card className="orf-card-padding">

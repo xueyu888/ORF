@@ -19,6 +19,8 @@ const oryPoolParams = [
   ["max_conn_lifetime", "ORY_DATABASE_POOL_CONN_LIFETIME", "30m"],
 ] as const;
 
+const trimSlash = (value: string) => value.replace(/\/+$/, "");
+
 function databaseUrlFromEnv() {
   const databaseUrl = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
   if (!databaseUrl) {
@@ -62,6 +64,52 @@ function applyOryPoolParams(url: URL) {
   }
 }
 
+function envLine(name: string, value: string) {
+  if (value.includes("\n") || value.includes("\r")) {
+    throw new Error(`Invalid newline in ${name}`);
+  }
+  return `${name}=${value}`;
+}
+
+function appendOryRuntimeEnv(lines: string[]) {
+  const publicBaseUrl = trimSlash(process.env.ORY_KRATOS_PUBLIC_BASE_URL ?? process.env.ORY_PUBLIC_URL ?? "http://127.0.0.1:4433");
+  const appUrl = trimSlash(process.env.ORY_KRATOS_UI_URL ?? process.env.ORF_APP_URL ?? "http://127.0.0.1:5173");
+  const corsOrigins = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    ...(process.env.ORY_KRATOS_CORS_ORIGINS ?? process.env.CORS_ORIGIN ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+  ].filter((origin, index, origins) => origins.indexOf(origin) === index);
+  const cookieSecret = process.env.ORY_COOKIE_SECRET;
+  const cipherSecret = process.env.ORY_CIPHER_SECRET;
+
+  lines.push(envLine("SERVE_PUBLIC_BASE_URL", `${publicBaseUrl}/`));
+  lines.push(envLine("SERVE_ADMIN_BASE_URL", "http://127.0.0.1:4434/"));
+  lines.push(envLine("SELFSERVICE_DEFAULT_BROWSER_RETURN_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_ALLOWED_RETURN_URLS_0", appUrl));
+  lines.push(envLine("SELFSERVICE_FLOWS_ERROR_UI_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_FLOWS_SETTINGS_UI_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_FLOWS_RECOVERY_UI_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_FLOWS_VERIFICATION_UI_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_FLOWS_VERIFICATION_AFTER_DEFAULT_BROWSER_RETURN_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_FLOWS_LOGOUT_AFTER_DEFAULT_BROWSER_RETURN_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_FLOWS_LOGIN_UI_URL", `${appUrl}/auth`));
+  lines.push(envLine("SELFSERVICE_FLOWS_REGISTRATION_UI_URL", `${appUrl}/auth`));
+
+  corsOrigins.forEach((origin, index) => {
+    lines.push(envLine(`SERVE_PUBLIC_CORS_ALLOWED_ORIGINS_${index}`, origin));
+  });
+
+  if (cookieSecret) {
+    lines.push(envLine("SECRETS_COOKIE_0", cookieSecret));
+  }
+  if (cipherSecret) {
+    lines.push(envLine("SECRETS_CIPHER_0", cipherSecret));
+  }
+}
+
 async function main() {
   const databaseUrl = databaseUrlFromEnv();
   const url = new URL(databaseUrl);
@@ -88,7 +136,9 @@ async function main() {
   }
 
   applyOryPoolParams(url);
-  fs.writeFileSync(outputFile, `DSN=${url.toString()}\n`);
+  const lines = [envLine("DSN", url.toString())];
+  appendOryRuntimeEnv(lines);
+  fs.writeFileSync(outputFile, `${lines.join("\n")}\n`);
   fs.chmodSync(outputFile, 0o600);
 
   console.log(`Prepared Ory database environment at ${outputFile}`);

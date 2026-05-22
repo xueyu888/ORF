@@ -113,14 +113,16 @@ function challengeGroups(): ObjectiveNode[] {
   return [
     group(
       objective({ id: "obj-alpha", title: "Alpha Objective", resultIds: ["res-alpha"], taskIds: ["task-alpha"] }),
-      bounty(result({ id: "res-alpha", objectiveId: "obj-alpha", title: "Alpha Metric" }), [alphaTask]),
+      [alphaTask],
+      bounty(result({ id: "res-alpha", objectiveId: "obj-alpha", title: "Alpha Metric" })),
     ),
     group(objective({ id: "obj-beta", title: "Beta Objective" })),
   ];
 }
 
-function group(objectiveItem: Objective, ...bounties: BountyNode[]): ObjectiveNode {
+function group(objectiveItem: Objective, actions: Task[] = [], ...bounties: BountyNode[]): ObjectiveNode {
   return {
+    actions,
     objective: objectiveItem,
     bounties,
     challengers: [],
@@ -128,10 +130,8 @@ function group(objectiveItem: Objective, ...bounties: BountyNode[]): ObjectiveNo
   };
 }
 
-function bounty(resultItem: Result, actions: Task[] = []): BountyNode {
+function bounty(resultItem: Result): BountyNode {
   return {
-    actions,
-    deadline: date,
     difficulty: "3 星",
     progress: 25,
     result: resultItem,

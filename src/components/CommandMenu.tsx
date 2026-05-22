@@ -2,7 +2,9 @@ import { Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { canShowFrontendPath } from "../config/frontendVisibility";
-import { quickPages } from "../config/navigation";
+import { quickCommands } from "../config/navigation";
+import { hasPermission } from "../config/permissions";
+import type { PermissionKey } from "../config/permissions";
 import {
   filterFeedbackForVisibleObjectives,
   filterResultsForVisibleObjectives,
@@ -26,15 +28,23 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
     const visibleResults = filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser);
     const visibleTasks = filterTasksForVisibleObjectives(state.tasks, visibleObjectiveIds, currentUser);
     const visibleFeedback = filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser);
-    const pageItems = quickPages
-      .filter((item) => canShowFrontendPath(currentUser, item.path))
-      .map((item) => ({ label: item.label, path: item.path, type: "Page" }));
+    const commandItems = quickCommands
+      .filter((item) =>
+        item.kind === "action"
+          ? hasPermission(currentUser, state.permissionRules, item.permission as PermissionKey)
+          : canShowFrontendPath(currentUser, item.path),
+      )
+      .map((item) =>
+        item.kind === "action"
+          ? { label: item.label, action: item.action, type: "Action" as const }
+          : { label: item.label, path: item.path, type: "Page" as const },
+      );
     const objectiveItems = visibleObjectives.map((item) => ({ label: item.title, path: `/objectives/${item.id}`, type: "Objective" }));
     const resultItems = visibleResults.map((item) => ({ label: item.title, path: `/objectives/${item.objectiveId}/results/${item.id}`, type: "Result" }));
     const taskItems = visibleTasks.map((item) => ({ label: `${item.id} ${item.title}`, path: "/tasks", type: "Task" }));
     const feedbackItems = visibleFeedback.map((item) => ({ label: item.phenomenon, path: `/feedback/${item.id}`, type: "Feedback" }));
 
-    return [...pageItems, ...objectiveItems, ...resultItems, ...taskItems, ...feedbackItems].filter((item) =>
+    return [...commandItems, ...objectiveItems, ...resultItems, ...taskItems, ...feedbackItems].filter((item) =>
       `${item.label} ${item.type}`.toLowerCase().includes(query.toLowerCase()),
     );
   }, [currentUser, query, state]);
@@ -56,9 +66,13 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
         <div className="max-h-[420px] overflow-auto p-2">
           {items.slice(0, 16).map((item) => (
             <button
-              key={`${item.type}-${item.path}-${item.label}`}
+              key={`${item.type}-${"path" in item ? item.path : item.action}-${item.label}`}
               onClick={() => {
-                navigate(item.path);
+                if ("action" in item) {
+                  if (item.action === "createObjective") navigate("/tasks?create=objective");
+                } else {
+                  navigate(item.path);
+                }
                 onClose();
               }}
               className="orf-hover-muted flex w-full items-center justify-between rounded-md px-3 py-2 text-left"

@@ -1,0 +1,63 @@
+services:
+  minio:
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:latest}
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-orf-dev-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-orf-dev-minio-secret}
+    ports:
+      - "127.0.0.1:${MINIO_API_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-quay.io/minio/mc:latest}
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-orf-dev-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-orf-dev-minio-secret}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-orf-comment-attachments}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:-orf-dev-minio}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:-orf-dev-minio-secret}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          sleep 1
+        done
+        mc mb --ignore-existing "local/$${OBJECT_STORAGE_BUCKET}"
+        mc anonymous set none "local/$${OBJECT_STORAGE_BUCKET}"
+        cat >/tmp/orf-app-policy.json <<EOF
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:ListBucket"],
+              "Resource": ["arn:aws:s3:::$${OBJECT_STORAGE_BUCKET}"]
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+              "Resource": ["arn:aws:s3:::$${OBJECT_STORAGE_BUCKET}/*"]
+            }
+          ]
+        }
+        EOF
+        if [ "$${OBJECT_STORAGE_ACCESS_KEY}" != "$${MINIO_ROOT_USER}" ]; then
+          mc admin user add local "$${OBJECT_STORAGE_ACCESS_KEY}" "$${OBJECT_STORAGE_SECRET_KEY}" || true
+          mc admin policy create local orf-comment-attachments-rw /tmp/orf-app-policy.json || true
+          mc admin policy attach local orf-comment-attachments-rw --user "$${OBJECT_STORAGE_ACCESS_KEY}"
+        fi
+
+volumes:
+  minio-data:

@@ -14,7 +14,7 @@ export class RealScenarioDsl {
 
   async openTasks(page: Page) {
     await page.goto("/tasks");
-    await expect(page.getByRole("heading", { name: "挑战" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "我的挑战" })).toBeVisible();
   }
 
   async openReports(page: Page) {
@@ -25,14 +25,11 @@ export class RealScenarioDsl {
   async createCandidateObjective(page: Page, title: string, options: { cycle?: string; finalDueAt?: string } = {}) {
     await this.openTasks(page);
     await page.getByRole("button", { name: "新建目标" }).click();
-    const dialog = page.getByRole("dialog", { name: "新建目标" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel("目标标题").fill(title);
-    await dialog.getByLabel("为什么重要").fill(`${title} 需要真实系统联调验证。`);
-    await dialog.getByRole("textbox", { name: "周期" }).fill(options.cycle ?? "2999 Q4");
-    await dialog.getByLabel("最终截止时间").fill(options.finalDueAt ?? realFutureDueDate);
-    await dialog.getByLabel("边界 / 不做什么").fill("只验证 ORF 流程，不改开发代码。");
-    await dialog.getByRole("button", { name: "保存目标" }).click();
+    const titleInput = page.getByLabel("编辑目标标题");
+    await expect(titleInput).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "新建目标" })).toHaveCount(0);
+    await titleInput.fill(title);
+    await titleInput.press("Enter");
     await expect(objectivePanel(page, title)).toBeVisible();
     return this.real.objectiveIdByTitle(title);
   }
@@ -115,10 +112,6 @@ export class RealScenarioDsl {
     await row.getByRole("button", { name: "接受挑战" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "接受挑战" }).click();
     await expect(page).toHaveURL(/\/tasks$/);
-  }
-
-  async declineRecruitment(user: RealUser, objectiveId: string) {
-    return this.real.apiAs(user, `/api/objectives/${encodeURIComponent(objectiveId)}/challenge/decline`, { method: "PATCH" });
   }
 
   async proposeMetric(page: Page, title: string, metricTitle: string, metricName = "挑战者校准达成率") {
