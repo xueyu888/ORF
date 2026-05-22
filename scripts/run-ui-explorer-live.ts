@@ -31,12 +31,22 @@ async function main() {
   });
   await liveReporter.initialize();
   const reportServer = await serveReport(runDir, positiveInt(process.env.UI_EXPLORER_LIVE_PORT, 5681));
-  console.log(`[ui-explorer:live] report: ${reportServer.url}/report.html`);
+  const reportUrl = `${reportServer.url}/report.html`;
+  console.log(`[ui-explorer:live] report: ${reportUrl}`);
+  if (shouldOpenLiveReport()) {
+    openUrl(reportUrl);
+    console.log("[ui-explorer:live] opened live report page.");
+  }
   console.log(`[ui-explorer:live] artifacts: ${runDir}`);
   console.log("[ui-explorer:live] press Ctrl+C to stop and flush the latest result.");
 
   await loadStateAbstractorRegistration(process.env.UI_EXPLORER_STATE_ABSTRACTOR_MODULE);
-  const browser = await chromium.launch({ headless: process.env.UI_EXPLORER_HEADLESS !== "0" });
+  const showTestBrowser = process.env.UI_EXPLORER_SHOW_TEST_BROWSER === "1";
+  if (process.env.UI_EXPLORER_HEADLESS === "0" && !showTestBrowser) {
+    console.log("[ui-explorer:live] UI_EXPLORER_HEADLESS=0 is ignored; set UI_EXPLORER_SHOW_TEST_BROWSER=1 to debug the test browser.");
+  }
+  console.log(`[ui-explorer:live] test browser: ${showTestBrowser ? "visible" : "headless"}`);
+  const browser = await chromium.launch({ headless: !showTestBrowser });
   const context = await browser.newContext({ baseURL: config.baseURL });
   await context.addInitScript(() => {
     (globalThis as typeof globalThis & { __name?: <T>(value: T) => T }).__name = (value) => value;
@@ -181,6 +191,35 @@ function stopChild(child: ChildProcess, detached: boolean) {
     }
   } catch {
     // The server may already have exited.
+  }
+}
+
+function shouldOpenLiveReport() {
+  return process.env.UI_EXPLORER_LIVE_OPEN_REPORT !== "0" && process.env.CI !== "1" && process.env.CI !== "true";
+}
+
+function openUrl(url: string) {
+  const candidates =
+    process.platform === "win32"
+      ? [{ command: "cmd", args: ["/c", "start", "", url] }]
+      : process.platform === "darwin"
+        ? [{ command: "open", args: [url] }]
+        : process.env.WSL_DISTRO_NAME
+          ? [
+              { command: "explorer.exe", args: [url] },
+              { command: "xdg-open", args: [url] },
+            ]
+          : [{ command: "xdg-open", args: [url] }];
+
+  for (const candidate of candidates) {
+    try {
+      const child = spawn(candidate.command, candidate.args, { detached: true, stdio: "ignore" });
+      child.on("error", () => undefined);
+      child.unref();
+      return;
+    } catch {
+      // Try the next platform opener.
+    }
   }
 }
 

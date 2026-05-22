@@ -1,6 +1,6 @@
 import { payloadKinds } from "./payloads";
 import { shortHash, stableStringify } from "./stableHash";
-import type { EventParams, PayloadKind, UiEvent, UiOperation, UiTarget } from "./types";
+import type { EventParams, PayloadKind, TargetAction, UiEvent, UiOperation, UiTarget } from "./types";
 
 const pastePayloadKinds = new Set<PayloadKind>([
   "emojiText",
@@ -15,6 +15,10 @@ export function generateInteractionEvents(targets: UiTarget[]): UiEvent[] {
 }
 
 export function eventsForTarget(target: UiTarget): UiEvent[] {
+  if (target.actions?.length) {
+    return eventsForInferredActions(target, target.actions);
+  }
+
   const events: UiEvent[] = [];
 
   if (target.capabilities.includes("focus")) {
@@ -61,6 +65,52 @@ export function eventsForTarget(target: UiTarget): UiEvent[] {
   return events;
 }
 
+function eventsForInferredActions(target: UiTarget, actions: TargetAction[]) {
+  const events: UiEvent[] = [];
+
+  for (const action of actions) {
+    switch (action.type) {
+      case "click":
+      case "toggle":
+        events.push(createUiEvent("click", target, { button: "left" }));
+        break;
+      case "pressEnter":
+        events.push(createUiEvent("pressKey", target, { key: "Enter" }));
+        break;
+      case "pressSpace":
+        events.push(createUiEvent("pressKey", target, { key: "Space" }));
+        break;
+      case "focus":
+        events.push(createUiEvent("focus", target));
+        break;
+      case "typeText":
+        for (const payloadKind of payloadKinds) {
+          events.push(createUiEvent("insertText", target, { payloadKind }));
+          if (pastePayloadKinds.has(payloadKind)) {
+            events.push(createUiEvent("pasteText", target, { payloadKind }));
+          }
+        }
+        break;
+      case "clearText":
+        events.push(createUiEvent("clear", target));
+        break;
+      case "selectOption":
+        events.push(createUiEvent("selectOption", target, { optionBucket: "first" }));
+        events.push(createUiEvent("selectOption", target, { optionBucket: "next" }));
+        events.push(createUiEvent("selectOption", target, { optionBucket: "last" }));
+        break;
+      case "hover":
+        events.push(createUiEvent("hover", target));
+        break;
+      case "blur":
+      case "scrollIntoView":
+        break;
+    }
+  }
+
+  return dedupeEvents(events);
+}
+
 export function pageLevelEvents(): UiEvent[] {
   const events: UiEvent[] = [];
   for (const pointBucket of ["center", "top-left", "top-right", "bottom-left", "bottom-right"]) {
@@ -82,7 +132,11 @@ export function createUiEvent(operation: UiOperation, target?: UiTarget, params:
     params,
   };
   const signature = `${operation}:${shortHash(stableStringify(signatureSource))}`;
-  return { operation, target, params, signature };
+  const event: UiEvent = { operation, target, params, signature };
+  if (target?.confidence !== undefined) {
+    event.confidence = target.confidence;
+  }
+  return event;
 }
 
 export function dedupeEvents(events: UiEvent[]) {

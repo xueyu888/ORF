@@ -28,6 +28,8 @@ export class CoverageGuidedRandomStrategy {
 
   weightEvent(state: NormalizedState, event: UiEvent, graph: CoverageGraph) {
     const base = baseWeight(event.operation);
+    const confidence = getCandidateConfidence(event);
+    const confidenceFactor = confidenceToFactor(confidence);
     const stateNode = graph.getStateNode(state.id);
     const candidate = graph.getCandidateRecord(state.id, event.signature);
     const operationStats = graph.getOperationStats(event.operation);
@@ -50,6 +52,7 @@ export class CoverageGuidedRandomStrategy {
     return Math.max(
       0.01,
       base *
+        confidenceFactor *
         untestedFactor *
         frontierFactor *
         targetFactor *
@@ -73,6 +76,23 @@ export class EventScheduler extends CoverageGuidedRandomStrategy {}
 
 function targetOperationKey(event: UiEvent) {
   return `${event.operation}:${event.target?.signature ?? "page"}`;
+}
+
+export function getCandidateConfidence(event: UiEvent) {
+  const raw = event.confidence ?? event.target?.confidence ?? event.targetConfidence ?? 1;
+  return clamp(Number.isFinite(raw) ? raw : 1, 0, 1);
+}
+
+export function confidenceToFactor(confidence: number) {
+  const c = clamp(confidence, 0, 1);
+  return 0.25 + 0.75 * c;
+}
+
+function clamp(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, value));
 }
 
 function baseWeight(operation: UiOperation) {
