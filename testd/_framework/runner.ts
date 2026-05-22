@@ -108,7 +108,7 @@ export async function runStateCase<
   }
 
   async function runStep(stage: StateCaseRunStageName, step: StepSpec) {
-    await test.step(`${step.id}: ${step.title}`, async () => {
+    await test.step(formatStepTitle(step), async () => {
       const operator = options.operators[step.object]?.[step.operator];
       if (!operator) {
         throw new Error(`未注册测试算子: ${formatStepOperator(step)}`);
@@ -131,6 +131,11 @@ export async function runStateCase<
       }
     });
   }
+}
+
+function formatStepTitle(step: StepSpec) {
+  const source = step.source ? `[${step.source.caseStepId}][${step.source.method}] ` : "";
+  return `${source}${step.id}: ${step.title}`;
 }
 
 function formatStepOperator(step: StepSpec) {

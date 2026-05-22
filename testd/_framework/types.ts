@@ -8,9 +8,17 @@ export type StateCaseRunStageName = StateCaseStageName | "B after Clean";
 
 export type StepParams = Record<string, unknown>;
 
+export type StepExecutionMethod = "playwright" | "api" | "prisma" | "mock";
+
+export type StepSource = {
+  caseStepId: string;
+  method: StepExecutionMethod;
+};
+
 export type StepSpec<TParams extends StepParams = StepParams> = {
   id: string;
   title: string;
+  source?: StepSource;
   object: string;
   operator: string;
   params?: TParams;

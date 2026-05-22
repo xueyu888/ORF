@@ -10,52 +10,52 @@
 ## 2. 状态模型
 
 - B：测试开始前和 Clean 后都必须满足的基准状态，用于确认基础环境可用且测试没有留下登录态。
-  - [api] 前端和后端服务已正常启动，健康检查或等价探测通过。
-  - [prisma] ORF 数据库连接正常，schema 已迁移到当前测试版本。
-  - [api] Ory/Kratos 服务可访问，Admin/Public API 对测试环境可用。
-  - [api] `/api/auth/session` 返回 `authenticated: false`。
-  - [playwright] 当前浏览器上下文不存在 `orf_ory_session` cookie。
-  - [playwright] localStorage/sessionStorage 不包含登录态。
-  - [playwright] 访问受保护入口 `/bounties` 会回到 `/auth`。
+  - [B-1] [api] 前端和后端服务已正常启动，健康检查或等价探测通过。
+  - [B-2] [prisma] ORF 数据库连接正常，schema 已迁移到当前测试版本。
+  - [B-3] [api] Ory/Kratos 服务可访问，Admin/Public API 对测试环境可用。
+  - [B-4] [api] `/api/auth/session` 返回 `authenticated: false`。
+  - [B-5] [playwright] 当前浏览器上下文不存在 `orf_ory_session` cookie。
+  - [B-6] [playwright] localStorage/sessionStorage 不包含登录态。
+  - [B-7] [playwright] 访问受保护入口 `/bounties` 会回到 `/auth`。
 
 - Setup：如何从 B 构造 S0？
-  - [api] 使用测试 helper 或 Ory Admin API upsert 测试身份，并设置固定测试密码。
-  - [prisma] 使用数据库 helper upsert ORF 测试用户和 `team_members` 记录，角色设置为 `member`。
-  - [prisma] 记录测试用户登录前需要恢复的字段，例如 `last_online_at`。
-  - [api] 若测试身份为本用例独占身份，清理该身份已有 Ory session。
-  - [playwright] 创建全新的浏览器上下文，或清空当前上下文的 cookies/localStorage/sessionStorage。
-  - [playwright] 打开 `/auth`。
+  - [Setup-1] [api] 使用测试 helper 或 Ory Admin API upsert 测试身份，并设置固定测试密码。
+  - [Setup-2] [prisma] 使用数据库 helper upsert ORF 测试用户和 `team_members` 记录，角色设置为 `member`。
+  - [Setup-3] [prisma] 记录测试用户登录前需要恢复的字段，例如 `last_online_at`。
+  - [Setup-4] [api] 若测试身份为本用例独占身份，清理该身份已有 Ory session。
+  - [Setup-5] [playwright] 创建全新的浏览器上下文，或清空当前上下文的 cookies/localStorage/sessionStorage。
+  - [Setup-6] [playwright] 打开 `/auth`。
 
 - S0：Action 前必须满足什么条件？用于确认 Setup 成功。
-  - [playwright] `page` URL 为 `/auth`。
-  - [playwright] `page.getByRole("heading", { name: "Sign in" })` 可见。
-  - [playwright] `page.getByLabel("Email")` 可见且值为空。
-  - [playwright] `page.getByLabel("Password", { exact: true })` 可见且值为空。
-  - [playwright] `page.getByRole("button", { name: "Sign In" })` 可见且可点击。
-  - [api] `/api/auth/session` 返回 `authenticated: false`。
-  - [playwright] 浏览器上下文 cookies 中不存在 `orf_ory_session`。
-  - [api] Ory/Kratos 测试身份存在。
-  - [prisma] ORF 用户和 `member` 成员关系存在。
+  - [S0-1] [playwright] `page` URL 为 `/auth`。
+  - [S0-2] [playwright] `page.getByRole("heading", { name: "Sign in" })` 可见。
+  - [S0-3] [playwright] `page.getByLabel("Email")` 可见且值为空。
+  - [S0-4] [playwright] `page.getByLabel("Password", { exact: true })` 可见且值为空。
+  - [S0-5] [playwright] `page.getByRole("button", { name: "Sign In" })` 可见且可点击。
+  - [S0-6] [api] `/api/auth/session` 返回 `authenticated: false`。
+  - [S0-7] [playwright] 浏览器上下文 cookies 中不存在 `orf_ory_session`。
+  - [S0-8] [api] Ory/Kratos 测试身份存在。
+  - [S0-9] [prisma] ORF 用户和 `member` 成员关系存在。
 
 - Action：本次测试唯一要验证的业务动作是什么？
-  - [playwright] 按业务语义定位 `Email` 输入框，输入测试邮箱。
-  - [playwright] 按业务语义精确定位 `Password` 输入框，输入测试密码。
-  - [playwright] 点击 `Sign In` 按钮提交登录表单。
+  - [Action-1] [playwright] 按业务语义定位 `Email` 输入框，输入测试邮箱。
+  - [Action-2] [playwright] 按业务语义精确定位 `Password` 输入框，输入测试密码。
+  - [Action-3] [playwright] 点击 `Sign In` 按钮提交登录表单。
 
 - S1：Action 后系统应该变成什么状态？用于确认业务动作正确。
-  - [api] `POST /api/auth/login` 响应成功；测试实现应在点击 `Sign In` 前注册响应捕获，避免错过点击后立即发出的请求。
-  - [playwright] `page` URL 为 `/bounties`。
-  - [playwright] 浏览器上下文 cookies 中存在 `orf_ory_session`。
-  - [api] `/api/auth/session` 返回 `authenticated: true`，且用户邮箱和角色符合测试数据。
-  - [playwright] `page.getByLabel("主导航")` 可见。
-  - [playwright] `page.getByLabel("当前用户")` 可见。
-  - [playwright] `page.getByRole("button", { name: "退出登录" })` 可见。
-  - [playwright] `page.getByRole("button", { name: "Sign In" })` 不再作为当前页面主要操作出现。
-  - [prisma] ORF 测试用户和 `member` 成员关系仍然存在。
+  - [S1-1] [api] `POST /api/auth/login` 响应成功；测试实现应在点击 `Sign In` 前注册响应捕获，避免错过点击后立即发出的请求。
+  - [S1-2] [playwright] `page` URL 为 `/bounties`。
+  - [S1-3] [playwright] 浏览器上下文 cookies 中存在 `orf_ory_session`。
+  - [S1-4] [api] `/api/auth/session` 返回 `authenticated: true`，且用户邮箱和角色符合测试数据。
+  - [S1-5] [playwright] `page.getByLabel("主导航")` 可见。
+  - [S1-6] [playwright] `page.getByLabel("当前用户")` 可见。
+  - [S1-7] [playwright] `page.getByRole("button", { name: "退出登录" })` 可见。
+  - [S1-8] [playwright] `page.getByRole("button", { name: "Sign In" })` 不再作为当前页面主要操作出现。
+  - [S1-9] [prisma] ORF 测试用户和 `member` 成员关系仍然存在。
 
 - Clean：如何清理并恢复到 B？
-  - [api] 在当前浏览器上下文中调用 `/api/auth/logout`，撤销本次登录产生的 Ory session。
-  - [playwright] 清空当前浏览器上下文的 cookies/localStorage/sessionStorage。
-  - [prisma] 如本用例修改了 `last_online_at` 等非基准字段，将其恢复为 Setup 前记录的值。
-  - [api] 若测试 Ory 身份由本用例临时创建，则删除该身份；若属于共享测试身份，则保留。
-  - [prisma] 若 ORF 测试用户和 `member` 成员关系由本用例临时创建，则删除；若属于预置测试账号，则保留。
+  - [Clean-1] [api] 在当前浏览器上下文中调用 `/api/auth/logout`，撤销本次登录产生的 Ory session。
+  - [Clean-2] [playwright] 清空当前浏览器上下文的 cookies/localStorage/sessionStorage。
+  - [Clean-3] [prisma] 如本用例修改了 `last_online_at` 等非基准字段，将其恢复为 Setup 前记录的值。
+  - [Clean-4] [api] 若测试 Ory 身份由本用例临时创建，则删除该身份；若属于共享测试身份，则保留。
+  - [Clean-5] [prisma] 若 ORF 测试用户和 `member` 成员关系由本用例临时创建，则删除；若属于预置测试账号，则保留。
