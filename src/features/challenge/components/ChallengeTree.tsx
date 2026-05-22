@@ -17,6 +17,7 @@ import {
   handleRowDragLeave,
   handleRowDragOver,
   handleRowDrop,
+  objectiveActionsDropTargetForEvent,
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
@@ -38,12 +39,13 @@ type RowHandlers = {
   canMutateMetrics: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
+  draftObjectiveId?: string;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
   onActiveActionChange: (id: string | null) => void;
-  onAddAction: (bounty: Result) => void;
+  onAddAction: (objectiveId: string) => void;
   onAddBounty: (objectiveId: string) => void;
   onAddSubAction: (actionId: string, afterItemId?: string) => void;
   onApproveApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
@@ -54,7 +56,7 @@ type RowHandlers = {
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
-  onSaveTitle: (target: ChallengeTarget, title: string) => void;
+  onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
   onToggleBounty: (bountyId: string) => void;
@@ -108,6 +110,7 @@ function ObjectivePanel({
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const hasOpenRowMenu = objectivePanelHasOpenRowMenu(group, handlers.openActionId);
+  const isDraftObjective = group.objective.id === handlers.draftObjectiveId;
   const isFrozen = shouldRenderObjectiveAsFrozen(group.objective);
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const workbenchAction = workbenchActionForObjective({
@@ -119,14 +122,15 @@ function ObjectivePanel({
     handlers.canManageFlow &&
     canReviewObjectiveChallengeApplications(group.objective) &&
     pendingApplications.length > 0;
-  const layoutKey = group.bounties
-    .map((bounty) => {
-      if (handlers.collapsedBountyIds.has(bounty.result.id)) return `${bounty.result.id}:closed`;
-      return `${bounty.result.id}:${bounty.actions
-        .map((action) => (handlers.collapsedActionIds.has(action.id) ? `${action.id}:closed` : `${action.id}:${action.checklist.map((item) => item.id).join(",")}`))
-        .join("|")}`;
-    })
-    .join(";");
+  const layoutKey = [
+    ...group.bounties.map((bounty) => bounty.result.id),
+    ...group.actions.map((action) => (handlers.collapsedActionIds.has(action.id) ? `${action.id}:closed` : `${action.id}:${action.checklist.map((item) => item.id).join(",")}`)),
+  ].join(";");
+  const metricAddLabel = isDraftObjective ? null : handlers.metricActionLabel(group.objective);
+  const objectiveAddActions = [
+    ...(metricAddLabel ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
+    ...(isDraftObjective || !handlers.canMutateWorkItems(group.objective.id) ? [] : [{ label: "新增行动项", onAdd: () => handlers.onAddAction(group.objective.id) }]),
+  ];
 
   return (
     <section
@@ -148,7 +152,7 @@ function ObjectivePanel({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel={handlers.metricActionLabel(group.objective)}
+          addActions={objectiveAddActions}
           left={rowActionLeft.objective}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -170,9 +174,9 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
-        <ObjectiveFlowAction group={group} handlers={handlers} />
+        {isDraftObjective ? <EmptySlot /> : <ObjectiveFlowAction group={group} handlers={handlers} />}
         <AvatarStack names={group.challengers} />
-        <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
+        {isDraftObjective ? <StatusChip tone="open">草稿</StatusChip> : <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>}
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
@@ -212,6 +216,26 @@ function ObjectivePanel({
           />
         ))}
         {group.bounties.length === 0 && <ObjectiveMetricEmptyState parentAnchorId={anchorId} />}
+        {group.actions.length > 0 ? (
+          <div className="pb-2">
+            {group.actions.map((action) => (
+              <ActionRow
+                key={action.id}
+                action={action}
+                handlers={handlers}
+                parentAnchorId={anchorId}
+              />
+            ))}
+          </div>
+        ) : (
+          <ObjectiveTaskEmptyState
+            canAdd={handlers.canMutateWorkItems(group.objective.id)}
+            dragDrop={handlers.dragDrop}
+            objectiveId={group.objective.id}
+            onAdd={() => handlers.onAddAction(group.objective.id)}
+            parentAnchorId={anchorId}
+          />
+        )}
       </div>
     </section>
   );
@@ -221,14 +245,61 @@ function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string
   if (!openActionId) return false;
   if (openActionId === `objective:${group.objective.id}`) return true;
 
-  return group.bounties.some((bounty) => {
-    if (openActionId === `bounty:${bounty.result.id}`) return true;
+  if (group.bounties.some((bounty) => openActionId === `bounty:${bounty.result.id}`)) {
+    return true;
+  }
 
-    return bounty.actions.some((action) => {
-      if (openActionId === `action:${action.id}`) return true;
-      return action.checklist.some((item) => openActionId === `subAction:${action.id}:${item.id}`);
-    });
+  return group.actions.some((action) => {
+    if (openActionId === `action:${action.id}`) return true;
+    return action.checklist.some((item) => openActionId === `subAction:${action.id}:${item.id}`);
   });
+}
+
+function ObjectiveTaskEmptyState({
+  canAdd,
+  dragDrop,
+  objectiveId,
+  onAdd,
+  parentAnchorId,
+}: {
+  canAdd: boolean;
+  dragDrop: DragDropController;
+  objectiveId: string;
+  onAdd: () => void;
+  parentAnchorId: string;
+}) {
+  const dropTarget = objectiveActionsDropTargetForEvent(dragDrop.dragItem, objectiveId);
+  const dropClass = dropTargetClass(dragDrop.dropTarget, [{ type: "objectiveActions", objectiveId }]);
+
+  return (
+    <div
+      className={clsx("orf-objective-metric-empty", dropClass)}
+      onDragLeave={(event) => handleRowDragLeave(event, dragDrop)}
+      onDragOver={(event) => handleRowDragOver(event, dragDrop, dropTarget)}
+      onDrop={(event) => handleRowDrop(event, dragDrop, dropTarget)}
+    >
+      <HierarchyCell depth={1}>
+        <span
+          className="flex h-5 w-5 shrink-0 items-center justify-center"
+          data-hierarchy-anchor={`empty-task:${parentAnchorId}`}
+          data-hierarchy-branch-end-offset="0"
+          data-hierarchy-branch-target={`empty-task:${parentAnchorId}`}
+          data-hierarchy-parent={parentAnchorId}
+        >
+          <CompletionCircleIcon checked={false} />
+        </span>
+        <div className="grid min-w-0 gap-1">
+          <div className="text-base font-semibold text-[#475467]">待创建行动项</div>
+          <div className="text-xs orf-text-muted">当前目标还没有技术任务。</div>
+        </div>
+        {canAdd && (
+          <button type="button" className="ml-auto text-sm font-semibold text-[#0d7df2] hover:underline" onClick={onAdd}>
+            新增行动项
+          </button>
+        )}
+      </HierarchyCell>
+    </div>
+  );
 }
 
 function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string }) {
@@ -305,14 +376,12 @@ function BountyRow({
   scope: ChallengeScope;
 }) {
   const target: ChallengeTarget = { type: "bounty", id: bounty.result.id, title: bounty.result.title, objectiveId: bounty.result.objectiveId };
-  const open = !handlers.collapsedBountyIds.has(bounty.result.id);
   const complete = bounty.status === "settled";
   const anchorId = `bounty:${bounty.result.id}`;
   const actionId = `bounty:${bounty.result.id}`;
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const dropClass = dropTargetClass(handlers.dragDrop.dropTarget, [
     { type: "bounty", bountyId: bounty.result.id },
-    { type: "bountyActions", bountyId: bounty.result.id },
   ]);
   return (
     <div className="relative">
@@ -336,31 +405,16 @@ function BountyRow({
         <ChallengeRowActions
           actionId={actionId}
           activeActionId={handlers.activeActionId}
-          addLabel={handlers.canMutateWorkItems(bounty.result.objectiveId) ? "新增行动项" : null}
           dragItem={handlers.canMutateMetrics(bounty.result.objectiveId) ? { type: "bounty", id: bounty.result.id, objectiveId: bounty.result.objectiveId } : undefined}
           left={rowActionLeft.bounty}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
-          onAdd={() => handlers.onAddAction(bounty.result)}
+          onAdd={() => undefined}
           onDragEnd={handlers.dragDrop.onDragEnd}
           onDragStart={handlers.dragDrop.onDragStart}
           onOpenActionChange={handlers.onOpenActionChange}
           openActionId={handlers.openActionId}
         />
-        {bounty.actions.length > 0 && (
-          <DisclosureAction
-            actionId={actionId}
-            activeActionId={handlers.activeActionId}
-            className="absolute top-1/2 -translate-y-1/2"
-            expanded={open}
-            label={open ? "折叠指标" : "展开指标"}
-            left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1]}
-            onActiveActionChange={handlers.onActiveActionChange}
-            onOpenActionChange={handlers.onOpenActionChange}
-            onToggle={() => handlers.onToggleBounty(bounty.result.id)}
-            openActionId={handlers.openActionId}
-          />
-        )}
         <HierarchyCell depth={1}>
           <span
             className="flex h-7 w-7 shrink-0 items-center justify-center"
@@ -387,24 +441,11 @@ function BountyRow({
         <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div>
         <EmptySlot />
         <StatusChip tone={bounty.status}>{bountyStatusLabel[bounty.status]}</StatusChip>
-        <TimeValue icon={Clock3} value={remainingTime(bounty.deadline, now)} />
-        <DateStack primary={bounty.deadline || "未设置"} secondary={bounty.updatedAt || "未设置"} />
+        <EmptySlot />
+        <DateStack primary={bounty.updatedAt || "未设置"} />
         <ProgressValue value={bounty.progress} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
-
-      {open && bounty.actions.length > 0 && (
-        <div className="pb-2">
-          {bounty.actions.map((action) => (
-            <ActionRow
-              key={action.id}
-              action={action}
-              handlers={handlers}
-              parentAnchorId={anchorId}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -422,7 +463,6 @@ function ActionRow({
     type: "action",
     id: action.id,
     title: action.title,
-    bountyId: action.linkedResultId,
     objectiveId: action.linkedObjectiveId,
     hasSubActions: action.checklist.length > 0,
   };
@@ -441,7 +481,7 @@ function ActionRow({
     <div className="relative">
       <div
         className={clsx(
-          "orf-task-row orf-challenge-row orf-challenge-row-action orf-row-depth-2 group relative grid min-h-[42px] items-center px-5 text-sm",
+          "orf-task-row orf-challenge-row orf-challenge-row-action orf-row-depth-1 group relative grid min-h-[42px] items-center px-5 text-sm",
           rowActive && "orf-row-active",
           handlers.dragDrop.dragItem?.type === "action" && handlers.dragDrop.dragItem.id === action.id && "orf-row-dragging",
           dropClass,
@@ -459,7 +499,7 @@ function ActionRow({
           actionId={actionId}
           activeActionId={handlers.activeActionId}
           addLabel={handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增子行动项" : null}
-          dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "action", id: action.id, bountyId: action.linkedResultId, objectiveId: action.linkedObjectiveId } : undefined}
+          dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "action", id: action.id, objectiveId: action.linkedObjectiveId } : undefined}
           left={rowActionLeft.action}
           onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
           onActiveActionChange={handlers.onActiveActionChange}
@@ -476,14 +516,14 @@ function ActionRow({
             className="absolute top-1/2 -translate-y-1/2"
             expanded={open}
             label={open ? "折叠行动项" : "展开行动项"}
-            left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[2]}
+            left={HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1]}
             onActiveActionChange={handlers.onActiveActionChange}
             onOpenActionChange={handlers.onOpenActionChange}
             onToggle={() => handlers.onToggleAction(action.id)}
             openActionId={handlers.openActionId}
           />
         )}
-        <HierarchyCell depth={2}>
+        <HierarchyCell depth={1}>
           <span
             className="flex h-5 w-5 shrink-0 items-center justify-center"
             data-hierarchy-anchor={anchorId}
@@ -547,7 +587,6 @@ function SubActionRow({
     id: item.id,
     title: item.label,
     actionId: action.id,
-    bountyId: action.linkedResultId,
     objectiveId: action.linkedObjectiveId,
   };
   const status = subActionVisualStatus(action, item, itemIndex);
@@ -559,7 +598,7 @@ function SubActionRow({
   return (
     <div
       className={clsx(
-        "orf-subtask-row orf-challenge-row orf-challenge-row-action orf-row-depth-3 group relative grid min-h-[36px] items-center px-5 text-sm",
+        "orf-subtask-row orf-challenge-row orf-challenge-row-action orf-row-depth-2 group relative grid min-h-[36px] items-center px-5 text-sm",
         rowActive && "orf-row-active",
         handlers.dragDrop.dragItem?.type === "subAction" && handlers.dragDrop.dragItem.id === item.id && "orf-row-dragging",
         dropClass,
@@ -587,7 +626,7 @@ function SubActionRow({
         onOpenActionChange={handlers.onOpenActionChange}
         openActionId={handlers.openActionId}
       />
-      <HierarchyCell depth={3}>
+      <HierarchyCell depth={2}>
         <span
           className="flex h-5 w-5 shrink-0 items-center justify-center"
           data-hierarchy-anchor={`subAction:${item.id}`}

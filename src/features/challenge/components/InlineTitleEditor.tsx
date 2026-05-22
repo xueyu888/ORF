@@ -13,7 +13,7 @@ export function InlineTitleEditor({
   ariaLabel: string;
   className: string;
   onCancel: () => void;
-  onSubmit: (value: string) => void;
+  onSubmit: (value: string) => boolean | void;
   value: string;
 }) {
   const [draft, setDraft] = useState(value);
@@ -33,7 +33,10 @@ export function InlineTitleEditor({
   const commit = () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
-    onSubmit(draft);
+    const accepted = onSubmit(draft);
+    if (accepted === false) {
+      finishedRef.current = false;
+    }
   };
 
   return (

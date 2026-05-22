@@ -1353,7 +1353,7 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     assert.equal(trimmedTask.statusCode, 200);
     const trimmedTaskPayload = trimmedTask.json() as { task: { id: string; title: string; description: string; assignee: string; dueDate: string } };
     assert.equal(trimmedTaskPayload.task.title, "trimmed action title");
-    assert.equal(trimmedTaskPayload.task.description, "执行支撑关联指标的下一步动作。");
+    assert.equal(trimmedTaskPayload.task.description, "执行支撑目标的下一步技术任务。");
     assert.equal(trimmedTaskPayload.task.assignee, fixture.challenger.name);
     assert.equal(trimmedTaskPayload.task.dueDate, "2999-02-28");
 
@@ -1946,6 +1946,7 @@ test("API mutations enforce runtime scope boundaries even for administrators", a
 
     const intruderTaskWithOwnerFeedback = await apiInject(app, intruder.commander, "POST", "/api/tasks", {
       title: `${intruder.prefix} cross-scope feedback origin task`,
+      linkedObjectiveId: intruderWorkResult.objectiveId,
       linkedResultId: intruderWorkResult.id,
       feedbackOriginId: ownerFeedbackId,
     });
@@ -2119,7 +2120,9 @@ test("comment image attachments upload, bind, and read through authorized commen
 
     const commentPayload = comment.json() as {
       commentThread: {
+        id: string;
         messages: Array<{
+          id: string;
           body: string;
           attachments: Array<{
             id: string;
@@ -2145,8 +2148,39 @@ test("comment image attachments upload, bind, and read through authorized commen
     const observerImage = await apiInject(app, fixture.observer, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
     assert.equal(observerImage.statusCode, 403);
 
-    await db.update(objectives).set({ flowStatus: "closed" }).where(eq(objectives.id, objective.id));
+    const cleanupUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "cleanup.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(cleanupUpload.statusCode, 200);
+    const cleanupPayload = cleanupUpload.json() as typeof uploadPayload;
+    const cleanupComment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body: cleanupPayload.markdown,
+    });
+    assert.equal(cleanupComment.statusCode, 200);
+    const cleanupCommentPayload = cleanupComment.json() as typeof commentPayload;
+    const cleanupMessage = cleanupCommentPayload.commentThread.messages.find((item) => item.body === cleanupPayload.markdown);
+    assert.ok(cleanupMessage);
+    assert.equal(cleanupMessage.attachments.length, 1);
 
+    const deleted = await apiInject(app, fixture.challenger, "DELETE", `/api/comments/${cleanupCommentPayload.commentThread.id}/messages/${cleanupMessage.id}`);
+    assert.equal(deleted.statusCode, 200);
+
+    const deletedImage = await apiInject(app, fixture.challenger, "GET", attachmentContentPath(cleanupMessage.attachments[0]?.contentUrl ?? ""));
+    assert.equal(deletedImage.statusCode, 404);
+
+    await db.update(objectives).set({ flowStatus: "closed" }).where(eq(objectives.id, objective.id));
     const archivedImage = await apiInject(app, fixture.challenger, "GET", attachmentContentPath(message.attachments[0]?.contentUrl ?? ""));
     assert.equal(archivedImage.statusCode, 200);
 
@@ -2212,6 +2246,20 @@ test("comment image attachment upload rejects unauthorized users and invalid ima
       },
     });
     assert.equal([400, 415].includes(spoofedUpload.statusCode), true);
+
+    const oversizedUpload = await apiMultipartInject(app, fixture.challenger, "/api/comments/attachments", {
+      fields: {
+        targetType: "objective",
+        targetId: objective.id,
+      },
+      file: {
+        fieldName: "file",
+        fileName: "oversized.png",
+        mimeType: "image/png",
+        content: Buffer.concat([tinyPng, Buffer.alloc(10 * 1024 * 1024)]),
+      },
+    });
+    assert.equal(oversizedUpload.statusCode, 413);
   });
 });
 

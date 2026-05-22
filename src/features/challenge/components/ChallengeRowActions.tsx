@@ -13,13 +13,14 @@ const actionItems: { action: ChallengeRowAction; icon: LucideIcon; label: string
 export const rowActionLeft = {
   objective: 20,
   bounty: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1],
-  action: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[2],
-  subAction: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[3],
+  action: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[1],
+  subAction: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[2],
 } as const;
 
 export function ChallengeRowActions({
   actionId,
   activeActionId,
+  addActions,
   addLabel,
   dragItem,
   left,
@@ -33,6 +34,7 @@ export function ChallengeRowActions({
 }: {
   actionId: string;
   activeActionId: string | null;
+  addActions?: Array<{ label: string; onAdd: () => void }>;
   addLabel?: string | null;
   dragItem?: DragItem;
   left: number;
@@ -46,6 +48,7 @@ export function ChallengeRowActions({
 }) {
   const open = openActionId === actionId;
   const visible = open || (!openActionId && activeActionId === actionId);
+  const resolvedAddActions = addActions ?? (addLabel ? [{ label: addLabel, onAdd }] : []);
 
   return (
     <div
@@ -56,17 +59,18 @@ export function ChallengeRowActions({
       onPointerEnter={() => onActiveActionChange(actionId)}
       style={{ left, zIndex: open ? 100 : 40 }}
     >
-      {addLabel ? (
+      {resolvedAddActions.map((item) => (
         <button
+          key={item.label}
           type="button"
-          aria-label={addLabel}
+          aria-label={item.label}
           className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
-          onClick={onAdd}
-          title={addLabel}
+          onClick={item.onAdd}
+          title={item.label}
         >
           <Plus className="h-4 w-4" />
         </button>
-      ) : null}
+      ))}
       <div className="relative">
         <button
           type="button"

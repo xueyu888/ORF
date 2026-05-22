@@ -1949,6 +1949,65 @@ test.describe("ORF frontend guard coverage", () => {
     await expect(page.getByRole("button", { name: "共 1 条回复" })).toBeVisible();
   });
 
+  test("comment panel opens image attachments in a preview dialog", async ({ page }, testInfo) => {
+    const objective = objectiveFixture({ id: "obj-ui-comment-image-preview", title: "前端测试 评论图片预览目标", flowStatus: "reestimating", stage: "orfReestimate", challengers: [memberUser.name], resultIds: ["res-ui-comment-image-preview"] });
+    const result = resultFixture({ id: "res-ui-comment-image-preview", objectiveId: objective.id, title: "前端测试 评论图片预览指标" });
+    const imageUrl =
+      "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='240' viewBox='0 0 480 240'%3E%3Crect width='480' height='240' fill='%23f8fafc'/%3E%3Ccircle cx='120' cy='120' r='64' fill='%232f9c89'/%3E%3Cpath d='M210 104h190v24H210zM210 152h144v24H210z' fill='%230b63ce'/%3E%3C/svg%3E";
+    const comments: CommentThread[] = [
+      {
+        id: "thread-ui-comment-image-preview",
+        targetType: "objective",
+        targetId: objective.id,
+        targetTitle: objective.title,
+        status: "open",
+        createdBy: memberUser.id,
+        createdAt: "2026-05-18T10:00:00.000Z",
+        updatedAt: "2026-05-18T10:00:00.000Z",
+        messages: [
+          {
+            id: "msg-ui-comment-image-preview",
+            author: memberUser.name,
+            body: "![证据图](orf-attachment:catt-ui-preview)",
+            attachments: [
+              {
+                id: "catt-ui-preview",
+                fileName: "proof.png",
+                mimeType: "image/png",
+                fileSize: 1024,
+                contentUrl: imageUrl,
+                width: 480,
+                height: 240,
+              },
+            ],
+            createdAt: "2026-05-18T10:00:00.000Z",
+          },
+        ],
+      },
+    ];
+    const data = taskManagementData({ objectives: [objective], results: [result], comments });
+
+    await mockOrfApp(page, memberUser, data, {
+      mineChallenges: () => data,
+      tasks: () => data,
+    });
+
+    await page.goto("/tasks");
+    await objectivePanel(page, objective.title).getByRole("button", { name: "打开 1 条评论" }).click();
+
+    const thumbnail = page.getByRole("button", { name: "查看图片 proof.png" });
+    await expect(thumbnail).toBeVisible();
+    await thumbnail.click();
+
+    const preview = page.getByRole("dialog", { name: "proof.png" });
+    await expect(preview).toBeVisible();
+    await expect(preview.getByRole("img", { name: "证据图" })).toBeVisible();
+    await attachAuditScreenshot(page, testInfo, "comment-image-preview-fixed");
+
+    await page.keyboard.press("Escape");
+    await expect(preview).toHaveCount(0);
+  });
+
   test("challenge confirm cancel does not call mutation API", async ({ page }) => {
     const applyObjective = objectiveFixture({ id: "obj-ui-cancel-apply", title: "前端测试 取消申请目标", flowStatus: "open", resultIds: ["res-ui-cancel-apply"] });
     const acceptObjective = objectiveFixture({ id: "obj-ui-cancel-accept", title: "前端测试 取消接受目标", flowStatus: "recruiting", assignedChallengers: [memberUser.name], resultIds: ["res-ui-cancel-accept"] });

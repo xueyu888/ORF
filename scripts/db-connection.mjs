@@ -19,9 +19,20 @@ export function loadEnvFile(envFile = ".env") {
 
     const index = line.indexOf("=");
     const key = line.slice(0, index);
-    const value = line.slice(index + 1);
+    const value = unquoteEnvValue(line.slice(index + 1));
     process.env[key] ??= value;
   }
+}
+
+function unquoteEnvValue(value) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return value;
 }
 
 export function createPgPoolConfig(connectionString, tuning = {}) {

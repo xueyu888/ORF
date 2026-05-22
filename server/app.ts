@@ -214,8 +214,8 @@ const createTaskBodySchema = z.object({
   description: optionalTextSchema,
   assignee: optionalTextSchema,
   priority: prioritySchema.optional(),
-  linkedObjectiveId: optionalTextSchema,
-  linkedResultId: requiredTextSchema,
+  linkedObjectiveId: requiredTextSchema,
+  linkedResultId: optionalTextSchema,
   dueDate: optionalDateOnlySchema,
   feedbackOriginId: optionalTextSchema,
 });
@@ -228,7 +228,7 @@ const moveResultBodySchema = z.object({
   placement: placementSchema.default("after"),
 });
 const moveTaskBodySchema = z.object({
-  toResultId: requiredTextSchema,
+  objectiveId: requiredTextSchema,
   referenceTaskId: optionalTextSchema,
   placement: placementSchema.optional(),
 });
@@ -717,7 +717,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
   await app.register(multipart, {
     limits: {
-      fileSize: 10 * 1024 * 1024,
+      fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES,
       files: 1,
     },
   });
@@ -1274,7 +1274,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.post("/api/tasks", async (request, reply) => {
     const body = createTaskBodySchema.parse(request.body);
-    const user = await requireWorkItemTargetMutation(request, reply, { type: "result", id: body.linkedResultId });
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "objective", id: body.linkedObjectiveId });
     if (!user) {
       return reply;
     }
@@ -1293,7 +1293,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const task = await createTask({ ...body, assignee });
 
     if (!task) {
-      return reply.code(404).send({ error: "Result or feedback not found" });
+      return reply.code(404).send({ error: "Objective, result, or feedback not found" });
     }
 
     return { task };
@@ -1730,7 +1730,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!user) {
       return reply;
     }
-    const targetObjectiveId = await resolveObjectiveIdForWorkItem({ type: "result", id: body.toResultId });
+    const targetObjectiveId = await resolveObjectiveIdForWorkItem({ type: "objective", id: body.objectiveId });
     if (!targetObjectiveId) {
       return reply.code(404).send({ error: "Task move target not found" });
     }

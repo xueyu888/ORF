@@ -14,10 +14,14 @@ const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 dotenv.config({ path: resolve(rootDir, '.env'), quiet: true });
 
+const authBaseUrl = process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433';
+const storageBaseUrl = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000';
+
 const appServices = {
   backend: {
     script: 'server:dev',
     url: 'http://127.0.0.1:8787/health',
+    check: checkBackendHealth,
     displayUrl: 'http://127.0.0.1:8787',
   },
   frontend: {
@@ -33,14 +37,14 @@ const dependencyServices = {
     displayUrl: databaseDisplayUrl(),
   },
   auth: {
-    script: 'ory:dev',
-    url: `${trimSlash(process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433')}/health/ready`,
-    displayUrl: process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433',
+    script: isLocalServiceUrl(authBaseUrl) ? 'ory:dev' : undefined,
+    url: `${trimSlash(authBaseUrl)}/health/ready`,
+    displayUrl: authBaseUrl,
   },
   storage: {
-    script: 'storage:dev',
-    url: `${trimSlash(process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000')}/minio/health/live`,
-    displayUrl: process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000',
+    script: isLocalServiceUrl(storageBaseUrl) ? 'storage:dev' : undefined,
+    url: `${trimSlash(storageBaseUrl)}/minio/health/live`,
+    displayUrl: storageBaseUrl,
   },
 };
 
@@ -174,15 +178,17 @@ async function startDetached() {
   }
 
   for (const [name, service] of Object.entries(appServices)) {
-    const health = await checkHealth(service.url);
+    const health = await checkServiceHealth(service);
     const pid = readPid(name);
     if (health.ok) {
       console.log(`${name} already healthy at ${service.displayUrl}`);
       continue;
     }
     if (pid && isAlive(pid)) {
-      console.log(`${name} process is running (pid ${pid}); waiting for health`);
-      continue;
+      console.log(`${name} process is running (pid ${pid}) but health check failed (${health.message}); restarting`);
+      killProcessTree(pid);
+      removePid(name);
+      await sleep(500);
     }
 
     removePid(name);
@@ -195,7 +201,7 @@ async function startDetached() {
     Object.entries(appServices).map(async ([name, service]) => ({
       name,
       service,
-      health: await waitForHealth(service.url, 30000),
+      health: await waitForServiceHealth(service, 30000),
     })),
   );
 
@@ -332,6 +338,8 @@ async function prepareRuntimeDependencies() {
       console.error(`${name} is not healthy: ${health.message}`);
       if (name === 'database') {
         console.error('Set DATABASE_URL or REMOTE_DATABASE_URL in .env, then run node scripts/verify-db.mjs.');
+      } else {
+        console.error(`${name} is configured as a shared/remote dependency at ${service.displayUrl}; not starting a local replacement.`);
       }
       process.exitCode = 1;
       return false;
@@ -389,6 +397,19 @@ async function waitForHealth(url, timeoutMs) {
   return latest;
 }
 
+async function waitForServiceHealth(service, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let latest = { ok: false, message: 'not checked' };
+  while (Date.now() < deadline) {
+    latest = await checkServiceHealth(service);
+    if (latest.ok) {
+      return latest;
+    }
+    await sleep(500);
+  }
+  return latest;
+}
+
 async function checkHealth(url) {
   const started = Date.now();
   const controller = new AbortController();
@@ -412,6 +433,30 @@ async function checkHealth(url) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function checkBackendHealth() {
+  const baseHealth = await checkHealth(appServices.backend.url);
+  if (!baseHealth.ok) {
+    return baseHealth;
+  }
+
+  const authHealth = await checkHealth(`${trimSlash(appServices.backend.displayUrl)}/health/auth`);
+  if (!authHealth.ok) {
+    return {
+      ...authHealth,
+      ms: baseHealth.ms + authHealth.ms,
+      message: `auth probe ${authHealth.message}`,
+    };
+  }
+
+  return {
+    ok: true,
+    status: baseHealth.status,
+    body: baseHealth.body,
+    ms: baseHealth.ms + authHealth.ms,
+    message: 'ok',
+  };
 }
 
 async function runNpmScriptCommand(script, scriptArgs) {
@@ -494,7 +539,49 @@ function trimSlash(value) {
   return value.replace(/\/+$/, '');
 }
 
-main().catch((error) => {
-  console.error(error?.stack ?? error?.message ?? String(error));
-  process.exitCode = 1;
-});
+function isLocalServiceUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1';
+  } catch {
+    return false;
+  }
+}
+
+if (!bootstrapPublicCa()) {
+  main().catch((error) => {
+    console.error(error?.stack ?? error?.message ?? String(error));
+    process.exitCode = 1;
+  });
+}
+
+function bootstrapPublicCa() {
+  if (process.env.ORF_SKIP_PUBLIC_CA_BOOTSTRAP === '1' || process.env.NODE_EXTRA_CA_CERTS) {
+    return false;
+  }
+
+  const publicCaCert = process.env.ORF_PUBLIC_CA_CERT;
+  if (!publicCaCert || !existsSync(publicCaCert)) {
+    return false;
+  }
+
+  const child = spawn(process.execPath, [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+    cwd: rootDir,
+    env: {
+      ...process.env,
+      NODE_EXTRA_CA_CERTS: publicCaCert,
+      ORF_SKIP_PUBLIC_CA_BOOTSTRAP: '1',
+    },
+    stdio: 'inherit',
+  });
+
+  child.on('exit', (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 0);
+  });
+
+  return true;
+}

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
@@ -7,7 +8,8 @@ import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
-import type { Result } from "../../types/orf";
+import type { Objective } from "../../types/orf";
+import { localDateString } from "../../utils/date";
 import { challengeLinkForTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
@@ -16,6 +18,68 @@ import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
 import { canMutateObjectiveWorkItems, canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
 import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
+import type { ObjectiveNode } from "./model/types";
+
+const draftObjectiveId = "draft-objective";
+
+function defaultFinalDueAt() {
+  const date = new Date();
+  date.setDate(date.getDate() + 14);
+  return localDateString(date);
+}
+
+function defaultCycleLabel() {
+  const date = new Date();
+  const quarter = Math.floor(date.getMonth() / 3) + 1;
+  return `${date.getFullYear()} Q${quarter}`;
+}
+
+function draftObjective(title: string): Objective {
+  const today = localDateString(new Date());
+  const finalDueAt = defaultFinalDueAt();
+  return {
+    id: draftObjectiveId,
+    title,
+    description: "",
+    whyItMatters: "",
+    cycle: defaultCycleLabel(),
+    stage: "goalSetting",
+    flowStatus: "candidate",
+    status: "Draft",
+    confidence: 50,
+    progress: 0,
+    boundary: "",
+    successDefinition: "",
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+    finalDueAt,
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    acceptedAt: null,
+    confirmationDueAt: null,
+    confirmedAt: null,
+    lootSubmittedAt: null,
+    acceptedResult: null,
+    completionMultiplier: null,
+    objectiveBasePoints: 0,
+    objectiveSettlementPoints: null,
+    createdAt: today,
+    updatedAt: today,
+  };
+}
+
+function draftObjectiveNode(title: string): ObjectiveNode {
+  const objective = draftObjective(title);
+  return {
+    actions: [],
+    bounties: [],
+    challengers: [],
+    deadline: objective.finalDueAt,
+    objective,
+  };
+}
 
 export function ChallengePlanPage() {
   const {
@@ -35,6 +99,7 @@ export function ChallengePlanPage() {
     openModal,
     publishObjective,
     freezeObjective,
+    createObjective,
     rejectChallengeApplication,
     setTaskCompletion,
     state,
@@ -49,6 +114,8 @@ export function ChallengePlanPage() {
   const role = currentUser?.role;
   const currentMember = currentUser?.name ?? "User";
   const canShowAllChallenges = canShowFrontend(currentUser, "challenge.scope.all");
+  const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
+  const [searchParams, setSearchParams] = useSearchParams();
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
@@ -56,6 +123,7 @@ export function ChallengePlanPage() {
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
+  const [draftObjectiveTitle, setDraftObjectiveTitle] = useState<string | null>(null);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
@@ -100,6 +168,7 @@ export function ChallengePlanPage() {
 
   const sourceData = challengeData ?? state;
   const challengeState = useMemo(() => ({ ...state, ...sourceData }), [sourceData, state]);
+  const draftGroup = useMemo(() => (draftObjectiveTitle === null ? null : draftObjectiveNode(draftObjectiveTitle)), [draftObjectiveTitle]);
   const visibleObjectiveIds = useMemo(() => {
     if (showAll) return undefined;
     return new Set(challengeState.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id));
@@ -120,6 +189,7 @@ export function ChallengePlanPage() {
   );
   const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
   const filteredGroups = useMemo(() => filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter }), [cycleFilter, groups, statusFilter]);
+  const displayedGroups = useMemo(() => (draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
   const hasActiveFilters = cycleFilter !== "all" || statusFilter !== "all";
   const emptyText = hasActiveFilters
@@ -136,6 +206,22 @@ export function ChallengePlanPage() {
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
+  useEffect(() => {
+    if (searchParams.get("create") !== "objective") return;
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("create");
+    setSearchParams(next, { replace: true });
+
+    if (!canCreateObjective) {
+      notify("没有新建目标权限");
+      return;
+    }
+
+    if (canShowAllChallenges) setScope("all");
+    setDraftObjectiveTitle((current) => current ?? "");
+    setEditingTarget({ type: "objective", id: draftObjectiveId, title: "" });
+  }, [canCreateObjective, canShowAllChallenges, notify, searchParams, setSearchParams]);
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
@@ -182,12 +268,12 @@ export function ChallengePlanPage() {
     openModal({ type: "newResult", objectiveId, source: action.source });
   };
 
-  const addAction = (bounty: Result) => {
-    if (!canMutateWorkItemsForObjective(bounty.objectiveId)) {
+  const addAction = (objectiveId: string) => {
+    if (!canMutateWorkItemsForObjective(objectiveId)) {
       notify("目标当前阶段不能新增行动项");
       return;
     }
-    openModal({ type: "newTask", objectiveId: bounty.objectiveId, resultId: bounty.id });
+    openModal({ type: "newTask", objectiveId });
   };
 
   const addSubAction = (actionId: string, afterItemId?: string) => {
@@ -207,11 +293,46 @@ export function ChallengePlanPage() {
     setOpenActionId(null);
   };
 
-  const saveTitle = (target: ChallengeTarget, title: string) => {
+  const saveDraftObjectiveTitle = (title: string) => {
     const value = title.trim();
     if (!value) {
       notify("标题不能为空");
-      return;
+      return false;
+    }
+
+    setDraftObjectiveTitle(value);
+    setEditingTarget(null);
+    void createObjective({
+      title: value,
+      whyItMatters: "待补充",
+      cycle: defaultCycleLabel(),
+      boundary: "待补充",
+      finalDueAt: defaultFinalDueAt(),
+    }).then((objective) => {
+      if (objective) {
+        setDraftObjectiveTitle(null);
+        if (canShowAllChallenges) setScope("all");
+      } else {
+        setEditingTarget({ type: "objective", id: draftObjectiveId, title: value });
+      }
+    });
+    return true;
+  };
+
+  const cancelEdit = () => {
+    if (editingTarget?.type === "objective" && editingTarget.id === draftObjectiveId && !draftObjectiveTitle?.trim()) {
+      setDraftObjectiveTitle(null);
+    }
+    setEditingTarget(null);
+  };
+
+  const saveTitle = (target: ChallengeTarget, title: string) => {
+    if (target.type === "objective" && target.id === draftObjectiveId) return saveDraftObjectiveTitle(title);
+
+    const value = title.trim();
+    if (!value) {
+      notify("标题不能为空");
+      return false;
     }
 
     if (target.type === "objective") updateObjectiveTitle(target.id, value);
@@ -219,9 +340,16 @@ export function ChallengePlanPage() {
     if (target.type === "action") updateTaskTitle(target.id, value);
     if (target.type === "subAction") updateTaskChecklistItemLabel(target.actionId, target.id, value);
     setEditingTarget(null);
+    return true;
   };
 
   const deleteTarget = (target: ChallengeTarget) => {
+    if (target.type === "objective" && target.id === draftObjectiveId) {
+      setDraftObjectiveTitle(null);
+      setEditingTarget(null);
+      return;
+    }
+
     if (!requireTargetPermission(target, "delete")) return;
     if (!window.confirm(deleteConfirmMessage(target, challengeState))) return;
 
@@ -232,6 +360,11 @@ export function ChallengePlanPage() {
   };
 
   const copyLink = (target: ChallengeTarget) => {
+    if (target.type === "objective" && target.id === draftObjectiveId) {
+      notify("请先完成目标标题");
+      return;
+    }
+
     const write = navigator.clipboard?.writeText(challengeLinkForTarget(target));
     if (!write) {
       notify("当前浏览器不支持复制链接");
@@ -242,6 +375,13 @@ export function ChallengePlanPage() {
   };
 
   const handleRowAction = (action: ChallengeRowAction, target: ChallengeTarget) => {
+    if (target.type === "objective" && target.id === draftObjectiveId) {
+      if (action === "edit") beginEdit(target);
+      if (action === "delete") deleteTarget(target);
+      if (action === "copyLink" || action === "comment") notify("请先完成目标标题");
+      return;
+    }
+
     if (action === "copyLink") copyLink(target);
     if (action === "edit") beginEdit(target);
     if (action === "comment") setCommentTarget(commentTargetForChallengeTarget(target));
@@ -308,11 +448,11 @@ export function ChallengePlanPage() {
       }
 
       if (dragItem.type === "action") {
-        if (target.type === "bountyActions") {
-          moveTask({ taskId: dragItem.id, toResultId: target.bountyId });
+        if (target.type === "objectiveActions") {
+          moveTask({ taskId: dragItem.id, objectiveId: target.objectiveId });
         }
         if (target.type === "action") {
-          moveTask({ taskId: dragItem.id, toResultId: target.bountyId, referenceTaskId: target.actionId, placement: target.placement });
+          moveTask({ taskId: dragItem.id, objectiveId: target.objectiveId, referenceTaskId: target.actionId, placement: target.placement });
         }
       }
 
@@ -352,7 +492,7 @@ export function ChallengePlanPage() {
       />
       <ChallengeTree
         emptyText={emptyText}
-        groups={filteredGroups}
+        groups={displayedGroups}
         handlers={{
           activeActionId,
           collapsedActionIds,
@@ -362,6 +502,7 @@ export function ChallengePlanPage() {
           editingTarget,
           contributionReviews: challengeState.objectiveContributionReviews,
           currentUser,
+          draftObjectiveId,
           metricActionLabel: (objective) =>
             metricCreationActionForObjective({
               objective,
@@ -384,7 +525,7 @@ export function ChallengePlanPage() {
           onAddBounty: addBounty,
           onAddSubAction: addSubAction,
           onApproveApplication: approveChallengeApplication,
-          onCancelEdit: () => setEditingTarget(null),
+          onCancelEdit: cancelEdit,
           onEditTarget: beginEdit,
           onFreezeObjective: freezeObjective,
           onOpenActionChange: setOpenActionId,

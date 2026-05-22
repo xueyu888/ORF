@@ -3,7 +3,15 @@ import { z } from "zod";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
 import { env } from "../env";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
-import { ORF_SESSION_COOKIE, OryAuthFlowError, getAuthenticatedOrfUser, loginWithPassword, registerWithPassword, revokeApiSession } from "./ory";
+import {
+  ORF_SESSION_COOKIE,
+  OryAuthFlowError,
+  checkPasswordLoginFlowHealth,
+  getAuthenticatedOrfUser,
+  loginWithPassword,
+  registerWithPassword,
+  revokeApiSession,
+} from "./ory";
 
 const emailBodySchema = z.string().trim().email().transform((value) => value.toLowerCase());
 
@@ -82,6 +90,16 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
 }
 
 export function registerAuthRoutes(app: FastifyInstance) {
+  app.get("/health/auth", async (request, reply) => {
+    try {
+      await checkPasswordLoginFlowHealth();
+      return { ok: true, service: "orf-auth" };
+    } catch (error) {
+      request.log.warn(error, "Ory auth health check failed");
+      return reply.code(503).send(authServiceUnavailablePayload());
+    }
+  });
+
   app.get("/api/auth/session", async (request, reply) => {
     const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
       request.log.warn(error, "Ory session check failed");

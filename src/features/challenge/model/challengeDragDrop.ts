@@ -4,7 +4,7 @@ import type { DragDropController, DragItem, DropPlacement, DropTarget } from "./
 
 type DropTargetMatch =
   | { type: "bounty"; bountyId: string }
-  | { type: "bountyActions"; bountyId: string }
+  | { type: "objectiveActions"; objectiveId: string }
   | { type: "action"; actionId: string }
   | { type: "actionSubActions"; actionId: string }
   | { type: "subAction"; actionId: string; itemId: string };
@@ -12,8 +12,12 @@ type DropTargetMatch =
 export function bountyDropTargetForEvent(dragItem: DragItem | null, bounty: Result, event: DragEvent<HTMLElement>): DropTarget | null {
   if (!dragItem) return null;
   if (dragItem.type === "bounty") return { type: "bounty", bountyId: bounty.id, objectiveId: bounty.objectiveId, placement: dropPlacementFromEvent(event) };
-  if (dragItem.type === "action") return { type: "bountyActions", bountyId: bounty.id, objectiveId: bounty.objectiveId };
   return null;
+}
+
+export function objectiveActionsDropTargetForEvent(dragItem: DragItem | null, objectiveId: string): DropTarget | null {
+  if (dragItem?.type !== "action") return null;
+  return { type: "objectiveActions", objectiveId };
 }
 
 export function actionDropTargetForEvent(dragItem: DragItem | null, action: Task, event: DragEvent<HTMLElement>): DropTarget | null {
@@ -22,7 +26,6 @@ export function actionDropTargetForEvent(dragItem: DragItem | null, action: Task
     return {
       type: "action",
       actionId: action.id,
-      bountyId: action.linkedResultId,
       objectiveId: action.linkedObjectiveId,
       placement: dropPlacementFromEvent(event),
     };
@@ -42,8 +45,8 @@ export function canDropItem(dragItem: DragItem, target: DropTarget) {
   }
 
   if (dragItem.type === "action") {
-    if (target.type === "bountyActions") return true;
-    return target.type === "action" && target.actionId !== dragItem.id;
+    if (target.type === "objectiveActions") return target.objectiveId === dragItem.objectiveId;
+    return target.type === "action" && target.actionId !== dragItem.id && target.objectiveId === dragItem.objectiveId;
   }
 
   if (target.type === "actionSubActions") return true;
@@ -78,7 +81,7 @@ export function dropTargetClass(target: DropTarget | null, matches: DropTargetMa
       return target.placement === "before" ? "orf-drop-target-before" : "orf-drop-target-after";
     }
 
-    if (target.type === "bountyActions" && match.type === "bountyActions" && target.bountyId === match.bountyId) {
+    if (target.type === "objectiveActions" && match.type === "objectiveActions" && target.objectiveId === match.objectiveId) {
       return "orf-drop-target-inside";
     }
 

@@ -51,7 +51,7 @@ flowchart TD
     W1[指挥官处理待办提醒]
     W2[指挥官管理已进入挑战的目标]
     W3[挑战者只看我的挑战目标]
-    W4[Objective -> Result -> Task -> Subtask 树]
+    W4[Objective 下并列展示 Result 与 Task -> Subtask]
   end
 
   subgraph Loot["/objectives/:id/loot 目标战利品"]
@@ -79,7 +79,7 @@ flowchart TD
 | 页面 | 定位 | 主体内容 | 不应该承担 |
 | --- | --- | --- | --- |
 | `/bounties` | 悬赏大厅 | `open/applying/recruiting` 悬赏目标，申请挑战，接受征召，已申请状态 | 不编辑目标、不编辑指标、不维护任务、不提交战利品 |
-| `/tasks` | 悬赏目标挑战工作台 | 已进入挑战流程的目标；指挥官看到全局工作台，挑战者只看自己的目标；主体仍是 `Objective -> Result -> Task -> Subtask` 树 | 不替代悬赏大厅，不把未通过申请当成“我的挑战” |
+| `/tasks` | 悬赏目标挑战工作台 | 已进入挑战流程的目标；指挥官看到全局工作台，挑战者只看自己的目标；主体是目标下并列的指标区和任务区 | 不替代悬赏大厅，不把未通过申请当成“我的挑战” |
 | `/objectives/:id/loot` | 目标战利品页 | 挑战者提交目标战利品；指挥官验收目标 | 不编辑指标，不管理申请 |
 | `/reports` | 结算结果页 | 目标级积分流水和排行榜 | 不承载流程操作 |
 
@@ -155,7 +155,7 @@ flowchart TD
   A3 --> F3[进入验收页<br/>验收并结算]
   A4 --> F4[查看验收结果和积分]
   Main --> Row
-  Row --> T1[展开后仍显示<br/>Objective -> Result -> Task -> Subtask]
+  Row --> T1[展开后显示<br/>Objective -> Result<br/>Objective -> Task -> Subtask]
 ```
 
 指挥官视角断言重点：
@@ -190,7 +190,8 @@ flowchart TD
   A3 --> B3[查看提交状态<br/>等待验收]
   A4 --> B4[查看积分结果]
   MyWorkbench --> Tree
-  T1 --> T2 --> T3 --> T4
+  T1 --> T2
+  T1 --> T3 --> T4
 ```
 
 挑战者视角断言重点：
@@ -198,18 +199,18 @@ flowchart TD
 - `/tasks` 只展示当前用户已经正式参与的悬赏目标。
 - “已申请但待确认”不进入 `/tasks`，只在 `/bounties` 显示。
 - 挑战者不看到发布、审核、冻结、验收等指挥官动作。
-- 挑战者在 `reestimating` 提出指标、编辑指标并维护任务；在 `frozen` 提交目标战利品；在 `submitted` 查看等待验收；在 `settled` 查看积分结果。
+- 挑战者在 `reestimating` 提出指标、编辑指标并维护目标下任务；在 `frozen` 提交目标战利品；在 `submitted` 查看等待验收；在 `settled` 查看积分结果。
 
 ### 指标 UI 流程
 
 ```mermaid
 flowchart TD
   A1[指挥官在目标下看到指标区域] --> A2[点击定义指标 / 新增指标<br/>或编辑已有指标]
-  A2 --> A3[指标出现在目标树下]
+  A2 --> A3[指标出现在目标下的指标区]
   B1[挑战者打开重估中的我的目标] --> B2{是否在重估截止前?}
   B2 -->|是| B3[看到提出指标入口<br/>已有指标显示编辑入口]
   B3 --> B4[新增时填写指标标题和衡量口径<br/>编辑时修改已有指标内容]
-  B4 --> B5[提交或保存后<br/>指标在目标树下更新]
+  B4 --> B5[提交或保存后<br/>指标在目标指标区更新]
   B2 -->|否| C1[提出入口关闭<br/>编辑入口消失或禁用]
   B1 --> D1[目标冻结后]
   D1 --> D2[提出入口关闭<br/>不能继续编辑指标]
@@ -337,7 +338,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | `orf-real-golden-flow.spec.ts` | 两个周期、两轮目标、两个挑战者，从发布、申请、审批、重估、冻结、战利品、匿名互评到验收结算 | 已结算目标从 `/bounties` 下架；观察成员 `/tasks` 看不到非本人挑战；`/reports` 累计积分正确 |
 | `orf-real-multi-state-dashboard.spec.ts` | 同时制造 candidate / open / applying / recruiting / reestimating / frozen / submitted / settled | 指挥官 `/tasks` 可总控；挑战者 `/tasks` 只看自己的目标；`/bounties` 只展示普通可申请目标和当前用户自己的征召令 |
 | `orf-real-recruitment.spec.ts` | 指挥官征召 A/B/C，A 和 B 连续接受，C 只保留接受入口，观察者越权接受 | A 接受后 B/C 仍能看到征召令；拒绝入口不可见；越权接受返回 403 |
-| `orf-real-reestimate-window.spec.ts` | 多挑战者在重估窗口内提出 / 编辑指标、加任务、加子任务，然后时间加速到窗口过期并冻结 | 窗口内可操作；过期后按钮不可见且 API 403；冻结后仍不可编辑指标 |
+| `orf-real-reestimate-window.spec.ts` | 多挑战者在重估窗口内提出 / 编辑指标、加目标任务、加子任务，然后时间加速到窗口过期并冻结 | 窗口内可操作；过期后按钮不可见且 API 403；冻结后仍不可编辑指标 |
 | `orf-real-time-acceleration.spec.ts` | 不等待真实时间，直接推进重估截止和最终截止 | 准时、逾期、超额、放弃的 multiplier 与积分一致 |
 | `orf-real-settlement-ledger.spec.ts` | 三挑战者匿名互评、缺评时指挥官汇总确认、结算入账 | `objectiveBasePoints`、`objectiveSettlementPoints`、`pointLedger`、`/reports` 展示一致 |
 | `orf-real-race-and-stale-ui.spec.ts` | 旧页面、重复点击、重复提交、重复结算 | 旧页面按钮不能越过后端状态机；重复战利品和重复 ledger 不产生脏数据 |
@@ -345,7 +346,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 测试分层必须保持正交：
 
 - `realSystemHarness.ts` 只负责启动真实 Fastify API、Fake Ory、真实数据库种子和多浏览器上下文。
-- `realScenarioDsl.ts` 只封装用户动作，不写业务判定；所有弹窗表单操作必须先定位到对应 `dialog`，避免页面级筛选器或同名控件污染真实流程测试。
+- `realScenarioDsl.ts` 只封装用户动作，不写业务判定；页面内新建目标先定位到目标行的 `编辑目标标题` 输入框，其他浮层表单先定位到对应 `dialog`，避免页面级筛选器或同名控件污染真实流程测试。
 - `realClock.ts` 只推进测试业务时间，不等待真实时间。
 - `realAssertions.ts` 只做页面和数据库不变量断言。
 - 产品代码不能 import 或依赖任何 `e2e/challenges/helpers/*`，也不能为了测试新增生产运行路径。
@@ -360,7 +361,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | 权限边界 | 成员不能看到指挥官动作；非挑战者不能提交；非指挥官不能验收；搜索、目标列表和深链页面也必须按当前用户可见目标收敛 |
 | 时间边界 | 只有正式挑战者能在重估截止前提出 / 编辑指标；截止后和冻结后入口关闭 |
 | 表单交互 | 空战利品、无指标、无 latest loot、取消弹窗、关闭 modal、重复点击都不能产生伪状态；征召、提交战利品、匿名互评、验收结算和成员管理写入必须在请求进行中禁用提交入口 |
-| 目标创建入口 | 顶部栏和命令菜单的 `新建目标` 进入 `/tasks` 页面内创建；保存成功后生成 `candidate` 目标行，失败时保留页面内草稿并展示失败提示 |
+| 目标创建入口 | 顶部栏和命令菜单的 `新建目标` 进入 `/tasks` 页面内创建；树内插入草稿目标行并默认编辑标题，回车或失焦后生成 `candidate` 目标行，失败时保留草稿并展示失败提示 |
 | 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
 | 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss、目标行评论数量入口贴近标题文本、切换评论对象后清空旧回复状态都要有可见断言 |
@@ -397,12 +398,12 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - 反馈详情页的证据、原因分类、建议调整、活动时间线和关联目标 / 指标都必须有真实数据或明确空态；不能留下空白详情区。
 - `/strategy-map` 必须从当前 API 返回的 Objective / Result / Task 生成目标组合、周期、目标、指标和行动项节点；空数据时展示空态，不能显示演示北极星、战略支柱或固定行动项进度。
 - `/objectives` 的周期筛选必须从当前 API 返回的 `Objective.cycle` 推导并真正参与过滤；不能显示固定演示周期。
-- 指标详情页的趋势、关联行动项、反馈历史、指标口径和 ORF 质量检查必须从当前 API 关系推导；没有真实记录或口径字段时显示空态 / 待补充，不能推断出默认验收口径。
+- 指标详情页的趋势、反馈历史、指标口径和 ORF 质量检查必须从当前 API 关系推导；任务详情归属目标，不从指标详情反推任务关系。
 - `/dashboard` 的周期标记必须从当前 Objective 集合推导；没有目标时显示空周期，不能显示固定演示周期或无行为按钮。
-- `/tasks` 工具栏中的周期和状态筛选必须是可操作控件，并从当前挑战数据推导；不能保留无行为的“全部周期 / 筛选”按钮。
+- `/tasks` 工具栏中的周期和状态筛选必须是可操作控件，并从当前挑战数据推导；“未分配”按目标挑战者为空筛选，不能保留无行为的“全部周期 / 筛选”按钮。
 - `/tasks` 筛选后无匹配项时必须说明是筛选无结果；不能误报为工作台没有挑战内容。
-- `/tasks` 中没有 Result 的 Objective 必须显示“待定义指标”；不能留下空白目标体，也不能写成“悬赏指标”。
-- 新建目标页面内草稿，以及指标、反馈、行动项和指标更新弹窗，不能预填演示业务文案；只能保留周期、截止日期、当前处理人等真实上下文默认值。
+- `/tasks` 中没有 Result 的 Objective 必须显示“待定义指标”；没有任务时必须显示任务空态。两者互不遮挡，不能留下空白目标体，也不能写成“悬赏指标”。
+- 新建目标树内草稿，以及指标、反馈、行动项和指标更新弹窗，不能预填演示业务文案；只能保留周期、截止日期、当前处理人等真实上下文默认值。
 - 新建类页面表单和弹窗提交前必须对必填文本做 trim 后校验；全空格输入不能关闭或重置当前输入，也不能发出 API 写请求。
 - 详情页不能保留无行为占位按钮；反馈详情的推荐动作必须触发现有产品命令，目标详情不能展示没有菜单实现的 More 按钮。
 - `/ai-evaluation` 失败样本里的反馈创建入口必须复用目标参与权限；没有失败样本时要显示空态，不能展示空白卡片。
@@ -420,9 +421,10 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 - 指挥官和成员的 `/tasks` 工作台权限边界变化。
 - 接受征召、审批申请、拒绝申请、冻结、提交战利品、验收结算等流程入口变化。
 - 成员重估阶段提出指标、编辑指标流程或 `source=memberProposed` 契约变化。
+- 任务是否继续只归属于目标，以及 `/tasks` 是否重新引入任务-指标父子展示。
 - 悬赏大厅申请 / 接受挑战后的刷新策略变化。
 - API 失败时是否允许乐观更新的策略变化。
-- 挑战树是否展示无 Result Objective 的规则变化。
+- 目标内容区是否展示无 Result Objective 的规则变化。
 - 深链页面、失败路径、表单校验、多人挑战或排行榜结算规则变化。
 
 ## 验证命令

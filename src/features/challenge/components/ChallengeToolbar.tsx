@@ -1,9 +1,10 @@
 import { CalendarDays, Filter } from "lucide-react";
 import type { ChallengeCycleFilter, ChallengeStatusFilter } from "../model/challengeFilters";
-import type { BountyStatus, ChallengeScope } from "../model/types";
+import type { ChallengeScope } from "../model/types";
 
 const statusOptions: Array<{ label: string; value: ChallengeStatusFilter }> = [
   { label: "全部状态", value: "all" },
+  { label: "未分配", value: "unassigned" },
   { label: "待认领", value: "open" },
   { label: "执行中", value: "active" },
   { label: "待验收", value: "review" },
@@ -42,7 +43,7 @@ export function ChallengeToolbar({
         </label>
         <label className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
           <Filter className="h-4 w-4 text-[#667085]" />
-          <select aria-label="挑战状态" className="bg-transparent text-sm font-semibold outline-none" value={status} onChange={(event) => onStatusChange(event.target.value as BountyStatus | "all")}>
+          <select aria-label="挑战状态" className="bg-transparent text-sm font-semibold outline-none" value={status} onChange={(event) => onStatusChange(event.target.value as ChallengeStatusFilter)}>
             {statusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
         </label>

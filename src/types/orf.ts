@@ -169,6 +169,7 @@ export interface Result {
   uncertaintyScore: number;
   acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
+  /** Deprecated compatibility field. Tasks belong to Objective, not Result. */
   taskIds: string[];
   feedbackIds: string[];
   trend: TrendPoint[];
@@ -209,7 +210,8 @@ export interface Task {
   priority: Priority;
   assignee: string;
   linkedObjectiveId: string;
-  linkedResultId: string;
+  /** Deprecated compatibility field. Task ownership is linkedObjectiveId. */
+  linkedResultId?: string | null;
   feedbackOriginId?: string;
   dueDate: string;
   tags: string[];

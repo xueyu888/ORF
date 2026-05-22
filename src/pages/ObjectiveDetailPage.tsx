@@ -192,7 +192,7 @@ export function ObjectiveDetailPage() {
             <TaskRow
               key={task.id}
               task={task}
-              resultTitle={results.find((result) => result.id === task.linkedResultId)?.title}
+              objectiveTitle={objective.title}
               onStatusChange={(status: TaskStatus) => updateTaskStatus(task.id, status)}
             />
           ))}

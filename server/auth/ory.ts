@@ -368,6 +368,36 @@ async function submitApiFlow(flowType: "login" | "registration", body: unknown):
   return response.json() as Promise<OryAuthResponse>;
 }
 
+export async function checkPasswordLoginFlowHealth() {
+  const flow = await createApiFlow("login");
+  if (!flow.ui?.action) {
+    throw new Error("Ory login flow is missing action URL");
+  }
+
+  const response = await fetchOry(flow.ui.action, {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      method: "password",
+      identifier: "__orf_health_probe__@invalid.orf",
+      password: "__orf_health_probe_password__",
+    }),
+  });
+
+  if (response.status === 400 || response.status === 401) {
+    return;
+  }
+
+  if (response.ok) {
+    throw new Error("Ory login probe unexpectedly accepted invalid credentials");
+  }
+
+  throw new Error(`Ory login probe failed with ${response.status}`);
+}
+
 export async function loginWithPassword(identifier: string, password: string) {
   const auth = await submitApiFlow("login", {
     method: "password",

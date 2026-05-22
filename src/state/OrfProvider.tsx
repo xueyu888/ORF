@@ -36,7 +36,7 @@ import type {
   UserRole,
 } from "../types/orf";
 
-type ModalType = "newObjective" | "newResult" | "newFeedback" | "newTask" | "resultUpdate" | "recruitChallengers" | null;
+type ModalType = "newResult" | "newFeedback" | "newTask" | "resultUpdate" | "recruitChallengers" | null;
 export type ThemeMode = "dark" | "light";
 type AuthResult = { ok: true } | { ok: false; message: string };
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
@@ -105,7 +105,7 @@ interface OrfContextValue {
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId" | "linkedResultId"> & Partial<Task>) => Promise<boolean>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>) => Promise<boolean>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => void;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
@@ -355,20 +355,30 @@ function bountyMutationFailureMessage(error: unknown, fallback: string) {
 
 function commentMutationFailureMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
+    const isImageMutation = fallback.includes("图片");
+
     if (error.status === 401) {
       return "登录已过期，请重新登录";
     }
 
     if (error.status === 403) {
-      return "只能编辑或删除自己的评论";
+      return isImageMutation ? "没有权限上传这个评论图片" : "只能编辑或删除自己的评论";
     }
 
     if (error.status === 404) {
       return "评论对象不存在，已刷新数据";
     }
 
+    if (error.status === 413) {
+      return "图片过大，请压缩后再上传";
+    }
+
+    if (error.status === 415) {
+      return "只能上传 PNG、JPEG、GIF 或 WebP 图片";
+    }
+
     if (error.status === 400) {
-      return "评论内容不能为空";
+      return isImageMutation ? "图片文件无效" : "评论内容不能为空";
     }
 
     return error.message || fallback;
@@ -911,7 +921,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
               phenomenon: input.phenomenon,
               causeCategories: input.causeCategories,
               impact: input.impact,
-              linkedResultId: input.linkedResultId,
+              linkedResultId: input.linkedResultId ?? null,
               suggestedAdjustment: input.suggestedAdjustment,
               source: input.source,
               owner: input.owner,
@@ -1064,7 +1074,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       moveTask: (input) => {
         void apiRequest(`/api/tasks/${encodeURIComponent(input.taskId)}/move`, {
           method: "PATCH",
-          body: JSON.stringify({ toResultId: input.toResultId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
+          body: JSON.stringify({ objectiveId: input.objectiveId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
         })
           .then(refreshTaskManagementData)
           .then(() => notify("行动项位置已更新"))
