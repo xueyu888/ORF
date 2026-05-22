@@ -4,6 +4,17 @@ import type { BountyHallData } from "../../src/state/apiClient";
 import type { Evidence, Feedback, Objective, OrfState, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 
+type ObjectiveCreationFrame = {
+  rows: Array<{ hasInput: boolean; text: string }>;
+  t: number;
+};
+
+declare global {
+  interface Window {
+    __objectiveCreationFrames: ObjectiveCreationFrame[];
+  }
+}
+
 function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
   return {
     objectives: initialOrfState.objectives,
@@ -531,16 +542,21 @@ test("objective creation keeps the created objective anchored when API order dif
   };
   let objectives: Objective[] = [earlierObjective, sameKeyObjective, laterSameKeyObjective];
   let createRequestCount = 0;
+  let objectiveCreated = false;
 
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
   });
   await page.route("**/api/my-challenges?scope=all", async (route) => {
+    if (objectiveCreated) {
+      await new Promise((resolve) => setTimeout(resolve, 160));
+    }
     await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
   });
   await page.route("**/api/objectives", async (route) => {
     if (route.request().method() === "POST") {
       createRequestCount += 1;
+      objectiveCreated = true;
       objectives = [earlierObjective, sameKeyObjective, createdObjective, laterSameKeyObjective];
       await route.fulfill({ json: { objective: createdObjective } });
       return;
@@ -557,12 +573,33 @@ test("objective creation keeps the created objective anchored when API order dif
   await titleInput.fill(createdObjective.title);
   const draftIndex = (await objectivePanelTitles(page)).indexOf(createdObjective.title);
   expect(draftIndex).toBe(1);
+  await page.evaluate(() => {
+    window.__objectiveCreationFrames = [];
+    const startedAt = performance.now();
+    const collectFrame = () => {
+      const rows = Array.from(document.querySelectorAll(".orf-objective-panel")).map((panel) => {
+        const input = panel.querySelector<HTMLInputElement>('input[aria-label="编辑目标标题"]');
+        return {
+          hasInput: Boolean(input),
+          text: (input?.value ?? panel.querySelector(".orf-objective-title")?.textContent ?? "").trim(),
+        };
+      });
+      window.__objectiveCreationFrames.push({ rows, t: Math.round(performance.now() - startedAt) });
+      if (performance.now() - startedAt < 700) requestAnimationFrame(collectFrame);
+    };
+    requestAnimationFrame(collectFrame);
+  });
 
   await titleInput.press("Enter");
 
   await expect.poll(() => createRequestCount).toBe(1);
   await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
   expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+  await page.waitForTimeout(720);
+  const frames = await page.evaluate(() => window.__objectiveCreationFrames);
+  const createdPositions = frames.map((frame) => frame.rows.findIndex((row) => row.text === createdObjective.title));
+  expect(createdPositions).not.toContain(-1);
+  expect(new Set(createdPositions)).toEqual(new Set([draftIndex]));
 });
 
 test("challenge workbench hides freeze until reestimating objectives have metrics", async ({ page }) => {

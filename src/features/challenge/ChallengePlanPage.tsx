@@ -88,11 +88,14 @@ function draftObjective(title: string): Objective {
 }
 
 function draftObjectiveNode(title: string): ObjectiveNode {
-  const objective = draftObjective(title);
+  return objectiveNode(draftObjective(title));
+}
+
+function objectiveNode(objective: Objective): ObjectiveNode {
   return {
     actions: [],
     bounties: [],
-    challengers: [],
+    challengers: objective.challengers,
     deadline: objective.finalDueAt,
     objective,
   };
@@ -189,6 +192,7 @@ export function ChallengePlanPage() {
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
   const [draftObjectiveTitle, setDraftObjectiveTitle] = useState<string | null>(null);
   const [draftReturnContext, setDraftReturnContext] = useState<DraftReturnContext | null>(null);
+  const [optimisticCreatedObjective, setOptimisticCreatedObjective] = useState<Objective | null>(null);
   const [objectiveOrderAnchor, setObjectiveOrderAnchor] = useState<ObjectiveOrderAnchor | null>(null);
   const [creatingDraftObjective, setCreatingDraftObjective] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
@@ -254,8 +258,16 @@ export function ChallengePlanPage() {
       ),
     [challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
   );
-  const cycleOptions = useMemo(() => challengeCycleOptions(groups), [groups]);
-  const filteredGroups = useMemo(() => sortChallengeGroups(filterChallengeGroups(groups, { cycle: cycleFilter, status: statusFilter })), [cycleFilter, groups, statusFilter]);
+  const optimisticGroup = useMemo(() => {
+    if (!optimisticCreatedObjective || groups.some((group) => group.objective.id === optimisticCreatedObjective.id)) return null;
+    return objectiveNode(optimisticCreatedObjective);
+  }, [groups, optimisticCreatedObjective]);
+  const displaySourceGroups = useMemo(() => (optimisticGroup ? [optimisticGroup, ...groups] : groups), [groups, optimisticGroup]);
+  const cycleOptions = useMemo(() => challengeCycleOptions(displaySourceGroups), [displaySourceGroups]);
+  const filteredGroups = useMemo(
+    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, status: statusFilter })),
+    [cycleFilter, displaySourceGroups, statusFilter],
+  );
   const sortedDisplayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
   const displayedGroups = useMemo(
     () => (draftGroup ? sortedDisplayedGroups : applyObjectiveOrderAnchor(sortedDisplayedGroups, objectiveOrderAnchor)),
@@ -274,6 +286,12 @@ export function ChallengePlanPage() {
       setCycleFilter("all");
     }
   }, [cycleFilter, cycleOptions]);
+  useEffect(() => {
+    if (!optimisticCreatedObjective) return;
+    if (groups.some((group) => group.objective.id === optimisticCreatedObjective.id)) {
+      setOptimisticCreatedObjective(null);
+    }
+  }, [groups, optimisticCreatedObjective]);
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
@@ -290,6 +308,7 @@ export function ChallengePlanPage() {
     }
 
     setDraftReturnContext((current) => current ?? { cycle: cycleFilter, scope, status: statusFilter });
+    setOptimisticCreatedObjective(null);
     setObjectiveOrderAnchor(null);
     if (canShowAllChallenges) setScope("all");
     setCycleFilter("all");
@@ -390,6 +409,7 @@ export function ChallengePlanPage() {
       finalDueAt: defaultFinalDueAt(),
     }).then((objective) => {
       if (objective) {
+        setOptimisticCreatedObjective(objective);
         setDraftObjectiveTitle(null);
         setDraftReturnContext(null);
         setObjectiveOrderAnchor(orderAnchor ? { ...orderAnchor, objectiveId: objective.id } : null);
@@ -423,16 +443,19 @@ export function ChallengePlanPage() {
   };
 
   const updateScope = (next: ChallengeScope) => {
+    setOptimisticCreatedObjective(null);
     setObjectiveOrderAnchor(null);
     setScope(next);
   };
 
   const updateCycleFilter = (next: ChallengeCycleFilter) => {
+    setOptimisticCreatedObjective(null);
     setObjectiveOrderAnchor(null);
     setCycleFilter(next);
   };
 
   const updateStatusFilter = (next: ChallengeStatusFilter) => {
+    setOptimisticCreatedObjective(null);
     setObjectiveOrderAnchor(null);
     setStatusFilter(next);
   };
