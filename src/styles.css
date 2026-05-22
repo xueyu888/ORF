@@ -5862,14 +5862,12 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-comment-mention {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  border-radius: 5px;
-  background: rgba(47, 156, 137, 0.12);
-  color: #087567;
-  font-weight: 800;
-  padding: 0 3px;
+  display: inline;
+  border-radius: 4px;
+  background: rgba(47, 156, 137, 0.08);
+  color: #0b7f70;
+  font-weight: 750;
+  padding: 0 2px;
 }
 
 .orf-comment-attachment {

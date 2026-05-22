@@ -158,13 +158,20 @@ test("inserts and renders structured member mentions", async ({ page }) => {
   const panel = page.locator("[data-comment-panel='true']");
   await expect(panel).toContainText(`@${mentionTarget.name}`);
 
+  await panel.getByRole("button", { name: "编辑评论" }).click();
+  const editInput = panel.getByPlaceholder("编辑评论...");
+  await expect(editInput).toHaveValue(`请 @${mentionTarget.name} 看一下`);
+  await expect(editInput).not.toHaveValue(/orf-user/);
+  await panel.locator(".orf-comment-draft-target").click();
+
   const input = panel.getByPlaceholder("添加评论...");
   await input.fill("hello @mia");
   await expect(panel.getByRole("button", { name: new RegExp(mentionTarget.name) })).toBeVisible();
   await input.press("Enter");
-  await expect(input).toHaveValue(new RegExp(`orf-user:${mentionTarget.id}`));
+  await expect(input).toHaveValue(`hello @${mentionTarget.name} `);
+  await expect(input).not.toHaveValue(/orf-user/);
 
   await panel.getByRole("button", { name: "发送评论" }).click();
-  await expect.poll(() => submittedBody).toContain(`orf-user:${mentionTarget.id}`);
+  await expect.poll(() => submittedBody).toContain(`@[${mentionTarget.name}](orf-user:${mentionTarget.id})`);
   await expect(panel).toContainText(`@${mentionTarget.name}`);
 });
