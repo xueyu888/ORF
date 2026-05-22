@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type {
   CommentAttachment,
@@ -526,7 +526,9 @@ function objectiveAcceptedResultFromReviews(reviews: ResultAcceptedResult[]): Ob
 
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
   const storageScopeId = scopedStorageId(scope);
-  const objectiveRows = storageScopeId ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)) : await db.select().from(objectives);
+  const objectiveRows = storageScopeId
+    ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id))
+    : await db.select().from(objectives).orderBy(desc(objectives.createdAt), desc(objectives.id));
   const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
   const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
   const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);

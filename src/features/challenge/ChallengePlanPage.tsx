@@ -22,6 +22,12 @@ import type { ObjectiveNode } from "./model/types";
 
 const draftObjectiveId = "draft-objective";
 
+type DraftReturnContext = {
+  cycle: ChallengeCycleFilter;
+  scope: ChallengeScope;
+  status: ChallengeStatusFilter;
+};
+
 function defaultFinalDueAt() {
   const date = new Date();
   date.setDate(date.getDate() + 14);
@@ -125,6 +131,7 @@ export function ChallengePlanPage() {
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
   const [draftObjectiveTitle, setDraftObjectiveTitle] = useState<string | null>(null);
+  const [draftReturnContext, setDraftReturnContext] = useState<DraftReturnContext | null>(null);
   const [creatingDraftObjective, setCreatingDraftObjective] = useState(false);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
@@ -220,12 +227,13 @@ export function ChallengePlanPage() {
       return;
     }
 
+    setDraftReturnContext((current) => current ?? { cycle: cycleFilter, scope, status: statusFilter });
     if (canShowAllChallenges) setScope("all");
     setCycleFilter("all");
     setStatusFilter("unassigned");
     setDraftObjectiveTitle((current) => current ?? "");
     setEditingTarget({ type: "objective", id: draftObjectiveId, title: "" });
-  }, [canCreateObjective, canShowAllChallenges, notify, searchParams, setSearchParams]);
+  }, [canCreateObjective, canShowAllChallenges, cycleFilter, notify, scope, searchParams, setSearchParams, statusFilter]);
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
@@ -319,6 +327,7 @@ export function ChallengePlanPage() {
     }).then((objective) => {
       if (objective) {
         setDraftObjectiveTitle(null);
+        setDraftReturnContext(null);
         setEditingTarget(null);
         if (canShowAllChallenges) setScope("all");
       } else {
@@ -330,9 +339,20 @@ export function ChallengePlanPage() {
     return false;
   };
 
+  const restoreDraftReturnContext = useCallback(() => {
+    if (!draftReturnContext) return;
+    setScope(draftReturnContext.scope);
+    setCycleFilter(draftReturnContext.cycle);
+    setStatusFilter(draftReturnContext.status);
+    setDraftReturnContext(null);
+  }, [draftReturnContext]);
+
   const cancelEdit = () => {
-    if (editingTarget?.type === "objective" && editingTarget.id === draftObjectiveId && !draftObjectiveTitle?.trim()) {
+    if (editingTarget?.type === "objective" && editingTarget.id === draftObjectiveId) {
       setDraftObjectiveTitle(null);
+      restoreDraftReturnContext();
+      setEditingTarget(null);
+      return;
     }
     setEditingTarget(null);
   };

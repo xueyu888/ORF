@@ -36,16 +36,17 @@ export function filterChallengeGroups(groups: readonly ObjectiveNode[], filters:
 }
 
 export function sortChallengeGroups(groups: readonly ObjectiveNode[]): ObjectiveNode[] {
-  return [...groups].sort(compareChallengeGroups);
+  return groups
+    .map((group, index) => ({ group, index }))
+    .sort((left, right) => compareChallengeGroups(left.group, right.group) || left.index - right.index)
+    .map((item) => item.group);
 }
 
 function compareChallengeGroups(left: ObjectiveNode, right: ObjectiveNode) {
   return (
     objectiveFlowRank(left) - objectiveFlowRank(right) ||
     compareText(left.deadline, right.deadline) ||
-    compareTextDescending(left.objective.createdAt, right.objective.createdAt) ||
-    compareText(left.objective.title, right.objective.title) ||
-    compareText(left.objective.id, right.objective.id)
+    compareTextDescending(left.objective.createdAt, right.objective.createdAt)
   );
 }
 

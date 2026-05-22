@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { challengeCycleOptions, filterChallengeGroups } from "../src/features/challenge/model/challengeFilters";
+import { challengeCycleOptions, filterChallengeGroups, sortChallengeGroups } from "../src/features/challenge/model/challengeFilters";
 import type { BountyNode, ObjectiveNode } from "../src/features/challenge/model/types";
 import type { Objective, Result } from "../src/types/orf";
 
@@ -48,6 +48,18 @@ test("filterChallengeGroups filters unassigned objectives at objective level", (
 
   assert.deepEqual(filtered.map((item) => item.objective.id), ["objective-unassigned"]);
   assert.deepEqual(filtered[0]?.bounties.map((item) => item.status), ["active", "review"]);
+});
+
+test("sortChallengeGroups preserves source order for objectives with identical business sort keys", () => {
+  const groups = [
+    group({ objective: objective({ id: "objective-draft", title: "" }) }),
+    group({ objective: objective({ id: "objective-z", title: "ZZZ 同键目标" }) }),
+    group({ objective: objective({ id: "objective-a", title: "AAA 同键目标" }) }),
+  ];
+
+  const sorted = sortChallengeGroups(groups);
+
+  assert.deepEqual(sorted.map((item) => item.objective.id), ["objective-draft", "objective-z", "objective-a"]);
 });
 
 function group(input: Partial<ObjectiveNode> = {}): ObjectiveNode {

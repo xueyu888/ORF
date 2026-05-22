@@ -1,7 +1,8 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { BountyHallData } from "../../src/state/apiClient";
 import type { Evidence, Feedback, Objective, OrfState, PointLedgerEntry, Result, Task } from "../../src/types/orf";
+import { localDateString } from "../../src/utils/date";
 
 function taskManagementData(tasks: Task[] = initialOrfState.tasks) {
   return {
@@ -25,6 +26,26 @@ function taskManagementDataWith(overrides: Partial<Pick<OrfState, "objectives" |
     comments: initialOrfState.comments,
     permissionRules: initialOrfState.permissionRules,
     ...overrides,
+  };
+}
+
+async function objectivePanelTitles(page: Page) {
+  return page.locator(".orf-objective-panel").evaluateAll((panels) =>
+    panels.map((panel) => {
+      const input = panel.querySelector<HTMLInputElement>('input[aria-label="编辑目标标题"]');
+      if (input) return input.value.trim();
+      return panel.querySelector(".orf-objective-title")?.textContent?.trim() ?? "";
+    }),
+  );
+}
+
+function defaultObjectiveCreationDates() {
+  const today = new Date();
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + 14);
+  return {
+    createdAt: localDateString(today),
+    finalDueAt: localDateString(dueDate),
   };
 }
 
@@ -262,12 +283,16 @@ test("command menu creates objectives as actions and lands on the workbench", as
     boundary: "测试边界",
     flowStatus: "candidate",
     stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
     resultIds: [],
     feedbackIds: [],
     taskIds: [],
   };
   let objectives: Objective[] = [];
   let createRequestCount = 0;
+  let titlePatchRequestCount = 0;
 
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
@@ -285,6 +310,15 @@ test("command menu creates objectives as actions and lands on the workbench", as
 
     await route.fallback();
   });
+  await page.route(`**/api/objectives/${createdObjective.id}`, async (route) => {
+    if (route.request().method() === "PATCH") {
+      titlePatchRequestCount += 1;
+      await route.fulfill({ json: { ok: true } });
+      return;
+    }
+
+    await route.fallback();
+  });
 
   await page.goto("/reports");
   await page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." }).click();
@@ -293,15 +327,170 @@ test("command menu creates objectives as actions and lands on the workbench", as
   await menu.getByRole("button", { name: /新建目标/ }).click();
 
   const titleInput = page.getByLabel("编辑目标标题");
+  const editingObjectivePanel = page.locator(".orf-objective-panel", { has: titleInput });
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(titleInput).toBeVisible();
   await expect(page.getByRole("dialog", { name: "新建目标" })).toHaveCount(0);
   await titleInput.fill(createdObjective.title);
+  await expect(editingObjectivePanel.getByText("待定义指标")).toBeVisible();
+  await expect(editingObjectivePanel.getByText("待创建行动项")).toBeVisible();
+  await expect(editingObjectivePanel.getByRole("button", { name: "发布" })).toBeDisabled();
+  const draftTitles = await objectivePanelTitles(page);
+  const draftIndex = draftTitles.indexOf(createdObjective.title);
+  expect(draftIndex).toBeGreaterThanOrEqual(0);
+  await titleInput.press("Enter");
+  await expect.poll(() => createRequestCount).toBe(1);
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  const createdPanel = page.locator(".orf-objective-panel", { hasText: createdObjective.title });
+  await expect(createdPanel.getByText("待定义指标")).toBeVisible();
+  await expect(createdPanel.getByText("待创建行动项")).toBeVisible();
+  await expect(createdPanel.getByRole("button", { name: "发布" })).toBeEnabled();
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+  await createdPanel.getByText("待创建行动项").click();
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  expect(titlePatchRequestCount).toBe(0);
+  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page.getByText(createdObjective.title)).toBeVisible();
+});
+
+test("objective creation entry scrolls to the sorted draft position when workbench is already scrolled", async ({ page }) => {
+  const objectives: Objective[] = Array.from({ length: 24 }, (_, index) => ({
+    ...initialOrfState.objectives[0]!,
+    id: `objective-scroll-anchor-${index}`,
+    title: `滚动定位目标 ${String(index + 1).padStart(2, "0")}`,
+    cycle: "2999 Q4",
+    flowStatus: "reestimating",
+    stage: "orfReestimate",
+    challengers: [initialOrfState.users[0]!.name],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+    finalDueAt: `2999-12-${String(Math.min(index + 1, 28)).padStart(2, "0")}`,
+  }));
+  const data = taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: data });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: data });
+  });
+
+  await page.goto("/tasks");
+  await expect(page.locator(".orf-objective-panel")).toHaveCount(objectives.length);
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect.poll(async () => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+  await page.getByRole("button", { name: "新建目标" }).click();
+
+  const titleInput = page.getByLabel("编辑目标标题");
+  await expect(titleInput).toBeVisible();
+  await expect(titleInput).toBeInViewport();
+});
+
+test("objective creation entry moves filtered workbench to the unassigned creation lane", async ({ page }) => {
+  const settledObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    id: "objective-filtered-settled",
+    title: "筛选中的已结算目标",
+    flowStatus: "settled",
+    stage: "done",
+    challengers: [initialOrfState.users[0]!.name],
+    resultIds: ["result-filtered-settled"],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const settledResult: Result = {
+    ...initialOrfState.results[0]!,
+    id: "result-filtered-settled",
+    objectiveId: settledObjective.id,
+    title: "筛选中的已结算指标",
+    acceptedResult: "completed",
+  };
+  const data = taskManagementDataWith({ objectives: [settledObjective], results: [settledResult], tasks: [], feedback: [] });
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: data });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: data });
+  });
+
+  await page.goto("/tasks");
+  await page.getByLabel("挑战状态").selectOption("settled");
+  await expect(page.getByText(settledObjective.title)).toBeVisible();
+
+  await page.getByRole("button", { name: "新建目标" }).click();
+
+  await expect(page.getByLabel("挑战状态")).toHaveValue("unassigned");
+  await expect(page.getByLabel("编辑目标标题")).toBeVisible();
+});
+
+test("objective creation keeps the active draft anchored while its title changes", async ({ page }) => {
+  const creationDates = defaultObjectiveCreationDates();
+  const baseObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    ...creationDates,
+    cycle: "2999 Q4",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+    resultIds: [],
+    feedbackIds: [],
+    taskIds: [],
+  };
+  const createdObjective: Objective = {
+    ...baseObjective,
+    id: "objective-title-anchor-created",
+    title: "MMM 新建目标",
+  };
+  let objectives: Objective[] = [
+    { ...baseObjective, id: "objective-title-anchor-a", title: "AAA 同键目标" },
+    { ...baseObjective, id: "objective-title-anchor-z", title: "ZZZ 同键目标" },
+    { ...baseObjective, id: "objective-title-anchor-cn", title: "中间同键目标" },
+  ];
+  let createRequestCount = 0;
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskManagementDataWith({ objectives, results: [], tasks: [], feedback: [] }) });
+  });
+  await page.route("**/api/objectives", async (route) => {
+    if (route.request().method() === "POST") {
+      createRequestCount += 1;
+      objectives = [createdObjective, ...objectives];
+      await route.fulfill({ json: { objective: createdObjective } });
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+
+  const titleInput = page.getByLabel("编辑目标标题");
+  await expect(titleInput).toBeVisible();
+  const draftIndex = (await objectivePanelTitles(page)).indexOf("");
+  expect(draftIndex).toBeGreaterThanOrEqual(0);
+
+  await titleInput.fill(createdObjective.title);
+
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
+  await expect(titleInput).toBeFocused();
+
   await titleInput.press("Enter");
 
   await expect.poll(() => createRequestCount).toBe(1);
-  await expect(page).toHaveURL(/\/tasks$/);
-  await expect(page.getByText(createdObjective.title)).toBeVisible();
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+  expect((await objectivePanelTitles(page)).indexOf(createdObjective.title)).toBe(draftIndex);
 });
 
 test("challenge workbench hides freeze until reestimating objectives have metrics", async ({ page }) => {
@@ -1095,12 +1284,13 @@ test("creation entries start from live context without demo business defaults", 
   await page.goto("/tasks");
   await page.getByRole("button", { name: "新建目标" }).click();
   await expect(page.getByLabel("编辑目标标题")).toHaveValue("");
+  await expect(page.getByLabel("编辑目标标题")).toBeFocused();
   await expect(page.getByText("降低权限策略问答中的幻觉率")).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   const panel = page.locator(".orf-objective-panel", { hasText: objective.title });
   await panel.hover();
-  await panel.getByRole("button", { name: "新增指标" }).click();
+  await panel.getByRole("button", { name: "新增指标" }).dispatchEvent("click");
   await expect(page.getByLabel("指标标题")).toHaveValue("");
   await expect(page.getByLabel("衡量指标")).toHaveValue("");
   await expect(page.getByText("权限策略回答幻觉率降低到 3%")).toHaveCount(0);
@@ -1167,14 +1357,19 @@ test("creation entries reject whitespace-only required values before API writes"
   await page.getByRole("button", { name: "新建目标" }).click();
   await page.getByLabel("编辑目标标题").fill("   ");
   await page.getByLabel("编辑目标标题").press("Enter");
+  await expect.poll(() => writeRequests).toEqual([]);
   await expect(page.getByText("标题不能为空")).toBeVisible();
   await expect(page.getByLabel("编辑目标标题")).toBeVisible();
+  await expect(page.getByLabel("编辑目标标题")).toBeFocused();
+  const invalidDraftPanel = page.locator(".orf-objective-panel", { has: page.getByLabel("编辑目标标题") });
+  await expect(invalidDraftPanel.getByText("待定义指标")).toBeVisible();
+  await expect(invalidDraftPanel.getByText("待创建行动项")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "新建目标" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   const panel = page.locator(".orf-objective-panel", { hasText: objective.title });
   await panel.hover();
-  await panel.getByRole("button", { name: "新增指标" }).click();
+  await panel.getByRole("button", { name: "新增指标" }).dispatchEvent("click");
   await page.getByLabel("指标标题").fill("   ");
   await page.getByLabel("衡量指标").fill("   ");
   await page.getByRole("button", { name: "保存指标" }).click();
@@ -1256,11 +1451,15 @@ test("creation entries keep user input when API writes fail", async ({ page }) =
   await expect(page.getByRole("dialog", { name: "新建目标" })).toHaveCount(0);
   await expect(page.getByText("objective rejected")).toBeVisible();
   await expect(page.getByLabel("编辑目标标题")).toHaveValue("失败后仍保留的目标");
+  await expect(page.getByLabel("编辑目标标题")).toBeFocused();
+  const failedDraftPanel = page.locator(".orf-objective-panel", { has: page.getByLabel("编辑目标标题") });
+  await expect(failedDraftPanel.getByText("待定义指标")).toBeVisible();
+  await expect(failedDraftPanel.getByText("待创建行动项")).toBeVisible();
   await page.keyboard.press("Escape");
 
   const panel = page.locator(".orf-objective-panel", { hasText: objective.title });
   await panel.hover();
-  await panel.getByRole("button", { name: "新增指标" }).click();
+  await panel.getByRole("button", { name: "新增指标" }).dispatchEvent("click");
   await page.getByLabel("指标标题").fill("失败后仍保留的指标");
   await page.getByLabel("衡量指标").fill("失败率");
   await page.getByRole("button", { name: "保存指标" }).click();
