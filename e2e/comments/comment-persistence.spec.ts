@@ -75,7 +75,7 @@ test("keeps a submitted comment visible after the POST response", async ({ page 
 
   await targetRow.hover();
   await targetRow.getByRole("button", { name: "按住拖拽，点击打开块菜单" }).click();
-  await page.getByRole("button", { name: "评论" }).click();
+  await page.getByRole("button", { name: "评论", exact: true }).click();
 
   const panel = page.locator("[data-comment-panel='true']");
   await expect(panel).toBeVisible();
@@ -90,4 +90,88 @@ test("keeps a submitted comment visible after the POST response", async ({ page 
 
   await expect(panel).toContainText(commentBody);
   await expect(panel.getByText("暂无评论")).toHaveCount(0);
+});
+
+test("inserts and renders structured member mentions", async ({ page }) => {
+  let submittedBody = "";
+  const mentionTarget = initialOrfState.users[1]!;
+  const existingComment: CommentThread = {
+    id: "cthread-e2e-comment-mention",
+    targetType: target.type,
+    targetId: target.id,
+    targetTitle: target.title,
+    status: "open",
+    createdBy: initialOrfState.users[0]!.id,
+    createdAt: "2026-05-09T00:00:00.000Z",
+    updatedAt: "2026-05-09T00:00:01.000Z",
+    messages: [
+      {
+        id: "cmsg-e2e-comment-mention",
+        author: initialOrfState.users[0]!.name,
+        body: `请 @[Old Mia](orf-user:${mentionTarget.id}) 看一下`,
+        createdAt: "2026-05-09T00:00:01.000Z",
+      },
+    ],
+  };
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskManagementData([existingComment]) });
+  });
+  await page.route("**/api/comments/mentionable-users?**", async (route) => {
+    await route.fulfill({ json: { users: initialOrfState.users } });
+  });
+  await page.route("**/api/comments", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+
+    const requestBody = route.request().postDataJSON() as { body: string };
+    submittedBody = requestBody.body;
+    await route.fulfill({
+      json: {
+        ok: true,
+        commentThread: {
+          ...existingComment,
+          messages: [
+            ...existingComment.messages,
+            {
+              id: "cmsg-e2e-comment-mention-new",
+              author: initialOrfState.users[0]!.name,
+              body: requestBody.body,
+              createdAt: "2026-05-09T00:00:02.000Z",
+            },
+          ],
+        },
+      },
+    });
+  });
+
+  await page.goto("/tasks");
+  const targetRow = page.locator(".orf-result-row", { hasText: target.title });
+  await expect(targetRow).toBeVisible();
+
+  await targetRow.hover();
+  await targetRow.getByRole("button", { name: "按住拖拽，点击打开块菜单" }).click();
+  await page.getByRole("button", { name: "评论", exact: true }).click();
+
+  const panel = page.locator("[data-comment-panel='true']");
+  await expect(panel).toContainText(`@${mentionTarget.name}`);
+
+  await panel.getByRole("button", { name: "编辑评论" }).click();
+  const editInput = panel.getByPlaceholder("编辑评论...");
+  await expect(editInput).toHaveValue(`请 @${mentionTarget.name} 看一下`);
+  await expect(editInput).not.toHaveValue(/orf-user/);
+  await panel.locator(".orf-comment-draft-target").click();
+
+  const input = panel.getByPlaceholder("添加评论...");
+  await input.fill("hello @mia");
+  await expect(panel.getByRole("button", { name: new RegExp(mentionTarget.name) })).toBeVisible();
+  await input.press("Enter");
+  await expect(input).toHaveValue(`hello @${mentionTarget.name} `);
+  await expect(input).not.toHaveValue(/orf-user/);
+
+  await panel.getByRole("button", { name: "发送评论" }).click();
+  await expect.poll(() => submittedBody).toContain(`@[${mentionTarget.name}](orf-user:${mentionTarget.id})`);
+  await expect(panel).toContainText(`@${mentionTarget.name}`);
 });

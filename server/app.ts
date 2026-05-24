@@ -43,6 +43,7 @@ import {
   freezeObjectiveAfterReestimate,
   getBountyHallData,
   getCommentAttachmentContent,
+  listCommentMentionableUsers,
   getMyChallengesData,
   getOrfStateSnapshot,
   getTaskManagementData,
@@ -252,6 +253,7 @@ const uploadCommentAttachmentFieldsSchema = z.object({
   targetId: z.string().trim().min(1),
   targetType: commentTargetTypeSchema,
 });
+const commentMentionableUsersQuerySchema = uploadCommentAttachmentFieldsSchema;
 const recruitBodySchema = z.object({
   members: z.array(z.string().trim().min(1)).min(1),
 });
@@ -986,6 +988,24 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     return { ok: true, attachment: outcome.attachment, markdown: outcome.markdown };
+  });
+
+  app.get("/api/comments/mentionable-users", async (request, reply) => {
+    const user = await commentActorWithPermissions(request, reply);
+    if (!user) {
+      return reply;
+    }
+
+    const query = commentMentionableUsersQuerySchema.parse(request.query);
+    const outcome = await listCommentMentionableUsers(query, user);
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Comment target not found" });
+    }
+    if (outcome.status === "forbidden") {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+
+    return { users: outcome.users };
   });
 
   app.get("/api/comments/attachments/:attachmentId/content", async (request, reply) => {

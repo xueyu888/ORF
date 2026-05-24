@@ -3,7 +3,7 @@ import type { ClipboardEvent, FormEvent, ReactNode } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
-import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread } from "../../../types/orf";
+import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { parseCommentBodyLinks } from "./commentText";
@@ -20,6 +20,20 @@ type CommentImagePreview = {
   src: string;
 };
 
+type CommentMentionUser = Pick<OrfUser, "email" | "id" | "name" | "role" | "status">;
+
+type CommentDraftMention = {
+  end: number;
+  label: string;
+  start: number;
+  userId: string;
+};
+
+type CommentDraft = {
+  mentions: CommentDraftMention[];
+  text: string;
+};
+
 type CommentDraftMode =
   | { type: "default" }
   | { type: "reply"; rootMessageId: string; targetAuthor: string; targetMessageId: string }
@@ -32,13 +46,16 @@ export type CommentReplyInput = {
 };
 
 const commentAttachmentTokenPattern = /!\[([^\]\n]*)\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
+const commentMentionTokenPattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 
 export function CommentPanel({
   canManageAllComments = false,
   currentMember,
+  currentUserId,
   onAddComment,
   onClose,
   onDeleteComment,
+  onLoadMentionableUsers,
   onUpdateComment,
   onUploadAttachment,
   targetId,
@@ -48,9 +65,11 @@ export function CommentPanel({
 }: {
   canManageAllComments?: boolean;
   currentMember: string;
+  currentUserId: string;
   onAddComment: (body: string, replyInput?: CommentReplyInput) => void;
   onClose: () => void;
   onDeleteComment: (threadId: string, messageId: string) => void;
+  onLoadMentionableUsers: (input: { targetId: string; targetType: CommentTargetType }) => Promise<CommentMentionUser[]>;
   onUpdateComment: (threadId: string, messageId: string, body: string) => void;
   onUploadAttachment: (file: File) => Promise<string | null>;
   targetId: string;
@@ -58,10 +77,11 @@ export function CommentPanel({
   targetType: CommentTargetType;
   threads: CommentThread[];
 }) {
-  const [body, setBody] = useState("");
+  const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
   const [activeRootMessageId, setActiveRootMessageId] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<CommentImagePreview | null>(null);
+  const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: targetTitle });
   const commentEntries = useMemo<CommentEntry[]>(() => {
@@ -96,12 +116,27 @@ export function CommentPanel({
   }, [commentEntries]);
   const activeRootEntry = activeRootMessageId ? rootEntries.find((entry) => entry.message.id === activeRootMessageId) ?? null : null;
   const replyEntries = activeRootEntry ? repliesByRootId.get(activeRootEntry.message.id) ?? [] : [];
+  const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
+
+  useEffect(() => {
+    let cancelled = false;
+    onLoadMentionableUsers({ targetId, targetType })
+      .then((users) => {
+        if (!cancelled) setMentionableUsers(users.filter((user) => user.status === "active"));
+      })
+      .catch(() => {
+        if (!cancelled) setMentionableUsers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [onLoadMentionableUsers, targetId, targetType]);
 
   useEffect(() => {
     if (activeRootMessageId && !rootEntries.some((entry) => entry.message.id === activeRootMessageId)) {
       setActiveRootMessageId(null);
       setDraftMode({ type: "default" });
-      setBody("");
+      setDraft(emptyCommentDraft());
     }
   }, [activeRootMessageId, rootEntries]);
 
@@ -124,12 +159,12 @@ export function CommentPanel({
 
   const resetDraft = () => {
     setDraftMode({ type: "default" });
-    setBody("");
+    setDraft(emptyCommentDraft());
   };
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    const value = body.trim();
+    const value = serializeCommentDraft(draft).trim();
     if (!value) return;
 
     if (draftMode.type === "edit") {
@@ -155,13 +190,13 @@ export function CommentPanel({
   const handleReply = (rootMessageId: string, message: CommentMessage) => {
     setSelectedMessageId(message.id);
     setDraftMode({ type: "reply", rootMessageId, targetMessageId: message.id, targetAuthor: message.author });
-    setBody("");
+    setDraft(emptyCommentDraft());
   };
 
   const handleEdit = (threadId: string, message: CommentMessage) => {
     setSelectedMessageId(message.id);
     setDraftMode({ type: "edit", threadId, messageId: message.id, targetAuthor: message.author });
-    setBody(message.body);
+    setDraft(commentDraftFromStoredBody(message.body, mentionUsersById));
   };
 
   const handleDelete = (threadId: string, messageId: string) => {
@@ -212,6 +247,7 @@ export function CommentPanel({
                     entry={activeRootEntry}
                     canManageAllComments={canManageAllComments}
                     currentMember={currentMember}
+                    mentionUsersById={mentionUsersById}
                     selected={selectedMessageId === activeRootEntry.message.id}
                     onOpenImage={setImagePreview}
                     onSelect={setSelectedMessageId}
@@ -228,6 +264,7 @@ export function CommentPanel({
                         entry={entry}
                         canManageAllComments={canManageAllComments}
                         currentMember={currentMember}
+                        mentionUsersById={mentionUsersById}
                         selected={selectedMessageId === entry.message.id}
                         onOpenImage={setImagePreview}
                         onSelect={setSelectedMessageId}
@@ -249,6 +286,7 @@ export function CommentPanel({
                     entry={entry}
                     canManageAllComments={canManageAllComments}
                     currentMember={currentMember}
+                    mentionUsersById={mentionUsersById}
                     selected={selectedMessageId === entry.message.id}
                     showReplyEntry
                     onOpenImage={setImagePreview}
@@ -265,16 +303,16 @@ export function CommentPanel({
             )}
           </div>
           <CommentComposer
-            body={body}
             currentMember={currentMember}
+            currentUserId={currentUserId}
             defaultReplyAuthor={activeRootEntry?.message.author}
+            draft={draft}
+            mentionableUsers={mentionableUsers}
             mode={draftMode}
-            onBodyChange={setBody}
             onCancelMode={resetDraft}
+            onDraftChange={setDraft}
             onSubmit={handleSubmit}
             onUploadAttachment={onUploadAttachment}
-            targetId={targetId}
-            targetType={targetType}
           />
         </div>
       </aside>
@@ -287,6 +325,7 @@ function CommentMessageRow({
   canManageAllComments,
   currentMember,
   entry,
+  mentionUsersById,
   onDelete,
   onEdit,
   onEnterReplies,
@@ -299,6 +338,7 @@ function CommentMessageRow({
   canManageAllComments: boolean;
   currentMember: string;
   entry: CommentEntry;
+  mentionUsersById: Map<string, CommentMentionUser>;
   onDelete: (threadId: string, messageId: string) => void;
   onEdit: (threadId: string, message: CommentMessage) => void;
   onEnterReplies?: () => void;
@@ -341,7 +381,7 @@ function CommentMessageRow({
         </div>
         <div className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
           {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
-          <CommentBodyText attachments={message.attachments ?? []} body={message.body} onOpenImage={onOpenImage} />
+          <CommentBodyText attachments={message.attachments ?? []} body={message.body} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
         </div>
         {showReplyEntry && entry.replyCount > 0 && (
           <button type="button" className="orf-comment-reply-count" onClick={(event) => { event.stopPropagation(); onEnterReplies?.(); }}>
@@ -373,7 +413,44 @@ function CommentImagePreviewDialog({ onClose, preview }: { onClose: () => void; 
   );
 }
 
-function CommentTextFragment({ value }: { value: string }) {
+function CommentTextFragment({ mentionUsersById, value }: { mentionUsersById: Map<string, CommentMentionUser>; value: string }) {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of value.matchAll(commentMentionTokenPattern)) {
+    const token = match[0];
+    const fallbackLabel = match[1] || "成员";
+    const rawUserId = match[2] ?? "";
+    const userId = decodeMentionUserId(rawUserId);
+    const index = match.index ?? 0;
+
+    if (index > lastIndex) {
+      nodes.push(<CommentLinkedText key={`mention-text:${lastIndex}`} value={value.slice(lastIndex, index)} />);
+    }
+
+    const user = mentionUsersById.get(userId);
+    nodes.push(
+      user ? (
+        <span key={`mention:${user.id}:${index}`} className="orf-comment-mention" title={user.email || user.name}>
+          @{user.name}
+        </span>
+      ) : (
+        <span key={`mention:${rawUserId}:${index}`} className="orf-comment-mention">
+          @{fallbackLabel}
+        </span>
+      ),
+    );
+    lastIndex = index + token.length;
+  }
+
+  if (lastIndex < value.length) {
+    nodes.push(<CommentLinkedText key={`mention-text:${lastIndex}`} value={value.slice(lastIndex)} />);
+  }
+
+  return <>{nodes}</>;
+}
+
+function CommentLinkedText({ value }: { value: string }) {
   return (
     <>
       {parseCommentBodyLinks(value).map((token, index) =>
@@ -400,10 +477,12 @@ function CommentTextFragment({ value }: { value: string }) {
 function CommentBodyText({
   attachments,
   body,
+  mentionUsersById,
   onOpenImage,
 }: {
   attachments: CommentAttachment[];
   body: string;
+  mentionUsersById: Map<string, CommentMentionUser>;
   onOpenImage: (preview: CommentImagePreview) => void;
 }) {
   const attachmentsById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
@@ -416,7 +495,7 @@ function CommentBodyText({
     const attachmentId = match[2];
     const index = match.index ?? 0;
     if (index > lastIndex) {
-      nodes.push(<CommentTextFragment key={`text:${lastIndex}`} value={body.slice(lastIndex, index)} />);
+      nodes.push(<CommentTextFragment key={`text:${lastIndex}`} mentionUsersById={mentionUsersById} value={body.slice(lastIndex, index)} />);
     }
 
     const attachment = attachmentId ? attachmentsById.get(attachmentId) : undefined;
@@ -438,57 +517,240 @@ function CommentBodyText({
           </button>
         </figure>
       ) : (
-        <CommentTextFragment key={`missing:${index}`} value={token} />
+        <CommentTextFragment key={`missing:${index}`} mentionUsersById={mentionUsersById} value={token} />
       ),
     );
     lastIndex = index + token.length;
   }
 
   if (lastIndex < body.length) {
-    nodes.push(<CommentTextFragment key={`text:${lastIndex}`} value={body.slice(lastIndex)} />);
+    nodes.push(<CommentTextFragment key={`text:${lastIndex}`} mentionUsersById={mentionUsersById} value={body.slice(lastIndex)} />);
   }
 
   return <>{nodes}</>;
 }
 
+function decodeMentionUserId(rawUserId: string) {
+  try {
+    return decodeURIComponent(rawUserId);
+  } catch {
+    return rawUserId;
+  }
+}
+
+function emptyCommentDraft(): CommentDraft {
+  return { mentions: [], text: "" };
+}
+
+function commentDraftFromStoredBody(body: string, mentionUsersById: Map<string, CommentMentionUser>): CommentDraft {
+  const mentions: CommentDraftMention[] = [];
+  let text = "";
+  let lastIndex = 0;
+
+  for (const match of body.matchAll(commentMentionTokenPattern)) {
+    const token = match[0];
+    const fallbackLabel = match[1] || "成员";
+    const rawUserId = match[2] ?? "";
+    const userId = decodeMentionUserId(rawUserId);
+    const index = match.index ?? 0;
+    const label = commentMentionLabel(mentionUsersById.get(userId)?.name ?? fallbackLabel);
+    const visibleMention = `@${label}`;
+
+    text += body.slice(lastIndex, index);
+    const start = text.length;
+    text += visibleMention;
+    mentions.push({ end: text.length, label, start, userId });
+    lastIndex = index + token.length;
+  }
+
+  text += body.slice(lastIndex);
+  return { mentions, text };
+}
+
+function serializeCommentDraft(draft: CommentDraft) {
+  const validMentions = draft.mentions
+    .filter((mention) => draft.text.slice(mention.start, mention.end) === `@${mention.label}`)
+    .sort((left, right) => left.start - right.start);
+  let serialized = "";
+  let lastIndex = 0;
+
+  for (const mention of validMentions) {
+    if (mention.start < lastIndex) continue;
+    serialized += draft.text.slice(lastIndex, mention.start);
+    serialized += commentMentionTokenForDraftMention(mention);
+    lastIndex = mention.end;
+  }
+
+  return serialized + draft.text.slice(lastIndex);
+}
+
+type CommentMentionRange = {
+  end: number;
+  query: string;
+  start: number;
+};
+
+function commentMentionRangeFor(value: string, cursor: number, mentions: CommentDraftMention[]): CommentMentionRange | null {
+  if (mentions.some((mention) => cursor > mention.start && cursor <= mention.end)) return null;
+
+  const prefix = value.slice(0, cursor);
+  const match = /(^|[\s(（])@([^\s@()[\]]{0,40})$/u.exec(prefix);
+  if (!match) return null;
+  const query = match[2] ?? "";
+  return {
+    end: cursor,
+    query,
+    start: cursor - query.length - 1,
+  };
+}
+
+function commentMentionTokenForDraftMention(mention: Pick<CommentDraftMention, "label" | "userId">) {
+  return `@[${commentMentionLabel(mention.label)}](orf-user:${encodeURIComponent(mention.userId)})`;
+}
+
+function commentMentionLabel(name: string) {
+  return name.replace(/[\]\r\n]/g, " ").trim() || "成员";
+}
+
+function reconcileCommentDraftMentions(previousText: string, nextText: string, mentions: CommentDraftMention[]) {
+  let prefixLength = 0;
+  const commonPrefixLimit = Math.min(previousText.length, nextText.length);
+  while (prefixLength < commonPrefixLimit && previousText[prefixLength] === nextText[prefixLength]) {
+    prefixLength += 1;
+  }
+
+  let suffixLength = 0;
+  const suffixLimit = commonPrefixLimit - prefixLength;
+  while (
+    suffixLength < suffixLimit &&
+    previousText[previousText.length - 1 - suffixLength] === nextText[nextText.length - 1 - suffixLength]
+  ) {
+    suffixLength += 1;
+  }
+
+  const previousEditEnd = previousText.length - suffixLength;
+  const nextEditEnd = nextText.length - suffixLength;
+  const delta = nextEditEnd - previousEditEnd;
+
+  return mentions
+    .flatMap((mention) => {
+      if (mention.end <= prefixLength) return [mention];
+      if (mention.start >= previousEditEnd) {
+        return [{ ...mention, end: mention.end + delta, start: mention.start + delta }];
+      }
+      return [];
+    })
+    .filter((mention) => nextText.slice(mention.start, mention.end) === `@${mention.label}`);
+}
+
+function replaceCommentDraftText(
+  draft: CommentDraft,
+  start: number,
+  end: number,
+  replacement: string,
+  mention?: Omit<CommentDraftMention, "end" | "start"> & { length: number },
+): CommentDraft {
+  const nextText = `${draft.text.slice(0, start)}${replacement}${draft.text.slice(end)}`;
+  const delta = replacement.length - (end - start);
+  const mentions = draft.mentions.flatMap((entry) => {
+    if (entry.end <= start) return [entry];
+    if (entry.start >= end) return [{ ...entry, end: entry.end + delta, start: entry.start + delta }];
+    return [];
+  });
+
+  if (mention) {
+    mentions.push({
+      end: start + mention.length,
+      label: mention.label,
+      start,
+      userId: mention.userId,
+    });
+  }
+
+  return {
+    mentions: mentions.sort((left, right) => left.start - right.start),
+    text: nextText,
+  };
+}
+
 function CommentComposer({
-  body,
   currentMember,
+  currentUserId,
   defaultReplyAuthor,
+  draft,
+  mentionableUsers,
   mode,
-  onBodyChange,
   onCancelMode,
+  onDraftChange,
   onSubmit,
   onUploadAttachment,
 }: {
-  body: string;
   currentMember: string;
+  currentUserId: string;
   defaultReplyAuthor?: string;
+  draft: CommentDraft;
+  mentionableUsers: CommentMentionUser[];
   mode: CommentDraftMode;
-  onBodyChange: (body: string) => void;
   onCancelMode: () => void;
+  onDraftChange: (draft: CommentDraft) => void;
   onSubmit: (event: FormEvent) => void;
   onUploadAttachment: (file: File) => Promise<string | null>;
-  targetId: string;
-  targetType: CommentTargetType;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [mentionRange, setMentionRange] = useState<CommentMentionRange | null>(null);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const placeholder = mode.type === "edit" ? "编辑评论..." : mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
   const submitLabel = mode.type === "edit" ? "保存评论" : mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";
+  const filteredMentionUsers = useMemo(() => {
+    if (!mentionRange) return [];
+    const query = mentionRange.query.trim().toLowerCase();
+    return mentionableUsers
+      .filter((user) => user.id !== currentUserId)
+      .filter((user) => !query || user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
+      .slice(0, 6);
+  }, [currentUserId, mentionRange, mentionableUsers]);
+
+  useEffect(() => {
+    setSelectedMentionIndex(0);
+  }, [mentionRange?.query, filteredMentionUsers.length]);
+
+  const updateMentionRange = (value: string, cursor: number, mentions = draft.mentions) => {
+    setMentionRange(commentMentionRangeFor(value, cursor, mentions));
+  };
+  const insertMention = (user: CommentMentionUser, range = mentionRange) => {
+    if (!range) return;
+    const textarea = textareaRef.current;
+    const after = draft.text.slice(range.end);
+    const label = commentMentionLabel(user.name);
+    const visibleMention = `@${label}`;
+    const suffix = after && /^\s/.test(after) ? "" : " ";
+    const nextDraft = replaceCommentDraftText(draft, range.start, range.end, `${visibleMention}${suffix}`, {
+      label,
+      length: visibleMention.length,
+      userId: user.id,
+    });
+    const nextCursor = range.start + visibleMention.length + suffix.length;
+    onDraftChange(nextDraft);
+    setMentionRange(null);
+    window.requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(nextCursor, nextCursor);
+    });
+  };
   const insertMarkdown = (markdown: string) => {
     const textarea = textareaRef.current;
-    const start = textarea?.selectionStart ?? body.length;
-    const end = textarea?.selectionEnd ?? body.length;
-    const before = body.slice(0, start);
-    const after = body.slice(end);
+    const start = textarea?.selectionStart ?? draft.text.length;
+    const end = textarea?.selectionEnd ?? draft.text.length;
+    const before = draft.text.slice(0, start);
+    const after = draft.text.slice(end);
     const prefix = before && !before.endsWith("\n") ? "\n" : "";
     const suffix = after && !after.startsWith("\n") ? "\n" : "";
-    const nextBody = `${before}${prefix}${markdown}${suffix}${after}`;
     const nextCursor = before.length + prefix.length + markdown.length;
-    onBodyChange(nextBody);
+    onDraftChange(replaceCommentDraftText(draft, start, end, `${prefix}${markdown}${suffix}`));
+    setMentionRange(null);
     window.requestAnimationFrame(() => {
       textarea?.focus();
       textarea?.setSelectionRange(nextCursor, nextCursor);
@@ -520,6 +782,11 @@ function CommentComposer({
     event.preventDefault();
     void uploadImage(image);
   };
+  const handleBodyChange = (value: string, cursor: number) => {
+    const mentions = reconcileCommentDraftMentions(draft.text, value, draft.mentions);
+    onDraftChange({ mentions, text: value });
+    updateMentionRange(value, cursor, mentions);
+  };
 
   return (
     <form className="orf-comment-composer" onSubmit={onSubmit}>
@@ -536,18 +803,68 @@ function CommentComposer({
       <textarea
         ref={textareaRef}
         className="orf-comment-compose-field"
-        onChange={(event) => onBodyChange(event.target.value)}
+        onChange={(event) => handleBodyChange(event.target.value, event.currentTarget.selectionStart)}
         onKeyDown={(event) => {
+          if (mentionRange && filteredMentionUsers.length > 0) {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setSelectedMentionIndex((index) => (index + 1) % filteredMentionUsers.length);
+              return;
+            }
+            if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setSelectedMentionIndex((index) => (index - 1 + filteredMentionUsers.length) % filteredMentionUsers.length);
+              return;
+            }
+            if (event.key === "Enter" || event.key === "Tab") {
+              event.preventDefault();
+              const selectedUser = filteredMentionUsers[selectedMentionIndex] ?? filteredMentionUsers[0];
+              if (selectedUser) insertMention(selectedUser);
+              return;
+            }
+          }
+          if (mentionRange && event.key === "Escape") {
+            event.preventDefault();
+            setMentionRange(null);
+            return;
+          }
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
             event.preventDefault();
             event.currentTarget.form?.requestSubmit();
           }
         }}
+        onKeyUp={(event) => updateMentionRange(event.currentTarget.value, event.currentTarget.selectionStart)}
         onPaste={handlePaste}
+        onSelect={(event) => updateMentionRange(event.currentTarget.value, event.currentTarget.selectionStart)}
         placeholder={placeholder}
         rows={3}
-        value={body}
+        value={draft.text}
       />
+      {mentionRange && (
+        <div className="orf-comment-mention-menu">
+          {filteredMentionUsers.length > 0 ? (
+            filteredMentionUsers.map((user, index) => (
+              <button
+                key={user.id}
+                type="button"
+                className={clsx("orf-comment-mention-option", index === selectedMentionIndex && "orf-comment-mention-option-active")}
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  insertMention(user);
+                }}
+              >
+                <PersonAvatar name={user.name} />
+                <span>
+                  <span className="orf-comment-mention-name">{user.name}</span>
+                  <span className="orf-comment-mention-email">{user.email}</span>
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="orf-comment-mention-empty">没有匹配成员</div>
+          )}
+        </div>
+      )}
       <div className="orf-comment-composer-footer">
         <span className={clsx("orf-comment-hint", uploadError && "orf-comment-upload-error")}>
           {uploadError || (uploadingImage ? "图片上传中..." : "Ctrl / Cmd + Enter 发送")}
@@ -573,7 +890,7 @@ function CommentComposer({
         >
           <ImagePlus className="h-4 w-4" />
         </button>
-        <button type="submit" className="orf-comment-send-button" disabled={!body.trim() || uploadingImage} aria-label={submitLabel} title={submitLabel}>
+        <button type="submit" className="orf-comment-send-button" disabled={!draft.text.trim() || uploadingImage} aria-label={submitLabel} title={submitLabel}>
           <Send className="h-4 w-4" />
         </button>
       </div>

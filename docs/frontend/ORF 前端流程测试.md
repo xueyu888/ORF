@@ -10,8 +10,8 @@
 
 | 层级 | 文件 | 覆盖重点 |
 | --- | --- | --- |
-| Model 单测 | `tests/challengeModel.test.ts` | 挑战树构建、状态文案、状态色、拖拽权限、评论映射等纯前端规则 |
-| API 优先契约 | `e2e/state-source/api-first-state.spec.ts` | 页面必须以 API 返回为准，不能回退到旧 localStorage 或乐观写入 |
+| Model 单测 | `tests/challengeModel.test.ts` / `tests/objectiveCreationSession.test.ts` | 挑战树构建、状态文案、状态色、拖拽权限、评论映射、目标创建 session 状态转换等纯前端规则 |
+| API 优先契约 | `e2e/state-source/api-first-state.spec.ts` | 页面必须以 API 返回为准，不能回退到旧 localStorage 或伪造业务数据；创建目标时只能用 `POST /api/objectives` 成功返回的真实目标做页面级临时覆盖层，并且不能等待任务数据刷新后才显示 |
 | 悬赏大厅 E2E | `e2e/bounties/bounty-hall-skin.spec.ts` / `e2e/challenges/orf-frontend-flow.spec.ts` | 悬赏大厅列表、征召置顶、申请后刷新和禁用重复申请 |
 | 挑战工作台 E2E | `e2e/challenges/orf-frontend-flow.spec.ts` | `/tasks` 悬赏目标挑战工作台中的流程按钮、审核条、范围过滤、目标树和冻结后入口 |
 | 评论 E2E | `e2e/comments/comment-persistence.spec.ts` | 评论提交后在当前页面保持可见 |
@@ -205,7 +205,7 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  A1[指挥官在目标下看到指标区域] --> A2[点击定义指标 / 新增指标<br/>或编辑已有指标]
+  A1[指挥官在目标下看到指标区域] --> A2[从待定义指标空态或目标行点击定义指标 / 新增指标<br/>或编辑已有指标]
   A2 --> A3[指标出现在目标下的指标区]
   B1[挑战者打开重估中的我的目标] --> B2{是否在重估截止前?}
   B2 -->|是| B3[看到提出指标入口<br/>已有指标显示编辑入口]
@@ -219,7 +219,7 @@ flowchart TD
 指标断言重点：
 
 - 目标才叫“悬赏目标”，`Result` 统一叫“指标”。
-- 指挥官动作可以叫“定义指标 / 新增指标”，也可以编辑未冻结目标下已有指标。
+- 指挥官动作可以叫“定义指标 / 新增指标”，空目标必须在“待定义指标”空态给出直接入口，也可以编辑未冻结目标下已有指标。
 - 挑战者动作分为“提出指标”和“编辑指标”：提出是新增指标，编辑是修改已有指标。
 - 挑战者在重估截止后不能提出或编辑指标；目标冻结后，指挥官和挑战者都不能继续编辑指标。
 - 不再使用“新增悬赏”，也不把指标称为悬赏。
@@ -331,7 +331,7 @@ flowchart TD
 ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=line --output="test-results/manual-real-system-suite-$(date +%Y%m%d-%H%M%S)"
 ```
 
-测试数据使用唯一 `real-e2e-*` 前缀写入真实数据库，默认保留，便于在悬赏大厅、挑战页、统计页面直接查看；只有设置 `ORF_REAL_E2E_CLEANUP=1` 时才清理本次 run 的数据。
+测试数据使用唯一 `real-e2e-*` 前缀写入真实数据库；套件结束时默认清理本次 run 的团队、用户和关联业务数据，避免测试用户残留。
 
 | 文件 | 场景 | 必须验证 |
 | --- | --- | --- |
@@ -346,7 +346,7 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 测试分层必须保持正交：
 
 - `realSystemHarness.ts` 只负责启动真实 Fastify API、Fake Ory、真实数据库种子和多浏览器上下文。
-- `realScenarioDsl.ts` 只封装用户动作，不写业务判定；页面内新建目标先定位到目标行的 `编辑目标标题` 输入框，其他浮层表单先定位到对应 `dialog`，避免页面级筛选器或同名控件污染真实流程测试。
+- `realScenarioDsl.ts` 只封装用户动作，不写业务判定；页面内新建目标先定位到目标行的 `编辑目标标题` 输入框，草稿面板必须已展示待定义指标和待创建行动项，按 Enter 或输入框失焦创建候选目标后退出标题编辑态并保持同一排序位置；其他浮层表单先定位到对应 `dialog`，避免页面级筛选器或同名控件污染真实流程测试。
 - `realClock.ts` 只推进测试业务时间，不等待真实时间。
 - `realAssertions.ts` 只做页面和数据库不变量断言。
 - 产品代码不能 import 或依赖任何 `e2e/challenges/helpers/*`，也不能为了测试新增生产运行路径。
@@ -361,7 +361,9 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | 权限边界 | 成员不能看到指挥官动作；非挑战者不能提交；非指挥官不能验收；搜索、目标列表和深链页面也必须按当前用户可见目标收敛 |
 | 时间边界 | 只有正式挑战者能在重估截止前提出 / 编辑指标；截止后和冻结后入口关闭 |
 | 表单交互 | 空战利品、无指标、无 latest loot、取消弹窗、关闭 modal、重复点击都不能产生伪状态；征召、提交战利品、匿名互评、验收结算和成员管理写入必须在请求进行中禁用提交入口 |
-| 目标创建入口 | 顶部栏和命令菜单的 `新建目标` 进入 `/tasks` 页面内创建；树内插入草稿目标行并默认编辑标题，回车或失焦后生成 `candidate` 目标行，失败时保留草稿并展示失败提示 |
+| 目标创建入口 | 顶部栏和命令菜单的 `新建目标` 进入 `/tasks` 页面内创建；树内插入完整草稿目标面板并默认编辑标题，草稿和创建成功后的真实目标都展示待定义指标和待创建行动项，创建成功后的待定义指标空态必须直接提供新增指标入口；Enter 或标题输入框失焦调用接口并生成 `candidate` 目标行，请求发起后立即退出标题编辑态，POST 返回后先显示真实目标覆盖层，任务数据刷新只负责撤掉覆盖层；输入标题时不能因为同排序键目标的标题 tie-breaker 发生重排，API 返回顺序和草稿源顺序不一致时也不能从第 2 位跳到第 3 位，页面数据刷新延迟时不能出现目标短暂消失或旧目标上移，点击非动作区域不能重新进入标题编辑或触发标题更新，失败时保留草稿并展示失败提示 |
+| 目标创建定位 | 用户已在挑战页滚动浏览时点击 `新建目标`，视口必须移动到统一排序后的草稿目标位置；不能只在列表顶部插入草稿却把用户留在原滚动位置 |
+| 目标创建过滤器 | 用户在已结算、待验收等非创建筛选视图中点击 `新建目标`，工作台必须切到未分配创建区，再显示草稿目标；不能把草稿硬插进当前不相干筛选结果 |
 | 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
 | 深链入口 | `/objectives/:id/loot`、Objective detail、Result detail 的入口必须和 `/tasks` 规则一致 |
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss、目标行评论数量入口贴近标题文本、切换评论对象后清空旧回复状态都要有可见断言 |

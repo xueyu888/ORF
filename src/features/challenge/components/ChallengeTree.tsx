@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Plus, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -50,6 +50,7 @@ type RowHandlers = {
   onAddSubAction: (actionId: string, afterItemId?: string) => void;
   onApproveApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCancelEdit: () => void;
+  onDraftTitleChange: (title: string) => void;
   onEditTarget: (target: ChallengeTarget) => void;
   onFreezeObjective: (objectiveId: string) => Promise<boolean>;
   onOpenActionChange: (id: string | null) => void;
@@ -111,6 +112,7 @@ function ObjectivePanel({
   const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
   const hasOpenRowMenu = objectivePanelHasOpenRowMenu(group, handlers.openActionId);
   const isDraftObjective = group.objective.id === handlers.draftObjectiveId;
+  const isEditingTarget = isSameTarget(handlers.editingTarget, target);
   const isFrozen = shouldRenderObjectiveAsFrozen(group.objective);
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const workbenchAction = workbenchActionForObjective({
@@ -128,14 +130,14 @@ function ObjectivePanel({
   ].join(";");
   const metricAddLabel = isDraftObjective ? null : handlers.metricActionLabel(group.objective);
   const objectiveAddActions = [
-    ...(metricAddLabel ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
+    ...(metricAddLabel && group.bounties.length > 0 ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
     ...(isDraftObjective || !handlers.canMutateWorkItems(group.objective.id) ? [] : [{ label: "新增行动项", onAdd: () => handlers.onAddAction(group.objective.id) }]),
   ];
 
   return (
     <section
       ref={setObjectiveElement}
-      className={clsx("orf-objective-panel relative", isFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable")}
+      className={clsx("orf-objective-panel relative", isFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable", isDraftObjective && "orf-objective-panel-draft")}
       data-has-open-row-menu={hasOpenRowMenu ? "true" : undefined}
     >
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
@@ -161,10 +163,11 @@ function ObjectivePanel({
           openActionId={handlers.openActionId}
         />
         <HierarchyRootCell anchor={<ObjectiveFlagIcon complete={complete} />} anchorId={anchorId}>
-          {isSameTarget(handlers.editingTarget, target) ? (
+          {isEditingTarget ? (
             <InlineTitleEditor
               ariaLabel="编辑目标标题"
               className="orf-objective-title text-lg font-bold"
+              onDraftChange={isDraftObjective ? handlers.onDraftTitleChange : undefined}
               onCancel={handlers.onCancelEdit}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
               value={group.objective.title}
@@ -174,9 +177,9 @@ function ObjectivePanel({
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
-        {isDraftObjective ? <EmptySlot /> : <ObjectiveFlowAction group={group} handlers={handlers} />}
+        <ObjectiveFlowAction disabled={isDraftObjective} group={group} handlers={handlers} />
         <AvatarStack names={group.challengers} />
-        {isDraftObjective ? <StatusChip tone="open">草稿</StatusChip> : <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>}
+        <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
@@ -215,7 +218,13 @@ function ObjectivePanel({
             scope={scope}
           />
         ))}
-        {group.bounties.length === 0 && <ObjectiveMetricEmptyState parentAnchorId={anchorId} />}
+        {group.bounties.length === 0 && (
+          <ObjectiveMetricEmptyState
+            actionLabel={metricAddLabel}
+            onAdd={metricAddLabel ? () => handlers.onAddBounty(group.objective.id) : undefined}
+            parentAnchorId={anchorId}
+          />
+        )}
         {group.actions.length > 0 ? (
           <div className="pb-2">
             {group.actions.map((action) => (
@@ -229,7 +238,7 @@ function ObjectivePanel({
           </div>
         ) : (
           <ObjectiveTaskEmptyState
-            canAdd={handlers.canMutateWorkItems(group.objective.id)}
+            canAdd={!isDraftObjective && handlers.canMutateWorkItems(group.objective.id)}
             dragDrop={handlers.dragDrop}
             objectiveId={group.objective.id}
             onAdd={() => handlers.onAddAction(group.objective.id)}
@@ -302,7 +311,15 @@ function ObjectiveTaskEmptyState({
   );
 }
 
-function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string }) {
+function ObjectiveMetricEmptyState({
+  actionLabel,
+  onAdd,
+  parentAnchorId,
+}: {
+  actionLabel?: string | null;
+  onAdd?: () => void;
+  parentAnchorId: string;
+}) {
   return (
     <div className="orf-objective-metric-empty">
       <HierarchyCell depth={1}>
@@ -319,12 +336,18 @@ function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string 
           <div className="text-base font-semibold text-[#475467]">待定义指标</div>
           <div className="text-xs orf-text-muted">当前目标还没有指标。</div>
         </div>
+        {actionLabel && onAdd && (
+          <button type="button" className="orf-flow-action-button orf-flow-action-primary ml-auto" onClick={onAdd}>
+            <Plus className="h-3.5 w-3.5" />
+            {actionLabel}
+          </button>
+        )}
       </HierarchyCell>
     </div>
   );
 }
 
-function ObjectiveFlowAction({ group, handlers }: { group: ObjectiveNode; handlers: RowHandlers }) {
+function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?: boolean; group: ObjectiveNode; handlers: RowHandlers }) {
   const objective = group.objective;
   if (!handlers.canManageFlow) return <EmptySlot />;
 
@@ -332,7 +355,7 @@ function ObjectiveFlowAction({ group, handlers }: { group: ObjectiveNode; handle
 
   if (objective.flowStatus === "candidate") {
     actions.push(
-      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="发布到悬赏大厅" onClick={() => void handlers.onPublishObjective(objective.id)}>
+      <button className="orf-flow-action-button orf-flow-action-secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可发布" : "发布到悬赏大厅"} onClick={() => void handlers.onPublishObjective(objective.id)}>
         <Send className="h-3.5 w-3.5" />
         发布
       </button>,
@@ -341,7 +364,7 @@ function ObjectiveFlowAction({ group, handlers }: { group: ObjectiveNode; handle
 
   if (handlers.canRecruitObjective(objective)) {
     actions.push(
-      <button className="orf-flow-action-button orf-flow-action-secondary" type="button" title="征召挑战者" onClick={() => handlers.onRecruitObjective(objective.id)}>
+      <button className="orf-flow-action-button orf-flow-action-secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可征召" : "征召挑战者"} onClick={() => handlers.onRecruitObjective(objective.id)}>
         <UserPlus className="h-3.5 w-3.5" />
         征召
       </button>,
@@ -350,7 +373,7 @@ function ObjectiveFlowAction({ group, handlers }: { group: ObjectiveNode; handle
 
   if (canFreezeObjectiveAfterReestimate(objective, group.bounties.map((bounty) => bounty.result))) {
     actions.push(
-      <button className="orf-flow-action-button orf-flow-action-primary" type="button" title="重估完成并冻结目标" onClick={() => void handlers.onFreezeObjective(objective.id)}>
+      <button className="orf-flow-action-button orf-flow-action-primary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可冻结" : "重估完成并冻结目标"} onClick={() => void handlers.onFreezeObjective(objective.id)}>
         <CheckCircle2 className="h-3.5 w-3.5" />
         冻结
       </button>,

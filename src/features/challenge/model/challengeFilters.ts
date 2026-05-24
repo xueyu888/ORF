@@ -34,3 +34,48 @@ export function filterChallengeGroups(groups: readonly ObjectiveNode[], filters:
       return filters.status === "all" || filters.status === "unassigned" || group.bounties.length > 0;
     });
 }
+
+export function sortChallengeGroups(groups: readonly ObjectiveNode[]): ObjectiveNode[] {
+  return groups
+    .map((group, index) => ({ group, index }))
+    .sort((left, right) => compareChallengeGroups(left.group, right.group) || left.index - right.index)
+    .map((item) => item.group);
+}
+
+function compareChallengeGroups(left: ObjectiveNode, right: ObjectiveNode) {
+  return (
+    objectiveFlowRank(left) - objectiveFlowRank(right) ||
+    compareText(left.deadline, right.deadline) ||
+    compareTextDescending(left.objective.createdAt, right.objective.createdAt)
+  );
+}
+
+function objectiveFlowRank(group: ObjectiveNode) {
+  switch (group.objective.flowStatus) {
+    case "candidate":
+      return 0;
+    case "open":
+    case "applying":
+    case "recruiting":
+      return group.challengers.length === 0 ? 1 : 2;
+    case "reestimating":
+    case "frozen":
+      return 3;
+    case "submitted":
+      return 4;
+    case "settled":
+      return 5;
+    case "closed":
+      return 6;
+    default:
+      return 7;
+  }
+}
+
+function compareText(left: string, right: string) {
+  return left.localeCompare(right, "zh-Hans-CN");
+}
+
+function compareTextDescending(left: string, right: string) {
+  return compareText(right, left);
+}
