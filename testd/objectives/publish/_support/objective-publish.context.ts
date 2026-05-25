@@ -12,6 +12,10 @@ export type ObjectivePublishCaseData = {
   password: string;
   name: string;
   role: "admin";
+  memberEmail: string;
+  memberPassword: string;
+  memberName: string;
+  memberRole: "member";
   objectiveTitle: string;
 };
 

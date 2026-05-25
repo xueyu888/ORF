@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
+import { clearBrowserState } from "../../_operators/common.helpers";
 import { optionalString, requiredString } from "../../_operators/params";
 import type { RegisterCaseData, RegisteredUserRecord, TestContext } from "./_support/register.context";
 import {
@@ -31,6 +32,13 @@ export const registerOperators = {
         return;
       }
       await revokeOrySessionsByEmail(email);
+    },
+  },
+
+  "browser.cleanup": {
+    clear_state_optional: async ({ ctx }) => {
+      await ctx.context.clearCookies().catch(() => undefined);
+      await clearBrowserState(ctx.page).catch(() => undefined);
     },
   },
 

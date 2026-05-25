@@ -12,6 +12,7 @@ import {
   adminAccountActive,
   bountyHallContainsObjective,
   bountyRow,
+  memberAccountActive,
   objectivePanel,
   objectiveTitleAbsent,
   readAdminWorkbenchData,
@@ -26,6 +27,12 @@ export const objectivePublishOperators = {
   "db.admin": {
     active: async ({ data }) => {
       await expect.poll(() => adminAccountActive(data)).toBe(true);
+    },
+  },
+
+  "db.member": {
+    active: async ({ data }) => {
+      await expect.poll(() => memberAccountActive(data)).toBe(true);
     },
   },
 

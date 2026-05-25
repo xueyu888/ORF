@@ -217,6 +217,20 @@ export const registerApprovalLoginCase = {
         operator: "approve",
         params: { emailFrom: "data.email", nameFrom: "data.name" },
       },
+      {
+        id: "approval_response.ok",
+        title: "注册通过接口响应成功",
+        object: "api.registration_approval",
+        operator: "ok",
+        params: { responseFrom: "runtime.approvalResponse" },
+      },
+      {
+        id: "db.registered_user.active",
+        title: "确认注册用户已启用",
+        object: "db.registered_user",
+        operator: "active",
+        params: { emailFrom: "data.email" },
+      },
       { id: "auth.logout.admin", title: "管理员退出登录", object: "auth", operator: "logout" },
       { id: "browser.clear.admin", title: "清理管理员浏览器状态", object: "browser", operator: "clear_state" },
       { id: "page.goto.auth.member", title: "打开登录页", object: "page", operator: "goto", params: { path: "/auth" } },
@@ -263,20 +277,6 @@ export const registerApprovalLoginCase = {
         params: { userFrom: "runtime.pendingRegisteredUser", emailFrom: "data.email" },
       },
       {
-        id: "approval_response.ok",
-        title: "注册通过接口响应成功",
-        object: "api.registration_approval",
-        operator: "ok",
-        params: { responseFrom: "runtime.approvalResponse" },
-      },
-      {
-        id: "db.registered_user.active",
-        title: "注册用户已启用",
-        object: "db.registered_user",
-        operator: "active",
-        params: { emailFrom: "data.email" },
-      },
-      {
         id: "session.member.authenticated",
         title: "注册用户 session 已登录",
         object: "auth.session",
@@ -291,10 +291,15 @@ export const registerApprovalLoginCase = {
   },
 
   Clean: {
-    description: "删除注册测试用户和 Ory 身份，恢复未登录基准状态",
+    description: "先切断浏览器会话，再删除注册测试用户和 Ory 身份，恢复未登录基准状态",
     steps: [
       { id: "auth.logout", title: "退出当前登录态", object: "auth", operator: "logout" },
-      { id: "browser.clear", title: "清理浏览器状态", object: "browser", operator: "clear_state" },
+      {
+        id: "browser.clear",
+        title: "清理浏览器状态",
+        object: "browser.cleanup",
+        operator: "clear_state_optional",
+      },
       {
         id: "ory.sessions.revoke.registered_user",
         title: "撤销注册测试身份 Ory session",

@@ -16,8 +16,11 @@ export async function closeObjectivePublishTestDb() {
 }
 
 export async function adminAccountActive(data: Pick<ObjectivePublishCaseData, "email" | "role">) {
-  const rows = await readMemberMemberships(data.email);
-  return rows.some((membership) => membership.role === data.role && membership.status === "active");
+  return accountActive(data.email, data.role);
+}
+
+export async function memberAccountActive(data: Pick<ObjectivePublishCaseData, "memberEmail" | "memberRole">) {
+  return accountActive(data.memberEmail, data.memberRole);
 }
 
 export async function objectiveTitleAbsent(title: string) {
@@ -132,4 +135,9 @@ async function readMemberMemberships(email: string) {
     .from(users)
     .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
     .where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
+}
+
+async function accountActive(email: string, role: "admin" | "member") {
+  const rows = await readMemberMemberships(email);
+  return rows.some((membership) => membership.role === role && membership.status === "active");
 }
