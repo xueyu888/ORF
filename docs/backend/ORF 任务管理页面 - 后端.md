@@ -25,7 +25,7 @@
 | `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品，进入 `submitted` |
 | `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 目标挑战者提交匿名互评贡献比例 |
 | `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算，进入 `settled` |
-| `POST` | `/api/results` | 创建指标；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
+| `POST` | `/api/results` | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
 | `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner`；仅管理员或目标挑战者可对目标下指标创建 |
 | `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
@@ -33,7 +33,7 @@
 | `PATCH` | `/api/tasks/:taskId` | 更新任务 |
 | `PATCH` | `/api/tasks/:taskId/move` | 在同一目标下调整任务顺序 |
 | `DELETE` | `/api/tasks/:taskId` | 删除任务和子任务 |
-| `POST` | `/api/tasks/:taskId/checklist` | 创建子任务 |
+| `POST` | `/api/tasks/:taskId/checklist` | 创建子任务并返回 `{ item }` |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId` | 更新子任务勾选状态 |
 | `GET` | `/api/users` | 管理员读取成员和注册状态 |
 | `PATCH` | `/api/registration-requests/:userId/approve` | 通过注册申请 |
@@ -45,7 +45,7 @@
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。
 
-`POST /api/objectives` 对应挑战页草稿目标标题输入框的 Enter 或失焦快速创建动作。创建请求发起后，前端先让本地草稿退出标题编辑态并留在原位；`POST` 成功返回的真实目标必须足以立即替换本地草稿，任务管理数据刷新只负责后续同步和撤掉覆盖层，不能成为创建成功 UI 的前置条件。创建成功后的真实目标继续保持同一套目标面板结构，包含待定义指标和待创建行动项；真实目标已有 id 后，空指标区可以立即开放 `POST /api/results` 对应的新增指标入口。任务管理接口按 `createdAt desc, id desc` 返回目标源数据；挑战页在业务排序键相同时保留该源顺序，并且不能把目标标题作为列表排序键。由于 API 源顺序可能和本地草稿插入顺序不同，前端在提交草稿时保留一次性的邻居锚点；`POST` 成功返回的真实目标可以作为页面级临时覆盖层连续替换草稿，任务管理数据刷新包含同一目标后撤掉覆盖层，但排序锚点继续保留到用户切换筛选或目标业务排序键变化。创建失败时，前端回到草稿标题编辑态并保留用户输入。
+`POST /api/objectives` 对应挑战页 temporary 目标标题输入框的 Enter 或失焦快速创建动作。创建请求发起后，前端先让本地 temporary 目标退出标题编辑态并留在原位；`POST` 成功返回的真实目标必须足以立即替换本地 temporary 目标，任务管理数据刷新只负责后续同步和撤掉覆盖层，不能成为创建成功 UI 的前置条件。创建成功后的真实目标继续保持同一套目标面板结构，但缺失指标和行动项时前端不渲染伪子行；前端从目标行 `+` 选择新增指标或新增行动项后，才通过 `POST /api/results` / `POST /api/tasks` 创建对应实体，返回的真实实体用于替换本次创建的 temporary 行。`POST /api/tasks/:taskId/checklist` 必须返回创建出来的 `TaskChecklistItem`，前端用真实子任务 id 替换 temporary 子任务，不能靠标题匹配。指标、任务和子任务创建成功后都使用一次性创建覆盖层桥接到 `/api/my-challenges` 刷新 materialize，不能在页面级刷新延迟时短暂回到旧列表。任务管理接口按 `createdAt desc, id desc` 返回目标源数据；挑战页在业务排序键相同时保留该源顺序，并且不能把目标标题作为列表排序键。由于 API 源顺序可能和本地 temporary 目标插入顺序不同，前端在提交目标时保留一次性的邻居锚点；`POST` 成功返回的真实目标可以作为页面级临时覆盖层连续替换 temporary 目标，任务管理数据刷新包含同一目标后撤掉覆盖层，但排序锚点继续保留到用户切换筛选或目标业务排序键变化。创建失败时，前端回到目标标题编辑态并保留用户输入。
 
 ## 术语
 

@@ -21,6 +21,7 @@ export function ChallengeRowActions({
   actionId,
   activeActionId,
   addActions,
+  addForceMenu,
   addLabel,
   dragItem,
   left,
@@ -35,20 +36,26 @@ export function ChallengeRowActions({
   actionId: string;
   activeActionId: string | null;
   addActions?: Array<{ label: string; onAdd: () => void }>;
+  addForceMenu?: boolean;
   addLabel?: string | null;
   dragItem?: DragItem;
   left: number;
   onAction: (action: ChallengeRowAction) => void;
   onActiveActionChange: (id: string | null) => void;
-  onAdd: () => void;
+  onAdd?: () => void;
   onDragEnd?: () => void;
   onDragStart?: (item: DragItem) => void;
   onOpenActionChange: (id: string | null) => void;
   openActionId: string | null;
 }) {
-  const open = openActionId === actionId;
+  const menuOpen = openActionId === actionId;
+  const addMenuActionId = `${actionId}:add`;
+  const addMenuOpen = openActionId === addMenuActionId;
+  const open = menuOpen || addMenuOpen;
   const visible = open || (!openActionId && activeActionId === actionId);
-  const resolvedAddActions = addActions ?? (addLabel ? [{ label: addLabel, onAdd }] : []);
+  const resolvedAddActions = addActions ?? (addLabel && onAdd ? [{ label: addLabel, onAdd }] : []);
+  const shouldShowAddMenu = addForceMenu || resolvedAddActions.length > 1;
+  const addButtonLabel = shouldShowAddMenu ? "新增子级" : resolvedAddActions[0]?.label;
 
   return (
     <div
@@ -59,18 +66,45 @@ export function ChallengeRowActions({
       onPointerEnter={() => onActiveActionChange(actionId)}
       style={{ left, zIndex: open ? 100 : 40 }}
     >
-      {resolvedAddActions.map((item) => (
-        <button
-          key={item.label}
-          type="button"
-          aria-label={item.label}
-          className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
-          onClick={item.onAdd}
-          title={item.label}
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-      ))}
+      {resolvedAddActions.length > 0 && addButtonLabel ? (
+        <div className="relative">
+          <button
+            type="button"
+            aria-label={addButtonLabel}
+            className="orf-block-action-button pointer-events-auto flex h-7 w-7 items-center justify-center rounded text-[#667085] transition hover:bg-[var(--orf-bg-muted)] hover:text-[#1d2939]"
+            onClick={() => {
+              onActiveActionChange(actionId);
+              if (shouldShowAddMenu) {
+                onOpenActionChange(addMenuOpen ? null : addMenuActionId);
+                return;
+              }
+              resolvedAddActions[0]?.onAdd();
+              onOpenActionChange(null);
+            }}
+            title={addButtonLabel}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+          {addMenuOpen && (
+            <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-7 z-50 w-40 p-1" onPointerDown={(event) => event.stopPropagation()}>
+              {resolvedAddActions.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  className="orf-block-menu-item flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm text-[#344054] transition hover:bg-[var(--orf-bg-muted)]"
+                  onClick={() => {
+                    item.onAdd();
+                    onOpenActionChange(null);
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
       <div className="relative">
         <button
           type="button"
@@ -82,7 +116,7 @@ export function ChallengeRowActions({
           draggable={Boolean(dragItem)}
           onClick={() => {
             onActiveActionChange(actionId);
-            onOpenActionChange(open ? null : actionId);
+            onOpenActionChange(menuOpen ? null : actionId);
           }}
           onDragEnd={onDragEnd}
           onDragStart={(event) => {
@@ -95,8 +129,8 @@ export function ChallengeRowActions({
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        {open && (
-          <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-9 z-50 w-40 p-1">
+        {menuOpen && (
+          <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-7 z-50 w-40 p-1" onPointerDown={(event) => event.stopPropagation()}>
             {actionItems.map((item) => {
               const Icon = item.icon;
 

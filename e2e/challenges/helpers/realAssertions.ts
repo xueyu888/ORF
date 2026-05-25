@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import type { Objective } from "../../../src/types/orf";
 import type { RealSystemHarness, RealUser } from "./realSystemHarness";
 
@@ -6,6 +6,25 @@ const flyingMetricPoints = 810;
 
 export function objectivePanel(page: Page, title: string) {
   return page.locator("section.orf-objective-panel").filter({ hasText: title });
+}
+
+export async function openObjectiveChildCreateMenu(panel: Locator) {
+  await panel.locator(".orf-objective-header").hover();
+  await panel.getByRole("button", { name: "新增子级" }).click();
+}
+
+export async function chooseObjectiveChildCreate(panel: Locator, actionName: "新增指标" | "提出指标" | "新增行动项") {
+  await openObjectiveChildCreateMenu(panel);
+  await panel.getByRole("button", { name: actionName }).click();
+}
+
+export async function expectObjectiveChildCreateOptionAbsent(panel: Locator, actionName: "新增指标" | "提出指标" | "新增行动项") {
+  await panel.locator(".orf-objective-header").hover();
+  const addButton = panel.getByRole("button", { name: "新增子级" });
+  if ((await addButton.count()) > 0) {
+    await addButton.click();
+  }
+  await expect(panel.getByRole("button", { name: actionName })).toHaveCount(0);
 }
 
 export function bountyRow(page: Page, title: string) {

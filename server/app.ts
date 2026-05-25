@@ -1344,7 +1344,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(404).send({ error: "Task not found" });
     }
 
-    return { ok: true };
+    return { item: created };
   });
 
   app.patch("/api/objectives/:objectiveId", async (request, reply) => {

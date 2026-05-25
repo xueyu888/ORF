@@ -1,12 +1,12 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Plus, Send, UserPlus, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
-import type { ObjectiveContributionReview, OrfUser, Result, Task, TaskChecklistItem } from "../../../types/orf";
+import type { ObjectiveContributionReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -23,7 +23,8 @@ import {
 import { commentCountFor } from "../model/challengeComments";
 import { canFreezeObjectiveAfterReestimate, workbenchActionForObjective } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
-import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
+import { temporaryChildRowId, temporaryChildTarget } from "../model/types";
+import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode, TemporaryChildRow } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
 import { handleRowDoubleClick, InlineTitleEditor, isSameTarget } from "./InlineTitleEditor";
 
@@ -32,6 +33,7 @@ type RowHandlers = {
   collapsedActionIds: Set<string>;
   collapsedBountyIds: Set<string>;
   commentCounts: Map<string, number>;
+  temporaryChildRow: TemporaryChildRow | null;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
   contributionReviews: ObjectiveContributionReview[];
@@ -50,6 +52,7 @@ type RowHandlers = {
   onAddSubAction: (actionId: string, afterItemId?: string) => void;
   onApproveApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCancelEdit: () => void;
+  onTemporaryChildTitleChange: (title: string) => void;
   onDraftTitleChange: (title: string) => void;
   onEditTarget: (target: ChallengeTarget) => void;
   onFreezeObjective: (objectiveId: string) => Promise<boolean>;
@@ -109,11 +112,16 @@ function ObjectivePanel({
   const complete = objectiveComplete(group.objective);
   const actionId = `objective:${group.objective.id}`;
   const anchorId = `objective:${group.objective.id}`;
-  const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
+  const rowActive = handlers.activeActionId === actionId || isRowActionOpen(handlers.openActionId, actionId);
   const hasOpenRowMenu = objectivePanelHasOpenRowMenu(group, handlers.openActionId);
   const isDraftObjective = group.objective.id === handlers.draftObjectiveId;
   const isEditingTarget = isSameTarget(handlers.editingTarget, target);
   const isFrozen = shouldRenderObjectiveAsFrozen(group.objective);
+  const activeTemporaryChild = handlers.temporaryChildRow?.objectiveId === group.objective.id ? handlers.temporaryChildRow : null;
+  const metricAddLabel = isDraftObjective ? null : handlers.metricActionLabel(group.objective);
+  const canCreateAction = !isDraftObjective && handlers.canMutateWorkItems(group.objective.id);
+  const metricTemporaryRow = activeTemporaryChild?.kind === "metric" ? activeTemporaryChild : null;
+  const actionTemporaryRow = activeTemporaryChild?.kind === "action" ? activeTemporaryChild : null;
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const workbenchAction = workbenchActionForObjective({
     objective: group.objective,
@@ -126,13 +134,22 @@ function ObjectivePanel({
     pendingApplications.length > 0;
   const layoutKey = [
     ...group.bounties.map((bounty) => bounty.result.id),
-    ...group.actions.map((action) => (handlers.collapsedActionIds.has(action.id) ? `${action.id}:closed` : `${action.id}:${action.checklist.map((item) => item.id).join(",")}`)),
+    ...(metricTemporaryRow ? [metricTemporaryRow.id] : []),
+    ...group.actions.map((action) => {
+      const temporarySubtaskKey = activeTemporaryChild?.kind === "subtask" && activeTemporaryChild.taskId === action.id ? `,${activeTemporaryChild.id}` : "";
+      return handlers.collapsedActionIds.has(action.id)
+        ? `${action.id}:closed${temporarySubtaskKey}`
+        : `${action.id}:${action.checklist.map((item) => item.id).join(",")}${temporarySubtaskKey}`;
+    }),
+    ...(actionTemporaryRow ? [actionTemporaryRow.id] : []),
   ].join(";");
-  const metricAddLabel = isDraftObjective ? null : handlers.metricActionLabel(group.objective);
-  const objectiveAddActions = [
-    ...(metricAddLabel && group.bounties.length > 0 ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
-    ...(isDraftObjective || !handlers.canMutateWorkItems(group.objective.id) ? [] : [{ label: "新增行动项", onAdd: () => handlers.onAddAction(group.objective.id) }]),
-  ];
+  const objectiveAddActions =
+    activeTemporaryChild || isDraftObjective
+      ? []
+      : [
+          ...(metricAddLabel ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
+          ...(canCreateAction ? [{ label: "新增行动项", onAdd: () => handlers.onAddAction(group.objective.id) }] : []),
+        ];
 
   return (
     <section
@@ -155,10 +172,10 @@ function ObjectivePanel({
           actionId={actionId}
           activeActionId={handlers.activeActionId}
           addActions={objectiveAddActions}
+          addForceMenu
           left={rowActionLeft.objective}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
-          onAdd={() => handlers.onAddBounty(group.objective.id)}
           onOpenActionChange={handlers.onOpenActionChange}
           openActionId={handlers.openActionId}
         />
@@ -209,41 +226,40 @@ function ObjectivePanel({
 
       <div className="orf-objective-body">
         {group.bounties.map((bounty) => (
-          <BountyRow
+          <MetricRow
             key={bounty.result.id}
-            bounty={bounty}
             handlers={handlers}
-            now={now}
             parentAnchorId={anchorId}
+            row={{ bounty, persistence: "persisted" }}
             scope={scope}
           />
         ))}
-        {group.bounties.length === 0 && (
-          <ObjectiveMetricEmptyState
-            actionLabel={metricAddLabel}
-            onAdd={metricAddLabel ? () => handlers.onAddBounty(group.objective.id) : undefined}
+        {metricTemporaryRow && (
+          <MetricRow
+            handlers={handlers}
             parentAnchorId={anchorId}
+            row={{ persistence: "temporary", placeholderTitle: metricAddLabel ?? "新增指标", temporary: metricTemporaryRow }}
+            scope={scope}
           />
         )}
-        {group.actions.length > 0 ? (
+        {(group.actions.length > 0 || actionTemporaryRow) && (
           <div className="pb-2">
             {group.actions.map((action) => (
               <ActionRow
                 key={action.id}
-                action={action}
                 handlers={handlers}
                 parentAnchorId={anchorId}
+                row={{ action, persistence: "persisted" }}
               />
             ))}
+            {actionTemporaryRow && (
+              <ActionRow
+                handlers={handlers}
+                parentAnchorId={anchorId}
+                row={{ persistence: "temporary", placeholderTitle: "新增行动项", temporary: actionTemporaryRow }}
+              />
+            )}
           </div>
-        ) : (
-          <ObjectiveTaskEmptyState
-            canAdd={!isDraftObjective && handlers.canMutateWorkItems(group.objective.id)}
-            dragDrop={handlers.dragDrop}
-            objectiveId={group.objective.id}
-            onAdd={() => handlers.onAddAction(group.objective.id)}
-            parentAnchorId={anchorId}
-          />
         )}
       </div>
     </section>
@@ -252,99 +268,23 @@ function ObjectivePanel({
 
 function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string | null): boolean {
   if (!openActionId) return false;
-  if (openActionId === `objective:${group.objective.id}`) return true;
+  if (isRowActionOpen(openActionId, `objective:${group.objective.id}`)) return true;
+  if (isRowActionOpen(openActionId, `temporary-metric:${temporaryChildRowId("metric", group.objective.id)}`)) return true;
+  if (isRowActionOpen(openActionId, `temporary-action:${temporaryChildRowId("action", group.objective.id)}`)) return true;
 
-  if (group.bounties.some((bounty) => openActionId === `bounty:${bounty.result.id}`)) {
+  if (group.bounties.some((bounty) => isRowActionOpen(openActionId, `bounty:${bounty.result.id}`))) {
     return true;
   }
 
   return group.actions.some((action) => {
-    if (openActionId === `action:${action.id}`) return true;
-    return action.checklist.some((item) => openActionId === `subAction:${action.id}:${item.id}`);
+    if (isRowActionOpen(openActionId, `action:${action.id}`)) return true;
+    if (isRowActionOpen(openActionId, `temporary-subtask:${temporaryChildRowId("subtask", action.id)}`)) return true;
+    return action.checklist.some((item) => isRowActionOpen(openActionId, `subAction:${action.id}:${item.id}`));
   });
 }
 
-function ObjectiveTaskEmptyState({
-  canAdd,
-  dragDrop,
-  objectiveId,
-  onAdd,
-  parentAnchorId,
-}: {
-  canAdd: boolean;
-  dragDrop: DragDropController;
-  objectiveId: string;
-  onAdd: () => void;
-  parentAnchorId: string;
-}) {
-  const dropTarget = objectiveActionsDropTargetForEvent(dragDrop.dragItem, objectiveId);
-  const dropClass = dropTargetClass(dragDrop.dropTarget, [{ type: "objectiveActions", objectiveId }]);
-
-  return (
-    <div
-      className={clsx("orf-objective-metric-empty", dropClass)}
-      onDragLeave={(event) => handleRowDragLeave(event, dragDrop)}
-      onDragOver={(event) => handleRowDragOver(event, dragDrop, dropTarget)}
-      onDrop={(event) => handleRowDrop(event, dragDrop, dropTarget)}
-    >
-      <HierarchyCell depth={1}>
-        <span
-          className="flex h-5 w-5 shrink-0 items-center justify-center"
-          data-hierarchy-anchor={`empty-task:${parentAnchorId}`}
-          data-hierarchy-branch-end-offset="0"
-          data-hierarchy-branch-target={`empty-task:${parentAnchorId}`}
-          data-hierarchy-parent={parentAnchorId}
-        >
-          <CompletionCircleIcon checked={false} />
-        </span>
-        <div className="grid min-w-0 gap-1">
-          <div className="text-base font-semibold text-[#475467]">待创建行动项</div>
-          <div className="text-xs orf-text-muted">当前目标还没有技术任务。</div>
-        </div>
-        {canAdd && (
-          <button type="button" className="ml-auto text-sm font-semibold text-[#0d7df2] hover:underline" onClick={onAdd}>
-            新增行动项
-          </button>
-        )}
-      </HierarchyCell>
-    </div>
-  );
-}
-
-function ObjectiveMetricEmptyState({
-  actionLabel,
-  onAdd,
-  parentAnchorId,
-}: {
-  actionLabel?: string | null;
-  onAdd?: () => void;
-  parentAnchorId: string;
-}) {
-  return (
-    <div className="orf-objective-metric-empty">
-      <HierarchyCell depth={1}>
-        <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center"
-          data-hierarchy-anchor={`empty:${parentAnchorId}`}
-          data-hierarchy-branch-end-offset="0"
-          data-hierarchy-branch-target={`empty:${parentAnchorId}`}
-          data-hierarchy-parent={parentAnchorId}
-        >
-          <MetricSquareIcon tone="todo" />
-        </span>
-        <div className="grid min-w-0 gap-1">
-          <div className="text-base font-semibold text-[#475467]">待定义指标</div>
-          <div className="text-xs orf-text-muted">当前目标还没有指标。</div>
-        </div>
-        {actionLabel && onAdd && (
-          <button type="button" className="orf-flow-action-button orf-flow-action-primary ml-auto" onClick={onAdd}>
-            <Plus className="h-3.5 w-3.5" />
-            {actionLabel}
-          </button>
-        )}
-      </HierarchyCell>
-    </div>
-  );
+function isRowActionOpen(openActionId: string | null, actionId: string) {
+  return openActionId === actionId || openActionId === `${actionId}:add`;
 }
 
 function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?: boolean; group: ObjectiveNode; handlers: RowHandlers }) {
@@ -385,59 +325,90 @@ function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?:
   return <div className="orf-flow-action-group">{actions.map((action, index) => <span key={index}>{action}</span>)}</div>;
 }
 
-function BountyRow({
-  bounty,
+type MetricTreeRow =
+  | { bounty: BountyNode; persistence: "persisted" }
+  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+
+type ActionTreeRow =
+  | { action: Task; persistence: "persisted" }
+  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+
+type SubActionTreeRow =
+  | { item: TaskChecklistItem; itemIndex: number; persistence: "persisted" }
+  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+
+function MetricRow({
+  row,
   handlers,
-  now,
   parentAnchorId,
   scope,
 }: {
-  bounty: BountyNode;
+  row: MetricTreeRow;
   handlers: RowHandlers;
-  now: Date;
   parentAnchorId: string;
   scope: ChallengeScope;
 }) {
-  const target: ChallengeTarget = { type: "bounty", id: bounty.result.id, title: bounty.result.title, objectiveId: bounty.result.objectiveId };
-  const complete = bounty.status === "settled";
-  const anchorId = `bounty:${bounty.result.id}`;
-  const actionId = `bounty:${bounty.result.id}`;
-  const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
-  const dropClass = dropTargetClass(handlers.dragDrop.dropTarget, [
-    { type: "bounty", bountyId: bounty.result.id },
-  ]);
+  const temporary = row.persistence === "temporary" ? row.temporary : null;
+  const placeholderTitle = row.persistence === "temporary" ? row.placeholderTitle : "";
+  const bounty = row.persistence === "persisted" ? row.bounty : null;
+  const target: ChallengeTarget = temporary
+    ? temporaryChildTarget(temporary)
+    : { type: "bounty", id: bounty!.result.id, title: bounty!.result.title, objectiveId: bounty!.result.objectiveId };
+  const complete = bounty?.status === "settled";
+  const anchorId = temporary ? `temporary-metric:${temporary.id}` : `bounty:${bounty!.result.id}`;
+  const actionId = anchorId;
+  const rowActive = handlers.activeActionId === actionId || isRowActionOpen(handlers.openActionId, actionId);
+  const isEditingTarget = isSameTarget(handlers.editingTarget, target);
+  const dropClass = bounty
+    ? dropTargetClass(handlers.dragDrop.dropTarget, [
+        { type: "bounty", bountyId: bounty.result.id },
+      ])
+    : "";
+  const disabled = temporary?.status === "submitting";
+  const title = temporary ? temporary.title || placeholderTitle : bounty!.result.title;
+  const statusLabel = temporary
+    ? temporary.status === "submitting"
+      ? "保存中"
+      : temporary.status === "idle"
+        ? "待创建"
+        : "草稿"
+    : bountyStatusLabel[bounty!.status];
+
   return (
     <div className="relative">
       <div
         className={clsx(
           "orf-result-row orf-challenge-row orf-challenge-row-bounty orf-row-depth-1 group relative grid min-h-[56px] items-center px-5 text-sm",
           rowActive && "orf-row-active",
-          handlers.dragDrop.dragItem?.type === "bounty" && handlers.dragDrop.dragItem.id === bounty.result.id && "orf-row-dragging",
+          bounty && handlers.dragDrop.dragItem?.type === "bounty" && handlers.dragDrop.dragItem.id === bounty.result.id && "orf-row-dragging",
           dropClass,
         )}
         data-scope={scope}
-        onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
-        onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
-        onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, bountyDropTargetForEvent(handlers.dragDrop.dragItem, bounty.result, event))}
-        onDrop={(event) => handleRowDrop(event, handlers.dragDrop, bountyDropTargetForEvent(handlers.dragDrop.dragItem, bounty.result, event))}
+        onDoubleClick={(event) => {
+          if (!disabled) handleRowDoubleClick(event, target, handlers.onEditTarget);
+        }}
+        onDragLeave={bounty ? (event) => handleRowDragLeave(event, handlers.dragDrop) : undefined}
+        onDragOver={bounty ? (event) => handleRowDragOver(event, handlers.dragDrop, bountyDropTargetForEvent(handlers.dragDrop.dragItem, bounty.result, event)) : undefined}
+        onDrop={bounty ? (event) => handleRowDrop(event, handlers.dragDrop, bountyDropTargetForEvent(handlers.dragDrop.dragItem, bounty.result, event)) : undefined}
         onPointerEnter={() => handlers.onActiveActionChange(actionId)}
         onPointerLeave={() => {
           if (handlers.activeActionId === actionId) handlers.onActiveActionChange(null);
         }}
       >
-        <ChallengeRowActions
-          actionId={actionId}
-          activeActionId={handlers.activeActionId}
-          dragItem={handlers.canMutateMetrics(bounty.result.objectiveId) ? { type: "bounty", id: bounty.result.id, objectiveId: bounty.result.objectiveId } : undefined}
-          left={rowActionLeft.bounty}
-          onAction={(action) => handlers.onActionRowAction(action, target)}
-          onActiveActionChange={handlers.onActiveActionChange}
-          onAdd={() => undefined}
-          onDragEnd={handlers.dragDrop.onDragEnd}
-          onDragStart={handlers.dragDrop.onDragStart}
-          onOpenActionChange={handlers.onOpenActionChange}
-          openActionId={handlers.openActionId}
-        />
+        {!disabled && (
+          <ChallengeRowActions
+            actionId={actionId}
+            activeActionId={handlers.activeActionId}
+            dragItem={bounty && handlers.canMutateMetrics(bounty.result.objectiveId) ? { type: "bounty", id: bounty.result.id, objectiveId: bounty.result.objectiveId } : undefined}
+            left={rowActionLeft.bounty}
+            onAction={(action) => handlers.onActionRowAction(action, target)}
+            onActiveActionChange={handlers.onActiveActionChange}
+            onDragEnd={handlers.dragDrop.onDragEnd}
+            onDragStart={handlers.dragDrop.onDragStart}
+            onOpenActionChange={handlers.onOpenActionChange}
+            openActionId={handlers.openActionId}
+          />
+        )}
         <HierarchyCell depth={1}>
           <span
             className="flex h-7 w-7 shrink-0 items-center justify-center"
@@ -446,27 +417,28 @@ function BountyRow({
             data-hierarchy-branch-target={anchorId}
             data-hierarchy-parent={parentAnchorId}
           >
-            <MetricSquareIcon tone={bounty.status === "settled" ? "done" : bounty.status === "review" ? "review" : bounty.status === "active" ? "active" : "todo"} />
+            <MetricSquareIcon tone={bounty ? (bounty.status === "settled" ? "done" : bounty.status === "review" ? "review" : bounty.status === "active" ? "active" : "todo") : "todo"} />
           </span>
-          {isSameTarget(handlers.editingTarget, target) ? (
+          {isEditingTarget ? (
             <InlineTitleEditor
               ariaLabel="编辑指标标题"
               className="orf-result-title text-base font-semibold"
               onCancel={handlers.onCancelEdit}
+              onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
-              value={bounty.result.title}
+              value={temporary ? temporary.title : bounty!.result.title}
             />
           ) : (
-            <div className={clsx("orf-result-title truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : "text-[#1d2939]")}>{bounty.result.title}</div>
+            <div className={clsx("orf-result-title truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
           )}
-          <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
+          {bounty && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
-        <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div>
+        {bounty ? <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div> : <EmptySlot />}
         <EmptySlot />
-        <StatusChip tone={bounty.status}>{bountyStatusLabel[bounty.status]}</StatusChip>
+        <StatusChip tone={bounty ? bounty.status : "open"}>{statusLabel}</StatusChip>
         <EmptySlot />
-        <DateStack primary={bounty.updatedAt || "未设置"} />
-        <ProgressValue value={bounty.progress} />
+        <DateStack primary={bounty ? bounty.updatedAt || "未设置" : "未设置"} />
+        <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
     </div>
@@ -474,31 +446,51 @@ function BountyRow({
 }
 
 function ActionRow({
-  action,
+  row,
   handlers,
   parentAnchorId,
 }: {
-  action: Task;
+  row: ActionTreeRow;
   handlers: RowHandlers;
   parentAnchorId: string;
 }) {
-  const target: ChallengeTarget = {
-    type: "action",
-    id: action.id,
-    title: action.title,
-    objectiveId: action.linkedObjectiveId,
-    hasSubActions: action.checklist.length > 0,
-  };
-  const open = !handlers.collapsedActionIds.has(action.id);
-  const status = actionVisualStatus(action);
+  const temporary = row.persistence === "temporary" ? row.temporary : null;
+  const placeholderTitle = row.persistence === "temporary" ? row.placeholderTitle : "";
+  const action = row.persistence === "persisted" ? row.action : null;
+  const temporarySubtask =
+    action && handlers.temporaryChildRow?.kind === "subtask" && handlers.temporaryChildRow.taskId === action.id
+      ? handlers.temporaryChildRow
+      : null;
+  const target: ChallengeTarget = temporary
+    ? temporaryChildTarget(temporary)
+    : {
+        type: "action",
+        id: action!.id,
+        title: action!.title,
+        objectiveId: action!.linkedObjectiveId,
+        hasSubActions: action!.checklist.length > 0,
+      };
+  const open = action ? !handlers.collapsedActionIds.has(action.id) || Boolean(temporarySubtask) : false;
+  const status = action ? actionVisualStatus(action) : "todo";
   const complete = status === "done";
-  const anchorId = `action:${action.id}`;
-  const actionId = `action:${action.id}`;
-  const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
-  const dropClass = dropTargetClass(handlers.dragDrop.dropTarget, [
-    { type: "action", actionId: action.id },
-    { type: "actionSubActions", actionId: action.id },
-  ]);
+  const anchorId = temporary ? `temporary-action:${temporary.id}` : `action:${action!.id}`;
+  const actionId = anchorId;
+  const rowActive = handlers.activeActionId === actionId || isRowActionOpen(handlers.openActionId, actionId);
+  const dropClass = action
+    ? dropTargetClass(handlers.dragDrop.dropTarget, [
+        { type: "action", actionId: action.id },
+        { type: "actionSubActions", actionId: action.id },
+      ])
+    : dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "objectiveActions", objectiveId: temporary!.objectiveId }]);
+  const disabled = temporary?.status === "submitting";
+  const title = temporary ? temporary.title || placeholderTitle : action!.title;
+  const statusLabel = temporary
+    ? temporary.status === "submitting"
+      ? "保存中"
+      : temporary.status === "idle"
+        ? "待创建"
+        : "草稿"
+    : null;
 
   return (
     <div className="relative">
@@ -506,33 +498,51 @@ function ActionRow({
         className={clsx(
           "orf-task-row orf-challenge-row orf-challenge-row-action orf-row-depth-1 group relative grid min-h-[42px] items-center px-5 text-sm",
           rowActive && "orf-row-active",
-          handlers.dragDrop.dragItem?.type === "action" && handlers.dragDrop.dragItem.id === action.id && "orf-row-dragging",
+          action && handlers.dragDrop.dragItem?.type === "action" && handlers.dragDrop.dragItem.id === action.id && "orf-row-dragging",
           dropClass,
         )}
-        onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
+        onDoubleClick={(event) => {
+          if (!disabled) handleRowDoubleClick(event, target, handlers.onEditTarget);
+        }}
         onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
-        onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, actionDropTargetForEvent(handlers.dragDrop.dragItem, action, event))}
-        onDrop={(event) => handleRowDrop(event, handlers.dragDrop, actionDropTargetForEvent(handlers.dragDrop.dragItem, action, event))}
+        onDragOver={(event) =>
+          handleRowDragOver(
+            event,
+            handlers.dragDrop,
+            action ? actionDropTargetForEvent(handlers.dragDrop.dragItem, action, event) : objectiveActionsDropTargetForEvent(handlers.dragDrop.dragItem, temporary!.objectiveId),
+          )
+        }
+        onDrop={(event) =>
+          handleRowDrop(
+            event,
+            handlers.dragDrop,
+            action ? actionDropTargetForEvent(handlers.dragDrop.dragItem, action, event) : objectiveActionsDropTargetForEvent(handlers.dragDrop.dragItem, temporary!.objectiveId),
+          )
+        }
         onPointerEnter={() => handlers.onActiveActionChange(actionId)}
         onPointerLeave={() => {
           if (handlers.activeActionId === actionId) handlers.onActiveActionChange(null);
         }}
       >
-        <ChallengeRowActions
-          actionId={actionId}
-          activeActionId={handlers.activeActionId}
-          addLabel={handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增子行动项" : null}
-          dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "action", id: action.id, objectiveId: action.linkedObjectiveId } : undefined}
-          left={rowActionLeft.action}
-          onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
-          onActiveActionChange={handlers.onActiveActionChange}
-          onAdd={() => handlers.onAddSubAction(action.id)}
-          onDragEnd={handlers.dragDrop.onDragEnd}
-          onDragStart={handlers.dragDrop.onDragStart}
-          onOpenActionChange={handlers.onOpenActionChange}
-          openActionId={handlers.openActionId}
-        />
-        {action.checklist.length > 0 && (
+        {!disabled && (
+          <ChallengeRowActions
+            actionId={actionId}
+            activeActionId={handlers.activeActionId}
+            addLabel={action && handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增子行动项" : null}
+            dragItem={action && handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "action", id: action.id, objectiveId: action.linkedObjectiveId } : undefined}
+            left={rowActionLeft.action}
+            onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
+            onActiveActionChange={handlers.onActiveActionChange}
+            onAdd={() => {
+              if (action) handlers.onAddSubAction(action.id);
+            }}
+            onDragEnd={handlers.dragDrop.onDragEnd}
+            onDragStart={handlers.dragDrop.onDragStart}
+            onOpenActionChange={handlers.onOpenActionChange}
+            openActionId={handlers.openActionId}
+          />
+        )}
+        {action && action.checklist.length > 0 && (
           <DisclosureAction
             actionId={actionId}
             activeActionId={handlers.activeActionId}
@@ -554,129 +564,158 @@ function ActionRow({
             data-hierarchy-branch-target={anchorId}
             data-hierarchy-parent={parentAnchorId}
           >
-            <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onActionDoneChange(action.id, checked)} />
+            {action ? <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onActionDoneChange(action.id, checked)} /> : <CompletionCircleIcon checked={false} />}
           </span>
           {isSameTarget(handlers.editingTarget, target) ? (
             <InlineTitleEditor
               ariaLabel="编辑行动项标题"
               className="orf-task-title text-base font-medium"
               onCancel={handlers.onCancelEdit}
+              onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
-              value={action.title}
+              value={temporary ? temporary.title : action!.title}
             />
           ) : (
-            <div className={clsx("orf-task-title truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : "text-[#1d2939]")}>{action.title}</div>
+            <div className={clsx("orf-task-title truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
           )}
-          <CommentCountBadge count={commentCountFor(handlers.commentCounts, "task", action.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
+          {action && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "task", action.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
         <EmptySlot />
         <EmptySlot />
+        {temporary ? <StatusChip tone="open">{statusLabel}</StatusChip> : <EmptySlot />}
         <EmptySlot />
-        <EmptySlot />
-        <TimeValue icon={Clock3} value={action.updatedAt || "未设置"} />
+        <TimeValue icon={Clock3} value={action?.updatedAt || "未设置"} />
         <EmptySlot />
       </div>
 
-      {open &&
-        action.checklist.map((item, index) => (
+      {action && open &&
+        subActionRows(action.checklist, temporarySubtask).map((subActionRow) => (
           <SubActionRow
-            key={item.id}
+            key={subActionRow.persistence === "persisted" ? subActionRow.item.id : subActionRow.temporary.id}
             action={action}
             handlers={handlers}
-            item={item}
-            itemIndex={index}
             parentAnchorId={anchorId}
+            row={subActionRow}
           />
         ))}
     </div>
   );
 }
 
+function subActionRows(items: TaskChecklistItem[], temporarySubtask: TemporaryChildRow | null): SubActionTreeRow[] {
+  if (!temporarySubtask) {
+    return items.map((item, itemIndex) => ({ item, itemIndex, persistence: "persisted" }));
+  }
+
+  const rows: SubActionTreeRow[] = [];
+  let inserted = false;
+  items.forEach((item, itemIndex) => {
+    rows.push({ item, itemIndex, persistence: "persisted" });
+    if (temporarySubtask.afterItemId === item.id) {
+      rows.push({ persistence: "temporary", placeholderTitle: "新增子行动项", temporary: temporarySubtask });
+      inserted = true;
+    }
+  });
+  if (!inserted) {
+    rows.push({ persistence: "temporary", placeholderTitle: "新增子行动项", temporary: temporarySubtask });
+  }
+  return rows;
+}
+
 function SubActionRow({
   action,
   handlers,
-  item,
-  itemIndex,
   parentAnchorId,
+  row,
 }: {
   action: Task;
   handlers: RowHandlers;
-  item: TaskChecklistItem;
-  itemIndex: number;
   parentAnchorId: string;
+  row: SubActionTreeRow;
 }) {
-  const target: ChallengeTarget = {
-    type: "subAction",
-    id: item.id,
-    title: item.label,
-    actionId: action.id,
-    objectiveId: action.linkedObjectiveId,
-  };
-  const status = subActionVisualStatus(action, item, itemIndex);
+  const temporary = row.persistence === "temporary" ? row.temporary : null;
+  const item = row.persistence === "persisted" ? row.item : null;
+  const itemIndex = row.persistence === "persisted" ? row.itemIndex : -1;
+  const target: ChallengeTarget = temporary
+    ? temporaryChildTarget(temporary)
+    : {
+        type: "subAction",
+        id: item!.id,
+        title: item!.label,
+        actionId: action.id,
+        objectiveId: action.linkedObjectiveId,
+      };
+  const status = item ? subActionVisualStatus(action, item, itemIndex) : "todo";
   const complete = status === "done";
-  const actionId = `subAction:${action.id}:${item.id}`;
-  const rowActive = handlers.activeActionId === actionId || handlers.openActionId === actionId;
-  const dropClass = dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "subAction", actionId: action.id, itemId: item.id }]);
+  const actionId = temporary ? `temporary-subtask:${temporary.id}` : `subAction:${action.id}:${item!.id}`;
+  const anchorId = temporary ? `temporary-subtask:${temporary.id}` : `subAction:${item!.id}`;
+  const rowActive = handlers.activeActionId === actionId || isRowActionOpen(handlers.openActionId, actionId);
+  const dropClass = item ? dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "subAction", actionId: action.id, itemId: item.id }]) : "";
+  const disabled = temporary?.status === "submitting";
+  const title = temporary ? temporary.title || "新增子行动项" : item!.label;
 
   return (
     <div
       className={clsx(
         "orf-subtask-row orf-challenge-row orf-challenge-row-action orf-row-depth-2 group relative grid min-h-[36px] items-center px-5 text-sm",
         rowActive && "orf-row-active",
-        handlers.dragDrop.dragItem?.type === "subAction" && handlers.dragDrop.dragItem.id === item.id && "orf-row-dragging",
+        item && handlers.dragDrop.dragItem?.type === "subAction" && handlers.dragDrop.dragItem.id === item.id && "orf-row-dragging",
         dropClass,
       )}
-      onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
-      onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
-      onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, subActionDropTargetForEvent(handlers.dragDrop.dragItem, action, item, event))}
-      onDrop={(event) => handleRowDrop(event, handlers.dragDrop, subActionDropTargetForEvent(handlers.dragDrop.dragItem, action, item, event))}
+      onDoubleClick={(event) => {
+        if (!disabled) handleRowDoubleClick(event, target, handlers.onEditTarget);
+      }}
+      onDragLeave={item ? (event) => handleRowDragLeave(event, handlers.dragDrop) : undefined}
+      onDragOver={item ? (event) => handleRowDragOver(event, handlers.dragDrop, subActionDropTargetForEvent(handlers.dragDrop.dragItem, action, item, event)) : undefined}
+      onDrop={item ? (event) => handleRowDrop(event, handlers.dragDrop, subActionDropTargetForEvent(handlers.dragDrop.dragItem, action, item, event)) : undefined}
       onPointerEnter={() => handlers.onActiveActionChange(actionId)}
       onPointerLeave={() => {
         if (handlers.activeActionId === actionId) handlers.onActiveActionChange(null);
       }}
     >
-      <ChallengeRowActions
-        actionId={actionId}
-        activeActionId={handlers.activeActionId}
-        addLabel={handlers.canMutateWorkItems(action.linkedObjectiveId) ? "新增同级子行动项" : null}
-        dragItem={handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "subAction", id: item.id, actionId: action.id } : undefined}
-        left={rowActionLeft.subAction}
-        onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
-        onActiveActionChange={handlers.onActiveActionChange}
-        onAdd={() => handlers.onAddSubAction(action.id, item.id)}
-        onDragEnd={handlers.dragDrop.onDragEnd}
-        onDragStart={handlers.dragDrop.onDragStart}
-        onOpenActionChange={handlers.onOpenActionChange}
-        openActionId={handlers.openActionId}
-      />
+      {!disabled && (
+        <ChallengeRowActions
+          actionId={actionId}
+          activeActionId={handlers.activeActionId}
+          dragItem={item && handlers.canMutateWorkItems(action.linkedObjectiveId) ? { type: "subAction", id: item.id, actionId: action.id } : undefined}
+          left={rowActionLeft.subAction}
+          onAction={(rowAction) => handlers.onActionRowAction(rowAction, target)}
+          onActiveActionChange={handlers.onActiveActionChange}
+          onDragEnd={handlers.dragDrop.onDragEnd}
+          onDragStart={handlers.dragDrop.onDragStart}
+          onOpenActionChange={handlers.onOpenActionChange}
+          openActionId={handlers.openActionId}
+        />
+      )}
       <HierarchyCell depth={2}>
         <span
           className="flex h-5 w-5 shrink-0 items-center justify-center"
-          data-hierarchy-anchor={`subAction:${item.id}`}
+          data-hierarchy-anchor={anchorId}
           data-hierarchy-branch-end-offset="0"
-          data-hierarchy-branch-target={`subAction:${item.id}`}
+          data-hierarchy-branch-target={anchorId}
           data-hierarchy-parent={parentAnchorId}
         >
-          <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onSubActionDoneChange(action.id, item.id, checked)} />
-        </span>
+            {item ? <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onSubActionDoneChange(action.id, item.id, checked)} /> : <CompletionCircleIcon checked={false} />}
+          </span>
         {isSameTarget(handlers.editingTarget, target) ? (
           <InlineTitleEditor
             ariaLabel="编辑子行动项标题"
             className="orf-subtask-title text-sm font-medium"
             onCancel={handlers.onCancelEdit}
+            onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
             onSubmit={(title) => handlers.onSaveTitle(target, title)}
-            value={item.label}
+            value={temporary ? temporary.title : item!.label}
           />
         ) : (
-          <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : "text-[#344054]")}>{item.label}</div>
+          <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#344054]")}>{title}</div>
         )}
-        <CommentCountBadge count={commentCountFor(handlers.commentCounts, "subtask", item.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
+        {item && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "subtask", item.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
       </HierarchyCell>
       <EmptySlot />
       <EmptySlot />
+      {temporary ? <StatusChip tone="open">{temporary.status === "submitting" ? "保存中" : temporary.status === "idle" ? "待创建" : "草稿"}</StatusChip> : <EmptySlot />}
       <EmptySlot />
-      <EmptySlot />
-      <TimeValue icon={Clock3} value={item.updatedAt || action.updatedAt || "未设置"} />
+      <TimeValue icon={Clock3} value={item?.updatedAt || action.updatedAt || "未设置"} />
       <EmptySlot />
     </div>
   );

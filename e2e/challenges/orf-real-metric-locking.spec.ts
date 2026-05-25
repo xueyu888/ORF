@@ -1,4 +1,4 @@
-import { objectivePanel } from "./helpers/realAssertions";
+import { expectObjectiveChildCreateOptionAbsent, objectivePanel, openObjectiveChildCreateMenu } from "./helpers/realAssertions";
 import { RealClock } from "./helpers/realClock";
 import { realSystemEnabled, test, expect } from "./helpers/realSystemHarness";
 import { RealScenarioDsl } from "./helpers/realScenarioDsl";
@@ -23,15 +23,15 @@ test.describe("ORF real metric lifecycle locking", () => {
       expect(accepted.status).toBe(200);
 
       await dsl.openTasks(member.page);
-      await expect(objectivePanel(member.page, frozenTitle).getByLabel("提出指标")).toBeVisible();
+      const frozenPanel = objectivePanel(member.page, frozenTitle);
+      await openObjectiveChildCreateMenu(frozenPanel);
+      await expect(frozenPanel.getByRole("button", { name: "提出指标" })).toBeVisible();
       await dsl.freezeViaApi(real.fixture.commander, frozen.objectiveId);
 
       await commander.page.reload();
-      await objectivePanel(commander.page, frozenTitle).hover();
-      await expect(objectivePanel(commander.page, frozenTitle).getByLabel("新增指标")).toHaveCount(0);
+      await expectObjectiveChildCreateOptionAbsent(objectivePanel(commander.page, frozenTitle), "新增指标");
       await member.page.reload();
-      await objectivePanel(member.page, frozenTitle).hover();
-      await expect(objectivePanel(member.page, frozenTitle).getByLabel("提出指标")).toHaveCount(0);
+      await expectObjectiveChildCreateOptionAbsent(objectivePanel(member.page, frozenTitle), "提出指标");
 
       const adminCreateAfterFreeze = await real.apiAs(real.fixture.commander, "/api/results", {
         body: JSON.stringify({
@@ -86,10 +86,12 @@ test.describe("ORF real metric lifecycle locking", () => {
       await dsl.recruitViaApi(real.fixture.commander, expired.objectiveId, [real.fixture.member1.name]);
       expect((await dsl.acceptRecruitmentViaApi(real.fixture.member1, expired.objectiveId)).status).toBe(200);
       await dsl.openTasks(member.page);
-      await expect(objectivePanel(member.page, expiredTitle).getByLabel("提出指标")).toBeVisible();
+      const expiredPanel = objectivePanel(member.page, expiredTitle);
+      await openObjectiveChildCreateMenu(expiredPanel);
+      await expect(expiredPanel.getByRole("button", { name: "提出指标" })).toBeVisible();
       await clock.expireReestimateWindow(expired.objectiveId);
       await member.page.reload();
-      await expect(objectivePanel(member.page, expiredTitle).getByLabel("提出指标")).toHaveCount(0);
+      await expectObjectiveChildCreateOptionAbsent(objectivePanel(member.page, expiredTitle), "提出指标");
 
       const memberProposedAfterExpiry = await real.apiAs(real.fixture.member1, "/api/results", {
         body: JSON.stringify({

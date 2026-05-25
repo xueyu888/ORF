@@ -1,4 +1,4 @@
-import { assertBountyHallVisibility, assertCommanderTaskVisibility, assertMyChallengeVisibility, objectivePanel } from "./helpers/realAssertions";
+import { assertBountyHallVisibility, assertCommanderTaskVisibility, assertMyChallengeVisibility, objectivePanel, openObjectiveChildCreateMenu } from "./helpers/realAssertions";
 import { realSystemEnabled, test, expect } from "./helpers/realSystemHarness";
 import { RealScenarioDsl } from "./helpers/realScenarioDsl";
 
@@ -63,7 +63,9 @@ test.describe("ORF real multi-state dashboard", () => {
         visible: [titles.reestimating, titles.frozen, titles.submitted, titles.settled],
       });
       await expect(objectivePanel(challengerA.page, titles.frozen).getByRole("link", { name: "提交战利品" })).toBeVisible();
-      await expect(objectivePanel(challengerA.page, titles.reestimating).getByRole("button", { name: "提出指标" })).toBeVisible();
+      const reestimatingPanel = objectivePanel(challengerA.page, titles.reestimating);
+      await openObjectiveChildCreateMenu(reestimatingPanel);
+      await expect(reestimatingPanel.getByRole("button", { name: "提出指标" })).toBeVisible();
       await real.attachScreenshot(challengerA.page, testInfo, "multi-state-challenger-tasks");
 
       await assertBountyHallVisibility(real, real.fixture.challengerA, {

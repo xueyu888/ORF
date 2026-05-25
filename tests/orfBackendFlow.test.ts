@@ -1478,6 +1478,10 @@ test("API work item creation trims labels and prevents blank persisted titles", 
       label: "   ",
     });
     assert.equal(defaultLabel.statusCode, 200);
+    const defaultLabelPayload = defaultLabel.json() as { item: Task["checklist"][number] };
+    assert.equal(defaultLabelPayload.item.label, "新子任务");
+    assert.equal(defaultLabelPayload.item.done, false);
+    assert.ok(defaultLabelPayload.item.id);
 
     const data = await getTaskManagementData({ scope: fixture.scope });
     const storedTask = data.tasks.find((item) => item.id === trimmedTaskPayload.task.id);
@@ -1569,7 +1573,11 @@ test("concurrent result, task, and checklist creation reserve stable sort orders
   const checklistCreates = await Promise.all(
     expectedSortOrders.map((index) => createChecklistItem(checklistTask.id, { label: `${fixture.prefix} concurrent checklist ${index}` })),
   );
-  assert.deepEqual(checklistCreates, expectedSortOrders.map(() => true));
+  assert.equal(checklistCreates.every(Boolean), true);
+  assert.deepEqual(
+    checklistCreates.map((item) => item?.label).sort(),
+    expectedSortOrders.map((index) => `${fixture.prefix} concurrent checklist ${index}`).sort(),
+  );
   const storedChecklist = await db
     .select({ id: taskChecklistItems.id, sortOrder: taskChecklistItems.sortOrder })
     .from(taskChecklistItems)
@@ -2103,6 +2111,7 @@ test("task and comment API writes require objective participation", async () => 
       label: "challenger can add",
     });
     assert.equal(challengerChecklist.statusCode, 200);
+    assert.equal((challengerChecklist.json() as { item: Task["checklist"][number] }).item.label, "challenger can add");
 
     const observerPatch = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(taskId)}`, {
       title: "observer should not edit",

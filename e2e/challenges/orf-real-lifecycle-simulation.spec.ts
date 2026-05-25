@@ -7,7 +7,7 @@ import {
   rejectPendingApplication,
   settlePreparedObjectiveViaApi,
 } from "./helpers/lifecycleActions";
-import { bountyRow, leaderboardRow, objectivePanel } from "./helpers/realAssertions";
+import { bountyRow, expectObjectiveChildCreateOptionAbsent, leaderboardRow, objectivePanel, openObjectiveChildCreateMenu } from "./helpers/realAssertions";
 import { expect, realSystemEnabled, test } from "./helpers/realSystemHarness";
 import { LifecycleSimulator, LifecycleWorld, type LifecycleObjectiveRecord } from "./helpers/lifecycleSimulator";
 
@@ -335,7 +335,7 @@ test.describe("ORF real lifecycle simulation", () => {
         await world.clock.expireReestimateWindow(world.objective("q2Expired").id!);
         await world.page("member3").reload();
         await expect(objectivePanel(world.page("member3"), world.objective("q2Expired").title)).toContainText("重估中");
-        await expect(objectivePanel(world.page("member3"), world.objective("q2Expired").title).getByLabel("提出指标")).toHaveCount(0);
+        await expectObjectiveChildCreateOptionAbsent(objectivePanel(world.page("member3"), world.objective("q2Expired").title), "提出指标");
 
         const expiredCreate = await real.apiAs(world.users.member3, "/api/results", {
           body: JSON.stringify({
@@ -360,16 +360,16 @@ test.describe("ORF real lifecycle simulation", () => {
         const accepted = await world.dsl.acceptRecruitmentViaApi(world.users.member2, created.objectiveId);
         expect(accepted.status).toBe(200);
         await world.dsl.openTasks(world.page("member2"));
-        await expect(objectivePanel(world.page("member2"), world.objective("q2StaleTask").title).getByLabel("提出指标")).toBeVisible();
+        const stalePanel = objectivePanel(world.page("member2"), world.objective("q2StaleTask").title);
+        await openObjectiveChildCreateMenu(stalePanel);
+        await expect(stalePanel.getByRole("button", { name: "提出指标" })).toBeVisible();
         await world.dsl.freezeViaApi(world.users.commander, created.objectiveId);
-        await objectivePanel(world.page("member2"), world.objective("q2StaleTask").title).hover();
-        await objectivePanel(world.page("member2"), world.objective("q2StaleTask").title).getByLabel("提出指标").click();
-        await world.page("member2").getByLabel("指标标题").fill(`${world.objective("q2StaleTask").title} 旧页面不应创建`);
-        await world.page("member2").getByLabel("衡量指标").fill("旧页面指标");
-        await world.page("member2").getByRole("button", { name: "提交指标" }).click();
+        await stalePanel.getByRole("button", { name: "提出指标" }).click();
+        await stalePanel.getByLabel("编辑指标标题").fill(`${world.objective("q2StaleTask").title} 旧页面不应创建`);
+        await stalePanel.getByLabel("编辑指标标题").press("Enter");
         await expect(world.page("member2").getByText("没有执行这个操作的权限")).toBeVisible();
         await world.page("member2").reload();
-        await expect(objectivePanel(world.page("member2"), world.objective("q2StaleTask").title).getByLabel("提出指标")).toHaveCount(0);
+        await expectObjectiveChildCreateOptionAbsent(objectivePanel(world.page("member2"), world.objective("q2StaleTask").title), "提出指标");
         const frozenEdit = await world.dsl.editMetric(world.users.member2, created.resultId, `${world.objective("q2StaleTask").title} 冻结后不应修改`);
         expect(frozenEdit.status).toBe(403);
         securityTargets = {

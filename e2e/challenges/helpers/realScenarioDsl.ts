@@ -1,7 +1,7 @@
 import { expect, type Page } from "@playwright/test";
 import type { ContributionAllocation, ObjectiveAcceptedResult, ResultAcceptedResult, UncertaintyLevel } from "../../../src/types/orf";
 import { realFutureDueDate } from "./realClock";
-import { bountyRow, objectivePanel } from "./realAssertions";
+import { bountyRow, chooseObjectiveChildCreate, objectivePanel } from "./realAssertions";
 import type { LoggedInPage, RealSystemHarness, RealUser } from "./realSystemHarness";
 
 export class RealScenarioDsl {
@@ -34,15 +34,13 @@ export class RealScenarioDsl {
     return this.real.objectiveIdByTitle(title);
   }
 
-  async addManagerMetric(page: Page, objectiveTitle: string, metricTitle: string, metricName = "真实联调完成率") {
+  async addManagerMetric(page: Page, objectiveTitle: string, metricTitle: string, _metricName = "真实联调完成率") {
     const panel = objectivePanel(page, objectiveTitle);
-    await panel.hover();
-    await panel.getByLabel("新增指标").click();
-    const dialog = page.getByRole("dialog", { name: "新增指标" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel("指标标题").fill(metricTitle);
-    await dialog.getByLabel("衡量指标").fill(metricName);
-    await dialog.getByRole("button", { name: "保存指标" }).click();
+    await chooseObjectiveChildCreate(panel, "新增指标");
+    const titleInput = panel.getByLabel("编辑指标标题");
+    await expect(titleInput).toBeVisible();
+    await titleInput.fill(metricTitle);
+    await titleInput.press("Enter");
     await expect(panel).toContainText(metricTitle);
     return this.real.resultIdByTitle(metricTitle);
   }
@@ -114,16 +112,14 @@ export class RealScenarioDsl {
     await expect(page).toHaveURL(/\/tasks$/);
   }
 
-  async proposeMetric(page: Page, title: string, metricTitle: string, metricName = "挑战者校准达成率") {
+  async proposeMetric(page: Page, title: string, metricTitle: string, _metricName = "挑战者校准达成率") {
     const panel = objectivePanel(page, title);
     await expect(panel).toContainText("重估中");
-    await panel.hover();
-    await panel.getByLabel("提出指标").click();
-    const dialog = page.getByRole("dialog", { name: "提出指标" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByLabel("指标标题").fill(metricTitle);
-    await dialog.getByLabel("衡量指标").fill(metricName);
-    await dialog.getByRole("button", { name: "提交指标" }).click();
+    await chooseObjectiveChildCreate(panel, "提出指标");
+    const titleInput = panel.getByLabel("编辑指标标题");
+    await expect(titleInput).toBeVisible();
+    await titleInput.fill(metricTitle);
+    await titleInput.press("Enter");
     await expect(panel).toContainText(metricTitle);
     return this.real.resultIdByTitle(metricTitle);
   }

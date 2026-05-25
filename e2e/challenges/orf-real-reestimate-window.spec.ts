@@ -1,4 +1,4 @@
-import { assertObjectiveInvariants, objectivePanel } from "./helpers/realAssertions";
+import { assertObjectiveInvariants, expectObjectiveChildCreateOptionAbsent, objectivePanel } from "./helpers/realAssertions";
 import { RealClock } from "./helpers/realClock";
 import { realSystemEnabled, test, expect } from "./helpers/realSystemHarness";
 import { RealScenarioDsl } from "./helpers/realScenarioDsl";
@@ -38,7 +38,7 @@ test.describe("ORF real reestimate window", () => {
       await clock.expireReestimateWindow(objectiveId);
       await challengerA.page.reload();
       await expect(objectivePanel(challengerA.page, title)).toContainText("重估中");
-      await expect(objectivePanel(challengerA.page, title).getByLabel("提出指标")).toHaveCount(0);
+      await expectObjectiveChildCreateOptionAbsent(objectivePanel(challengerA.page, title), "提出指标");
       await real.attachScreenshot(challengerA.page, testInfo, "reestimate-after-expiry");
 
       const expiredCreate = await real.apiAs(real.fixture.challengerA, "/api/results", {

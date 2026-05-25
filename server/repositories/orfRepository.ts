@@ -26,6 +26,7 @@ import type {
   Result,
   ResultAcceptedResult,
   Task,
+  TaskChecklistItem,
   TaskStatus,
   UncertaintyLevel,
 } from "../../src/types/orf";
@@ -2946,11 +2947,11 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
   return data.tasks.find((task) => task.id === created.id) ?? null;
 }
 
-export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput): Promise<boolean> {
+export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput): Promise<TaskChecklistItem | null> {
   return db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
-      return false;
+      return null;
     }
 
     const rows = await tx
@@ -2959,6 +2960,8 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
       .where(eq(taskChecklistItems.taskId, taskId))
       .orderBy(taskChecklistItems.sortOrder);
     const id = makeId("ck");
+    const label = input.label?.trim() || "新子任务";
+    const updatedAt = today();
     const afterIndex = input.afterItemId ? rows.findIndex((row) => row.id === input.afterItemId) : -1;
     const insertIndex = afterIndex >= 0 ? afterIndex + 1 : rows.length;
     const orderedIds = [...rows.map((row) => row.id)];
@@ -2967,18 +2970,18 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
     await tx.insert(taskChecklistItems).values({
       id,
       taskId,
-      label: input.label?.trim() || "新子任务",
+      label,
       done: false,
       sortOrder: insertIndex,
-      updatedAt: today(),
+      updatedAt,
     });
 
     for (const [index, itemId] of orderedIds.entries()) {
       await tx.update(taskChecklistItems).set({ sortOrder: index }).where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)));
     }
-    await tx.update(tasks).set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt: today() }).where(eq(tasks.id, taskId));
+    await tx.update(tasks).set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt }).where(eq(tasks.id, taskId));
 
-    return true;
+    return { id, label, done: false, updatedAt };
   });
 }
 
