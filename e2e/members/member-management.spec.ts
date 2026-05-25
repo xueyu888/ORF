@@ -1,6 +1,7 @@
 import { expect, test, type Route } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { OrfUser, UserRole } from "../../src/types/orf";
+import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 type OnlineUser = OrfUser & {
   lastOnlineAt?: string | null;
@@ -20,6 +21,7 @@ function taskManagementData() {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
+  await routeVisualBackgroundMocks(page);
 
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({ json: { authenticated: true, user: initialOrfState.users[0] } });

@@ -2,11 +2,13 @@ import { expect, test, type Route } from "@playwright/test";
 import { permissionDefinitions } from "../../src/config/permissions";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { PermissionRule } from "../../src/types/orf";
+import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 const emptyMemberRules: PermissionRule[] = [{ role: "member", permissions: [] }];
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
+  await routeVisualBackgroundMocks(page);
 
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({ json: { authenticated: true, user: initialOrfState.users[0] } });

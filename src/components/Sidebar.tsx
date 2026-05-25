@@ -1,8 +1,8 @@
 import { Command, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { type CSSProperties } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
-import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
+import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
@@ -37,12 +37,22 @@ export function Sidebar({
     .filter((group) => group.items.length > 0);
   const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
   const useUnifiedBackground = Boolean(unifiedBackgroundUrl);
+  const backgroundImageUrl = (useUnifiedBackground ? unifiedBackgroundUrl : backgroundUrl) ?? "";
+  const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFailedBackgroundUrl(null);
+  }, [backgroundImageUrl]);
+
+  if (!backgroundImageUrl) {
+    throw new Error("Sidebar background image URL is missing");
+  }
+  if (failedBackgroundUrl === backgroundImageUrl) {
+    throw new Error(`Sidebar background image failed to load: ${backgroundImageUrl}`);
+  }
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-image": toCssImageUrl((useUnifiedBackground ? unifiedBackgroundUrl : backgroundUrl) || sidebarBackground.src),
     "--orf-sidebar-bg-position": useUnifiedBackground ? "left top" : sidebarBackground.position,
-    "--orf-sidebar-bg-size": useUnifiedBackground ? "var(--orf-app-shell-bg-size)" : "cover",
-    "--orf-sidebar-bg-attachment": useUnifiedBackground ? "fixed" : "scroll",
     "--orf-sidebar-bg-transform": useUnifiedBackground ? "none" : "scale(1.03)",
     "--orf-sidebar-bg-filter": useUnifiedBackground ? "none" : sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
@@ -58,6 +68,15 @@ export function Sidebar({
       data-unified-background={useUnifiedBackground ? "true" : "false"}
       aria-label="主导航"
     >
+      <img
+        className="orf-sidebar-background-image"
+        src={backgroundImageUrl}
+        alt=""
+        aria-hidden="true"
+        loading="eager"
+        decoding="async"
+        onError={() => setFailedBackgroundUrl(backgroundImageUrl)}
+      />
       <div className="orf-sidebar-brand flex items-center justify-between border-b px-5">
         <div className="orf-sidebar-brand-main flex items-center gap-3">
           <div className="orf-sidebar-logo flex h-11 w-11 items-center justify-center shadow-sm">

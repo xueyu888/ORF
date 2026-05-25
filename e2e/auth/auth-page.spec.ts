@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
+import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 function taskManagementData() {
   return {
@@ -15,22 +16,10 @@ function taskManagementData() {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
+  await routeVisualBackgroundMocks(page);
 
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({ json: { authenticated: false, user: null } });
-  });
-  await page.route("**/api/settings/visual/backgrounds?**", async (route) => {
-    await route.fulfill({
-      json: {
-        code: 0,
-        message: "ok",
-        data: {
-          scene: "login_background",
-          config: { mode: "fixed", fixedBackgroundId: null, switchTrigger: "on_open", switchOrder: "random", switchIntervalMinutes: 10 },
-          list: [],
-        },
-      },
-    });
   });
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({ json: taskManagementData() });

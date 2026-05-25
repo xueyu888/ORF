@@ -2,8 +2,30 @@ import { useEffect, useState } from "react";
 import { getVisualBackgrounds, type VisualBackgroundScene } from "../state/apiClient";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 
-export function useVisualBackground(scene: VisualBackgroundScene, fallbackUrl: string) {
-  const [backgroundUrl, setBackgroundUrl] = useState(fallbackUrl);
+type VisualBackgroundLoadState =
+  | { status: "loading"; url: null; error: null }
+  | { status: "ready"; url: string; error: null }
+  | { status: "error"; url: null; error: Error };
+
+function visualBackgroundError(scene: VisualBackgroundScene, error: unknown) {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(`Failed to load ${scene} visual background`);
+}
+
+function requiredVisualBackgroundUrl(scene: VisualBackgroundScene, data: Awaited<ReturnType<typeof getVisualBackgrounds>>) {
+  const background = pickVisualBackground(data);
+  if (!background) {
+    throw new Error(`No visual background image is configured for ${scene}`);
+  }
+
+  return background.url;
+}
+
+export function useVisualBackground(scene: VisualBackgroundScene) {
+  const [background, setBackground] = useState<VisualBackgroundLoadState>({ status: "loading", url: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
@@ -18,24 +40,34 @@ export function useVisualBackground(scene: VisualBackgroundScene, fallbackUrl: s
 
     const loadBackground = () => {
       clearRotationTimer();
+      setBackground((current) => (current.status === "ready" ? current : { status: "loading", url: null, error: null }));
+
+      const applyBackground = (data: Awaited<ReturnType<typeof getVisualBackgrounds>>) => {
+        try {
+          setBackground({ status: "ready", url: requiredVisualBackgroundUrl(scene, data), error: null });
+        } catch (error) {
+          setBackground({ status: "error", url: null, error: visualBackgroundError(scene, error) });
+        }
+      };
+
       void getVisualBackgrounds(scene)
         .then((data) => {
           if (cancelled) {
             return;
           }
 
-          setBackgroundUrl(pickVisualBackground(data)?.url ?? fallbackUrl);
+          applyBackground(data);
 
           const intervalMs = visualBackgroundIntervalMs(data);
           if (intervalMs) {
             intervalId = window.setInterval(() => {
-              setBackgroundUrl(pickVisualBackground(data)?.url ?? fallbackUrl);
+              applyBackground(data);
             }, intervalMs);
           }
         })
-        .catch(() => {
+        .catch((error) => {
           if (!cancelled) {
-            setBackgroundUrl(fallbackUrl);
+            setBackground({ status: "error", url: null, error: visualBackgroundError(scene, error) });
           }
         });
     };
@@ -48,7 +80,7 @@ export function useVisualBackground(scene: VisualBackgroundScene, fallbackUrl: s
       unsubscribe();
       clearRotationTimer();
     };
-  }, [fallbackUrl, scene]);
+  }, [scene]);
 
-  return backgroundUrl;
+  return background;
 }
