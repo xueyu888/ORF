@@ -112,8 +112,8 @@ interface OrfContextValue {
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
-  setTaskCompletion: (taskId: string, done: boolean) => void;
-  updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
+  setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
+  updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
   updateObjectiveTitle: (objectiveId: string, title: string) => void;
   updateObjectiveStage: (objectiveId: string, stage: OrfState["objectives"][number]["stage"]) => void;
   updateResultTitle: (resultId: string, title: string) => void;
@@ -979,29 +979,35 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      setTaskCompletion: (taskId, done) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
-          method: "PATCH",
-          body: JSON.stringify({ done }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("行动项完成状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "行动项完成状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      setTaskCompletion: async (taskId, done) => {
+        try {
+          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
+            method: "PATCH",
+            body: JSON.stringify({ done }),
           });
+          await refreshTaskManagementData();
+          notify("行动项完成状态已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "行动项完成状态更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
-      updateTaskChecklistItem: (taskId, itemId, done) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ done }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("子行动项完成状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "子行动项完成状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      updateTaskChecklistItem: async (taskId, itemId, done) => {
+        try {
+          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ done }),
           });
+          await refreshTaskManagementData();
+          notify("子行动项完成状态已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "子行动项完成状态更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       updateObjectiveTitle: (objectiveId, title) => {
         void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {

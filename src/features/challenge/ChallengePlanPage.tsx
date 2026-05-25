@@ -16,6 +16,13 @@ import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permission
 import { challengeCycleOptions, filterChallengeGroups, sortChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
+import {
+  applyTaskCompletionOverlays,
+  taskCompletionOverlayMaterialized,
+  upsertTaskCompletionOverlay,
+  type TaskCompletionOverlay,
+  type TaskCompletionOverlayInput,
+} from "./model/taskCompletionOverlay";
 import { isTemporaryChildTarget, temporaryChildRowId, temporaryChildTarget } from "./model/types";
 import {
   applyObjectiveOrderAnchor,
@@ -227,7 +234,9 @@ export function ChallengePlanPage() {
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
+  const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
   const temporaryChildRowRef = useRef<TemporaryChildRow | null>(null);
+  const completionOverlaySequenceRef = useRef(0);
   const now = useMinuteNow();
 
   useEffect(() => {
@@ -270,12 +279,26 @@ export function ChallengePlanPage() {
 
   const sourceData = challengeData ?? state;
   const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
-  const challengeState = useMemo(() => applyCreatedChildOverlay(baseChallengeState, createdChildOverlay), [baseChallengeState, createdChildOverlay]);
+  const challengeState = useMemo(
+    () => applyTaskCompletionOverlays(applyCreatedChildOverlay(baseChallengeState, createdChildOverlay), completionOverlays),
+    [baseChallengeState, completionOverlays, createdChildOverlay],
+  );
   const setTrackedTemporaryChildRow = (row: TemporaryChildRow | null) => {
     temporaryChildRowRef.current = row;
     setTemporaryChildRow(row);
   };
   const clearTemporaryChildRow = () => setTrackedTemporaryChildRow(null);
+  const applyCompletionOverlay = (overlay: TaskCompletionOverlayInput) => {
+    const trackedOverlay = {
+      ...overlay,
+      id: `completion-${Date.now()}-${completionOverlaySequenceRef.current++}`,
+    } as TaskCompletionOverlay;
+    setCompletionOverlays((items) => upsertTaskCompletionOverlay(items, trackedOverlay));
+    return trackedOverlay.id;
+  };
+  const removeCompletionOverlay = (overlayId: string) => {
+    setCompletionOverlays((items) => items.filter((item) => item.id !== overlayId));
+  };
   const completeTemporaryChildRow = (submittingRow: TemporaryChildRow, overlay: CreatedChildOverlay) => {
     if (temporaryChildRowRef.current?.id !== submittingRow.id) return;
     setCreatedChildOverlay(overlay);
@@ -354,6 +377,13 @@ export function ChallengePlanPage() {
       setCreatedChildOverlay(null);
     }
   }, [baseChallengeState, createdChildOverlay]);
+  useEffect(() => {
+    setCompletionOverlays((items) => {
+      if (items.length === 0) return items;
+      const pendingItems = items.filter((item) => !taskCompletionOverlayMaterialized(baseChallengeState, item));
+      return pendingItems.length === items.length ? items : pendingItems;
+    });
+  }, [baseChallengeState]);
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
@@ -772,7 +802,10 @@ export function ChallengePlanPage() {
       notify("目标当前阶段不能修改行动项");
       return;
     }
-    setTaskCompletion(actionId, done);
+    const overlayId = applyCompletionOverlay({ type: "task", taskId: actionId, done });
+    void setTaskCompletion(actionId, done).then((ok) => {
+      if (!ok) removeCompletionOverlay(overlayId);
+    });
   };
 
   const setSubActionDone = (actionId: string, itemId: string, done: boolean) => {
@@ -782,7 +815,10 @@ export function ChallengePlanPage() {
       notify("目标当前阶段不能修改子行动项");
       return;
     }
-    updateTaskChecklistItem(actionId, itemId, done);
+    const overlayId = applyCompletionOverlay({ type: "subtask", taskId: actionId, itemId, done });
+    void updateTaskChecklistItem(actionId, itemId, done).then((ok) => {
+      if (!ok) removeCompletionOverlay(overlayId);
+    });
   };
 
   const dragDrop = {
