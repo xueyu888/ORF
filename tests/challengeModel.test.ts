@@ -13,6 +13,7 @@ import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisua
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
 import {
   canFreezeObjectiveAfterReestimate,
+  canMutateObjectiveWorkItems,
   canSubmitObjectiveLoot,
   canSubmitObjectivePeerReview,
   metricCreationActionForObjective,
@@ -310,6 +311,14 @@ test("metric creation action separates commander definition from challenger prop
     }),
     null,
   );
+});
+
+test("objective work item mutation covers candidate planning and active execution windows", () => {
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "candidate" })), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "reestimating" })), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "frozen" })), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "submitted" })), false);
+  assert.equal(canMutateObjectiveWorkItems(undefined), false);
 });
 
 test("loot workbench actions keep commander review separate from member challenge actions", () => {

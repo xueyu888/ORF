@@ -1353,6 +1353,7 @@ test("API objective creation rejects malformed final due dates", async () => {
 
 test("API task creation is owned by the objective and does not require a result", async () => {
   const fixture = await createFixture("api-task-objective-ownership");
+  const candidateObjective = await createTestObjective(fixture, "candidate action objective");
   const objective = await createTestObjective(fixture, "resultless action objective");
   await db
     .update(objectives)
@@ -1365,6 +1366,15 @@ test("API task creation is owned by the objective and does not require a result"
     .where(eq(objectives.id, objective.id));
 
   await withApiServer(fixture, async (app) => {
+    const candidateResponse = await apiInject(app, fixture.commander, "POST", "/api/tasks", {
+      title: `${fixture.prefix} candidate planning task`,
+      linkedObjectiveId: candidateObjective.id,
+    });
+    assert.equal(candidateResponse.statusCode, 200, candidateResponse.body);
+    const candidatePayload = candidateResponse.json() as { task: Task };
+    assert.equal(candidatePayload.task.linkedObjectiveId, candidateObjective.id);
+    assert.equal(candidatePayload.task.linkedResultId, null);
+
     const response = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
       title: `${fixture.prefix} objective-only task`,
       linkedObjectiveId: objective.id,

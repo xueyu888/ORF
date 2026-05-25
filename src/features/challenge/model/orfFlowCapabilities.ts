@@ -24,6 +24,7 @@ type WorkbenchAction = {
 };
 
 const objectiveWorkItemMutationStatuses = new Set([
+  "candidate",
   "reestimating",
   "frozen",
 ]);

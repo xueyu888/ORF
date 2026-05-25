@@ -138,7 +138,7 @@ const difficultyRanks: Record<UncertaintyLevel, number> = {
 };
 const challengeAcceptanceFlowStatuses = new Set<Objective["flowStatus"]>(["recruiting", "reestimating"]);
 const resultMutationFlowStatuses = new Set<Objective["flowStatus"]>(["candidate", "open", "applying", "recruiting", "reestimating"]);
-const workItemMutationFlowStatuses = new Set<Objective["flowStatus"]>(["reestimating", "frozen"]);
+const workItemMutationFlowStatuses = new Set<Objective["flowStatus"]>(["candidate", "reestimating", "frozen"]);
 const commentLockedFlowStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);
 const memberCommentFlowStatuses = new Set<Objective["flowStatus"]>(["reestimating", "frozen", "submitted"]);
 const objectiveDeleteLockedFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled"]);

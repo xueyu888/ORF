@@ -29,7 +29,7 @@
 | `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner`；仅管理员或目标挑战者可对目标下指标创建 |
 | `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
-| `POST` | `/api/tasks` | 在目标下创建任务 |
+| `POST` | `/api/tasks` | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务 |
 | `PATCH` | `/api/tasks/:taskId` | 更新任务 |
 | `PATCH` | `/api/tasks/:taskId/move` | 在同一目标下调整任务顺序 |
 | `DELETE` | `/api/tasks/:taskId` | 删除任务和子任务 |
@@ -172,7 +172,7 @@ type ObjectiveFlowStatus =
 - `Task.linkedObjectiveId` 是任务归属、权限、生命周期和排序边界。
 - `Task.linkedResultId` 不再作为任务归属；实现迁移时应从任务创建、移动、删除、DTO 映射和测试夹具中移除。
 - `Result.taskIds` 不再作为指标拥有任务的反向索引；指标删除不能删除目标下任务。
-- `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；没有指标的目标也可以创建任务。
+- `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；候选目标和没有指标的目标也可以创建任务。
 - `PATCH /api/tasks/:taskId/move` 只在同一目标下移动任务，不能通过移动任务改变指标归属。
 - 历史数据迁移应以旧 `tasks.linked_result_id -> results.objective_id` 回填 `tasks.linked_objective_id`，保留任务、子任务和评论；确认代码不再读取旧列后再删除旧外键和列。
 - 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 必须非空，`tasks.linked_result_id` 必须可空且外键 `ON DELETE SET NULL`。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。
