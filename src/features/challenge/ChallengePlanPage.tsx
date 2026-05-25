@@ -219,6 +219,7 @@ export function ChallengePlanPage() {
   const canShowAllChallenges = canShowFrontend(currentUser, "challenge.scope.all");
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const [searchParams, setSearchParams] = useSearchParams();
+  const hasObjectiveCreationEntry = searchParams.get("create") === "objective";
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
@@ -237,6 +238,7 @@ export function ChallengePlanPage() {
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
   const temporaryChildRowRef = useRef<TemporaryChildRow | null>(null);
   const completionOverlaySequenceRef = useRef(0);
+  const handledObjectiveCreationEntryRef = useRef(false);
   const now = useMinuteNow();
 
   useEffect(() => {
@@ -402,7 +404,12 @@ export function ChallengePlanPage() {
     }
   }, [challengeState.objectives, temporaryChildRow, editingTarget]);
   useEffect(() => {
-    if (searchParams.get("create") !== "objective") return;
+    if (!hasObjectiveCreationEntry) {
+      handledObjectiveCreationEntryRef.current = false;
+      return;
+    }
+    if (handledObjectiveCreationEntryRef.current) return;
+    handledObjectiveCreationEntryRef.current = true;
 
     const next = new URLSearchParams(searchParams);
     next.delete("create");
@@ -413,6 +420,16 @@ export function ChallengePlanPage() {
       return;
     }
 
+    if (objectiveCreationSession.status === "submittingDraft") {
+      notify("目标正在创建，请稍后");
+      return;
+    }
+
+    if (objectiveCreationSession.status === "editingDraft" || objectiveCreationSession.status === "failedEditingDraft") {
+      notify("请先完成当前目标草稿");
+      return;
+    }
+
     setObjectiveCreationSession((current) => beginObjectiveCreationSession(current, { cycle: cycleFilter, scope, status: statusFilter }));
     setEditingTarget(null);
     clearTemporaryChildRow();
@@ -420,7 +437,7 @@ export function ChallengePlanPage() {
     if (canShowAllChallenges) setScope("all");
     setCycleFilter("all");
     setStatusFilter("unassigned");
-  }, [canCreateObjective, canShowAllChallenges, cycleFilter, notify, scope, searchParams, setSearchParams, statusFilter]);
+  }, [canCreateObjective, canShowAllChallenges, cycleFilter, hasObjectiveCreationEntry, notify, objectiveCreationSession.status, scope, searchParams, setSearchParams, statusFilter]);
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {

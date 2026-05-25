@@ -2243,6 +2243,58 @@ test("creation entries keep user input when API writes fail", async ({ page }) =
   await expect(page.getByText("proposal rejected")).toBeVisible();
 });
 
+test("objective creation shows pending feedback and ignores repeated create clicks", async ({ page }) => {
+  const createdObjective: Objective = {
+    ...initialOrfState.objectives[0]!,
+    ...defaultObjectiveCreationDates(),
+    id: "objective-creation-pending-feedback",
+    title: "重复点击创建目标",
+    flowStatus: "candidate",
+    stage: "goalSetting",
+    resultIds: [],
+    taskIds: [],
+    feedbackIds: [],
+    challengers: [],
+    assignedChallengers: [],
+    challengeApplications: [],
+  };
+  let taskData = taskManagementDataWith({ objectives: [], results: [], tasks: [], feedback: [] });
+  const objectiveWrite = createDeferred();
+  let objectiveWrites = 0;
+
+  await page.route("**/api/tasks-page", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskData });
+  });
+  await page.route(/\/api\/objectives$/, async (route) => {
+    objectiveWrites += 1;
+    taskData = taskManagementDataWith({ objectives: [createdObjective], results: [], tasks: [], feedback: [] });
+    await objectiveWrite.promise;
+    await route.fulfill({ json: { objective: createdObjective } });
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "新建目标" }).click();
+  await page.getByLabel("编辑目标标题").fill(createdObjective.title);
+  await page.getByLabel("编辑目标标题").press("Enter");
+
+  await expect.poll(() => objectiveWrites).toBe(1);
+  const pendingDraftPanel = page.locator(".orf-objective-panel", { hasText: createdObjective.title });
+  await expect(pendingDraftPanel.getByText("保存中")).toBeVisible();
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "新建目标" }).dispatchEvent("click");
+  await expect(page.getByText("目标正在创建，请稍后").first()).toBeVisible();
+  await expect.poll(() => objectiveWrites).toBe(1);
+
+  objectiveWrite.resolve();
+  await expect(page.getByText("目标已创建").first()).toBeVisible();
+  await expect(page.getByText(createdObjective.title).first()).toBeVisible();
+  await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
+});
+
 test("feedback detail recommendation actions are real commands", async ({ page }) => {
   const objective: Objective = {
     ...initialOrfState.objectives[0]!,

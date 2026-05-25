@@ -116,6 +116,7 @@ function ObjectivePanel({
   const hasOpenRowMenu = objectivePanelHasOpenRowMenu(group, handlers.openActionId);
   const isDraftObjective = group.objective.id === handlers.draftObjectiveId;
   const isEditingTarget = isSameTarget(handlers.editingTarget, target);
+  const draftObjectiveIsSubmitting = isDraftObjective && !isEditingTarget;
   const isFrozen = shouldRenderObjectiveAsFrozen(group.objective);
   const activeTemporaryChild = handlers.temporaryChildRow?.objectiveId === group.objective.id ? handlers.temporaryChildRow : null;
   const metricAddLabel = isDraftObjective ? null : handlers.metricActionLabel(group.objective);
@@ -123,6 +124,11 @@ function ObjectivePanel({
   const metricTemporaryRow = activeTemporaryChild?.kind === "metric" ? activeTemporaryChild : null;
   const actionTemporaryRow = activeTemporaryChild?.kind === "action" ? activeTemporaryChild : null;
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
+  const statusChip = isDraftObjective ? (
+    <StatusChip tone="open">{draftObjectiveIsSubmitting ? "保存中" : "草稿"}</StatusChip>
+  ) : (
+    <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
+  );
   const workbenchAction = workbenchActionForObjective({
     objective: group.objective,
     currentUser: handlers.currentUser,
@@ -162,6 +168,7 @@ function ObjectivePanel({
         className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
         data-has-workbench-action={workbenchAction ? "true" : undefined}
         data-scope={scope}
+        aria-busy={draftObjectiveIsSubmitting ? "true" : undefined}
         onDoubleClick={(event) => handleRowDoubleClick(event, target, handlers.onEditTarget)}
         onPointerEnter={() => handlers.onActiveActionChange(actionId)}
         onPointerLeave={() => {
@@ -196,7 +203,7 @@ function ObjectivePanel({
         </HierarchyRootCell>
         <ObjectiveFlowAction disabled={isDraftObjective} group={group} handlers={handlers} />
         <AvatarStack names={group.challengers} />
-        <StatusChip tone={objectiveStatusTone(group.objective)}>{objectiveStatusLabel(group.objective)}</StatusChip>
+        {statusChip}
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <DateStack primary={group.deadline || "未设置"} />
         <ProgressValue value={group.objective.progress} />
