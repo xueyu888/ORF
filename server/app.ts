@@ -7,6 +7,7 @@ import { getAuthenticatedOrfUser } from "./auth/ory";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./auth/errors";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/errors";
+import { assertRuntimeDatabaseSchema, databaseSchemaMismatchPayload, isDatabaseSchemaMismatchError } from "./db/schemaGuard";
 import { env } from "./env";
 import { registerOptionalIntegrations } from "./integrations";
 import {
@@ -742,9 +743,16 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(503).send(databaseUnavailablePayload());
     }
 
+    if (isDatabaseSchemaMismatchError(error)) {
+      app.log.error(error);
+      return reply.code(503).send(databaseSchemaMismatchPayload(error));
+    }
+
     app.log.error(error);
     return reply.code(500).send({ error: "Internal Server Error" });
   });
+
+  await assertRuntimeDatabaseSchema();
 
   app.addHook("preHandler", requireAuthenticatedApi);
 

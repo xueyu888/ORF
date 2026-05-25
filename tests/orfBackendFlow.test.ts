@@ -6,7 +6,7 @@ import { buildServer } from "../server/app";
 import { loginWithPassword } from "../server/auth/ory";
 import { closeDb, db } from "../server/db/client";
 import { objectives, results as resultRows, taskChecklistItems, tasks as taskRows, teams, teamMembers, users } from "../server/db/schema";
-import type { ObjectiveAcceptedResult, Result, UncertaintyLevel } from "../src/types/orf";
+import type { ObjectiveAcceptedResult, Result, Task, UncertaintyLevel } from "../src/types/orf";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
@@ -1351,6 +1351,37 @@ test("API objective creation rejects malformed final due dates", async () => {
   });
 });
 
+test("API task creation is owned by the objective and does not require a result", async () => {
+  const fixture = await createFixture("api-task-objective-ownership");
+  const objective = await createTestObjective(fixture, "resultless action objective");
+  await db
+    .update(objectives)
+    .set({
+      flowStatus: "reestimating",
+      stage: "orfReestimate",
+      challengers: [fixture.challenger.name],
+      confirmationDueAt: "2999-01-01T00:00:00.000Z",
+    })
+    .where(eq(objectives.id, objective.id));
+
+  await withApiServer(fixture, async (app) => {
+    const response = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: `${fixture.prefix} objective-only task`,
+      linkedObjectiveId: objective.id,
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const payload = response.json() as { task: Task };
+
+    assert.equal(payload.task.linkedObjectiveId, objective.id);
+    assert.equal(payload.task.linkedResultId, null);
+
+    const data = await getTaskManagementData({ scope: fixture.scope });
+    const storedTask = data.tasks.find((item) => item.id === payload.task.id);
+    assert.equal(storedTask?.linkedObjectiveId, objective.id);
+    assert.equal(storedTask?.linkedResultId, null);
+  });
+});
+
 test("API work item creation trims labels and prevents blank persisted titles", async () => {
   const fixture = await createFixture("api-work-item-input");
   const publishedObjective = await createPublishedObjective(fixture, "input validation objective");
@@ -1423,6 +1454,15 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     assert.equal(trimmedTaskPayload.task.description, "执行支撑目标的下一步技术任务。");
     assert.equal(trimmedTaskPayload.task.assignee, fixture.challenger.name);
     assert.equal(trimmedTaskPayload.task.dueDate, "2999-02-28");
+
+    const objectiveOwnedTask = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: `${fixture.prefix} objective-owned action`,
+      linkedObjectiveId: objective.id,
+    });
+    assert.equal(objectiveOwnedTask.statusCode, 200, objectiveOwnedTask.body);
+    const objectiveOwnedTaskPayload = objectiveOwnedTask.json() as { task: Task };
+    assert.equal(objectiveOwnedTaskPayload.task.linkedObjectiveId, objective.id);
+    assert.equal(objectiveOwnedTaskPayload.task.linkedResultId, null);
 
     const defaultLabel = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(trimmedTaskPayload.task.id)}/checklist`, {
       label: "   ",

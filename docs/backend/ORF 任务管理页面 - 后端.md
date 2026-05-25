@@ -175,3 +175,4 @@ type ObjectiveFlowStatus =
 - `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；没有指标的目标也可以创建任务。
 - `PATCH /api/tasks/:taskId/move` 只在同一目标下移动任务，不能通过移动任务改变指标归属。
 - 历史数据迁移应以旧 `tasks.linked_result_id -> results.objective_id` 回填 `tasks.linked_objective_id`，保留任务、子任务和评论；确认代码不再读取旧列后再删除旧外键和列。
+- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 必须非空，`tasks.linked_result_id` 必须可空且外键 `ON DELETE SET NULL`。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。
