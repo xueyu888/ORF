@@ -11,13 +11,13 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/tasks-page` | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据 |
-| `GET` | `/api/bounties` | 返回悬赏大厅数据 |
+| `GET` | `/api/bounties` | 普通成员返回悬赏大厅数据；管理员返回空挑战入口集合 |
 | `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
 | `POST` | `/api/objectives` | 挑战页按 Enter 或标题输入框失焦快速创建候选目标，默认 `flowStatus=candidate` |
 | `PATCH` | `/api/objectives/:objectiveId` | 指挥官更新目标标题 |
 | `PATCH` | `/api/objectives/:objectiveId/publish` | 指挥官发布目标，进入 `open` |
-| `POST` | `/api/objectives/:objectiveId/recruitments` | 指挥官征召成员，进入 `recruiting` |
-| `POST` | `/api/objectives/:objectiveId/challenge-applications` | 成员申请挑战，进入 `applying` |
+| `POST` | `/api/objectives/:objectiveId/recruitments` | 指挥官征召 active 普通成员，进入 `recruiting` |
+| `POST` | `/api/objectives/:objectiveId/challenge-applications` | active 普通成员申请挑战，进入 `applying` |
 | `PATCH` | `/api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，写入挑战者并进入 `reestimating` |
 | `PATCH` | `/api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
 | `PATCH` | `/api/objectives/:objectiveId/challenge` | 被征召成员接受，写入挑战者并进入 `reestimating` |
@@ -29,7 +29,7 @@
 | `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner`；仅管理员或目标挑战者可对目标下指标创建 |
 | `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
-| `POST` | `/api/tasks` | 在目标下创建任务 |
+| `POST` | `/api/tasks` | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务 |
 | `PATCH` | `/api/tasks/:taskId` | 更新任务 |
 | `PATCH` | `/api/tasks/:taskId/move` | 在同一目标下调整任务顺序 |
 | `DELETE` | `/api/tasks/:taskId` | 删除任务和子任务 |
@@ -41,7 +41,7 @@
 | `PATCH` | `/api/users/:userId/disable` | 停用用户 |
 
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
-读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。
+读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。
 
@@ -72,9 +72,9 @@
 | `pointLedger` | 验收结算后的成员积分流水 |
 | `permissionRules` | 前端操作权限 |
 
-`GET /api/bounties` 只返回 `flowStatus in (open, applying, recruiting)` 且当前用户尚未成为挑战者的目标。
+`GET /api/bounties` 只对普通成员返回 `flowStatus in (open, applying, recruiting)` 且当前用户尚未成为挑战者的目标。
 
-申请挑战只接受 `open/applying/recruiting`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
+申请挑战只接受 active 普通成员在 `open/applying/recruiting` 发起；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
 
 ## 状态字段
 
@@ -172,6 +172,7 @@ type ObjectiveFlowStatus =
 - `Task.linkedObjectiveId` 是任务归属、权限、生命周期和排序边界。
 - `Task.linkedResultId` 不再作为任务归属；实现迁移时应从任务创建、移动、删除、DTO 映射和测试夹具中移除。
 - `Result.taskIds` 不再作为指标拥有任务的反向索引；指标删除不能删除目标下任务。
-- `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；没有指标的目标也可以创建任务。
+- `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；候选目标和没有指标的目标也可以创建任务。
 - `PATCH /api/tasks/:taskId/move` 只在同一目标下移动任务，不能通过移动任务改变指标归属。
 - 历史数据迁移应以旧 `tasks.linked_result_id -> results.objective_id` 回填 `tasks.linked_objective_id`，保留任务、子任务和评论；确认代码不再读取旧列后再删除旧外键和列。
+- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 必须非空，`tasks.linked_result_id` 必须可空且外键 `ON DELETE SET NULL`。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。

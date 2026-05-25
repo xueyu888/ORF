@@ -73,7 +73,7 @@ export function LootSubmitPage() {
   }
 
   const currentMember = currentUser?.name ?? "";
-  const isChallenger = objective.challengers.includes(currentMember);
+  const isChallenger = currentUser?.role === "member" && objective.challengers.includes(currentMember);
   const canSubmit = objective.flowStatus === "frozen" && isChallenger;
   const canReview = currentUser?.role === "admin" && objective.flowStatus === "submitted" && latestLoot;
   const canPeerReview = objective.flowStatus === "submitted" && isChallenger;

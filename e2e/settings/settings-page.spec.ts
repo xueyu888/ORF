@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { VisualBackgroundScene } from "../../src/state/apiClient";
+import { fulfillVisualBackgroundImage, visualBackgroundFixture } from "../helpers/visualBackgroundMocks";
 
 function taskManagementData() {
   return {
@@ -39,46 +40,31 @@ test("settings page only exposes implemented visual configuration", async ({ pag
     const scene = (url.searchParams.get("scene") ?? "login_background") as VisualBackgroundScene;
     requestedScenes.push(scene);
 
-    await route.fulfill({
-      json: {
-        code: 0,
-        message: "ok",
-        data: {
-          scene,
-          config: {
-            mode: "fixed",
-            fixedBackgroundId: `${scene}/default/test-bg.png`,
-            switchTrigger: "on_open",
-            switchOrder: "random",
-            switchIntervalMinutes: 10,
-          },
-          list: [
-            {
-              id: `${scene}/default/test-bg.png`,
-              scene,
-              fileName: "test-bg.png",
-              url: `/settings/backgrounds/${scene}/default/test-bg.png`,
-              fileKey: `${scene}/default/test-bg.png`,
-              mimeType: "image/png",
-              fileSize: 128,
-              isDefault: true,
-            },
-          ],
-        },
-      },
-    });
+    await route.fulfill({ json: { code: 0, message: "ok", data: visualBackgroundFixture(scene) } });
   });
 
-  await page.route("**/settings/backgrounds/**", async (route) => {
-    await route.fulfill({
-      contentType: "image/png",
-      body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", "base64"),
-    });
-  });
+  await page.route("**/settings/backgrounds/**", fulfillVisualBackgroundImage);
 
   await page.goto("/settings");
 
   await expect(page.getByRole("heading", { name: "视觉设置" })).toBeVisible();
+  await expect(page.locator(".orf-sidebar-background-image")).toHaveAttribute("src", /\/settings\/backgrounds\/sidebar_background\/default\/test-bg\.png$/);
+  await expect.poll(() =>
+    page.locator(".orf-sidebar-background-image").evaluate((image) => {
+      const element = image as HTMLImageElement;
+      return { complete: element.complete, naturalWidth: element.naturalWidth };
+    }),
+  ).toEqual({ complete: true, naturalWidth: 1 });
+  await expect.poll(() =>
+    page.locator(".orf-sidebar").evaluate((sidebar) => {
+      const style = window.getComputedStyle(sidebar);
+      const beforeStyle = window.getComputedStyle(sidebar, "::before");
+      return {
+        backgroundColor: style.backgroundColor,
+        beforeBackgroundImage: beforeStyle.backgroundImage,
+      };
+    }),
+  ).toEqual({ backgroundColor: "rgba(0, 0, 0, 0)", beforeBackgroundImage: "none" });
   await expect(page.getByLabel("设置导航")).toContainText("视觉设置");
   await expect(page.getByText("Coming Soon")).toHaveCount(0);
 
@@ -87,4 +73,27 @@ test("settings page only exposes implemented visual configuration", async ({ pag
   }
 
   await expect.poll(() => Array.from(new Set(requestedScenes)).sort()).toEqual(["login_background", "sidebar_background"]);
+});
+
+test("sidebar background image load failure is reported instead of falling back to a color", async ({ page }) => {
+  await page.route("**/api/settings/visual/backgrounds?**", async (route) => {
+    const url = new URL(route.request().url());
+    const scene = (url.searchParams.get("scene") ?? "login_background") as VisualBackgroundScene;
+    await route.fulfill({ json: { code: 0, message: "ok", data: visualBackgroundFixture(scene) } });
+  });
+
+  await page.route("**/settings/backgrounds/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.includes("/sidebar_background/")) {
+      await route.fulfill({ status: 404, body: "" });
+      return;
+    }
+
+    await fulfillVisualBackgroundImage(route);
+  });
+
+  const pageError = page.waitForEvent("pageerror");
+  await page.goto("/settings");
+  const error = await pageError;
+  expect(error.message).toContain("Sidebar background image failed to load");
 });

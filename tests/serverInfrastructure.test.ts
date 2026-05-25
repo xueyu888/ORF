@@ -8,6 +8,12 @@ import { authDependencyUnavailablePayload } from "../server/auth/routes";
 import { createPgPoolConfig } from "../server/db/connectionOptions";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../server/db/errors";
 import {
+  DatabaseSchemaMismatchError,
+  databaseSchemaMismatchPayload,
+  isDatabaseSchemaMismatchError,
+  validateObjectiveOwnedTaskSchema,
+} from "../server/db/schemaGuard";
+import {
   checkDatabaseHealth,
   createPgPoolConfig as createScriptPgPoolConfig,
   databaseDisplayUrl,
@@ -112,6 +118,48 @@ test("database unavailable errors are classified for 503 responses", () => {
   assert.equal(isDatabaseUnavailableError(new Error("remaining connection slots are reserved")), true);
   assert.deepEqual(databaseUnavailablePayload(), { error: "数据服务暂时不可用，请稍后重试。" });
   assert.equal(isDatabaseUnavailableError(new Error("invalid input syntax for type uuid")), false);
+});
+
+test("objective-owned task schema guard accepts migrated task ownership contract", () => {
+  assert.deepEqual(
+    validateObjectiveOwnedTaskSchema({
+      columns: [
+        { columnName: "linked_objective_id", isNullable: "NO" },
+        { columnName: "linked_result_id", isNullable: "YES" },
+      ],
+      constraints: [
+        {
+          constraintName: "tasks_linked_result_id_results_id_fk",
+          definition: "FOREIGN KEY (linked_result_id) REFERENCES results(id) ON DELETE SET NULL",
+        },
+      ],
+    }),
+    [],
+  );
+});
+
+test("objective-owned task schema guard rejects stale result-owned task schema", () => {
+  const details = validateObjectiveOwnedTaskSchema({
+    columns: [
+      { columnName: "linked_objective_id", isNullable: "NO" },
+      { columnName: "linked_result_id", isNullable: "NO" },
+    ],
+    constraints: [
+      {
+        constraintName: "tasks_linked_result_id_results_id_fk",
+        definition: "FOREIGN KEY (linked_result_id) REFERENCES results(id) ON DELETE CASCADE",
+      },
+    ],
+  });
+  const error = new DatabaseSchemaMismatchError(details);
+
+  assert.deepEqual(details, ["tasks.linked_result_id must be nullable.", "tasks.linked_result_id foreign key must use ON DELETE SET NULL."]);
+  assert.equal(isDatabaseSchemaMismatchError(error), true);
+  assert.equal(error.statusCode, 503);
+  assert.deepEqual(databaseSchemaMismatchPayload(error), {
+    error: "数据库结构未完成迁移，请先对当前运行时 DATABASE_URL 执行 npm run db:migrate。",
+    details,
+  });
 });
 
 test("auth service unavailable errors are classified for 503 responses", () => {

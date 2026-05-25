@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { BountyHallData, BountyHallItem } from "../../src/state/apiClient";
 import type { AppNotification } from "../../src/types/orf";
+import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 const difficultyRanks = {
   入门: 1,
@@ -43,12 +44,14 @@ const bountyHallData: BountyHallData = {
   ].filter((item): item is NonNullable<typeof item> => Boolean(item)),
   contribution: { points: 0 },
 };
+const bountyHallUser = initialOrfState.users.find((user) => user.role === "member") ?? initialOrfState.users[0]!;
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
+  await routeVisualBackgroundMocks(page);
 
   await page.route("**/api/auth/session", async (route) => {
-    await route.fulfill({ json: { authenticated: true, user: initialOrfState.users[0] } });
+    await route.fulfill({ json: { authenticated: true, user: bountyHallUser } });
   });
   await page.route("**/api/tasks-page", async (route) => {
     await route.fulfill({
