@@ -11,7 +11,13 @@ import {
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
-import { canFreezeObjectiveAfterReestimate, metricCreationActionForObjective } from "../src/features/challenge/model/orfFlowCapabilities";
+import {
+  canFreezeObjectiveAfterReestimate,
+  canSubmitObjectiveLoot,
+  canSubmitObjectivePeerReview,
+  metricCreationActionForObjective,
+  workbenchActionForObjective,
+} from "../src/features/challenge/model/orfFlowCapabilities";
 import {
   canViewObjectiveRecord,
   filterFeedbackForVisibleObjectives,
@@ -304,6 +310,23 @@ test("metric creation action separates commander definition from challenger prop
     }),
     null,
   );
+});
+
+test("loot workbench actions keep commander review separate from member challenge actions", () => {
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const pollutedFrozen = objective({ flowStatus: "frozen", challengers: [admin.name, challenger.name] });
+  const pollutedSubmitted = objective({ flowStatus: "submitted", challengers: [admin.name, challenger.name] });
+
+  assert.equal(canSubmitObjectiveLoot(pollutedFrozen, admin), false);
+  assert.equal(canSubmitObjectiveLoot(pollutedFrozen, challenger), true);
+  assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, admin), false);
+  assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, challenger), true);
+  assert.deepEqual(workbenchActionForObjective({ objective: pollutedSubmitted, currentUser: admin, contributionReviews: [] }), {
+    kind: "reviewLoot",
+    label: "验收战利品",
+    to: `/objectives/${pollutedSubmitted.id}/loot`,
+  });
 });
 
 test("challenge permission helpers map target resources to configured permissions", () => {

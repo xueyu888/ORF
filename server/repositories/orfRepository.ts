@@ -324,6 +324,26 @@ async function getActiveMemberNameSetInScope(storageScopeId: string, values: Arr
   return new Set(rows.map((member) => member.name));
 }
 
+async function getActiveChallengerNameSetInScope(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  values: Array<string | undefined | null>,
+) {
+  const memberNames = uniqueMembers(values);
+  if (memberNames.length === 0) return new Set<string>();
+
+  const rows = await client
+    .select({ name: users.name })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, storageScopeId), eq(teamMembers.role, "member"), eq(users.status, "active"), inArray(users.name, memberNames)));
+  return new Set(rows.map((member) => member.name));
+}
+
+async function isActiveChallengerInScope(client: Pick<typeof db, "select">, storageScopeId: string, memberName: string) {
+  return (await getActiveChallengerNameSetInScope(client, storageScopeId, [memberName])).has(memberName);
+}
+
 async function notifyAdminsOfChallengeApplication(input: {
   actorUserId?: string | null;
   applicant: string;
@@ -1093,6 +1113,9 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     if (isObjectiveTerminal(objective) || !challengeAcceptanceFlowStatuses.has(objective.flowStatus)) {
       return { status: "closed" as const };
     }
+    if (!(await isActiveChallengerInScope(tx, objective.teamId, nextChallenger))) {
+      return { status: "forbidden" as const };
+    }
 
     const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
     const applications = objective.challengeApplications ?? [];
@@ -1153,6 +1176,7 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "applied"; objective: Objective }
   | { status: "alreadyApplied" }
   | { status: "alreadyAccepted"; challengers: string[] }
+  | { status: "forbidden" }
   | { status: "closed" }
   | { status: "notFound" };
 
@@ -1174,6 +1198,9 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     }
     if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus)) {
       return { status: "closed" as const };
+    }
+    if (!(await isActiveChallengerInScope(tx, objective.teamId, nextApplicant))) {
+      return { status: "forbidden" as const };
     }
 
     const applications = objective.challengeApplications ?? [];
@@ -1263,6 +1290,7 @@ export async function approveObjectiveChallengeApplication(
     const acceptedAt = nowIso();
     const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
     if (!nextConfirmationDueAt) return { status: "invalid" as const };
+    if (!(await isActiveChallengerInScope(tx, objective.teamId, application.applicant))) return { status: "invalid" as const };
 
     const challengers = uniqueMembers([...(objective.challengers ?? []), application.applicant]);
     await tx
@@ -1332,13 +1360,8 @@ export async function recruitObjectiveChallengers(
     const currentChallengers = uniqueMembers(objective.challengers ?? []);
     const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
     if (recruitMembers.length === 0) return { status: "invalid" as const };
-    const activeMembers = await tx
-      .select({ name: users.name })
-      .from(teamMembers)
-      .innerJoin(users, eq(teamMembers.userId, users.id))
-      .where(and(eq(teamMembers.teamId, objective.teamId), eq(users.status, "active"), inArray(users.name, recruitMembers)));
-    const activeMemberNames = new Set(activeMembers.map((member) => member.name));
-    if (recruitMembers.some((member) => !activeMemberNames.has(member))) return { status: "invalid" as const };
+    const activeChallengerNames = await getActiveChallengerNameSetInScope(tx, objective.teamId, recruitMembers);
+    if (recruitMembers.some((member) => !activeChallengerNames.has(member))) return { status: "invalid" as const };
     const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
     if (assignedChallengers.length === 0) return { status: "invalid" as const };
     await tx
@@ -2604,7 +2627,7 @@ export async function submitObjectiveLoot(
     return { status: "closed" };
   }
 
-  if (!uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
+  if (actor.role !== "member" || !uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
     return { status: "forbidden" };
   }
 
@@ -2687,7 +2710,7 @@ export async function submitObjectiveContributionReview(
   }
 
   const challengers = uniqueMembers(objective.challengers ?? []);
-  if (!challengers.includes(actor.name)) {
+  if (actor.role !== "member" || !challengers.includes(actor.name)) {
     return { status: "forbidden" };
   }
 

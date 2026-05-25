@@ -892,6 +892,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
+    if (user.role !== "member") {
+      return { recruitmentItems: [], availableItems: [], objectiveOptions: [], contribution: { points: 0 } };
+    }
+
     return getBountyHallData(user.name, { scope });
   });
   app.get("/api/my-challenges", async (request, reply) => {
@@ -1599,6 +1603,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
     if (outcome.status === "alreadyApplied") {
       return reply.code(409).send({ error: "Challenge application already exists" });
+    }
+    if (outcome.status === "forbidden") {
+      return reply.code(403).send({ error: "Only active members can apply for objective challenges" });
     }
     if (outcome.status === "closed") {
       return reply.code(409).send({ error: "Objective is not open for challenge applications" });
