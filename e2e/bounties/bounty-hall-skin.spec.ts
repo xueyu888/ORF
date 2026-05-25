@@ -162,7 +162,7 @@ test("refreshes the bounty hall when a recruitment notification is received", as
     body: `你被征召挑战「${recruitmentObjective.title}」，请在悬赏大厅接受或拒绝。`,
     targetType: "objective",
     targetId: recruitmentObjective.id,
-    targetHref: "/bounties",
+    targetHref: `/bounties#objective:${recruitmentObjective.id}`,
     readAt: null,
     createdAt: "2026-05-20T10:00:00.000Z",
     metadata: { objectiveTitle: recruitmentObjective.title },

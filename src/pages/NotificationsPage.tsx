@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { formatNotificationTime } from "../components/NotificationBell";
 import { Button, Card, EmptyState } from "../components/ui";
+import { notificationTargetHref } from "../features/notifications/notificationTargets";
 import type { AppNotification } from "../types/orf";
 import { useOrf } from "../state/OrfProvider";
 
@@ -14,7 +15,7 @@ export function NotificationsPage() {
     if (!notification.readAt) {
       await markNotificationRead(notification.id);
     }
-    navigate(notification.targetHref);
+    navigate(notificationTargetHref(notification));
   };
 
   return (

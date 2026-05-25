@@ -54,6 +54,10 @@ test("topbar notification entry is visible across authenticated pages", async ({
 test("topbar notification bell shows unread messages and marks the opened message read", async ({ page }) => {
   const now = new Date().toISOString();
   const readNotifications: string[] = [];
+  const applicationObjective = initialOrfState.objectives.find((objective) => objective.id === "obj-bounty-agent-retry");
+  if (!applicationObjective) {
+    throw new Error("Missing notification objective fixture");
+  }
   let notifications: AppNotification[] = [
     {
       id: "notification-application",
@@ -62,13 +66,13 @@ test("topbar notification bell shows unread messages and marks the opened messag
       actorUserId: initialOrfState.users[1].id,
       actorName: initialOrfState.users[1].name,
       title: "新的挑战申请",
-      body: "Mia Zhang 申请挑战「提升任务流」，需要指挥官确认。",
+      body: `Mia Zhang 申请挑战「${applicationObjective.title}」，需要指挥官确认。`,
       targetType: "objective",
-      targetId: "objective-notification-1",
+      targetId: applicationObjective.id,
       targetHref: "/tasks",
       readAt: null,
       createdAt: now,
-      metadata: { objectiveTitle: "提升任务流" },
+      metadata: { objectiveTitle: applicationObjective.title },
     },
     {
       id: "notification-loot",
@@ -136,7 +140,8 @@ test("topbar notification bell shows unread messages and marks the opened messag
   await page.getByRole("button", { name: /新的挑战申请/ }).click();
 
   await expect.poll(() => readNotifications).toContain("notification-application");
-  await expect(page).toHaveURL(/\/tasks$/);
+  await expect(page).toHaveURL(new RegExp(`/tasks#objective:${applicationObjective.id}$`));
+  await expect(page.locator(".orf-objective-header.orf-row-active").filter({ hasText: applicationObjective.title })).toBeVisible();
   await expect(page.getByRole("button", { name: /消息，1 条未读/ })).toBeVisible();
 });
 
@@ -154,7 +159,7 @@ test("notification page lists messages and marks all current user messages read"
       body: "Mia Zhang 申请挑战「提升任务流」，需要指挥官确认。",
       targetType: "objective",
       targetId: "objective-notification-1",
-      targetHref: "/tasks",
+      targetHref: "/tasks#objective:objective-notification-1",
       readAt: null,
       createdAt: now,
       metadata: { objectiveTitle: "提升任务流" },

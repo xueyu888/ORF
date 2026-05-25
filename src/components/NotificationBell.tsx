@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { AppNotification } from "../types/orf";
 import { useOrf } from "../state/OrfProvider";
+import { notificationTargetHref } from "../features/notifications/notificationTargets";
 
 export function NotificationBell() {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ export function NotificationBell() {
       await markNotificationRead(notification.id);
     }
     setOpen(false);
-    navigate(notification.targetHref);
+    navigate(notificationTargetHref(notification));
   };
 
   return (

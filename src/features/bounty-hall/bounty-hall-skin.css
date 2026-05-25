@@ -532,6 +532,11 @@
   box-shadow: inset 3px 0 0 rgba(57, 125, 167, 0.26);
 }
 
+.bounty-list-row[data-linked-target="true"] {
+  background: rgba(255, 250, 237, 0.68);
+  box-shadow: inset 3px 0 0 rgba(57, 125, 167, 0.58), 0 10px 24px rgba(98, 77, 48, 0.12);
+}
+
 .bounty-list-row:focus-visible {
   outline: 2px solid rgba(60, 133, 178, 0.5);
   outline-offset: -4px;

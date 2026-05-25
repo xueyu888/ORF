@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
@@ -10,7 +10,7 @@ import { getMyChallengesData, type TaskManagementData } from "../../state/apiCli
 import { useOrf } from "../../state/OrfProvider";
 import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
 import { localDateString } from "../../utils/date";
-import { challengeLinkForTarget } from "./model/challengeLinks";
+import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
 import { challengeCycleOptions, filterChallengeGroups, sortChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
@@ -218,8 +218,10 @@ export function ChallengePlanPage() {
   const currentMember = currentUser?.name ?? "User";
   const canShowAllChallenges = canShowFrontend(currentUser, "challenge.scope.all");
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const hasObjectiveCreationEntry = searchParams.get("create") === "objective";
+  const linkedChallengeTarget = useMemo(() => parseChallengeTargetHash(location.hash), [location.hash]);
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
   const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
@@ -239,6 +241,7 @@ export function ChallengePlanPage() {
   const temporaryChildRowRef = useRef<TemporaryChildRow | null>(null);
   const completionOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
+  const appliedLinkedTargetRef = useRef<string | null>(null);
   const now = useMinuteNow();
 
   useEffect(() => {
@@ -389,6 +392,46 @@ export function ChallengePlanPage() {
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
+
+  useEffect(() => {
+    if (!linkedChallengeTarget) {
+      appliedLinkedTargetRef.current = null;
+      return;
+    }
+    const linkedTargetKey = challengeAnchorIdForLinkedTarget(linkedChallengeTarget);
+    if (appliedLinkedTargetRef.current === linkedTargetKey) return;
+
+    const objectiveId = objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, challengeState) ?? objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, state);
+    if (!objectiveId) return;
+    appliedLinkedTargetRef.current = linkedTargetKey;
+
+    if (canShowAllChallenges && scope !== "all") setScope("all");
+    if (cycleFilter !== "all") setCycleFilter("all");
+    if (statusFilter !== "all") setStatusFilter("all");
+
+    const parentActionId = parentActionIdForLinkedSubAction(linkedChallengeTarget, challengeState) ?? parentActionIdForLinkedSubAction(linkedChallengeTarget, state);
+    if (parentActionId) {
+      setCollapsedActionIds((items) => (items.has(parentActionId) ? withoutItem(items, parentActionId) : items));
+    }
+  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, scope, state, statusFilter]);
+
+  useEffect(() => {
+    if (!linkedChallengeTarget) return undefined;
+    const anchorId = challengeAnchorIdForLinkedTarget(linkedChallengeTarget);
+    const rowActionId = rowActionIdForLinkedChallengeTarget(linkedChallengeTarget, challengeState);
+    if (!rowActionId) return undefined;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = challengeTargetElement(anchorId);
+      if (!element) return;
+
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      setActiveActionId(rowActionId);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [challengeState, displayedGroups, linkedChallengeTarget]);
+
   useEffect(() => {
     if (!temporaryChildRow) return;
     if (!challengeState.objectives.some((objective) => objective.id === temporaryChildRow.objectiveId)) {
@@ -1012,6 +1055,37 @@ export function ChallengePlanPage() {
       )}
     </div>
   );
+}
+
+function challengeAnchorIdForLinkedTarget(target: ChallengeUrlTarget) {
+  return `${target.type}:${target.id}`;
+}
+
+function challengeTargetElement(anchorId: string) {
+  return (
+    Array.from(document.querySelectorAll<HTMLElement>("[data-challenge-row-target]")).find((element) => element.dataset.challengeRowTarget === anchorId) ??
+    null
+  );
+}
+
+function objectiveIdForLinkedChallengeTarget(target: ChallengeUrlTarget, state: OrfState) {
+  if (target.type === "objective") return state.objectives.some((objective) => objective.id === target.id) ? target.id : null;
+  if (target.type === "bounty") return state.results.find((result) => result.id === target.id)?.objectiveId ?? null;
+  if (target.type === "action") return state.tasks.find((task) => task.id === target.id)?.linkedObjectiveId ?? null;
+  return state.tasks.find((task) => task.checklist.some((item) => item.id === target.id))?.linkedObjectiveId ?? null;
+}
+
+function parentActionIdForLinkedSubAction(target: ChallengeUrlTarget, state: OrfState) {
+  if (target.type !== "subAction") return null;
+  return state.tasks.find((task) => task.checklist.some((item) => item.id === target.id))?.id ?? null;
+}
+
+function rowActionIdForLinkedChallengeTarget(target: ChallengeUrlTarget, state: OrfState) {
+  if (!objectiveIdForLinkedChallengeTarget(target, state)) return null;
+  if (target.type !== "subAction") return challengeAnchorIdForLinkedTarget(target);
+
+  const parentActionId = parentActionIdForLinkedSubAction(target, state);
+  return parentActionId ? `subAction:${parentActionId}:${target.id}` : null;
 }
 
 function useMinuteNow() {

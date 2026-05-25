@@ -201,6 +201,7 @@ test("commander and challenger can complete the application-to-settlement ORF ba
   const applicationNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
   assert.equal(applicationNotifications[0]?.kind, "challenge.application.created");
   assert.equal(applicationNotifications[0]?.targetId, objective.id);
+  assert.equal(applicationNotifications[0]?.targetHref, `/tasks#objective:${encodeURIComponent(objective.id)}`);
   assert.equal(applicationNotifications[0]?.readAt, null);
 
   const hallAfterApply = await getBountyHallData(fixture.challenger.name);
@@ -380,6 +381,7 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   const recruitmentNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
   assert.equal(recruitmentNotifications[0]?.kind, "objective.recruitment.created");
   assert.equal(recruitmentNotifications[0]?.targetId, objective.id);
+  assert.equal(recruitmentNotifications[0]?.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
 
   const hallForRecruited = await getBountyHallData(fixture.challenger.name);
   const recruitmentItem = hallForRecruited.recruitmentItems.find((item) => item.objective.id === objective.id);
@@ -2249,7 +2251,7 @@ test("comment mentions resolve scoped active users and create recipient notifica
   );
   assert.equal(challengerNotifications.length, 1);
   assert.equal(challengerNotifications[0]?.targetType, "comment");
-  assert.equal(challengerNotifications[0]?.targetHref, "/tasks");
+  assert.equal(challengerNotifications[0]?.targetHref, `/tasks#objective:${encodeURIComponent(objective.id)}`);
   assert.equal(challengerNotifications[0]?.metadata.targetId, objective.id);
   assert.match(challengerNotifications[0]?.body ?? "", /评论中提到了你/);
 

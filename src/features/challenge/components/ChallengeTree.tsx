@@ -166,6 +166,7 @@ function ObjectivePanel({
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
       <div
         className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
+        data-challenge-row-target={anchorId}
         data-has-workbench-action={workbenchAction ? "true" : undefined}
         data-scope={scope}
         aria-busy={draftObjectiveIsSubmitting ? "true" : undefined}
@@ -390,6 +391,7 @@ function MetricRow({
           bounty && handlers.dragDrop.dragItem?.type === "bounty" && handlers.dragDrop.dragItem.id === bounty.result.id && "orf-row-dragging",
           dropClass,
         )}
+        data-challenge-row-target={anchorId}
         data-scope={scope}
         onDoubleClick={(event) => {
           if (!disabled) handleRowDoubleClick(event, target, handlers.onEditTarget);
@@ -508,6 +510,7 @@ function ActionRow({
           action && handlers.dragDrop.dragItem?.type === "action" && handlers.dragDrop.dragItem.id === action.id && "orf-row-dragging",
           dropClass,
         )}
+        data-challenge-row-target={anchorId}
         onDoubleClick={(event) => {
           if (!disabled) handleRowDoubleClick(event, target, handlers.onEditTarget);
         }}
@@ -669,6 +672,7 @@ function SubActionRow({
         item && handlers.dragDrop.dragItem?.type === "subAction" && handlers.dragDrop.dragItem.id === item.id && "orf-row-dragging",
         dropClass,
       )}
+      data-challenge-row-target={anchorId}
       onDoubleClick={(event) => {
         if (!disabled) handleRowDoubleClick(event, target, handlers.onEditTarget);
       }}

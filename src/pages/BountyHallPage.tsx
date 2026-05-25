@@ -8,8 +8,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { remainingTime } from "../features/challenge/model/challengeDates";
+import { parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
 import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
 import {
   BountyBadge,
@@ -53,6 +54,7 @@ export function BountyHallPage() {
     currentUser,
     notifications,
   } = useOrf();
+  const location = useLocation();
   const navigate = useNavigate();
   const bountyDataRequestRef = useRef(0);
   const [bountyData, setBountyData] = useState<BountyHallData | null>(null);
@@ -64,6 +66,10 @@ export function BountyHallPage() {
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
   const challengeActionsBlocked = currentUser?.role !== "member";
+  const linkedBountyObjectiveId = useMemo(() => {
+    const target = parseChallengeTargetHash(location.hash);
+    return target?.type === "objective" ? target.id : null;
+  }, [location.hash]);
 
   const loadBountyData = useCallback(async () => {
     const requestId = bountyDataRequestRef.current + 1;
@@ -134,6 +140,26 @@ export function BountyHallPage() {
 
   const hasFilters = query.trim() || difficultyFilter !== "all";
 
+  useEffect(() => {
+    if (!linkedBountyObjectiveId) return;
+    setQuery("");
+    setDifficultyFilter("all");
+  }, [linkedBountyObjectiveId]);
+
+  useEffect(() => {
+    if (!linkedBountyObjectiveId) return undefined;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const element = bountyTargetElement(linkedBountyObjectiveId);
+      if (!element) return;
+
+      element.scrollIntoView({ behavior: "smooth", block: "center" });
+      element.focus({ preventScroll: true });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [filteredHallItems, linkedBountyObjectiveId]);
+
   const clearFilters = () => {
     setQuery("");
     setDifficultyFilter("all");
@@ -199,6 +225,7 @@ export function BountyHallPage() {
 
         {filteredHallItems.length > 0 ? (
           <BountyObjectiveList
+            activeObjectiveId={linkedBountyObjectiveId}
             items={filteredHallItems}
             now={now}
             processingBountyId={processingBountyId}
@@ -321,11 +348,13 @@ function Toolbar({
 }
 
 function BountyObjectiveList({
+  activeObjectiveId,
   items,
   now,
   processingBountyId,
   onAction,
 }: {
+  activeObjectiveId: string | null;
   items: BountyItem[];
   now: Date;
   processingBountyId: string | null;
@@ -343,6 +372,7 @@ function BountyObjectiveList({
       {items.map((item) => (
         <BountyListRow
           key={item.objective.id}
+          active={item.objective.id === activeObjectiveId}
           item={item}
           now={now}
           processing={processingBountyId === item.objective.id}
@@ -358,7 +388,9 @@ function BountyListRow({
   now,
   processing,
   onAction,
+  active,
 }: {
+  active: boolean;
   item: BountyItem;
   now: Date;
   processing: boolean;
@@ -371,6 +403,8 @@ function BountyListRow({
   return (
     <article
       className={`bounty-list-row${item.isRecruitment ? " bounty-list-row-priority" : ""}`}
+      data-bounty-objective-id={item.objective.id}
+      data-linked-target={active ? "true" : undefined}
       tabIndex={0}
       aria-label={`${item.objective.title}，移入或聚焦后显示完整信息`}
     >
@@ -548,6 +582,13 @@ function resultCountLabel(item: BountyItem) {
 
 function bountySortTitle(item: BountyItem) {
   return item.result?.title ?? item.objective.title;
+}
+
+function bountyTargetElement(objectiveId: string) {
+  return (
+    Array.from(document.querySelectorAll<HTMLElement>("[data-bounty-objective-id]")).find((element) => element.dataset.bountyObjectiveId === objectiveId) ??
+    null
+  );
 }
 
 function useMinuteNow() {

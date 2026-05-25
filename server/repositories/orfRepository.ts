@@ -346,6 +346,20 @@ async function isActiveChallengerInScope(client: Pick<typeof db, "select">, stor
   return (await getActiveChallengerNameSetInScope(client, storageScopeId, [memberName])).has(memberName);
 }
 
+function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: string) {
+  return `${path}#objective:${encodeURIComponent(objectiveId)}`;
+}
+
+function challengeCommentTargetHref(targetType: CommentTargetType, targetId: string) {
+  const challengeTargetTypeByCommentTarget: Record<CommentTargetType, "action" | "bounty" | "objective" | "subAction"> = {
+    objective: "objective",
+    result: "bounty",
+    subtask: "subAction",
+    task: "action",
+  };
+  return `/tasks#${challengeTargetTypeByCommentTarget[targetType]}:${encodeURIComponent(targetId)}`;
+}
+
 async function notifyAdminsOfChallengeApplication(input: {
   actorUserId?: string | null;
   applicant: string;
@@ -360,7 +374,7 @@ async function notifyAdminsOfChallengeApplication(input: {
     kind: "challenge.application.created",
     metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
     recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
-    targetHref: "/tasks",
+    targetHref: challengeObjectiveHref("/tasks", input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
@@ -383,7 +397,7 @@ async function notifyMembersOfRecruitment(input: {
     kind: "objective.recruitment.created",
     metadata: { objectiveTitle: input.objectiveTitle },
     recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, input.memberNames),
-    targetHref: "/bounties",
+    targetHref: challengeObjectiveHref("/bounties", input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
@@ -405,7 +419,7 @@ async function notifyAdminsOfChallengeAcceptance(input: {
     kind: "objective.challenge.accepted",
     metadata: { challenger: input.challenger, objectiveTitle: input.objectiveTitle },
     recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
-    targetHref: "/tasks",
+    targetHref: challengeObjectiveHref("/tasks", input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
@@ -481,7 +495,7 @@ async function notifyMentionedUsersOfComment(input: {
       targetType: input.targetType,
     },
     recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, mentionedUserIds),
-    targetHref: "/tasks",
+    targetHref: challengeCommentTargetHref(input.targetType, input.targetId),
     targetId: input.commentMessageId,
     targetType: "comment",
     teamId: input.teamId,
