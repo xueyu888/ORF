@@ -78,6 +78,11 @@ test("published objective without concrete results is visible in the bounty hall
   assert.equal(item.result, null);
   assert.deepEqual(item.results, []);
   assert.equal(item.uncertaintyPoints, 0);
+
+  const commanderHall = await getBountyHallData(fixture.commander.name, { scope: fixture.scope }, "admin");
+  const commanderItem = commanderHall.availableItems.find((item) => item.objective.id === objective.id);
+  assert.ok(commanderItem, "commanders should see the same published Objective in the bounty hall");
+  assert.equal(commanderItem.hasCurrentApplication, false);
 });
 
 test("recruited objective without concrete results is visible as a recruitment item", async () => {
@@ -106,6 +111,13 @@ test("recruited objective without concrete results is visible as a recruitment i
   assert.equal(item.isRecruitment, true);
   assert.equal(item.result, null);
   assert.deepEqual(item.results, []);
+
+  const commanderHall = await getBountyHallData(fixture.commander.name, { scope: fixture.scope }, "admin");
+  assert.ok(
+    commanderHall.availableItems.find((item) => item.objective.id === objective.id),
+    "commanders should see recruiting Objectives without becoming the recruited actor",
+  );
+  assert.equal(commanderHall.recruitmentItems.some((item) => item.objective.id === objective.id), false);
 });
 
 test("task management data removes accepted challengers from pending recruitment lists", async () => {
@@ -528,11 +540,19 @@ test("challenge participant entrypoints reject administrators", async () => {
   await withApiServer(fixture, async (app) => {
     const bounties = await apiInject(app, fixture.commander, "GET", "/api/bounties");
     assert.equal(bounties.statusCode, 200);
-    assert.deepEqual(JSON.parse(bounties.body).availableItems, []);
-    assert.deepEqual(JSON.parse(bounties.body).recruitmentItems, []);
+    const bountyPayload = bounties.json() as {
+      availableItems: Array<{ hasCurrentApplication: boolean; objective: { id: string } }>;
+      recruitmentItems: Array<{ objective: { id: string } }>;
+    };
+    const visibleApplicationObjective = bountyPayload.availableItems.find((item) => item.objective.id === applicationObjective.id);
+    assert.ok(visibleApplicationObjective, "commanders should see bounty hall entries instead of receiving an empty list");
+    assert.equal(visibleApplicationObjective.hasCurrentApplication, false);
 
     const response = await apiInject(app, fixture.commander, "POST", `/api/objectives/${encodeURIComponent(applicationObjective.id)}/challenge-applications`);
     assert.equal(response.statusCode, 403);
+
+    const acceptance = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/challenge`);
+    assert.equal(acceptance.statusCode, 403);
   });
 
   const data = await getTaskManagementData({ scope: fixture.scope });

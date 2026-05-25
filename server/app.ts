@@ -900,11 +900,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
-    if (user.role !== "member") {
-      return { recruitmentItems: [], availableItems: [], objectiveOptions: [], contribution: { points: 0 } };
-    }
-
-    return getBountyHallData(user.name, { scope });
+    return getBountyHallData(user.name, { scope }, user.role);
   });
   app.get("/api/my-challenges", async (request, reply) => {
     const user = await requireApiUser(request, reply);
@@ -1564,6 +1560,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
       return reply;
     }
+    if (user.role !== "member" || user.status !== "active") {
+      return reply.code(403).send({ error: "Only active members can accept objective challenges" });
+    }
 
     const outcome = await acceptObjectiveChallenge(params.objectiveId, user.name, user.id);
 
@@ -1599,6 +1598,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const { user, scope } = context;
     if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
       return reply;
+    }
+    if (user.role !== "member" || user.status !== "active") {
+      return reply.code(403).send({ error: "Only active members can apply for objective challenges" });
     }
 
     const outcome = await applyForObjectiveChallenge(params.objectiveId, user.name, user.id);

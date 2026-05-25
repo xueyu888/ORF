@@ -29,6 +29,7 @@ import type {
   TaskChecklistItem,
   TaskStatus,
   UncertaintyLevel,
+  UserRole,
 } from "../../src/types/orf";
 import {
   normalizeContributionAllocations,
@@ -872,12 +873,13 @@ function contributionSummaryFor(data: TaskManagementData, member: string) {
   };
 }
 
-export async function getBountyHallData(member: string, scope: TaskManagementDataScope = {}): Promise<BountyHallData> {
+export async function getBountyHallData(viewerName: string, scope: TaskManagementDataScope = {}, viewerRole: UserRole = "member"): Promise<BountyHallData> {
   const data = await getTaskManagementData(scope);
+  const canUseChallengeActions = viewerRole === "member";
   const items = data.objectives.flatMap((objective) => {
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
-    const isRecruitment = objective.assignedChallengers.includes(member) && challengeAcceptanceFlowStatuses.has(objective.flowStatus);
+    const isRecruitment = canUseChallengeActions && objective.assignedChallengers.includes(viewerName) && challengeAcceptanceFlowStatuses.has(objective.flowStatus);
     if (objectiveClosedForBountyHall(objective) && !isRecruitment) return [];
     if (objectiveAcceptedForBountyHall(objective) && !isRecruitment) return [];
 
@@ -887,7 +889,7 @@ export async function getBountyHallData(member: string, scope: TaskManagementDat
       deadline: objective.finalDueAt,
       definer: result?.definer ?? "",
       difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
-      hasCurrentApplication: pendingApplications.some((application) => application.applicant === member),
+      hasCurrentApplication: canUseChallengeActions && pendingApplications.some((application) => application.applicant === viewerName),
       isRecruitment,
       objective,
       result: result ?? null,
@@ -903,7 +905,7 @@ export async function getBountyHallData(member: string, scope: TaskManagementDat
     recruitmentItems: items.filter((item) => item.isRecruitment),
     availableItems,
     objectiveOptions: data.objectives.filter((objective) => objectiveOptionIds.has(objective.id)),
-    contribution: contributionSummaryFor(data, member),
+    contribution: contributionSummaryFor(data, viewerName),
   };
 }
 

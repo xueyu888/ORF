@@ -958,10 +958,15 @@ test("commander publishes a candidate objective and the bounty hall exposes it a
   const result = resultFixture({ id: "res-ui-publish", objectiveId: candidate.id, title: "前端测试 发布候选指标" });
   let taskData = taskManagementData({ objectives: [candidate], results: [result] });
   let bountyData = bountyHallData([]);
+  let commanderApplyRequests = 0;
 
   await mockOrfApp(page, adminUser, taskData, {
     allChallenges: () => taskData,
     bounties: () => bountyData,
+    onApply: async () => {
+      commanderApplyRequests += 1;
+      return { status: 500, json: { error: "commander should not apply" } };
+    },
     onPublish: async () => {
       const publishedObjective = {
         ...candidate,
@@ -980,6 +985,14 @@ test("commander publishes a candidate objective and the bounty hall exposes it a
   await panel.getByRole("button", { name: "发布" }).click();
   await expect(panel.getByText("可申请")).toBeVisible();
   await expect(panel.getByRole("button", { name: "发布" })).toHaveCount(0);
+
+  await page.goto("/bounties");
+  await expect(page.getByRole("heading", { name: candidate.title })).toBeVisible();
+  await expect(page.getByRole("button", { name: "申请挑战" })).toBeVisible();
+  await page.getByRole("button", { name: "申请挑战" }).click();
+  await expect(page.getByRole("dialog", { name: "指挥官不应该申请挑战" })).toBeVisible();
+  await expect.poll(() => commanderApplyRequests).toBe(0);
+  await page.getByRole("button", { name: "我知道了" }).click();
 
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({ json: { authenticated: true, user: observerUser } });

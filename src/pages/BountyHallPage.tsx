@@ -33,6 +33,7 @@ type BountyItem = BountyHallItem;
 type ChallengeAction = "apply" | "accept";
 type ChallengeConfirmTarget = {
   action: ChallengeAction;
+  blocked: boolean;
   item: BountyItem;
 };
 
@@ -62,7 +63,7 @@ export function BountyHallPage() {
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
-  const canCurrentUserChallenge = currentUser?.role === "member";
+  const challengeActionsBlocked = currentUser?.role !== "member";
 
   const loadBountyData = useCallback(async () => {
     const requestId = bountyDataRequestRef.current + 1;
@@ -101,12 +102,12 @@ export function BountyHallPage() {
   }, [loadBountyData, recruitmentNotificationKey]);
 
   const recruitmentItems = useMemo(
-    () => (canCurrentUserChallenge ? [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency) : []),
-    [bountyData, canCurrentUserChallenge],
+    () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),
+    [bountyData],
   );
 
-  const availableBounties = canCurrentUserChallenge ? bountyData?.availableItems ?? [] : [];
-  const objectiveOptions = canCurrentUserChallenge ? bountyData?.objectiveOptions ?? [] : [];
+  const availableBounties = bountyData?.availableItems ?? [];
+  const objectiveOptions = bountyData?.objectiveOptions ?? [];
   const hallItems = useMemo(() => {
     const seen = new Set<string>();
     return [...recruitmentItems, ...availableBounties].filter((item) => {
@@ -201,7 +202,7 @@ export function BountyHallPage() {
             items={filteredHallItems}
             now={now}
             processingBountyId={processingBountyId}
-            onAction={(item, action) => setConfirmTarget({ action, item })}
+            onAction={(item, action) => setConfirmTarget({ action, blocked: challengeActionsBlocked, item })}
           />
         ) : (
           <BountyEmptyState
@@ -447,9 +448,17 @@ function ChallengeConfirmModal({
 }) {
   useEscape(onCancel);
   const actionLabel = item.action === "accept" ? "接受挑战" : "申请挑战";
-  const title = item.action === "accept" ? "接受后会进入你的挑战页" : "提交后等待指挥官确认";
+  const title = item.blocked
+    ? item.action === "accept"
+      ? "指挥官不应该接受挑战"
+      : "指挥官不应该申请挑战"
+    : item.action === "accept"
+      ? "接受后会进入你的挑战页"
+      : "提交后等待指挥官确认";
   const description =
-    item.action === "accept"
+    item.blocked
+      ? "指挥官可以完整查看悬赏大厅和操作区，但不能成为挑战者。这个动作不会提交，也不会改变申请、征召或挑战者关系。"
+      : item.action === "accept"
       ? "接受挑战后会成为当前挑战者；目标进入重估，重估完成后由指挥官冻结。"
       : "申请挑战只表达负责意愿，不会直接成为挑战者；指挥官确认后，目标进入重估。";
 
@@ -460,15 +469,19 @@ function ChallengeConfirmModal({
       subtitle={actionLabel}
       variant="confirm"
       footer={
-        <>
-          <BountyButton variant="secondary" onClick={onCancel} disabled={processing}>
-            取消
-          </BountyButton>
-          <BountyButton onClick={onConfirm} disabled={processing}>
-            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : item.action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            {actionLabel}
-          </BountyButton>
-        </>
+        item.blocked ? (
+          <BountyButton onClick={onCancel}>我知道了</BountyButton>
+        ) : (
+          <>
+            <BountyButton variant="secondary" onClick={onCancel} disabled={processing}>
+              取消
+            </BountyButton>
+            <BountyButton onClick={onConfirm} disabled={processing}>
+              {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : item.action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+              {actionLabel}
+            </BountyButton>
+          </>
+        )
       }
     >
       <BountyCardSurface>
