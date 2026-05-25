@@ -12,8 +12,8 @@
 
 | 测试 | 入口 | 覆盖流程 |
 | --- | --- | --- |
-| 目标无指标可见性 | `published objective without concrete results is visible in the bounty hall` | 指挥官只发布 Objective，不预先定义具体 Result，挑战者仍应在悬赏大厅看到该目标 |
-| 征召无指标可见性 | `recruited objective without concrete results is visible as a recruitment item` | 指挥官只发布 Objective 后征召成员，被征召成员仍应看到征召项 |
+| 目标无指标可见性 | `published objective without concrete results is visible in the bounty hall` | 指挥官发布 Objective 时可以预定义 Result，也可以暂不定义；即使没有 Result，所有已通过用户仍应在悬赏大厅看到该目标，只有 active 普通成员申请能写入 |
+| 征召无指标可见性 | `recruited objective without concrete results is visible as a recruitment item` | 指挥官发布 Objective 时可以预定义 Result，也可以暂不定义；即使没有 Result，征召中目标仍在大厅可见，只有被征召普通成员接受能写入 |
 | 申请到结算 | `commander and challenger can complete the application-to-settlement ORF backend flow` | 指挥官发布悬赏，挑战者申请，指挥官通过，挑战者在重估期提出 / 编辑指标，冻结，提交战利品，验收结算 |
 | 消息接口 | `notification API scopes messages to the current recipient and supports read state` | 申请挑战生成指挥官消息；当前用户只能读取和标记自己的消息 |
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
@@ -42,7 +42,7 @@
 
 | 角色 | 测试身份 | 用途 |
 | --- | --- | --- |
-| 指挥官 | `commander` | 必须创建 Objective、发布、审核申请、征召、冻结、验收；可以提供参考 Result，但不强制定义具体指标 |
+| 指挥官 | `commander` | 必须创建 Objective、发布、审核申请、征召、冻结、验收；可以预定义 Result，也可以选择不定义；必须看到完整悬赏大厅界面，但申请或接受挑战不能写入 |
 | 挑战者 | `challenger` | 查看悬赏、申请、接受征召、在 `reestimating` 提出 / 编辑具体 Result、查看我的挑战、提交战利品、参与匿名互评 |
 | 旁观成员 | `observer` | 验证未被授权成员不能接受征召或提交战利品 |
 
@@ -77,8 +77,8 @@ flowchart TD
   B -->|可选| C[指挥官创建参考 Result]
   B -->|跳过| D[指挥官发布 Objective]
   C --> D
-  D --> E[挑战者在 /api/bounties 可见 available item]
-  E --> F[挑战者申请挑战]
+  D --> E[所有已通过用户在 /api/bounties 可见 available item]
+  E --> F[active 普通成员申请挑战]
   F --> G[悬赏大厅标记 hasCurrentApplication]
   G --> H[指挥官通过申请]
   H --> I[Objective.flowStatus = reestimating]
@@ -109,7 +109,7 @@ flowchart TD
   D --> E[指挥官征召挑战者]
   E --> F[Objective.flowStatus = recruiting]
   F --> G[Objective.assignedChallengers 包含挑战者]
-  G --> H[被征召挑战者在 /api/bounties 可见 recruitment item]
+  G --> H[被征召普通成员在 /api/bounties 可见 recruitment item]
   H --> I[旁观成员接受征召被拒绝]
   H --> J[被征召挑战者接受挑战]
   J --> K[Objective.flowStatus = reestimating]
@@ -126,8 +126,9 @@ flowchart TD
 | --- | --- | --- |
 | ORF-BE-R001 | Objective 是悬赏流程的必填核心对象，指挥官必须先创建 Objective。 | 申请到结算、征召到接受 |
 | ORF-BE-R002 | 指挥官发布 Objective 时，Result 是可选参考指标，不是发布和展示的前置条件。 | 目标无指标可见性、征召无指标可见性 |
-| ORF-BE-R003 | 无 Result 的 `open` Objective 仍应出现在挑战者的 `availableItems` 中，`results=[]`、`result=null`、`uncertaintyPoints=0`。 | 目标无指标可见性 |
-| ORF-BE-R004 | 无 Result 的 `recruiting` Objective 仍应出现在被征召成员的 `recruitmentItems` 中。 | 征召无指标可见性 |
+| ORF-BE-R003 | 无 Result 的 `open` Objective 仍应出现在所有已通过用户的 `availableItems` 中，`results=[]`、`result=null`、`uncertaintyPoints=0`；只有 active 普通成员能申请。 | 目标无指标可见性 |
+| ORF-BE-R003A | `GET /api/bounties` 不能因为当前用户是指挥官 / 管理员而返回空列表；角色只限制申请和接受 mutation 是否写入，不限制大厅发现数据或前端操作区展示。 | API 流程权限、目标无指标可见性 |
+| ORF-BE-R004 | 无 Result 的 `recruiting` Objective 仍应出现在悬赏大厅；被征召 active 普通成员接受能写入，指挥官 / 管理员触发接受必须被拒绝。 | 征召无指标可见性 |
 | ORF-BE-R005 | 成员申请后仅进入 `applying`，在指挥官批准前不是正式挑战者，不能提出或编辑指标。 | 申请到结算 |
 | ORF-BE-R006 | 指挥官批准申请后，申请状态变为 `approved`，成员进入 `challengers`，Objective 进入 `reestimating`，并生成 `confirmationDueAt`。 | 申请到结算、API 创建指标权限、API 编辑指标权限 |
 | ORF-BE-R007 | 被征召成员接受挑战后，Objective 进入 `reestimating`，成员进入 `challengers`，并从 `assignedChallengers` 移除。 | 征召到接受 |
@@ -198,6 +199,7 @@ flowchart TD
 | 创建目标 | 返回目标存在，`flowStatus=candidate` |
 | 可选参考指标 | 如果指挥官创建 Result，返回指标存在，不确定性分按难度计算 |
 | 发布目标 | `publishObjective` 返回 `ok`，`flowStatus=open`；即使没有 Result，也应进入悬赏大厅 |
+| 悬赏大厅动作阻断 | 发布后目标出现在指挥官读取的 `availableItems`，界面可完整展示申请 / 接受入口，但指挥官触发申请或接受挑战必须被拒绝 |
 | 审核申请 | 申请状态变为 `approved`，目标进入 `reestimating` |
 | 冻结目标 | 已有 Result 的 `reestimating` 目标可进入 `flowStatus=frozen`，挑战者指标调整资格变为 `false` |
 | 验收战利品 | 每个指标写入验收结论，目标结果由指标结论汇总，`flowStatus=settled`，写入基础分和结算分 |

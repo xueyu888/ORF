@@ -11,7 +11,7 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/api/tasks-page` | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据 |
-| `GET` | `/api/bounties` | 普通成员返回悬赏大厅数据；管理员返回空挑战入口集合 |
+| `GET` | `/api/bounties` | 所有已通过用户返回悬赏大厅发现数据；角色只影响申请 / 接受动作能否写入，管理员不能因为无挑战权限而拿到空列表 |
 | `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
 | `POST` | `/api/objectives` | 挑战页按 Enter 或标题输入框失焦快速创建候选目标，默认 `flowStatus=candidate` |
 | `PATCH` | `/api/objectives/:objectiveId` | 指挥官更新目标标题 |
@@ -41,7 +41,7 @@
 | `PATCH` | `/api/users/:userId/disable` | 停用用户 |
 
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
-读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。
+读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。
 
@@ -72,7 +72,7 @@
 | `pointLedger` | 验收结算后的成员积分流水 |
 | `permissionRules` | 前端操作权限 |
 
-`GET /api/bounties` 只对普通成员返回 `flowStatus in (open, applying, recruiting)` 且当前用户尚未成为挑战者的目标。
+`GET /api/bounties` 对所有已通过用户返回 `flowStatus in (open, applying, recruiting)` 且当前用户尚未成为挑战者的目标。`availableItems` 表示当前仍在大厅发现范围内的目标；`recruitmentItems` 表示当前 active 普通成员自己待接受的征召。指挥官/管理员读取同一接口时仍能看到大厅目标；前端可以完整显示申请 / 接受操作入口，但所有申请 / 接受动作接口必须返回 403 或等价 forbidden，不能把管理员写入 `challengers`、`assignedChallengers` 或申请记录。
 
 申请挑战只接受 active 普通成员在 `open/applying/recruiting` 发起；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
 
