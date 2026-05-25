@@ -49,6 +49,7 @@ export function BountyHallPage() {
   const {
     acceptBountyChallenge,
     applyForBounty,
+    currentUser,
     notifications,
   } = useOrf();
   const navigate = useNavigate();
@@ -61,6 +62,7 @@ export function BountyHallPage() {
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
+  const canCurrentUserChallenge = currentUser?.role === "member";
 
   const loadBountyData = useCallback(async () => {
     const requestId = bountyDataRequestRef.current + 1;
@@ -99,12 +101,12 @@ export function BountyHallPage() {
   }, [loadBountyData, recruitmentNotificationKey]);
 
   const recruitmentItems = useMemo(
-    () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),
-    [bountyData],
+    () => (canCurrentUserChallenge ? [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency) : []),
+    [bountyData, canCurrentUserChallenge],
   );
 
-  const availableBounties = bountyData?.availableItems ?? [];
-  const objectiveOptions = bountyData?.objectiveOptions ?? [];
+  const availableBounties = canCurrentUserChallenge ? bountyData?.availableItems ?? [] : [];
+  const objectiveOptions = canCurrentUserChallenge ? bountyData?.objectiveOptions ?? [] : [];
   const hallItems = useMemo(() => {
     const seen = new Set<string>();
     return [...recruitmentItems, ...availableBounties].filter((item) => {

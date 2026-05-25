@@ -2,18 +2,24 @@ import { buildServer } from "./app";
 import { closeDb } from "./db/client";
 import { env } from "./env";
 
-const server = await buildServer();
+let server: Awaited<ReturnType<typeof buildServer>> | null = null;
 
 try {
+  server = await buildServer();
   await server.listen({ host: env.SERVER_HOST, port: env.SERVER_PORT });
 } catch (error) {
-  server.log.error(error);
+  if (server) {
+    server.log.error(error);
+    await server.close();
+  } else {
+    console.error(error);
+  }
   await closeDb();
   process.exit(1);
 }
 
 const shutdown = async () => {
-  await server.close();
+  await server?.close();
   await closeDb();
 };
 

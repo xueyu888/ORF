@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Plus, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -130,7 +130,7 @@ function ObjectivePanel({
   ].join(";");
   const metricAddLabel = isDraftObjective ? null : handlers.metricActionLabel(group.objective);
   const objectiveAddActions = [
-    ...(metricAddLabel ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
+    ...(metricAddLabel && group.bounties.length > 0 ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
     ...(isDraftObjective || !handlers.canMutateWorkItems(group.objective.id) ? [] : [{ label: "新增行动项", onAdd: () => handlers.onAddAction(group.objective.id) }]),
   ];
 
@@ -218,7 +218,13 @@ function ObjectivePanel({
             scope={scope}
           />
         ))}
-        {group.bounties.length === 0 && <ObjectiveMetricEmptyState parentAnchorId={anchorId} />}
+        {group.bounties.length === 0 && (
+          <ObjectiveMetricEmptyState
+            actionLabel={metricAddLabel}
+            onAdd={metricAddLabel ? () => handlers.onAddBounty(group.objective.id) : undefined}
+            parentAnchorId={anchorId}
+          />
+        )}
         {group.actions.length > 0 ? (
           <div className="pb-2">
             {group.actions.map((action) => (
@@ -305,7 +311,15 @@ function ObjectiveTaskEmptyState({
   );
 }
 
-function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string }) {
+function ObjectiveMetricEmptyState({
+  actionLabel,
+  onAdd,
+  parentAnchorId,
+}: {
+  actionLabel?: string | null;
+  onAdd?: () => void;
+  parentAnchorId: string;
+}) {
   return (
     <div className="orf-objective-metric-empty">
       <HierarchyCell depth={1}>
@@ -322,6 +336,12 @@ function ObjectiveMetricEmptyState({ parentAnchorId }: { parentAnchorId: string 
           <div className="text-base font-semibold text-[#475467]">待定义指标</div>
           <div className="text-xs orf-text-muted">当前目标还没有指标。</div>
         </div>
+        {actionLabel && onAdd && (
+          <button type="button" className="orf-flow-action-button orf-flow-action-primary ml-auto" onClick={onAdd}>
+            <Plus className="h-3.5 w-3.5" />
+            {actionLabel}
+          </button>
+        )}
       </HierarchyCell>
     </div>
   );

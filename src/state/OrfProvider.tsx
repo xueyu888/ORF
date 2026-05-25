@@ -832,6 +832,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
       },
       applyForBounty: async (objectiveId) => {
+        if (currentUser?.role !== "member") {
+          notify("只有普通成员可以申请挑战");
+          return false;
+        }
         const applicant = currentUser?.name ?? "";
         const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
         if (hasScopedObjective) {
@@ -854,6 +858,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
       },
       acceptBountyChallenge: async (objectiveId) => {
+        if (currentUser?.role !== "member") {
+          notify("只有普通成员可以接受挑战");
+          return false;
+        }
         const challenger = currentUser?.name ?? "";
         const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
         if (hasScopedObjective) {

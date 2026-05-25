@@ -1319,13 +1319,64 @@ test("member reestimate metric proposal uses the member-proposed interaction con
   await panel.hover();
   await panel.getByRole("button", { name: "提出指标" }).click();
 
-  await expect(page.getByText("提出指标")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
   await page.getByLabel("指标标题").fill("前端测试 成员候选指标");
   await page.getByLabel("衡量指标").fill("候选指标");
   await page.getByRole("button", { name: "提交指标" }).click();
 
   await expect.poll(() => createPayload).toMatchObject({ objectiveId: objective.id, source: "memberProposed", definer: memberUser.name });
   await expect(objectivePanel(page, objective.title)).toContainText("前端测试 成员候选指标");
+});
+
+test("member creates objective-owned action without a linked result", async ({ page }) => {
+  const objective = objectiveFixture({
+    id: "obj-ui-objective-owned-action",
+    title: "前端测试 目标行动项",
+    flowStatus: "reestimating",
+    stage: "orfReestimate",
+    challengers: [memberUser.name],
+    confirmationDueAt: "2999-01-01T00:00:00.000Z",
+    resultIds: [],
+  });
+  let createPayload: TaskCreatePayload | null = null;
+  let data = taskManagementData({ objectives: [objective], results: [] });
+
+  await mockOrfApp(page, memberUser, data, {
+    mineChallenges: () => data,
+    onCreateTask: async (payload) => {
+      createPayload = payload as TaskCreatePayload;
+      const createdTask: Task = {
+        id: "task-ui-objective-owned-action",
+        title: createPayload.title ?? "前端测试 目标行动项执行",
+        description: "执行支撑目标的下一步技术任务。",
+        status: "Todo",
+        priority: createPayload.priority ?? "High",
+        assignee: createPayload.assignee ?? memberUser.name,
+        linkedObjectiveId: objective.id,
+        linkedResultId: null,
+        dueDate: "2999-01-01",
+        tags: [],
+        checklist: [],
+        createdAt: "2026-05-18T12:00:00.000Z",
+        updatedAt: "2026-05-18T12:00:00.000Z",
+      };
+      data = taskManagementData({ objectives: [objective], results: [], tasks: [createdTask] });
+      return { json: { task: createdTask } };
+    },
+    tasks: () => data,
+  });
+
+  await page.goto("/tasks");
+  const panel = objectivePanel(page, objective.title);
+  await panel.getByText("新增行动项", { exact: true }).click();
+
+  await expect(page.getByRole("dialog", { name: "新建行动项" })).toBeVisible();
+  await page.getByLabel("行动项标题").fill("前端测试 目标行动项执行");
+  await page.getByRole("button", { name: "保存行动项" }).click();
+
+  await expect.poll(() => createPayload).toMatchObject({ linkedObjectiveId: objective.id, title: "前端测试 目标行动项执行" });
+  expect(createPayload && "linkedResultId" in createPayload).toBe(false);
+  await expect(panel).toContainText("前端测试 目标行动项执行");
 });
 
 test.describe("ORF frontend guard coverage", () => {
@@ -1594,7 +1645,7 @@ test.describe("ORF frontend guard coverage", () => {
     await panel.hover();
     await panel.getByRole("button", { name: "提出指标" }).click();
 
-    await expect(page.getByText("提出指标")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
     await page.getByLabel("指标标题").fill("前端测试 不应出现的候选指标");
     await page.getByLabel("衡量指标").fill("候选指标");
     await page.getByRole("button", { name: "提交指标" }).click();
@@ -1731,7 +1782,7 @@ test.describe("ORF frontend guard coverage", () => {
     const panel = objectivePanel(page, objective.title);
     await panel.hover();
     await panel.getByRole("button", { name: "提出指标" }).click();
-    await expect(page.getByText("提出指标")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
     await page.getByLabel("指标标题").fill("前端测试 截止前候选指标");
     await page.getByLabel("衡量指标").fill("候选指标");
     await page.getByRole("button", { name: "提交指标" }).click();
@@ -2054,9 +2105,9 @@ test.describe("ORF frontend guard coverage", () => {
     const panel = objectivePanel(page, objective.title);
     await panel.hover();
     await panel.getByRole("button", { name: "提出指标" }).click();
-    await expect(page.getByText("提出指标")).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
     await page.getByRole("button").filter({ has: page.locator("svg") }).last().click();
-    await expect(page.getByText("提出指标")).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "提出指标" })).toHaveCount(0);
     await expect.poll(() => postCount).toBe(0);
   });
 
@@ -2569,6 +2620,7 @@ async function mockOrfApp(
     onApply?: () => Promise<void | MockMutationResult> | void | MockMutationResult;
     onApprove?: (applicationId: string) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onCreateResult?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
+    onCreateTask?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onFreeze?: () => Promise<void | MockMutationResult> | void | MockMutationResult;
     onPublish?: () => Promise<void | MockMutationResult> | void | MockMutationResult;
     onReject?: (applicationId: string) => Promise<void | MockMutationResult> | void | MockMutationResult;
@@ -2625,6 +2677,14 @@ async function mockOrfApp(
     }
 
     await fulfillMutation(route, options.onCreateResult?.(route.request().postDataJSON()));
+  });
+  await page.route("**/api/tasks", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+
+    await fulfillMutation(route, options.onCreateTask?.(route.request().postDataJSON()));
   });
   await page.route("**/api/objectives/*/challenge", async (route) => {
     if (route.request().method() !== "PATCH") {
@@ -2712,6 +2772,7 @@ type MockMutationResult = { status?: number; json?: unknown };
 type MockRouteResponse<T> = T | { status: number; json?: unknown };
 type MockRouteSource<T> = MockRouteResponse<T> | (() => MockRouteResponse<T> | Promise<MockRouteResponse<T>>);
 type ResultCreatePayload = { definer?: string; metricName?: string; objectiveId?: string; source?: string; title?: string };
+type TaskCreatePayload = { assignee?: string; linkedObjectiveId?: string; linkedResultId?: string; priority?: Task["priority"]; title?: string };
 type LootSubmitPayload = { body?: string; resultClaims?: ObjectiveLoot["resultClaims"]; selfTestReportBody?: string | null };
 type ContributionReviewPayload = { allocations?: ContributionAllocation[] };
 

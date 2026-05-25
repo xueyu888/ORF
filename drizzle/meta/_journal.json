@@ -134,6 +134,13 @@
       "when": 1779420000000,
       "tag": "0018_task_objective_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1779660000000,
+      "tag": "0019_challenger_member_boundary",
+      "breakpoints": true
     }
   ]
 }

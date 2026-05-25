@@ -7,6 +7,7 @@ import { getAuthenticatedOrfUser } from "./auth/ory";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./auth/errors";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/errors";
+import { assertRuntimeDatabaseSchema, databaseSchemaMismatchPayload, isDatabaseSchemaMismatchError } from "./db/schemaGuard";
 import { env } from "./env";
 import { registerOptionalIntegrations } from "./integrations";
 import {
@@ -742,9 +743,16 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(503).send(databaseUnavailablePayload());
     }
 
+    if (isDatabaseSchemaMismatchError(error)) {
+      app.log.error(error);
+      return reply.code(503).send(databaseSchemaMismatchPayload(error));
+    }
+
     app.log.error(error);
     return reply.code(500).send({ error: "Internal Server Error" });
   });
+
+  await assertRuntimeDatabaseSchema();
 
   app.addHook("preHandler", requireAuthenticatedApi);
 
@@ -890,6 +898,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const scope = await getDefaultRuntimeScopeForUser(user.id);
     if (!scope) {
       return reply.code(404).send({ error: "Runtime scope not found" });
+    }
+
+    if (user.role !== "member") {
+      return { recruitmentItems: [], availableItems: [], objectiveOptions: [], contribution: { points: 0 } };
     }
 
     return getBountyHallData(user.name, { scope });
@@ -1599,6 +1611,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
     if (outcome.status === "alreadyApplied") {
       return reply.code(409).send({ error: "Challenge application already exists" });
+    }
+    if (outcome.status === "forbidden") {
+      return reply.code(403).send({ error: "Only active members can apply for objective challenges" });
     }
     if (outcome.status === "closed") {
       return reply.code(409).send({ error: "Objective is not open for challenge applications" });

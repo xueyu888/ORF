@@ -6,7 +6,7 @@ import { buildServer } from "../server/app";
 import { loginWithPassword } from "../server/auth/ory";
 import { closeDb, db } from "../server/db/client";
 import { objectives, results as resultRows, taskChecklistItems, tasks as taskRows, teams, teamMembers, users } from "../server/db/schema";
-import type { ObjectiveAcceptedResult, Result, UncertaintyLevel } from "../src/types/orf";
+import type { ObjectiveAcceptedResult, Result, Task, UncertaintyLevel } from "../src/types/orf";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
@@ -484,6 +484,62 @@ test("recruitment API only accepts active members in scope", async () => {
   assert.deepEqual(refreshed?.assignedChallengers, [fixture.challenger.name]);
 });
 
+test("challenge participant entrypoints reject administrators", async () => {
+  const fixture = await createFixture("admin-challenger-guard");
+  const objective = await createPublishedObjective(fixture, "admin cannot become challenger");
+  await createTestResult(objective.id, fixture.commander.name, `${fixture.prefix} admin challenger guard result`);
+
+  const adminApplication = await applyForObjectiveChallenge(objective.id, fixture.commander.name, fixture.commander.id);
+  assert.equal(adminApplication.status, "forbidden");
+
+  const adminRecruitment = await recruitObjectiveChallengers(objective.id, [fixture.commander.name], fixture.commander.id);
+  assert.equal(adminRecruitment.status, "invalid");
+
+  await db
+    .update(objectives)
+    .set({
+      assignedChallengers: [fixture.commander.name],
+      flowStatus: "recruiting",
+    })
+    .where(eq(objectives.id, objective.id));
+  const adminAcceptance = await acceptObjectiveChallenge(objective.id, fixture.commander.name, fixture.commander.id);
+  assert.equal(adminAcceptance.status, "forbidden");
+
+  const applicationObjective = await createPublishedObjective(fixture, "admin application cannot be approved");
+  const applicationId = `${fixture.prefix}-admin-application`;
+  await db
+    .update(objectives)
+    .set({
+      challengeApplications: [
+        {
+          id: applicationId,
+          applicant: fixture.commander.name,
+          status: "pending",
+          createdAt: "2999-01-01T00:00:00.000Z",
+          decidedAt: null,
+        },
+      ],
+      flowStatus: "applying",
+    })
+    .where(eq(objectives.id, applicationObjective.id));
+  const adminApproval = await approveObjectiveChallengeApplication(applicationObjective.id, applicationId, fixture.commander.id);
+  assert.equal(adminApproval.status, "invalid");
+
+  await withApiServer(fixture, async (app) => {
+    const bounties = await apiInject(app, fixture.commander, "GET", "/api/bounties");
+    assert.equal(bounties.statusCode, 200);
+    assert.deepEqual(JSON.parse(bounties.body).availableItems, []);
+    assert.deepEqual(JSON.parse(bounties.body).recruitmentItems, []);
+
+    const response = await apiInject(app, fixture.commander, "POST", `/api/objectives/${encodeURIComponent(applicationObjective.id)}/challenge-applications`);
+    assert.equal(response.statusCode, 403);
+  });
+
+  const data = await getTaskManagementData({ scope: fixture.scope });
+  const refreshed = data.objectives.find((item) => item.id === applicationObjective.id);
+  assert.equal(refreshed?.challengers.includes(fixture.commander.name), false);
+});
+
 test("member-proposed result creation requires the API actor to be a challenger inside the reestimate window", async () => {
   const fixture = await createFixture("api-create-result");
 
@@ -910,6 +966,17 @@ test("loot submission rejects incomplete or out-of-state payloads", async () => 
 
   const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
   assert.equal(frozen.status, "ok");
+  await db
+    .update(objectives)
+    .set({ challengers: [fixture.challenger.name, fixture.commander.name] })
+    .where(eq(objectives.id, objective.id));
+
+  const adminLoot = await submitObjectiveLoot(
+    objective.id,
+    { body: "admin should not submit loot", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "admin evidence" }] },
+    { id: fixture.commander.id, name: fixture.commander.name, role: "admin" },
+  );
+  assert.equal(adminLoot.status, "forbidden");
 
   const emptyBody = await submitObjectiveLoot(
     objective.id,
@@ -1284,6 +1351,47 @@ test("API objective creation rejects malformed final due dates", async () => {
   });
 });
 
+test("API task creation is owned by the objective and does not require a result", async () => {
+  const fixture = await createFixture("api-task-objective-ownership");
+  const candidateObjective = await createTestObjective(fixture, "candidate action objective");
+  const objective = await createTestObjective(fixture, "resultless action objective");
+  await db
+    .update(objectives)
+    .set({
+      flowStatus: "reestimating",
+      stage: "orfReestimate",
+      challengers: [fixture.challenger.name],
+      confirmationDueAt: "2999-01-01T00:00:00.000Z",
+    })
+    .where(eq(objectives.id, objective.id));
+
+  await withApiServer(fixture, async (app) => {
+    const candidateResponse = await apiInject(app, fixture.commander, "POST", "/api/tasks", {
+      title: `${fixture.prefix} candidate planning task`,
+      linkedObjectiveId: candidateObjective.id,
+    });
+    assert.equal(candidateResponse.statusCode, 200, candidateResponse.body);
+    const candidatePayload = candidateResponse.json() as { task: Task };
+    assert.equal(candidatePayload.task.linkedObjectiveId, candidateObjective.id);
+    assert.equal(candidatePayload.task.linkedResultId, null);
+
+    const response = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: `${fixture.prefix} objective-only task`,
+      linkedObjectiveId: objective.id,
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    const payload = response.json() as { task: Task };
+
+    assert.equal(payload.task.linkedObjectiveId, objective.id);
+    assert.equal(payload.task.linkedResultId, null);
+
+    const data = await getTaskManagementData({ scope: fixture.scope });
+    const storedTask = data.tasks.find((item) => item.id === payload.task.id);
+    assert.equal(storedTask?.linkedObjectiveId, objective.id);
+    assert.equal(storedTask?.linkedResultId, null);
+  });
+});
+
 test("API work item creation trims labels and prevents blank persisted titles", async () => {
   const fixture = await createFixture("api-work-item-input");
   const publishedObjective = await createPublishedObjective(fixture, "input validation objective");
@@ -1356,6 +1464,15 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     assert.equal(trimmedTaskPayload.task.description, "执行支撑目标的下一步技术任务。");
     assert.equal(trimmedTaskPayload.task.assignee, fixture.challenger.name);
     assert.equal(trimmedTaskPayload.task.dueDate, "2999-02-28");
+
+    const objectiveOwnedTask = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: `${fixture.prefix} objective-owned action`,
+      linkedObjectiveId: objective.id,
+    });
+    assert.equal(objectiveOwnedTask.statusCode, 200, objectiveOwnedTask.body);
+    const objectiveOwnedTaskPayload = objectiveOwnedTask.json() as { task: Task };
+    assert.equal(objectiveOwnedTaskPayload.task.linkedObjectiveId, objective.id);
+    assert.equal(objectiveOwnedTaskPayload.task.linkedResultId, null);
 
     const defaultLabel = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(trimmedTaskPayload.task.id)}/checklist`, {
       label: "   ",

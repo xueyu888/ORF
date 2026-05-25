@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { CommentThread } from "../../src/types/orf";
+import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 const target = {
   id: "res-rag-recall",
@@ -22,6 +23,7 @@ function taskManagementData(comments: CommentThread[] = []) {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
+  await routeVisualBackgroundMocks(page);
 
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({ json: { authenticated: true, user: initialOrfState.users[0] } });
@@ -158,13 +160,20 @@ test("inserts and renders structured member mentions", async ({ page }) => {
   const panel = page.locator("[data-comment-panel='true']");
   await expect(panel).toContainText(`@${mentionTarget.name}`);
 
+  await panel.getByRole("button", { name: "编辑评论" }).click();
+  const editInput = panel.getByPlaceholder("编辑评论...");
+  await expect(editInput).toHaveValue(`请 @${mentionTarget.name} 看一下`);
+  await expect(editInput).not.toHaveValue(/orf-user/);
+  await panel.locator(".orf-comment-draft-target").click();
+
   const input = panel.getByPlaceholder("添加评论...");
   await input.fill("hello @mia");
   await expect(panel.getByRole("button", { name: new RegExp(mentionTarget.name) })).toBeVisible();
   await input.press("Enter");
-  await expect(input).toHaveValue(new RegExp(`orf-user:${mentionTarget.id}`));
+  await expect(input).toHaveValue(`hello @${mentionTarget.name} `);
+  await expect(input).not.toHaveValue(/orf-user/);
 
   await panel.getByRole("button", { name: "发送评论" }).click();
-  await expect.poll(() => submittedBody).toContain(`orf-user:${mentionTarget.id}`);
+  await expect.poll(() => submittedBody).toContain(`@[${mentionTarget.name}](orf-user:${mentionTarget.id})`);
   await expect(panel).toContainText(`@${mentionTarget.name}`);
 });

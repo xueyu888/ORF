@@ -11,7 +11,14 @@ import {
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../src/features/challenge/model/challengePermissions";
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
-import { canFreezeObjectiveAfterReestimate } from "../src/features/challenge/model/orfFlowCapabilities";
+import {
+  canFreezeObjectiveAfterReestimate,
+  canMutateObjectiveWorkItems,
+  canSubmitObjectiveLoot,
+  canSubmitObjectivePeerReview,
+  metricCreationActionForObjective,
+  workbenchActionForObjective,
+} from "../src/features/challenge/model/orfFlowCapabilities";
 import {
   canViewObjectiveRecord,
   filterFeedbackForVisibleObjectives,
@@ -269,6 +276,66 @@ test("freeze action requires reestimating objectives with concrete metrics", () 
   assert.equal(canFreezeObjectiveAfterReestimate(reestimating, [result({ objectiveId: reestimating.id })]), true);
   assert.equal(canFreezeObjectiveAfterReestimate(frozen, [result({ objectiveId: frozen.id })]), false);
   assert.equal(canFreezeObjectiveAfterReestimate(undefined, [result()]), false);
+});
+
+test("metric creation action separates commander definition from challenger proposal", () => {
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const rules = [{ role: "member" as const, permissions: [] }];
+  const dueAt = "2999-05-30T00:00:00.000Z";
+
+  assert.deepEqual(
+    metricCreationActionForObjective({
+      objective: objective({ flowStatus: "candidate", challengers: [] }),
+      currentUser: admin,
+      permissionRules: rules,
+      now: new Date("2026-05-22T00:00:00.000Z"),
+    }),
+    { label: "新增指标", source: "managerDefined" },
+  );
+  assert.deepEqual(
+    metricCreationActionForObjective({
+      objective: objective({ flowStatus: "reestimating", challengers: [challenger.name], confirmationDueAt: dueAt }),
+      currentUser: challenger,
+      permissionRules: rules,
+      now: new Date("2026-05-22T00:00:00.000Z"),
+    }),
+    { label: "提出指标", source: "memberProposed" },
+  );
+  assert.equal(
+    metricCreationActionForObjective({
+      objective: objective({ flowStatus: "frozen", challengers: [] }),
+      currentUser: admin,
+      permissionRules: rules,
+      now: new Date("2026-05-22T00:00:00.000Z"),
+    }),
+    null,
+  );
+});
+
+test("objective work item mutation covers candidate planning and active execution windows", () => {
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "candidate" })), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "reestimating" })), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "frozen" })), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "submitted" })), false);
+  assert.equal(canMutateObjectiveWorkItems(undefined), false);
+});
+
+test("loot workbench actions keep commander review separate from member challenge actions", () => {
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const pollutedFrozen = objective({ flowStatus: "frozen", challengers: [admin.name, challenger.name] });
+  const pollutedSubmitted = objective({ flowStatus: "submitted", challengers: [admin.name, challenger.name] });
+
+  assert.equal(canSubmitObjectiveLoot(pollutedFrozen, admin), false);
+  assert.equal(canSubmitObjectiveLoot(pollutedFrozen, challenger), true);
+  assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, admin), false);
+  assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, challenger), true);
+  assert.deepEqual(workbenchActionForObjective({ objective: pollutedSubmitted, currentUser: admin, contributionReviews: [] }), {
+    kind: "reviewLoot",
+    label: "验收战利品",
+    to: `/objectives/${pollutedSubmitted.id}/loot`,
+  });
 });
 
 test("challenge permission helpers map target resources to configured permissions", () => {

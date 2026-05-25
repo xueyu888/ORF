@@ -1,4 +1,4 @@
-import { Plus, Search, Shield } from "lucide-react";
+import { Loader2, Plus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { type CSSProperties, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
@@ -14,8 +14,6 @@ import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/fe
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { useOrf } from "../state/OrfProvider";
 
-const defaultSidebarBackgroundUrl = "/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png";
-
 function appShellBackgroundUrlFor(sidebarBackgroundUrl: string) {
   const background = orfAssetLibrary.appShell.nikeExtendedBackground;
   return sidebarBackgroundUrl.endsWith(background.sourceSidebarUrl) ? background.src : null;
@@ -27,14 +25,7 @@ export function AppShell() {
   const { currentUser, openModal, state } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const sidebarBackgroundUrl = useVisualBackground("sidebar_background", defaultSidebarBackgroundUrl);
-  const appShellBackgroundUrl = appShellBackgroundUrlFor(sidebarBackgroundUrl);
-  const shellStyle = {
-    "--orf-app-shell-bg-image": appShellBackgroundUrl ? toCssImageUrl(appShellBackgroundUrl) : "none",
-  } as CSSProperties;
-  const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
-  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
-  const isBountyHall = location.pathname.startsWith("/bounties");
+  const sidebarBackground = useVisualBackground("sidebar_background");
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -47,6 +38,22 @@ export function AppShell() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
+
+  if (sidebarBackground.status === "error") {
+    throw sidebarBackground.error;
+  }
+  if (sidebarBackground.status === "loading") {
+    return <AppShellBackgroundLoading />;
+  }
+
+  const sidebarBackgroundUrl = sidebarBackground.url;
+  const appShellBackgroundUrl = appShellBackgroundUrlFor(sidebarBackgroundUrl);
+  const shellStyle = {
+    "--orf-app-shell-bg-image": appShellBackgroundUrl ? toCssImageUrl(appShellBackgroundUrl) : "none",
+  } as CSSProperties;
+  const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
+  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
+  const isBountyHall = location.pathname.startsWith("/bounties");
 
   return (
     <div
@@ -107,5 +114,19 @@ export function AppShell() {
       <GlobalModals />
       <Toasts />
     </div>
+  );
+}
+
+function AppShellBackgroundLoading() {
+  return (
+    <main className="orf-auth-loading-page" role="status" aria-live="polite">
+      <div className="orf-auth-loading-panel">
+        <Loader2 className="h-7 w-7 animate-spin" />
+        <div>
+          <div className="orf-auth-loading-title">正在加载视觉背景</div>
+          <div className="orf-auth-loading-copy">侧边栏背景图片加载完成后进入系统。</div>
+        </div>
+      </div>
+    </main>
   );
 }

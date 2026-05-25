@@ -4,8 +4,8 @@
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
-| `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 挑战者提交匿名互评贡献比例 |
+| `POST` | `/api/objectives/:objectiveId/loot` | 普通成员挑战者提交结构化战利品 |
+| `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 普通成员挑战者提交匿名互评贡献比例 |
 | `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算积分 |
 
 ## 提交请求体
@@ -81,10 +81,10 @@
 
 ## 约束
 
-- 只有 `Objective.challengers` 中的成员可提交。
+- 只有 `Objective.challengers` 中的普通成员可提交。
 - 只有 `frozen` 目标可提交战利品。
 - 只有指挥官可验收。
 - 只有 `submitted` 目标可验收。
-- 多挑战者结算必须有可用匿名互评汇总，或有指挥官分歧处理结果。
+- 多个普通成员挑战者结算必须有可用匿名互评汇总，或有指挥官分歧处理结果。
 - 同一 reviewer 可重复提交匿名互评，后端保留历史；结算只使用每个 reviewer 最新一条记录。
 - 任务和子任务状态不自动决定目标完成。

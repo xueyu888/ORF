@@ -6,6 +6,7 @@
 - `Result` 是“指标”，只作为目标的验收口径和计分基础。
 - `Task` 是目标执行行动项，归属于 `Objective`，不归属于 `Result`。
 - 挑战者绑定到 `Objective.challengers`，不绑定到 `Result`。
+- 挑战者只能是当前作用域内的 active 普通成员；指挥官/管理员不进入 `Objective.challengers`、`Objective.assignedChallengers` 或挑战申请。
 - 一个目标可以有多个挑战者；一个目标可以包含多个指标。
 - 新建目标属于挑战页内的候选目标编辑流程；全局入口只负责把用户带到挑战页。页面先插入完整目标草稿面板，标题输入按 Enter 或输入框失焦快速创建 `candidate`；创建 UI 必须用单一 `objectiveCreationSession` 表达 `editingDraft → submittingDraft → submittedOverlay → anchoredCreated / failedEditingDraft`。请求发起后草稿立即退出标题编辑态并留在原位，`POST /api/objectives` 返回真实目标后立即连续替换草稿并沿用草稿位置，任务管理数据刷新只负责撤掉覆盖层，一次性排序锚点保留到用户切换筛选或业务排序键变化，刷新前后都不能出现目标消失或跳位。
 - 挑战页目标排序统一为：候选中目标、未分配的待申请/待征召目标、已分配执行中的目标、待验收目标、已结算目标、已关闭目标；同组内先按截止时间升序，再按创建日期降序；业务排序键相同则保留数据源顺序，目标标题不参与列表排序。
@@ -76,17 +77,18 @@
 ## 征召与申请
 
 - 申请挑战只表达意愿，不直接成为挑战者。
-- 申请挑战只允许在 `open`、`applying`、`recruiting`。
-- 指挥官通过申请后，申请人成为挑战者，目标进入重估。
+- 申请挑战只允许 active 普通成员在 `open`、`applying`、`recruiting` 发起。
+- 指挥官通过申请后，普通成员申请人成为挑战者，目标进入重估。
 - 申请审核只允许在 `applying`、`recruiting`、`reestimating`。
 - 征召发生在目标层级，不存在指标级征召。
+- 征召对象只能是 active 普通成员。
 - 被征召成员只能接受征召；有异议时线下找指挥官处理。
 - 被征召成员接受后成为挑战者，目标进入重估。
 - `frozen`、`submitted`、`settled`、`closed` 不再接受或审核挑战申请；历史残留的 pending 申请只读，不应展示通过或拒绝操作。
 
 ## 战利品
 
-战利品提交发生在目标层级，且仅允许目标挑战者在 `frozen` 状态提交。
+战利品提交发生在目标层级，且仅允许普通成员挑战者在 `frozen` 状态提交。
 
 战利品结构化保存到 `objectiveLoot`：
 

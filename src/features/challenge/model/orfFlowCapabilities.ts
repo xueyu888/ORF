@@ -24,6 +24,7 @@ type WorkbenchAction = {
 };
 
 const objectiveWorkItemMutationStatuses = new Set([
+  "candidate",
   "reestimating",
   "frozen",
 ]);
@@ -130,6 +131,7 @@ export function canSubmitObjectiveLoot(
   return Boolean(
     objective &&
       currentUser &&
+      currentUser.role === "member" &&
       objective.flowStatus === "frozen" &&
       objective.challengers.includes(currentUser.name),
   );
@@ -142,6 +144,7 @@ export function canSubmitObjectivePeerReview(
   return Boolean(
     objective &&
       currentUser &&
+      currentUser.role === "member" &&
       objective.flowStatus === "submitted" &&
       objective.challengers.includes(currentUser.name),
   );

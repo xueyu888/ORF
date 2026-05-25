@@ -1,6 +1,7 @@
 import { expect, test, type Route } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { AppNotification } from "../../src/types/orf";
+import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 function taskManagementData() {
   return {
@@ -20,6 +21,7 @@ function unreadCount(notifications: AppNotification[]) {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
+  await routeVisualBackgroundMocks(page);
 
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({ json: { authenticated: true, user: initialOrfState.users[0] } });
@@ -113,7 +115,22 @@ test("topbar notification bell shows unread messages and marks the opened messag
   await expect(page.getByRole("navigation", { name: "主导航" }).getByText("消息")).toHaveCount(0);
 
   await bell.click();
-  await expect(page.getByRole("button", { name: /新的挑战申请/ })).toBeVisible();
+  const popover = page.locator(".orf-notification-popover");
+  await expect(popover).toHaveCSS("position", "absolute");
+  const popoverBox = await popover.boundingBox();
+  const viewport = page.viewportSize();
+  expect(popoverBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(popoverBox!.x).toBeGreaterThanOrEqual(0);
+  expect(popoverBox!.x + popoverBox!.width).toBeLessThanOrEqual(viewport!.width);
+  const applicationPreview = page.getByRole("button", { name: /新的挑战申请/ });
+  await expect(applicationPreview).toBeVisible();
+  await expect(applicationPreview).toHaveCSS("border-radius", "8px");
+  await expect(applicationPreview.locator(".orf-notification-preview-title")).toHaveCSS("color", "rgb(23, 32, 51)");
+  await expect(applicationPreview.locator(".orf-notification-preview-body")).toHaveCSS("color", "rgb(67, 83, 108)");
+  const footerAction = page.getByRole("button", { name: /查看全部消息/ });
+  await expect(footerAction).toHaveCSS("border-top-left-radius", "0px");
+  await expect(footerAction).toHaveCSS("border-bottom-left-radius", "10px");
   await expect(page.getByRole("button", { name: /战利品待验收/ })).toBeVisible();
 
   await page.getByRole("button", { name: /新的挑战申请/ }).click();
