@@ -1,0 +1,144 @@
+import { expect } from "@playwright/test";
+import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import { requiredNumber, requiredString } from "../../_operators/params";
+import type { FinalScoreLedger, FinalScoreTarget, TestContext, ViewFinalScoreCaseData } from "./_support/view-final-score.context";
+import {
+  createFinalScoreLedger,
+  deleteFinalScoreLedger,
+  finalScoreLedgerPresent,
+  finalScoreTargetAvailable,
+  finalScoreTargetSettledForMember,
+  memberAccountActive,
+  prepareFinalScoreTarget,
+  restoreFinalScoreTarget,
+  selectFinalScoreTarget,
+  testFinalScoreLedgerAbsent,
+} from "./_support/view-final-score.helpers";
+
+export const viewFinalScoreOperators = {
+  "db.member": {
+    active: async ({ params }) => {
+      await expect.poll(() => memberAccountActive(requiredString(params, "email"))).toBe(true);
+    },
+  },
+
+  "db.final_score_target": {
+    available: async ({ data }) => {
+      await expect.poll(() => finalScoreTargetAvailable(data)).toBe(true);
+    },
+
+    select: async ({ data }) => {
+      const target = await selectFinalScoreTarget(data);
+      if (!target) {
+        throw new Error("没有可构造最终分数查看起点的目标");
+      }
+      return target;
+    },
+
+    original_state_recorded: async ({ params }) => {
+      expect(requiredFinalScoreTarget(params, "target").previous).toBeTruthy();
+    },
+
+    prepare: async ({ params }) => {
+      await prepareFinalScoreTarget(
+        requiredFinalScoreTarget(params, "target"),
+        requiredString(params, "memberName"),
+        requiredNumber(params, "points"),
+      );
+    },
+
+    settled_for_member: async ({ params }) => {
+      await expect
+        .poll(() => finalScoreTargetSettledForMember(requiredFinalScoreTarget(params, "target"), requiredString(params, "memberName")))
+        .toBe(true);
+    },
+
+    restore: async ({ params }) => {
+      await restoreFinalScoreTarget(optionalFinalScoreTarget(params, "target"));
+    },
+  },
+
+  "db.final_score_ledger": {
+    absent: async ({ params }) => {
+      await expect.poll(() => testFinalScoreLedgerAbsent(requiredString(params, "reason"))).toBe(true);
+    },
+
+    create: async ({ params }) => {
+      return createFinalScoreLedger(requiredFinalScoreTarget(params, "target"), {
+        email: requiredString(params, "email"),
+        name: requiredString(params, "memberName"),
+        points: requiredNumber(params, "points"),
+        reason: requiredString(params, "reason"),
+      });
+    },
+
+    present: async ({ params }) => {
+      await expect
+        .poll(() => finalScoreLedgerPresent(requiredFinalScoreTarget(params, "target"), requiredString(params, "memberName"), requiredNumber(params, "points")))
+        .toBe(true);
+    },
+
+    delete: async ({ params }) => {
+      await deleteFinalScoreLedger(requiredString(params, "reason"), optionalFinalScoreLedger(params, "ledger"));
+    },
+  },
+
+  "page.final_score": {
+    visible: async ({ ctx, params }) => {
+      const memberName = requiredString(params, "memberName");
+      const pointsText = requiredNumber(params, "points").toFixed(1);
+      const table = ctx.page.getByRole("table", { name: "成员积分排行榜" });
+      await expect(table).toBeVisible();
+      const row = table.getByRole("row").filter({ hasText: memberName }).filter({ hasText: pointsText });
+      await expect(row).toBeVisible();
+    },
+  },
+} satisfies OperatorRegistry<TestContext, ViewFinalScoreCaseData>;
+
+function requiredFinalScoreTarget(params: StepParams, key: string): FinalScoreTarget {
+  const value = params[key];
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    typeof (value as FinalScoreTarget).objective !== "object" ||
+    (value as FinalScoreTarget).objective === null ||
+    typeof (value as FinalScoreTarget).objective.id !== "string" ||
+    typeof (value as FinalScoreTarget).objective.title !== "string" ||
+    typeof (value as FinalScoreTarget).previous !== "object" ||
+    (value as FinalScoreTarget).previous === null
+  ) {
+    throw new Error(`参数 ${key} 必须是最终分数目标`);
+  }
+
+  return value as FinalScoreTarget;
+}
+
+function optionalFinalScoreTarget(params: StepParams, key: string): FinalScoreTarget | null {
+  const value = params[key];
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return requiredFinalScoreTarget(params, key);
+}
+
+function optionalFinalScoreLedger(params: StepParams, key: string): FinalScoreLedger | null {
+  const value = params[key];
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    typeof (value as FinalScoreLedger).id !== "string" ||
+    typeof (value as FinalScoreLedger).objectiveId !== "string" ||
+    typeof (value as FinalScoreLedger).memberName !== "string" ||
+    typeof (value as FinalScoreLedger).points !== "number" ||
+    typeof (value as FinalScoreLedger).reason !== "string"
+  ) {
+    throw new Error(`参数 ${key} 必须是最终分数积分流水`);
+  }
+
+  return value as FinalScoreLedger;
+}
