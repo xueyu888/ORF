@@ -20,6 +20,7 @@
 | API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
 | API 创建任务归属 | `API task creation is owned by the objective and does not require a result` | `POST /api/tasks` 基于 `linkedObjectiveId` 创建任务，不要求 `linkedResultId`；候选目标和无指标目标也能维护目标行动项 |
+| API 任务共同维护权限 | `objective challengers share task and subtask maintenance` | 任务和子任务写入权限来自父级 Objective 参与关系；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除，旁观成员拒绝，指挥官按管理员权限通过 |
 | API 输入归一化 | `API work item creation trims labels and prevents blank persisted titles` | 指标、任务、子任务创建接口会 trim 用户输入，拒绝空白必填标题，非法日期和非 active 成员执行人返回 400，空执行人回落为当前用户 |
 | API stage 兼容保护 | `API objective stage updates cannot violate lifecycle compatibility` | 旧 stage 接口不能把重估目标标成冻结阶段，也不能把冻结后目标改回重估阶段 |
 | 发布前征召保护 | `recruitment is only allowed after an objective is published` | `candidate` 目标不能被征召，必须先发布 |
@@ -64,6 +65,7 @@
 | 阶段 | 任务规则 |
 | --- | --- |
 | `candidate` / `reestimating` / `frozen` | 任务归属于目标，用于候选规划、执行协作和过程记录 |
+| 目标参与关系 | 同一目标正式挑战者可以共同维护目标下任务和子任务；`assignee` 只是执行提示，`tasks.createdBy` / `updatedBy` 只做审计，不作为维护授权边界 |
 | `submitted` / `settled` | 任务只保留查看和历史记录，不再新增或修改 |
 | 任意阶段 | 任务和子任务完成状态不自动推导目标进度、指标验收、战利品状态或积分结算 |
 | 删除指标 | 不删除目标下任务，只删除指标自身及其指标级数据 |
@@ -165,6 +167,7 @@ flowchart TD
 | ORF-BE-R038 | 成员不能创建 `managerDefined` 指标；confidence、update-proposal、排序、删除等指标管理路由必须走角色权限。 | API 指标管理权限 |
 | ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`；行动项执行人必须是当前作用域 active 成员，空执行人回落为当前用户。 | API 输入归一化 |
 | ORF-BE-R039A | 候选目标允许指挥官创建目标级行动项；任务仍以 `linkedObjectiveId` 为归属事实源，不依赖指标存在。 | API 创建任务归属 |
+| ORF-BE-R039B | 任务和子任务维护权限来自 `Objective.challengers`；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务和子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务；`assignee` 与 `tasks.createdBy` 不作为维护授权边界。 | API 任务共同维护权限 |
 | ORF-BE-R040 | `Objective.stage` 是兼容字段，旧接口不能写入与 `flowStatus` 冲突的阶段；生命周期状态只能由 ORF 流程接口推进。 | API stage 兼容保护 |
 | ORF-BE-R041 | 指标更新提案携带的 `feedbackId` 必须和当前指标同默认作用域、同指标；任务创建携带的 `feedbackOriginId` 必须和当前目标同默认作用域、同目标。合法指标或任务请求不能连带改写或挂接其他作用域数据。 | API 跨作用域写保护 |
 | ORF-BE-R042 | 目标结算写入 `pointLedger.userId` 时，只能在目标所属默认作用域内解析挑战者；其他作用域同名用户不能抢占积分流水身份。 | 积分流水作用域边界 |

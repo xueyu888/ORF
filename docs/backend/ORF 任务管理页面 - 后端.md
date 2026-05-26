@@ -30,12 +30,16 @@
 | `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner`；仅管理员或目标挑战者可对目标下指标创建 |
 | `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
 | `POST` | `/api/tasks` | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务 |
-| `PATCH` | `/api/tasks/:taskId` | 更新任务 |
+| `PATCH` | `/api/tasks/:taskId` | 更新任务标题 |
+| `PATCH` | `/api/tasks/:taskId/status` | 更新任务状态 |
+| `PATCH` | `/api/tasks/:taskId/completion` | 更新任务勾选状态，并同步该任务下子任务完成状态 |
 | `PATCH` | `/api/tasks/:taskId/move` | 在同一目标下调整任务顺序 |
 | `DELETE` | `/api/tasks/:taskId` | 删除任务和子任务 |
 | `POST` | `/api/tasks/:taskId/checklist` | 创建子任务并返回 `{ item }` |
-| `PATCH` | `/api/tasks/:taskId/completion` | 更新任务勾选状态，并同步该任务下子任务完成状态 |
 | `PATCH` | `/api/tasks/:taskId/checklist/:itemId` | 更新子任务勾选状态，并同步父任务状态 |
+| `PATCH` | `/api/tasks/:taskId/checklist/:itemId/label` | 更新子任务标题 |
+| `PATCH` | `/api/tasks/:taskId/checklist/:itemId/move` | 在允许的目标任务范围内移动子任务 |
+| `DELETE` | `/api/tasks/:taskId/checklist/:itemId` | 删除子任务 |
 | `GET` | `/api/users` | 管理员读取成员和注册状态 |
 | `PATCH` | `/api/registration-requests/:userId/approve` | 通过注册申请 |
 | `PATCH` | `/api/registration-requests/:userId/reject` | 拒绝注册申请 |
@@ -49,6 +53,8 @@
 `POST /api/objectives` 对应挑战页 temporary 目标标题输入框的 Enter 或失焦快速创建动作。创建请求发起后，前端先让本地 temporary 目标退出标题编辑态并留在原位；`POST` 成功返回的真实目标必须足以立即替换本地 temporary 目标，任务管理数据刷新只负责后续同步和撤掉覆盖层，不能成为创建成功 UI 的前置条件。创建成功后的真实目标继续保持同一套目标面板结构，但缺失指标和行动项时前端不渲染伪子行；前端从目标行 `+` 选择新增指标或新增行动项后，才通过 `POST /api/results` / `POST /api/tasks` 创建对应实体，返回的真实实体用于替换本次创建的 temporary 行。`POST /api/tasks/:taskId/checklist` 必须返回创建出来的 `TaskChecklistItem`，前端用真实子任务 id 替换 temporary 子任务，不能靠标题匹配。指标、任务和子任务创建成功后都使用一次性创建覆盖层桥接到 `/api/my-challenges` 刷新 materialize，不能在页面级刷新延迟时短暂回到旧列表。任务管理接口按 `createdAt desc, id desc` 返回目标源数据；挑战页在业务排序键相同时保留该源顺序，并且不能把目标标题作为列表排序键。由于 API 源顺序可能和本地 temporary 目标插入顺序不同，前端在提交目标时保留一次性的邻居锚点；`POST` 成功返回的真实目标可以作为页面级临时覆盖层连续替换 temporary 目标，任务管理数据刷新包含同一目标后撤掉覆盖层，但排序锚点继续保留到用户切换筛选或目标业务排序键变化。创建失败时，前端回到目标标题编辑态并保留用户输入。
 
 任务和子任务完成状态接口只表达执行进度写入，不触发指标验收、目标提交、结算或积分。前端可以在挑战页展示层使用短生命周期完成状态覆盖层即时反馈点击；后端返回的任务管理数据仍是完成状态的持久化事实源，刷新数据包含同一任务或子任务完成状态后前端撤销覆盖层。
+
+任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户是否为该目标的正式挑战者；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。
 
 ## 术语
 
@@ -150,6 +156,8 @@ type ObjectiveFlowStatus =
 - 反馈 `owner` 必须是当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为反馈处理人。
 - 指标更新提案如果携带 `feedbackId`，该反馈必须属于同一默认作用域且绑定到当前指标；不能通过一个合法指标请求改写其他作用域或其他指标的反馈状态。
 - 任务创建基于目标授权和排序，不要求关联指标；创建时如果携带 `feedbackOriginId`，该反馈必须属于同一默认作用域且属于同一目标，不能把其他作用域或其他目标的反馈挂成任务来源。
+- 任务和子任务维护权限以 `Objective.challengers` 为边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
+- `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
 - 当前不开放退回重估；重估截止后停止调整，不续期。
 - 任务、子任务和评论允许在挑战协作中维护，但不自动推导验收或结算。
@@ -173,6 +181,7 @@ type ObjectiveFlowStatus =
 任务从指标下移到目标下时，后端契约按以下方向收敛：
 
 - `Task.linkedObjectiveId` 是任务归属、权限、生命周期和排序边界。
+- `Task.assignee` 是执行人提示，不是所有者；`Task.createdBy` / `updatedBy` 是审计信息，不改变同目标挑战者共同维护权限。
 - `Task.linkedResultId` 不再作为任务归属；实现迁移时应从任务创建、移动、删除、DTO 映射和测试夹具中移除。
 - `Result.taskIds` 不再作为指标拥有任务的反向索引；指标删除不能删除目标下任务。
 - `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；候选目标和没有指标的目标也可以创建任务。

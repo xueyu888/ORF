@@ -253,6 +253,10 @@ function scopedStorageId(scope: TaskManagementDataScope = {}) {
   return scope.scope ? runtimeScopeStorageId(scope.scope).trim() : "";
 }
 
+function taskAuditUpdate(actorId?: string | null) {
+  return actorId ? { updatedBy: actorId } : {};
+}
+
 function storageScope(id: string | null | undefined): RuntimeScope | null {
   const storageId = id?.trim();
   return storageId ? runtimeScope(storageId) : null;
@@ -639,6 +643,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     dueDate: task.dueDate,
     tags: task.tags,
     checklist: checklistByTask.get(task.id) ?? [],
+    createdBy: task.createdBy,
+    updatedBy: task.updatedBy,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
   }));
@@ -983,6 +989,7 @@ export interface CreateTaskInput {
   title: string;
   description?: string;
   assignee?: string;
+  actorId?: string | null;
   priority?: Priority;
   linkedObjectiveId: string;
   linkedResultId?: string | null;
@@ -1889,6 +1896,8 @@ export async function canMutateObjectiveWorkItem(
     return "allowed";
   }
 
+  // Task and subtask maintenance is shared at Objective scope. Task createdBy
+  // remains audit metadata and must not become a private ownership gate.
   const member = actor.name.trim();
   return member && uniqueMembers(objective.challengers ?? []).includes(member)
     ? "allowed"
@@ -2950,6 +2959,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       createdAt: now,
       updatedAt: now,
       sortOrder,
+      createdBy: input.actorId ?? null,
+      updatedBy: input.actorId ?? null,
     });
 
     return { id, scope: runtimeScope(objective.teamId) };
@@ -2963,7 +2974,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
   return data.tasks.find((task) => task.id === created.id) ?? null;
 }
 
-export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput): Promise<TaskChecklistItem | null> {
+export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput, actorId?: string | null): Promise<TaskChecklistItem | null> {
   return db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
@@ -2995,7 +3006,10 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
     for (const [index, itemId] of orderedIds.entries()) {
       await tx.update(taskChecklistItems).set({ sortOrder: index }).where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)));
     }
-    await tx.update(tasks).set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt }).where(eq(tasks.id, taskId));
+    await tx
+      .update(tasks)
+      .set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt, ...taskAuditUpdate(actorId) })
+      .where(eq(tasks.id, taskId));
 
     return { id, label, done: false, updatedAt };
   });
@@ -3082,14 +3096,18 @@ export async function updateResultTitle(resultId: string, title: string): Promis
   });
 }
 
-export async function updateTaskTitle(taskId: string, title: string): Promise<boolean> {
+export async function updateTaskTitle(taskId: string, title: string, actorId?: string | null): Promise<boolean> {
   const nextTitle = title.trim();
   if (!nextTitle) {
     return false;
   }
 
   return db.transaction(async (tx) => {
-    const updated = await tx.update(tasks).set({ title: nextTitle, updatedAt: today() }).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
+    const updated = await tx
+      .update(tasks)
+      .set({ title: nextTitle, updatedAt: today(), ...taskAuditUpdate(actorId) })
+      .where(eq(tasks.id, taskId))
+      .returning({ id: tasks.id });
     if (updated.length === 0) {
       return false;
     }
@@ -3102,7 +3120,7 @@ export async function updateTaskTitle(taskId: string, title: string): Promise<bo
   });
 }
 
-export async function updateChecklistItemLabel(taskId: string, itemId: string, label: string): Promise<boolean> {
+export async function updateChecklistItemLabel(taskId: string, itemId: string, label: string, actorId?: string | null): Promise<boolean> {
   const nextLabel = label.trim();
   if (!nextLabel) {
     return false;
@@ -3119,7 +3137,7 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
       return false;
     }
 
-    await tx.update(tasks).set({ updatedAt: today() }).where(eq(tasks.id, taskId));
+    await tx.update(tasks).set({ updatedAt: today(), ...taskAuditUpdate(actorId) }).where(eq(tasks.id, taskId));
     await tx
       .update(commentThreads)
       .set({ targetTitle: nextLabel, updatedAt: nowIso() })
@@ -3208,7 +3226,7 @@ export async function deleteTask(taskId: string): Promise<boolean> {
   });
 }
 
-export async function deleteChecklistItem(taskId: string, itemId: string): Promise<boolean> {
+export async function deleteChecklistItem(taskId: string, itemId: string, actorId?: string | null): Promise<boolean> {
   return db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
@@ -3232,7 +3250,10 @@ export async function deleteChecklistItem(taskId: string, itemId: string): Promi
     for (const [index, row] of rows.entries()) {
       await tx.update(taskChecklistItems).set({ sortOrder: index }).where(eq(taskChecklistItems.id, row.id));
     }
-    await tx.update(tasks).set({ status: statusFromChecklist(rows, task.status), updatedAt: today() }).where(eq(tasks.id, taskId));
+    await tx
+      .update(tasks)
+      .set({ status: statusFromChecklist(rows, task.status), updatedAt: today(), ...taskAuditUpdate(actorId) })
+      .where(eq(tasks.id, taskId));
     return true;
   });
 }
@@ -3271,7 +3292,11 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
   });
 }
 
-export async function moveTask(taskId: string, input: { objectiveId: string; referenceTaskId?: string; placement?: "before" | "after" }): Promise<boolean> {
+export async function moveTask(
+  taskId: string,
+  input: { objectiveId: string; referenceTaskId?: string; placement?: "before" | "after" },
+  actorId?: string | null,
+): Promise<boolean> {
   return db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
     const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
@@ -3285,7 +3310,7 @@ export async function moveTask(taskId: string, input: { objectiveId: string; ref
       }
     }
 
-    await tx.update(tasks).set({ updatedAt: today() }).where(eq(tasks.id, taskId));
+    await tx.update(tasks).set({ updatedAt: today(), ...taskAuditUpdate(actorId) }).where(eq(tasks.id, taskId));
 
     const rows = await tx
       .select({ id: tasks.id })
@@ -3309,6 +3334,7 @@ export async function moveChecklistItem(
   taskId: string,
   itemId: string,
   input: { toTaskId: string; referenceItemId?: string; placement?: "before" | "after" },
+  actorId?: string | null,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
     const [item] = await tx
@@ -3357,22 +3383,33 @@ export async function moveChecklistItem(
         await tx.update(taskChecklistItems).set({ sortOrder: index }).where(eq(taskChecklistItems.id, id));
       }
       const fallback = currentTaskId === sourceTask.id ? sourceTask.status : targetTask.status;
-      await tx.update(tasks).set({ status: statusFromChecklist(rows, fallback), updatedAt: today() }).where(eq(tasks.id, currentTaskId));
+      await tx
+        .update(tasks)
+        .set({ status: statusFromChecklist(rows, fallback), updatedAt: today(), ...taskAuditUpdate(actorId) })
+        .where(eq(tasks.id, currentTaskId));
     }
 
     return true;
   });
 }
 
-export async function updateTaskStatus(taskId: string, status: TaskStatus): Promise<boolean> {
-  const updated = await db.update(tasks).set({ status, updatedAt: today() }).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
+export async function updateTaskStatus(taskId: string, status: TaskStatus, actorId?: string | null): Promise<boolean> {
+  const updated = await db
+    .update(tasks)
+    .set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) })
+    .where(eq(tasks.id, taskId))
+    .returning({ id: tasks.id });
   return updated.length > 0;
 }
 
-export async function setTaskCompletion(taskId: string, done: boolean): Promise<boolean> {
+export async function setTaskCompletion(taskId: string, done: boolean, actorId?: string | null): Promise<boolean> {
   const status: TaskStatus = done ? "Done" : "Todo";
   return db.transaction(async (tx) => {
-    const updated = await tx.update(tasks).set({ status, updatedAt: today() }).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
+    const updated = await tx
+      .update(tasks)
+      .set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) })
+      .where(eq(tasks.id, taskId))
+      .returning({ id: tasks.id });
     if (updated.length === 0) {
       return false;
     }
@@ -3382,7 +3419,7 @@ export async function setTaskCompletion(taskId: string, done: boolean): Promise<
   });
 }
 
-export async function updateChecklistItem(taskId: string, itemId: string, done: boolean): Promise<boolean> {
+export async function updateChecklistItem(taskId: string, itemId: string, done: boolean, actorId?: string | null): Promise<boolean> {
   return db.transaction(async (tx) => {
     const updated = await tx
       .update(taskChecklistItems)
@@ -3398,7 +3435,7 @@ export async function updateChecklistItem(taskId: string, itemId: string, done: 
     const completedCount = checklist.filter((item) => item.done).length;
     const status: TaskStatus = completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 
-    await tx.update(tasks).set({ status, updatedAt: today() }).where(eq(tasks.id, taskId));
+    await tx.update(tasks).set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) }).where(eq(tasks.id, taskId));
     return true;
   });
 }

@@ -1318,7 +1318,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(400).send({ error: "Task assignee must be an active member" });
     }
 
-    const task = await createTask({ ...body, assignee });
+    const task = await createTask({ ...body, assignee, actorId: user.id });
 
     if (!task) {
       return reply.code(404).send({ error: "Objective, result, or feedback not found" });
@@ -1330,11 +1330,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.post("/api/tasks/:taskId/checklist", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = createChecklistItemBodySchema.parse(request.body);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId });
+    if (!user) {
       return reply;
     }
 
-    const created = await createChecklistItem(params.taskId, body);
+    const created = await createChecklistItem(params.taskId, body, user.id);
 
     if (!created) {
       return reply.code(404).send({ error: "Task not found" });
@@ -1657,11 +1658,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId });
+    if (!user) {
       return reply;
     }
 
-    const updated = await updateTaskTitle(params.taskId, body.title);
+    const updated = await updateTaskTitle(params.taskId, body.title, user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Task not found" });
@@ -1673,11 +1675,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId/label", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = labelBodySchema.parse(request.body);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId });
+    if (!user) {
       return reply;
     }
 
-    const updated = await updateChecklistItemLabel(params.taskId, params.itemId, body.label);
+    const updated = await updateChecklistItemLabel(params.taskId, params.itemId, body.label, user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Checklist item not found" });
@@ -1689,11 +1692,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/status", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = updateTaskStatusBodySchema.parse(request.body);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId });
+    if (!user) {
       return reply;
     }
 
-    const updated = await updateTaskStatus(params.taskId, body.status);
+    const updated = await updateTaskStatus(params.taskId, body.status, user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Task not found" });
@@ -1705,11 +1709,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/completion", async (request, reply) => {
     const params = taskParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "task", id: params.taskId });
+    if (!user) {
       return reply;
     }
 
-    const updated = await setTaskCompletion(params.taskId, body.done);
+    const updated = await setTaskCompletion(params.taskId, body.done, user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Task not found" });
@@ -1721,11 +1726,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
     const body = completionBodySchema.parse(request.body);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId });
+    if (!user) {
       return reply;
     }
 
-    const updated = await updateChecklistItem(params.taskId, params.itemId, body.done);
+    const updated = await updateChecklistItem(params.taskId, params.itemId, body.done, user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Checklist item not found" });
@@ -1775,7 +1781,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
 
-    const updated = await moveTask(params.taskId, body);
+    const updated = await moveTask(params.taskId, body, user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Task move target not found" });
@@ -1799,7 +1805,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
 
-    const updated = await moveChecklistItem(params.taskId, params.itemId, body);
+    const updated = await moveChecklistItem(params.taskId, params.itemId, body, user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Checklist move target not found" });
@@ -1869,11 +1875,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.delete("/api/tasks/:taskId/checklist/:itemId", async (request, reply) => {
     const params = checklistParamsSchema.parse(request.params);
-    if (!(await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId }))) {
+    const user = await requireWorkItemTargetMutation(request, reply, { type: "subtask", id: params.itemId, taskId: params.taskId });
+    if (!user) {
       return reply;
     }
 
-    const deleted = await deleteChecklistItem(params.taskId, params.itemId);
+    const deleted = await deleteChecklistItem(params.taskId, params.itemId, user.id);
 
     if (!deleted) {
       return reply.code(404).send({ error: "Checklist item not found" });

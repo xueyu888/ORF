@@ -517,6 +517,8 @@ export class OrfFlowStore {
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
       checklist: (input.checklist ?? []).map((item) => ({ ...item, updatedAt: item.updatedAt ?? now })),
+      createdBy: input.createdBy,
+      updatedBy: input.updatedBy,
       createdAt: now,
       updatedAt: now,
     };
