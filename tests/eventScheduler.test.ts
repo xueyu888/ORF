@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CoverageGraph } from "../e2e/_explorer/coverageGraph";
 import { EventScheduler } from "../e2e/_explorer/eventScheduler";
+import { confidenceToFactor, getCandidateConfidence } from "../e2e/_explorer/randomStrategy";
 import type { ExecutionResult, NormalizedState, UiEvent, UiTarget } from "../e2e/_explorer/types";
 
 test("scheduler boosts untested candidates over tested no-change candidates", () => {
@@ -30,6 +31,21 @@ test("scheduler gives uncovered payload kinds extra weight", () => {
   assert.ok(scheduler.weightEvent(stateA, emoji, graph) > scheduler.weightEvent(stateA, ascii, graph));
 });
 
+test("scheduler applies DOM target confidence only as a weighted-branch factor", () => {
+  const graph = new CoverageGraph();
+  const scheduler = new EventScheduler({ epsilon: 0 });
+  const stateA = state("A");
+  const strong = event("strong", "click", {}, 1);
+  const weak = event("weak", "click", {}, 0.3);
+  graph.observeState(stateA, [strong, weak], 0);
+
+  assert.equal(getCandidateConfidence(strong), 1);
+  assert.equal(getCandidateConfidence({ ...weak, confidence: undefined, target: { ...weak.target!, confidence: undefined } }), 1);
+  assert.equal(confidenceToFactor(1), 1);
+  assert.equal(confidenceToFactor(0.3), 0.475);
+  assert.ok(scheduler.weightEvent(stateA, strong, graph) > scheduler.weightEvent(stateA, weak, graph));
+});
+
 function state(id: string): NormalizedState {
   return {
     id: `S-${id}`,
@@ -49,7 +65,7 @@ function state(id: string): NormalizedState {
   };
 }
 
-function event(signature: string, operation: UiEvent["operation"], params: UiEvent["params"] = {}): UiEvent {
+function event(signature: string, operation: UiEvent["operation"], params: UiEvent["params"] = {}, confidence?: number): UiEvent {
   const target: UiTarget = {
     id: "T-a",
     routePattern: "/auth",
@@ -63,8 +79,9 @@ function event(signature: string, operation: UiEvent["operation"], params: UiEve
     placeholderBucket: "input",
     rect: { x: 1, y: 1, width: 1, height: 1 },
     capabilities: ["input", "focus", "keyboard"],
+    confidence,
   };
-  return { operation, target, params, signature };
+  return { operation, target, params, signature, confidence };
 }
 
 function okExecution(): ExecutionResult {

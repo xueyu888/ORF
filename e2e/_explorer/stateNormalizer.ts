@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import type { DomTreeNodeSnapshot } from "./repeatableRegionDetector";
 import { abstractState, type StateDomSnapshot } from "./stateAbstractorRegistry";
 import type { NormalizedState } from "./types";
 
@@ -156,7 +157,7 @@ export async function normalizeState(
       return segments.length > 0 ? segments.join(" > ") : element.tagName.toLowerCase();
     }
 
-    function domTree(element: Element, depth = 0, budget = { count: 0 }): unknown {
+    function domTree(element: Element, depth = 0, budget = { count: 0 }): DomTreeNodeSnapshot | null {
       budget.count += 1;
       if (depth > 8 || budget.count > 450) {
         return null;
@@ -170,7 +171,9 @@ export async function normalizeState(
         dataAttributes: dataAttributes(element),
         textBucket: longTextBucket(directText(element)),
         subtreeTextBucket: longTextBucket(element.textContent),
-        children: visibleChildren.map((child) => domTree(child, depth + 1, budget)).filter(Boolean),
+        children: visibleChildren
+          .map((child) => domTree(child, depth + 1, budget))
+          .filter((child): child is DomTreeNodeSnapshot => child !== null),
       };
     }
 

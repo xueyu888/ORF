@@ -74,9 +74,51 @@ export async function isBackendReady(page: Page) {
   }
 }
 
+export async function isFrontendReady(page: Page) {
+  try {
+    const response = await page.request.get("/");
+    return response.ok();
+  } catch {
+    return false;
+  }
+}
+
+export async function isFrontendAuthEntryReady(page: Page) {
+  try {
+    const response = await page.request.get("/auth");
+    return response.ok();
+  } catch {
+    return false;
+  }
+}
+
+export async function isSessionEndpointReady(page: Page) {
+  try {
+    const response = await page.request.get("/api/auth/session");
+    if (response.status() !== 200) {
+      return false;
+    }
+
+    const body = await response.json().catch(() => null);
+    return typeof body?.authenticated === "boolean";
+  } catch {
+    return false;
+  }
+}
+
 export async function isDatabaseReady() {
   try {
     await db.execute(sql`select 1`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function isDatabaseSchemaCurrent() {
+  try {
+    await db.execute(sql`select id, email, ory_identity_id, status from users limit 0`);
+    await db.execute(sql`select team_id, user_id, role from team_members limit 0`);
     return true;
   } catch {
     return false;
@@ -89,6 +131,24 @@ export async function isOryAdminReady() {
       headers: { accept: "application/json" },
     });
     return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function isOryAdminPublicReady(page: Page) {
+  if (!(await isOryAdminReady())) {
+    return false;
+  }
+
+  try {
+    const response = await page.request.get("/health/auth");
+    if (!response.ok()) {
+      return false;
+    }
+
+    const body = await response.json().catch(() => null);
+    return body?.ok === true && body?.service === "orf-auth";
   } catch {
     return false;
   }

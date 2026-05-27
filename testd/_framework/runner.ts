@@ -134,7 +134,9 @@ export async function runStateCase<
 }
 
 function formatStepTitle(step: StepSpec) {
-  return `[${step.source.caseStepId}][${step.source.method}] ${step.id}: ${step.title}`;
+  return step.source
+    ? `[${step.source.caseStepId}][${step.source.method}] ${step.id}: ${step.title}`
+    : `[未追溯] ${step.id}: ${step.title}`;
 }
 
 function formatStepOperator(step: StepSpec) {

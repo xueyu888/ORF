@@ -18,6 +18,19 @@ export type UiOperation =
 
 export type TargetCapability = "click" | "input" | "focus" | "keyboard" | "scroll" | "select" | "toggle";
 
+export type TargetAction =
+  | { type: "click" }
+  | { type: "pressEnter" }
+  | { type: "pressSpace" }
+  | { type: "focus" }
+  | { type: "blur" }
+  | { type: "typeText"; text?: string }
+  | { type: "clearText" }
+  | { type: "selectOption"; value?: string }
+  | { type: "toggle" }
+  | { type: "hover" }
+  | { type: "scrollIntoView" };
+
 export type PayloadKind =
   | "emptyText"
   | "asciiText"
@@ -85,6 +98,9 @@ export type UiTarget = {
   placeholderBucket: string;
   rect: RectBucket;
   capabilities: TargetCapability[];
+  actions?: TargetAction[];
+  confidence?: number;
+  reason?: string[];
 };
 
 export type EventParams = {
@@ -103,6 +119,8 @@ export type EventParams = {
 export type UiEvent = {
   operation: UiOperation;
   target?: UiTarget;
+  confidence?: number;
+  targetConfidence?: number;
   params: EventParams;
   signature: string;
 };

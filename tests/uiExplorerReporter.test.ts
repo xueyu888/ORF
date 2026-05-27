@@ -3,7 +3,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { outcomeBreakdown, writeExplorerReport, writeMergedExplorerReport } from "../e2e/_explorer/reporter";
+import { LiveExplorerReporter } from "../e2e/_explorer/liveReporter";
+import { liveReportSnapshot, outcomeBreakdown, renderLiveReportHtml, writeExplorerReport, writeMergedExplorerReport } from "../e2e/_explorer/reporter";
 import type { CoverageSummary, ExplorerConfig, ExplorerRunResult, StateNode, StepRecord, TransitionEdge } from "../e2e/_explorer/types";
 
 test("merged explorer report recomputes novelty globally across shards", async () => {
@@ -131,8 +132,18 @@ test("explorer report prioritizes result summary and embeds path replay data", a
   const result = runResult(
     "seed-layout",
     [root, next],
-    [transition(root.id, next.id, "click:open")],
-    [stepRecord({ beforeStateId: root.id, afterStateId: next.id, eventSignature: "click:open", newState: true })],
+    [transition(root.id, next.id, "repeatedClick:settings")],
+    [
+      stepRecord({
+        beforeStateId: root.id,
+        afterStateId: next.id,
+        eventSignature: "repeatedClick:settings",
+        operation: "repeatedClick",
+        params: { count: 4 },
+        targetSignature: "route:/tasks|tag:a|role:link|type:none|label:设置|placeholder:none|text:设置|rect:0.9.3.1|index:5|cap:click.focus.keyboard",
+        newState: true,
+      }),
+    ],
   );
   result.config.reportDir = reportDir;
 
@@ -150,6 +161,7 @@ test("explorer report prioritizes result summary and embeds path replay data", a
   assert.ok(html.includes("异常事件"));
   assert.ok(html.includes("探索路径回放"));
   assert.ok(html.includes("退出回放"));
+  assert.ok(html.includes("连续点击 4 次：链接「设置」"));
   assert.ok(html.includes('"replaySteps"'));
   assert.ok(graphIndex >= 0);
   assert.ok(settingsIndex > graphIndex);
@@ -171,7 +183,9 @@ test("explorer report describes issues in human terms and links them to graph re
       step: 7,
       beforeStateId: root.id,
       afterStateId: root.id,
-      eventSignature: "click:stale-target",
+      eventSignature: "doubleClick:search",
+      operation: "doubleClick",
+      targetSignature: "route:/tasks|tag:button|role:button|type:none|label:搜索|placeholder:none|text:搜索|rect:0.8.3.1|index:1|cap:click.focus.keyboard",
       noChange: true,
       issues: [{ severity: "ordinary", type: "timeout", message: "locator.click: Timeout 1500ms exceeded" }],
     }),
@@ -183,9 +197,77 @@ test("explorer report describes issues in human terms and links them to graph re
 
   assert.ok(html.includes("本次发现 1 个异常步骤"));
   assert.ok(html.includes("操作超时"));
+  assert.ok(html.includes("双击：按钮「搜索」时操作超时"));
+  assert.ok(html.includes("对象：按钮「搜索」"));
+  assert.ok(html.includes("issue-scroll"));
   assert.ok(html.includes("在状态图中定位"));
   assert.ok(html.includes('data-replay-step="7"'));
   assert.equal(html.includes("locator.click: Timeout 1500ms exceeded"), false);
+});
+
+test("live explorer report keeps the full report while refreshing result sections only", () => {
+  const root = state("root", 0);
+  const result = runResult("seed-live", [root], [], [
+    stepRecord({
+      step: 3,
+      beforeStateId: root.id,
+      afterStateId: root.id,
+      eventSignature: "repeatedClick:add-task",
+      operation: "repeatedClick",
+      params: { count: 4 },
+      targetSignature: "route:/tasks|tag:button|role:button|type:none|label:新增行动项|placeholder:none|text:none|rect:2.6.1.1|index:12|cap:click.focus.keyboard",
+      issues: [{ severity: "ordinary", type: "timeout", message: "locator.click: Timeout 1500ms exceeded" }],
+    }),
+  ]);
+
+  const snapshot = liveReportSnapshot(result, "running", {
+    revision: 2,
+    startedAt: Date.now(),
+    runDir: ".artifacts/ui-explorer/live",
+    reportPath: ".artifacts/ui-explorer/live/report.html",
+    resultPath: ".artifacts/ui-explorer/live/result.json",
+  });
+  const html = renderLiveReportHtml(result, snapshot);
+
+  assert.ok(snapshot.html.score.includes("已发现空间探索分数"));
+  assert.ok(snapshot.html.cards.includes("状态节点"));
+  assert.ok(snapshot.html.issues.includes("连续点击 4 次：按钮「新增行动项」时操作超时"));
+  assert.ok(snapshot.html.coverage.includes("覆盖进度"));
+  assert.ok(snapshot.html.curves.includes("探索曲线"));
+  assert.ok(html.includes("live-summary.json"));
+  assert.ok(html.includes("状态图和测试环境等完整报告内容"));
+  assert.ok(html.includes('id="stateGraph"'));
+  assert.ok(html.includes("更新完整报告"));
+  assert.equal(JSON.stringify(snapshot).includes("stateGraph"), false);
+});
+
+test("live explorer report persists the latest snapshot into report html", async () => {
+  const reportDir = await fs.mkdtemp(path.join(os.tmpdir(), "orf-ui-live-reporter-"));
+  const root = state("root", 0);
+  const result = runResult("seed-live-file", [root], [], [
+    stepRecord({
+      step: 1,
+      beforeStateId: root.id,
+      afterStateId: root.id,
+      eventSignature: "click:noop",
+      operation: "click",
+    }),
+  ]);
+  result.config.reportDir = reportDir;
+  const reporter = new LiveExplorerReporter(result.config, {
+    runDir: reportDir,
+    flushIntervalMs: 1,
+    resultFlushIntervalMs: 1,
+  });
+
+  await reporter.initialize();
+  const initialHtml = await fs.readFile(reporter.reportPath, "utf8");
+  await reporter.complete(result, "completed");
+  const completedHtml = await fs.readFile(reporter.reportPath, "utf8");
+
+  assert.ok(initialHtml.includes('"latestStepCount":0'));
+  assert.ok(completedHtml.includes('"latestStepCount":1'));
+  assert.ok(completedHtml.includes('"status":"completed"'));
 });
 
 function runResult(seed: string, states: StateNode[], transitions: TransitionEdge[], records: StepRecord[]): ExplorerRunResult {

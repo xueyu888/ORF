@@ -2,29 +2,60 @@ import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { optionalString, requiredString } from "../../_operators/params";
-import type { RegisterCaseData, RegisteredUserRecord, TestContext } from "./_support/register.context";
+import type {
+  RegisterCaseData,
+  RegisteredUserRecord,
+  TestContext,
+} from "./_support/register.context";
 import {
   adminAccountActive,
+  deleteAdminByEmail,
+  deleteAdminMembershipsByEmail,
   deleteOryIdentityByEmail,
   deleteRegisteredUserByEmail,
+  deleteRegisteredUserMembershipsByEmail,
   oryIdentityAbsent,
+  oryIdentityPasswordAvailable,
   readRegisteredUser,
   registeredUserAbsent,
+  registeredUserExists,
+  registeredUserRoleIs,
+  registeredUserStatusIs,
   revokeOrySessionsByEmail,
+  upsertAdminAccount,
+  upsertOryIdentityWithPassword,
 } from "./_support/register.helpers";
 
 const APPROVAL_RESPONSE_TIMEOUT_MS = 5_000;
 
 export const registerOperators = {
   "ory.identity": {
+    upsert_password: async ({ params }) => {
+      return upsertOryIdentityWithPassword({
+        email: requiredString(params, "email"),
+        password: requiredString(params, "password"),
+        name: requiredString(params, "name"),
+      });
+    },
+
     absent: async ({ params }) => {
-      await expect.poll(() => oryIdentityAbsent(requiredString(params, "email"))).toBe(true);
+      await expect
+        .poll(() => oryIdentityAbsent(requiredString(params, "email")))
+        .toBe(true);
     },
 
     delete_by_email: async ({ params }) => {
       const email = requiredString(params, "email");
       await deleteOryIdentityByEmail(email);
       await expect.poll(() => oryIdentityAbsent(email)).toBe(true);
+    },
+
+    password_available: async ({ params }) => {
+      await expect
+        .poll(() =>
+          oryIdentityPasswordAvailable(requiredString(params, "email")),
+        )
+        .toBe(true);
     },
   },
 
@@ -39,44 +70,123 @@ export const registerOperators = {
   },
 
   "db.admin": {
+    upsert: async ({ data, params }) => {
+      return upsertAdminAccount(
+        {
+          adminEmail: requiredString(params, "email"),
+          adminName: requiredString(params, "name"),
+          adminRole: data.adminRole,
+        },
+        optionalString(params, "identityId"),
+      );
+    },
+
     active: async ({ params }) => {
-      await expect.poll(() => adminAccountActive(requiredString(params, "email"))).toBe(true);
+      await expect
+        .poll(() => adminAccountActive(requiredString(params, "email")))
+        .toBe(true);
+    },
+
+    delete_memberships: async ({ params }) => {
+      await deleteAdminMembershipsByEmail(requiredString(params, "email"));
+    },
+
+    delete: async ({ params }) => {
+      await deleteAdminByEmail(requiredString(params, "email"));
     },
   },
 
   "db.registered_user": {
     absent: async ({ params }) => {
-      await expect.poll(() => registeredUserAbsent(requiredString(params, "email"))).toBe(true);
+      await expect
+        .poll(() => registeredUserAbsent(requiredString(params, "email")))
+        .toBe(true);
     },
 
     pending: async ({ params }) => {
       const email = requiredString(params, "email");
-      await expect.poll(() => readRegisteredUser(email)).toMatchObject({
-        email,
-        status: "pending",
-        role: "member",
-      });
+      await expect
+        .poll(() => readRegisteredUser(email))
+        .toMatchObject({
+          email,
+          status: "pending",
+          role: "member",
+        });
       return readRegisteredUser(email);
     },
 
     active: async ({ params }) => {
-      await expect.poll(() => readRegisteredUser(requiredString(params, "email"))).toMatchObject({
-        email: requiredString(params, "email"),
-        status: "active",
-        role: "member",
-      });
+      await expect
+        .poll(() => readRegisteredUser(requiredString(params, "email")))
+        .toMatchObject({
+          email: requiredString(params, "email"),
+          status: "active",
+          role: "member",
+        });
+    },
+
+    exists: async ({ params }) => {
+      await expect
+        .poll(() => registeredUserExists(requiredString(params, "email")))
+        .toBe(true);
+    },
+
+    status: async ({ params }) => {
+      await expect
+        .poll(() =>
+          registeredUserStatusIs(
+            requiredString(params, "email"),
+            requiredString(params, "status"),
+          ),
+        )
+        .toBe(true);
+    },
+
+    role: async ({ params }) => {
+      await expect
+        .poll(() =>
+          registeredUserRoleIs(
+            requiredString(params, "email"),
+            requiredString(params, "role"),
+          ),
+        )
+        .toBe(true);
+    },
+
+    delete_memberships: async ({ params }) => {
+      await deleteRegisteredUserMembershipsByEmail(
+        requiredString(params, "email"),
+      );
     },
 
     delete: async ({ params }) => {
       const email = requiredString(params, "email");
-      await deleteRegisteredUserByEmail(email);
+      const deadline = Date.now() + 10_000;
+      let absentSince: number | null = null;
+
+      while (Date.now() < deadline) {
+        if (await registeredUserAbsent(email)) {
+          absentSince ??= Date.now();
+          if (Date.now() - absentSince >= 750) {
+            return;
+          }
+        } else {
+          absentSince = null;
+          await deleteRegisteredUserByEmail(email);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+
       await expect.poll(() => registeredUserAbsent(email)).toBe(true);
     },
   },
 
   "page.approval_pending": {
     visible: async ({ ctx }) => {
-      await expect(ctx.page.getByRole("heading", { name: "等待注册审核" })).toBeVisible();
+      await expect(
+        ctx.page.getByRole("heading", { name: "等待注册审核" }),
+      ).toBeVisible();
       return true;
     },
   },
@@ -87,32 +197,58 @@ export const registerOperators = {
     },
 
     approve: async ({ ctx, params }) => {
-      await memberRow(ctx, params).getByRole("button", { name: "通过" }).click();
+      await memberRow(ctx, params)
+        .getByRole("button", { name: "通过" })
+        .click();
     },
   },
 
   "api.registration_response": {
+    ok: async ({ params }) => {
+      const response = await requiredCapturedResponse(params, "response");
+      expect(response.ok).toBe(true);
+      expect(response.status).toBe(200);
+    },
+
     record_user: async ({ params }) => {
       const response = await requiredCapturedResponse(params, "response");
       expect(response.ok).toBe(true);
       expect(response.status).toBe(200);
-      const user = response.body && typeof response.body === "object" ? (response.body as { user?: unknown }).user : null;
+      const user =
+        response.body && typeof response.body === "object"
+          ? (response.body as { user?: unknown }).user
+          : null;
       if (!isRegisteredUserPayload(user)) {
         throw new Error("注册响应缺少用户信息");
       }
       return user;
     },
 
-    pending: async ({ params }) => {
+    email_matches: async ({ params }) => {
       const response = await requiredCapturedResponse(params, "response");
-      const user = response.body && typeof response.body === "object" ? (response.body as { user?: unknown }).user : null;
-      expect(response.ok).toBe(true);
-      expect(response.status).toBe(200);
-      expect(user).toMatchObject({
-        email: requiredString(params, "email"),
-        role: "member",
-        status: "pending",
-      });
+      const user =
+        response.body && typeof response.body === "object"
+          ? (response.body as { user?: unknown }).user
+          : null;
+      expect(user).toMatchObject({ email: requiredString(params, "email") });
+    },
+
+    status: async ({ params }) => {
+      const response = await requiredCapturedResponse(params, "response");
+      const user =
+        response.body && typeof response.body === "object"
+          ? (response.body as { user?: unknown }).user
+          : null;
+      expect(user).toMatchObject({ status: requiredString(params, "status") });
+    },
+
+    role: async ({ params }) => {
+      const response = await requiredCapturedResponse(params, "response");
+      const user =
+        response.body && typeof response.body === "object"
+          ? (response.body as { user?: unknown }).user
+          : null;
+      expect(user).toMatchObject({ role: requiredString(params, "role") });
     },
   },
 
@@ -124,7 +260,11 @@ export const registerOperators = {
         .waitForResponse((response) => {
           return (
             response.request().method().toUpperCase() === "PATCH" &&
-            response.url().endsWith(`/api/registration-requests/${encodeURIComponent(userId)}/approve`)
+            response
+              .url()
+              .endsWith(
+                `/api/registration-requests/${encodeURIComponent(userId)}/approve`,
+              )
           );
         }, { timeout: APPROVAL_RESPONSE_TIMEOUT_MS })
         .then(async (response) => ({
@@ -150,11 +290,17 @@ export const registerOperators = {
   },
 
   "runtime.registered_user": {
-    pending: async ({ params }) => {
+    status: async ({ params }) => {
       expect(requiredRegisteredUser(params, "user")).toMatchObject({
         email: requiredString(params, "email"),
-        status: "pending",
-        role: "member",
+        status: requiredString(params, "status"),
+      });
+    },
+
+    role: async ({ params }) => {
+      expect(requiredRegisteredUser(params, "user")).toMatchObject({
+        email: requiredString(params, "email"),
+        role: requiredString(params, "role"),
       });
     },
   },
@@ -164,10 +310,19 @@ function memberRow(ctx: TestContext, params: StepParams) {
   const email = requiredString(params, "email");
   const name = optionalString(params, "name");
   const table = ctx.page.locator(".orf-user-table");
-  return table.locator("tr").filter({ hasText: name ? new RegExp(`${escapeRegExp(name)}|${escapeRegExp(email)}`) : email }).first();
+  return table
+    .locator("tr")
+    .filter({
+      hasText: name
+        ? new RegExp(`${escapeRegExp(name)}|${escapeRegExp(email)}`)
+        : email,
+    })
+    .first();
 }
 
-function isRegisteredUserPayload(value: unknown): value is RegisteredUserRecord {
+function isRegisteredUserPayload(
+  value: unknown,
+): value is RegisteredUserRecord {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -178,7 +333,10 @@ function isRegisteredUserPayload(value: unknown): value is RegisteredUserRecord 
   );
 }
 
-function requiredRegisteredUser(params: StepParams, key: string): RegisteredUserRecord {
+function requiredRegisteredUser(
+  params: StepParams,
+  key: string,
+): RegisteredUserRecord {
   const value = params[key];
   if (!isRegisteredUserPayload(value)) {
     throw new Error(`参数 ${key} 必须是注册用户记录`);

@@ -72,6 +72,7 @@ export async function installAuthenticatedAppScenario(page: Page) {
           author: explorerUser.name,
           body: value,
           createdAt: now,
+          attachments: [],
           parentMessageId: body.parentMessageId,
           replyToMessageId: body.replyToMessageId,
           replyToAuthor: body.replyToAuthor,
@@ -112,7 +113,7 @@ export async function installAuthenticatedAppScenario(page: Page) {
     if (statusMatch && method === "PATCH") {
       const body = safePostJson<{ status?: CommentStatus }>(route);
       const threadId = decodeURIComponent(statusMatch[1]!);
-      const status = body.status === "resolved" ? "resolved" : "open";
+      const status: CommentStatus = body.status === "resolved" ? "resolved" : "open";
       const commentThread = comments.find((thread) => thread.id === threadId) ?? null;
       if (!commentThread) {
         await route.fulfill({ status: 404, json: { error: "Comment thread not found" } });
@@ -346,12 +347,14 @@ function seedComments(): CommentThread[] {
           author: explorerUser.name,
           body: "随机测试基线评论",
           createdAt: "2026-05-19T00:00:00.000Z",
+          attachments: [],
         },
         {
           id: "cmsg-explorer-reply",
           author: "Mia Zhang",
           body: "随机测试基线回复",
           createdAt: "2026-05-19T00:03:00.000Z",
+          attachments: [],
           parentMessageId: "cmsg-explorer-root",
           replyToMessageId: "cmsg-explorer-root",
           replyToAuthor: explorerUser.name,

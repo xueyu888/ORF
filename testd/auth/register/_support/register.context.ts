@@ -12,6 +12,7 @@ export type RegisterCaseData = {
   role: "member";
   adminEmail: string;
   adminPassword: string;
+  adminName: string;
   adminRole: "admin";
 };
 

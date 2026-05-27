@@ -1,71 +1,81 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry } from "../../_framework/types";
-import { optionalString, requiredString } from "../../_operators/params";
-import type { MloginCaseData, TestContext } from "./_support/mlogin.context";
+import { requiredString } from "../../_operators/params";
+import type {
+  MloginCaseData,
+  MemberAccountRecord,
+  TestContext,
+} from "./_support/mlogin.context";
 import {
-  ensureTestTeam,
-  readOrfMembership,
-  restoreLastOnlineAt,
-  revokeIdentitySessions,
+  deleteMemberByEmail,
+  deleteMemberMembershipsByEmail,
+  deleteOryIdentityByEmail,
+  memberAccountActive,
+  oryIdentityPasswordAvailable,
+  readMemberAccount,
+  revokeOrySessionsByEmail,
   upsertOrfMember,
-  upsertOryIdentity,
+  upsertOryIdentityWithPassword,
 } from "./_support/mlogin.helpers";
 
 export const mloginOperators = {
   "ory.identity": {
-    upsert: async ({ data }) => upsertOryIdentity(data),
-  },
+    upsert_password: async ({ data }) => upsertOryIdentityWithPassword(data),
 
-  "ory.sessions": {
-    revoke: async ({ params }) => {
-      const identityId = optionalString(params, "identityId");
-      if (!identityId) {
-        if (params.optional === true) {
-          return;
-        }
-        throw new Error("ory.sessions.revoke 缺少 identityId");
-      }
+    password_available: async ({ params }) => {
+      await expect
+        .poll(() =>
+          oryIdentityPasswordAvailable(requiredString(params, "email")),
+        )
+        .toBe(true);
+    },
 
-      await revokeIdentitySessions(identityId);
+    delete_by_email: async ({ params }) => {
+      await deleteOryIdentityByEmail(requiredString(params, "email"));
     },
   },
 
-  "db.team": {
-    ensure: async ({ data }) => ensureTestTeam(data.teamId),
-  },
-
-  "db.user": {
-    upsert: async ({ data }) => upsertOrfMember(data.teamId, data),
-
-    restore_last_online_at: async ({ params }) => {
-      const userId = optionalString(params, "userId");
-      if (!userId) {
-        if (params.optional === true) {
-          return;
-        }
-        throw new Error("db.user.restore_last_online_at 缺少 userId");
-      }
-
-      const lastOnlineAt = params.lastOnlineAt;
-      if (lastOnlineAt !== null && typeof lastOnlineAt !== "string") {
-        if (params.optional === true && lastOnlineAt === undefined) {
-          return;
-        }
-        throw new Error("db.user.restore_last_online_at 的 lastOnlineAt 必须是 string 或 null");
-      }
-
-      await restoreLastOnlineAt(userId, lastOnlineAt);
+  "ory.sessions": {
+    revoke_by_email: async ({ params }) => {
+      await revokeOrySessionsByEmail(requiredString(params, "email"));
     },
   },
 
   "db.member": {
-    matches: async ({ params }) => {
-      const userId = requiredString(params, "userId");
-      const teamId = requiredString(params, "teamId");
-      const email = requiredString(params, "email");
-      const role = requiredString(params, "role");
+    upsert: async ({ data, params }) =>
+      upsertOrfMember(data, requiredString(params, "identityId")),
 
-      await expect.poll(() => readOrfMembership(userId, teamId)).toMatchObject({ email, role });
+    active: async ({ params }) => {
+      await expect
+        .poll(() => memberAccountActive(requiredString(params, "email")))
+        .toBe(true);
+    },
+
+    record: async ({ params }) => {
+      const account = await readMemberAccount(requiredString(params, "email"));
+      if (!account) {
+        throw new Error("预置普通成员账号不存在或不可用");
+      }
+      return account;
+    },
+
+    matches: async ({ params }) => {
+      const email = requiredString(params, "email");
+      await expect.poll(() => readMemberAccount(email)).not.toBeNull();
+      const account = await readMemberAccount(email);
+      expect(account).toMatchObject({
+        email,
+        role: "member",
+        status: "active",
+      } satisfies Partial<MemberAccountRecord>);
+    },
+
+    delete_memberships: async ({ params }) => {
+      await deleteMemberMembershipsByEmail(requiredString(params, "email"));
+    },
+
+    delete: async ({ params }) => {
+      await deleteMemberByEmail(requiredString(params, "email"));
     },
   },
 } satisfies OperatorRegistry<TestContext, MloginCaseData>;
