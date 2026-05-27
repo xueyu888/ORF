@@ -9,14 +9,13 @@ import type {
   TestContext,
 } from "./_support/admin-create-result.context";
 import {
-  adminAccountActive,
   createdResultFromResponse,
   deleteTestResult,
   objectivePanel,
-  resultTargetAvailable,
-  selectResultTarget,
+  resultTargetFromObjective,
   targetCanCreateResult,
   targetMetricButton,
+  targetMetricMenuItem,
   targetResultAbsent,
   targetResultPresent,
   targetResultRow,
@@ -24,24 +23,8 @@ import {
 } from "./_support/admin-create-result.helpers";
 
 export const adminCreateResultOperators = {
-  "db.admin": {
-    active: async ({ params }) => {
-      await expect.poll(() => adminAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.result_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => resultTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectResultTarget(data);
-      if (!target) {
-        throw new Error("没有可新增指标的目标");
-      }
-      return target;
-    },
+    from_objective: async ({ params }) => resultTargetFromObjective(requiredString(params, "objectiveId")),
 
     can_create_result: async ({ params }) => {
       await expect.poll(() => targetCanCreateResult(requiredResultTarget(params, "target"))).toBe(true);
@@ -98,11 +81,15 @@ export const adminCreateResultOperators = {
     },
 
     add_metric_enabled: async ({ ctx, params }) => {
-      await expect(targetMetricButton(ctx.page, requiredResultTarget(params, "target"))).toBeEnabled();
+      const target = requiredResultTarget(params, "target");
+      await openMetricCreationMenu(ctx, target);
+      await expect(targetMetricMenuItem(ctx.page, target)).toBeEnabled();
     },
 
     add_metric: async ({ ctx, params }) => {
-      await targetMetricButton(ctx.page, requiredResultTarget(params, "target")).click();
+      const target = requiredResultTarget(params, "target");
+      await openMetricCreationMenu(ctx, target);
+      await targetMetricMenuItem(ctx.page, target).click();
     },
 
     result_visible: async ({ ctx, params }) => {
@@ -110,12 +97,21 @@ export const adminCreateResultOperators = {
     },
   },
 
-  "page.result_modal": {
-    visible: async ({ ctx }) => {
-      await expect(ctx.page.getByRole("dialog", { name: "新增指标" })).toBeVisible();
+  "page.result_inline_editor": {
+    submit: async ({ ctx }) => {
+      await ctx.page.getByLabel("编辑指标标题").press("Enter");
     },
   },
 } satisfies OperatorRegistry<TestContext, AdminCreateResultCaseData>;
+
+async function openMetricCreationMenu(ctx: TestContext, target: AdminCreateResultTarget) {
+  await objectivePanel(ctx.page, target).hover();
+  await expect(targetMetricButton(ctx.page, target)).toBeEnabled();
+  if (!(await targetMetricMenuItem(ctx.page, target).isVisible())) {
+    await targetMetricButton(ctx.page, target).click();
+  }
+  await expect(targetMetricMenuItem(ctx.page, target)).toBeVisible();
+}
 
 function requiredResultTarget(params: StepParams, key: string): AdminCreateResultTarget {
   const value = params[key];

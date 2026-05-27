@@ -9,7 +9,10 @@ export type TestContext = {
 export type AdminCreateResultCaseData = {
   email: string;
   password: string;
+  name: string;
   role: "admin";
+  objectiveId: string;
+  objectiveTitle: string;
   resultTitle: string;
   metricName: string;
 };

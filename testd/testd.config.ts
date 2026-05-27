@@ -144,7 +144,8 @@ export const testdCases = [
     doc: "testd-doc/cases/results/管理员新增指标.md",
     spec: "testd/results/admin-create-result/_entry/admin-create-result.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "results.admin-create.member-forbidden",

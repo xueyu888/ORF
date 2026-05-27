@@ -1,71 +1,17 @@
 import type { Page } from "@playwright/test";
-import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { objectives, results, teamMembers, users } from "../../../../server/db/schema";
+import { and, eq } from "drizzle-orm";
+import { db } from "../../../../server/db/client";
+import { objectives, results } from "../../../../server/db/schema";
 import type { ObjectiveFlowStatus } from "../../../../src/types/orf";
 import type { AdminCreateResultCaseData, AdminCreateResultTarget, AdminCreatedResult } from "./admin-create-result.context";
 
 const resultMutableFlowStatuses = new Set<ObjectiveFlowStatus>(["candidate", "open", "applying", "recruiting", "reestimating"]);
 
-export async function closeAdminCreateResultTestDb() {
-  await closeDb();
-}
-
-export async function adminAccountActive(email: string) {
-  const account = await readAdminAccount(email);
-  return !!account && account.role === "admin" && account.status === "active";
-}
-
-export async function resultTargetAvailable(data: Pick<AdminCreateResultCaseData, "email">) {
-  return (await selectResultTarget(data)) !== null;
-}
-
-export async function selectResultTarget(data: Pick<AdminCreateResultCaseData, "email">): Promise<AdminCreateResultTarget | null> {
-  const admin = await readAdminAccount(data.email);
-  if (!admin) {
-    return null;
-  }
-
-  const objectiveRows = await db
-    .select({
-      id: objectives.id,
-      title: objectives.title,
-      flowStatus: objectives.flowStatus,
-    })
-    .from(objectives)
-    .where(eq(objectives.teamId, admin.teamId));
-
-  const resultRows = await db
-    .select({
-      objectiveId: results.objectiveId,
-    })
-    .from(results);
-
-  const resultCountByObjective = new Map<string, number>();
-  for (const row of resultRows) {
-    resultCountByObjective.set(row.objectiveId, (resultCountByObjective.get(row.objectiveId) ?? 0) + 1);
-  }
-
-  const titleCounts = new Map<string, number>();
-  for (const row of objectiveRows) {
-    titleCounts.set(row.title, (titleCounts.get(row.title) ?? 0) + 1);
-  }
-
-  const candidates = objectiveRows.filter((row) => {
-    if (!resultMutableFlowStatuses.has(row.flowStatus)) return false;
-    if (titleCounts.get(row.title) !== 1) return false;
-    return (resultCountByObjective.get(row.id) ?? 0) === 0;
-  });
-
-  const selected =
-    candidates.find((row) => row.flowStatus === "reestimating") ??
-    candidates.find((row) => row.flowStatus === "open") ??
-    candidates[0];
-
+export async function resultTargetFromObjective(objectiveId: string): Promise<AdminCreateResultTarget> {
+  const selected = await readObjective(objectiveId);
   if (!selected) {
-    return null;
+    throw new Error(`新增指标目标不存在: ${objectiveId}`);
   }
-
   return {
     objective: {
       id: selected.id,
@@ -113,6 +59,10 @@ export function objectivePanel(page: Page, target: AdminCreateResultTarget) {
 }
 
 export function targetMetricButton(page: Page, target: AdminCreateResultTarget) {
+  return objectivePanel(page, target).getByRole("button", { name: "新增子级" }).first();
+}
+
+export function targetMetricMenuItem(page: Page, target: AdminCreateResultTarget) {
   return objectivePanel(page, target).getByRole("button", { name: "新增指标" }).first();
 }
 
@@ -175,31 +125,11 @@ async function readObjective(objectiveId: string) {
   const [row] = await db
     .select({
       id: objectives.id,
+      title: objectives.title,
       flowStatus: objectives.flowStatus,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
-    .limit(1);
-
-  return row ?? null;
-}
-
-async function readAdminAccount(email: string): Promise<{
-  userId: string;
-  teamId: string;
-  role: string;
-  status: string;
-} | null> {
-  const [row] = await db
-    .select({
-      userId: users.id,
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-      status: users.status,
-    })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
     .limit(1);
 
   return row ?? null;
