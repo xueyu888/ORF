@@ -11,6 +11,8 @@ export type ApplyChallengeCaseData = {
   password: string;
   name: string;
   role: "member";
+  objectiveId: string;
+  objectiveTitle: string;
 };
 
 export type BountyTarget = {

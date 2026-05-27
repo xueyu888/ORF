@@ -23,11 +23,16 @@ import {
   readBrowserAuthStorageState,
   readBrowserSession,
   readResponseBody,
+  readTestObjective,
   readTestUserAccount,
   restoreTestUserLastOnlineAt,
   revokeOrySessionsByEmail,
+  testObjectiveAbsent,
   testUserAccountMatches,
+  type TestObjectiveFixtureInput,
   type TestUserAccountRecord,
+  deleteTestObjectives,
+  upsertTestObjective,
   upsertOryIdentityWithPassword,
   upsertTestUserAccount,
 } from "./common.helpers";
@@ -206,6 +211,64 @@ export function createCommonOperators<
           emails: optionalStringArray(params, "emails"),
           userId: optionalString(params, "userId"),
         });
+      },
+    },
+
+    "db.objective": {
+      upsert: async ({ params }) =>
+        upsertTestObjective({
+          id: optionalString(params, "id"),
+          teamId: requiredString(params, "teamId"),
+          title: requiredString(params, "title"),
+          description: optionalString(params, "description"),
+          whyItMatters: optionalString(params, "whyItMatters"),
+          cycle: optionalString(params, "cycle"),
+          stage: optionalOrfStage(params, "stage"),
+          flowStatus: optionalObjectiveFlowStatus(params, "flowStatus"),
+          status: optionalWorkStatus(params, "status"),
+          confidence: optionalNumber(params, "confidence"),
+          progress: optionalNumber(params, "progress"),
+          boundary: optionalString(params, "boundary"),
+          successDefinition: optionalString(params, "successDefinition"),
+          finalDueAt: optionalString(params, "finalDueAt"),
+          challengers: optionalStringArray(params, "challengers"),
+          assignedChallengers: optionalStringArray(params, "assignedChallengers"),
+          objectiveBasePoints: optionalNumber(params, "objectiveBasePoints"),
+          createdBy: optionalString(params, "createdBy"),
+          updatedBy: optionalString(params, "updatedBy"),
+        } satisfies TestObjectiveFixtureInput),
+
+      delete_by_title: async ({ params }) => {
+        await deleteTestObjectives({ title: requiredString(params, "title") });
+      },
+
+      delete: async ({ params }) => {
+        await deleteTestObjectives({
+          id: optionalString(params, "id"),
+          title: optionalString(params, "title"),
+        });
+      },
+
+      absent: async ({ params }) => {
+        await expect
+          .poll(() =>
+            testObjectiveAbsent({
+              id: optionalString(params, "id"),
+              title: optionalString(params, "title"),
+            }),
+          )
+          .toBe(true);
+      },
+
+      exists: async ({ params }) => {
+        await expect
+          .poll(() =>
+            readTestObjective({
+              id: optionalString(params, "id"),
+              title: optionalString(params, "title"),
+            }),
+          )
+          .not.toBeNull();
       },
     },
 
@@ -467,6 +530,49 @@ function optionalUserStatus(params: StepParams, key: string) {
     return status;
   }
   throw new Error(`参数 ${key} 必须是有效用户状态`);
+}
+
+function optionalOrfStage(params: StepParams, key: string) {
+  const stage = optionalString(params, key);
+  if (stage === undefined) {
+    return undefined;
+  }
+  if (stage === "goalSetting" || stage === "resultClaiming" || stage === "orfReestimate" || stage === "goalFrozen") {
+    return stage;
+  }
+  throw new Error(`参数 ${key} 必须是有效 ORF 阶段`);
+}
+
+function optionalObjectiveFlowStatus(params: StepParams, key: string) {
+  const status = optionalString(params, key);
+  if (status === undefined) {
+    return undefined;
+  }
+  if (
+    status === "candidate" ||
+    status === "open" ||
+    status === "applying" ||
+    status === "recruiting" ||
+    status === "reestimating" ||
+    status === "frozen" ||
+    status === "submitted" ||
+    status === "settled" ||
+    status === "closed"
+  ) {
+    return status;
+  }
+  throw new Error(`参数 ${key} 必须是有效目标流转状态`);
+}
+
+function optionalWorkStatus(params: StepParams, key: string) {
+  const status = optionalString(params, key);
+  if (status === undefined) {
+    return undefined;
+  }
+  if (status === "On Track" || status === "At Risk" || status === "Blocked" || status === "Draft") {
+    return status;
+  }
+  throw new Error(`参数 ${key} 必须是有效工作状态`);
 }
 
 function optionalUserAccount(params: StepParams, key: string): TestUserAccountRecord | null {

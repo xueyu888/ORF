@@ -1,36 +1,22 @@
 import type { Page } from "@playwright/test";
-import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { objectives, teamMembers, users } from "../../../../server/db/schema";
-import { getBountyHallData, type BountyHallData } from "../../../../server/repositories/orfRepository";
-import { getDefaultRuntimeScopeForUser } from "../../../../server/repositories/runtimeScope";
+import { eq } from "drizzle-orm";
+import { db } from "../../../../server/db/client";
+import { objectives } from "../../../../server/db/schema";
+import type { BountyHallData } from "../../../../server/repositories/orfRepository";
 import type { ChallengeApplication, ObjectiveFlowStatus } from "../../../../src/types/orf";
-import type { ApplyChallengeCaseData, BountyApplicationRecord, BountyTarget } from "./apply-challenge.context";
+import type { BountyApplicationRecord, BountyTarget } from "./apply-challenge.context";
 
 const applicationFlowStatuses = new Set(["open", "applying", "recruiting"]);
 
-export async function closeApplyChallengeTestDb() {
-  await closeDb();
-}
-
-export async function memberAccountActive(data: Pick<ApplyChallengeCaseData, "email" | "role">) {
-  const memberships = await readMemberMemberships(data.email);
-  return memberships.some((membership) => membership.role === data.role && membership.status === "active");
-}
-
-export async function availableBountyTargetExists(data: Pick<ApplyChallengeCaseData, "email" | "name">) {
-  return (await selectBountyTargetFromRepository(data)) !== null;
-}
-
-export async function selectBountyTargetFromPage(page: Page, applicant: string): Promise<BountyTarget> {
+export async function selectBountyTargetFromPage(page: Page, applicant: string, title: string): Promise<BountyTarget> {
   const response = await readBountyHall(page);
   if (response.status !== 200) {
     throw new Error(`读取悬赏大厅数据失败: HTTP ${response.status}`);
   }
 
-  const target = selectBountyTarget(response.body, applicant);
+  const target = selectBountyTarget(response.body, applicant, title);
   if (!target) {
-    throw new Error("悬赏大厅没有当前用户可申请的目标");
+    throw new Error(`悬赏大厅没有当前用户可申请的本用例目标: ${title}`);
   }
   return target;
 }
@@ -108,24 +94,11 @@ export async function targetStillExistsWithoutApplication(target: BountyTarget, 
   return !!objective && !objective.challengeApplications.some((application) => application.applicant === applicant && application.status === "pending");
 }
 
-async function selectBountyTargetFromRepository(data: Pick<ApplyChallengeCaseData, "email" | "name">) {
-  const [member] = await readMemberMemberships(data.email);
-  if (!member) {
-    return null;
-  }
-
-  const scope = await getDefaultRuntimeScopeForUser(member.userId);
-  if (!scope) {
-    return null;
-  }
-
-  return selectBountyTarget(await getBountyHallData(data.name, { scope }), data.name);
-}
-
-function selectBountyTarget(data: BountyHallData, applicant: string): BountyTarget | null {
+function selectBountyTarget(data: BountyHallData, applicant: string, title: string): BountyTarget | null {
   const items = [...data.availableItems, ...data.recruitmentItems].filter((item) => {
     const objective = item.objective;
     return (
+      objective.title === title &&
       !item.isRecruitment &&
       !item.hasCurrentApplication &&
       applicationFlowStatuses.has(objective.flowStatus) &&
@@ -136,12 +109,7 @@ function selectBountyTarget(data: BountyHallData, applicant: string): BountyTarg
     return null;
   }
 
-  const titleCounts = new Map<string, number>();
-  for (const item of items) {
-    titleCounts.set(item.objective.title, (titleCounts.get(item.objective.title) ?? 0) + 1);
-  }
-
-  const item = items.find((candidate) => titleCounts.get(candidate.objective.title) === 1) ?? items[0];
+  const item = items[0];
   return {
     objective: {
       id: item.objective.id,
@@ -178,19 +146,4 @@ async function readObjectiveApplications(objectiveId: string): Promise<{
     .limit(1);
 
   return row ?? null;
-}
-
-async function readMemberMemberships(email: string) {
-  return db
-    .select({
-      userId: users.id,
-      email: users.email,
-      name: users.name,
-      status: users.status,
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-    })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(and(sql`lower(${users.email}) = ${email.toLowerCase()}`));
 }

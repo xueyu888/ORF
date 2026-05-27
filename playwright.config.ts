@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 import { disabledTestdSpecGlobs } from "./testd/testd.config";
 
 const realSystemEnabled = process.env.ORF_REAL_E2E === "1";
+const includeDisabledTestdSpecs = process.env.TESTD_INCLUDE_DISABLED_SPECS === "1";
 if (realSystemEnabled) {
   process.env.DATABASE_POOL_MAX ??= "4";
   process.env.DATABASE_CONNECTION_TIMEOUT_MS ??= "30000";
@@ -24,7 +25,7 @@ export default defineConfig({
   expect: {
     timeout: 5_000,
   },
-  testIgnore: disabledTestdSpecGlobs,
+  testIgnore: includeDisabledTestdSpecs ? [] : disabledTestdSpecGlobs,
   reporter: [
     ["list", { printSteps: true }],
     ["./testd/_framework/reporter.ts"],

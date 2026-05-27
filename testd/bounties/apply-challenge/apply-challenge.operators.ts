@@ -4,10 +4,8 @@ import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { requiredString } from "../../_operators/params";
 import type { ApplyChallengeCaseData, BountyTarget, TestContext } from "./_support/apply-challenge.context";
 import {
-  availableBountyTargetExists,
   bountyTargetHasCurrentApplication,
   bountyTargetPresentForCurrentUser,
-  memberAccountActive,
   objectiveFlowMatchesApplicationOutcome,
   pendingApplicationAbsent,
   pendingApplicationExists,
@@ -17,17 +15,7 @@ import {
 } from "./_support/apply-challenge.helpers";
 
 export const applyChallengeOperators = {
-  "db.member": {
-    active: async ({ data }) => {
-      await expect.poll(() => memberAccountActive(data)).toBe(true);
-    },
-  },
-
   "db.bounty_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => availableBountyTargetExists(data)).toBe(true);
-    },
-
     no_pending_application: async ({ params }) => {
       await expect
         .poll(() => pendingApplicationAbsent(requiredBountyTarget(params, "target"), requiredString(params, "applicant")))
@@ -61,7 +49,8 @@ export const applyChallengeOperators = {
   },
 
   "api.bounties": {
-    select_available_target: async ({ ctx, data }) => selectBountyTargetFromPage(ctx.page, data.name),
+    select_available_target: async ({ ctx, data, params }) =>
+      selectBountyTargetFromPage(ctx.page, data.name, requiredString(params, "title")),
 
     target_present: async ({ ctx, params }) => {
       await expect.poll(() => bountyTargetPresentForCurrentUser(ctx.page, requiredBountyTarget(params, "target"))).toBe(true);
@@ -116,6 +105,10 @@ export const applyChallengeOperators = {
 
     apply_enabled: async ({ ctx, params }) => {
       await expect(bountyRow(ctx, requiredBountyTarget(params, "target")).getByRole("button", { name: "申请挑战" })).toBeEnabled();
+    },
+
+    apply_visible: async ({ ctx, params }) => {
+      await expect(bountyRow(ctx, requiredBountyTarget(params, "target")).getByRole("button", { name: "申请挑战" })).toBeVisible();
     },
 
     applied_disabled: async ({ ctx, params }) => {

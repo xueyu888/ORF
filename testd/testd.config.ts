@@ -127,7 +127,8 @@ export const testdCases = [
     doc: "testd-doc/cases/bounties/悬赏大厅申请挑战.md",
     spec: "testd/bounties/apply-challenge/_entry/apply-challenge.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "bounties.apply-challenge.unauthenticated",

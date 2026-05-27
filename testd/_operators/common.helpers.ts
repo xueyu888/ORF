@@ -1,8 +1,10 @@
 import type { BrowserContext, Page, Response } from "@playwright/test";
 import { asc, eq, or, sql } from "drizzle-orm";
 import { db } from "../../server/db/client";
-import { teamMembers, teams, users } from "../../server/db/schema";
+import { objectives, teamMembers, teams, users } from "../../server/db/schema";
+import { deleteObjective } from "../../server/repositories/orfRepository";
 import type { UserRole, UserStatus } from "../../src/types/orf";
+import type { ChallengeApplication, ObjectiveFlowStatus, OrfStage, WorkStatus } from "../../src/types/orf";
 import { ORF_SESSION_COOKIE, ORY_ADMIN_URL, type BrowserAuthStorageState, type BrowserSession, type OryIdentity } from "./common.context";
 
 export type TestUserAccountRecord = {
@@ -13,6 +15,43 @@ export type TestUserAccountRecord = {
   role: UserRole;
   status: UserStatus;
   lastOnlineAt: string | null;
+};
+
+export type TestObjectiveFixtureInput = {
+  id?: string;
+  teamId: string;
+  title: string;
+  description?: string;
+  whyItMatters?: string;
+  cycle?: string;
+  stage?: OrfStage;
+  flowStatus?: ObjectiveFlowStatus;
+  status?: WorkStatus;
+  confidence?: number;
+  progress?: number;
+  boundary?: string;
+  successDefinition?: string;
+  finalDueAt?: string;
+  challengers?: string[];
+  assignedChallengers?: string[];
+  challengeApplications?: ChallengeApplication[];
+  objectiveBasePoints?: number;
+  createdBy?: string;
+  updatedBy?: string;
+};
+
+export type TestObjectiveFixtureRecord = {
+  id: string;
+  teamId: string;
+  title: string;
+  stage: OrfStage;
+  flowStatus: ObjectiveFlowStatus;
+  status: WorkStatus;
+  challengers: string[];
+  assignedChallengers: string[];
+  challengeApplications: ChallengeApplication[];
+  finalDueAt: string;
+  objectiveBasePoints: number;
 };
 
 export async function clearBrowserState(page: Page) {
@@ -361,6 +400,106 @@ export async function deleteTestUsers(input: { email?: string; emails?: string[]
   }
 }
 
+export async function upsertTestObjective(input: TestObjectiveFixtureInput) {
+  const id = input.id ?? `obj-${slug(input.title)}`;
+  const todayValue = today();
+  const values = {
+    id,
+    teamId: input.teamId,
+    title: input.title,
+    description: input.description ?? "TestD isolated objective fixture",
+    whyItMatters: input.whyItMatters ?? "Fixture data for an isolated TestD case.",
+    cycle: input.cycle ?? "TestD",
+    stage: input.stage ?? "resultClaiming",
+    flowStatus: input.flowStatus ?? "open",
+    status: input.status ?? "Draft",
+    confidence: input.confidence ?? 70,
+    progress: input.progress ?? 0,
+    boundary: input.boundary ?? "Owned by the current isolated TestD case.",
+    successDefinition: input.successDefinition ?? "Fixture is available for the current TestD action.",
+    finalDueAt: input.finalDueAt ?? addDaysIsoDate(21),
+    challengers: input.challengers ?? [],
+    assignedChallengers: input.assignedChallengers ?? [],
+    challengeApplications: input.challengeApplications ?? [],
+    objectiveBasePoints: input.objectiveBasePoints ?? 0,
+    createdAt: todayValue,
+    updatedAt: todayValue,
+    createdBy: input.createdBy,
+    updatedBy: input.updatedBy,
+  };
+
+  await db
+    .insert(objectives)
+    .values(values)
+    .onConflictDoUpdate({
+      target: objectives.id,
+      set: {
+        teamId: values.teamId,
+        title: values.title,
+        description: values.description,
+        whyItMatters: values.whyItMatters,
+        cycle: values.cycle,
+        stage: values.stage,
+        flowStatus: values.flowStatus,
+        status: values.status,
+        confidence: values.confidence,
+        progress: values.progress,
+        boundary: values.boundary,
+        successDefinition: values.successDefinition,
+        finalDueAt: values.finalDueAt,
+        challengers: values.challengers,
+        assignedChallengers: values.assignedChallengers,
+        challengeApplications: values.challengeApplications,
+        objectiveBasePoints: values.objectiveBasePoints,
+        updatedAt: values.updatedAt,
+        createdBy: values.createdBy,
+        updatedBy: values.updatedBy,
+      },
+    });
+
+  const record = await readTestObjective({ id });
+  if (!record) {
+    throw new Error(`测试目标创建失败: ${id}`);
+  }
+  return record;
+}
+
+export async function readTestObjective(input: { id?: string; title?: string }): Promise<TestObjectiveFixtureRecord | null> {
+  const [row] = await db
+    .select({
+      id: objectives.id,
+      teamId: objectives.teamId,
+      title: objectives.title,
+      stage: objectives.stage,
+      flowStatus: objectives.flowStatus,
+      status: objectives.status,
+      challengers: objectives.challengers,
+      assignedChallengers: objectives.assignedChallengers,
+      challengeApplications: objectives.challengeApplications,
+      finalDueAt: objectives.finalDueAt,
+      objectiveBasePoints: objectives.objectiveBasePoints,
+    })
+    .from(objectives)
+    .where(objectivePredicate(input))
+    .limit(1);
+
+  return row ?? null;
+}
+
+export async function testObjectiveAbsent(input: { id?: string; title?: string }) {
+  return (await readTestObjective(input)) === null;
+}
+
+export async function deleteTestObjectives(input: { id?: string; title?: string }) {
+  const rows = await db.select({ id: objectives.id }).from(objectives).where(objectivePredicate(input));
+  for (const row of rows) {
+    const deleted = await deleteObjective(row.id);
+    if (!deleted) {
+      await db.delete(objectives).where(eq(objectives.id, row.id));
+    }
+  }
+}
+
 export async function oryAdminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${ORY_ADMIN_URL}${path}`, {
     ...init,
@@ -454,8 +593,27 @@ function userPredicate(input: { email?: string; emails?: string[]; userId?: stri
   return predicates.length === 1 ? predicates[0] : or(...predicates);
 }
 
+function objectivePredicate(input: { id?: string; title?: string }) {
+  const predicates = [
+    input.id ? eq(objectives.id, input.id) : undefined,
+    input.title ? eq(objectives.title, input.title) : undefined,
+  ].filter((predicate): predicate is NonNullable<typeof predicate> => Boolean(predicate));
+
+  if (predicates.length === 0) {
+    throw new Error("目标查询必须提供 id 或 title");
+  }
+
+  return predicates.length === 1 ? predicates[0] : or(...predicates);
+}
+
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysIsoDate(days: number) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function slug(value: string) {
