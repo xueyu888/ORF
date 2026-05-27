@@ -8,13 +8,6 @@ export type TestContext = {
 export type ALoginCaseData = {
   email: string;
   password: string;
+  name: string;
   role: "admin";
-};
-
-export type AdminAccountRecord = {
-  userId: string;
-  email: string;
-  role: "admin";
-  status: string;
-  lastOnlineAt: string | null;
 };

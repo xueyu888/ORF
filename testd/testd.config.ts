@@ -50,7 +50,8 @@ export const testdCases = [
     doc: "testd-doc/cases/auth/admin登录.md",
     spec: "testd/auth/alogin/_entry/alogin.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "auth.admin.login-wrong-password",
