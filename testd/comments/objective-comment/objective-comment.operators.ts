@@ -6,27 +6,13 @@ import type { ObjectiveCommentCaseData, ObjectiveCommentTarget, TestContext } fr
 import {
   myChallengesHasComment,
   myChallengesHasObjectiveTarget,
+  objectiveCommentTargetFromObjective,
   persistedObjectiveCommentExists,
   removeTestComments,
-  selectObjectiveCommentTarget,
   testCommentBodiesAbsent,
-  testMemberFixtureExists,
-  visibleObjectiveFixtureExists,
 } from "./_support/objective-comment.helpers";
 
 export const objectiveCommentOperators = {
-  "db.member.fixture": {
-    exists: async ({ data }) => {
-      await expect.poll(() => testMemberFixtureExists(data)).toBe(true);
-    },
-  },
-
-  "db.objective.fixture": {
-    exists: async ({ data }) => {
-      await expect.poll(() => visibleObjectiveFixtureExists(data)).toBe(true);
-    },
-  },
-
   "db.test_comments": {
     absent: async ({ params }) => {
       await expect.poll(() => testCommentBodiesAbsent(requiredString(params, "prefix"))).toBe(true);
@@ -35,6 +21,10 @@ export const objectiveCommentOperators = {
     delete: async ({ params }) => {
       await removeTestComments(requiredString(params, "prefix"));
     },
+  },
+
+  "db.comment_target": {
+    from_objective: async ({ params }) => objectiveCommentTargetFromObjective(requiredString(params, "objectiveId")),
   },
 
   "db.comment": {
@@ -49,11 +39,6 @@ export const objectiveCommentOperators = {
         )
         .toBe(true);
     },
-  },
-
-  "api.my_challenges": {
-    select_objective_target: async ({ ctx, data }) =>
-      selectObjectiveCommentTarget(ctx.page, myChallengesScopeFor(data.role)),
   },
 
   "api.my_challenges.objective_target": {

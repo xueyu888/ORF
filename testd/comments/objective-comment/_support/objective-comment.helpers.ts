@@ -1,54 +1,23 @@
 import type { Page } from "@playwright/test";
 import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { commentMessages, commentThreads, objectives, teamMembers, users } from "../../../../server/db/schema";
+import { db } from "../../../../server/db/client";
+import { commentMessages, commentThreads, objectives, users } from "../../../../server/db/schema";
 import {
   type MyChallengesData,
   type MyChallengesResponse,
-  type ObjectiveCommentCaseData,
   type ObjectiveCommentTarget,
 } from "./objective-comment.context";
 
-export async function closeObjectiveCommentTestDb() {
-  await closeDb();
-}
-
-export async function testMemberFixtureExists(data: Pick<ObjectiveCommentCaseData, "email" | "role">) {
-  const memberships = await readMemberMemberships(data.email);
-  return memberships.some((membership) => membership.role === data.role && membership.status === "active");
-}
-
-export async function visibleObjectiveFixtureExists(data: Pick<ObjectiveCommentCaseData, "email" | "name" | "role">) {
-  const memberships = await readMemberMemberships(data.email);
-  const teamIds = new Set(
-    memberships
-      .filter((membership) => membership.role === data.role && membership.status === "active")
-      .map((membership) => membership.teamId),
-  );
-  if (teamIds.size === 0) {
-    return false;
+export async function objectiveCommentTargetFromObjective(objectiveId: string): Promise<ObjectiveCommentTarget> {
+  const [row] = await db
+    .select({ id: objectives.id, title: objectives.title })
+    .from(objectives)
+    .where(eq(objectives.id, objectiveId))
+    .limit(1);
+  if (!row) {
+    throw new Error(`目标评论对象不存在: ${objectiveId}`);
   }
-
-  const rows = await db
-    .select({
-      id: objectives.id,
-      teamId: objectives.teamId,
-      title: objectives.title,
-      challengers: objectives.challengers,
-    })
-    .from(objectives);
-
-  if (data.role === "admin") {
-    return rows.some((objective) => teamIds.has(objective.teamId) && objective.title.trim().length > 0);
-  }
-
-  return rows.some(
-    (objective) =>
-      teamIds.has(objective.teamId) &&
-      objective.title.trim().length > 0 &&
-      Array.isArray(objective.challengers) &&
-      objective.challengers.includes(data.name),
-  );
+  return { type: "objective", id: row.id, title: row.title };
 }
 
 export async function testCommentBodiesAbsent(prefix: string) {
@@ -102,30 +71,6 @@ export async function readMyChallenges(page: Page, scope: MyChallengesScope = "m
       body,
     };
   }, scope);
-}
-
-export async function selectObjectiveCommentTarget(page: Page, scope: MyChallengesScope = "mine"): Promise<ObjectiveCommentTarget> {
-  const response = await readMyChallenges(page, scope);
-  if (response.status !== 200) {
-    throw new Error(`读取我的挑战数据失败: HTTP ${response.status}`);
-  }
-
-  const objectives = (response.body.objectives ?? []).filter((objective) => objective.id && objective.title.trim());
-  if (objectives.length === 0) {
-    throw new Error("当前用户可见挑战树中没有可用于评论测试的目标");
-  }
-
-  const titleCounts = new Map<string, number>();
-  for (const objective of objectives) {
-    titleCounts.set(objective.title, (titleCounts.get(objective.title) ?? 0) + 1);
-  }
-
-  const objective = objectives.find((item) => titleCounts.get(item.title) === 1) ?? objectives[0];
-  return {
-    type: "objective",
-    id: objective.id,
-    title: objective.title,
-  };
 }
 
 export async function myChallengesHasObjectiveTarget(page: Page, target: ObjectiveCommentTarget, scope: MyChallengesScope = "mine") {
@@ -197,19 +142,4 @@ export async function persistedObjectiveCommentExists(
     row.replyToMessageId === null &&
     row.replyToAuthor === null
   );
-}
-
-async function readMemberMemberships(email: string) {
-  return db
-    .select({
-      userId: users.id,
-      email: users.email,
-      name: users.name,
-      status: users.status,
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-    })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
 }

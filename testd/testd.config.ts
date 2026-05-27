@@ -350,7 +350,8 @@ export const testdCases = [
     doc: "testd-doc/cases/comments/目标新增评论.md",
     spec: "testd/comments/objective-comment/_entry/objective-comment.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "comments.objective-comment.unauthenticated",
