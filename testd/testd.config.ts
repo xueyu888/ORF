@@ -224,7 +224,8 @@ export const testdCases = [
     doc: "testd-doc/cases/implementation/实施阶段管理员不可新增指标.md",
     spec: "testd/implementation/admin-cannot-create-result-frozen/_entry/admin-cannot-create-result-frozen.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "implementation.admin-can-create-result-evaluation",

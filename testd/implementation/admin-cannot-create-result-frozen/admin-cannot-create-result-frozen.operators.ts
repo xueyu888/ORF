@@ -9,13 +9,10 @@ import type {
 } from "./_support/admin-cannot-create-result-frozen.context";
 import {
   addMetricButton,
-  adminAccountActive,
   deleteTestResult,
-  frozenAdminResultTargetAvailable,
+  frozenAdminResultTargetFromObjective,
   objectivePanel,
   prepareFrozenAdminResultTarget,
-  restoreFrozenAdminResultTarget,
-  selectFrozenAdminResultTarget,
   submitManagerDefinedResult,
   targetFrozen,
   targetResultAbsent,
@@ -24,28 +21,8 @@ import {
 } from "./_support/admin-cannot-create-result-frozen.helpers";
 
 export const adminCannotCreateResultFrozenOperators = {
-  "db.admin": {
-    active: async ({ params }) => {
-      await expect.poll(() => adminAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.frozen_admin_result_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => frozenAdminResultTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectFrozenAdminResultTarget(data);
-      if (!target) {
-        throw new Error("没有可构造实施阶段管理员不可新增指标起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredFrozenAdminResultTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => frozenAdminResultTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareFrozenAdminResultTarget(requiredFrozenAdminResultTarget(params, "target"));
@@ -59,10 +36,6 @@ export const adminCannotCreateResultFrozenOperators = {
       await expect
         .poll(() => targetResultAbsent(requiredFrozenAdminResultTarget(params, "target"), requiredString(params, "title")))
         .toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restoreFrozenAdminResultTarget(optionalFrozenAdminResultTarget(params, "target"));
     },
   },
 
@@ -117,22 +90,12 @@ function requiredFrozenAdminResultTarget(params: StepParams, key: string): Froze
     (value as FrozenAdminResultTarget).objective === null ||
     typeof (value as FrozenAdminResultTarget).objective.id !== "string" ||
     typeof (value as FrozenAdminResultTarget).objective.title !== "string" ||
-    typeof (value as FrozenAdminResultTarget).previous !== "object" ||
-    (value as FrozenAdminResultTarget).previous === null
+    typeof (value as FrozenAdminResultTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是实施阶段管理员新增指标限制目标`);
   }
 
   return value as FrozenAdminResultTarget;
-}
-
-function optionalFrozenAdminResultTarget(params: StepParams, key: string): FrozenAdminResultTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredFrozenAdminResultTarget(params, key);
 }
 
 function requiredRejectedResponse(params: StepParams, key: string): RejectedResultCreateResponse {
