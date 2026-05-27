@@ -3,6 +3,7 @@ export type TestdCaseConfig = {
   title: string;
   doc: string;
   enabled: boolean;
+  fixtureLifecycle?: "isolated" | "legacy-base-data";
   // Omitted for imported disabled cases until document-to-StepSpec mapping is verified.
   traceability?: "verified";
   spec?: string;
@@ -17,6 +18,7 @@ export const testdCases = [
     doc: "testd-doc/cases/auth/用户注册.md",
     spec: "testd/auth/register/_entry/register.spec.ts",
     enabled: true,
+    fixtureLifecycle: "isolated",
     traceability: "verified",
   },
   {
@@ -32,6 +34,7 @@ export const testdCases = [
     doc: "testd-doc/cases/auth/member登录.md",
     spec: "testd/auth/mlogin/_entry/mlogin.spec.ts",
     enabled: false,
+    fixtureLifecycle: "isolated",
     traceability: "verified",
   },
   {
@@ -47,6 +50,7 @@ export const testdCases = [
     doc: "testd-doc/cases/auth/admin登录.md",
     spec: "testd/auth/alogin/_entry/alogin.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "auth.admin.login-wrong-password",
@@ -61,6 +65,7 @@ export const testdCases = [
     doc: "testd-doc/cases/auth/管理员变更权限.md",
     spec: "testd/auth/admin-permission/_entry/admin-permission.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "auth.admin-permission.member-forbidden",
@@ -75,6 +80,7 @@ export const testdCases = [
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
     spec: "testd/objectives/publish/_entry/objective-publish.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "objectives.publish.member-forbidden",
@@ -103,6 +109,7 @@ export const testdCases = [
     doc: "testd-doc/cases/bounties/成员申请挑战审批.md",
     spec: "testd/bounties/review-application/_entry/review-application.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "bounties.review-application.member-forbidden",
@@ -117,6 +124,7 @@ export const testdCases = [
     doc: "testd-doc/cases/bounties/悬赏大厅申请挑战.md",
     spec: "testd/bounties/apply-challenge/_entry/apply-challenge.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "bounties.apply-challenge.unauthenticated",
@@ -131,6 +139,7 @@ export const testdCases = [
     doc: "testd-doc/cases/results/管理员新增指标.md",
     spec: "testd/results/admin-create-result/_entry/admin-create-result.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "results.admin-create.member-forbidden",
@@ -145,6 +154,7 @@ export const testdCases = [
     doc: "testd-doc/cases/results/成员提出指标.md",
     spec: "testd/results/member-propose-result/_entry/member-propose-result.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "results.member-propose.non-participant-forbidden",
@@ -159,6 +169,7 @@ export const testdCases = [
     doc: "testd-doc/cases/tasks/用户增加行动项和子行动项.md",
     spec: "testd/tasks/member-create-task/_entry/member-create-task.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "tasks.member-create-task.forbidden",
@@ -173,6 +184,7 @@ export const testdCases = [
     doc: "testd-doc/cases/implementation/管理员冻结目标进入实施阶段.md",
     spec: "testd/implementation/admin-freeze-objective/_entry/admin-freeze-objective.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "implementation.admin-freeze-objective.member-forbidden",
@@ -187,6 +199,7 @@ export const testdCases = [
     doc: "testd-doc/cases/implementation/实施阶段成员不可提出指标.md",
     spec: "testd/implementation/member-cannot-propose-result-frozen/_entry/member-cannot-propose-result-frozen.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "implementation.member-can-propose-result-evaluation",
@@ -201,6 +214,7 @@ export const testdCases = [
     doc: "testd-doc/cases/implementation/实施阶段管理员不可新增指标.md",
     spec: "testd/implementation/admin-cannot-create-result-frozen/_entry/admin-cannot-create-result-frozen.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "implementation.admin-can-create-result-evaluation",
@@ -215,6 +229,7 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/成员提交战利品.md",
     spec: "testd/acceptance/member-submit-loot/_entry/member-submit-loot.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "acceptance.member-submit-loot.non-challenger-forbidden",
@@ -229,6 +244,7 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/成员提交匿名互评.md",
     spec: "testd/acceptance/member-submit-peer-review/_entry/member-submit-peer-review.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "acceptance.member-submit-peer-review.non-participant-forbidden",
@@ -243,6 +259,7 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/查看最终分数.md",
     spec: "testd/acceptance/view-final-score/_entry/view-final-score.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "acceptance.view-final-score.before-accepted-forbidden",
@@ -257,6 +274,7 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/管理员验收战利品.md",
     spec: "testd/acceptance/admin-review-loot/_entry/admin-review-loot.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "acceptance.admin-review-loot.member-forbidden",
@@ -271,6 +289,7 @@ export const testdCases = [
     doc: "testd-doc/cases/statistics/成员分数统计.md",
     spec: "testd/statistics/member-score-statistics/_entry/member-score-statistics.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "statistics.member-score.empty",
@@ -285,6 +304,7 @@ export const testdCases = [
     doc: "testd-doc/cases/members/管理员编辑成员.md",
     spec: "testd/members/admin-edit-member/_entry/admin-edit-member.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "members.admin-edit.member-forbidden",
@@ -313,6 +333,7 @@ export const testdCases = [
     doc: "testd-doc/cases/comments/目标新增评论.md",
     spec: "testd/comments/objective-comment/_entry/objective-comment.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "comments.objective-comment.unauthenticated",
@@ -327,6 +348,7 @@ export const testdCases = [
     doc: "testd-doc/cases/settings/设置页面修改背景.md",
     spec: "testd/settings/background-permission/_entry/background-permission.spec.ts",
     enabled: false,
+    fixtureLifecycle: "legacy-base-data",
   },
   {
     id: "settings.background-admin",
@@ -352,6 +374,19 @@ const enabledCasesWithoutTraceability = testdCases.filter(
 if (enabledCasesWithoutTraceability.length > 0) {
   throw new Error(
     `testd config enabled cases without verified traceability: ${enabledCasesWithoutTraceability
+      .map((testdCase) => `${testdCase.id} (${testdCase.title})`)
+      .join(", ")}`,
+  );
+}
+
+const executableCasesWithoutIsolatedFixtures = testdCases.filter(
+  (testdCase) =>
+    (testdCase.enabled || testdCase.traceability === "verified") &&
+    testdCase.fixtureLifecycle !== "isolated",
+);
+if (executableCasesWithoutIsolatedFixtures.length > 0) {
+  throw new Error(
+    `testd config executable cases without isolated fixture lifecycle: ${executableCasesWithoutIsolatedFixtures
       .map((testdCase) => `${testdCase.id} (${testdCase.title})`)
       .join(", ")}`,
   );
