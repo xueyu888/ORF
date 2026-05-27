@@ -1,61 +1,74 @@
 ## 1. 测试目标
 
-验证：已存在的 ORF 普通成员，在 Ory/Kratos 中存在可用密码凭据时，可以使用正确邮箱和密码，从当前浏览器未登录状态进入 ORF 已登录状态。
+验证：本用例准备的 ORF 普通成员可以使用正确邮箱和密码，从当前浏览器未登录状态进入 ORF 普通成员已登录状态。
 
 边界：
 
-- 本用例只验证成功登录，不验证注册、错误密码、账号不存在或权限配置。
-- 本用例的 Action 只包含用户登录动作，不包含创建用户、写数据库、写 cookie 或清理 session。
+- 覆盖对象：普通成员成功登录。
+- 不覆盖对象：注册、错误密码、账号不存在、权限配置。
+- Setup 产物：独占普通成员账号、干净浏览器状态和已打开的登录页。
+- Clean 产物：邮箱为 "orf-member-login-e2e@orf.local" 的普通成员测试身份和用户。
+- Action 边界：只提交普通成员登录表单。
 
 ## 2. 状态模型
 
-- B：测试开始前和 Clean 后都必须满足的基准状态，用于确认基础环境可用且测试没有留下登录态。
-  - [api] 前端和后端服务已正常启动，健康检查或等价探测通过。
-  - [prisma] ORF 数据库连接正常，schema 已迁移到当前测试版本。
-  - [api] Ory/Kratos 服务可访问，Admin/Public API 对测试环境可用。
-  - [api] `/api/auth/session` 返回 `authenticated: false`。
-  - [playwright] 当前浏览器上下文不存在 `orf_ory_session` cookie。
-  - [playwright] localStorage/sessionStorage 不包含登录态。
-  - [playwright] 访问受保护入口 `/bounties` 会回到 `/auth`。
+- B：基准状态。
+  - [api] 前端服务 应可用。
+  - [api] 后端服务 应可用。
+  - [api] 前端登录页入口 应可访问。
+  - [api] 当前会话查询接口 应可访问。
+  - [prisma] ORF 数据库 应可连接。
+  - [prisma] ORF 数据库 schema 应为 当前测试版本。
+  - [api] Ory/Kratos Admin/Public API 应可访问。
+  - [api] 当前会话 应为 未登录。
+  - [playwright] 当前浏览器 应不存在 Ory session cookie。
+  - [playwright] 当前浏览器 storage 应不包含 登录态。
+  - [playwright] 受保护入口 `/bounties` 应重定向到 `/auth`。
 
-- Setup：如何从 B 构造 S0？
-  - [api] 使用测试 helper 或 Ory Admin API upsert 测试身份，并设置固定测试密码。
-  - [prisma] 使用数据库 helper upsert ORF 测试用户和 `team_members` 记录，角色设置为 `member`。
-  - [prisma] 记录测试用户登录前需要恢复的字段，例如 `last_online_at`。
-  - [api] 若测试身份为本用例独占身份，清理该身份已有 Ory session。
-  - [playwright] 创建全新的浏览器上下文，或清空当前上下文的 cookies/localStorage/sessionStorage。
-  - [playwright] 打开 `/auth`。
+- Setup：构造 S0。
+  - [api] 准备邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份，并设置固定测试密码。
+  - [prisma] 准备邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户。
+  - [api] 撤销普通成员登录身份可能残留的 Ory session。
+  - [playwright] 清理浏览器状态。
+  - [playwright] 打开 登录页。
 
-- S0：Action 前必须满足什么条件？用于确认 Setup 成功。
-  - [playwright] `page` URL 为 `/auth`。
-  - [playwright] `page.getByRole("heading", { name: "Sign in" })` 可见。
-  - [playwright] `page.getByLabel("Email")` 可见且值为空。
-  - [playwright] `page.getByLabel("Password", { exact: true })` 可见且值为空。
-  - [playwright] `page.getByRole("button", { name: "Sign In" })` 可见且可点击。
-  - [api] `/api/auth/session` 返回 `authenticated: false`。
-  - [playwright] 浏览器上下文 cookies 中不存在 `orf_ory_session`。
-  - [api] Ory/Kratos 测试身份存在。
-  - [prisma] ORF 用户和 `member` 成员关系存在。
+- S0：Action 前状态。
+  - [playwright] 当前页面 应为 登录页。
+  - [playwright] 登录页标题 "Sign in" 应可见。
+  - [playwright] 邮箱输入框 应可见。
+  - [playwright] 邮箱输入框的值 应为空。
+  - [playwright] 密码输入框 应可见。
+  - [playwright] 密码输入框的值 应为空。
+  - [playwright] "Sign In" 登录操作 应可见。
+  - [playwright] "Sign In" 登录操作 应可点击。
+  - [api] 当前会话 应为 未登录。
+  - [playwright] 浏览器上下文 cookies 应不包含 `orf_ory_session`。
+  - [api] 认证系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份。
+  - [api] 普通成员登录身份 的密码凭据 应可用。
+  - [prisma] ORF 业务系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户。
 
-- Action：本次测试唯一要验证的业务动作是什么？
-  - [playwright] 按业务语义定位 `Email` 输入框，输入测试邮箱。
-  - [playwright] 按业务语义精确定位 `Password` 输入框，输入测试密码。
-  - [playwright] 点击 `Sign In` 按钮提交登录表单。
+- Action：被测业务动作。
+  - [playwright] 在邮箱输入框输入普通成员测试邮箱。
+  - [playwright] 在密码输入框输入普通成员测试密码。
+  - [playwright] 在点击 "Sign In" 登录操作前注册登录接口响应捕获。
+  - [playwright] 点击 "Sign In" 登录操作。
 
-- S1：Action 后系统应该变成什么状态？用于确认业务动作正确。
-  - [api] `POST /api/auth/login` 响应成功；测试实现应在点击 `Sign In` 前注册响应捕获，避免错过点击后立即发出的请求。
-  - [playwright] `page` URL 为 `/bounties`。
-  - [playwright] 浏览器上下文 cookies 中存在 `orf_ory_session`。
-  - [api] `/api/auth/session` 返回 `authenticated: true`，且用户邮箱和角色符合测试数据。
-  - [playwright] `page.getByLabel("主导航")` 可见。
-  - [playwright] `page.getByLabel("当前用户")` 可见。
-  - [playwright] `page.getByRole("button", { name: "退出登录" })` 可见。
-  - [playwright] `page.getByRole("button", { name: "Sign In" })` 不再作为当前页面主要操作出现。
-  - [prisma] ORF 测试用户和 `member` 成员关系仍然存在。
+- S1：Action 后状态。
+  - [api] 登录接口响应 应成功。
+  - [playwright] 当前页面 应为 悬赏大厅。
+  - [playwright] 浏览器上下文 cookies 应包含 `orf_ory_session`。
+  - [api] 当前会话 应为 邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话。
+  - [playwright] 主导航 应可见。
+  - [playwright] 当前用户入口 应可见。
+  - [playwright] "退出登录" 操作 应可见。
+  - [playwright] "Sign In" 登录操作 应不再作为当前页面主要操作出现。
+  - [prisma] ORF 普通成员用户和 `member` 成员关系 应仍存在。
 
-- Clean：如何清理并恢复到 B？
-  - [api] 在当前浏览器上下文中调用 `/api/auth/logout`，撤销本次登录产生的 Ory session。
-  - [playwright] 清空当前浏览器上下文的 cookies/localStorage/sessionStorage。
-  - [prisma] 如本用例修改了 `last_online_at` 等非基准字段，将其恢复为 Setup 前记录的值。
-  - [api] 若测试 Ory 身份由本用例临时创建，则删除该身份；若属于共享测试身份，则保留。
-  - [prisma] 若 ORF 测试用户和 `member` 成员关系由本用例临时创建，则删除；若属于预置测试账号，则保留。
+- Clean：恢复 B。
+  - [api] 调用退出登录接口撤销本次登录产生的 Ory session。
+  - [playwright] 当前页面离开 ORF 前端应用。
+  - [playwright] 清理浏览器状态。
+  - [api] 撤销普通成员登录身份的残留 Ory session。
+  - [api] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份。
+  - [prisma] 删除普通成员的默认团队成员关系。
+  - [prisma] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户。

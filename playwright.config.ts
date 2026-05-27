@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { disabledTestdSpecGlobs } from "./testd/testd.config";
 
 const realSystemEnabled = process.env.ORF_REAL_E2E === "1";
 if (realSystemEnabled) {
@@ -23,6 +24,7 @@ export default defineConfig({
   expect: {
     timeout: 5_000,
   },
+  testIgnore: disabledTestdSpecGlobs,
   reporter: [
     ["list", { printSteps: true }],
     ["./testd/_framework/reporter.ts"],

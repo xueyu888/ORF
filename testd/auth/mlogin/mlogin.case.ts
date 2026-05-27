@@ -5,14 +5,12 @@ export const mloginSuccessCase = {
   id: "auth.login.success",
   title: "普通成员可以使用正确邮箱和密码登录 ORF",
   model: STATE_CASE_MODEL,
-  tags: ["auth", "login", "happy-path"],
+  tags: ["auth", "login", "member", "happy-path"],
 
   data: {
-    email: "orf-login-e2e@orf.local",
-    password: "OrfLoginE2E!2026",
-    name: "ORF Login E2E",
-    userId: "user-orf-login-e2e",
-    teamId: "team-orf-login-e2e",
+    email: "orf-member-login-e2e@orf.local",
+    password: "OrfMemberLoginE2E!2026",
+    name: "ORF Member Login E2E",
     role: "member",
   },
 
@@ -20,26 +18,68 @@ export const mloginSuccessCase = {
     description: "系统服务可用，浏览器处于未登录基准状态",
     assertions: [
       {
+        id: "frontend.ready",
+        title: "前端服务 应可用",
+        object: "frontend.service",
+        operator: "available",
+      },
+      {
         id: "backend.ready",
-        title: "后端服务可用",
+        title: "后端服务 应可用",
         object: "api.health",
         operator: "ok",
       },
       {
+        id: "frontend.login_entry.accessible",
+        title: "前端登录页入口 应可访问",
+        object: "frontend.login_entry",
+        operator: "accessible",
+      },
+      {
+        id: "session.endpoint.accessible",
+        title: "当前会话查询接口 应可访问",
+        object: "auth.session",
+        operator: "accessible",
+      },
+      {
         id: "db.ready",
-        title: "数据库可连接",
+        title: "ORF 数据库 应可连接",
         object: "db",
         operator: "ready",
       },
       {
-        id: "ory.ready",
-        title: "Ory Admin API 可用",
-        object: "ory.admin",
+        id: "db.schema.current",
+        title: "ORF 数据库 schema 应为 当前测试版本",
+        object: "db.schema",
+        operator: "current",
+      },
+      {
+        id: "ory.admin_public.ready",
+        title: "Ory/Kratos Admin/Public API 应可访问",
+        object: "ory.admin_public",
         operator: "ready",
       },
       {
+        id: "session.unauthenticated",
+        title: "当前会话 应为 未登录",
+        object: "auth.session",
+        operator: "unauthenticated",
+      },
+      {
+        id: "cookie.absent",
+        title: "当前浏览器 应不存在 Ory session cookie",
+        object: "browser.cookie",
+        operator: "absent",
+      },
+      {
+        id: "storage.empty",
+        title: "当前浏览器 storage 应不包含 登录态",
+        object: "browser.auth_storage",
+        operator: "empty",
+      },
+      {
         id: "protected.redirects_to_auth",
-        title: "受保护页面会回到登录页",
+        title: "受保护入口 `/bounties` 应重定向到 `/auth`",
         object: "page.protected",
         operator: "redirects_to_auth",
         params: {
@@ -47,65 +87,37 @@ export const mloginSuccessCase = {
           pattern: "/auth$",
         },
       },
-      {
-        id: "session.unauthenticated",
-        title: "后端 session 未登录",
-        object: "auth.session",
-        operator: "unauthenticated",
-      },
-      {
-        id: "cookie.absent",
-        title: "浏览器不存在登录 cookie",
-        object: "browser.cookie",
-        operator: "absent",
-      },
-      {
-        id: "storage.empty",
-        title: "浏览器 storage 不含登录态",
-        object: "browser.auth_storage",
-        operator: "empty",
-      },
     ],
   },
 
   Setup: {
-    description: "准备测试身份、ORF 成员关系并进入登录页",
+    description: "准备普通成员测试账号、清理会话并进入登录页",
     steps: [
       {
-        id: "ory.identity.upsert",
-        title: "准备 Ory 测试身份",
+        id: "ory.member_identity.upsert",
+        title:
+          "准备邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份，并设置固定测试密码",
         object: "ory.identity",
+        operator: "upsert_password",
+        params: { saveAs: "memberIdentity" },
+      },
+      {
+        id: "db.member.upsert",
+        title:
+          "准备邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户",
+        object: "db.member",
         operator: "upsert",
         params: {
-          saveAs: "oryIdentity",
+          identityIdFrom: "runtime.memberIdentity.id",
+          saveAs: "memberUser",
         },
       },
       {
         id: "ory.sessions.revoke",
-        title: "清理测试身份已有 Ory session",
+        title: "撤销普通成员登录身份可能残留的 Ory session",
         object: "ory.sessions",
-        operator: "revoke",
-        params: {
-          identityIdFrom: "runtime.oryIdentity.id",
-        },
-      },
-      {
-        id: "db.team.ensure",
-        title: "准备测试团队",
-        object: "db.team",
-        operator: "ensure",
-        params: {
-          saveAs: "teamId",
-        },
-      },
-      {
-        id: "db.user.upsert",
-        title: "准备 ORF 测试成员",
-        object: "db.user",
-        operator: "upsert",
-        params: {
-          saveAs: "orfUser",
-        },
+        operator: "revoke_by_email",
+        params: { emailFrom: "data.email" },
       },
       {
         id: "browser.clear",
@@ -115,111 +127,117 @@ export const mloginSuccessCase = {
       },
       {
         id: "page.goto.auth",
-        title: "打开登录页",
+        title: "打开 登录页",
         object: "page",
         operator: "goto",
-        params: {
-          path: "/auth",
-        },
+        params: { path: "/auth" },
       },
     ],
   },
 
   S0: {
-    description: "登录页可用，测试用户存在，当前浏览器仍未登录",
+    description: "登录页可用，普通成员账号存在，当前浏览器仍未登录",
     assertions: [
       {
         id: "url.auth",
-        title: "当前页面是登录页",
+        title: "当前页面 应为 登录页",
         object: "page.url",
         operator: "match",
-        params: {
-          pattern: "/auth$",
-        },
+        params: { pattern: "/auth$" },
       },
       {
         id: "heading.sign_in.visible",
-        title: "登录页标题可见",
+        title: '登录页标题 "Sign in" 应可见',
         object: "page",
         operator: "visible",
-        params: {
-          role: "heading",
-          name: "Sign in",
-        },
+        params: { role: "heading", name: "Sign in" },
+      },
+      {
+        id: "input.email.visible",
+        title: "邮箱输入框 应可见",
+        object: "page",
+        operator: "visible",
+        params: { label: "Email" },
       },
       {
         id: "input.email.empty",
-        title: "邮箱输入框为空",
+        title: "邮箱输入框的值 应为空",
         object: "input",
         operator: "value",
-        params: {
-          label: "Email",
-          value: "",
-        },
+        params: { label: "Email", value: "" },
+      },
+      {
+        id: "input.password.visible",
+        title: "密码输入框 应可见",
+        object: "page",
+        operator: "visible",
+        params: { label: "Password", exact: true },
       },
       {
         id: "input.password.empty",
-        title: "密码输入框为空",
+        title: "密码输入框的值 应为空",
         object: "input",
         operator: "value",
-        params: {
-          label: "Password",
-          exact: true,
-          value: "",
-        },
+        params: { label: "Password", exact: true, value: "" },
+      },
+      {
+        id: "button.sign_in.visible",
+        title: '"Sign In" 登录操作 应可见',
+        object: "page",
+        operator: "visible",
+        params: { role: "button", name: "Sign In" },
       },
       {
         id: "button.sign_in.enabled",
-        title: "登录按钮可点击",
+        title: '"Sign In" 登录操作 应可点击',
         object: "page",
         operator: "enabled",
-        params: {
-          role: "button",
-          name: "Sign In",
-        },
+        params: { role: "button", name: "Sign In" },
       },
       {
         id: "session.unauthenticated",
-        title: "后端 session 未登录",
+        title: "当前会话 应为 未登录",
         object: "auth.session",
         operator: "unauthenticated",
       },
       {
         id: "cookie.absent",
-        title: "浏览器不存在登录 cookie",
+        title: "浏览器上下文 cookies 应不包含 `orf_ory_session`",
         object: "browser.cookie",
         operator: "absent",
       },
       {
-        id: "ory.identity.exists",
-        title: "Ory 测试身份存在",
+        id: "ory.member_identity.exists",
+        title:
+          "认证系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份",
         object: "ory.identity",
         operator: "exists",
-        params: {
-          emailFrom: "data.email",
-        },
+        params: { emailFrom: "data.email" },
+      },
+      {
+        id: "ory.member_identity.password_available",
+        title: "普通成员登录身份 的密码凭据 应可用",
+        object: "ory.identity",
+        operator: "password_available",
+        params: { emailFrom: "data.email" },
       },
       {
         id: "db.member.matches",
-        title: "ORF 普通成员关系存在",
+        title:
+          "ORF 业务系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户",
         object: "db.member",
         operator: "matches",
-        params: {
-          userIdFrom: "runtime.orfUser.id",
-          teamIdFrom: "data.teamId",
-          emailFrom: "data.email",
-          roleFrom: "data.role",
-        },
+        params: { emailFrom: "data.email" },
       },
     ],
   },
 
   Action: {
-    description: "输入正确邮箱和密码并提交登录表单",
+    description: "输入普通成员测试邮箱和密码并提交登录表单",
     steps: [
       {
         id: "fill.email",
-        title: "输入邮箱",
+        title: "在邮箱输入框输入普通成员测试邮箱",
         object: "page",
         operator: "fill",
         params: {
@@ -229,7 +247,7 @@ export const mloginSuccessCase = {
       },
       {
         id: "fill.password",
-        title: "输入密码",
+        title: "在密码输入框输入普通成员测试密码",
         object: "page",
         operator: "fill",
         params: {
@@ -240,7 +258,7 @@ export const mloginSuccessCase = {
       },
       {
         id: "capture.login_response",
-        title: "注册登录接口响应捕获",
+        title: '在点击 "Sign In" 登录操作前注册登录接口响应捕获',
         object: "api",
         operator: "capture_response",
         params: {
@@ -251,7 +269,7 @@ export const mloginSuccessCase = {
       },
       {
         id: "click.sign_in",
-        title: "点击登录按钮",
+        title: '点击 "Sign In" 登录操作',
         object: "page",
         operator: "click",
         params: {
@@ -263,11 +281,11 @@ export const mloginSuccessCase = {
   },
 
   S1: {
-    description: "页面进入登录后状态，后端 session 有效",
+    description: "页面进入普通成员登录后状态，后端 session 有效",
     assertions: [
       {
         id: "login_response.ok",
-        title: "登录接口响应成功",
+        title: "登录接口响应 应成功",
         object: "api.response",
         operator: "ok",
         params: {
@@ -277,50 +295,46 @@ export const mloginSuccessCase = {
       },
       {
         id: "url.bounties",
-        title: "进入 bounties 页面",
+        title: "当前页面 应为 悬赏大厅",
         object: "page.url",
         operator: "match",
-        params: {
-          pattern: "/bounties$",
-        },
+        params: { pattern: "/bounties$" },
       },
       {
         id: "cookie.present",
-        title: "浏览器存在登录 cookie",
+        title: "浏览器上下文 cookies 应包含 `orf_ory_session`",
         object: "browser.cookie",
         operator: "present",
       },
       {
         id: "session.authenticated",
-        title: "后端 session 已登录",
+        title:
+          "当前会话 应为 邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: {
           emailFrom: "data.email",
           roleFrom: "data.role",
+          status: "active",
         },
       },
       {
         id: "nav.visible",
-        title: "主导航可见",
+        title: "主导航 应可见",
         object: "page",
         operator: "visible",
-        params: {
-          label: "主导航",
-        },
+        params: { label: "主导航" },
       },
       {
         id: "current_user.visible",
-        title: "当前用户入口可见",
+        title: "当前用户入口 应可见",
         object: "page",
         operator: "visible",
-        params: {
-          label: "当前用户",
-        },
+        params: { label: "当前用户" },
       },
       {
         id: "logout.visible",
-        title: "退出登录按钮可见",
+        title: '"退出登录" 操作 应可见',
         object: "page",
         operator: "visible",
         params: {
@@ -330,7 +344,7 @@ export const mloginSuccessCase = {
       },
       {
         id: "sign_in.absent",
-        title: "登录按钮不再出现在当前页面",
+        title: '"Sign In" 登录操作 应不再作为当前页面主要操作出现',
         object: "page",
         operator: "count",
         params: {
@@ -341,27 +355,28 @@ export const mloginSuccessCase = {
       },
       {
         id: "db.member.matches",
-        title: "ORF 普通成员关系仍然存在",
+        title: "ORF 普通成员用户和 `member` 成员关系 应仍存在",
         object: "db.member",
         operator: "matches",
-        params: {
-          userIdFrom: "runtime.orfUser.id",
-          teamIdFrom: "data.teamId",
-          emailFrom: "data.email",
-          roleFrom: "data.role",
-        },
+        params: { emailFrom: "data.email" },
       },
     ],
   },
 
   Clean: {
-    description: "登出并恢复测试前基准状态",
+    description: "登出并恢复普通成员登录测试前基准状态",
     steps: [
       {
         id: "auth.logout",
-        title: "退出当前登录态",
+        title: "调用退出登录接口撤销本次登录产生的 Ory session",
         object: "auth",
         operator: "logout",
+      },
+      {
+        id: "page.runtime.stop",
+        title: "当前页面离开 ORF 前端应用",
+        object: "page.runtime",
+        operator: "stop",
       },
       {
         id: "browser.clear",
@@ -370,25 +385,32 @@ export const mloginSuccessCase = {
         operator: "clear_state",
       },
       {
-        id: "db.restore_last_online_at",
-        title: "恢复 last_online_at",
-        object: "db.user",
-        operator: "restore_last_online_at",
-        params: {
-          userIdFrom: "runtime.orfUser.id",
-          lastOnlineAtFrom: "runtime.orfUser.previousLastOnlineAt",
-          optional: true,
-        },
+        id: "ory.sessions.revoke",
+        title: "撤销普通成员登录身份的残留 Ory session",
+        object: "ory.sessions",
+        operator: "revoke_by_email",
+        params: { emailFrom: "data.email" },
       },
       {
-        id: "ory.sessions.revoke",
-        title: "撤销测试身份 Ory session",
-        object: "ory.sessions",
-        operator: "revoke",
-        params: {
-          identityIdFrom: "runtime.oryIdentity.id",
-          optional: true,
-        },
+        id: "ory.member_identity.delete",
+        title: "删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份",
+        object: "ory.identity",
+        operator: "delete_by_email",
+        params: { emailFrom: "data.email" },
+      },
+      {
+        id: "db.member.memberships.delete",
+        title: "删除普通成员的默认团队成员关系",
+        object: "db.member",
+        operator: "delete_memberships",
+        params: { emailFrom: "data.email" },
+      },
+      {
+        id: "db.member.delete",
+        title: "删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户",
+        object: "db.member",
+        operator: "delete",
+        params: { emailFrom: "data.email" },
       },
     ],
   },
