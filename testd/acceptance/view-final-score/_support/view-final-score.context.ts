@@ -1,11 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type {
-  ChallengeApplication,
-  ObjectiveAcceptedResult,
-  ObjectiveFlowStatus,
-  OrfStage,
-  WorkStatus,
-} from "../../../../src/types/orf";
+import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -17,6 +11,8 @@ export type ViewFinalScoreCaseData = {
   password: string;
   name: string;
   role: "member";
+  objectiveId: string;
+  objectiveTitle: string;
   points: number;
   reason: string;
 };
@@ -24,30 +20,11 @@ export type ViewFinalScoreCaseData = {
 export type FinalScoreTarget = {
   objective: {
     id: string;
+    teamId: string;
     title: string;
+    stage: OrfStage;
+    flowStatus: ObjectiveFlowStatus;
   };
-  previous: FinalScoreTargetSnapshot;
-};
-
-export type FinalScoreTargetSnapshot = {
-  id: string;
-  title: string;
-  stage: OrfStage;
-  flowStatus: ObjectiveFlowStatus;
-  status: WorkStatus;
-  challengers: string[];
-  assignedChallengers: string[];
-  challengeApplications: ChallengeApplication[];
-  acceptedAt: string | null;
-  confirmationDueAt: string | null;
-  confirmedAt: string | null;
-  lootSubmittedAt: string | null;
-  acceptedResult: ObjectiveAcceptedResult | null;
-  completionMultiplier: number | null;
-  objectiveBasePoints: number;
-  objectiveSettlementPoints: number | null;
-  updatedAt: string;
-  updatedBy: string | null;
 };
 
 export type FinalScoreLedger = {

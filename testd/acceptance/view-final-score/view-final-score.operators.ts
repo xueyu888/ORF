@@ -6,38 +6,15 @@ import {
   createFinalScoreLedger,
   deleteFinalScoreLedger,
   finalScoreLedgerPresent,
-  finalScoreTargetAvailable,
+  finalScoreTargetFromObjective,
   finalScoreTargetSettledForMember,
-  memberAccountActive,
   prepareFinalScoreTarget,
-  restoreFinalScoreTarget,
-  selectFinalScoreTarget,
   testFinalScoreLedgerAbsent,
 } from "./_support/view-final-score.helpers";
 
 export const viewFinalScoreOperators = {
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.final_score_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => finalScoreTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectFinalScoreTarget(data);
-      if (!target) {
-        throw new Error("没有可构造最终分数查看起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredFinalScoreTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => finalScoreTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareFinalScoreTarget(
@@ -52,10 +29,6 @@ export const viewFinalScoreOperators = {
         .poll(() => finalScoreTargetSettledForMember(requiredFinalScoreTarget(params, "target"), requiredString(params, "memberName")))
         .toBe(true);
     },
-
-    restore: async ({ params }) => {
-      await restoreFinalScoreTarget(optionalFinalScoreTarget(params, "target"));
-    },
   },
 
   "db.final_score_ledger": {
@@ -65,7 +38,7 @@ export const viewFinalScoreOperators = {
 
     create: async ({ params }) => {
       return createFinalScoreLedger(requiredFinalScoreTarget(params, "target"), {
-        email: requiredString(params, "email"),
+        userId: requiredString(params, "userId"),
         name: requiredString(params, "memberName"),
         points: requiredNumber(params, "points"),
         reason: requiredString(params, "reason"),
@@ -103,23 +76,14 @@ function requiredFinalScoreTarget(params: StepParams, key: string): FinalScoreTa
     typeof (value as FinalScoreTarget).objective !== "object" ||
     (value as FinalScoreTarget).objective === null ||
     typeof (value as FinalScoreTarget).objective.id !== "string" ||
+    typeof (value as FinalScoreTarget).objective.teamId !== "string" ||
     typeof (value as FinalScoreTarget).objective.title !== "string" ||
-    typeof (value as FinalScoreTarget).previous !== "object" ||
-    (value as FinalScoreTarget).previous === null
+    typeof (value as FinalScoreTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是最终分数目标`);
   }
 
   return value as FinalScoreTarget;
-}
-
-function optionalFinalScoreTarget(params: StepParams, key: string): FinalScoreTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredFinalScoreTarget(params, key);
 }
 
 function optionalFinalScoreLedger(params: StepParams, key: string): FinalScoreLedger | null {

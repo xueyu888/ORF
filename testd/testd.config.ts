@@ -272,7 +272,8 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/查看最终分数.md",
     spec: "testd/acceptance/view-final-score/_entry/view-final-score.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "acceptance.view-final-score.before-accepted-forbidden",
