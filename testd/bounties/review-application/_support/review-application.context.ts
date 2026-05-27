@@ -9,9 +9,20 @@ export type TestContext = {
 export type ReviewApplicationCaseData = {
   email: string;
   password: string;
+  name: string;
   role: "admin";
+  approveApplicantEmail: string;
+  approveApplicantPassword: string;
   approveApplicantName: string;
+  approveApplicantRole: "member";
+  rejectApplicantEmail: string;
+  rejectApplicantPassword: string;
   rejectApplicantName: string;
+  rejectApplicantRole: "member";
+  objectiveId: string;
+  objectiveTitle: string;
+  approveApplicationId: string;
+  rejectApplicationId: string;
 };
 
 export type ReviewApplicationTarget = {

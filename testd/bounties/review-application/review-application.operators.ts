@@ -5,59 +5,26 @@ import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
 import type { ReviewApplicationCaseData, ReviewApplicationTarget, TestContext } from "./_support/review-application.context";
 import {
-  adminAccountActive,
   applicationPill,
   applicationStatus,
   createPendingApplication,
-  memberAccountActive,
+  createReviewTargetFromObjective,
   objectiveFlowStatus,
   objectiveHasChallenger,
   objectivePanel,
-  restoreReviewTarget,
-  reviewTargetAvailable,
-  revokeOrySessionsByEmail,
-  selectReviewTarget,
 } from "./_support/review-application.helpers";
 
 export const reviewApplicationOperators = {
-  "ory.sessions": {
-    revoke_by_email: async ({ params }) => {
-      await revokeOrySessionsByEmail(requiredString(params, "email"));
-    },
-  },
-
-  "db.admin": {
-    active: async ({ params }) => {
-      await expect.poll(() => adminAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "name"))).toBe(true);
-    },
-  },
-
   "db.challenge_review": {
-    target_available: async ({ data }) => {
-      await expect.poll(() => reviewTargetAvailable(data)).toBe(true);
-    },
-
-    select_target: async ({ data }) => {
-      const target = await selectReviewTarget(data);
-      if (!target) {
-        throw new Error("没有可审批挑战申请的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredReviewTarget(params, "target").previous).toBeTruthy();
-    },
-
-    restore_target: async ({ params }) => {
-      await restoreReviewTarget(optionalReviewTarget(params, "target"));
-    },
+    target_from_objective: async ({ data, params }) =>
+      createReviewTargetFromObjective({
+        objectiveId: requiredString(params, "objectiveId"),
+        objectiveTitle: requiredString(params, "objectiveTitle"),
+        approveApplicationId: data.approveApplicationId,
+        rejectApplicationId: data.rejectApplicationId,
+        approveApplicantName: data.approveApplicantName,
+        rejectApplicantName: data.rejectApplicantName,
+      }),
   },
 
   "db.challenge_application": {
@@ -105,10 +72,6 @@ export const reviewApplicationOperators = {
     capture_reject_response: async ({ ctx, runtime, params }) => {
       const target = requiredReviewTarget(params, "target");
       runtime.values[requiredString(params, "saveAs")] = captureReviewResponse(ctx, target, "reject");
-    },
-
-    await_response: async ({ params }) => {
-      await requiredCapturedResponse(params, "response");
     },
 
     response_ok: async ({ params }) => {
@@ -167,14 +130,6 @@ function captureReviewResponse(ctx: TestContext, target: ReviewApplicationTarget
       method: response.request().method(),
       body: await readResponseBody(response),
     }));
-}
-
-function optionalReviewTarget(params: StepParams, key: string): ReviewApplicationTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-  return requiredReviewTarget(params, key);
 }
 
 function requiredReviewTarget(params: StepParams, key: string): ReviewApplicationTarget {

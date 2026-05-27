@@ -112,7 +112,8 @@ export const testdCases = [
     doc: "testd-doc/cases/bounties/成员申请挑战审批.md",
     spec: "testd/bounties/review-application/_entry/review-application.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "bounties.review-application.member-forbidden",

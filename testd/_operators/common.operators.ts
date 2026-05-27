@@ -170,12 +170,13 @@ export function createCommonOperators<
       absent: async ({ params }) => {
         await expect
           .poll(async () => {
-            const account = await readTestUserAccount({
-              email: optionalString(params, "email"),
-              userId: optionalString(params, "userId"),
-            });
-            if (account) {
-              return false;
+            const email = optionalString(params, "email");
+            const userId = optionalString(params, "userId");
+            if (email || userId) {
+              const account = await readTestUserAccount({ email, userId });
+              if (account) {
+                return false;
+              }
             }
 
             const emails = optionalStringArray(params, "emails");
