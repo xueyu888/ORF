@@ -10,17 +10,10 @@ export type TestContext = {
 export type AdminPermissionCaseData = {
   email: string;
   password: string;
+  name: string;
   role: "admin";
   targetRole: "member";
   permissionKey: PermissionKey;
-};
-
-export type AdminAccountRecord = {
-  userId: string;
-  email: string;
-  role: "admin";
-  status: string;
-  lastOnlineAt: string | null;
 };
 
 export type PermissionRulesResult = {

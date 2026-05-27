@@ -66,7 +66,8 @@ export const testdCases = [
     doc: "testd-doc/cases/auth/管理员变更权限.md",
     spec: "testd/auth/admin-permission/_entry/admin-permission.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "auth.admin-permission.member-forbidden",
