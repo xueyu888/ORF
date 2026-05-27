@@ -9,12 +9,9 @@ import type {
 } from "./_support/member-cannot-propose-result-frozen.context";
 import {
   deleteTestResult,
-  frozenProposalTargetAvailable,
-  memberAccountActive,
+  frozenProposalTargetFromObjective,
   objectivePanel,
   prepareFrozenProposalTarget,
-  restoreFrozenProposalTarget,
-  selectFrozenProposalTarget,
   submitMemberProposedResult,
   targetFrozenForMember,
   targetMetricButton,
@@ -24,28 +21,8 @@ import {
 } from "./_support/member-cannot-propose-result-frozen.helpers";
 
 export const memberCannotProposeResultFrozenOperators = {
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.frozen_proposal_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => frozenProposalTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectFrozenProposalTarget(data);
-      if (!target) {
-        throw new Error("没有可构造实施阶段成员不可提出指标起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredFrozenProposalTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => frozenProposalTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareFrozenProposalTarget(requiredFrozenProposalTarget(params, "target"), requiredString(params, "memberName"));
@@ -61,10 +38,6 @@ export const memberCannotProposeResultFrozenOperators = {
       await expect
         .poll(() => targetResultAbsent(requiredFrozenProposalTarget(params, "target"), requiredString(params, "title")))
         .toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restoreFrozenProposalTarget(optionalFrozenProposalTarget(params, "target"));
     },
   },
 
@@ -119,22 +92,12 @@ function requiredFrozenProposalTarget(params: StepParams, key: string): FrozenPr
     (value as FrozenProposalTarget).objective === null ||
     typeof (value as FrozenProposalTarget).objective.id !== "string" ||
     typeof (value as FrozenProposalTarget).objective.title !== "string" ||
-    typeof (value as FrozenProposalTarget).previous !== "object" ||
-    (value as FrozenProposalTarget).previous === null
+    typeof (value as FrozenProposalTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是实施阶段成员提出指标限制目标`);
   }
 
   return value as FrozenProposalTarget;
-}
-
-function optionalFrozenProposalTarget(params: StepParams, key: string): FrozenProposalTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredFrozenProposalTarget(params, key);
 }
 
 function requiredRejectedResponse(params: StepParams, key: string): RejectedResultCreateResponse {

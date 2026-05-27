@@ -208,7 +208,8 @@ export const testdCases = [
     doc: "testd-doc/cases/implementation/实施阶段成员不可提出指标.md",
     spec: "testd/implementation/member-cannot-propose-result-frozen/_entry/member-cannot-propose-result-frozen.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "implementation.member-can-propose-result-evaluation",
