@@ -1,28 +1,34 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
-import { requiredString } from "../../_operators/params";
+import { optionalBoolean, requiredString } from "../../_operators/params";
 import type { ApiAttemptResult, BackgroundPermissionCaseData, BackgroundSnapshots, TestContext } from "./_support/background-permission.context";
 import {
   attemptSaveSidebarBackgroundConfig,
   attemptSetDefaultSidebarBackground,
   backgroundsMatchSnapshot,
-  memberAccountActive,
   readBackgroundSnapshots,
   readSidebarBackgroundsAsCurrentUser,
+  restoreBackgroundSnapshots,
 } from "./_support/background-permission.helpers";
 
 export const backgroundPermissionOperators = {
-  "db.member": {
-    active: async ({ data }) => {
-      await expect.poll(() => memberAccountActive(data)).toBe(true);
-    },
-  },
-
   "api.visual_backgrounds": {
     snapshot: async () => readBackgroundSnapshots(),
 
     unchanged: async ({ params }) => {
+      const snapshot = maybeBackgroundSnapshots(params, "snapshot");
+      if (!snapshot && optionalBoolean(params, "optional")) {
+        return;
+      }
       await expect.poll(() => backgroundsMatchSnapshot(requiredBackgroundSnapshots(params, "snapshot"))).toBe(true);
+    },
+
+    restore_snapshot: async ({ params }) => {
+      const snapshot = maybeBackgroundSnapshots(params, "snapshot");
+      if (!snapshot && optionalBoolean(params, "optional")) {
+        return;
+      }
+      await restoreBackgroundSnapshots(requiredBackgroundSnapshots(params, "snapshot"));
     },
   },
 
@@ -60,14 +66,23 @@ export const backgroundPermissionOperators = {
 } satisfies OperatorRegistry<TestContext, BackgroundPermissionCaseData>;
 
 function requiredBackgroundSnapshots(params: StepParams, key: string): BackgroundSnapshots {
+  const value = maybeBackgroundSnapshots(params, key);
+  if (!value) {
+    throw new Error(`参数 ${key} 必须是背景快照`);
+  }
+  return value;
+}
+
+function maybeBackgroundSnapshots(params: StepParams, key: string): BackgroundSnapshots | null {
   const value = params[key];
   if (
     typeof value !== "object" ||
     value === null ||
     typeof (value as BackgroundSnapshots).login_background !== "object" ||
-    typeof (value as BackgroundSnapshots).sidebar_background !== "object"
+    typeof (value as BackgroundSnapshots).sidebar_background !== "object" ||
+    typeof (value as BackgroundSnapshots).userSettingsFile !== "object"
   ) {
-    throw new Error(`参数 ${key} 必须是背景快照`);
+    return null;
   }
   return value as BackgroundSnapshots;
 }

@@ -366,7 +366,8 @@ export const testdCases = [
     doc: "testd-doc/cases/settings/设置页面修改背景.md",
     spec: "testd/settings/background-permission/_entry/background-permission.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "settings.background-admin",

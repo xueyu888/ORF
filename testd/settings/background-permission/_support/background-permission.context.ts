@@ -16,6 +16,10 @@ export type BackgroundPermissionCaseData = {
 export type BackgroundSnapshots = {
   login_background: VisualBackgroundsData;
   sidebar_background: VisualBackgroundsData;
+  userSettingsFile: {
+    existed: boolean;
+    content: string | null;
+  };
 };
 
 export type ApiAttemptResult = {

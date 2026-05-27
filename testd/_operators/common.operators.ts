@@ -109,6 +109,11 @@ export function createCommonOperators<
           .toBe(email);
       },
 
+      absent: async ({ params }) => {
+        const email = requiredString(params, "email");
+        await expect.poll(() => findOryIdentityByEmail(email)).toBeNull();
+      },
+
       password_available: async ({ params }) => {
         await expect
           .poll(() => oryIdentityPasswordAvailable(requiredString(params, "email")))

@@ -1,29 +1,35 @@
 import type { Page } from "@playwright/test";
-import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { teamMembers, users } from "../../../../server/db/schema";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { listVisualBackgrounds } from "../../../../server/settings/visualBackgrounds";
 import type { VisualBackgroundsData, VisualBackgroundScene } from "../../../../src/state/apiClient";
-import type { BackgroundPermissionCaseData, BackgroundSnapshots } from "./background-permission.context";
+import type { BackgroundSnapshots } from "./background-permission.context";
 
-export async function closeBackgroundPermissionTestDb() {
-  await closeDb();
-}
-
-export async function memberAccountActive(data: Pick<BackgroundPermissionCaseData, "email" | "role">) {
-  const memberships = await readMemberMemberships(data.email);
-  return memberships.some((membership) => membership.role === data.role && membership.status === "active");
-}
+const userSettingsPath = path.join(process.cwd(), "public", "settings", "user", "settings.json");
 
 export async function readBackgroundSnapshots(): Promise<BackgroundSnapshots> {
   return {
     login_background: normalizeBackgrounds(await listVisualBackgrounds("login_background")),
     sidebar_background: normalizeBackgrounds(await listVisualBackgrounds("sidebar_background")),
+    userSettingsFile: await readUserSettingsFileSnapshot(),
   };
 }
 
 export async function backgroundsMatchSnapshot(snapshot: BackgroundSnapshots) {
-  return JSON.stringify(await readBackgroundSnapshots()) === JSON.stringify(snapshot);
+  const current = await readBackgroundSnapshots();
+  return (
+    JSON.stringify(visibleBackgroundSnapshot(current)) ===
+    JSON.stringify(visibleBackgroundSnapshot(snapshot))
+  );
+}
+
+export async function restoreBackgroundSnapshots(snapshot: BackgroundSnapshots) {
+  if (snapshot.userSettingsFile.existed && snapshot.userSettingsFile.content !== null) {
+    await mkdir(path.dirname(userSettingsPath), { recursive: true });
+    await writeFile(userSettingsPath, snapshot.userSettingsFile.content, "utf8");
+  } else {
+    await rm(userSettingsPath, { force: true });
+  }
 }
 
 export async function readSidebarBackgroundsAsCurrentUser(page: Page) {
@@ -94,17 +100,23 @@ function normalizeBackgrounds(input: Awaited<ReturnType<typeof listVisualBackgro
   };
 }
 
-async function readMemberMemberships(email: string) {
-  return db
-    .select({
-      userId: users.id,
-      email: users.email,
-      name: users.name,
-      status: users.status,
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-    })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(and(sql`lower(${users.email}) = ${email.toLowerCase()}`));
+async function readUserSettingsFileSnapshot(): Promise<BackgroundSnapshots["userSettingsFile"]> {
+  try {
+    return {
+      existed: true,
+      content: await readFile(userSettingsPath, "utf8"),
+    };
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "ENOENT") {
+      return { existed: false, content: null };
+    }
+    throw error;
+  }
+}
+
+function visibleBackgroundSnapshot(snapshot: BackgroundSnapshots) {
+  return {
+    login_background: snapshot.login_background,
+    sidebar_background: snapshot.sidebar_background,
+  };
 }
