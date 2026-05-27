@@ -288,7 +288,8 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/管理员验收战利品.md",
     spec: "testd/acceptance/admin-review-loot/_entry/admin-review-loot.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "acceptance.admin-review-loot.member-forbidden",

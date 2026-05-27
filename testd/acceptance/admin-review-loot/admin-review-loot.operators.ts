@@ -4,60 +4,27 @@ import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredNumber, requiredString } from "../../_operators/params";
 import type { AdminReviewLootCaseData, ReviewLoot, ReviewLootResult, ReviewLootTarget, TestContext } from "./_support/admin-review-loot.context";
 import {
-  adminAccountActive,
-  closeAdminReviewLootTestDb,
   createReviewLoot,
   createReviewLootResult,
   deleteReviewLoot,
   deleteReviewLootLedger,
   deleteReviewLootResult,
   lootPagePath,
-  memberAccountActive,
   prepareReviewLootTarget,
-  restoreReviewLootTarget,
   reviewLootLedgerPresent,
   reviewLootPresent,
   reviewLootResultPresent,
-  reviewLootTargetAvailable,
+  reviewLootTargetFromObjective,
   reviewLootTargetSettled,
   reviewLootTargetSubmitted,
-  selectReviewLootTarget,
   testReviewLootAbsent,
   testReviewLootLedgerAbsent,
   testReviewLootResultAbsent,
 } from "./_support/admin-review-loot.helpers";
 
-export { closeAdminReviewLootTestDb };
-
 export const adminReviewLootOperators = {
-  "db.admin": {
-    active: async ({ params }) => {
-      await expect.poll(() => adminAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "memberName"))).toBe(true);
-    },
-  },
-
   "db.review_loot_target": {
-    available: async () => {
-      await expect.poll(() => reviewLootTargetAvailable()).toBe(true);
-    },
-
-    select: async () => {
-      const target = await selectReviewLootTarget();
-      if (!target) {
-        throw new Error("没有可构造管理员验收战利品起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredReviewLootTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => reviewLootTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareReviewLootTarget(requiredReviewLootTarget(params, "target"), requiredString(params, "memberName"));
@@ -69,10 +36,6 @@ export const adminReviewLootOperators = {
 
     settled: async ({ params }) => {
       await expect.poll(() => reviewLootTargetSettled(requiredReviewLootTarget(params, "target"), requiredNumber(params, "points"))).toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restoreReviewLootTarget(optionalReviewLootTarget(params, "target"));
     },
   },
 
@@ -131,7 +94,14 @@ export const adminReviewLootOperators = {
 
     present: async ({ params }) => {
       await expect
-        .poll(() => reviewLootLedgerPresent(requiredReviewLootTarget(params, "target"), requiredString(params, "memberName"), requiredNumber(params, "points")))
+        .poll(() =>
+          reviewLootLedgerPresent(
+            requiredReviewLootTarget(params, "target"),
+            requiredString(params, "memberName"),
+            requiredNumber(params, "points"),
+            requiredString(params, "reason"),
+          ),
+        )
         .toBe(true);
     },
 
@@ -179,23 +149,14 @@ function requiredReviewLootTarget(params: StepParams, key: string): ReviewLootTa
     typeof (value as ReviewLootTarget).objective !== "object" ||
     (value as ReviewLootTarget).objective === null ||
     typeof (value as ReviewLootTarget).objective.id !== "string" ||
+    typeof (value as ReviewLootTarget).objective.teamId !== "string" ||
     typeof (value as ReviewLootTarget).objective.title !== "string" ||
-    typeof (value as ReviewLootTarget).previous !== "object" ||
-    (value as ReviewLootTarget).previous === null
+    typeof (value as ReviewLootTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是管理员验收战利品目标`);
   }
 
   return value as ReviewLootTarget;
-}
-
-function optionalReviewLootTarget(params: StepParams, key: string): ReviewLootTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredReviewLootTarget(params, key);
 }
 
 function requiredReviewLootResult(params: StepParams, key: string): ReviewLootResult {

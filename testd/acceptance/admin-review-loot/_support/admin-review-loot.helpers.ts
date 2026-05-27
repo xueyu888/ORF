@@ -1,101 +1,21 @@
-import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { objectiveLoot, objectives, pointLedger, results, teamMembers, users } from "../../../../server/db/schema";
+import { and, eq } from "drizzle-orm";
+import { db } from "../../../../server/db/client";
+import { objectiveLoot, objectives, pointLedger, results } from "../../../../server/db/schema";
 import type { AdminReviewLootCaseData, ReviewLoot, ReviewLootResult, ReviewLootTarget } from "./admin-review-loot.context";
 
-export async function closeAdminReviewLootTestDb() {
-  await closeDb();
-}
-
-export async function adminAccountActive(email: string) {
-  const account = await readAccount(email);
-  return !!account && account.role === "admin" && account.status === "active";
-}
-
-export async function memberAccountActive(name: string) {
-  const account = await readAccountByName(name);
-  return !!account && account.role === "member" && account.status === "active";
-}
-
-export async function reviewLootTargetAvailable() {
-  return (await selectReviewLootTarget()) !== null;
-}
-
-export async function selectReviewLootTarget(): Promise<ReviewLootTarget | null> {
-  const objectiveRows = await db
-    .select({
-      id: objectives.id,
-      title: objectives.title,
-      finalDueAt: objectives.finalDueAt,
-      stage: objectives.stage,
-      flowStatus: objectives.flowStatus,
-      status: objectives.status,
-      challengers: objectives.challengers,
-      assignedChallengers: objectives.assignedChallengers,
-      challengeApplications: objectives.challengeApplications,
-      acceptedAt: objectives.acceptedAt,
-      confirmationDueAt: objectives.confirmationDueAt,
-      confirmedAt: objectives.confirmedAt,
-      lootSubmittedAt: objectives.lootSubmittedAt,
-      acceptedResult: objectives.acceptedResult,
-      completionMultiplier: objectives.completionMultiplier,
-      objectiveBasePoints: objectives.objectiveBasePoints,
-      objectiveSettlementPoints: objectives.objectiveSettlementPoints,
-      updatedAt: objectives.updatedAt,
-      updatedBy: objectives.updatedBy,
-    })
-    .from(objectives);
-
-  const resultRows = await db.select({ objectiveId: results.objectiveId }).from(results);
-  const lootRows = await db.select({ objectiveId: objectiveLoot.objectiveId }).from(objectiveLoot);
-  const ledgerRows = await db.select({ objectiveId: pointLedger.objectiveId }).from(pointLedger);
-  const resultCountByObjective = countByObjective(resultRows);
-  const lootCountByObjective = countByObjective(lootRows);
-  const ledgerCountByObjective = countByObjective(ledgerRows);
-
-  const titleCounts = new Map<string, number>();
-  for (const row of objectiveRows) {
-    titleCounts.set(row.title, (titleCounts.get(row.title) ?? 0) + 1);
-  }
-
-  const selected = objectiveRows.find((row) => {
-    if (titleCounts.get(row.title) !== 1) return false;
-    if ((resultCountByObjective.get(row.id) ?? 0) !== 0) return false;
-    if ((lootCountByObjective.get(row.id) ?? 0) !== 0) return false;
-    if ((ledgerCountByObjective.get(row.id) ?? 0) !== 0) return false;
-    if (row.flowStatus === "settled" || row.flowStatus === "closed") return false;
-    return true;
-  });
-
+export async function reviewLootTargetFromObjective(objectiveId: string): Promise<ReviewLootTarget> {
+  const selected = await readObjective(objectiveId);
   if (!selected) {
-    return null;
+    throw new Error(`管理员验收战利品目标不存在: ${objectiveId}`);
   }
 
   return {
     objective: {
       id: selected.id,
+      teamId: selected.teamId,
       title: selected.title,
-    },
-    previous: {
-      id: selected.id,
-      title: selected.title,
-      finalDueAt: selected.finalDueAt,
       stage: selected.stage,
       flowStatus: selected.flowStatus,
-      status: selected.status,
-      challengers: selected.challengers,
-      assignedChallengers: selected.assignedChallengers,
-      challengeApplications: selected.challengeApplications,
-      acceptedAt: selected.acceptedAt,
-      confirmationDueAt: selected.confirmationDueAt,
-      confirmedAt: selected.confirmedAt,
-      lootSubmittedAt: selected.lootSubmittedAt,
-      acceptedResult: selected.acceptedResult,
-      completionMultiplier: selected.completionMultiplier,
-      objectiveBasePoints: selected.objectiveBasePoints,
-      objectiveSettlementPoints: selected.objectiveSettlementPoints,
-      updatedAt: selected.updatedAt,
-      updatedBy: selected.updatedBy,
     },
   };
 }
@@ -128,7 +48,7 @@ export async function createReviewLootResult(
   }
 
   const result: ReviewLootResult = {
-    id: `res-testd-review-${Date.now()}`,
+    id: "res-testd-admin-review-loot",
     objectiveId: objective.id,
     title: input.resultTitle,
   };
@@ -175,7 +95,7 @@ export async function createReviewLoot(
   }
 
   const loot: ReviewLoot = {
-    id: `loot-testd-review-${Date.now()}`,
+    id: "loot-testd-admin-review-loot",
     objectiveId: objective.id,
     body: input.lootBody,
   };
@@ -193,35 +113,6 @@ export async function createReviewLoot(
   });
 
   return loot;
-}
-
-export async function restoreReviewLootTarget(target: ReviewLootTarget | null) {
-  if (!target) {
-    return;
-  }
-
-  await db
-    .update(objectives)
-    .set({
-      finalDueAt: target.previous.finalDueAt,
-      stage: target.previous.stage,
-      flowStatus: target.previous.flowStatus,
-      status: target.previous.status,
-      challengers: target.previous.challengers,
-      assignedChallengers: target.previous.assignedChallengers,
-      challengeApplications: target.previous.challengeApplications,
-      acceptedAt: target.previous.acceptedAt,
-      confirmationDueAt: target.previous.confirmationDueAt,
-      confirmedAt: target.previous.confirmedAt,
-      lootSubmittedAt: target.previous.lootSubmittedAt,
-      acceptedResult: target.previous.acceptedResult,
-      completionMultiplier: target.previous.completionMultiplier,
-      objectiveBasePoints: target.previous.objectiveBasePoints,
-      objectiveSettlementPoints: target.previous.objectiveSettlementPoints,
-      updatedAt: target.previous.updatedAt,
-      updatedBy: target.previous.updatedBy,
-    })
-    .where(eq(objectives.id, target.objective.id));
 }
 
 export async function deleteReviewLootResult(title: string, result?: ReviewLootResult | null) {
@@ -256,7 +147,7 @@ export async function testReviewLootLedgerAbsent(reason: string) {
 
 export async function reviewLootTargetSubmitted(target: ReviewLootTarget) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "submitted";
+  return !!objective && objective.flowStatus === "submitted" && !!objective.lootSubmittedAt;
 }
 
 export async function reviewLootTargetSettled(target: ReviewLootTarget, points: number) {
@@ -283,14 +174,14 @@ export async function reviewLootPresent(target: ReviewLootTarget, loot: ReviewLo
   return !!row && row.id === loot.id && row.objectiveId === target.objective.id;
 }
 
-export async function reviewLootLedgerPresent(target: ReviewLootTarget, memberName: string, points: number) {
+export async function reviewLootLedgerPresent(target: ReviewLootTarget, memberName: string, points: number, reason: string) {
   const [row] = await db
-    .select({ points: pointLedger.points })
+    .select({ points: pointLedger.points, reason: pointLedger.reason })
     .from(pointLedger)
     .where(and(eq(pointLedger.objectiveId, target.objective.id), eq(pointLedger.memberName, memberName)))
     .limit(1);
 
-  return !!row && row.points === points;
+  return !!row && row.points === points && row.reason === reason;
 }
 
 export function lootPagePath(target: ReviewLootTarget) {
@@ -317,43 +208,16 @@ async function readObjective(objectiveId: string) {
     .select({
       id: objectives.id,
       teamId: objectives.teamId,
+      title: objectives.title,
+      stage: objectives.stage,
       flowStatus: objectives.flowStatus,
+      lootSubmittedAt: objectives.lootSubmittedAt,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
     .limit(1);
 
   return row ?? null;
-}
-
-async function readAccount(email: string) {
-  const [row] = await db
-    .select({ role: teamMembers.role, status: users.status })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
-    .limit(1);
-
-  return row ?? null;
-}
-
-async function readAccountByName(name: string) {
-  const [row] = await db
-    .select({ role: teamMembers.role, status: users.status })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(eq(users.name, name))
-    .limit(1);
-
-  return row ?? null;
-}
-
-function countByObjective(rows: Array<{ objectiveId: string }>) {
-  const counts = new Map<string, number>();
-  for (const row of rows) {
-    counts.set(row.objectiveId, (counts.get(row.objectiveId) ?? 0) + 1);
-  }
-  return counts;
 }
 
 function today() {
