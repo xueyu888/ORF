@@ -14,7 +14,7 @@ export const testdCases = [
     title: "账号注册登录",
     doc: "testd-doc/cases/auth/用户注册.md",
     spec: "testd/auth/register/_entry/register.spec.ts",
-    enabled: false,
+    enabled: true,
   },
   {
     id: "auth.register.invalid-email",
