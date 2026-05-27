@@ -256,7 +256,8 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/成员提交匿名互评.md",
     spec: "testd/acceptance/member-submit-peer-review/_entry/member-submit-peer-review.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "acceptance.member-submit-peer-review.non-participant-forbidden",

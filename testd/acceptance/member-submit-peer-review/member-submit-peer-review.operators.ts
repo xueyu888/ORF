@@ -15,42 +15,19 @@ import {
   deletePeerReview,
   deletePeerReviewLoot,
   lootPagePath,
-  memberAccountActive,
   peerReviewAbsent,
   peerReviewFromResponse,
   peerReviewPresent,
-  peerReviewTargetAvailable,
+  peerReviewTargetFromObjective,
   preparePeerReviewTarget,
-  restorePeerReviewTarget,
-  selectPeerReviewTarget,
   targetLootPresent,
   targetSubmittedForMember,
   testLootAbsent,
 } from "./_support/member-submit-peer-review.helpers";
 
 export const memberSubmitPeerReviewOperators = {
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.peer_review_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => peerReviewTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectPeerReviewTarget(data);
-      if (!target) {
-        throw new Error("没有可构造成员提交匿名互评起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredPeerReviewTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => peerReviewTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await preparePeerReviewTarget(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName"));
@@ -60,10 +37,6 @@ export const memberSubmitPeerReviewOperators = {
       await expect
         .poll(() => targetSubmittedForMember(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName")))
         .toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restorePeerReviewTarget(optionalPeerReviewTarget(params, "target"));
     },
   },
 
@@ -164,9 +137,9 @@ function requiredPeerReviewTarget(params: StepParams, key: string): PeerReviewTa
     typeof (value as PeerReviewTarget).objective !== "object" ||
     (value as PeerReviewTarget).objective === null ||
     typeof (value as PeerReviewTarget).objective.id !== "string" ||
+    typeof (value as PeerReviewTarget).objective.teamId !== "string" ||
     typeof (value as PeerReviewTarget).objective.title !== "string" ||
-    typeof (value as PeerReviewTarget).previous !== "object" ||
-    (value as PeerReviewTarget).previous === null
+    typeof (value as PeerReviewTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是成员提交匿名互评目标`);
   }

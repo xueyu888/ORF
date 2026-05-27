@@ -1,100 +1,25 @@
-import type { Page } from "@playwright/test";
-import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { objectiveContributionReviews, objectiveLoot, objectives, teamMembers, users } from "../../../../server/db/schema";
+import { and, eq } from "drizzle-orm";
+import { db } from "../../../../server/db/client";
+import { objectiveContributionReviews, objectiveLoot, objectives } from "../../../../server/db/schema";
 import type {
-  MemberSubmitPeerReviewCaseData,
   PeerReviewLoot,
   PeerReviewTarget,
   SubmittedPeerReview,
 } from "./member-submit-peer-review.context";
 
-export async function closeMemberSubmitPeerReviewTestDb() {
-  await closeDb();
-}
-
-export async function memberAccountActive(email: string) {
-  const account = await readMemberAccount(email);
-  return !!account && account.role === "member" && account.status === "active";
-}
-
-export async function peerReviewTargetAvailable(data: Pick<MemberSubmitPeerReviewCaseData, "email" | "name">) {
-  return (await selectPeerReviewTarget(data)) !== null;
-}
-
-export async function selectPeerReviewTarget(data: Pick<MemberSubmitPeerReviewCaseData, "email" | "name">): Promise<PeerReviewTarget | null> {
-  const member = await readMemberAccount(data.email);
-  if (!member) {
-    return null;
-  }
-
-  const objectiveRows = await db
-    .select({
-      id: objectives.id,
-      title: objectives.title,
-      stage: objectives.stage,
-      flowStatus: objectives.flowStatus,
-      status: objectives.status,
-      challengers: objectives.challengers,
-      assignedChallengers: objectives.assignedChallengers,
-      challengeApplications: objectives.challengeApplications,
-      acceptedAt: objectives.acceptedAt,
-      confirmationDueAt: objectives.confirmationDueAt,
-      confirmedAt: objectives.confirmedAt,
-      lootSubmittedAt: objectives.lootSubmittedAt,
-      acceptedResult: objectives.acceptedResult,
-      objectiveSettlementPoints: objectives.objectiveSettlementPoints,
-      updatedAt: objectives.updatedAt,
-      updatedBy: objectives.updatedBy,
-    })
-    .from(objectives)
-    .where(eq(objectives.teamId, member.teamId));
-
-  const lootRows = await db.select({ objectiveId: objectiveLoot.objectiveId }).from(objectiveLoot);
-  const lootCountByObjective = new Map<string, number>();
-  for (const row of lootRows) {
-    lootCountByObjective.set(row.objectiveId, (lootCountByObjective.get(row.objectiveId) ?? 0) + 1);
-  }
-
-  const titleCounts = new Map<string, number>();
-  for (const row of objectiveRows) {
-    titleCounts.set(row.title, (titleCounts.get(row.title) ?? 0) + 1);
-  }
-
-  const selected = objectiveRows.find((row) => {
-    if (titleCounts.get(row.title) !== 1) return false;
-    if ((lootCountByObjective.get(row.id) ?? 0) !== 0) return false;
-    if (row.acceptedResult || row.objectiveSettlementPoints != null) return false;
-    if (row.flowStatus === "settled" || row.flowStatus === "closed") return false;
-    return true;
-  });
-
+export async function peerReviewTargetFromObjective(objectiveId: string): Promise<PeerReviewTarget> {
+  const selected = await readObjective(objectiveId);
   if (!selected) {
-    return null;
+    throw new Error(`成员提交匿名互评目标不存在: ${objectiveId}`);
   }
 
   return {
     objective: {
       id: selected.id,
-      title: selected.title,
-    },
-    previous: {
-      id: selected.id,
+      teamId: selected.teamId,
       title: selected.title,
       stage: selected.stage,
       flowStatus: selected.flowStatus,
-      status: selected.status,
-      challengers: selected.challengers,
-      assignedChallengers: selected.assignedChallengers,
-      challengeApplications: selected.challengeApplications,
-      acceptedAt: selected.acceptedAt,
-      confirmationDueAt: selected.confirmationDueAt,
-      confirmedAt: selected.confirmedAt,
-      lootSubmittedAt: selected.lootSubmittedAt,
-      acceptedResult: selected.acceptedResult,
-      objectiveSettlementPoints: selected.objectiveSettlementPoints,
-      updatedAt: selected.updatedAt,
-      updatedBy: selected.updatedBy,
     },
   };
 }
@@ -125,7 +50,7 @@ export async function createPeerReviewLoot(target: PeerReviewTarget, body: strin
     throw new Error("目标不存在，无法创建匿名互评前置战利品");
   }
 
-  const id = `loot-testd-peer-${Date.now()}`;
+  const id = "loot-testd-member-submit-peer-review";
   await db.insert(objectiveLoot).values({
     id,
     teamId: objective.teamId,
@@ -139,32 +64,6 @@ export async function createPeerReviewLoot(target: PeerReviewTarget, body: strin
   });
 
   return { id, objectiveId: objective.id, body };
-}
-
-export async function restorePeerReviewTarget(target: PeerReviewTarget | null) {
-  if (!target) {
-    return;
-  }
-
-  await db
-    .update(objectives)
-    .set({
-      stage: target.previous.stage,
-      flowStatus: target.previous.flowStatus,
-      status: target.previous.status,
-      challengers: target.previous.challengers,
-      assignedChallengers: target.previous.assignedChallengers,
-      challengeApplications: target.previous.challengeApplications,
-      acceptedAt: target.previous.acceptedAt,
-      confirmationDueAt: target.previous.confirmationDueAt,
-      confirmedAt: target.previous.confirmedAt,
-      lootSubmittedAt: target.previous.lootSubmittedAt,
-      acceptedResult: target.previous.acceptedResult,
-      objectiveSettlementPoints: target.previous.objectiveSettlementPoints,
-      updatedAt: target.previous.updatedAt,
-      updatedBy: target.previous.updatedBy,
-    })
-    .where(eq(objectives.id, target.objective.id));
 }
 
 export async function deletePeerReviewLoot(body: string, loot?: PeerReviewLoot | null) {
@@ -182,12 +81,15 @@ export async function deletePeerReview(target: PeerReviewTarget | null, reviewer
     await db
       .delete(objectiveContributionReviews)
       .where(and(eq(objectiveContributionReviews.objectiveId, target.objective.id), eq(objectiveContributionReviews.reviewer, reviewer)));
+    return;
   }
+
+  await db.delete(objectiveContributionReviews).where(eq(objectiveContributionReviews.reviewer, reviewer));
 }
 
 export async function targetSubmittedForMember(target: PeerReviewTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "submitted" && objective.challengers.includes(memberName);
+  return !!objective && objective.flowStatus === "submitted" && !!objective.lootSubmittedAt && objective.challengers.includes(memberName);
 }
 
 export async function testLootAbsent(body: string) {
@@ -195,7 +97,9 @@ export async function testLootAbsent(body: string) {
 }
 
 export async function peerReviewAbsent(target: PeerReviewTarget | null, reviewer: string) {
-  if (!target) return true;
+  if (!target) {
+    return (await readPeerReviewsByReviewer(reviewer)).length === 0;
+  }
   return (await readPeerReview(target.objective.id, reviewer)) === null;
 }
 
@@ -261,37 +165,26 @@ async function readPeerReview(objectiveId: string, reviewer: string) {
   return row ?? null;
 }
 
+async function readPeerReviewsByReviewer(reviewer: string) {
+  return db
+    .select({ id: objectiveContributionReviews.id })
+    .from(objectiveContributionReviews)
+    .where(eq(objectiveContributionReviews.reviewer, reviewer));
+}
+
 async function readObjective(objectiveId: string) {
   const [row] = await db
     .select({
       id: objectives.id,
       teamId: objectives.teamId,
+      title: objectives.title,
+      stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      lootSubmittedAt: objectives.lootSubmittedAt,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
-    .limit(1);
-
-  return row ?? null;
-}
-
-async function readMemberAccount(email: string): Promise<{
-  userId: string;
-  teamId: string;
-  role: string;
-  status: string;
-} | null> {
-  const [row] = await db
-    .select({
-      userId: users.id,
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-      status: users.status,
-    })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
     .limit(1);
 
   return row ?? null;
