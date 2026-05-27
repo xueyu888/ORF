@@ -304,7 +304,8 @@ export const testdCases = [
     doc: "testd-doc/cases/statistics/成员分数统计.md",
     spec: "testd/statistics/member-score-statistics/_entry/member-score-statistics.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "statistics.member-score.empty",
