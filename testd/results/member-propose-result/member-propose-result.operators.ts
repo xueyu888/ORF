@@ -11,14 +11,12 @@ import type {
 import {
   createdResultFromResponse,
   deleteTestResult,
-  memberAccountActive,
   objectivePanel,
   prepareProposalTarget,
-  proposalTargetAvailable,
-  restoreProposalTarget,
-  selectProposalTarget,
+  proposalTargetFromObjective,
+  targetAddMenuButton,
   targetCanProposeResult,
-  targetMetricButton,
+  targetMetricMenuItem,
   targetResultAbsent,
   targetResultPresent,
   targetResultRow,
@@ -26,28 +24,8 @@ import {
 } from "./_support/member-propose-result.helpers";
 
 export const memberProposeResultOperators = {
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.proposal_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => proposalTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectProposalTarget(data);
-      if (!target) {
-        throw new Error("没有可构造成员提出指标起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredProposalTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => proposalTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareProposalTarget(requiredProposalTarget(params, "target"), requiredString(params, "memberName"));
@@ -67,16 +45,14 @@ export const memberProposeResultOperators = {
 
     result_present: async ({ params }) => {
       await expect
-        .poll(() => targetResultPresent(requiredProposalTarget(params, "target"), {
-          name: requiredString(params, "memberName"),
-          resultTitle: requiredString(params, "title"),
-          metricName: requiredString(params, "metricName"),
-        }))
+        .poll(() =>
+          targetResultPresent(requiredProposalTarget(params, "target"), {
+            name: requiredString(params, "memberName"),
+            resultTitle: requiredString(params, "title"),
+            metricName: requiredString(params, "metricName"),
+          }),
+        )
         .toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restoreProposalTarget(optionalProposalTarget(params, "target"));
     },
   },
 
@@ -116,11 +92,16 @@ export const memberProposeResultOperators = {
     },
 
     propose_metric_enabled: async ({ ctx, params }) => {
-      await expect(targetMetricButton(ctx.page, requiredProposalTarget(params, "target"))).toBeEnabled();
+      const target = requiredProposalTarget(params, "target");
+      await openMetricProposalMenu(ctx, target);
+      await expect(targetMetricMenuItem(ctx.page, target)).toBeEnabled();
+      await targetAddMenuButton(ctx.page, target).click();
     },
 
     propose_metric: async ({ ctx, params }) => {
-      await targetMetricButton(ctx.page, requiredProposalTarget(params, "target")).click();
+      const target = requiredProposalTarget(params, "target");
+      await openMetricProposalMenu(ctx, target);
+      await targetMetricMenuItem(ctx.page, target).click();
     },
 
     result_visible: async ({ ctx, params }) => {
@@ -128,12 +109,21 @@ export const memberProposeResultOperators = {
     },
   },
 
-  "page.result_modal": {
-    visible: async ({ ctx }) => {
-      await expect(ctx.page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
+  "page.result_inline_editor": {
+    submit: async ({ ctx }) => {
+      await ctx.page.getByLabel("编辑指标标题").press("Enter");
     },
   },
 } satisfies OperatorRegistry<TestContext, MemberProposeResultCaseData>;
+
+async function openMetricProposalMenu(ctx: TestContext, target: MemberProposeResultTarget) {
+  await objectivePanel(ctx.page, target).hover();
+  await expect(targetAddMenuButton(ctx.page, target)).toBeEnabled();
+  if (!(await targetMetricMenuItem(ctx.page, target).isVisible())) {
+    await targetAddMenuButton(ctx.page, target).click();
+  }
+  await expect(targetMetricMenuItem(ctx.page, target)).toBeVisible();
+}
 
 function requiredProposalTarget(params: StepParams, key: string): MemberProposeResultTarget {
   const value = params[key];
@@ -144,22 +134,12 @@ function requiredProposalTarget(params: StepParams, key: string): MemberProposeR
     (value as MemberProposeResultTarget).objective === null ||
     typeof (value as MemberProposeResultTarget).objective.id !== "string" ||
     typeof (value as MemberProposeResultTarget).objective.title !== "string" ||
-    typeof (value as MemberProposeResultTarget).previous !== "object" ||
-    (value as MemberProposeResultTarget).previous === null
+    typeof (value as MemberProposeResultTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是成员提出指标目标`);
   }
 
   return value as MemberProposeResultTarget;
-}
-
-function optionalProposalTarget(params: StepParams, key: string): MemberProposeResultTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredProposalTarget(params, key);
 }
 
 function requiredCreatedResult(params: StepParams, key: string): MemberProposedResult {

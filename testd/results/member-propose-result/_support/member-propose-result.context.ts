@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { BountySource, ChallengeApplication, ObjectiveFlowStatus, OrfStage, WorkStatus } from "../../../../src/types/orf";
+import type { BountySource, ObjectiveFlowStatus } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -11,6 +11,8 @@ export type MemberProposeResultCaseData = {
   password: string;
   name: string;
   role: "member";
+  objectiveId: string;
+  objectiveTitle: string;
   resultTitle: string;
   metricName: string;
 };
@@ -19,24 +21,8 @@ export type MemberProposeResultTarget = {
   objective: {
     id: string;
     title: string;
+    flowStatus: ObjectiveFlowStatus;
   };
-  previous: MemberProposeObjectiveSnapshot;
-};
-
-export type MemberProposeObjectiveSnapshot = {
-  id: string;
-  title: string;
-  stage: OrfStage;
-  flowStatus: ObjectiveFlowStatus;
-  status: WorkStatus;
-  challengers: string[];
-  assignedChallengers: string[];
-  challengeApplications: ChallengeApplication[];
-  acceptedAt: string | null;
-  confirmationDueAt: string | null;
-  confirmedAt: string | null;
-  updatedAt: string;
-  updatedBy: string | null;
 };
 
 export type MemberProposedResult = {

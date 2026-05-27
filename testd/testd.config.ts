@@ -160,7 +160,8 @@ export const testdCases = [
     doc: "testd-doc/cases/results/成员提出指标.md",
     spec: "testd/results/member-propose-result/_entry/member-propose-result.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "results.member-propose.non-participant-forbidden",
