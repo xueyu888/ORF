@@ -11,48 +11,27 @@ import type {
   TestContext,
 } from "./_support/member-create-task.context";
 import {
+  createdSubtaskFromResponse,
   createdTaskFromResponse,
   deleteTestTask,
-  memberAccountActive,
   objectivePanel,
   prepareTaskTarget,
-  recordCreatedSubtask,
-  restoreTaskTarget,
-  selectTaskTarget,
+  targetAddMenuButton,
   targetCanCreateTask,
+  targetSubtaskButton,
   targetSubtaskRow,
   targetTaskAbsent,
-  targetTaskButton,
+  targetTaskMenuItem,
   targetTaskPresent,
   targetTaskRow,
   taskSubtaskPresent,
-  taskTargetAvailable,
+  taskTargetFromObjective,
   testTaskAbsent,
 } from "./_support/member-create-task.helpers";
 
 export const memberCreateTaskOperators = {
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.task_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => taskTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectTaskTarget(data);
-      if (!target) {
-        throw new Error("没有可构造成员新增行动项起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredTaskTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => taskTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareTaskTarget(requiredTaskTarget(params, "target"), requiredString(params, "memberName"));
@@ -72,16 +51,14 @@ export const memberCreateTaskOperators = {
 
     task_present: async ({ params }) => {
       await expect
-        .poll(() => targetTaskPresent(requiredTaskTarget(params, "target"), {
-          name: requiredString(params, "assignee"),
-          taskTitle: requiredString(params, "title"),
-          taskDescription: requiredString(params, "description"),
-        }))
+        .poll(() =>
+          targetTaskPresent(requiredTaskTarget(params, "target"), {
+            name: requiredString(params, "assignee"),
+            taskTitle: requiredString(params, "title"),
+            taskDescription: requiredString(params, "description"),
+          }),
+        )
         .toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restoreTaskTarget(optionalTaskTarget(params, "target"));
     },
   },
 
@@ -139,7 +116,7 @@ export const memberCreateTaskOperators = {
     record_subtask: async ({ params }) => {
       const response = await requiredCapturedResponse(params, "response");
       expect(response.ok).toBe(true);
-      return recordCreatedSubtask(requiredTask(params, "task"), requiredString(params, "label"));
+      return createdSubtaskFromResponse(response.body, requiredTask(params, "task"));
     },
   },
 
@@ -149,17 +126,24 @@ export const memberCreateTaskOperators = {
     },
 
     add_task_enabled: async ({ ctx, params }) => {
-      await expect(targetTaskButton(ctx.page, requiredTaskTarget(params, "target"))).toBeEnabled();
+      const target = requiredTaskTarget(params, "target");
+      await openTaskCreationMenu(ctx, target);
+      await expect(targetTaskMenuItem(ctx.page, target)).toBeEnabled();
+      await targetAddMenuButton(ctx.page, target).click();
     },
 
     add_task: async ({ ctx, params }) => {
-      await targetTaskButton(ctx.page, requiredTaskTarget(params, "target")).click();
+      const target = requiredTaskTarget(params, "target");
+      await openTaskCreationMenu(ctx, target);
+      await targetTaskMenuItem(ctx.page, target).click();
     },
 
     add_subtask: async ({ ctx, params }) => {
-      const row = targetTaskRow(ctx.page, requiredTaskTarget(params, "target"), requiredTask(params, "task"));
-      await row.hover();
-      await row.getByLabel("新增子行动项").click();
+      const target = requiredTaskTarget(params, "target");
+      const task = requiredTask(params, "task");
+      await targetTaskRow(ctx.page, target, task).hover();
+      await expect(targetSubtaskButton(ctx.page, target, task)).toBeEnabled();
+      await targetSubtaskButton(ctx.page, target, task).click();
     },
 
     task_visible: async ({ ctx, params }) => {
@@ -167,18 +151,31 @@ export const memberCreateTaskOperators = {
     },
 
     subtask_visible: async ({ ctx, params }) => {
-      await expect(
-        targetSubtaskRow(ctx.page, requiredTaskTarget(params, "target"), requiredTask(params, "task"), requiredSubtask(params, "subtask")),
-      ).toBeVisible();
+      await expect(targetSubtaskRow(ctx.page, requiredTaskTarget(params, "target"), requiredSubtask(params, "subtask"))).toBeVisible();
     },
   },
 
-  "page.task_modal": {
-    visible: async ({ ctx }) => {
-      await expect(ctx.page.getByRole("dialog", { name: "新建行动项" })).toBeVisible();
+  "page.task_inline_editor": {
+    submit: async ({ ctx }) => {
+      await ctx.page.getByLabel("编辑行动项标题").press("Enter");
+    },
+  },
+
+  "page.subtask_inline_editor": {
+    submit: async ({ ctx }) => {
+      await ctx.page.getByLabel("编辑子行动项标题").press("Enter");
     },
   },
 } satisfies OperatorRegistry<TestContext, MemberCreateTaskCaseData>;
+
+async function openTaskCreationMenu(ctx: TestContext, target: MemberCreateTaskTarget) {
+  await objectivePanel(ctx.page, target).hover();
+  await expect(targetAddMenuButton(ctx.page, target)).toBeEnabled();
+  if (!(await targetTaskMenuItem(ctx.page, target).isVisible())) {
+    await targetAddMenuButton(ctx.page, target).click();
+  }
+  await expect(targetTaskMenuItem(ctx.page, target)).toBeVisible();
+}
 
 function requiredTaskTarget(params: StepParams, key: string): MemberCreateTaskTarget {
   const value = params[key];
@@ -189,22 +186,12 @@ function requiredTaskTarget(params: StepParams, key: string): MemberCreateTaskTa
     (value as MemberCreateTaskTarget).objective === null ||
     typeof (value as MemberCreateTaskTarget).objective.id !== "string" ||
     typeof (value as MemberCreateTaskTarget).objective.title !== "string" ||
-    typeof (value as MemberCreateTaskTarget).previous !== "object" ||
-    (value as MemberCreateTaskTarget).previous === null
+    typeof (value as MemberCreateTaskTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是成员新增行动项目标`);
   }
 
   return value as MemberCreateTaskTarget;
-}
-
-function optionalTaskTarget(params: StepParams, key: string): MemberCreateTaskTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredTaskTarget(params, key);
 }
 
 function requiredTask(params: StepParams, key: string): MemberCreatedTask {

@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { ChallengeApplication, ObjectiveFlowStatus, OrfStage, Priority, TaskStatus, WorkStatus } from "../../../../src/types/orf";
+import type { ObjectiveFlowStatus, Priority, TaskStatus } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -11,6 +11,8 @@ export type MemberCreateTaskCaseData = {
   password: string;
   name: string;
   role: "member";
+  objectiveId: string;
+  objectiveTitle: string;
   taskTitle: string;
   taskDescription: string;
   subtaskLabel: string;
@@ -20,21 +22,8 @@ export type MemberCreateTaskTarget = {
   objective: {
     id: string;
     title: string;
+    flowStatus: ObjectiveFlowStatus;
   };
-  previous: MemberCreateTaskObjectiveSnapshot;
-};
-
-export type MemberCreateTaskObjectiveSnapshot = {
-  id: string;
-  title: string;
-  stage: OrfStage;
-  flowStatus: ObjectiveFlowStatus;
-  status: WorkStatus;
-  challengers: string[];
-  assignedChallengers: string[];
-  challengeApplications: ChallengeApplication[];
-  updatedAt: string;
-  updatedBy: string | null;
 };
 
 export type MemberCreatedTask = {

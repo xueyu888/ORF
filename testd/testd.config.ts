@@ -176,7 +176,8 @@ export const testdCases = [
     doc: "testd-doc/cases/tasks/用户增加行动项和子行动项.md",
     spec: "testd/tasks/member-create-task/_entry/member-create-task.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "tasks.member-create-task.forbidden",
