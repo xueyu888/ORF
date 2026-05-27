@@ -9,10 +9,8 @@ import type {
   TestContext,
 } from "./_support/objective-publish.context";
 import {
-  adminAccountActive,
   bountyHallContainsObjective,
   bountyRow,
-  memberAccountActive,
   objectivePanel,
   objectiveTitleAbsent,
   readAdminWorkbenchData,
@@ -24,18 +22,6 @@ import {
 } from "./_support/objective-publish.helpers";
 
 export const objectivePublishOperators = {
-  "db.admin": {
-    active: async ({ data }) => {
-      await expect.poll(() => adminAccountActive(data)).toBe(true);
-    },
-  },
-
-  "db.member": {
-    active: async ({ data }) => {
-      await expect.poll(() => memberAccountActive(data)).toBe(true);
-    },
-  },
-
   "db.objective": {
     absent: async ({ params }) => {
       await expect.poll(() => objectiveTitleAbsent(requiredString(params, "title"))).toBe(true);

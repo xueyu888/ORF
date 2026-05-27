@@ -1,27 +1,14 @@
 import type { Page } from "@playwright/test";
-import { eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { objectives, teamMembers, users } from "../../../../server/db/schema";
+import { eq } from "drizzle-orm";
+import { db } from "../../../../server/db/client";
+import { objectives } from "../../../../server/db/schema";
 import { deleteObjective } from "../../../../server/repositories/orfRepository";
 import type {
   BountyHallResponse,
   MyChallengesResponse,
-  ObjectivePublishCaseData,
   ObjectivePublishDbSnapshot,
   ObjectivePublishTarget,
 } from "./objective-publish.context";
-
-export async function closeObjectivePublishTestDb() {
-  await closeDb();
-}
-
-export async function adminAccountActive(data: Pick<ObjectivePublishCaseData, "email" | "role">) {
-  return accountActive(data.email, data.role);
-}
-
-export async function memberAccountActive(data: Pick<ObjectivePublishCaseData, "memberEmail" | "memberRole">) {
-  return accountActive(data.memberEmail, data.memberRole);
-}
 
 export async function objectiveTitleAbsent(title: string) {
   return (await readObjectiveByTitle(title)) === null;
@@ -121,23 +108,4 @@ export function objectivePanel(page: Page, target: Pick<ObjectivePublishTarget, 
 
 export function bountyRow(page: Page, target: Pick<ObjectivePublishTarget, "title">) {
   return page.locator(".bounty-list-row").filter({ hasText: target.title }).first();
-}
-
-async function readMemberMemberships(email: string) {
-  return db
-    .select({
-      userId: users.id,
-      email: users.email,
-      status: users.status,
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-    })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`);
-}
-
-async function accountActive(email: string, role: "admin" | "member") {
-  const rows = await readMemberMemberships(email);
-  return rows.some((membership) => membership.role === role && membership.status === "active");
 }

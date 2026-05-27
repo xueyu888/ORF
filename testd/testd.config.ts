@@ -82,7 +82,8 @@ export const testdCases = [
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
     spec: "testd/objectives/publish/_entry/objective-publish.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "objectives.publish.member-forbidden",
