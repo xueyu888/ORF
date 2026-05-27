@@ -192,7 +192,8 @@ export const testdCases = [
     doc: "testd-doc/cases/implementation/管理员冻结目标进入实施阶段.md",
     spec: "testd/implementation/admin-freeze-objective/_entry/admin-freeze-objective.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "implementation.admin-freeze-objective.member-forbidden",

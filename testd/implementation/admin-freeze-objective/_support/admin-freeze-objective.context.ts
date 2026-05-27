@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { ChallengeApplication, ObjectiveFlowStatus, OrfStage, WorkStatus } from "../../../../src/types/orf";
+import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -9,7 +9,10 @@ export type TestContext = {
 export type AdminFreezeObjectiveCaseData = {
   email: string;
   password: string;
+  name: string;
   role: "admin";
+  objectiveId: string;
+  objectiveTitle: string;
   freezeResultTitle: string;
   freezeMetricName: string;
 };
@@ -18,24 +21,8 @@ export type AdminFreezeObjectiveTarget = {
   objective: {
     id: string;
     title: string;
+    flowStatus: ObjectiveFlowStatus;
   };
-  previous: AdminFreezeObjectiveSnapshot;
-};
-
-export type AdminFreezeObjectiveSnapshot = {
-  id: string;
-  title: string;
-  stage: OrfStage;
-  flowStatus: ObjectiveFlowStatus;
-  status: WorkStatus;
-  challengers: string[];
-  assignedChallengers: string[];
-  challengeApplications: ChallengeApplication[];
-  acceptedAt: string | null;
-  confirmationDueAt: string | null;
-  confirmedAt: string | null;
-  updatedAt: string;
-  updatedBy: string | null;
 };
 
 export type FreezePrerequisiteResult = {

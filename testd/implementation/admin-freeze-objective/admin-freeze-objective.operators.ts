@@ -11,46 +11,23 @@ import type {
   TestContext,
 } from "./_support/admin-freeze-objective.context";
 import {
-  adminAccountActive,
   createFreezePrerequisiteResult,
   deleteFreezePrerequisiteResult,
   freezeButton,
-  freezeTargetAvailable,
+  freezeTargetFromObjective,
   frozenObjectiveFromResponse,
   frozenStatus,
   objectivePanel,
-  restoreFreezeTarget,
-  selectFreezeTarget,
+  prepareFreezeTarget,
   targetFrozen,
   targetReestimating,
   targetResultPresent,
   testResultAbsent,
-  prepareFreezeTarget,
 } from "./_support/admin-freeze-objective.helpers";
 
 export const adminFreezeObjectiveOperators = {
-  "db.admin": {
-    active: async ({ params }) => {
-      await expect.poll(() => adminAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.freeze_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => freezeTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectFreezeTarget(data);
-      if (!target) {
-        throw new Error("没有可构造冻结起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredFreezeTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => freezeTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareFreezeTarget(requiredFreezeTarget(params, "target"));
@@ -62,10 +39,6 @@ export const adminFreezeObjectiveOperators = {
 
     frozen: async ({ params }) => {
       await expect.poll(() => targetFrozen(requiredFreezeTarget(params, "target"))).toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restoreFreezeTarget(optionalFreezeTarget(params, "target"));
     },
   },
 
@@ -158,22 +131,12 @@ function requiredFreezeTarget(params: StepParams, key: string): AdminFreezeObjec
     (value as AdminFreezeObjectiveTarget).objective === null ||
     typeof (value as AdminFreezeObjectiveTarget).objective.id !== "string" ||
     typeof (value as AdminFreezeObjectiveTarget).objective.title !== "string" ||
-    typeof (value as AdminFreezeObjectiveTarget).previous !== "object" ||
-    (value as AdminFreezeObjectiveTarget).previous === null
+    typeof (value as AdminFreezeObjectiveTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是冻结目标`);
   }
 
   return value as AdminFreezeObjectiveTarget;
-}
-
-function optionalFreezeTarget(params: StepParams, key: string): AdminFreezeObjectiveTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredFreezeTarget(params, key);
 }
 
 function requiredFreezeResult(params: StepParams, key: string): FreezePrerequisiteResult {
