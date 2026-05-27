@@ -5330,16 +5330,6 @@ body[data-dragging-floating="true"] {
     color 140ms ease;
 }
 
-.orf-objective-metric-empty {
-  display: grid;
-  min-height: 56px;
-  align-items: center;
-  margin: 0 10px;
-  border-radius: var(--orf-radius-control);
-  padding: 8px 20px;
-  color: var(--orf-text-secondary);
-}
-
 .orf-result-row::before,
 .orf-task-row::before,
 .orf-subtask-row::before {

@@ -78,6 +78,11 @@ test("published objective without concrete results is visible in the bounty hall
   assert.equal(item.result, null);
   assert.deepEqual(item.results, []);
   assert.equal(item.uncertaintyPoints, 0);
+
+  const commanderHall = await getBountyHallData(fixture.commander.name, { scope: fixture.scope }, "admin");
+  const commanderItem = commanderHall.availableItems.find((item) => item.objective.id === objective.id);
+  assert.ok(commanderItem, "commanders should see the same published Objective in the bounty hall");
+  assert.equal(commanderItem.hasCurrentApplication, false);
 });
 
 test("recruited objective without concrete results is visible as a recruitment item", async () => {
@@ -106,6 +111,13 @@ test("recruited objective without concrete results is visible as a recruitment i
   assert.equal(item.isRecruitment, true);
   assert.equal(item.result, null);
   assert.deepEqual(item.results, []);
+
+  const commanderHall = await getBountyHallData(fixture.commander.name, { scope: fixture.scope }, "admin");
+  assert.ok(
+    commanderHall.availableItems.find((item) => item.objective.id === objective.id),
+    "commanders should see recruiting Objectives without becoming the recruited actor",
+  );
+  assert.equal(commanderHall.recruitmentItems.some((item) => item.objective.id === objective.id), false);
 });
 
 test("task management data removes accepted challengers from pending recruitment lists", async () => {
@@ -189,6 +201,7 @@ test("commander and challenger can complete the application-to-settlement ORF ba
   const applicationNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
   assert.equal(applicationNotifications[0]?.kind, "challenge.application.created");
   assert.equal(applicationNotifications[0]?.targetId, objective.id);
+  assert.equal(applicationNotifications[0]?.targetHref, `/tasks#objective:${encodeURIComponent(objective.id)}`);
   assert.equal(applicationNotifications[0]?.readAt, null);
 
   const hallAfterApply = await getBountyHallData(fixture.challenger.name);
@@ -368,6 +381,7 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   const recruitmentNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
   assert.equal(recruitmentNotifications[0]?.kind, "objective.recruitment.created");
   assert.equal(recruitmentNotifications[0]?.targetId, objective.id);
+  assert.equal(recruitmentNotifications[0]?.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
 
   const hallForRecruited = await getBountyHallData(fixture.challenger.name);
   const recruitmentItem = hallForRecruited.recruitmentItems.find((item) => item.objective.id === objective.id);
@@ -528,11 +542,19 @@ test("challenge participant entrypoints reject administrators", async () => {
   await withApiServer(fixture, async (app) => {
     const bounties = await apiInject(app, fixture.commander, "GET", "/api/bounties");
     assert.equal(bounties.statusCode, 200);
-    assert.deepEqual(JSON.parse(bounties.body).availableItems, []);
-    assert.deepEqual(JSON.parse(bounties.body).recruitmentItems, []);
+    const bountyPayload = bounties.json() as {
+      availableItems: Array<{ hasCurrentApplication: boolean; objective: { id: string } }>;
+      recruitmentItems: Array<{ objective: { id: string } }>;
+    };
+    const visibleApplicationObjective = bountyPayload.availableItems.find((item) => item.objective.id === applicationObjective.id);
+    assert.ok(visibleApplicationObjective, "commanders should see bounty hall entries instead of receiving an empty list");
+    assert.equal(visibleApplicationObjective.hasCurrentApplication, false);
 
     const response = await apiInject(app, fixture.commander, "POST", `/api/objectives/${encodeURIComponent(applicationObjective.id)}/challenge-applications`);
     assert.equal(response.statusCode, 403);
+
+    const acceptance = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/challenge`);
+    assert.equal(acceptance.statusCode, 403);
   });
 
   const data = await getTaskManagementData({ scope: fixture.scope });
@@ -1478,6 +1500,10 @@ test("API work item creation trims labels and prevents blank persisted titles", 
       label: "   ",
     });
     assert.equal(defaultLabel.statusCode, 200);
+    const defaultLabelPayload = defaultLabel.json() as { item: Task["checklist"][number] };
+    assert.equal(defaultLabelPayload.item.label, "新子任务");
+    assert.equal(defaultLabelPayload.item.done, false);
+    assert.ok(defaultLabelPayload.item.id);
 
     const data = await getTaskManagementData({ scope: fixture.scope });
     const storedTask = data.tasks.find((item) => item.id === trimmedTaskPayload.task.id);
@@ -1569,7 +1595,11 @@ test("concurrent result, task, and checklist creation reserve stable sort orders
   const checklistCreates = await Promise.all(
     expectedSortOrders.map((index) => createChecklistItem(checklistTask.id, { label: `${fixture.prefix} concurrent checklist ${index}` })),
   );
-  assert.deepEqual(checklistCreates, expectedSortOrders.map(() => true));
+  assert.equal(checklistCreates.every(Boolean), true);
+  assert.deepEqual(
+    checklistCreates.map((item) => item?.label).sort(),
+    expectedSortOrders.map((index) => `${fixture.prefix} concurrent checklist ${index}`).sort(),
+  );
   const storedChecklist = await db
     .select({ id: taskChecklistItems.id, sortOrder: taskChecklistItems.sortOrder })
     .from(taskChecklistItems)
@@ -2103,6 +2133,7 @@ test("task and comment API writes require objective participation", async () => 
       label: "challenger can add",
     });
     assert.equal(challengerChecklist.statusCode, 200);
+    assert.equal((challengerChecklist.json() as { item: Task["checklist"][number] }).item.label, "challenger can add");
 
     const observerPatch = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(taskId)}`, {
       title: "observer should not edit",
@@ -2188,6 +2219,129 @@ test("task and comment API writes require objective participation", async () => 
   });
 });
 
+test("objective challengers share task and subtask maintenance", async () => {
+  const fixture = await createFixture("api-shared-task-maintenance");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "shared task maintenance objective");
+
+  await withApiServer(fixture, async (app) => {
+    const firstTaskResponse = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: `${fixture.prefix} shared task A`,
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    });
+    assert.equal(firstTaskResponse.statusCode, 200, firstTaskResponse.body);
+    const firstTask = (firstTaskResponse.json() as { task: Task }).task;
+    assert.equal(firstTask.createdBy, fixture.challenger.id);
+    assert.equal(firstTask.updatedBy, fixture.challenger.id);
+
+    const secondTaskResponse = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
+      title: `${fixture.prefix} shared task B`,
+      linkedObjectiveId: objective.id,
+      linkedResultId: result.id,
+    });
+    assert.equal(secondTaskResponse.statusCode, 200, secondTaskResponse.body);
+    const secondTask = (secondTaskResponse.json() as { task: Task }).task;
+
+    const firstChecklistResponse = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(firstTask.id)}/checklist`, {
+      label: `${fixture.prefix} shared subtask A`,
+    });
+    assert.equal(firstChecklistResponse.statusCode, 200, firstChecklistResponse.body);
+    const firstChecklistItem = (firstChecklistResponse.json() as { item: Task["checklist"][number] }).item;
+
+    const observerStatusBeforeJoin = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(firstTask.id)}/status`, {
+      status: "In Progress",
+    });
+    assert.equal(observerStatusBeforeJoin.statusCode, 403);
+
+    const recruitedObserver = await recruitObjectiveChallengers(objective.id, [fixture.observer.name], fixture.commander.id);
+    assert.equal(recruitedObserver.status, "ok");
+
+    const observerStatusBeforeAccept = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(firstTask.id)}/status`, {
+      status: "In Progress",
+    });
+    assert.equal(observerStatusBeforeAccept.statusCode, 403);
+
+    const acceptedObserver = await acceptObjectiveChallenge(objective.id, fixture.observer.name, fixture.observer.id);
+    assert.equal(acceptedObserver.status, "accepted");
+
+    const observerTitle = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(firstTask.id)}`, {
+      title: `${fixture.prefix} observer maintained task`,
+    });
+    assert.equal(observerTitle.statusCode, 200, observerTitle.body);
+
+    const observerStatus = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(firstTask.id)}/status`, {
+      status: "In Progress",
+    });
+    assert.equal(observerStatus.statusCode, 200, observerStatus.body);
+
+    const observerCompletion = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(firstTask.id)}/completion`, {
+      done: true,
+    });
+    assert.equal(observerCompletion.statusCode, 200, observerCompletion.body);
+
+    const secondChecklistResponse = await apiInject(app, fixture.observer, "POST", `/api/tasks/${encodeURIComponent(firstTask.id)}/checklist`, {
+      label: `${fixture.prefix} shared subtask B`,
+    });
+    assert.equal(secondChecklistResponse.statusCode, 200, secondChecklistResponse.body);
+    const secondChecklistItem = (secondChecklistResponse.json() as { item: Task["checklist"][number] }).item;
+
+    const observerChecklistDone = await apiInject(
+      app,
+      fixture.observer,
+      "PATCH",
+      `/api/tasks/${encodeURIComponent(firstTask.id)}/checklist/${encodeURIComponent(firstChecklistItem.id)}`,
+      { done: false },
+    );
+    assert.equal(observerChecklistDone.statusCode, 200, observerChecklistDone.body);
+
+    const observerChecklistLabel = await apiInject(
+      app,
+      fixture.observer,
+      "PATCH",
+      `/api/tasks/${encodeURIComponent(firstTask.id)}/checklist/${encodeURIComponent(firstChecklistItem.id)}/label`,
+      { label: `${fixture.prefix} observer maintained subtask` },
+    );
+    assert.equal(observerChecklistLabel.statusCode, 200, observerChecklistLabel.body);
+
+    const observerTaskMove = await apiInject(app, fixture.observer, "PATCH", `/api/tasks/${encodeURIComponent(firstTask.id)}/move`, {
+      objectiveId: objective.id,
+      referenceTaskId: secondTask.id,
+      placement: "after",
+    });
+    assert.equal(observerTaskMove.statusCode, 200, observerTaskMove.body);
+
+    const observerChecklistMove = await apiInject(
+      app,
+      fixture.observer,
+      "PATCH",
+      `/api/tasks/${encodeURIComponent(firstTask.id)}/checklist/${encodeURIComponent(firstChecklistItem.id)}/move`,
+      { toTaskId: secondTask.id },
+    );
+    assert.equal(observerChecklistMove.statusCode, 200, observerChecklistMove.body);
+
+    const observerChecklistDelete = await apiInject(
+      app,
+      fixture.observer,
+      "DELETE",
+      `/api/tasks/${encodeURIComponent(firstTask.id)}/checklist/${encodeURIComponent(secondChecklistItem.id)}`,
+    );
+    assert.equal(observerChecklistDelete.statusCode, 200, observerChecklistDelete.body);
+
+    const afterObserverMaintenance = await getTaskManagementData({ scope: fixture.scope });
+    assert.equal(afterObserverMaintenance.tasks.find((task) => task.id === firstTask.id)?.updatedBy, fixture.observer.id);
+    assert.equal(afterObserverMaintenance.tasks.find((task) => task.id === secondTask.id)?.updatedBy, fixture.observer.id);
+
+    const commanderDeleteSecondTask = await apiInject(app, fixture.commander, "DELETE", `/api/tasks/${encodeURIComponent(secondTask.id)}`);
+    assert.equal(commanderDeleteSecondTask.statusCode, 200, commanderDeleteSecondTask.body);
+
+    const observerDeleteFirstTask = await apiInject(app, fixture.observer, "DELETE", `/api/tasks/${encodeURIComponent(firstTask.id)}`);
+    assert.equal(observerDeleteFirstTask.statusCode, 200, observerDeleteFirstTask.body);
+  });
+
+  const finalData = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(finalData.tasks.some((task) => task.linkedObjectiveId === objective.id), false);
+});
+
 test("comment mentions resolve scoped active users and create recipient notifications", async () => {
   const fixture = await createFixture("api-comment-mention");
   const { objective } = await createApprovedObjectiveWithResult(fixture, "mention objective");
@@ -2220,7 +2374,7 @@ test("comment mentions resolve scoped active users and create recipient notifica
   );
   assert.equal(challengerNotifications.length, 1);
   assert.equal(challengerNotifications[0]?.targetType, "comment");
-  assert.equal(challengerNotifications[0]?.targetHref, "/tasks");
+  assert.equal(challengerNotifications[0]?.targetHref, `/tasks#objective:${encodeURIComponent(objective.id)}`);
   assert.equal(challengerNotifications[0]?.metadata.targetId, objective.id);
   assert.match(challengerNotifications[0]?.body ?? "", /评论中提到了你/);
 

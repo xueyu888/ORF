@@ -6,6 +6,7 @@ import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
+import { commentTimeDisplay } from "./commentTime";
 import { parseCommentBodyLinks } from "./commentText";
 
 type CommentEntry = {
@@ -350,6 +351,7 @@ function CommentMessageRow({
 }) {
   const { message, threadId } = entry;
   const canManageMessage = canManageAllComments || message.author === currentMember;
+  const createdTime = commentTimeDisplay(message.createdAt);
   const deleteMessage = () => {
     if (window.confirm("删除这条评论？")) {
       onDelete(threadId, message.id);
@@ -363,7 +365,7 @@ function CommentMessageRow({
         <div className="orf-comment-message-header">
           <span className="orf-comment-author-name">{message.author}</span>
           <div className="orf-comment-meta">
-            <time>{formatCommentTime(message.createdAt)}</time>
+            <time dateTime={createdTime.dateTime} title={createdTime.title}>{createdTime.label}</time>
             <button type="button" className="orf-comment-icon-button" aria-label="回复评论" title="回复" onClick={(event) => { event.stopPropagation(); onReply(message); }}>
               <Reply className="h-3.5 w-3.5" />
             </button>
@@ -904,19 +906,4 @@ function PersonAvatar({ name }: { name: string }) {
       {initials(name)}
     </div>
   );
-}
-
-function formatCommentTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  const now = Date.now();
-  const diffMinutes = Math.max(0, Math.round((now - date.getTime()) / 60000));
-  if (diffMinutes < 1) return "刚刚";
-  if (diffMinutes < 60) return `${diffMinutes} 分钟前`;
-
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours} 小时前`;
-
-  return date.toISOString().slice(0, 10);
 }

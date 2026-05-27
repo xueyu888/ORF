@@ -45,6 +45,7 @@ const bountyHallData: BountyHallData = {
   contribution: { points: 0 },
 };
 const bountyHallUser = initialOrfState.users.find((user) => user.role === "member") ?? initialOrfState.users[0]!;
+const bountyHallCommander = initialOrfState.users.find((user) => user.role === "admin") ?? initialOrfState.users[0]!;
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
@@ -118,6 +119,33 @@ test("recruited bounty rows only expose the accept path", async ({ page }) => {
   await expect.poll(() => declineRequests).toBe(0);
 });
 
+test("commander sees bounty hall actions but challenge writes are blocked", async ({ page }) => {
+  let applicationRequests = 0;
+
+  await page.route("**/api/auth/session", async (route) => {
+    await route.fulfill({ json: { authenticated: true, user: bountyHallCommander } });
+  });
+  await page.route("**/api/objectives/*/challenge-applications", async (route) => {
+    applicationRequests += 1;
+    await route.fulfill({ status: 500, json: { error: "commander should not submit challenge applications" } });
+  });
+
+  await page.goto("/bounties");
+
+  const availableRow = page.locator(".bounty-list-row").filter({ hasText: "建立成本感知的模型路由策略" });
+  const action = availableRow.getByRole("button", { name: "申请挑战" });
+  await expect(availableRow).toBeVisible();
+  await expect(action).toBeVisible();
+  await expect(action).toBeEnabled();
+
+  await action.click();
+
+  const dialog = page.getByRole("dialog", { name: "指挥官不应该申请挑战" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("不能成为挑战者");
+  await expect.poll(() => applicationRequests).toBe(0);
+});
+
 test("refreshes the bounty hall when a recruitment notification is received", async ({ page }) => {
   const recruitmentObjective = initialOrfState.objectives.find((item) => item.id === "obj-bounty-agent-retry");
   if (!recruitmentObjective) {
@@ -134,7 +162,7 @@ test("refreshes the bounty hall when a recruitment notification is received", as
     body: `你被征召挑战「${recruitmentObjective.title}」，请在悬赏大厅接受或拒绝。`,
     targetType: "objective",
     targetId: recruitmentObjective.id,
-    targetHref: "/bounties",
+    targetHref: `/bounties#objective:${recruitmentObjective.id}`,
     readAt: null,
     createdAt: "2026-05-20T10:00:00.000Z",
     metadata: { objectiveTitle: recruitmentObjective.title },

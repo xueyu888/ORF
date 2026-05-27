@@ -221,6 +221,8 @@ export interface Task {
   dueDate: string;
   tags: string[];
   checklist: TaskChecklistItem[];
+  createdBy?: string | null;
+  updatedBy?: string | null;
   createdAt: string;
   updatedAt: string;
 }

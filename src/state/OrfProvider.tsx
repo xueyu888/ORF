@@ -30,6 +30,7 @@ import type {
   Result,
   ResultAcceptedResult,
   Task,
+  TaskChecklistItem,
   TaskStatus,
   BountySource,
   ContributionAllocation,
@@ -43,6 +44,9 @@ type AuthResult = { ok: true } | { ok: false; message: string };
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
 type OnlineActivityResponse = { ok: boolean; lastOnlineAt?: string | null };
 type CreateObjectiveResponse = { objective: Objective };
+type CreateResultResponse = { result: Result };
+type CreateTaskResponse = { task: Task };
+type CreateChecklistItemResponse = { item: TaskChecklistItem };
 type SubmitLootInput = {
   objectiveId: string;
   body: string;
@@ -95,7 +99,7 @@ interface OrfContextValue {
   markNotificationRead: (notificationId: string) => Promise<boolean>;
   markAllNotificationsRead: () => Promise<boolean>;
   createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<Objective | null> : never;
-  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<boolean>;
+  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
@@ -106,16 +110,16 @@ interface OrfContextValue {
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>) => Promise<boolean>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
-  setTaskCompletion: (taskId: string, done: boolean) => void;
-  updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => void;
+  setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
+  updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
   updateObjectiveTitle: (objectiveId: string, title: string) => void;
   updateObjectiveStage: (objectiveId: string, stage: OrfState["objectives"][number]["stage"]) => void;
   updateResultTitle: (resultId: string, title: string) => void;
   updateTaskTitle: (taskId: string, title: string) => void;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => void;
-  createTaskChecklistItem: (taskId: string, afterItemId?: string) => void;
+  createTaskChecklistItem: (taskId: string, input?: { afterItemId?: string; label?: string }) => Promise<TaskChecklistItem | null>;
   moveResult: OrfFlowStore["moveResult"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTaskChecklistItem: OrfFlowStore["moveTaskChecklistItem"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
@@ -763,21 +767,21 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;
         if (!canCreateManagerDefined && !canCreateMemberProposed) {
           notify("没有新增指标权限");
-          return false;
+          return null;
         }
 
         try {
-          await apiRequest("/api/results", {
+          const data = await apiJson<CreateResultResponse>("/api/results", {
             method: "POST",
             body: JSON.stringify(payload),
           });
           await refreshTaskManagementData();
           notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建");
-          return true;
+          return data.result;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "指标创建失败"));
           void refreshTaskManagementData().catch(() => undefined);
-          return false;
+          return null;
         }
       },
       publishObjective: async (objectiveId) => {
@@ -950,17 +954,17 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       createTask: async (input) => {
         try {
-          await apiRequest("/api/tasks", {
+          const data = await apiJson<CreateTaskResponse>("/api/tasks", {
             method: "POST",
             body: JSON.stringify(input),
           });
           await refreshTaskManagementData();
           notify("行动项已创建");
-          return true;
+          return data.task;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "行动项创建失败"));
           void refreshTaskManagementData().catch(() => undefined);
-          return false;
+          return null;
         }
       },
       updateTaskStatus: (taskId, status) => {
@@ -975,29 +979,35 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      setTaskCompletion: (taskId, done) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
-          method: "PATCH",
-          body: JSON.stringify({ done }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("行动项完成状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "行动项完成状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      setTaskCompletion: async (taskId, done) => {
+        try {
+          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
+            method: "PATCH",
+            body: JSON.stringify({ done }),
           });
+          await refreshTaskManagementData();
+          notify("行动项完成状态已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "行动项完成状态更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
-      updateTaskChecklistItem: (taskId, itemId, done) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
-          method: "PATCH",
-          body: JSON.stringify({ done }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("子行动项完成状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "子行动项完成状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      updateTaskChecklistItem: async (taskId, itemId, done) => {
+        try {
+          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ done }),
           });
+          await refreshTaskManagementData();
+          notify("子行动项完成状态已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "子行动项完成状态更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       updateObjectiveTitle: (objectiveId, title) => {
         void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
@@ -1059,17 +1069,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      createTaskChecklistItem: (taskId, afterItemId) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
-          method: "POST",
-          body: JSON.stringify({ afterItemId }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("子行动项已添加"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "子行动项添加失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      createTaskChecklistItem: async (taskId, input = {}) => {
+        try {
+          const data = await apiJson<CreateChecklistItemResponse>(`/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
+            method: "POST",
+            body: JSON.stringify(input),
           });
+          await refreshTaskManagementData();
+          notify("子行动项已添加");
+          return data.item;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "子行动项添加失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return null;
+        }
       },
       moveResult: (input) => {
         void apiRequest(`/api/results/${encodeURIComponent(input.resultId)}/order`, {

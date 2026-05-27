@@ -12,6 +12,12 @@ import { canAccessDragItem, canAccessTarget, permissionDeniedMessage } from "../
 import { bountyStatus, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../src/features/challenge/model/challengeStatus";
 import { buildChallengeTree, summarizeDashboard } from "../src/features/challenge/model/challengeTreeModel";
 import {
+  applyTaskCompletionOverlays,
+  taskCompletionOverlayMaterialized,
+  upsertTaskCompletionOverlay,
+  type TaskCompletionOverlay,
+} from "../src/features/challenge/model/taskCompletionOverlay";
+import {
   canFreezeObjectiveAfterReestimate,
   canMutateObjectiveWorkItems,
   canSubmitObjectiveLoot,
@@ -251,6 +257,59 @@ test("date and status helpers keep challenge display boundaries stable", () => {
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "recruiting" })), "征召中");
   assert.equal(objectiveStatusTone(objective({ flowStatus: "frozen" })), "active");
   assert.equal(subActionVisualStatus(action, action.checklist[1]!, 1), "active");
+});
+
+test("task completion overlays update display state without touching settlement truth", () => {
+  const current = state({
+    objectives: [objective({ id: "obj-a", acceptedResult: null, taskIds: ["task-a"] })],
+    results: [result({ id: "res-a", objectiveId: "obj-a", acceptedResult: "unreviewed" })],
+    tasks: [
+      task({
+        id: "task-a",
+        linkedObjectiveId: "obj-a",
+        status: "Todo",
+        checklist: [
+          { id: "ck-a", label: "first", done: false, updatedAt: date },
+          { id: "ck-b", label: "second", done: false, updatedAt: date },
+        ],
+      }),
+    ],
+  });
+  const overlay: TaskCompletionOverlay = { id: "overlay-task", type: "task", taskId: "task-a", done: true };
+
+  const optimistic = applyTaskCompletionOverlays(current, [overlay]);
+
+  assert.equal(optimistic.tasks[0]?.status, "Done");
+  assert.deepEqual(optimistic.tasks[0]?.checklist.map((item) => item.done), [true, true]);
+  assert.equal(optimistic.objectives[0]?.acceptedResult, null);
+  assert.equal(optimistic.results[0]?.acceptedResult, "unreviewed");
+  assert.equal(taskCompletionOverlayMaterialized(current, overlay), false);
+  assert.equal(taskCompletionOverlayMaterialized(optimistic, overlay), true);
+});
+
+test("subtask completion overlays reuse task status inference and replace same-target intents", () => {
+  const current = state({
+    tasks: [
+      task({
+        id: "task-a",
+        status: "Todo",
+        checklist: [
+          { id: "ck-a", label: "first", done: false, updatedAt: date },
+          { id: "ck-b", label: "second", done: false, updatedAt: date },
+        ],
+      }),
+    ],
+  });
+  const firstOverlay: TaskCompletionOverlay = { id: "overlay-first", type: "subtask", taskId: "task-a", itemId: "ck-a", done: true };
+  const replacementOverlay: TaskCompletionOverlay = { id: "overlay-replacement", type: "subtask", taskId: "task-a", itemId: "ck-a", done: false };
+  const overlays = upsertTaskCompletionOverlay(upsertTaskCompletionOverlay([], firstOverlay), replacementOverlay);
+  const optimistic = applyTaskCompletionOverlays(current, [firstOverlay]);
+
+  assert.deepEqual(overlays, [replacementOverlay]);
+  assert.equal(optimistic.tasks[0]?.status, "In Progress");
+  assert.deepEqual(optimistic.tasks[0]?.checklist.map((item) => item.done), [true, false]);
+  assert.equal(taskCompletionOverlayMaterialized(current, firstOverlay), false);
+  assert.equal(taskCompletionOverlayMaterialized(optimistic, firstOverlay), true);
 });
 
 test("bounty and objective statuses follow the ORF frontend flow", () => {

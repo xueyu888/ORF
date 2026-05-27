@@ -1,7 +1,8 @@
-import { expect, test, type Page, type Route, type TestInfo } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route, type TestInfo } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { BountyHallData, BountyHallItem, TaskManagementData } from "../../src/state/apiClient";
 import type { CommentThread, ContributionAllocation, Objective, ObjectiveContributionReview, ObjectiveLoot, OrfUser, PointLedgerEntry, Result, Task } from "../../src/types/orf";
+import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 const adminUser = initialOrfState.users.find((user) => user.role === "admin")!;
 const memberUser = initialOrfState.users.find((user) => user.name === "Mia Zhang")!;
@@ -112,6 +113,7 @@ test("real user launch flow links commander and challengers from publish to sett
       objectiveContributionReviews: data.objectiveContributionReviews,
       pointLedger: data.pointLedger,
     });
+    return { json: { result: created } };
   };
   const submitLoot = (payload: unknown) => {
     const input = payload as LootSubmitPayload;
@@ -251,11 +253,7 @@ test("real user launch flow links commander and challengers from publish to sett
     await challengerPage.goto("/tasks");
     const challengerPanel = objectivePanel(challengerPage, objective.title);
     await expect(challengerPanel).toContainText("重估中");
-    await challengerPanel.hover();
-    await challengerPanel.getByRole("button", { name: "提出指标" }).click();
-    await challengerPage.getByLabel("指标标题").fill("真实联动 权限策略幻觉率低于 3%");
-    await challengerPage.getByLabel("衡量指标").fill("幻觉率");
-    await challengerPage.getByRole("button", { name: "提交指标" }).click();
+    await createInlineMetric(challengerPanel, "提出指标", "真实联动 权限策略幻觉率低于 3%");
     await expect.poll(() => createPayload).toMatchObject({ objectiveId: objective.id, source: "memberProposed", definer: memberUser.name });
     await expect(challengerPanel).toContainText("真实联动 权限策略幻觉率低于 3%");
 
@@ -428,6 +426,7 @@ test.describe("ORF high-level audit coverage", () => {
         objectives: data.objectives.map((objective) => (objective.id === objectiveId ? { ...objective, resultIds: [created.id] } : objective)),
         results: [...data.results.filter((result) => result.id !== created.id), created],
       });
+      return { json: { result: created } };
     };
     const submitLoot = (payload: unknown) => {
       const input = payload as LootSubmitPayload;
@@ -558,11 +557,7 @@ test.describe("ORF high-level audit coverage", () => {
 
       await challengerPage.goto("/tasks");
       const challengerPanel = objectivePanel(challengerPage, round.title);
-      await challengerPanel.hover();
-      await challengerPanel.getByRole("button", { name: "提出指标" }).click();
-      await challengerPage.getByLabel("指标标题").fill(round.resultTitle);
-      await challengerPage.getByLabel("衡量指标").fill(index === 1 ? "幻觉率" : "Recall");
-      await challengerPage.getByRole("button", { name: "提交指标" }).click();
+      await createInlineMetric(challengerPanel, "提出指标", round.resultTitle);
       await expect(challengerPanel).toContainText(round.resultTitle);
       await expect(createdPayloads.at(-1)).toMatchObject({ objectiveId: round.id, source: "memberProposed", definer: memberUser.name });
 
@@ -689,13 +684,11 @@ test.describe("ORF high-level audit coverage", () => {
     await mockOrfApp(page, memberUser, data, { mineChallenges: () => data, tasks: () => data });
 
     await page.goto("/tasks");
-    await objectivePanel(page, expired.title).hover();
+    await expectObjectiveChildOptionAbsent(objectivePanel(page, expired.title), "提出指标");
     await attachAuditScreenshot(page, testInfo, "audit-expired-proposal-hover");
-    await expect.soft(objectivePanel(page, expired.title).getByRole("button", { name: "提出指标" })).toHaveCount(0);
 
-    await objectivePanel(page, frozen.title).hover();
+    await expectObjectiveChildOptionAbsent(objectivePanel(page, frozen.title), "提出指标");
     await attachAuditScreenshot(page, testInfo, "audit-frozen-proposal-hover");
-    await expect.soft(objectivePanel(page, frozen.title).getByRole("button", { name: "提出指标" })).toHaveCount(0);
   });
 
   test("mine workbench applies challenger filtering even if the API returns full data", async ({ page }, testInfo) => {
@@ -965,10 +958,15 @@ test("commander publishes a candidate objective and the bounty hall exposes it a
   const result = resultFixture({ id: "res-ui-publish", objectiveId: candidate.id, title: "前端测试 发布候选指标" });
   let taskData = taskManagementData({ objectives: [candidate], results: [result] });
   let bountyData = bountyHallData([]);
+  let commanderApplyRequests = 0;
 
   await mockOrfApp(page, adminUser, taskData, {
     allChallenges: () => taskData,
     bounties: () => bountyData,
+    onApply: async () => {
+      commanderApplyRequests += 1;
+      return { status: 500, json: { error: "commander should not apply" } };
+    },
     onPublish: async () => {
       const publishedObjective = {
         ...candidate,
@@ -988,6 +986,17 @@ test("commander publishes a candidate objective and the bounty hall exposes it a
   await expect(panel.getByText("可申请")).toBeVisible();
   await expect(panel.getByRole("button", { name: "发布" })).toHaveCount(0);
 
+  await page.goto("/bounties");
+  await expect(page.getByRole("heading", { name: candidate.title })).toBeVisible();
+  await expect(page.getByRole("button", { name: "申请挑战" })).toBeVisible();
+  await page.getByRole("button", { name: "申请挑战" }).click();
+  await expect(page.getByRole("dialog", { name: "指挥官不应该申请挑战" })).toBeVisible();
+  await expect.poll(() => commanderApplyRequests).toBe(0);
+  await page.getByRole("button", { name: "我知道了" }).click();
+
+  await page.route("**/api/auth/session", async (route) => {
+    await route.fulfill({ json: { authenticated: true, user: observerUser } });
+  });
   await page.goto("/bounties");
   await expect(page.getByRole("heading", { name: candidate.title })).toBeVisible();
   await expect(page.getByRole("button", { name: "申请挑战" })).toBeVisible();
@@ -1310,19 +1319,14 @@ test("member reestimate metric proposal uses the member-proposed interaction con
         definer: memberUser.name,
       });
       data = taskManagementData({ objectives: [{ ...objective, resultIds: [createdResult.id] }], results: [createdResult] });
+      return { json: { result: createdResult } };
     },
     tasks: () => data,
   });
 
   await page.goto("/tasks");
   const panel = objectivePanel(page, objective.title);
-  await panel.hover();
-  await panel.getByRole("button", { name: "提出指标" }).click();
-
-  await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
-  await page.getByLabel("指标标题").fill("前端测试 成员候选指标");
-  await page.getByLabel("衡量指标").fill("候选指标");
-  await page.getByRole("button", { name: "提交指标" }).click();
+  await createInlineMetric(panel, "提出指标", "前端测试 成员候选指标");
 
   await expect.poll(() => createPayload).toMatchObject({ objectiveId: objective.id, source: "memberProposed", definer: memberUser.name });
   await expect(objectivePanel(page, objective.title)).toContainText("前端测试 成员候选指标");
@@ -1368,11 +1372,7 @@ test("member creates objective-owned action without a linked result", async ({ p
 
   await page.goto("/tasks");
   const panel = objectivePanel(page, objective.title);
-  await panel.getByText("新增行动项", { exact: true }).click();
-
-  await expect(page.getByRole("dialog", { name: "新建行动项" })).toBeVisible();
-  await page.getByLabel("行动项标题").fill("前端测试 目标行动项执行");
-  await page.getByRole("button", { name: "保存行动项" }).click();
+  await createInlineAction(panel, "前端测试 目标行动项执行");
 
   await expect.poll(() => createPayload).toMatchObject({ linkedObjectiveId: objective.id, title: "前端测试 目标行动项执行" });
   expect(createPayload && "linkedResultId" in createPayload).toBe(false);
@@ -1642,13 +1642,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/tasks");
     const panel = objectivePanel(page, objective.title);
-    await panel.hover();
-    await panel.getByRole("button", { name: "提出指标" }).click();
-
-    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
-    await page.getByLabel("指标标题").fill("前端测试 不应出现的候选指标");
-    await page.getByLabel("衡量指标").fill("候选指标");
-    await page.getByRole("button", { name: "提交指标" }).click();
+    await createInlineMetric(panel, "提出指标", "前端测试 不应出现的候选指标");
     await expect(page.getByText("proposed metric rejected")).toBeVisible();
     await expect(panel.getByText("前端测试 不应出现的候选指标")).toHaveCount(0);
   });
@@ -1774,18 +1768,14 @@ test.describe("ORF frontend guard coverage", () => {
         payload = body;
         const created = resultFixture({ id: "res-ui-before-deadline", objectiveId: objective.id, title: "前端测试 截止前候选指标", source: "memberProposed", definer: memberUser.name });
         data = taskManagementData({ objectives: [{ ...objective, resultIds: [created.id] }], results: [created] });
+        return { json: { result: created } };
       },
       tasks: () => data,
     });
 
     await page.goto("/tasks");
     const panel = objectivePanel(page, objective.title);
-    await panel.hover();
-    await panel.getByRole("button", { name: "提出指标" }).click();
-    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
-    await page.getByLabel("指标标题").fill("前端测试 截止前候选指标");
-    await page.getByLabel("衡量指标").fill("候选指标");
-    await page.getByRole("button", { name: "提交指标" }).click();
+    await createInlineMetric(panel, "提出指标", "前端测试 截止前候选指标");
 
     await expect.poll(() => payload).toMatchObject({ source: "memberProposed" });
   });
@@ -1812,9 +1802,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/tasks");
     const panel = objectivePanel(page, objective.title);
-    await panel.hover();
-
-    await expect(panel.getByRole("button", { name: "提出指标" })).toHaveCount(0);
+    await expectObjectiveChildOptionAbsent(panel, "提出指标");
     await expect(page.getByText("新增指标")).toHaveCount(0);
     await expect.poll(() => postCount).toBe(0);
   });
@@ -1840,9 +1828,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/tasks");
     const panel = objectivePanel(page, objective.title);
-    await panel.hover();
-
-    await expect(panel.getByRole("button", { name: "提出指标" })).toHaveCount(0);
+    await expectObjectiveChildOptionAbsent(panel, "提出指标");
     await expect.poll(() => postCount).toBe(0);
   });
 
@@ -2088,7 +2074,7 @@ test.describe("ORF frontend guard coverage", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
 
-  test("member proposed metric modal close does not mutate data", async ({ page }) => {
+  test("member proposed metric draft cancel does not mutate data", async ({ page }) => {
     const objective = objectiveFixture({ id: "obj-ui-proposed-close", title: "前端测试 关闭候选指标目标", flowStatus: "reestimating", stage: "orfReestimate", challengers: [memberUser.name], confirmationDueAt: "2999-01-01T00:00:00.000Z" });
     let postCount = 0;
     const data = taskManagementData({ objectives: [objective], results: [] });
@@ -2103,11 +2089,10 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/tasks");
     const panel = objectivePanel(page, objective.title);
-    await panel.hover();
-    await panel.getByRole("button", { name: "提出指标" }).click();
-    await expect(page.getByRole("dialog", { name: "提出指标" })).toBeVisible();
-    await page.getByRole("button").filter({ has: page.locator("svg") }).last().click();
-    await expect(page.getByRole("dialog", { name: "提出指标" })).toHaveCount(0);
+    await chooseObjectiveChildCreate(panel, "提出指标");
+    await expect(panel.getByLabel("编辑指标标题")).toBeVisible();
+    await panel.getByLabel("编辑指标标题").press("Escape");
+    await expect(panel.getByLabel("编辑指标标题")).toHaveCount(0);
     await expect.poll(() => postCount).toBe(0);
   });
 
@@ -2601,6 +2586,41 @@ function objectivePanel(page: Page, title: string) {
   return page.locator("section.orf-objective-panel").filter({ hasText: title });
 }
 
+async function createInlineMetric(panel: Locator, actionName: "新增指标" | "提出指标", title: string) {
+  await chooseObjectiveChildCreate(panel, actionName);
+  const titleInput = panel.getByLabel("编辑指标标题");
+  await expect(titleInput).toBeVisible();
+  await titleInput.fill(title);
+  await titleInput.press("Enter");
+}
+
+async function createInlineAction(panel: Locator, title: string) {
+  await chooseObjectiveChildCreate(panel, "新增行动项");
+  const titleInput = panel.getByLabel("编辑行动项标题");
+  await expect(titleInput).toBeVisible();
+  await titleInput.fill(title);
+  await titleInput.press("Enter");
+}
+
+async function chooseObjectiveChildCreate(panel: Locator, actionName: "新增指标" | "提出指标" | "新增行动项") {
+  await openObjectiveChildCreateMenu(panel);
+  await panel.getByRole("button", { name: actionName }).click();
+}
+
+async function openObjectiveChildCreateMenu(panel: Locator) {
+  await panel.locator(".orf-objective-header").hover();
+  await panel.getByRole("button", { name: "新增子级" }).click();
+}
+
+async function expectObjectiveChildOptionAbsent(panel: Locator, actionName: "新增指标" | "提出指标" | "新增行动项") {
+  await panel.locator(".orf-objective-header").hover();
+  const addButton = panel.getByRole("button", { name: "新增子级" });
+  if ((await addButton.count()) > 0) {
+    await addButton.click();
+  }
+  await expect.soft(panel.getByRole("button", { name: actionName })).toHaveCount(0);
+}
+
 async function attachAuditScreenshot(page: Page, testInfo: TestInfo, name: string) {
   const safeName = name.replace(/[^a-z0-9-]+/gi, "-").toLowerCase();
   const path = testInfo.outputPath(`${safeName}.png`);
@@ -2631,6 +2651,8 @@ async function mockOrfApp(
     tasks?: () => MockRouteResponse<TaskManagementData> | Promise<MockRouteResponse<TaskManagementData>>;
   } = {},
 ) {
+  await routeVisualBackgroundMocks(page);
+
   await page.route("**/api/auth/session", async (route) => {
     await route.fulfill({ json: { authenticated: true, user } });
   });
@@ -2639,22 +2661,6 @@ async function mockOrfApp(
   });
   await page.route("**/api/users", async (route) => {
     await route.fulfill({ json: { users: initialOrfState.users } });
-  });
-  await page.route("**/api/settings/visual/backgrounds?**", async (route) => {
-    await route.fulfill({
-      json: {
-        code: 0,
-        message: "ok",
-        data: {
-          scene: "sidebar_background",
-          config: { mode: "fixed", fixedBackgroundId: null, switchTrigger: "on_open", switchOrder: "sequential", switchIntervalMinutes: 30 },
-          list: [],
-        },
-      },
-    });
-  });
-  await page.route("**/settings/backgrounds/**", async (route) => {
-    await route.fulfill({ status: 404, body: "" });
   });
   await page.route("**/api/tasks-page", async (route) => {
     await fulfillData(route, options.tasks?.() ?? initialTasks);

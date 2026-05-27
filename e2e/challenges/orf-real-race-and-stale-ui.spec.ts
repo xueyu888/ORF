@@ -1,4 +1,4 @@
-import { assertNoDuplicateLedger, assertNoDuplicateLoot, bountyRow, objectivePanel } from "./helpers/realAssertions";
+import { assertNoDuplicateLedger, assertNoDuplicateLoot, bountyRow, expectObjectiveChildCreateOptionAbsent, objectivePanel, openObjectiveChildCreateMenu } from "./helpers/realAssertions";
 import { realSystemEnabled, test, expect } from "./helpers/realSystemHarness";
 import { RealScenarioDsl } from "./helpers/realScenarioDsl";
 
@@ -31,16 +31,16 @@ test.describe("ORF real stale UI and duplicate mutation guards", () => {
       await dsl.recruitViaApi(real.fixture.commander, staleTask.objectiveId, [real.fixture.challengerA.name]);
       await dsl.acceptRecruitmentViaApi(real.fixture.challengerA, staleTask.objectiveId);
       await dsl.openTasks(challenger.page);
-      await expect(objectivePanel(challenger.page, staleTaskTitle).getByLabel("提出指标")).toBeVisible();
+      const stalePanel = objectivePanel(challenger.page, staleTaskTitle);
+      await openObjectiveChildCreateMenu(stalePanel);
+      await expect(stalePanel.getByRole("button", { name: "提出指标" })).toBeVisible();
       await dsl.freezeViaApi(real.fixture.commander, staleTask.objectiveId);
-      await objectivePanel(challenger.page, staleTaskTitle).hover();
-      await objectivePanel(challenger.page, staleTaskTitle).getByLabel("提出指标").click();
-      await challenger.page.getByLabel("指标标题").fill(`${staleTaskTitle} 旧页面不应创建`);
-      await challenger.page.getByLabel("衡量指标").fill("旧页面指标");
-      await challenger.page.getByRole("button", { name: "提交指标" }).click();
+      await stalePanel.getByRole("button", { name: "提出指标" }).click();
+      await stalePanel.getByLabel("编辑指标标题").fill(`${staleTaskTitle} 旧页面不应创建`);
+      await stalePanel.getByLabel("编辑指标标题").press("Enter");
       await expect(challenger.page.getByText("没有执行这个操作的权限")).toBeVisible();
       await challenger.page.reload();
-      await expect(objectivePanel(challenger.page, staleTaskTitle).getByLabel("提出指标")).toHaveCount(0);
+      await expectObjectiveChildCreateOptionAbsent(objectivePanel(challenger.page, staleTaskTitle), "提出指标");
       await real.attachScreenshot(challenger.page, testInfo, "stale-task-proposal-rejected");
 
       const duplicateTitle = `${real.fixture.runLabel} 重复提交验收目标`;
