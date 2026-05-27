@@ -1,5 +1,4 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { UserRole, UserStatus } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -9,6 +8,7 @@ export type TestContext = {
 export type AdminEditMemberCaseData = {
   adminEmail: string;
   adminPassword: string;
+  adminName: string;
   adminRole: "admin";
   targetUserId: string;
   originalName: string;
@@ -17,13 +17,5 @@ export type AdminEditMemberCaseData = {
   updatedName: string;
   updatedEmail: string;
   updatedRole: "admin";
-};
-
-export type EditableMemberRecord = {
-  id: string;
-  teamId: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  status: UserStatus;
+  targetEmails: string[];
 };

@@ -306,7 +306,8 @@ export const testdCases = [
     doc: "testd-doc/cases/members/管理员编辑成员.md",
     spec: "testd/members/admin-edit-member/_entry/admin-edit-member.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "members.admin-edit.member-forbidden",
