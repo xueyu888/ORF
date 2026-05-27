@@ -240,7 +240,8 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/成员提交战利品.md",
     spec: "testd/acceptance/member-submit-loot/_entry/member-submit-loot.spec.ts",
     enabled: false,
-    fixtureLifecycle: "legacy-base-data",
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
   },
   {
     id: "acceptance.member-submit-loot.non-challenger-forbidden",

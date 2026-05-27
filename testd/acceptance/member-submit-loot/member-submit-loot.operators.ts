@@ -17,11 +17,8 @@ import {
   deleteTestLoot,
   lootFromResponse,
   lootPagePath,
-  lootTargetAvailable,
-  memberAccountActive,
+  lootTargetFromObjective,
   prepareLootTarget,
-  restoreLootTarget,
-  selectLootTarget,
   targetFrozenForMember,
   targetLootPresent,
   targetResultPresent,
@@ -31,28 +28,8 @@ import {
 } from "./_support/member-submit-loot.helpers";
 
 export const memberSubmitLootOperators = {
-  "db.member": {
-    active: async ({ params }) => {
-      await expect.poll(() => memberAccountActive(requiredString(params, "email"))).toBe(true);
-    },
-  },
-
   "db.loot_target": {
-    available: async ({ data }) => {
-      await expect.poll(() => lootTargetAvailable(data)).toBe(true);
-    },
-
-    select: async ({ data }) => {
-      const target = await selectLootTarget(data);
-      if (!target) {
-        throw new Error("没有可构造成员提交战利品起点的目标");
-      }
-      return target;
-    },
-
-    original_state_recorded: async ({ params }) => {
-      expect(requiredLootTarget(params, "target").previous).toBeTruthy();
-    },
+    from_objective: async ({ params }) => lootTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
       await prepareLootTarget(requiredLootTarget(params, "target"), requiredString(params, "memberName"));
@@ -66,10 +43,6 @@ export const memberSubmitLootOperators = {
 
     submitted: async ({ params }) => {
       await expect.poll(() => targetSubmitted(requiredLootTarget(params, "target"))).toBe(true);
-    },
-
-    restore: async ({ params }) => {
-      await restoreLootTarget(optionalLootTarget(params, "target"));
     },
   },
 
@@ -95,6 +68,10 @@ export const memberSubmitLootOperators = {
   "db.result": {
     absent: async ({ params }) => {
       await expect.poll(() => testResultAbsent(requiredString(params, "title"))).toBe(true);
+    },
+
+    delete: async ({ params }) => {
+      await deleteLootPrerequisiteResult(requiredString(params, "title"), optionalLootResult(params, "result"));
     },
   },
 
@@ -186,23 +163,14 @@ function requiredLootTarget(params: StepParams, key: string): LootTarget {
     typeof (value as LootTarget).objective !== "object" ||
     (value as LootTarget).objective === null ||
     typeof (value as LootTarget).objective.id !== "string" ||
+    typeof (value as LootTarget).objective.teamId !== "string" ||
     typeof (value as LootTarget).objective.title !== "string" ||
-    typeof (value as LootTarget).previous !== "object" ||
-    (value as LootTarget).previous === null
+    typeof (value as LootTarget).objective.flowStatus !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是成员提交战利品目标`);
   }
 
   return value as LootTarget;
-}
-
-function optionalLootTarget(params: StepParams, key: string): LootTarget | null {
-  const value = params[key];
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  return requiredLootTarget(params, key);
 }
 
 function requiredLootResult(params: StepParams, key: string): LootPrerequisiteResult {

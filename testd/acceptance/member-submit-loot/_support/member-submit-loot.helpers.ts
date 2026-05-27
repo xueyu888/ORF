@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
-import { and, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
-import { notifications, objectiveLoot, objectives, results, teamMembers, users } from "../../../../server/db/schema";
+import { and, eq } from "drizzle-orm";
+import { db } from "../../../../server/db/client";
+import { notifications, objectiveLoot, objectives, results } from "../../../../server/db/schema";
 import type {
   LootPrerequisiteResult,
   LootTarget,
@@ -9,92 +9,19 @@ import type {
   SubmittedLoot,
 } from "./member-submit-loot.context";
 
-export async function closeMemberSubmitLootTestDb() {
-  await closeDb();
-}
-
-export async function memberAccountActive(email: string) {
-  const account = await readMemberAccount(email);
-  return !!account && account.role === "member" && account.status === "active";
-}
-
-export async function lootTargetAvailable(data: Pick<MemberSubmitLootCaseData, "email">) {
-  return (await selectLootTarget(data)) !== null;
-}
-
-export async function selectLootTarget(data: Pick<MemberSubmitLootCaseData, "email">): Promise<LootTarget | null> {
-  const member = await readMemberAccount(data.email);
-  if (!member) {
-    return null;
-  }
-
-  const objectiveRows = await db
-    .select({
-      id: objectives.id,
-      title: objectives.title,
-      stage: objectives.stage,
-      flowStatus: objectives.flowStatus,
-      status: objectives.status,
-      challengers: objectives.challengers,
-      assignedChallengers: objectives.assignedChallengers,
-      challengeApplications: objectives.challengeApplications,
-      acceptedAt: objectives.acceptedAt,
-      confirmationDueAt: objectives.confirmationDueAt,
-      confirmedAt: objectives.confirmedAt,
-      lootSubmittedAt: objectives.lootSubmittedAt,
-      acceptedResult: objectives.acceptedResult,
-      objectiveSettlementPoints: objectives.objectiveSettlementPoints,
-      updatedAt: objectives.updatedAt,
-      updatedBy: objectives.updatedBy,
-    })
-    .from(objectives)
-    .where(eq(objectives.teamId, member.teamId));
-
-  const resultRows = await db.select({ objectiveId: results.objectiveId }).from(results);
-  const resultCountByObjective = new Map<string, number>();
-  for (const row of resultRows) {
-    resultCountByObjective.set(row.objectiveId, (resultCountByObjective.get(row.objectiveId) ?? 0) + 1);
-  }
-
-  const titleCounts = new Map<string, number>();
-  for (const row of objectiveRows) {
-    titleCounts.set(row.title, (titleCounts.get(row.title) ?? 0) + 1);
-  }
-
-  const selected = objectiveRows.find((row) => {
-    if (titleCounts.get(row.title) !== 1) return false;
-    if ((resultCountByObjective.get(row.id) ?? 0) !== 0) return false;
-    if (row.lootSubmittedAt || row.acceptedResult || row.objectiveSettlementPoints != null) return false;
-    if (row.flowStatus === "submitted" || row.flowStatus === "settled" || row.flowStatus === "closed") return false;
-    return true;
-  });
-
+export async function lootTargetFromObjective(objectiveId: string): Promise<LootTarget> {
+  const selected = await readObjective(objectiveId);
   if (!selected) {
-    return null;
+    throw new Error(`成员提交战利品目标不存在: ${objectiveId}`);
   }
 
   return {
     objective: {
       id: selected.id,
-      title: selected.title,
-    },
-    previous: {
-      id: selected.id,
+      teamId: selected.teamId,
       title: selected.title,
       stage: selected.stage,
       flowStatus: selected.flowStatus,
-      status: selected.status,
-      challengers: selected.challengers,
-      assignedChallengers: selected.assignedChallengers,
-      challengeApplications: selected.challengeApplications,
-      acceptedAt: selected.acceptedAt,
-      confirmationDueAt: selected.confirmationDueAt,
-      confirmedAt: selected.confirmedAt,
-      lootSubmittedAt: selected.lootSubmittedAt,
-      acceptedResult: selected.acceptedResult,
-      objectiveSettlementPoints: selected.objectiveSettlementPoints,
-      updatedAt: selected.updatedAt,
-      updatedBy: selected.updatedBy,
     },
   };
 }
@@ -130,7 +57,7 @@ export async function createLootPrerequisiteResult(
     throw new Error("目标不存在，无法创建战利品前置指标");
   }
 
-  const id = `res-testd-loot-${Date.now()}`;
+  const id = "res-testd-member-submit-loot";
   await db.insert(results).values({
     id,
     teamId: objective.teamId,
@@ -167,32 +94,6 @@ export async function createLootPrerequisiteResult(
   };
 }
 
-export async function restoreLootTarget(target: LootTarget | null) {
-  if (!target) {
-    return;
-  }
-
-  await db
-    .update(objectives)
-    .set({
-      stage: target.previous.stage,
-      flowStatus: target.previous.flowStatus,
-      status: target.previous.status,
-      challengers: target.previous.challengers,
-      assignedChallengers: target.previous.assignedChallengers,
-      challengeApplications: target.previous.challengeApplications,
-      acceptedAt: target.previous.acceptedAt,
-      confirmationDueAt: target.previous.confirmationDueAt,
-      confirmedAt: target.previous.confirmedAt,
-      lootSubmittedAt: target.previous.lootSubmittedAt,
-      acceptedResult: target.previous.acceptedResult,
-      objectiveSettlementPoints: target.previous.objectiveSettlementPoints,
-      updatedAt: target.previous.updatedAt,
-      updatedBy: target.previous.updatedBy,
-    })
-    .where(eq(objectives.id, target.objective.id));
-}
-
 export async function deleteLootPrerequisiteResult(title: string, result?: LootPrerequisiteResult | null) {
   if (result?.id) {
     await db.delete(results).where(eq(results.id, result.id));
@@ -204,6 +105,11 @@ export async function deleteTestLoot(body: string, loot?: SubmittedLoot | null) 
   if (loot?.id) {
     await db.delete(notifications).where(eq(notifications.targetId, loot.id));
     await db.delete(objectiveLoot).where(eq(objectiveLoot.id, loot.id));
+  }
+
+  const rows = await db.select({ id: objectiveLoot.id }).from(objectiveLoot).where(eq(objectiveLoot.body, body));
+  for (const row of rows) {
+    await db.delete(notifications).where(eq(notifications.targetId, row.id));
   }
   await db.delete(objectiveLoot).where(eq(objectiveLoot.body, body));
 }
@@ -315,6 +221,7 @@ async function readObjective(objectiveId: string) {
     .select({
       id: objectives.id,
       teamId: objectives.teamId,
+      title: objectives.title,
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
@@ -322,27 +229,6 @@ async function readObjective(objectiveId: string) {
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
-    .limit(1);
-
-  return row ?? null;
-}
-
-async function readMemberAccount(email: string): Promise<{
-  userId: string;
-  teamId: string;
-  role: string;
-  status: string;
-} | null> {
-  const [row] = await db
-    .select({
-      userId: users.id,
-      teamId: teamMembers.teamId,
-      role: teamMembers.role,
-      status: users.status,
-    })
-    .from(users)
-    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
-    .where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
     .limit(1);
 
   return row ?? null;

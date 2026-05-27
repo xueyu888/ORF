@@ -3,15 +3,10 @@ import { runStateCase } from "../../../_framework/runner";
 import { createCommonOperators } from "../../../_operators/common.operators";
 import { mergeOperatorRegistries } from "../../../_operators/registry";
 import type { MemberSubmitLootCaseData, TestContext } from "../_support/member-submit-loot.context";
-import { closeMemberSubmitLootTestDb } from "../_support/member-submit-loot.helpers";
 import { memberSubmitLootCase } from "../member-submit-loot.case";
 import { memberSubmitLootOperators } from "../member-submit-loot.operators";
 
 test.describe("成员提交战利品测试用例", () => {
-  test.afterAll(async () => {
-    await closeMemberSubmitLootTestDb();
-  });
-
   test(memberSubmitLootCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 

@@ -1,12 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type {
-  ChallengeApplication,
-  LootResultClaim,
-  ObjectiveAcceptedResult,
-  ObjectiveFlowStatus,
-  OrfStage,
-  WorkStatus,
-} from "../../../../src/types/orf";
+import type { LootResultClaim, ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -18,6 +11,8 @@ export type MemberSubmitLootCaseData = {
   password: string;
   name: string;
   role: "member";
+  objectiveId: string;
+  objectiveTitle: string;
   resultTitle: string;
   metricName: string;
   lootBody: string;
@@ -29,28 +24,11 @@ export type MemberSubmitLootCaseData = {
 export type LootTarget = {
   objective: {
     id: string;
+    teamId: string;
     title: string;
+    stage: OrfStage;
+    flowStatus: ObjectiveFlowStatus;
   };
-  previous: LootTargetSnapshot;
-};
-
-export type LootTargetSnapshot = {
-  id: string;
-  title: string;
-  stage: OrfStage;
-  flowStatus: ObjectiveFlowStatus;
-  status: WorkStatus;
-  challengers: string[];
-  assignedChallengers: string[];
-  challengeApplications: ChallengeApplication[];
-  acceptedAt: string | null;
-  confirmationDueAt: string | null;
-  confirmedAt: string | null;
-  lootSubmittedAt: string | null;
-  acceptedResult: ObjectiveAcceptedResult | null;
-  objectiveSettlementPoints: number | null;
-  updatedAt: string;
-  updatedBy: string | null;
 };
 
 export type LootPrerequisiteResult = {
