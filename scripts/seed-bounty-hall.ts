@@ -9,22 +9,28 @@ import {
   users,
 } from "../server/db/schema";
 import { initialOrfState } from "../src/data/initialOrfState";
+import {
+  assertDemoSeedSafety,
+  namespacedSeedId,
+  seedBootstrapAdmin,
+  seedTeamId,
+  seedTeamName,
+  seedUserIdForName,
+} from "./seedSafety";
 
 const team = {
-  id: "team-ai-app",
-  name: "AI 应用团队",
+  id: seedTeamId(),
+  name: seedTeamName(),
   createdAt: "2026-04-01",
 };
-const bootstrapAdmin = {
-  id: "user-xueyu",
-  name: "xueyu",
-  email: "xueyu@qq.com",
-  createdAt: "2026-04-01",
-  lastOnlineAt: "2026-05-05T09:42:00.000Z",
-};
+const bootstrapAdmin = seedBootstrapAdmin(team.id);
 
 function userIdForName(name: string) {
-  return `user-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+  return seedUserIdForName(team.id, name);
+}
+
+function seedId(id: string) {
+  return namespacedSeedId(team.id, id);
 }
 
 function emailForName(name: string) {
@@ -45,16 +51,24 @@ function collectBountyUserNames(objectiveIds: Set<string>) {
 }
 
 async function seedBountyHall() {
+  const connectionString = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
+  assertDemoSeedSafety({
+    connectionString,
+    scriptName: "db:seed:bounties",
+    targetTeamId: team.id,
+  });
+
   const bountyObjectives = initialOrfState.objectives.filter((objective) => objective.id.startsWith("obj-bounty-"));
-  const bountyObjectiveIds = new Set(bountyObjectives.map((objective) => objective.id));
-  const bountyResults = initialOrfState.results.filter((result) => bountyObjectiveIds.has(result.objectiveId));
-  const bountyResultIds = bountyResults.map((result) => result.id);
+  const sourceBountyObjectiveIds = new Set(bountyObjectives.map((objective) => objective.id));
+  const bountyObjectiveIds = bountyObjectives.map((objective) => seedId(objective.id));
+  const bountyResults = initialOrfState.results.filter((result) => sourceBountyObjectiveIds.has(result.objectiveId));
+  const bountyResultIds = bountyResults.map((result) => seedId(result.id));
 
   await db.transaction(async (tx) => {
     await tx.insert(teams).values(team).onConflictDoNothing();
 
     const userRowsById = new Map(
-      collectBountyUserNames(bountyObjectiveIds).map((name) => [
+      collectBountyUserNames(sourceBountyObjectiveIds).map((name) => [
         userIdForName(name),
         {
           id: userIdForName(name),
@@ -81,12 +95,12 @@ async function seedBountyHall() {
     }
 
     if (bountyObjectives.length > 0) {
-      await tx.delete(objectives).where(inArray(objectives.id, Array.from(bountyObjectiveIds)));
+      await tx.delete(objectives).where(inArray(objectives.id, bountyObjectiveIds));
       await tx
         .insert(objectives)
         .values(
           bountyObjectives.map((objective) => ({
-            id: objective.id,
+            id: seedId(objective.id),
             teamId: team.id,
             title: objective.title,
             description: objective.description,
@@ -124,9 +138,9 @@ async function seedBountyHall() {
         .insert(results)
         .values(
           bountyResults.map((result) => ({
-            id: result.id,
+            id: seedId(result.id),
             teamId: team.id,
-            objectiveId: result.objectiveId,
+            objectiveId: seedId(result.objectiveId),
             title: result.title,
             description: result.description,
             metricName: result.metricName,
@@ -158,7 +172,7 @@ async function seedBountyHall() {
       await tx.insert(resultTrendPoints).values(
         bountyResults.flatMap((result) =>
           result.trend.map((point, index) => ({
-            resultId: result.id,
+            resultId: seedId(result.id),
             date: point.date,
             value: point.value,
             sortOrder: index,

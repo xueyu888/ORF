@@ -1,5 +1,5 @@
 import { expect, test as base, type Browser, type BrowserContext, type Page, type TestInfo } from "@playwright/test";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -144,6 +144,7 @@ export class RealSystemHarness {
 
     try {
       await cleanupFixtureData(runtime.db, runtime.schema, this.fixture);
+      await assertFixtureDataRemoved(runtime.db, runtime.schema, this.fixture);
     } finally {
       await runtime.app.close();
       await closeServer(runtime.fakeOry);
@@ -298,6 +299,19 @@ async function cleanupFixtureData(db: Runtime["db"], schema: Runtime["schema"], 
   const users = Object.values(input).filter(isRealUser);
   await db.delete(schema.teams).where(eq(schema.teams.id, input.teamId));
   await db.delete(schema.users).where(inArray(schema.users.id, users.map((user) => user.id)));
+}
+
+async function assertFixtureDataRemoved(db: Runtime["db"], schema: Runtime["schema"], input: RealFixture) {
+  const users = Object.values(input).filter(isRealUser);
+  const count = sql<number>`count(*)::int`.mapWith(Number);
+  const [teamRow] = await db.select({ count }).from(schema.teams).where(eq(schema.teams.id, input.teamId));
+  const [userRow] = await db.select({ count }).from(schema.users).where(inArray(schema.users.id, users.map((user) => user.id)));
+  const remainingTeams = teamRow?.count ?? 0;
+  const remainingUsers = userRow?.count ?? 0;
+
+  if (remainingTeams > 0 || remainingUsers > 0) {
+    throw new Error(`Real E2E fixture cleanup left ${remainingTeams} team rows and ${remainingUsers} user rows for ${input.runSlug}.`);
+  }
 }
 
 function isRealUser(value: unknown): value is RealUser {
