@@ -193,6 +193,16 @@ export async function installAuthenticatedAppScenario(page: Page) {
       return;
     }
 
+    if (url.pathname === "/api/settings/personal/preferences") {
+      await route.fulfill({ json: personalPreferencesResponse() });
+      return;
+    }
+
+    if (url.pathname === "/api/settings/personal/backgrounds") {
+      await route.fulfill({ json: personalBackgroundsResponse() });
+      return;
+    }
+
     if (url.pathname === "/api/settings/visual/backgrounds" && method === "GET") {
       const scene = sceneFromUrl(url);
       await route.fulfill({ json: visualBackgroundsResponse(scene) });
@@ -380,6 +390,33 @@ function visualBackgroundsResponse(scene: VisualBackgroundScene) {
       scene,
       config: visualBackgroundConfig(),
       list: [],
+    },
+  };
+}
+
+function personalPreferencesResponse() {
+  return {
+    code: 0,
+    message: "ok",
+    data: {
+      userId: explorerUser.id,
+      defaultLandingPath: null,
+      sidebarCollapsed: null,
+      appBackground: null,
+      notificationDisplay: { toastEnabled: true },
+    },
+  };
+}
+
+function personalBackgroundsResponse() {
+  return {
+    code: 0,
+    message: "ok",
+    data: {
+      scene: "app_background",
+      config: visualBackgroundConfig(),
+      list: [],
+      preferences: personalPreferencesResponse().data,
     },
   };
 }

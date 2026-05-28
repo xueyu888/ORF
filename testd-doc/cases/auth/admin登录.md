@@ -62,8 +62,8 @@
   - [S1-5] [playwright] 主导航 应可见。
   - [S1-6] [playwright] 当前用户入口 应可见。
   - [S1-7] [playwright] "退出登录" 操作 应可见。
-  - [S1-8] [playwright] 管理员入口 "成员管理" 应可见。
-  - [S1-9] [playwright] 管理员入口 "权限管理" 应可见。
+  - [S1-8] [playwright] 管理员入口 "系统管理" 应可见。
+  - [S1-9] [playwright] 一级入口 "权限管理" 应不再单独可见。
   - [S1-10] [playwright] "Sign In" 登录操作 应不再作为当前页面主要操作出现。
   - [S1-11] [prisma] ORF 管理员用户和 admin 成员关系 应仍存在。
 

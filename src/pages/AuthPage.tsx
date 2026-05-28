@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
-import { getVisualBackgrounds } from "../state/apiClient";
+import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 
@@ -53,9 +53,26 @@ export function AuthPage() {
   const [authError, setAuthError] = useState("");
 
   useEffect(() => {
-    if (authReady && isAuthenticated && isApproved) {
-      navigate("/tasks");
+    if (!authReady || !isAuthenticated || !isApproved) {
+      return;
     }
+
+    let cancelled = false;
+    void getUserPreferences()
+      .then((preferences) => {
+        if (!cancelled) {
+          navigate(preferences.defaultLandingPath ?? "/tasks");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          navigate("/tasks");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [authReady, isApproved, isAuthenticated, navigate]);
 
   useEffect(() => {
@@ -138,7 +155,10 @@ export function AuthPage() {
       return;
     }
 
-    navigate("/tasks");
+    const landingPath = await getUserPreferences()
+      .then((preferences) => preferences.defaultLandingPath ?? "/tasks")
+      .catch(() => "/tasks");
+    navigate(landingPath);
   };
 
   const title = mode === "login" ? "Sign in" : "Register";

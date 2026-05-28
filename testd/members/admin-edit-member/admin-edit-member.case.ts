@@ -213,10 +213,10 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Setup-12", method: "playwright" },
         id: "page.goto.members",
-        title: "打开 成员管理页面",
+        title: "打开 系统管理的成员管理页面",
         object: "page",
         operator: "goto",
-        params: { path: "/members" },
+        params: { path: "/system/members" },
       },
     ],
   },
@@ -238,7 +238,7 @@ export const adminEditMemberCase = {
         title: "当前页面 应为 成员管理页面",
         object: "page.url",
         operator: "match",
-        params: { pattern: "/members$" },
+        params: { pattern: "/system/members$" },
       },
       {
         source: { caseStepId: "S0-3", method: "playwright" },

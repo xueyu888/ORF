@@ -15,32 +15,28 @@
     "label": "侧边栏统计入口",
     "audience": "all"
   },
-  "nav.members": {
-    "label": "侧边栏成员管理入口",
-    "audience": ["admin"]
-  },
-  "nav.permissions": {
-    "label": "侧边栏权限管理入口",
-    "audience": ["admin"]
-  },
   "nav.personalSettings": {
     "label": "侧边栏个人设置入口",
     "audience": "all"
   },
-  "nav.systemSettings": {
-    "label": "侧边栏系统设置入口",
+  "nav.systemManagement": {
+    "label": "侧边栏系统管理入口",
     "audience": ["admin"]
   },
   "command.objectives": {
     "label": "命令菜单目标入口",
     "audience": "all"
   },
-  "page.members": {
-    "label": "成员管理页面访问",
+  "page.systemManagement": {
+    "label": "系统管理页面访问",
     "audience": ["admin"]
   },
-  "page.permissions": {
-    "label": "权限管理页面访问",
+  "page.systemMembers": {
+    "label": "系统管理成员页面访问",
+    "audience": ["admin"]
+  },
+  "page.systemPermissions": {
+    "label": "系统管理权限页面访问",
     "audience": ["admin"]
   },
   "page.personalSettings": {

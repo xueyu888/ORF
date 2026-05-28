@@ -73,6 +73,21 @@ export type VisualBackgroundsData = {
   config: VisualBackgroundConfig;
   list: VisualBackgroundImage[];
 };
+export type UserPreferences = {
+  userId: string;
+  defaultLandingPath: string | null;
+  sidebarCollapsed: boolean | null;
+  appBackground: VisualBackgroundConfig | null;
+  notificationDisplay: {
+    toastEnabled: boolean;
+  };
+};
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "appBackground">> & {
+  notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
+};
+export type PersonalBackgroundsData = VisualBackgroundsData & {
+  preferences: UserPreferences;
+};
 type ApiEnvelope<T> = {
   code: number;
   message: string;
@@ -206,6 +221,42 @@ export async function saveVisualBackgroundConfig(scene: VisualBackgroundScene, c
   const response = await apiJson<ApiEnvelope<{ scene: VisualBackgroundScene; config: VisualBackgroundConfig }>>("/api/settings/visual/background-config", {
     method: "PUT",
     body: JSON.stringify({ scene, config }),
+  });
+  return response.data;
+}
+
+export async function getUserPreferences() {
+  const response = await apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences");
+  return response.data;
+}
+
+export async function saveUserPreferences(input: UserPreferencesPatch) {
+  const response = await apiJson<ApiEnvelope<UserPreferences>>("/api/settings/personal/preferences", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
+export async function getPersonalBackgrounds() {
+  const response = await apiJson<ApiEnvelope<PersonalBackgroundsData>>("/api/settings/personal/backgrounds");
+  return response.data;
+}
+
+export async function uploadPersonalBackground(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  const response = await apiJson<ApiEnvelope<VisualBackgroundImage>>("/api/settings/personal/backgrounds", {
+    method: "POST",
+    body: formData,
+  });
+  return response.data;
+}
+
+export async function deletePersonalBackground(id: string) {
+  const response = await apiJson<ApiEnvelope<{ id: string }>>(`/api/settings/personal/backgrounds/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
   return response.data;
 }

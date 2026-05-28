@@ -189,10 +189,10 @@ export const adminPermissionUpdateCase = {
       {
         source: { caseStepId: "Setup-11", method: "playwright" },
         id: "page.goto.permissions",
-        title: "打开 权限管理页面",
+        title: "打开 系统管理的权限管理页面",
         object: "page",
         operator: "goto",
-        params: { path: "/permissions" },
+        params: { path: "/system/permissions" },
       },
     ],
   },
@@ -214,7 +214,7 @@ export const adminPermissionUpdateCase = {
         title: "当前页面 应为 权限管理页面",
         object: "page.url",
         operator: "match",
-        params: { pattern: "/permissions$" },
+        params: { pattern: "/system/permissions$" },
       },
       {
         source: { caseStepId: "S0-3", method: "playwright" },

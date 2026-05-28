@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { hasPermission } from "../config/permissions";
-import { apiJson, apiRequest } from "./apiClient";
+import { apiJson, apiRequest, getUserPreferences } from "./apiClient";
 import { OrfFlowStore } from "./OrfFlowStore";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
@@ -13,6 +13,7 @@ import {
 } from "./orfProviderMutationMessages";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
+import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type {
   CommentStatus,
   CommentTargetType,
@@ -175,13 +176,17 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(loadInitialState);
   const { authenticateWithPassword, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme());
+  const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const notify = useCallback((message: string) => {
+    if (!toastEnabled) {
+      return;
+    }
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
     setToasts((items) => [...items, { id, message }]);
     window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3600);
-  }, []);
+  }, [toastEnabled]);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
   const currentUserRole = currentUser?.role ?? null;
   const isAuthenticated = currentUser !== null;
@@ -217,6 +222,32 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.colorScheme = theme;
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) {
+      setToastEnabled(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const refreshPersonalPreferences = () => {
+      void getUserPreferences()
+        .then((preferences) => {
+          if (!cancelled) {
+            setToastEnabled(preferences.notificationDisplay.toastEnabled);
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    refreshPersonalPreferences();
+    const unsubscribe = subscribePersonalPreferencesChanged(refreshPersonalPreferences);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [authReady, isApproved, isAuthenticated]);
 
   useEffect(() => {
     void refreshAuthSession();
@@ -778,6 +809,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       modal,
       markAllNotificationsRead,
       markNotificationRead,
+      notify,
       notifications,
       refreshNotifications,
       refreshTaskManagementData,

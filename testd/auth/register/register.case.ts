@@ -465,10 +465,10 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Action-16", method: "playwright" },
         id: "page.goto.members",
-        title: "打开 成员管理页面",
+        title: "打开 系统管理的成员管理页面",
         object: "page",
         operator: "goto",
-        params: { path: "/members" },
+        params: { path: "/system/members" },
       },
       {
         source: { caseStepId: "Action-17", method: "playwright" },
@@ -687,11 +687,11 @@ export const registerApprovalLoginCase = {
       },
       {
         source: { caseStepId: "S1-13", method: "playwright" },
-        id: "members.nav.absent",
-        title: "成员管理入口 应不对该普通成员可见",
+        id: "system.nav.absent",
+        title: "系统管理入口 应不对该普通成员可见",
         object: "page",
         operator: "count",
-        params: { text: "成员管理", count: 0 },
+        params: { text: "系统管理", count: 0 },
       },
     ],
   },

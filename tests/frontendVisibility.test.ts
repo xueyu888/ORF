@@ -29,13 +29,21 @@ test("frontend visibility path mappings reference configured keys", () => {
   }
 });
 
-test("personal and system settings have separate visibility contracts", () => {
+test("personal settings and system management have separate visibility contracts", () => {
   assert.equal(canShowFrontend(adminUser, "nav.personalSettings"), true);
   assert.equal(canShowFrontend(memberUser, "nav.personalSettings"), true);
-  assert.equal(canShowFrontend(adminUser, "nav.systemSettings"), true);
-  assert.equal(canShowFrontend(memberUser, "nav.systemSettings"), false);
+  assert.equal(canShowFrontend(adminUser, "nav.systemManagement"), true);
+  assert.equal(canShowFrontend(memberUser, "nav.systemManagement"), false);
   assert.equal(canShowFrontendPath(adminUser, "/settings"), true);
   assert.equal(canShowFrontendPath(memberUser, "/settings"), true);
+  assert.equal(canShowFrontendPath(adminUser, "/system"), true);
+  assert.equal(canShowFrontendPath(memberUser, "/system"), false);
+  assert.equal(canShowFrontendPath(adminUser, "/system/members"), true);
+  assert.equal(canShowFrontendPath(memberUser, "/system/members"), false);
+  assert.equal(canShowFrontendPath(adminUser, "/system/permissions"), true);
+  assert.equal(canShowFrontendPath(memberUser, "/system/permissions"), false);
+  assert.equal(canShowFrontendPath(adminUser, "/system/settings"), true);
+  assert.equal(canShowFrontendPath(memberUser, "/system/settings"), false);
   assert.equal(canShowFrontendPath(adminUser, "/settings/system"), true);
   assert.equal(canShowFrontendPath(memberUser, "/settings/system"), false);
 });

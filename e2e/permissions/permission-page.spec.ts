@@ -47,7 +47,7 @@ test("renders the documented permission list and saves member changes", async ({
   await page.route("**/api/permissions", handlePermissionsRoute);
   await page.route("**/api/permissions/*", handlePermissionsRoute);
 
-  await page.goto("/permissions");
+  await page.goto("/system/permissions");
   await expect(page.getByRole("button", { name: /保存角色权限/ })).toBeDisabled();
 
   for (const permission of permissionDefinitions) {
@@ -67,7 +67,7 @@ test("keeps admin permissions fixed and read-only", async ({ page }) => {
     await route.fulfill({ json: { permissionRules: emptyMemberRules } });
   });
 
-  await page.goto("/permissions");
+  await page.goto("/system/permissions");
   await page.getByRole("button", { name: /管理员/ }).click();
 
   await expect(page.getByRole("button", { name: /保存角色权限/ })).toBeDisabled();

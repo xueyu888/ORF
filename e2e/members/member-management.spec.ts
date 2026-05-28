@@ -50,7 +50,7 @@ test("member list shows recent online timestamps from lastOnlineAt", async ({ pa
     await route.fulfill({ json: { users } });
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
 
   await expect(page.getByRole("columnheader", { name: "最近在线" })).toBeVisible();
   await expect(page.getByRole("row", { name: /Alex Chen/ })).toContainText("2026-05-19 10:11");
@@ -72,7 +72,7 @@ test("member page reports recent online only after real user activity", async ({
     await route.fulfill({ json: { ok: true, lastOnlineAt: reportedAt } });
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
   await expect(page.getByRole("button", { name: "新增用户" })).toBeVisible();
   await expect.poll(() => activityRequests.length, { timeout: 500 }).toBe(0);
 
@@ -115,7 +115,7 @@ test("member dialog trims identity fields before creating users", async ({ page 
     await route.fulfill({ json: { users } });
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
   await page.getByRole("button", { name: "新增用户" }).click();
 
   const dialog = page.getByRole("dialog", { name: "新增用户" });
@@ -147,7 +147,7 @@ test("member dialog locks email for users already bound to a login identity", as
     await route.fulfill({ json: { users } });
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
 
   await page.getByRole("row", { name: /Mia Zhang/ }).getByRole("button", { name: "编辑" }).click();
   const dialog = page.getByRole("dialog", { name: "编辑用户" });
@@ -172,7 +172,7 @@ test("member dialog preserves edits when backend rejects login email changes", a
     await route.fallback();
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
 
   await page.getByRole("row", { name: /Mia Zhang/ }).getByRole("button", { name: "编辑" }).click();
   const dialog = page.getByRole("dialog", { name: "编辑用户" });
@@ -196,7 +196,7 @@ test("member dialog rejects blank required values before writing to API", async 
     await route.fulfill({ json: { users: initialOrfState.users } });
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
   await page.getByRole("button", { name: "新增用户" }).click();
 
   const dialog = page.getByRole("dialog", { name: "新增用户" });
@@ -224,7 +224,7 @@ test("member dialog preserves in-flight user writes until the API responds", asy
     await route.fulfill({ json: { users: initialOrfState.users } });
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
   await page.getByRole("button", { name: "新增用户" }).click();
 
   const dialog = page.getByRole("dialog", { name: "新增用户" });
@@ -280,7 +280,7 @@ test("member page deletes unreferenced users through the user DELETE endpoint", 
     await route.fallback();
   });
 
-  await page.goto("/members");
+  await page.goto("/system/members");
 
   const removableRow = page.getByRole("row", { name: /Removable Member/ });
   await expect(removableRow.getByRole("button", { name: "删除" })).toBeVisible();

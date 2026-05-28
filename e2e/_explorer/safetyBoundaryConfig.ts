@@ -20,8 +20,10 @@ export const explorerSafetyProfiles = {
       "/strategy-map",
       "/ai-evaluation",
       "/reports",
-      "/members",
-      "/permissions",
+      "/system",
+      "/system/members",
+      "/system/permissions",
+      "/system/settings",
       "/settings",
     ],
     blockedPathPatterns: [

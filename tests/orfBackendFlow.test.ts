@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { and, eq, sql } from "drizzle-orm";
 import { buildServer } from "../server/app";
@@ -2823,6 +2825,50 @@ test("API visual settings write routes are administrator-only", async () => {
   });
 });
 
+test("API personal settings routes are scoped to the current active user", async () => {
+  const fixture = await createFixture("api-personal-settings");
+
+  try {
+    await withApiServer(fixture, async (app) => {
+      const memberPreferences = await apiInject(app, fixture.challenger, "GET", "/api/settings/personal/preferences");
+      assert.equal(memberPreferences.statusCode, 200);
+      assert.equal(memberPreferences.json().data.userId, fixture.challenger.id);
+
+      const savedMemberPreferences = await apiInject(app, fixture.challenger, "PUT", "/api/settings/personal/preferences", {
+        defaultLandingPath: "/reports",
+        sidebarCollapsed: true,
+        notificationDisplay: { toastEnabled: false },
+      });
+      assert.equal(savedMemberPreferences.statusCode, 200);
+      assert.equal(savedMemberPreferences.json().data.userId, fixture.challenger.id);
+      assert.equal(savedMemberPreferences.json().data.defaultLandingPath, "/reports");
+      assert.equal(savedMemberPreferences.json().data.sidebarCollapsed, true);
+      assert.equal(savedMemberPreferences.json().data.notificationDisplay.toastEnabled, false);
+
+      const commanderPreferences = await apiInject(app, fixture.commander, "GET", "/api/settings/personal/preferences");
+      assert.equal(commanderPreferences.statusCode, 200);
+      assert.equal(commanderPreferences.json().data.userId, fixture.commander.id);
+      assert.equal(commanderPreferences.json().data.defaultLandingPath, null);
+
+      const invalidLoginBackgroundPreference = await apiInject(app, fixture.challenger, "PUT", "/api/settings/personal/preferences", {
+        appBackground: {
+          mode: "fixed",
+          fixedBackgroundId: "login_background/default/orf-login-sky-adventure.png",
+          switchTrigger: "on_open",
+          switchOrder: "random",
+          switchIntervalMinutes: 10,
+        },
+      });
+      assert.equal(invalidLoginBackgroundPreference.statusCode, 404);
+    });
+  } finally {
+    await Promise.all([
+      rm(personalSettingsTestDir(fixture.challenger.id), { recursive: true, force: true }),
+      rm(personalSettingsTestDir(fixture.commander.id), { recursive: true, force: true }),
+    ]);
+  }
+});
+
 test("visual background read routes only expose login assets publicly", async () => {
   const fixture = await createFixture("visual-background-read-scope");
 
@@ -3346,6 +3392,10 @@ function headerValue(headers: HeadersInit | undefined, name: string) {
 
 function apiCookie(user: FixtureUser) {
   return `orf_ory_session=${encodeURIComponent(user.id)}`;
+}
+
+function personalSettingsTestDir(userId: string) {
+  return path.join(process.cwd(), "public", "settings", "users", Buffer.from(userId, "utf8").toString("base64url"));
 }
 
 async function apiInject(

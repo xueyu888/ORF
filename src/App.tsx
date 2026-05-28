@@ -24,6 +24,7 @@ const PersonalSettingsPage = lazyNamed(() => import("./pages/PersonalSettingsPag
 const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage");
 const ResultDetailPage = lazyNamed(() => import("./pages/ResultDetailPage"), "ResultDetailPage");
 const StrategyMapPage = lazyNamed(() => import("./pages/StrategyMapPage"), "StrategyMapPage");
+const SystemManagementPage = lazyNamed(() => import("./pages/SystemManagementPage"), "SystemManagementPage");
 const SystemSettingsPage = lazyNamed(() => import("./pages/SettingsPage"), "SystemSettingsPage");
 
 export function App() {
@@ -47,22 +48,8 @@ export function App() {
         <Route path="strategy-map" element={<LazyRoute><StrategyMapPage /></LazyRoute>} />
         <Route path="ai-evaluation" element={<LazyRoute><AIEvaluationPage /></LazyRoute>} />
         <Route path="reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />
-        <Route
-          path="members"
-          element={
-            <RequireFrontendVisibility visibilityKey="page.members">
-              <LazyRoute><MembersPage /></LazyRoute>
-            </RequireFrontendVisibility>
-          }
-        />
-        <Route
-          path="permissions"
-          element={
-            <RequireFrontendVisibility visibilityKey="page.permissions">
-              <LazyRoute><PermissionsPage /></LazyRoute>
-            </RequireFrontendVisibility>
-          }
-        />
+        <Route path="members" element={<Navigate to="/system/members" replace />} />
+        <Route path="permissions" element={<Navigate to="/system/permissions" replace />} />
         <Route
           path="settings"
           element={
@@ -71,14 +58,41 @@ export function App() {
             </RequireFrontendVisibility>
           }
         />
+        <Route path="settings/system" element={<Navigate to="/system/settings" replace />} />
         <Route
-          path="settings/system"
+          path="system"
           element={
-            <RequireFrontendVisibility visibilityKey="page.systemSettings">
-              <LazyRoute><SystemSettingsPage /></LazyRoute>
+            <RequireFrontendVisibility visibilityKey="page.systemManagement">
+              <LazyRoute><SystemManagementPage /></LazyRoute>
             </RequireFrontendVisibility>
           }
-        />
+        >
+          <Route index element={<Navigate to="/system/members" replace />} />
+          <Route
+            path="members"
+            element={
+              <RequireFrontendVisibility visibilityKey="page.systemMembers">
+                <LazyRoute><MembersPage /></LazyRoute>
+              </RequireFrontendVisibility>
+            }
+          />
+          <Route
+            path="permissions"
+            element={
+              <RequireFrontendVisibility visibilityKey="page.systemPermissions">
+                <LazyRoute><PermissionsPage /></LazyRoute>
+              </RequireFrontendVisibility>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <RequireFrontendVisibility visibilityKey="page.systemSettings">
+                <LazyRoute><SystemSettingsPage /></LazyRoute>
+              </RequireFrontendVisibility>
+            }
+          />
+        </Route>
         <Route path="*" element={<Navigate to="/bounties" replace />} />
       </Route>
     </Routes>

@@ -1,6 +1,6 @@
 export const visualBackgroundScenes = ["login_background", "app_background"] as const;
 export const legacyVisualBackgroundScenes = ["sidebar_background"] as const;
-export const visualBackgroundScopes = ["default", "system"] as const;
+export const visualBackgroundScopes = ["default", "system", "personal"] as const;
 export const legacyVisualBackgroundScopes = ["user"] as const;
 
 export type VisualBackgroundScene = (typeof visualBackgroundScenes)[number];
