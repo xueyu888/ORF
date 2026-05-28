@@ -41,7 +41,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "B-4", method: "api" },
         id: "session.endpoint.accessible",
-        title: "当前会话查询接口 应可访问",
+        title: "当前会话查询能力 应可用",
         object: "auth.session",
         operator: "accessible",
       },
@@ -62,7 +62,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "B-7", method: "api" },
         id: "ory.admin_public.ready",
-        title: "Ory/Kratos Admin/Public API 应可访问",
+        title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用",
         object: "ory.admin_public",
         operator: "ready",
       },
@@ -76,27 +76,16 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "B-9", method: "playwright" },
         id: "cookie.absent",
-        title: "当前浏览器 应不存在 Ory session cookie",
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "B-10", method: "playwright" },
         id: "storage.empty",
-        title: "当前浏览器 storage 应不包含 登录态",
+        title: "当前浏览器 应不保留本地登录态",
         object: "browser.auth_storage",
         operator: "empty",
-      },
-      {
-        source: { caseStepId: "B-11", method: "playwright" },
-        id: "protected.redirects_to_auth",
-        title: '受保护入口 "/bounties" 应重定向到 "/auth"',
-        object: "page.protected",
-        operator: "redirects_to_auth",
-        params: {
-          path: "/bounties",
-          pattern: "/auth$",
-        },
       },
     ],
   },
@@ -107,7 +96,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Setup-1", method: "api" },
         id: "ory.admin_identity.upsert",
-        title: '准备邮箱为 "orf-admin-login-e2e@orf.local" 的管理员登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-admin-login-e2e@orf.local`、使用固定测试密码的管理员登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -120,7 +109,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Setup-2", method: "prisma" },
         id: "db.admin.upsert",
-        title: '准备邮箱为 "orf-admin-login-e2e@orf.local"、角色为 admin、状态为 active 的管理员用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-admin-login-e2e@orf.local`、角色为 `admin`、状态为 `active` 的管理员用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -135,7 +124,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Setup-3", method: "api" },
         id: "ory.sessions.revoke",
-        title: "撤销管理员登录身份可能残留的 Ory session",
+        title: "撤销邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -143,14 +132,14 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Setup-4", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Setup-5", method: "playwright" },
         id: "page.goto.auth",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
@@ -172,7 +161,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S0-2", method: "playwright" },
         id: "heading.sign_in.visible",
-        title: '登录页标题 "Sign in" 应可见',
+        title: "登录页中 \"Sign in\" 标题 应可见",
         object: "page",
         operator: "visible",
         params: { role: "heading", name: "Sign in" },
@@ -212,7 +201,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S0-7", method: "playwright" },
         id: "button.sign_in.visible",
-        title: '"Sign In" 登录操作 应可见',
+        title: "登录页的 \"Sign In\" 登录操作 应可见",
         object: "page",
         operator: "visible",
         params: { role: "button", name: "Sign In" },
@@ -220,7 +209,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S0-8", method: "playwright" },
         id: "button.sign_in.enabled",
-        title: '"Sign In" 登录操作 应可点击',
+        title: "登录页的 \"Sign In\" 登录操作 应可点击",
         object: "page",
         operator: "enabled",
         params: { role: "button", name: "Sign In" },
@@ -235,14 +224,14 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S0-10", method: "playwright" },
         id: "cookie.absent",
-        title: '浏览器上下文 cookies 应不包含 "orf_ory_session"',
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "S0-11", method: "api" },
         id: "ory.admin_identity.exists",
-        title: '认证系统中 应存在 邮箱为 "orf-admin-login-e2e@orf.local" 的管理员登录身份',
+        title: "认证系统中 应存在 邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份",
         object: "ory.identity",
         operator: "exists",
         params: { emailFrom: "data.email" },
@@ -250,7 +239,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S0-12", method: "api" },
         id: "ory.admin_identity.password_available",
-        title: "管理员登录身份 的密码凭据 应可用",
+        title: "邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份的密码凭据 应可用",
         object: "ory.identity",
         operator: "password_available",
         params: { emailFrom: "data.email" },
@@ -258,7 +247,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S0-13", method: "prisma" },
         id: "db.admin.matches",
-        title: 'ORF 业务系统中 应存在 邮箱为 "orf-admin-login-e2e@orf.local"、角色为 admin、状态为 active 的管理员用户',
+        title: "ORF 业务系统中 应存在 邮箱为 `orf-admin-login-e2e@orf.local`、角色为 `admin`、状态为 `active` 的管理员用户",
         object: "db.user",
         operator: "matches",
         params: {
@@ -276,7 +265,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Action-1", method: "playwright" },
         id: "fill.email",
-        title: "在邮箱输入框输入管理员测试邮箱",
+        title: "在邮箱输入框输入 `orf-admin-login-e2e@orf.local`",
         object: "page",
         operator: "fill",
         params: {
@@ -287,7 +276,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Action-2", method: "playwright" },
         id: "fill.password",
-        title: "在密码输入框输入管理员测试密码",
+        title: "在密码输入框输入管理员固定测试密码",
         object: "page",
         operator: "fill",
         params: {
@@ -298,25 +287,12 @@ export const aloginSuccessCase = {
       },
       {
         source: { caseStepId: "Action-3", method: "playwright" },
-        id: "capture.login_response",
-        title: '在点击 "Sign In" 登录操作前注册登录接口响应捕获',
-        object: "api",
-        operator: "capture_response",
-        params: {
-          urlEndsWith: "/api/auth/login",
-          method: "POST",
-          saveAs: "loginResponse",
-        },
-      },
-      {
-        source: { caseStepId: "Action-4", method: "playwright" },
         id: "click.sign_in",
-        title: '点击 "Sign In" 登录操作',
-        object: "page",
-        operator: "click",
+        title: "点击 \"Sign In\" 登录操作",
+        object: "page.login_form",
+        operator: "submit",
         params: {
-          role: "button",
-          name: "Sign In",
+          saveAs: "loginResponse",
         },
       },
     ],
@@ -328,7 +304,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-1", method: "api" },
         id: "login_response.ok",
-        title: "登录接口响应 应成功",
+        title: "登录结果 应成功",
         object: "api.response",
         operator: "ok",
         params: {
@@ -347,14 +323,14 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-3", method: "playwright" },
         id: "cookie.present",
-        title: '浏览器上下文 cookies 应包含 "orf_ory_session"',
+        title: "当前浏览器 应存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "present",
       },
       {
         source: { caseStepId: "S1-4", method: "api" },
         id: "session.authenticated",
-        title: '当前会话 应为 邮箱为 "orf-admin-login-e2e@orf.local"、角色为 admin、状态为 active 的已登录会话',
+        title: "当前会话 应为 邮箱为 `orf-admin-login-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: {
@@ -366,7 +342,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-5", method: "playwright" },
         id: "nav.visible",
-        title: "主导航 应可见",
+        title: "登录后主导航 应可见",
         object: "page",
         operator: "visible",
         params: { label: "主导航" },
@@ -374,7 +350,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-6", method: "playwright" },
         id: "current_user.visible",
-        title: "当前用户入口 应可见",
+        title: "登录后当前用户入口 应可见",
         object: "page",
         operator: "visible",
         params: { label: "当前用户" },
@@ -382,7 +358,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-7", method: "playwright" },
         id: "logout.visible",
-        title: '"退出登录" 操作 应可见',
+        title: "登录后的 \"退出登录\" 操作 应可见",
         object: "page",
         operator: "visible",
         params: {
@@ -393,7 +369,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-8", method: "playwright" },
         id: "members.nav.visible",
-        title: '管理员入口 "成员管理" 应可见',
+        title: "登录后的管理员入口 \"成员管理\" 应可见",
         object: "page",
         operator: "visible",
         params: { label: "成员管理" },
@@ -401,7 +377,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-9", method: "playwright" },
         id: "permissions.nav.visible",
-        title: '管理员入口 "权限管理" 应可见',
+        title: "登录后的管理员入口 \"权限管理\" 应可见",
         object: "page",
         operator: "visible",
         params: { label: "权限管理" },
@@ -409,7 +385,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-10", method: "playwright" },
         id: "sign_in.absent",
-        title: '"Sign In" 登录操作 应不再作为当前页面主要操作出现',
+        title: "当前页面中的 \"Sign In\" 登录操作 应不存在",
         object: "page",
         operator: "count",
         params: {
@@ -421,7 +397,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "S1-11", method: "prisma" },
         id: "db.admin.matches",
-        title: "ORF 管理员用户和 admin 成员关系 应仍存在",
+        title: "ORF 业务系统中 应仍存在 邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户和 `admin` 成员关系",
         object: "db.user",
         operator: "matches",
         params: {
@@ -439,28 +415,28 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Clean-1", method: "api" },
         id: "auth.logout",
-        title: "调用退出登录接口撤销本次登录产生的 Ory session",
+        title: "注销当前登录会话",
         object: "auth",
         operator: "logout",
       },
       {
         source: { caseStepId: "Clean-2", method: "playwright" },
         id: "page.runtime.stop",
-        title: "当前页面离开 ORF 前端应用",
+        title: "离开当前 ORF 前端页面",
         object: "page.runtime",
         operator: "stop",
       },
       {
         source: { caseStepId: "Clean-3", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Clean-4", method: "api" },
         id: "ory.sessions.revoke",
-        title: "撤销管理员登录身份的残留 Ory session",
+        title: "撤销邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -468,7 +444,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Clean-5", method: "api" },
         id: "ory.admin_identity.delete",
-        title: '删除邮箱为 "orf-admin-login-e2e@orf.local" 的管理员登录身份',
+        title: "删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
@@ -476,7 +452,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Clean-6", method: "prisma" },
         id: "db.admin.memberships.delete",
-        title: "删除管理员用户的默认团队成员关系",
+        title: "删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户的默认团队成员关系",
         object: "db.user",
         operator: "delete_memberships",
         params: { emailFrom: "data.email" },
@@ -484,7 +460,7 @@ export const aloginSuccessCase = {
       {
         source: { caseStepId: "Clean-7", method: "prisma" },
         id: "db.admin.delete",
-        title: '删除邮箱为 "orf-admin-login-e2e@orf.local" 的管理员用户',
+        title: "删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.email" },

@@ -45,7 +45,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "B-4", method: "api" },
         id: "session.endpoint.accessible",
-        title: "当前会话查询接口 应可访问",
+        title: "当前会话查询能力 应可用",
         object: "auth.session",
         operator: "accessible",
       },
@@ -66,7 +66,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "B-7", method: "api" },
         id: "ory.admin_public.ready",
-        title: "Ory/Kratos Admin/Public API 应可访问",
+        title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用",
         object: "ory.admin_public",
         operator: "ready",
       },
@@ -80,14 +80,14 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "B-9", method: "playwright" },
         id: "cookie.absent",
-        title: "当前浏览器 应不存在 Ory session cookie",
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "B-10", method: "playwright" },
         id: "storage.empty",
-        title: "当前浏览器 storage 应不包含 登录态",
+        title: "当前浏览器 应不保留本地登录态",
         object: "browser.auth_storage",
         operator: "empty",
       },
@@ -108,7 +108,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-2", method: "prisma" },
         id: "db.peer_review_loot.delete_residue",
-        title: "删除可能残留的测试战利品",
+        title: "删除可能残留的内容为 `E2E-PEER-LOOT-BODY: 匿名互评前置战利品` 的测试战利品",
         object: "db.peer_review_loot",
         operator: "delete",
         params: { bodyFrom: "data.lootBody" },
@@ -116,7 +116,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-3", method: "prisma" },
         id: "db.objective.delete_residue",
-        title: "删除可能残留的本用例目标及其派生数据",
+        title: "删除可能残留的标题为 `E2E-MEMBER-SUBMIT-PEER-REVIEW: 目标前置` 的本用例目标及其派生数据",
         object: "db.objective",
         operator: "delete_by_title",
         params: { titleFrom: "data.objectiveTitle" },
@@ -124,7 +124,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-4", method: "api" },
         id: "ory.member_identity.upsert",
-        title: '准备邮箱为 "orf-member-submit-peer-review-e2e@orf.local" 的普通成员登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-member-submit-peer-review-e2e@orf.local`、使用固定测试密码的普通成员登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -137,7 +137,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-5", method: "prisma" },
         id: "db.member.upsert",
-        title: '准备邮箱为 "orf-member-submit-peer-review-e2e@orf.local"、角色为 member、状态为 active 的普通成员用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-member-submit-peer-review-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -152,7 +152,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-6", method: "prisma" },
         id: "db.objective.upsert_peer_review_target",
-        title: '创建标题为 "E2E-MEMBER-SUBMIT-PEER-REVIEW: 目标前置" 的本用例独占目标',
+        title: "创建标题为 `E2E-MEMBER-SUBMIT-PEER-REVIEW: 目标前置` 的本用例独占目标",
         object: "db.objective",
         operator: "upsert",
         params: {
@@ -168,7 +168,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-7", method: "prisma" },
         id: "db.peer_review_target.from_objective",
-        title: "记录本用例独占目标为 runtime.peerReviewTarget",
+        title: "记录 本用例独占目标",
         object: "db.peer_review_target",
         operator: "from_objective",
         params: { objectiveIdFrom: "runtime.fixtureObjective.id", saveAs: "peerReviewTarget" },
@@ -176,7 +176,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-8", method: "prisma" },
         id: "db.peer_review_target.prepare",
-        title: "设置本用例目标为 submitted，记录 lootSubmittedAt，并设置挑战者列表仅包含普通成员",
+        title: "设置本用例目标为 `submitted`，记录 lootSubmittedAt，并设置挑战者列表仅包含普通成员",
         object: "db.peer_review_target",
         operator: "prepare",
         params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.name" },
@@ -184,7 +184,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-9", method: "prisma" },
         id: "db.peer_review_loot.create",
-        title: '为本用例目标创建内容为 "E2E-PEER-LOOT-BODY: 匿名互评前置战利品" 的前置战利品',
+        title: "为本用例目标创建内容为 `E2E-PEER-LOOT-BODY: 匿名互评前置战利品` 的前置战利品",
         object: "db.peer_review_loot",
         operator: "create",
         params: {
@@ -197,7 +197,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-10", method: "api" },
         id: "ory.member_sessions.revoke",
-        title: "撤销普通成员登录身份可能残留的 Ory session",
+        title: "撤销普通成员登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -205,14 +205,14 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-11", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Setup-12", method: "playwright" },
         id: "page.goto.auth",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
@@ -220,7 +220,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-13", method: "playwright" },
         id: "fill.email",
-        title: "在邮箱输入框输入普通成员测试邮箱",
+        title: "在邮箱输入框输入普通成员固定测试邮箱",
         object: "page",
         operator: "fill",
         params: { label: "Email", valueFrom: "data.email" },
@@ -228,7 +228,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-14", method: "playwright" },
         id: "fill.password",
-        title: "在密码输入框输入普通成员测试密码",
+        title: "在密码输入框输入普通成员固定测试密码",
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.password" },
@@ -236,7 +236,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-15", method: "playwright" },
         id: "click.sign_in",
-        title: '点击 "Sign In" 登录操作',
+        title: "点击 `Sign In` 登录操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "Sign In" },
@@ -244,7 +244,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-16", method: "api" },
         id: "session.member.authenticated",
-        title: "当前会话 应为 普通成员已登录",
+        title: "当前会话 应为 普通成员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -266,7 +266,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "S0-1", method: "api" },
         id: "session.member.authenticated",
-        title: '当前会话 应为 邮箱为 "orf-member-submit-peer-review-e2e@orf.local"、角色为 member、状态为 active 的已登录会话',
+        title: "当前会话 应为 邮箱 `orf-member-submit-peer-review-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -289,7 +289,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "S0-4", method: "prisma" },
         id: "db.peer_review_target.submitted_for_member",
-        title: "本用例目标 flowStatus 应为 submitted、已记录 lootSubmittedAt，且挑战者列表包含普通成员",
+        title: "本用例目标流转状态 应为 `submitted`、战利品提交时间已存在，且挑战者列表包含普通成员",
         object: "db.peer_review_target",
         operator: "submitted_for_member",
         params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.name" },
@@ -319,15 +319,15 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Action-1", method: "playwright" },
         id: "fill.member_ratio",
-        title: "填写普通成员贡献比例输入框为 1",
+        title: "填写 普通成员贡献比例输入框 为 `1`",
         object: "page",
         operator: "fill",
         params: { labelFrom: "data.name", valueFrom: "data.ratio" },
       },
       {
-        source: { caseStepId: "Action-2", method: "playwright" },
+        source: { caseStepId: "Action-2", method: "api" },
         id: "capture.submit_peer_review_response",
-        title: "在点击提交匿名互评前注册接口响应捕获",
+        title: "监听 提交匿名互评请求响应",
         object: "api.peer_review_submit",
         operator: "capture_response",
         params: { targetFrom: "runtime.peerReviewTarget", saveAs: "submitPeerReviewResponse" },
@@ -335,7 +335,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Action-3", method: "playwright" },
         id: "click.submit_peer_review",
-        title: "点击提交匿名互评操作",
+        title: "点击 `提交匿名互评` 操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "提交匿名互评" },
@@ -343,7 +343,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Action-4", method: "api" },
         id: "submit_peer_review_response.record",
-        title: "记录提交匿名互评接口返回的互评",
+        title: "记录 提交匿名互评结果中的互评",
         object: "api.peer_review_submit_response",
         operator: "record_review",
         params: { responseFrom: "runtime.submitPeerReviewResponse", saveAs: "submittedPeerReview" },
@@ -357,7 +357,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "S1-1", method: "api" },
         id: "submit_peer_review_response.ok",
-        title: "提交匿名互评接口响应 应成功",
+        title: "提交匿名互评结果 应成功",
         object: "api.response",
         operator: "ok",
         params: { responseFrom: "runtime.submitPeerReviewResponse", status: 200 },
@@ -365,7 +365,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "S1-2", method: "api" },
         id: "submitted_peer_review.matches",
-        title: "提交匿名互评接口返回的互评 reviewer 应为普通成员，allocations 应包含普通成员贡献比例 1",
+        title: "提交匿名互评结果中的互评 reviewer 应为 普通成员，allocations 应包含普通成员贡献比例 `1`",
         object: "api.peer_review_submit_response",
         operator: "matches",
         params: {
@@ -386,7 +386,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "S1-4", method: "api" },
         id: "session.member.still_authenticated",
-        title: "当前会话 应仍为 普通成员已登录",
+        title: "当前会话 应仍为 普通成员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -400,7 +400,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-1", method: "prisma" },
         id: "db.peer_review.delete",
-        title: "删除本用例创建的测试匿名互评",
+        title: "删除 本用例创建的测试匿名互评",
         object: "db.peer_review",
         operator: "delete",
         params: { targetFrom: "runtime.peerReviewTarget", reviewerFrom: "data.name", reviewFrom: "runtime.submittedPeerReview" },
@@ -408,7 +408,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-2", method: "prisma" },
         id: "db.peer_review_loot.delete",
-        title: "删除本用例创建的测试战利品",
+        title: "删除 本用例创建的测试战利品",
         object: "db.peer_review_loot",
         operator: "delete",
         params: { bodyFrom: "data.lootBody", lootFrom: "runtime.peerReviewLoot" },
@@ -416,7 +416,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-3", method: "prisma" },
         id: "db.objective.delete",
-        title: "删除本用例独占目标及其派生数据",
+        title: "删除 本用例独占目标及其派生数据",
         object: "db.objective",
         operator: "delete",
         params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle" },
@@ -424,28 +424,28 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-4", method: "api" },
         id: "auth.logout",
-        title: "退出当前登录态",
+        title: "注销当前登录会话",
         object: "auth",
         operator: "logout",
       },
       {
         source: { caseStepId: "Clean-5", method: "playwright" },
         id: "page.runtime.stop",
-        title: "停止当前页面运行态",
+        title: "离开当前 ORF 前端页面",
         object: "page.runtime",
         operator: "stop",
       },
       {
         source: { caseStepId: "Clean-6", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Clean-7", method: "api" },
         id: "ory.member_sessions.revoke",
-        title: "撤销普通成员登录身份的 Ory session",
+        title: "撤销普通成员登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -453,7 +453,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-8", method: "api" },
         id: "ory.member_identity.delete",
-        title: "删除普通成员 Ory 身份",
+        title: "删除普通成员登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
@@ -461,7 +461,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-9", method: "prisma" },
         id: "db.member.delete_memberships",
-        title: "删除普通成员默认团队成员关系",
+        title: "删除 普通成员默认团队成员关系",
         object: "db.user",
         operator: "delete_memberships",
         params: { emailFrom: "data.email" },
@@ -469,7 +469,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-10", method: "prisma" },
         id: "db.member.delete",
-        title: "删除普通成员用户",
+        title: "删除 普通成员用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.email" },
@@ -485,7 +485,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-12", method: "prisma" },
         id: "db.peer_review_loot.absent",
-        title: "测试战利品 应不存在",
+        title: "内容为 `E2E-PEER-LOOT-BODY: 匿名互评前置战利品` 的测试战利品 应不存在",
         object: "db.peer_review_loot",
         operator: "absent",
         params: { bodyFrom: "data.lootBody" },
@@ -493,7 +493,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-13", method: "prisma" },
         id: "db.objective.absent",
-        title: "本用例目标 应不存在",
+        title: "标题为 `E2E-MEMBER-SUBMIT-PEER-REVIEW: 目标前置` 的本用例目标 应不存在",
         object: "db.objective",
         operator: "absent",
         params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle" },
@@ -501,7 +501,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Clean-14", method: "prisma" },
         id: "db.member.absent",
-        title: "普通成员用户 应不存在",
+        title: "邮箱为 `orf-member-submit-peer-review-e2e@orf.local` 的普通成员用户 应不存在",
         object: "db.user",
         operator: "absent",
         params: { emailFrom: "data.email" },

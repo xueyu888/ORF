@@ -1,6 +1,7 @@
-import { expect } from "@playwright/test";
+import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
+import { readResponseBody } from "../../_operators/common.helpers";
 import { optionalString, requiredString } from "../../_operators/params";
 import type {
   RegisterCaseData,
@@ -26,7 +27,7 @@ import {
   upsertOryIdentityWithPassword,
 } from "./_support/register.helpers";
 
-const APPROVAL_RESPONSE_TIMEOUT_MS = 5_000;
+const CAPTURED_RESPONSE_TIMEOUT_MS = 5_000;
 
 export const registerOperators = {
   "ory.identity": {
@@ -182,6 +183,27 @@ export const registerOperators = {
     },
   },
 
+  "page.registration_form": {
+    submit: async ({ ctx }) => {
+      const responsePromise = ctx.page
+        .waitForResponse((response) => {
+          return (
+            response.request().method().toUpperCase() === "POST" &&
+            response.url().endsWith("/api/auth/registration")
+          );
+        }, { timeout: CAPTURED_RESPONSE_TIMEOUT_MS })
+        .then(toCapturedResponse);
+
+      try {
+        await ctx.page.getByRole("button", { name: "Create Account" }).click();
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
+    },
+  },
+
   "page.approval_pending": {
     visible: async ({ ctx }) => {
       await expect(
@@ -197,9 +219,29 @@ export const registerOperators = {
     },
 
     approve: async ({ ctx, params }) => {
-      await memberRow(ctx, params)
-        .getByRole("button", { name: "通过" })
-        .click();
+      const userId = requiredString(params, "userId");
+      const responsePromise = ctx.page
+        .waitForResponse((response) => {
+          return (
+            response.request().method().toUpperCase() === "PATCH" &&
+            response
+              .url()
+              .endsWith(
+                `/api/registration-requests/${encodeURIComponent(userId)}/approve`,
+              )
+          );
+        }, { timeout: CAPTURED_RESPONSE_TIMEOUT_MS })
+        .then(toCapturedResponse);
+
+      try {
+        await memberRow(ctx, params)
+          .getByRole("button", { name: "通过" })
+          .click();
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 
@@ -253,29 +295,6 @@ export const registerOperators = {
   },
 
   "api.registration_approval": {
-    capture_response: async ({ ctx, runtime, params }) => {
-      const userId = requiredString(params, "userId");
-      const saveAs = requiredString(params, "saveAs");
-      runtime.values[saveAs] = ctx.page
-        .waitForResponse((response) => {
-          return (
-            response.request().method().toUpperCase() === "PATCH" &&
-            response
-              .url()
-              .endsWith(
-                `/api/registration-requests/${encodeURIComponent(userId)}/approve`,
-              )
-          );
-        }, { timeout: APPROVAL_RESPONSE_TIMEOUT_MS })
-        .then(async (response) => ({
-          ok: response.ok(),
-          status: response.status(),
-          url: response.url(),
-          method: response.request().method(),
-          body: await response.json().catch(() => null),
-        }));
-    },
-
     ok: async ({ params }) => {
       const response = await requiredCapturedResponse(params, "response");
       expect(response.ok).toBe(true);
@@ -318,6 +337,16 @@ function memberRow(ctx: TestContext, params: StepParams) {
         : email,
     })
     .first();
+}
+
+async function toCapturedResponse(response: Response) {
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    url: response.url(),
+    method: response.request().method(),
+    body: await readResponseBody(response),
+  };
 }
 
 function isRegisteredUserPayload(

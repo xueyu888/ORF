@@ -45,7 +45,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "B-4", method: "api" },
         id: "session.endpoint.accessible",
-        title: "当前会话查询接口 应可访问",
+        title: "当前会话查询能力 应可用",
         object: "auth.session",
         operator: "accessible",
       },
@@ -66,7 +66,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "B-7", method: "api" },
         id: "ory.admin_public.ready",
-        title: "Ory/Kratos Admin/Public API 应可访问",
+        title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用",
         object: "ory.admin_public",
         operator: "ready",
       },
@@ -80,14 +80,14 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "B-9", method: "playwright" },
         id: "cookie.absent",
-        title: "当前浏览器 应不存在 Ory session cookie",
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "B-10", method: "playwright" },
         id: "storage.empty",
-        title: "当前浏览器 storage 应不包含 登录态",
+        title: "当前浏览器 应不保留本地登录态",
         object: "browser.auth_storage",
         operator: "empty",
       },
@@ -100,7 +100,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-1", method: "prisma" },
         id: "db.final_score_ledger.delete_residue",
-        title: "删除可能残留的测试积分流水",
+        title: "删除可能残留的 reason 为 `E2E-FINAL-SCORE: 查看最终分数` 的测试积分流水",
         object: "db.final_score_ledger",
         operator: "delete",
         params: { reasonFrom: "data.reason" },
@@ -108,7 +108,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-2", method: "prisma" },
         id: "db.objective.delete_residue",
-        title: "删除可能残留的本用例目标及其派生数据",
+        title: "删除可能残留的标题为 `E2E-VIEW-FINAL-SCORE: 目标前置` 的本用例目标及其派生数据",
         object: "db.objective",
         operator: "delete_by_title",
         params: { titleFrom: "data.objectiveTitle" },
@@ -116,7 +116,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-3", method: "api" },
         id: "ory.member_identity.upsert",
-        title: '准备邮箱为 "orf-member-view-final-score-e2e@orf.local" 的普通成员登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-member-view-final-score-e2e@orf.local`、使用固定测试密码的普通成员登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -129,7 +129,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-4", method: "prisma" },
         id: "db.member.upsert",
-        title: '准备邮箱为 "orf-member-view-final-score-e2e@orf.local"、角色为 member、状态为 active 的普通成员用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-member-view-final-score-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -144,7 +144,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-5", method: "prisma" },
         id: "db.objective.upsert_final_score_target",
-        title: '创建标题为 "E2E-VIEW-FINAL-SCORE: 目标前置" 的本用例独占目标',
+        title: "创建标题为 `E2E-VIEW-FINAL-SCORE: 目标前置` 的本用例独占目标",
         object: "db.objective",
         operator: "upsert",
         params: {
@@ -160,7 +160,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-6", method: "prisma" },
         id: "db.final_score_target.from_objective",
-        title: "记录本用例独占目标为 runtime.finalScoreTarget",
+        title: "记录 本用例独占目标",
         object: "db.final_score_target",
         operator: "from_objective",
         params: { objectiveIdFrom: "runtime.fixtureObjective.id", saveAs: "finalScoreTarget" },
@@ -168,7 +168,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-7", method: "prisma" },
         id: "db.final_score_target.prepare",
-        title: "设置本用例目标为 settled，挑战者包含普通成员，目标结算积分为 42",
+        title: "设置本用例目标为 `settled`，挑战者包含普通成员，目标结算积分为 `42`",
         object: "db.final_score_target",
         operator: "prepare",
         params: { targetFrom: "runtime.finalScoreTarget", memberNameFrom: "data.name", pointsFrom: "data.points" },
@@ -176,7 +176,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-8", method: "prisma" },
         id: "db.final_score_ledger.create",
-        title: "创建普通成员对本用例目标的测试积分流水，积分为 42",
+        title: "创建普通成员对本用例目标的测试积分流水，积分为 `42`",
         object: "db.final_score_ledger",
         operator: "create",
         params: {
@@ -191,7 +191,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-9", method: "api" },
         id: "ory.member_sessions.revoke",
-        title: "撤销普通成员登录身份可能残留的 Ory session",
+        title: "撤销普通成员登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -199,14 +199,14 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-10", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Setup-11", method: "playwright" },
         id: "page.goto.auth",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
@@ -214,7 +214,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-12", method: "playwright" },
         id: "fill.email",
-        title: "在邮箱输入框输入普通成员测试邮箱",
+        title: "在邮箱输入框输入普通成员固定测试邮箱",
         object: "page",
         operator: "fill",
         params: { label: "Email", valueFrom: "data.email" },
@@ -222,7 +222,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-13", method: "playwright" },
         id: "fill.password",
-        title: "在密码输入框输入普通成员测试密码",
+        title: "在密码输入框输入普通成员固定测试密码",
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.password" },
@@ -230,7 +230,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-14", method: "playwright" },
         id: "click.sign_in",
-        title: '点击 "Sign In" 登录操作',
+        title: "点击 `Sign In` 登录操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "Sign In" },
@@ -238,7 +238,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Setup-15", method: "api" },
         id: "session.member.authenticated",
-        title: "当前会话 应为 普通成员已登录",
+        title: "当前会话 应为 普通成员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -252,7 +252,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "S0-1", method: "api" },
         id: "session.member.authenticated",
-        title: '当前会话 应为 邮箱为 "orf-member-view-final-score-e2e@orf.local"、角色为 member、状态为 active 的已登录会话',
+        title: "当前会话 应为 邮箱 `orf-member-view-final-score-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -260,7 +260,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "S0-2", method: "prisma" },
         id: "db.final_score_target.settled_for_member",
-        title: "本用例目标 应为 settled 且挑战者包含普通成员",
+        title: "本用例目标 应为 `settled` 且挑战者包含普通成员",
         object: "db.final_score_target",
         operator: "settled_for_member",
         params: { targetFrom: "runtime.finalScoreTarget", memberNameFrom: "data.name" },
@@ -268,7 +268,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "S0-3", method: "prisma" },
         id: "db.final_score_ledger.present",
-        title: "数据库中 应存在 普通成员对本用例目标的测试积分流水，积分为 42",
+        title: "数据库中 应存在 普通成员对本用例目标的测试积分流水，积分为 `42`",
         object: "db.final_score_ledger",
         operator: "present",
         params: { targetFrom: "runtime.finalScoreTarget", memberNameFrom: "data.name", pointsFrom: "data.points" },
@@ -290,7 +290,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Action-2", method: "playwright" },
         id: "click.all_time",
-        title: '点击 "全部时间" 时间范围操作',
+        title: "点击 `全部时间` 时间范围操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "全部时间" },
@@ -312,7 +312,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "S1-2", method: "playwright" },
         id: "page.final_score.visible",
-        title: "成员积分排行榜 应显示普通成员和最终积分 42.0",
+        title: "成员积分排行榜 应显示普通成员和最终积分 `42.0`",
         object: "page.final_score",
         operator: "visible",
         params: { memberNameFrom: "data.name", pointsFrom: "data.points" },
@@ -320,7 +320,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "S1-3", method: "prisma" },
         id: "db.final_score_ledger.present",
-        title: "数据库中 普通成员对本用例目标的测试积分流水 应保持为 42",
+        title: "数据库中 普通成员对本用例目标的测试积分流水 应保持为 `42`",
         object: "db.final_score_ledger",
         operator: "present",
         params: { targetFrom: "runtime.finalScoreTarget", memberNameFrom: "data.name", pointsFrom: "data.points" },
@@ -328,7 +328,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "S1-4", method: "api" },
         id: "session.member.still_authenticated",
-        title: "当前会话 应仍为 普通成员已登录",
+        title: "当前会话 应仍为 普通成员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -342,7 +342,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-1", method: "prisma" },
         id: "db.final_score_ledger.delete",
-        title: "删除本用例创建的测试积分流水",
+        title: "删除 本用例创建的测试积分流水",
         object: "db.final_score_ledger",
         operator: "delete",
         params: { reasonFrom: "data.reason", ledgerFrom: "runtime.finalScoreLedger" },
@@ -350,7 +350,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-2", method: "prisma" },
         id: "db.objective.delete",
-        title: "删除本用例独占目标及其派生数据",
+        title: "删除 本用例独占目标及其派生数据",
         object: "db.objective",
         operator: "delete",
         params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle" },
@@ -358,28 +358,28 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-3", method: "api" },
         id: "auth.logout",
-        title: "退出当前登录态",
+        title: "注销当前登录会话",
         object: "auth",
         operator: "logout",
       },
       {
         source: { caseStepId: "Clean-4", method: "playwright" },
         id: "page.runtime.stop",
-        title: "停止当前页面运行态",
+        title: "离开当前 ORF 前端页面",
         object: "page.runtime",
         operator: "stop",
       },
       {
         source: { caseStepId: "Clean-5", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Clean-6", method: "api" },
         id: "ory.member_sessions.revoke",
-        title: "撤销普通成员登录身份的 Ory session",
+        title: "撤销普通成员登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -387,7 +387,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-7", method: "api" },
         id: "ory.member_identity.delete",
-        title: "删除普通成员 Ory 身份",
+        title: "删除普通成员登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
@@ -395,7 +395,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-8", method: "prisma" },
         id: "db.member.delete_memberships",
-        title: "删除普通成员默认团队成员关系",
+        title: "删除 普通成员默认团队成员关系",
         object: "db.user",
         operator: "delete_memberships",
         params: { emailFrom: "data.email" },
@@ -403,7 +403,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-9", method: "prisma" },
         id: "db.member.delete",
-        title: "删除普通成员用户",
+        title: "删除 普通成员用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.email" },
@@ -411,7 +411,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-10", method: "prisma" },
         id: "db.final_score_ledger.absent",
-        title: "测试积分流水 应不存在",
+        title: "reason 为 `E2E-FINAL-SCORE: 查看最终分数` 的测试积分流水 应不存在",
         object: "db.final_score_ledger",
         operator: "absent",
         params: { reasonFrom: "data.reason" },
@@ -419,7 +419,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-11", method: "prisma" },
         id: "db.objective.absent",
-        title: "本用例目标 应不存在",
+        title: "标题为 `E2E-VIEW-FINAL-SCORE: 目标前置` 的本用例目标 应不存在",
         object: "db.objective",
         operator: "absent",
         params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle" },
@@ -427,7 +427,7 @@ export const viewFinalScoreCase = {
       {
         source: { caseStepId: "Clean-12", method: "prisma" },
         id: "db.member.absent",
-        title: "普通成员用户 应不存在",
+        title: "邮箱为 `orf-member-view-final-score-e2e@orf.local` 的普通成员用户 应不存在",
         object: "db.user",
         operator: "absent",
         params: { emailFrom: "data.email" },

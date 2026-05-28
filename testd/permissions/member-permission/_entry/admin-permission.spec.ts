@@ -6,7 +6,7 @@ import { adminPermissionUpdateCase } from "../admin-permission.case";
 import { adminPermissionOperators } from "../admin-permission.operators";
 import type { AdminPermissionCaseData, TestContext } from "../_support/admin-permission.context";
 
-test.describe("管理员权限变更测试用例", () => {
+test.describe("管理员修改 member 权限测试用例", () => {
   test(adminPermissionUpdateCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 

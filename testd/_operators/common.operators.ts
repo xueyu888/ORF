@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type Locator, type Page, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../_framework/types";
 import {
   type BrowserTestContext,
@@ -28,13 +28,17 @@ import {
   restoreTestUserLastOnlineAt,
   revokeOrySessionsByEmail,
   testObjectiveAbsent,
+  testDefaultTeamMembershipMatches,
   testUserAccountMatches,
+  testUserRecordMatches,
   type TestObjectiveFixtureInput,
   type TestUserAccountRecord,
   deleteTestObjectives,
   upsertTestObjective,
+  upsertDefaultTeamMembership,
   upsertOryIdentityWithPassword,
   upsertTestUserAccount,
+  upsertTestUserRecord,
 } from "./common.helpers";
 import {
   optionalBoolean,
@@ -43,6 +47,8 @@ import {
   requiredNumber,
   requiredString,
 } from "./params";
+
+const CAPTURED_RESPONSE_TIMEOUT_MS = 5_000;
 
 export function createCommonOperators<
   TContext extends BrowserTestContext,
@@ -220,6 +226,51 @@ export function createCommonOperators<
       },
     },
 
+    "db.user_record": {
+      upsert: async ({ params }) =>
+        upsertTestUserRecord({
+          userId: optionalString(params, "userId"),
+          email: requiredString(params, "email"),
+          name: requiredString(params, "name"),
+          status: optionalUserStatus(params, "status"),
+          identityId: optionalString(params, "identityId"),
+        }),
+
+      matches: async ({ params }) => {
+        await expect
+          .poll(() =>
+            testUserRecordMatches({
+              email: optionalString(params, "email"),
+              userId: optionalString(params, "userId"),
+              name: optionalString(params, "name"),
+              status: optionalUserStatus(params, "status"),
+            }),
+          )
+          .toBe(true);
+      },
+    },
+
+    "db.default_team_membership": {
+      upsert: async ({ params }) =>
+        upsertDefaultTeamMembership({
+          email: optionalString(params, "email"),
+          userId: optionalString(params, "userId"),
+          role: requiredUserRole(params, "role"),
+        }),
+
+      matches: async ({ params }) => {
+        await expect
+          .poll(() =>
+            testDefaultTeamMembershipMatches({
+              email: optionalString(params, "email"),
+              userId: optionalString(params, "userId"),
+              role: optionalUserRole(params, "role"),
+            }),
+          )
+          .toBe(true);
+      },
+    },
+
     "db.objective": {
       upsert: async ({ params }) =>
         upsertTestObjective({
@@ -293,9 +344,14 @@ export function createCommonOperators<
       },
 
       authenticated: async ({ ctx, params }) => {
-        const email = requiredString(params, "email");
-        const role = requiredString(params, "role");
+        const email = optionalString(params, "email");
+        const role = optionalString(params, "role");
         const status = optionalString(params, "status");
+        const expectedUser = {
+          ...(email ? { email } : {}),
+          ...(role ? { role } : {}),
+          ...(status ? { status } : {}),
+        };
 
         await expect
           .poll(() => readBrowserSession(ctx.page))
@@ -303,13 +359,36 @@ export function createCommonOperators<
             status: 200,
             body: {
               authenticated: true,
-              user: {
-                email,
-                role,
-                ...(status ? { status } : {}),
-              },
+              ...(Object.keys(expectedUser).length > 0 ? { user: expectedUser } : {}),
             },
           });
+      },
+    },
+
+    "auth.session.user_email": {
+      equals: async ({ ctx, params }) => {
+        await expect
+          .poll(async () => (await readBrowserSession(ctx.page)).body.user?.email ?? null)
+          .toBe(requiredString(params, "email"));
+      },
+    },
+
+    "auth.session.user_role": {
+      equals: async ({ ctx, params }) => {
+        await expect
+          .poll(async () => (await readBrowserSession(ctx.page)).body.user?.role ?? null)
+          .toBe(requiredString(params, "role"));
+      },
+    },
+
+    "auth.session.user_status": {
+      equals: async ({ ctx, params }) => {
+        await expect
+          .poll(async () => {
+            const user = (await readBrowserSession(ctx.page)).body.user as { status?: unknown } | null;
+            return typeof user?.status === "string" ? user.status : null;
+          })
+          .toBe(requiredString(params, "status"));
       },
     },
 
@@ -360,6 +439,27 @@ export function createCommonOperators<
         await expect(ctx.page).toHaveURL(
           new RegExp(optionalString(params, "pattern") ?? "/auth$"),
         );
+      },
+    },
+
+    "page.login_form": {
+      submit: async ({ ctx }) => {
+        const responsePromise = ctx.page
+          .waitForResponse((response) => {
+            return (
+              response.request().method().toUpperCase() === "POST" &&
+              response.url().endsWith("/api/auth/login")
+            );
+          }, { timeout: CAPTURED_RESPONSE_TIMEOUT_MS })
+          .then(toCapturedResponse);
+
+        try {
+          await ctx.page.getByRole("button", { name: "Sign In" }).click();
+          return await responsePromise;
+        } catch (error) {
+          await responsePromise.catch(() => undefined);
+          throw error;
+        }
       },
     },
 
@@ -462,6 +562,16 @@ export async function requiredCapturedResponse(
     throw new Error(`参数 ${key} 不是捕获到的接口响应`);
   }
   return value;
+}
+
+async function toCapturedResponse(response: Response): Promise<CapturedResponse> {
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    url: response.url(),
+    method: response.request().method(),
+    body: await readResponseBody(response),
+  };
 }
 
 function locatorFromParams(page: Page, params: StepParams): Locator {

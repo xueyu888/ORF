@@ -45,7 +45,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "B-4", method: "api" },
         id: "session.endpoint.accessible",
-        title: "当前会话查询接口 应可访问",
+        title: "当前会话查询能力 应可用",
         object: "auth.session",
         operator: "accessible",
       },
@@ -66,7 +66,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "B-7", method: "api" },
         id: "ory.admin_public.ready",
-        title: "Ory/Kratos Admin/Public API 应可访问",
+        title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用",
         object: "ory.admin_public",
         operator: "ready",
       },
@@ -80,14 +80,14 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "B-9", method: "playwright" },
         id: "cookie.absent",
-        title: "当前浏览器 应不存在 Ory session cookie",
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "B-10", method: "playwright" },
         id: "storage.empty",
-        title: "当前浏览器 storage 应不包含 登录态",
+        title: "当前浏览器 应不保留本地登录态",
         object: "browser.auth_storage",
         operator: "empty",
       },
@@ -100,7 +100,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Setup-1", method: "api" },
         id: "ory.sessions.revoke.registered_user.setup",
-        title: "撤销注册测试登录身份可能残留的 Ory session",
+        title: "撤销注册测试登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -132,8 +132,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Setup-5", method: "api" },
         id: "ory.admin_identity.upsert",
-        title:
-          "准备邮箱为 `orf-register-admin-e2e@orf.local` 的测试管理员登录身份，并设置固定测试密码",
+        title: "准备邮箱为 `orf-register-admin-e2e@orf.local`、使用固定测试密码的测试管理员登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -146,8 +145,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Setup-6", method: "prisma" },
         id: "db.admin.upsert",
-        title:
-          "准备邮箱为 `orf-register-admin-e2e@orf.local`、角色为 `admin`、状态为 `active` 的测试管理员用户",
+        title: "准备邮箱为 `orf-register-admin-e2e@orf.local`、角色为 `admin`、状态为 `active` 的测试管理员用户",
         object: "db.admin",
         operator: "upsert",
         params: {
@@ -160,7 +158,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Setup-7", method: "api" },
         id: "ory.sessions.revoke.admin",
-        title: "撤销测试管理员登录身份可能残留的 Ory session",
+        title: "撤销测试管理员登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.adminEmail" },
@@ -168,14 +166,14 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Setup-8", method: "playwright" },
         id: "browser.clear",
-        title: "清理浏览器状态",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Setup-9", method: "playwright" },
         id: "page.goto.auth",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
@@ -183,7 +181,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Setup-10", method: "playwright" },
         id: "switch.register",
-        title: "点击登录页的 `Register` 切换到注册模式",
+        title: "点击登录页的 `Register` 操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "Register" },
@@ -205,7 +203,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S0-2", method: "playwright" },
         id: "heading.register.visible",
-        title: '注册页标题 "Register" 应可见',
+        title: "注册页标题 \"Register\" 应可见",
         object: "page",
         operator: "visible",
         params: { role: "heading", name: "Register" },
@@ -261,7 +259,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S0-9", method: "playwright" },
         id: "button.create_account.visible",
-        title: '"Create Account" 注册操作 应可见',
+        title: "\"Create Account\" 注册操作 应可见",
         object: "page",
         operator: "visible",
         params: { role: "button", name: "Create Account" },
@@ -269,7 +267,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S0-10", method: "playwright" },
         id: "button.create_account.enabled",
-        title: '"Create Account" 注册操作 应可点击',
+        title: "\"Create Account\" 注册操作 应可点击",
         object: "page",
         operator: "enabled",
         params: { role: "button", name: "Create Account" },
@@ -284,8 +282,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S0-12", method: "api" },
         id: "ory.admin_identity.exists",
-        title:
-          "认证系统中 应存在 邮箱为 `orf-register-admin-e2e@orf.local` 的测试管理员登录身份",
+        title: "认证系统中 应存在 邮箱为 `orf-register-admin-e2e@orf.local` 的测试管理员登录身份",
         object: "ory.identity",
         operator: "exists",
         params: { emailFrom: "data.adminEmail" },
@@ -293,7 +290,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S0-13", method: "api" },
         id: "ory.admin_identity.password_available",
-        title: "测试管理员登录身份 的密码凭据 应可用",
+        title: "测试管理员登录身份的密码凭据 应可用",
         object: "ory.identity",
         operator: "password_available",
         params: { emailFrom: "data.adminEmail" },
@@ -301,8 +298,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S0-14", method: "prisma" },
         id: "db.admin.active",
-        title:
-          "ORF 业务系统中 应存在 邮箱为 `orf-register-admin-e2e@orf.local`、角色为 `admin`、状态为 `active` 的测试管理员用户",
+        title: "ORF 业务系统中 应存在 邮箱为 `orf-register-admin-e2e@orf.local`、角色为 `admin`、状态为 `active` 的测试管理员用户",
         object: "db.admin",
         operator: "active",
         params: { emailFrom: "data.adminEmail" },
@@ -355,36 +351,24 @@ export const registerApprovalLoginCase = {
       },
       {
         source: { caseStepId: "Action-4", method: "playwright" },
-        id: "capture.registration_response",
-        title: '在点击 "Create Account" 注册操作前注册注册申请接口响应捕获',
-        object: "api",
-        operator: "capture_response",
-        params: {
-          urlEndsWith: "/api/auth/registration",
-          method: "POST",
-          saveAs: "registrationResponse",
-        },
+        id: "click.create_account",
+        title: "点击 \"Create Account\" 注册操作",
+        object: "page.registration_form",
+        operator: "submit",
+        params: { saveAs: "registrationResponse" },
       },
       {
         source: { caseStepId: "Action-5", method: "playwright" },
-        id: "click.create_account",
-        title: '点击 "Create Account" 注册操作',
-        object: "page",
-        operator: "click",
-        params: { role: "button", name: "Create Account" },
-      },
-      {
-        source: { caseStepId: "Action-6", method: "playwright" },
         id: "approval_pending.visible",
-        title: '"等待注册审核" 状态 应可见',
+        title: "注册页的 `等待注册审核` 状态 应可见",
         object: "page.approval_pending",
         operator: "visible",
         params: { saveAs: "approvalPendingSeen" },
       },
       {
-        source: { caseStepId: "Action-7", method: "api" },
+        source: { caseStepId: "Action-6", method: "api" },
         id: "registration_response.record_user",
-        title: "记录 注册响应用户",
+        title: "注册申请结果 应包含 注册测试用户",
         object: "api.registration_response",
         operator: "record_user",
         params: {
@@ -393,47 +377,47 @@ export const registerApprovalLoginCase = {
         },
       },
       {
-        source: { caseStepId: "Action-8", method: "prisma" },
+        source: { caseStepId: "Action-7", method: "prisma" },
         id: "db.registered_user.pending",
-        title: "记录 注册测试用户的待审核状态",
+        title: "注册测试用户 应进入 `pending` 待审核状态",
         object: "db.registered_user",
         operator: "pending",
         params: { emailFrom: "data.email", saveAs: "pendingRegisteredUser" },
       },
       {
-        source: { caseStepId: "Action-9", method: "playwright" },
+        source: { caseStepId: "Action-8", method: "playwright" },
         id: "auth.logout.pending_user",
-        title: "点击 `退出登录` 清理注册用户当前会话",
+        title: "注销注册用户当前会话",
         object: "auth",
         operator: "logout",
       },
       {
-        source: { caseStepId: "Action-10", method: "playwright" },
+        source: { caseStepId: "Action-9", method: "playwright" },
         id: "browser.clear.pending_user",
-        title: "清理注册用户浏览器状态",
+        title: "移除当前浏览器中的注册用户登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
-        source: { caseStepId: "Action-11", method: "playwright" },
+        source: { caseStepId: "Action-10", method: "playwright" },
         id: "page.goto.auth.admin",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
       },
       {
-        source: { caseStepId: "Action-12", method: "playwright" },
+        source: { caseStepId: "Action-11", method: "playwright" },
         id: "fill.admin.email",
-        title: "在邮箱输入框输入测试管理员邮箱",
+        title: "在邮箱输入框输入 测试管理员邮箱",
         object: "page",
         operator: "fill",
         params: { label: "Email", valueFrom: "data.adminEmail" },
       },
       {
-        source: { caseStepId: "Action-13", method: "playwright" },
+        source: { caseStepId: "Action-12", method: "playwright" },
         id: "fill.admin.password",
-        title: "在密码输入框输入测试管理员密码",
+        title: "在密码输入框输入 测试管理员密码",
         object: "page",
         operator: "fill",
         params: {
@@ -443,7 +427,7 @@ export const registerApprovalLoginCase = {
         },
       },
       {
-        source: { caseStepId: "Action-14", method: "playwright" },
+        source: { caseStepId: "Action-13", method: "playwright" },
         id: "click.admin.sign_in",
         title: "点击 `Sign In` 登录操作",
         object: "page",
@@ -451,7 +435,7 @@ export const registerApprovalLoginCase = {
         params: { role: "button", name: "Sign In" },
       },
       {
-        source: { caseStepId: "Action-15", method: "api" },
+        source: { caseStepId: "Action-14", method: "api" },
         id: "session.admin.authenticated",
         title: "当前会话 应为 测试管理员已登录",
         object: "auth.session",
@@ -463,7 +447,7 @@ export const registerApprovalLoginCase = {
         },
       },
       {
-        source: { caseStepId: "Action-16", method: "playwright" },
+        source: { caseStepId: "Action-15", method: "playwright" },
         id: "page.goto.members",
         title: "打开 成员管理页面",
         object: "page",
@@ -471,74 +455,66 @@ export const registerApprovalLoginCase = {
         params: { path: "/members" },
       },
       {
-        source: { caseStepId: "Action-17", method: "playwright" },
+        source: { caseStepId: "Action-16", method: "playwright" },
         id: "member_row.visible",
-        title:
-          "成员管理列表 应显示 `ORF Register E2E` 或 `orf-register-e2e@orf.local`",
+        title: "成员管理列表 应显示 注册测试用户",
         object: "page.member_row",
         operator: "visible",
         params: { emailFrom: "data.email", nameFrom: "data.name" },
       },
       {
-        source: { caseStepId: "Action-18", method: "playwright" },
-        id: "capture.approval_response",
-        title: "在点击 `通过` 操作前注册审批通过接口响应捕获",
-        object: "api.registration_approval",
-        operator: "capture_response",
+        source: { caseStepId: "Action-17", method: "playwright" },
+        id: "member_row.approve",
+        title: "点击该用户行的 `通过` 操作",
+        object: "page.member_row",
+        operator: "approve",
         params: {
+          emailFrom: "data.email",
+          nameFrom: "data.name",
           userIdFrom: "runtime.registeredUser.id",
           saveAs: "approvalResponse",
         },
       },
       {
-        source: { caseStepId: "Action-19", method: "playwright" },
-        id: "member_row.approve",
-        title: "点击该用户行的 `通过` 操作",
-        object: "page.member_row",
-        operator: "approve",
-        params: { emailFrom: "data.email", nameFrom: "data.name" },
-      },
-      {
-        source: { caseStepId: "Action-20", method: "api" },
+        source: { caseStepId: "Action-18", method: "api" },
         id: "approval_response.ok",
-        title: "审批通过接口响应 应成功",
+        title: "审批通过结果 应成功",
         object: "api.registration_approval",
         operator: "ok",
         params: { responseFrom: "runtime.approvalResponse" },
       },
       {
-        source: { caseStepId: "Action-21", method: "prisma" },
+        source: { caseStepId: "Action-19", method: "prisma" },
         id: "db.registered_user.active",
-        title:
-          "ORF 业务系统中 注册测试用户状态 应变为 `active`，且成员关系角色 应仍为 `member`",
+        title: "ORF 业务系统中 注册测试用户 应为 `active`，且团队角色 应仍为 `member`",
         object: "db.registered_user",
         operator: "active",
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Action-22", method: "playwright" },
+        source: { caseStepId: "Action-20", method: "playwright" },
         id: "auth.logout.admin",
-        title: "管理员退出登录",
+        title: "注销测试管理员当前会话",
         object: "auth",
         operator: "logout",
       },
       {
-        source: { caseStepId: "Action-23", method: "playwright" },
+        source: { caseStepId: "Action-21", method: "playwright" },
         id: "browser.clear.admin",
-        title: "清理管理员浏览器状态",
+        title: "移除当前浏览器中的测试管理员登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
-        source: { caseStepId: "Action-24", method: "playwright" },
+        source: { caseStepId: "Action-22", method: "playwright" },
         id: "page.goto.auth.member",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
       },
       {
-        source: { caseStepId: "Action-25", method: "playwright" },
+        source: { caseStepId: "Action-23", method: "playwright" },
         id: "fill.member.email",
         title: "在邮箱输入框输入注册测试用户邮箱",
         object: "page",
@@ -546,7 +522,7 @@ export const registerApprovalLoginCase = {
         params: { label: "Email", valueFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Action-26", method: "playwright" },
+        source: { caseStepId: "Action-24", method: "playwright" },
         id: "fill.member.password",
         title: "在密码输入框输入注册测试用户密码",
         object: "page",
@@ -554,7 +530,7 @@ export const registerApprovalLoginCase = {
         params: { label: "Password", exact: true, valueFrom: "data.password" },
       },
       {
-        source: { caseStepId: "Action-27", method: "playwright" },
+        source: { caseStepId: "Action-25", method: "playwright" },
         id: "click.member.sign_in",
         title: "点击 `Sign In` 登录操作",
         object: "page",
@@ -570,7 +546,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-1", method: "api" },
         id: "registration_response.ok",
-        title: "注册申请接口响应 应成功",
+        title: "注册申请结果 应成功",
         object: "api.registration_response",
         operator: "ok",
         params: { responseFrom: "runtime.registrationResponse" },
@@ -578,7 +554,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-2", method: "api" },
         id: "registration_response.email_matches",
-        title: "注册响应的用户邮箱 应匹配 测试邮箱",
+        title: "注册申请结果中的用户邮箱 应为本次注册邮箱",
         object: "api.registration_response",
         operator: "email_matches",
         params: {
@@ -589,7 +565,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-3", method: "api" },
         id: "registration_response.status_pending",
-        title: "注册响应的用户状态 应为 `pending`",
+        title: "注册申请结果中的用户状态 应为 `pending`",
         object: "api.registration_response",
         operator: "status",
         params: {
@@ -600,7 +576,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-4", method: "api" },
         id: "registration_response.role_member",
-        title: "注册响应的用户角色 应为 `member`",
+        title: "注册申请结果中的用户角色 应为 `member`",
         object: "api.registration_response",
         operator: "role",
         params: {
@@ -611,7 +587,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-5", method: "playwright" },
         id: "approval_pending.seen",
-        title: '"等待注册审核" 提示 应曾可见',
+        title: "注册提交后 `等待注册审核` 提示 应曾可见",
         object: "runtime.boolean",
         operator: "true",
         params: { valueFrom: "runtime.approvalPendingSeen" },
@@ -627,7 +603,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-7", method: "prisma" },
         id: "pending_user.status_recorded",
-        title: "注册测试用户 的状态 应曾为 `pending`",
+        title: "注册测试用户的状态 应曾为 `pending`",
         object: "runtime.registered_user",
         operator: "status",
         params: {
@@ -639,7 +615,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-8", method: "prisma" },
         id: "pending_user.role_recorded",
-        title: "注册测试用户 的成员关系角色 应为 `member`",
+        title: "注册测试用户在待审核状态下的团队角色 应为 `member`",
         object: "runtime.registered_user",
         operator: "role",
         params: {
@@ -651,8 +627,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "S1-9", method: "api" },
         id: "session.member.authenticated",
-        title:
-          "注册测试用户再次登录后的当前会话 应为 邮箱为 `orf-register-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话",
+        title: "注册测试用户再次登录后的当前会话 应为 邮箱为 `orf-register-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: {
@@ -703,28 +678,28 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Clean-1", method: "api" },
         id: "auth.logout",
-        title: "撤销当前会话的 Ory session",
+        title: "注销当前登录会话",
         object: "auth",
         operator: "logout",
       },
       {
         source: { caseStepId: "Clean-2", method: "playwright" },
         id: "page.runtime.stop",
-        title: "当前页面离开 ORF 前端应用",
+        title: "当前页面 应离开 ORF 前端应用",
         object: "page.runtime",
         operator: "stop",
       },
       {
         source: { caseStepId: "Clean-3", method: "playwright" },
         id: "browser.clear",
-        title: "清理浏览器状态",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Clean-4", method: "api" },
         id: "ory.sessions.revoke.registered_user",
-        title: "撤销注册测试登录身份的残留 Ory session",
+        title: "撤销注册测试登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -756,7 +731,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Clean-8", method: "api" },
         id: "ory.sessions.revoke.admin",
-        title: "撤销测试管理员登录身份的残留 Ory session",
+        title: "撤销测试管理员登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.adminEmail" },
@@ -764,8 +739,7 @@ export const registerApprovalLoginCase = {
       {
         source: { caseStepId: "Clean-9", method: "api" },
         id: "ory.admin_identity.delete",
-        title:
-          "删除邮箱为 `orf-register-admin-e2e@orf.local` 的测试管理员登录身份",
+        title: "删除邮箱为 `orf-register-admin-e2e@orf.local` 的测试管理员登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.adminEmail" },

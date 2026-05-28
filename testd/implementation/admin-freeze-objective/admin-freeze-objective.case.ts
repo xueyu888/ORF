@@ -45,7 +45,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "B-4", method: "api" },
         id: "session.endpoint.accessible",
-        title: "当前会话查询接口 应可访问",
+        title: "当前会话查询能力 应可用",
         object: "auth.session",
         operator: "accessible",
       },
@@ -66,7 +66,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "B-7", method: "api" },
         id: "ory.admin_public.ready",
-        title: "Ory/Kratos Admin/Public API 应可访问",
+        title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用",
         object: "ory.admin_public",
         operator: "ready",
       },
@@ -80,14 +80,14 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "B-9", method: "playwright" },
         id: "cookie.absent",
-        title: "当前浏览器 应不存在 Ory session cookie",
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "B-10", method: "playwright" },
         id: "storage.empty",
-        title: "当前浏览器 storage 应不包含 登录态",
+        title: "当前浏览器 应不保留本地登录态",
         object: "browser.auth_storage",
         operator: "empty",
       },
@@ -116,7 +116,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-3", method: "api" },
         id: "ory.admin_identity.upsert",
-        title: '准备邮箱为 "orf-admin-freeze-objective-e2e@orf.local" 的管理员登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-admin-freeze-objective-e2e@orf.local`、使用固定测试密码的管理员登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -129,7 +129,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-4", method: "prisma" },
         id: "db.admin.upsert",
-        title: '准备邮箱为 "orf-admin-freeze-objective-e2e@orf.local"、角色为 admin、状态为 active 的管理员用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-admin-freeze-objective-e2e@orf.local`、角色为 `admin`、状态为 `active` 的管理员用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -144,7 +144,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-5", method: "prisma" },
         id: "db.objective.upsert_freeze_target",
-        title: '创建标题为 "E2E-ADMIN-FREEZE-OBJECTIVE: 目标前置"、流转状态为 reestimating、阶段为 orfReestimate 的本用例冻结目标',
+        title: "创建标题为 `E2E-ADMIN-FREEZE-OBJECTIVE: 目标前置`、流转状态为 `reestimating`、阶段为 `orfReestimate` 的本用例冻结目标",
         object: "db.objective",
         operator: "upsert",
         params: {
@@ -160,7 +160,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-6", method: "prisma" },
         id: "db.freeze_target.from_objective",
-        title: "记录本用例冻结目标为 runtime.freezeTarget",
+        title: "记录 本用例冻结目标",
         object: "db.freeze_target",
         operator: "from_objective",
         params: { objectiveIdFrom: "runtime.fixtureObjective.id", saveAs: "freezeTarget" },
@@ -176,7 +176,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-8", method: "prisma" },
         id: "db.freeze_result.create",
-        title: '为本用例冻结目标创建标题为 "E2E-FREEZE-RESULT: 冻结前置指标" 的冻结前置指标',
+        title: "为本用例冻结目标创建标题为 `E2E-FREEZE-RESULT: 冻结前置指标` 的冻结前置指标",
         object: "db.freeze_result",
         operator: "create",
         params: {
@@ -189,7 +189,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-9", method: "api" },
         id: "ory.admin_sessions.revoke",
-        title: "撤销管理员登录身份可能残留的 Ory session",
+        title: "撤销管理员登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -197,14 +197,14 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-10", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Setup-11", method: "playwright" },
         id: "page.goto.auth",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
@@ -212,7 +212,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-12", method: "playwright" },
         id: "fill.email",
-        title: "在邮箱输入框输入管理员测试邮箱",
+        title: "在邮箱输入框输入管理员固定测试邮箱",
         object: "page",
         operator: "fill",
         params: { label: "Email", valueFrom: "data.email" },
@@ -220,7 +220,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-13", method: "playwright" },
         id: "fill.password",
-        title: "在密码输入框输入管理员测试密码",
+        title: "在密码输入框输入管理员固定测试密码",
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.password" },
@@ -228,7 +228,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-14", method: "playwright" },
         id: "click.sign_in",
-        title: '点击 "Sign In" 登录操作',
+        title: "点击 \"Sign In\" 登录操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "Sign In" },
@@ -236,7 +236,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-15", method: "api" },
         id: "session.admin.authenticated",
-        title: "当前会话 应为 管理员已登录",
+        title: "当前会话 应为 管理员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -252,7 +252,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-17", method: "playwright" },
         id: "scope.all",
-        title: '切换到 "所有挑战" 视图',
+        title: "切换到 \"所有挑战\" 视图",
         object: "page",
         operator: "click",
         params: { role: "button", name: "所有挑战" },
@@ -266,7 +266,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S0-1", method: "api" },
         id: "session.admin.authenticated",
-        title: '当前会话 应为 邮箱为 "orf-admin-freeze-objective-e2e@orf.local"、角色为 admin、状态为 active 的已登录会话',
+        title: "当前会话 应为 邮箱为 `orf-admin-freeze-objective-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -290,7 +290,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S0-4", method: "playwright" },
         id: "freeze_target.freeze.enabled",
-        title: '本用例冻结目标的 "冻结" 操作 应可点击',
+        title: "本用例冻结目标的 \"冻结\" 操作 应可点击",
         object: "page.freeze_target",
         operator: "freeze_enabled",
         params: { targetFrom: "runtime.freezeTarget" },
@@ -320,7 +320,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Action-1", method: "api" },
         id: "capture.freeze_response",
-        title: '在点击 "冻结" 前注册冻结目标接口响应捕获',
+        title: "监听冻结目标请求响应",
         object: "api.objective_freeze",
         operator: "capture_response",
         params: { targetFrom: "runtime.freezeTarget", saveAs: "freezeResponse" },
@@ -328,7 +328,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Action-2", method: "playwright" },
         id: "click.freeze",
-        title: '点击本用例冻结目标的 "冻结" 操作',
+        title: "点击 本用例冻结目标的 \"冻结\" 操作",
         object: "page.freeze_target",
         operator: "freeze",
         params: { targetFrom: "runtime.freezeTarget" },
@@ -336,7 +336,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Action-3", method: "api" },
         id: "freeze_response.record",
-        title: "记录冻结目标接口返回的目标为 runtime.frozenObjective",
+        title: "记录 冻结目标结果中的目标",
         object: "api.objective_freeze_response",
         operator: "record_objective",
         params: { responseFrom: "runtime.freezeResponse", saveAs: "frozenObjective" },
@@ -350,7 +350,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S1-1", method: "api" },
         id: "freeze_response.ok",
-        title: "冻结目标接口响应 应成功",
+        title: "冻结目标结果 应成功",
         object: "api.response",
         operator: "ok",
         params: { responseFrom: "runtime.freezeResponse", status: 200 },
@@ -358,7 +358,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S1-2", method: "api" },
         id: "frozen_objective.matches",
-        title: "冻结目标接口返回的目标 应属于本用例目标，flowStatus 为 frozen、stage 为 goalFrozen 且 confirmedAt 已存在",
+        title: "冻结目标结果中的目标 应属于本用例目标，流转状态为 `frozen`、阶段为 `goalFrozen` 且冻结确认时间已存在",
         object: "api.objective_freeze_response",
         operator: "matches",
         params: { objectiveFrom: "runtime.frozenObjective", targetFrom: "runtime.freezeTarget" },
@@ -366,7 +366,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S1-3", method: "prisma" },
         id: "db.freeze_target.frozen",
-        title: "本用例冻结目标 在数据库中 应为 flowStatus frozen、stage goalFrozen 且 confirmedAt 已存在",
+        title: "本用例冻结目标 在数据库中 应为 流转状态 `frozen`、阶段 `goalFrozen` 且冻结确认时间已存在",
         object: "db.freeze_target",
         operator: "frozen",
         params: { targetFrom: "runtime.freezeTarget" },
@@ -374,7 +374,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S1-4", method: "playwright" },
         id: "page.freeze_target.frozen_status",
-        title: '本用例冻结目标面板 应显示 "已冻结"',
+        title: "本用例冻结目标面板 应显示 \"已冻结\"",
         object: "page.freeze_target",
         operator: "frozen_status_visible",
         params: { targetFrom: "runtime.freezeTarget" },
@@ -382,7 +382,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S1-5", method: "api" },
         id: "session.admin.still_authenticated",
-        title: "当前会话 应保持 管理员已登录",
+        title: "当前会话 应仍为 管理员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -396,7 +396,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-1", method: "prisma" },
         id: "db.freeze_result.delete",
-        title: "删除本用例创建的冻结前置指标",
+        title: "删除 本用例创建的冻结前置指标",
         object: "db.freeze_result",
         operator: "delete",
         params: { titleFrom: "data.freezeResultTitle", resultFrom: "runtime.freezeResult" },
@@ -404,7 +404,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-2", method: "prisma" },
         id: "db.objective.delete",
-        title: "删除本用例冻结目标及其派生数据",
+        title: "删除 本用例冻结目标及其派生数据",
         object: "db.objective",
         operator: "delete_by_title",
         params: { titleFrom: "data.objectiveTitle" },
@@ -412,28 +412,28 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-3", method: "api" },
         id: "auth.logout",
-        title: "调用退出登录接口撤销当前登录会话",
+        title: "注销当前登录会话",
         object: "auth",
         operator: "logout",
       },
       {
         source: { caseStepId: "Clean-4", method: "playwright" },
         id: "page.runtime.stop",
-        title: "当前页面离开 ORF 前端应用",
+        title: "离开当前 ORF 前端页面",
         object: "page.runtime",
         operator: "stop",
       },
       {
         source: { caseStepId: "Clean-5", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Clean-6", method: "api" },
         id: "ory.admin_sessions.revoke",
-        title: "撤销管理员登录身份的残留 Ory session",
+        title: "撤销管理员登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -441,7 +441,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-7", method: "api" },
         id: "ory.admin_identity.delete",
-        title: '删除邮箱为 "orf-admin-freeze-objective-e2e@orf.local" 的管理员登录身份',
+        title: "删除邮箱为 `orf-admin-freeze-objective-e2e@orf.local` 的管理员登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
@@ -457,7 +457,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-9", method: "prisma" },
         id: "db.admin.delete",
-        title: '删除邮箱为 "orf-admin-freeze-objective-e2e@orf.local" 的管理员用户',
+        title: "删除邮箱为 `orf-admin-freeze-objective-e2e@orf.local` 的管理员用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.email" },
@@ -465,7 +465,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-10", method: "prisma" },
         id: "db.freeze_result.absent",
-        title: '应不存在 标题为 "E2E-FREEZE-RESULT: 冻结前置指标" 的冻结前置指标',
+        title: "应不存在 标题为 `E2E-FREEZE-RESULT: 冻结前置指标` 的冻结前置指标",
         object: "db.result",
         operator: "absent",
         params: { titleFrom: "data.freezeResultTitle" },
@@ -473,7 +473,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-11", method: "prisma" },
         id: "db.objective.absent",
-        title: '应不存在 标题为 "E2E-ADMIN-FREEZE-OBJECTIVE: 目标前置" 的测试目标',
+        title: "应不存在 标题为 `E2E-ADMIN-FREEZE-OBJECTIVE: 目标前置` 的测试目标",
         object: "db.objective",
         operator: "absent",
         params: { titleFrom: "data.objectiveTitle" },
@@ -481,7 +481,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Clean-12", method: "prisma" },
         id: "db.admin.absent",
-        title: '应不存在 邮箱为 "orf-admin-freeze-objective-e2e@orf.local" 的管理员用户',
+        title: "应不存在 邮箱为 `orf-admin-freeze-objective-e2e@orf.local` 的管理员用户",
         object: "db.user",
         operator: "absent",
         params: { emailFrom: "data.email" },

@@ -53,7 +53,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "B-4", method: "api" },
         id: "session.endpoint.accessible",
-        title: "当前会话查询接口 应可访问",
+        title: "当前会话查询能力 应可用",
         object: "auth.session",
         operator: "accessible",
       },
@@ -74,7 +74,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "B-7", method: "api" },
         id: "ory.admin_public.ready",
-        title: "Ory/Kratos Admin/Public API 应可访问",
+        title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用",
         object: "ory.admin_public",
         operator: "ready",
       },
@@ -88,14 +88,14 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "B-9", method: "playwright" },
         id: "cookie.absent",
-        title: "当前浏览器 应不存在 Ory session cookie",
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "B-10", method: "playwright" },
         id: "storage.empty",
-        title: "当前浏览器 storage 应不包含 登录态",
+        title: "当前浏览器 应不保留本地登录态",
         object: "browser.auth_storage",
         operator: "empty",
       },
@@ -116,7 +116,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-2", method: "api" },
         id: "ory.admin_identity.upsert",
-        title: '准备邮箱为 "orf-admin-review-application-e2e@orf.local" 的管理员登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-admin-review-application-e2e@orf.local`、使用固定测试密码的管理员登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -129,7 +129,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-3", method: "prisma" },
         id: "db.admin.upsert",
-        title: '准备邮箱为 "orf-admin-review-application-e2e@orf.local"、角色为 admin、状态为 active 的管理员用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-admin-review-application-e2e@orf.local`、角色为 `admin`、状态为 `active` 的管理员用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -144,7 +144,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-4", method: "api" },
         id: "ory.approve_identity.upsert",
-        title: '准备邮箱为 "orf-member-review-approve-e2e@orf.local" 的审批通过申请人登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-member-review-approve-e2e@orf.local`、使用固定测试密码的审批通过申请人登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -157,7 +157,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-5", method: "prisma" },
         id: "db.approve_member.upsert",
-        title: '准备邮箱为 "orf-member-review-approve-e2e@orf.local"、角色为 member、状态为 active 的审批通过申请人用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-member-review-approve-e2e@orf.local`、角色为 `member`、状态为 `active` 的审批通过申请人用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -172,7 +172,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-6", method: "api" },
         id: "ory.reject_identity.upsert",
-        title: '准备邮箱为 "orf-member-review-reject-e2e@orf.local" 的审批拒绝申请人登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-member-review-reject-e2e@orf.local`、使用固定测试密码的审批拒绝申请人登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -185,7 +185,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-7", method: "prisma" },
         id: "db.reject_member.upsert",
-        title: '准备邮箱为 "orf-member-review-reject-e2e@orf.local"、角色为 member、状态为 active 的审批拒绝申请人用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-member-review-reject-e2e@orf.local`、角色为 `member`、状态为 `active` 的审批拒绝申请人用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -200,7 +200,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-8", method: "prisma" },
         id: "db.objective.upsert_reviewable",
-        title: '创建标题为 "E2E-REVIEW-APPLICATION: 成员申请审批"、流转状态为 open、阶段为 resultClaiming 的本用例审批目标',
+        title: "创建标题为 `E2E-REVIEW-APPLICATION: 成员申请审批`、流转状态为 `open`、阶段为 `resultClaiming` 的本用例审批目标",
         object: "db.objective",
         operator: "upsert",
         params: {
@@ -228,7 +228,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-10", method: "prisma" },
         id: "db.challenge_application.create_approve_pending",
-        title: '创建 "ORF Member Review Approve E2E" 对本用例审批目标的 pending 挑战申请',
+        title: "创建 \"ORF Member Review Approve E2E\" 对本用例审批目标的 pending 挑战申请",
         object: "db.challenge_application",
         operator: "create_pending_application",
         params: {
@@ -240,7 +240,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-11", method: "prisma" },
         id: "db.challenge_application.create_reject_pending",
-        title: '创建 "ORF Member Review Reject E2E" 对本用例审批目标的 pending 挑战申请',
+        title: "创建 \"ORF Member Review Reject E2E\" 对本用例审批目标的 pending 挑战申请",
         object: "db.challenge_application",
         operator: "create_pending_application",
         params: {
@@ -252,7 +252,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-12", method: "api" },
         id: "ory.admin_sessions.revoke",
-        title: "撤销管理员登录身份可能残留的 Ory session",
+        title: "撤销管理员登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -260,7 +260,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-13", method: "api" },
         id: "ory.approve_sessions.revoke",
-        title: "撤销审批通过申请人登录身份可能残留的 Ory session",
+        title: "撤销审批通过申请人登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.approveApplicantEmail" },
@@ -268,7 +268,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-14", method: "api" },
         id: "ory.reject_sessions.revoke",
-        title: "撤销审批拒绝申请人登录身份可能残留的 Ory session",
+        title: "撤销审批拒绝申请人登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.rejectApplicantEmail" },
@@ -276,14 +276,14 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-15", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Setup-16", method: "playwright" },
         id: "page.goto.auth",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
@@ -291,7 +291,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-17", method: "playwright" },
         id: "fill.email",
-        title: "在邮箱输入框输入管理员测试邮箱",
+        title: "在邮箱输入框输入管理员固定测试邮箱",
         object: "page",
         operator: "fill",
         params: { label: "Email", valueFrom: "data.email" },
@@ -299,7 +299,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-18", method: "playwright" },
         id: "fill.password",
-        title: "在密码输入框输入管理员测试密码",
+        title: "在密码输入框输入管理员固定测试密码",
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.password" },
@@ -307,7 +307,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-19", method: "playwright" },
         id: "click.sign_in",
-        title: '点击 "Sign In" 登录操作',
+        title: "点击 \"Sign In\" 登录操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "Sign In" },
@@ -315,7 +315,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-20", method: "api" },
         id: "session.admin.authenticated",
-        title: "当前会话 应为 管理员已登录",
+        title: "当前会话 应为 管理员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -331,7 +331,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Setup-22", method: "playwright" },
         id: "scope.all",
-        title: '切换到 "所有挑战" 视图',
+        title: "切换到 \"所有挑战\" 视图",
         object: "page",
         operator: "click",
         params: { role: "button", name: "所有挑战" },
@@ -345,7 +345,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S0-1", method: "api" },
         id: "session.admin.authenticated",
-        title: '当前会话 应为 邮箱为 "orf-admin-review-application-e2e@orf.local"、角色为 admin、状态为 active 的已登录会话',
+        title: "当前会话 应为 邮箱为 `orf-admin-review-application-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -369,7 +369,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S0-4", method: "playwright" },
         id: "approve_application.visible",
-        title: '"ORF Member Review Approve E2E" 挑战申请的 "通过" 操作 应可见',
+        title: "\"ORF Member Review Approve E2E\" 挑战申请的 \"通过\" 操作 应可见",
         object: "page.challenge_application",
         operator: "approve_visible",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.approveApplicantName" },
@@ -377,7 +377,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S0-5", method: "playwright" },
         id: "reject_application.visible",
-        title: '"ORF Member Review Reject E2E" 挑战申请的 "拒绝" 操作 应可见',
+        title: "\"ORF Member Review Reject E2E\" 挑战申请的 \"拒绝\" 操作 应可见",
         object: "page.challenge_application",
         operator: "reject_visible",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.rejectApplicantName" },
@@ -385,7 +385,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S0-6", method: "prisma" },
         id: "db.approve_application.pending",
-        title: '"ORF Member Review Approve E2E" 对本用例审批目标的挑战申请状态 应为 pending',
+        title: "\"ORF Member Review Approve E2E\" 对本用例审批目标的挑战申请状态 应为 `pending`",
         object: "db.challenge_application",
         operator: "status",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.approveApplicantName", status: "pending" },
@@ -393,7 +393,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S0-7", method: "prisma" },
         id: "db.reject_application.pending",
-        title: '"ORF Member Review Reject E2E" 对本用例审批目标的挑战申请状态 应为 pending',
+        title: "\"ORF Member Review Reject E2E\" 对本用例审批目标的挑战申请状态 应为 `pending`",
         object: "db.challenge_application",
         operator: "status",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.rejectApplicantName", status: "pending" },
@@ -401,7 +401,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S0-8", method: "prisma" },
         id: "db.approve_challenger.absent",
-        title: '本用例审批目标的挑战者列表 应不包含 "ORF Member Review Approve E2E"',
+        title: "本用例审批目标的挑战者列表 应不包含 \"ORF Member Review Approve E2E\"",
         object: "db.objective_challengers",
         operator: "absent",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.approveApplicantName" },
@@ -409,7 +409,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S0-9", method: "prisma" },
         id: "db.reject_challenger.absent",
-        title: '本用例审批目标的挑战者列表 应不包含 "ORF Member Review Reject E2E"',
+        title: "本用例审批目标的挑战者列表 应不包含 \"ORF Member Review Reject E2E\"",
         object: "db.objective_challengers",
         operator: "absent",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.rejectApplicantName" },
@@ -423,7 +423,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Action-1", method: "api" },
         id: "capture.approve_response",
-        title: "在点击通过前注册审批通过接口响应捕获",
+        title: "监听审批通过请求响应",
         object: "api.challenge_review",
         operator: "capture_approve_response",
         params: { targetFrom: "runtime.reviewTarget", saveAs: "approveResponse" },
@@ -431,7 +431,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Action-2", method: "playwright" },
         id: "click.approve_application",
-        title: '点击 "ORF Member Review Approve E2E" 挑战申请的 "通过" 操作',
+        title: "点击 \"ORF Member Review Approve E2E\" 挑战申请的 \"通过\" 操作",
         object: "page.challenge_application",
         operator: "approve",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.approveApplicantName" },
@@ -439,7 +439,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Action-3", method: "api" },
         id: "capture.reject_response",
-        title: "在点击拒绝前注册审批拒绝接口响应捕获",
+        title: "监听审批拒绝请求响应",
         object: "api.challenge_review",
         operator: "capture_reject_response",
         params: { targetFrom: "runtime.reviewTarget", saveAs: "rejectResponse" },
@@ -447,7 +447,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Action-4", method: "playwright" },
         id: "click.reject_application",
-        title: '点击 "ORF Member Review Reject E2E" 挑战申请的 "拒绝" 操作',
+        title: "点击 \"ORF Member Review Reject E2E\" 挑战申请的 \"拒绝\" 操作",
         object: "page.challenge_application",
         operator: "reject",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.rejectApplicantName" },
@@ -461,7 +461,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-1", method: "api" },
         id: "approve_response.ok",
-        title: "审批通过接口响应 应成功，且响应目标 ID 为本用例审批目标 ID",
+        title: "审批通过结果 应成功，且响应目标 ID 为本用例审批目标 ID",
         object: "api.challenge_review",
         operator: "response_ok",
         params: { responseFrom: "runtime.approveResponse", targetFrom: "runtime.reviewTarget" },
@@ -469,7 +469,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-2", method: "api" },
         id: "reject_response.ok",
-        title: "审批拒绝接口响应 应成功，且响应目标 ID 为本用例审批目标 ID",
+        title: "审批拒绝结果 应成功，且响应目标 ID 为本用例审批目标 ID",
         object: "api.challenge_review",
         operator: "response_ok",
         params: { responseFrom: "runtime.rejectResponse", targetFrom: "runtime.reviewTarget" },
@@ -477,7 +477,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-3", method: "prisma" },
         id: "db.approve_application.approved",
-        title: '"ORF Member Review Approve E2E" 对本用例审批目标的挑战申请状态 应变为 approved',
+        title: "\"ORF Member Review Approve E2E\" 对本用例审批目标的挑战申请状态 应变为 `approved`",
         object: "db.challenge_application",
         operator: "status",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.approveApplicantName", status: "approved" },
@@ -485,7 +485,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-4", method: "prisma" },
         id: "db.approve_challenger.present",
-        title: '本用例审批目标的挑战者列表 应包含 "ORF Member Review Approve E2E"',
+        title: "本用例审批目标的挑战者列表 应包含 \"ORF Member Review Approve E2E\"",
         object: "db.objective_challengers",
         operator: "present",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.approveApplicantName" },
@@ -493,7 +493,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-5", method: "prisma" },
         id: "db.reject_application.declined",
-        title: '"ORF Member Review Reject E2E" 对本用例审批目标的挑战申请状态 应变为 declined',
+        title: "\"ORF Member Review Reject E2E\" 对本用例审批目标的挑战申请状态 应变为 `declined`",
         object: "db.challenge_application",
         operator: "status",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.rejectApplicantName", status: "declined" },
@@ -501,7 +501,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-6", method: "prisma" },
         id: "db.reject_challenger.absent",
-        title: '本用例审批目标的挑战者列表 应不包含 "ORF Member Review Reject E2E"',
+        title: "本用例审批目标的挑战者列表 应不包含 \"ORF Member Review Reject E2E\"",
         object: "db.objective_challengers",
         operator: "absent",
         params: { targetFrom: "runtime.reviewTarget", applicantFrom: "data.rejectApplicantName" },
@@ -509,7 +509,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-7", method: "prisma" },
         id: "db.objective.flow_reestimating",
-        title: "本用例审批目标的 flowStatus 应变为 reestimating",
+        title: "本用例审批目标的 flowStatus 应变为 `reestimating`",
         object: "db.objective",
         operator: "flow_status",
         params: { targetFrom: "runtime.reviewTarget", status: "reestimating" },
@@ -517,7 +517,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "S1-8", method: "api" },
         id: "session.admin.still_authenticated",
-        title: "当前会话 应保持 管理员已登录",
+        title: "当前会话 应仍为 管理员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -531,7 +531,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-1", method: "prisma" },
         id: "db.objective.delete_by_title",
-        title: "删除本用例审批目标及其派生数据",
+        title: "删除 本用例审批目标及其派生数据",
         object: "db.objective",
         operator: "delete_by_title",
         params: { titleFrom: "data.objectiveTitle" },
@@ -539,28 +539,28 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-2", method: "api" },
         id: "auth.logout",
-        title: "调用退出登录接口撤销当前登录会话",
+        title: "注销当前登录会话",
         object: "auth",
         operator: "logout",
       },
       {
         source: { caseStepId: "Clean-3", method: "playwright" },
         id: "page.runtime.stop",
-        title: "当前页面离开 ORF 前端应用",
+        title: "离开当前 ORF 前端页面",
         object: "page.runtime",
         operator: "stop",
       },
       {
         source: { caseStepId: "Clean-4", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Clean-5", method: "api" },
         id: "ory.admin_sessions.revoke",
-        title: "撤销管理员登录身份的残留 Ory session",
+        title: "撤销管理员登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -568,7 +568,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-6", method: "api" },
         id: "ory.approve_sessions.revoke",
-        title: "撤销审批通过申请人登录身份的残留 Ory session",
+        title: "撤销审批通过申请人登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.approveApplicantEmail" },
@@ -576,7 +576,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-7", method: "api" },
         id: "ory.reject_sessions.revoke",
-        title: "撤销审批拒绝申请人登录身份的残留 Ory session",
+        title: "撤销审批拒绝申请人登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.rejectApplicantEmail" },
@@ -584,7 +584,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-8", method: "api" },
         id: "ory.admin_identity.delete",
-        title: '删除邮箱为 "orf-admin-review-application-e2e@orf.local" 的管理员登录身份',
+        title: "删除邮箱为 `orf-admin-review-application-e2e@orf.local` 的管理员登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
@@ -592,7 +592,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-9", method: "api" },
         id: "ory.approve_identity.delete",
-        title: '删除邮箱为 "orf-member-review-approve-e2e@orf.local" 的审批通过申请人登录身份',
+        title: "删除邮箱为 `orf-member-review-approve-e2e@orf.local` 的审批通过申请人登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.approveApplicantEmail" },
@@ -600,7 +600,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-10", method: "api" },
         id: "ory.reject_identity.delete",
-        title: '删除邮箱为 "orf-member-review-reject-e2e@orf.local" 的审批拒绝申请人登录身份',
+        title: "删除邮箱为 `orf-member-review-reject-e2e@orf.local` 的审批拒绝申请人登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.rejectApplicantEmail" },
@@ -632,7 +632,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-14", method: "prisma" },
         id: "db.admin.delete",
-        title: '删除邮箱为 "orf-admin-review-application-e2e@orf.local" 的管理员用户',
+        title: "删除邮箱为 `orf-admin-review-application-e2e@orf.local` 的管理员用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.email" },
@@ -640,7 +640,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-15", method: "prisma" },
         id: "db.approve_member.delete",
-        title: '删除邮箱为 "orf-member-review-approve-e2e@orf.local" 的审批通过申请人用户',
+        title: "删除邮箱为 `orf-member-review-approve-e2e@orf.local` 的审批通过申请人用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.approveApplicantEmail" },
@@ -648,7 +648,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-16", method: "prisma" },
         id: "db.reject_member.delete",
-        title: '删除邮箱为 "orf-member-review-reject-e2e@orf.local" 的审批拒绝申请人用户',
+        title: "删除邮箱为 `orf-member-review-reject-e2e@orf.local` 的审批拒绝申请人用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.rejectApplicantEmail" },
@@ -656,7 +656,7 @@ export const reviewApplicationCase = {
       {
         source: { caseStepId: "Clean-17", method: "prisma" },
         id: "db.objective.absent",
-        title: '应不存在 标题为 "E2E-REVIEW-APPLICATION: 成员申请审批" 的测试目标',
+        title: "应不存在 标题为 `E2E-REVIEW-APPLICATION: 成员申请审批` 的测试目标",
         object: "db.objective",
         operator: "absent",
         params: { titleFrom: "data.objectiveTitle" },
