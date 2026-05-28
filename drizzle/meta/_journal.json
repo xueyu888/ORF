@@ -141,6 +141,13 @@
       "when": 1779660000000,
       "tag": "0019_challenger_member_boundary",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1779740000000,
+      "tag": "0020_drop_task_result_ownership",
+      "breakpoints": true
     }
   ]
 }

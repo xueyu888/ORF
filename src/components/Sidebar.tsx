@@ -12,7 +12,7 @@ const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
 const sidebarGroups = [
   { title: "work", labels: ["悬赏大厅", "我的挑战"] },
   { title: "report", labels: ["反馈", "统计"] },
-  { title: "admin", labels: ["成员管理", "权限管理"] },
+  { title: "admin", labels: ["成员管理", "权限管理", "系统设置"] },
 ].map((group) => ({
   ...group,
   items: group.labels.map((label) => navItemByLabel.get(label)).filter((item) => item !== undefined),
@@ -125,7 +125,7 @@ export function Sidebar({
               >
                 <Command className="h-4 w-4" />
               </button>
-              {canShowFrontend(currentUser, "nav.settings") && (
+              {canShowFrontend(currentUser, "nav.personalSettings") && (
                 <NavLink
                   to="/settings"
                   className={({ isActive }) =>

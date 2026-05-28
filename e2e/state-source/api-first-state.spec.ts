@@ -563,7 +563,6 @@ test("created action stays visible while challenge refresh is pending", async ({
     ...initialOrfState.tasks[0]!,
     id: "task-action-overlay-refresh",
     linkedObjectiveId: objective.id,
-    linkedResultId: null,
     title: "延迟刷新后端行动项",
     checklist: [],
   };
@@ -632,7 +631,6 @@ test("created subtask stays visible while challenge refresh is pending", async (
     ...initialOrfState.tasks[0]!,
     id: "task-subtask-overlay-refresh",
     linkedObjectiveId: objective.id,
-    linkedResultId: null,
     title: "已有行动项用于新增子项",
     checklist: [],
   };
@@ -768,7 +766,6 @@ test("objective hover keeps one primary add icon for metric and action branches"
     ...initialOrfState.tasks[0]!,
     id: "task-unified-child-create",
     linkedObjectiveId: objective.id,
-    linkedResultId: null,
     title: "已有行动项",
   };
   const taskData = taskManagementDataWith({
@@ -1456,7 +1453,6 @@ test("objective overview shows an empty related AI systems state without linked 
     title: "真实 AI 系统空态指标",
     evidenceIds: [],
     feedbackIds: [],
-    taskIds: [],
   };
 
   await page.route("**/api/tasks-page", async (route) => {
@@ -1496,7 +1492,6 @@ test("objective overview derives related AI systems from linked evidence", async
     title: "真实 AI 系统关联指标",
     evidenceIds: ["evidence-ai-system-live", "evidence-ai-system-log"],
     feedbackIds: [],
-    taskIds: [],
   };
   const evidence: Evidence[] = [
     {
@@ -1686,7 +1681,6 @@ test("strategy map renders only API-derived strategy nodes", async ({ page }) =>
     id: "task-strategy-live",
     title: "真实策略行动项",
     linkedObjectiveId: objective.id,
-    linkedResultId: result.id,
     status: "In Review",
   };
 
@@ -1797,7 +1791,6 @@ test("result detail derives feedback and quality checks from API relations", asy
     completionStandard: "",
     sampleSet: "",
     measurementScope: "",
-    taskIds: [],
     feedbackIds: [],
   };
   const task: Task = {
@@ -1805,7 +1798,6 @@ test("result detail derives feedback and quality checks from API relations", asy
     id: "task-quality-live",
     title: "真实关联行动项",
     linkedObjectiveId: objective.id,
-    linkedResultId: result.id,
   };
   const feedback: Feedback = {
     ...initialOrfState.feedback[0]!,
@@ -1855,7 +1847,6 @@ test("result detail shows empty states instead of inferred criteria for sparse l
     completionStandard: "",
     sampleSet: "",
     measurementScope: "",
-    taskIds: [],
     feedbackIds: [],
     trend: [],
   };

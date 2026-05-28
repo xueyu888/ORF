@@ -16,10 +16,11 @@ import { MembersPage } from "./pages/MembersPage";
 import { NotificationsPage } from "./pages/NotificationsPage";
 import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
 import { ObjectivesPage } from "./pages/ObjectivesPage";
+import { PersonalSettingsPage } from "./pages/PersonalSettingsPage";
 import { PermissionsPage } from "./pages/PermissionsPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ResultDetailPage } from "./pages/ResultDetailPage";
-import { SettingsPage } from "./pages/SettingsPage";
+import { SystemSettingsPage } from "./pages/SettingsPage";
 import { StrategyMapPage } from "./pages/StrategyMapPage";
 import { ChallengePlanPage } from "./pages/TasksPage";
 import { useOrf } from "./state/OrfProvider";
@@ -64,8 +65,16 @@ export function App() {
         <Route
           path="settings"
           element={
-            <RequireFrontendVisibility visibilityKey="page.settings">
-              <SettingsPage />
+            <RequireFrontendVisibility visibilityKey="page.personalSettings">
+              <PersonalSettingsPage />
+            </RequireFrontendVisibility>
+          }
+        />
+        <Route
+          path="settings/system"
+          element={
+            <RequireFrontendVisibility visibilityKey="page.systemSettings">
+              <SystemSettingsPage />
             </RequireFrontendVisibility>
           }
         />

@@ -1,4 +1,6 @@
 import type { AppNotification, BountySource, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
+import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -45,7 +47,6 @@ export type BountyHallData = {
   contribution: { points: number };
 };
 export type MyChallengesScope = "mine" | "all";
-export type VisualBackgroundScene = "login_background" | "sidebar_background";
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
 export type VisualBackgroundSwitchOrder = "sequential" | "random";

@@ -23,8 +23,12 @@
     "label": "侧边栏权限管理入口",
     "audience": ["admin"]
   },
-  "nav.settings": {
-    "label": "侧边栏设置入口",
+  "nav.personalSettings": {
+    "label": "侧边栏个人设置入口",
+    "audience": "all"
+  },
+  "nav.systemSettings": {
+    "label": "侧边栏系统设置入口",
     "audience": ["admin"]
   },
   "command.objectives": {
@@ -39,8 +43,12 @@
     "label": "权限管理页面访问",
     "audience": ["admin"]
   },
-  "page.settings": {
-    "label": "设置页面访问",
+  "page.personalSettings": {
+    "label": "个人设置页面访问",
+    "audience": "all"
+  },
+  "page.systemSettings": {
+    "label": "系统设置页面访问",
     "audience": ["admin"]
   },
   "challenge.scope.all": {

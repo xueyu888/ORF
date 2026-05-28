@@ -1357,7 +1357,6 @@ test("member creates objective-owned action without a linked result", async ({ p
         priority: createPayload.priority ?? "High",
         assignee: createPayload.assignee ?? memberUser.name,
         linkedObjectiveId: objective.id,
-        linkedResultId: null,
         dueDate: "2999-01-01",
         tags: [],
         checklist: [],
@@ -2778,7 +2777,7 @@ type MockMutationResult = { status?: number; json?: unknown };
 type MockRouteResponse<T> = T | { status: number; json?: unknown };
 type MockRouteSource<T> = MockRouteResponse<T> | (() => MockRouteResponse<T> | Promise<MockRouteResponse<T>>);
 type ResultCreatePayload = { definer?: string; metricName?: string; objectiveId?: string; source?: string; title?: string };
-type TaskCreatePayload = { assignee?: string; linkedObjectiveId?: string; linkedResultId?: string; priority?: Task["priority"]; title?: string };
+type TaskCreatePayload = { assignee?: string; linkedObjectiveId?: string; priority?: Task["priority"]; title?: string };
 type LootSubmitPayload = { body?: string; resultClaims?: ObjectiveLoot["resultClaims"]; selfTestReportBody?: string | null };
 type ContributionReviewPayload = { allocations?: ContributionAllocation[] };
 
@@ -2894,7 +2893,6 @@ function resultFixture(overrides: Partial<Result> & Pick<Result, "id" | "objecti
     metricName: `${overrides.title} metric`,
     metricRequirement: `${overrides.title} requirement`,
     acceptedResult: "unreviewed",
-    taskIds: [],
     feedbackIds: [],
     evidenceIds: [],
     ...overrides,

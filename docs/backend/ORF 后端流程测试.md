@@ -19,7 +19,7 @@
 | 征召到接受 | `commander recruitment appears as a recruitment item and the recruited challenger can accept it` | 指挥官征召，挑战者看到征召项，接受后进入我的挑战，并获得重估期指标调整资格 |
 | API 创建指标权限 | `member-proposed result creation requires the API actor to be a challenger inside the reestimate window` | `POST /api/results` 只允许正式挑战者在未过期重估期创建 `memberProposed` 指标 |
 | API 编辑指标权限 | `challenger result edits through the API close after reestimate expiry and freeze` | `PATCH /api/results/:resultId` 只允许正式挑战者在未过期重估期编辑指标标题，过期或冻结后拒绝 |
-| API 创建任务归属 | `API task creation is owned by the objective and does not require a result` | `POST /api/tasks` 基于 `linkedObjectiveId` 创建任务，不要求 `linkedResultId`；候选目标和无指标目标也能维护目标行动项 |
+| API 创建任务归属 | `API task creation is owned by the objective and does not require a result` | `POST /api/tasks` 基于 `linkedObjectiveId` 创建任务，不接受或持久化任务级 `linkedResultId`；候选目标和无指标目标也能维护目标行动项 |
 | API 任务共同维护权限 | `objective challengers share task and subtask maintenance` | 任务和子任务写入权限来自父级 Objective 参与关系；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除，旁观成员拒绝，指挥官按管理员权限通过 |
 | API 输入归一化 | `API work item creation trims labels and prevents blank persisted titles` | 指标、任务、子任务创建接口会 trim 用户输入，拒绝空白必填标题，非法日期和非 active 成员执行人返回 400，空执行人回落为当前用户 |
 | API stage 兼容保护 | `API objective stage updates cannot violate lifecycle compatibility` | 旧 stage 接口不能把重估目标标成冻结阶段，也不能把冻结后目标改回重估阶段 |

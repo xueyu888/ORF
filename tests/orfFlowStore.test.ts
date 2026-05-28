@@ -55,7 +55,7 @@ test("normalizeState migrates legacy challenge fields and result defaults", () =
     assignedChallenger: "Kai Wang",
     challengeApplications: [{ id: "app-1", applicant: "Nora Li", status: "pending", createdAt: date }],
   } as unknown as Result;
-  const legacyTask = task({ id: "task-legacy", linkedObjectiveId: "obj-legacy", linkedResultId: "res-legacy", dueDate: "2026-06-20" });
+  const legacyTask = task({ id: "task-legacy", linkedObjectiveId: "obj-legacy", dueDate: "2026-06-20" });
 
   const normalized = normalizeState(
     state({
@@ -92,7 +92,7 @@ test("local store generated ids stay unique within one millisecond", () => {
   const current = state({
     objectives: [objective({ id: "obj-base", resultIds: ["res-base"], taskIds: ["task-base"] })],
     results: [result({ id: "res-base", objectiveId: "obj-base" })],
-    tasks: [task({ id: "task-base", linkedObjectiveId: "obj-base", linkedResultId: "res-base" })],
+    tasks: [task({ id: "task-base", linkedObjectiveId: "obj-base" })],
   });
   const originalNow = Date.now;
   const originalRandom = Math.random;
@@ -149,17 +149,16 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
       objective({ id: "obj-keep", resultIds: ["res-keep"], taskIds: ["task-keep"], feedbackIds: [] }),
     ],
     results: [
-      result({ id: "res-delete", objectiveId: "obj-delete", taskIds: ["task-delete"], feedbackIds: ["fb-delete"], evidenceIds: ["ev-delete"] }),
-      result({ id: "res-keep", objectiveId: "obj-keep", taskIds: ["task-keep"] }),
+      result({ id: "res-delete", objectiveId: "obj-delete", feedbackIds: ["fb-delete"], evidenceIds: ["ev-delete"] }),
+      result({ id: "res-keep", objectiveId: "obj-keep" }),
     ],
     tasks: [
       task({
         id: "task-delete",
         linkedObjectiveId: "obj-delete",
-        linkedResultId: "res-delete",
         checklist: [{ id: "ck-delete", label: "remove me", done: false, updatedAt: date }],
       }),
-      task({ id: "task-keep", linkedObjectiveId: "obj-keep", linkedResultId: "res-keep" }),
+      task({ id: "task-keep", linkedObjectiveId: "obj-keep" }),
     ],
     feedback: [feedback({ id: "fb-delete", linkedObjectiveId: "obj-delete", linkedResultId: "res-delete" })],
     evidence: [evidence({ id: "ev-delete", linkedResultId: "res-delete", linkedFeedbackId: "fb-delete" })],
@@ -200,12 +199,12 @@ test("moveTask reorders tasks inside the same objective without changing result 
   const current = state({
     objectives: [objective({ id: "obj-a", resultIds: ["res-a", "res-b"], taskIds: ["task-a", "task-b"] })],
     results: [
-      result({ id: "res-a", objectiveId: "obj-a", taskIds: ["task-a"] }),
-      result({ id: "res-b", objectiveId: "obj-a", taskIds: ["task-b"] }),
+      result({ id: "res-a", objectiveId: "obj-a" }),
+      result({ id: "res-b", objectiveId: "obj-a" }),
     ],
     tasks: [
-      task({ id: "task-a", linkedObjectiveId: "obj-a", linkedResultId: "res-a" }),
-      task({ id: "task-b", linkedObjectiveId: "obj-a", linkedResultId: "res-b" }),
+      task({ id: "task-a", linkedObjectiveId: "obj-a" }),
+      task({ id: "task-b", linkedObjectiveId: "obj-a" }),
     ],
   });
 
@@ -213,10 +212,7 @@ test("moveTask reorders tasks inside the same objective without changing result 
 
   assert.deepEqual(next.tasks.map((item) => item.id), ["task-b", "task-a"]);
   assert.equal(next.tasks.find((item) => item.id === "task-a")?.linkedObjectiveId, "obj-a");
-  assert.equal(next.tasks.find((item) => item.id === "task-a")?.linkedResultId, "res-a");
   assert.deepEqual(next.objectives.find((item) => item.id === "obj-a")?.taskIds, ["task-b", "task-a"]);
-  assert.deepEqual(next.results.find((item) => item.id === "res-a")?.taskIds, ["task-a"]);
-  assert.deepEqual(next.results.find((item) => item.id === "res-b")?.taskIds, ["task-b"]);
 });
 
 test("moveResult refuses to move a result outside its objective", () => {
@@ -470,7 +466,6 @@ function result(overrides: Partial<Result> = {}): Result {
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     evidenceIds: [],
-    taskIds: [],
     feedbackIds: [],
     trend: [{ date, value: 0 }],
     reviewCadence: "Weekly",
@@ -487,7 +482,6 @@ function task(overrides: Partial<Task> = {}): Task {
     priority: "Medium",
     assignee: "Kai Wang",
     linkedObjectiveId: "obj-a",
-    linkedResultId: "res-a",
     dueDate: date,
     tags: ["ORF"],
     checklist: [],

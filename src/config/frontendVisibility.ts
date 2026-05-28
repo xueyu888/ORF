@@ -23,7 +23,8 @@ export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/reports": "nav.reports",
   "/members": "nav.members",
   "/permissions": "nav.permissions",
-  "/settings": "page.settings",
+  "/settings": "page.personalSettings",
+  "/settings/system": "page.systemSettings",
   "/objectives": "command.objectives",
 };
 

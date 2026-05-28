@@ -29,11 +29,15 @@ test("frontend visibility path mappings reference configured keys", () => {
   }
 });
 
-test("visual settings are only visible to administrators", () => {
-  assert.equal(canShowFrontend(adminUser, "nav.settings"), true);
-  assert.equal(canShowFrontend(memberUser, "nav.settings"), false);
+test("personal and system settings have separate visibility contracts", () => {
+  assert.equal(canShowFrontend(adminUser, "nav.personalSettings"), true);
+  assert.equal(canShowFrontend(memberUser, "nav.personalSettings"), true);
+  assert.equal(canShowFrontend(adminUser, "nav.systemSettings"), true);
+  assert.equal(canShowFrontend(memberUser, "nav.systemSettings"), false);
   assert.equal(canShowFrontendPath(adminUser, "/settings"), true);
-  assert.equal(canShowFrontendPath(memberUser, "/settings"), false);
+  assert.equal(canShowFrontendPath(memberUser, "/settings"), true);
+  assert.equal(canShowFrontendPath(adminUser, "/settings/system"), true);
+  assert.equal(canShowFrontendPath(memberUser, "/settings/system"), false);
 });
 
 test("authenticated command pages do not include the auth route", () => {

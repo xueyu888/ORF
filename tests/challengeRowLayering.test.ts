@@ -106,7 +106,6 @@ function challengeGroups(): ObjectiveNode[] {
   const alphaTask = task({
     id: "task-alpha",
     linkedObjectiveId: "obj-alpha",
-    linkedResultId: "res-alpha",
     checklist: [{ id: "check-alpha", label: "Alpha checklist", done: false, updatedAt: date }],
   });
 
@@ -192,7 +191,6 @@ function result(overrides: Partial<Result> = {}): Result {
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     evidenceIds: [],
-    taskIds: [],
     feedbackIds: [],
     trend: [],
     reviewCadence: "Weekly",
@@ -209,7 +207,6 @@ function task(overrides: Partial<Task> = {}): Task {
     priority: "Medium",
     assignee: "Kai Wang",
     linkedObjectiveId: "obj-alpha",
-    linkedResultId: "res-alpha",
     dueDate: date,
     tags: [],
     checklist: [],

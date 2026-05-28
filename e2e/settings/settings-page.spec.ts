@@ -45,10 +45,10 @@ test("settings page only exposes implemented visual configuration", async ({ pag
 
   await page.route("**/settings/backgrounds/**", fulfillVisualBackgroundImage);
 
-  await page.goto("/settings");
+  await page.goto("/settings/system");
 
   await expect(page.getByRole("heading", { name: "视觉设置" })).toBeVisible();
-  await expect(page.locator(".orf-sidebar-background-image")).toHaveAttribute("src", /\/settings\/backgrounds\/sidebar_background\/default\/test-bg\.png$/);
+  await expect(page.locator(".orf-sidebar-background-image")).toHaveAttribute("src", /\/settings\/backgrounds\/app_background\/default\/test-bg\.png$/);
   await expect.poll(() =>
     page.locator(".orf-sidebar-background-image").evaluate((image) => {
       const element = image as HTMLImageElement;
@@ -72,7 +72,7 @@ test("settings page only exposes implemented visual configuration", async ({ pag
     await expect(page.getByText(hiddenLabel, { exact: true })).toHaveCount(0);
   }
 
-  await expect.poll(() => Array.from(new Set(requestedScenes)).sort()).toEqual(["login_background", "sidebar_background"]);
+  await expect.poll(() => Array.from(new Set(requestedScenes)).sort()).toEqual(["app_background", "login_background"]);
 });
 
 test("sidebar background image load failure is reported instead of falling back to a color", async ({ page }) => {
@@ -84,7 +84,7 @@ test("sidebar background image load failure is reported instead of falling back 
 
   await page.route("**/settings/backgrounds/**", async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname.includes("/sidebar_background/")) {
+    if (url.pathname.includes("/app_background/")) {
       await route.fulfill({ status: 404, body: "" });
       return;
     }
@@ -93,7 +93,7 @@ test("sidebar background image load failure is reported instead of falling back 
   });
 
   const pageError = page.waitForEvent("pageerror");
-  await page.goto("/settings");
+  await page.goto("/settings/system");
   const error = await pageError;
   expect(error.message).toContain("Sidebar background image failed to load");
 });

@@ -5,11 +5,7 @@ import {
   apiJson,
   apiRequest,
   getCommentMentionableUsers,
-  getNotifications,
-  markAllNotificationsReadRequest,
-  markNotificationReadRequest,
   type AuthSession,
-  type NotificationsResponse,
   type PermissionRulesResponse,
   type TaskManagementData,
   type UsersResponse,
@@ -17,6 +13,7 @@ import {
 } from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
+import { useNotificationState } from "./orfProviderNotifications";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
 import type {
   CommentStatus,
@@ -111,7 +108,7 @@ interface OrfContextValue {
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
   createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Task>) => Promise<Task | null>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Omit<Task, "linkedObjectiveId">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
@@ -438,9 +435,12 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme());
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const lastOnlineActivitySentAt = useRef(0);
+  const notify = useCallback((message: string) => {
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setToasts((items) => [...items, { id, message }]);
+    window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3600);
+  }, []);
   const currentUser = authUserId ? state.users.find((user) => user.id === authUserId) ?? null : null;
   const currentUserRole = currentUser?.role ?? null;
   const isAuthenticated = currentUser !== null;
@@ -502,13 +502,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     const data = await apiJson<UsersResponse>("/api/users");
     applyUsers(data);
   }, [applyUsers]);
-  const applyNotifications = useCallback((data: NotificationsResponse) => {
-    setNotifications(data.notifications);
-    setUnreadNotificationCount(data.unreadCount);
-  }, []);
-  const refreshNotifications = useCallback(async () => {
-    applyNotifications(await getNotifications());
-  }, [applyNotifications]);
+  const {
+    clearNotifications,
+    markAllNotificationsRead,
+    markNotificationRead,
+    notifications,
+    refreshNotifications,
+    unreadNotificationCount,
+  } = useNotificationState(businessMutationFailureMessage, notify);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
@@ -521,8 +522,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
-      setNotifications([]);
-      setUnreadNotificationCount(0);
+      clearNotifications();
       return;
     }
 
@@ -542,13 +542,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
       });
 
-    void getNotifications()
-      .then((data) => {
-        if (!cancelled) {
-          applyNotifications(data);
-        }
-      })
-      .catch(() => undefined);
+    void refreshNotifications().catch(() => undefined);
 
     if (shouldFetchAdminCollections(currentUserRole)) {
       void apiJson<PermissionRulesResponse>("/api/permissions")
@@ -571,7 +565,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyNotifications, applyPermissionRules, applyTaskManagementData, applyUsers, authReady, currentUserRole, isAuthenticated, isApproved]);
+  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, clearNotifications, currentUserRole, isAuthenticated, isApproved, refreshNotifications]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
@@ -638,18 +632,12 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     };
   }, [authReady, authUserId, isAuthenticated, isApproved]);
 
-  const commit = (next: OrfState, message?: string) => {
+  const commit = useCallback((next: OrfState, message?: string) => {
     setState(next);
     if (message) {
       notify(message);
     }
-  };
-
-  const notify = (message: string) => {
-    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    setToasts((items) => [...items, { id, message }]);
-    window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3600);
-  };
+  }, [notify]);
 
   const applyAuthSession = useCallback((session: AuthSession) => {
     if (!session.authenticated) {
@@ -703,30 +691,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           .catch((error) => notify(businessMutationFailureMessage(error, "重新加载数据失败")));
       },
       refreshNotifications,
-      markNotificationRead: async (notificationId) => {
-        try {
-          const data = await markNotificationReadRequest(notificationId);
-          setNotifications((items) => items.map((item) => (item.id === data.notification.id ? data.notification : item)));
-          setUnreadNotificationCount(data.unreadCount);
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "消息状态更新失败"));
-          void refreshNotifications().catch(() => undefined);
-          return false;
-        }
-      },
-      markAllNotificationsRead: async () => {
-        try {
-          await markAllNotificationsReadRequest();
-          setNotifications((items) => items.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
-          setUnreadNotificationCount(0);
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "消息状态更新失败"));
-          void refreshNotifications().catch(() => undefined);
-          return false;
-        }
-      },
+      markNotificationRead,
+      markAllNotificationsRead,
       createObjective: async (input) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");
@@ -1407,6 +1373,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isApproved,
       isAuthenticated,
       modal,
+      markAllNotificationsRead,
+      markNotificationRead,
       notifications,
       refreshNotifications,
       refreshPermissionRules,

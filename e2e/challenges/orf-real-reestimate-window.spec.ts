@@ -26,7 +26,7 @@ test.describe("ORF real reestimate window", () => {
       const edited = await dsl.editMetric(real.fixture.challengerB, proposedResultId, `${title} 挑战者B修订指标`);
       expect(edited.status).toBe(200);
 
-      const taskId = await dsl.addTask(real.fixture.challengerA, objectiveId, proposedResultId, `${title} 重估任务`);
+      const taskId = await dsl.addTask(real.fixture.challengerA, objectiveId, `${title} 重估任务`);
       const subtaskCreated = await dsl.addSubtask(real.fixture.challengerB, taskId, `${title} 重估子任务`);
       expect(taskId).toBeTruthy();
       expect(subtaskCreated).toBe(true);

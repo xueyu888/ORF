@@ -5,6 +5,7 @@ import {
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../domain/orfLifecycle";
+import { taskIdsForObjective } from "../domain/orfWorkItems";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus, UncertaintyLevel } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
@@ -222,7 +223,6 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
     .filter((result) => !targets.resultIds.has(result.id))
     .map((result) => ({
       ...result,
-      taskIds: result.taskIds.filter((id) => !targets.taskIds.has(id)),
       feedbackIds: result.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
       evidenceIds: result.evidenceIds.filter((id) => !targets.evidenceIds.has(id)),
     })),
@@ -437,7 +437,6 @@ export class OrfFlowStore {
       uncertaintyScore: input.uncertaintyScore ?? uncertaintyScore(input.uncertaintyLevel),
       acceptedResult: input.acceptedResult ?? "unreviewed",
       evidenceIds: [],
-      taskIds: [],
       feedbackIds: [],
       trend: [{ date: "Now", value: input.current ?? 0 }],
       reviewCadence: input.reviewCadence ?? "Weekly",
@@ -497,8 +496,6 @@ export class OrfFlowStore {
     if (!objective) {
       return state;
     }
-    const linkedResultId = input.linkedResultId && state.results.some((item) => item.id === input.linkedResultId && item.objectiveId === objective.id) ? input.linkedResultId : null;
-
     const nextNumber = 128 + state.tasks.length + 1;
     const now = currentDate();
     const task: Task = {
@@ -509,7 +506,6 @@ export class OrfFlowStore {
       priority: input.priority,
       assignee: input.assignee || currentUserName(state),
       linkedObjectiveId: objective.id,
-      linkedResultId,
       feedbackOriginId: input.feedbackOriginId,
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
@@ -835,7 +831,7 @@ export class OrfFlowStore {
       ...state,
       tasks: nextTasks,
       objectives: state.objectives.map((item) =>
-        item.id === objective.id ? { ...item, taskIds: nextTasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id), updatedAt: now } : item,
+        item.id === objective.id ? { ...item, taskIds: taskIdsForObjective(nextTasks, objective.id), updatedAt: now } : item,
       ),
     };
   }
@@ -909,7 +905,6 @@ export class OrfFlowStore {
     return {
       ...state,
       objectives: state.objectives.map((objective) => ({ ...objective, taskIds: objective.taskIds.filter((id) => id !== taskId) })),
-      results: state.results.map((result) => ({ ...result, taskIds: result.taskIds.filter((id) => id !== taskId) })),
       tasks: state.tasks.filter((item) => item.id !== taskId),
       comments: removeCommentsForTargets(state.comments, {
         taskIds: new Set([taskId]),

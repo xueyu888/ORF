@@ -11,6 +11,7 @@ import {
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
 } from "../domain/orfLifecycle";
+import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
 import type { ContributionAllocation, LootResultClaimStatus, ResultAcceptedResult } from "../types/orf";
 
 const lootClaimOptions: Array<{ label: string; value: LootResultClaimStatus }> = [
@@ -381,13 +382,6 @@ function ratioInputsToAllocations(values: Record<string, string>, members: strin
   return members
     .map((member) => ({ member, ratio: Number(values[member] ?? 0) }))
     .filter((item) => Number.isFinite(item.ratio) && item.ratio >= 0);
-}
-
-function objectiveAcceptedResultFromReviews(reviews: ResultAcceptedResult[]) {
-  if (reviews.length === 0) return "abandoned";
-  if (reviews.every((review) => review === "completed")) return "completed";
-  if (reviews.every((review) => review === "falsified")) return "falsified";
-  return "abandoned";
 }
 
 function objectiveReviewResultLabel(value: ReturnType<typeof objectiveAcceptedResultFromReviews>) {

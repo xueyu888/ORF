@@ -43,10 +43,9 @@ export async function addExecutionWork(
   dsl: RealScenarioDsl,
   actor: RealUser,
   objectiveId: string,
-  resultId: string,
   label: string,
 ) {
-  const taskId = await dsl.addTask(actor, objectiveId, resultId, `${label} 任务`);
+  const taskId = await dsl.addTask(actor, objectiveId, `${label} 任务`);
   await dsl.addSubtask(actor, taskId, `${label} 子任务`);
   const comment = await real.apiAs(actor, "/api/comments", {
     body: JSON.stringify({
