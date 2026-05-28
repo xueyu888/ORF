@@ -1,15 +1,12 @@
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import Fastify from "fastify";
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyReply } from "fastify";
 import { z, ZodError } from "zod";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import {
   authorizeObjectiveWorkItemMutation,
-  commentActorWithPermissions,
   requireAdminContext,
-  requireAdminScope,
-  requireApiUser,
   requireFeedbackInScope,
   requireResultEditContext,
   requireTargetInScope,
@@ -24,8 +21,6 @@ import { registerOptionalIntegrations } from "./integrations";
 import {
   getPermissionRulesForScope,
   hasRolePermission,
-  permissionKeys,
-  replaceRolePermissionRules,
 } from "./repositories/permissionRepository";
 import { getDefaultRuntimeScopeForUser } from "./repositories/runtimeScope";
 import {
@@ -37,24 +32,16 @@ import {
   canEditObjectiveResultsDuringReestimate,
   canMutateObjectiveResults,
   canMutateResult,
-  createComment,
   createChecklistItem,
   createFeedback,
   createObjective,
   createResult,
   createTask,
-  deleteCommentMessage,
   deleteChecklistItem,
   deleteObjective,
   deleteResult,
   deleteTask,
   freezeObjectiveAfterReestimate,
-  getBountyHallData,
-  getCommentAttachmentContent,
-  listCommentMentionableUsers,
-  getMyChallengesData,
-  getOrfStateSnapshot,
-  getTaskManagementData,
   moveChecklistItem,
   moveResult,
   moveTask,
@@ -68,9 +55,6 @@ import {
   setTaskCompletion,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
-  uploadCommentAttachment,
-  updateCommentMessage,
-  updateCommentThreadStatus,
   updateChecklistItemLabel,
   updateFeedbackStatus,
   updateObjectiveStage,
@@ -82,23 +66,14 @@ import {
   updateTaskStatus,
 } from "./repositories/orfRepository";
 import {
-  approveRegistrationRequest,
-  createScopedUser,
-  deleteScopedUser,
-  disableScopedUser,
-  getRegistrationRequests,
   getScopedUsers,
-  recordUserOnlineActivity,
-  rejectRegistrationRequest,
-  updateScopedUser,
 } from "./repositories/userRepository";
 import { registerSettingsRoutes } from "./routes/settingsRoutes";
-import {
-  getUnreadNotificationCount,
-  listNotificationsForUser,
-  markAllNotificationsRead,
-  markNotificationRead,
-} from "./repositories/notificationRepository";
+import { registerNotificationRoutes } from "./routes/notificationRoutes";
+import { registerOrfReadRoutes } from "./routes/orfReadRoutes";
+import { registerCommentRoutes } from "./routes/commentRoutes";
+import { registerUserRoutes } from "./routes/userRoutes";
+import { registerPermissionRoutes } from "./routes/permissionRoutes";
 import { isDateOnlyString } from "../src/utils/date";
 
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
@@ -109,22 +84,12 @@ const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "
 const bountySourceSchema = z.enum(["managerDefined", "memberProposed"]);
 const feedbackSourceSchema = z.enum(["User report", "Eval run", "Log", "Incident", "Team review"]);
 const feedbackStatusSchema = z.enum(["New", "Reviewing", "Action Created", "Result Updated", "Closed"]);
-const userRoleSchema = z.enum(["admin", "member"]);
-const commentTargetTypeSchema = z.enum(["objective", "result", "task", "subtask"]);
-const commentStatusSchema = z.enum(["open", "resolved"]);
 const lootResultClaimStatusSchema = z.enum(["completed", "falsified", "notClaimed"]);
 const objectiveAcceptedResultSchema = z.enum(["completed", "falsified", "overturned", "abandoned", "overdelivered"]);
 const resultAcceptedResultSchema = z.enum(["unreviewed", "completed", "falsified", "failed"]);
-const userBodySchema = z.object({
-  name: z.string().trim().min(1),
-  email: z.string().trim().email().transform((value) => value.toLowerCase()),
-  role: userRoleSchema,
-});
 const requiredTextSchema = z.string().trim().min(1);
 const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
-const editablePermissionRoleSchema = z.enum(["member"]);
 const objectiveStageSchema = z.enum(["goalSetting", "resultClaiming", "orfReestimate", "goalFrozen"]);
-const permissionKeySchema = z.enum(permissionKeys);
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const titleBodySchema = z.object({ title: requiredTextSchema });
 const labelBodySchema = z.object({ label: requiredTextSchema });
@@ -136,25 +101,9 @@ const resultParamsSchema = z.object({ resultId: z.string().min(1) });
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
 const applicationParamsSchema = objectiveParamsSchema.extend({ applicationId: z.string().min(1) });
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
-const commentThreadParamsSchema = z.object({ threadId: z.string().min(1) });
-const commentMessageParamsSchema = commentThreadParamsSchema.extend({ messageId: z.string().min(1) });
-const commentAttachmentParamsSchema = z.object({ attachmentId: z.string().min(1) });
-const notificationParamsSchema = z.object({ notificationId: z.string().min(1) });
-const userParamsSchema = z.object({ userId: z.string().min(1) });
-const permissionRoleParamsSchema = z.object({ role: userRoleSchema });
 const dateOnlySchema = z.string().trim().refine(isDateOnlyString, { message: "Invalid date" });
 const optionalDateOnlySchema = z.string().trim().transform((value) => value || undefined).pipe(dateOnlySchema.optional()).optional();
 const placementSchema = z.enum(["before", "after"]);
-const permissionRuleSchema = z.object({
-  role: editablePermissionRoleSchema,
-  permissions: z.array(permissionKeySchema),
-});
-const updateRolePermissionsBodySchema = z.object({
-  permissionRules: z.array(permissionRuleSchema),
-});
-const myChallengesQuerySchema = z.object({
-  scope: z.enum(["mine", "all"]).default("mine"),
-});
 const createResultBodySchema = z.object({
   objectiveId: requiredTextSchema,
   title: requiredTextSchema,
@@ -219,22 +168,6 @@ const moveChecklistBodySchema = z.object({
   referenceItemId: optionalTextSchema,
   placement: placementSchema.optional(),
 });
-const createCommentBodySchema = z.object({
-  targetType: commentTargetTypeSchema,
-  targetId: z.string().min(1),
-  targetTitle: z.string().trim().min(1),
-  body: z.string().trim().min(1),
-  parentMessageId: z.string().min(1).optional(),
-  replyToMessageId: z.string().min(1).optional(),
-  replyToAuthor: z.string().trim().min(1).optional(),
-});
-const updateCommentStatusBodySchema = z.object({ status: commentStatusSchema });
-const updateCommentMessageBodySchema = z.object({ body: z.string().trim().min(1) });
-const uploadCommentAttachmentFieldsSchema = z.object({
-  targetId: z.string().trim().min(1),
-  targetType: commentTargetTypeSchema,
-});
-const commentMentionableUsersQuerySchema = uploadCommentAttachmentFieldsSchema;
 const recruitBodySchema = z.object({
   members: z.array(z.string().trim().min(1)).min(1),
 });
@@ -325,43 +258,6 @@ async function requireObjectiveDeleteUnlocked(reply: FastifyReply, objectiveId: 
   }
 
   return true;
-}
-
-function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof createComment>>) {
-  if (outcome.status === "notFound") {
-    return reply.code(404).send({ error: "Comment target not found" });
-  }
-
-  if (outcome.status === "forbidden") {
-    return reply.code(403).send({ error: "Forbidden" });
-  }
-
-  if (outcome.status === "invalid") {
-    return reply.code(400).send({ error: "Comment body is required" });
-  }
-
-  return { ok: true, commentThread: outcome.thread ?? null };
-}
-
-async function readCommentAttachmentUpload(request: FastifyRequest) {
-  const fields: Record<string, string> = {};
-  let file: { buffer: Buffer; fileName: string; mimeType: string } | null = null;
-
-  for await (const part of request.parts()) {
-    if (part.type === "field" && typeof part.value === "string") {
-      fields[part.fieldname] = part.value;
-    }
-    if (part.type === "file" && part.fieldname === "file") {
-      file = {
-        buffer: await part.toBuffer(),
-        fileName: part.filename,
-        mimeType: part.mimetype,
-      };
-    }
-  }
-
-  const target = uploadCommentAttachmentFieldsSchema.parse(fields);
-  return file ? { ...target, ...file } : null;
 }
 
 function sendObjectiveFlowOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof publishObjective>>) {
@@ -471,328 +367,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   }
   registerAuthRoutes(app);
 
+  registerNotificationRoutes(app);
+  registerOrfReadRoutes(app);
   registerSettingsRoutes(app);
-
-  app.get("/api/tasks-page", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const scope = await getDefaultRuntimeScopeForUser(user.id);
-    if (!scope) {
-      return reply.code(404).send({ error: "Runtime scope not found" });
-    }
-
-    return user.role === "admin"
-      ? getTaskManagementData({ scope })
-      : getMyChallengesData(user.name, false, { scope });
-  });
-  app.get("/api/bounties", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
-      return reply;
-    }
-    const scope = await getDefaultRuntimeScopeForUser(user.id);
-    if (!scope) {
-      return reply.code(404).send({ error: "Runtime scope not found" });
-    }
-
-    return getBountyHallData(user.name, { scope }, user.role);
-  });
-  app.get("/api/my-challenges", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
-      return reply;
-    }
-    const scope = await getDefaultRuntimeScopeForUser(user.id);
-    if (!scope) {
-      return reply.code(404).send({ error: "Runtime scope not found" });
-    }
-
-    const query = myChallengesQuerySchema.parse(request.query);
-    if (query.scope === "all" && user.role !== "admin") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    return getMyChallengesData(user.name, query.scope === "all", { scope });
-  });
-  app.get("/api/notifications", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return {
-      notifications: await listNotificationsForUser(context.user.id, context.scope),
-      unreadCount: await getUnreadNotificationCount(context.user.id, context.scope),
-    };
-  });
-  app.patch("/api/notifications/:notificationId/read", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const params = notificationParamsSchema.parse(request.params);
-    const notification = await markNotificationRead(params.notificationId, context.user.id, context.scope);
-    if (!notification) {
-      return reply.code(404).send({ error: "Notification not found" });
-    }
-
-    return {
-      notification,
-      unreadCount: await getUnreadNotificationCount(context.user.id, context.scope),
-    };
-  });
-  app.patch("/api/notifications/read-all", async (request, reply) => {
-    const context = await requireUserScopeContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return {
-      updated: await markAllNotificationsRead(context.user.id, context.scope),
-      unreadCount: await getUnreadNotificationCount(context.user.id, context.scope),
-    };
-  });
-  app.get("/api/orf-state", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    return getOrfStateSnapshot({ scope: context.scope });
-  });
-
-  app.post("/api/comments/attachments", async (request, reply) => {
-    const user = await commentActorWithPermissions(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const upload = await readCommentAttachmentUpload(request);
-    if (!upload) {
-      return reply.code(400).send({ error: "Image file is required" });
-    }
-
-    const outcome = await uploadCommentAttachment({ ...upload, body: upload.buffer }, user);
-    if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Comment target not found" });
-    }
-    if (outcome.status === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-    if (outcome.status === "tooLarge") {
-      return reply.code(413).send({ error: "Image is too large" });
-    }
-    if (outcome.status === "unsupported") {
-      return reply.code(415).send({ error: "Unsupported image type" });
-    }
-    if (outcome.status === "invalid") {
-      return reply.code(400).send({ error: "Image file is required" });
-    }
-
-    return { ok: true, attachment: outcome.attachment, markdown: outcome.markdown };
-  });
-
-  app.get("/api/comments/mentionable-users", async (request, reply) => {
-    const user = await commentActorWithPermissions(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const query = commentMentionableUsersQuerySchema.parse(request.query);
-    const outcome = await listCommentMentionableUsers(query, user);
-    if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Comment target not found" });
-    }
-    if (outcome.status === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    return { users: outcome.users };
-  });
-
-  app.get("/api/comments/attachments/:attachmentId/content", async (request, reply) => {
-    const user = await commentActorWithPermissions(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const params = commentAttachmentParamsSchema.parse(request.params);
-    const outcome = await getCommentAttachmentContent(params.attachmentId, user);
-    if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Comment attachment not found" });
-    }
-    if (outcome.status === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
-    }
-
-    reply.header("Cache-Control", "private, max-age=60");
-    reply.header("Content-Type", outcome.contentType);
-    if (outcome.contentLength !== undefined) {
-      reply.header("Content-Length", outcome.contentLength);
-    }
-    return reply.send(outcome.body);
-  });
-
-  app.post("/api/comments", async (request, reply) => {
-    const user = await commentActorWithPermissions(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const body = createCommentBodySchema.parse(request.body);
-    return sendCommentOutcome(reply, await createComment(body, user));
-  });
-
-  app.patch("/api/comments/:threadId/status", async (request, reply) => {
-    const user = await commentActorWithPermissions(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const params = commentThreadParamsSchema.parse(request.params);
-    const body = updateCommentStatusBodySchema.parse(request.body);
-    return sendCommentOutcome(reply, await updateCommentThreadStatus(params.threadId, body.status, user));
-  });
-
-  app.patch("/api/comments/:threadId/messages/:messageId", async (request, reply) => {
-    const user = await commentActorWithPermissions(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const params = commentMessageParamsSchema.parse(request.params);
-    const body = updateCommentMessageBodySchema.parse(request.body);
-    return sendCommentOutcome(reply, await updateCommentMessage(params.threadId, params.messageId, body.body, user));
-  });
-
-  app.delete("/api/comments/:threadId/messages/:messageId", async (request, reply) => {
-    const user = await commentActorWithPermissions(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const params = commentMessageParamsSchema.parse(request.params);
-    return sendCommentOutcome(reply, await deleteCommentMessage(params.threadId, params.messageId, user));
-  });
-
-  app.get("/api/users", async (request, reply) => {
-    const scope = await requireAdminScope(request, reply);
-    if (!scope) {
-      return reply;
-    }
-
-    return { users: await getScopedUsers(scope) };
-  });
-
-  app.get("/api/registration-requests", async (request, reply) => {
-    const scope = await requireAdminScope(request, reply);
-    if (!scope) {
-      return reply;
-    }
-
-    return { users: await getRegistrationRequests(scope) };
-  });
-
-  app.post("/api/users/me/activity", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    const activity = await recordUserOnlineActivity(user.id);
-    return { ok: true, lastOnlineAt: activity.lastOnlineAt };
-  });
-
-  app.post("/api/users", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const body = userBodySchema.parse(request.body);
-    return { users: await createScopedUser(context.scope, context.user.id, body) };
-  });
-
-  app.patch("/api/users/:userId", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const params = userParamsSchema.parse(request.params);
-    const body = userBodySchema.parse(request.body);
-    return { users: await updateScopedUser(context.scope, context.user.id, params.userId, body) };
-  });
-
-  app.patch("/api/users/:userId/disable", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const params = userParamsSchema.parse(request.params);
-    return { users: await disableScopedUser(context.scope, context.user.id, params.userId) };
-  });
-
-  app.patch("/api/registration-requests/:userId/approve", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const params = userParamsSchema.parse(request.params);
-    return { users: await approveRegistrationRequest(context.scope, params.userId) };
-  });
-
-  app.patch("/api/registration-requests/:userId/reject", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const params = userParamsSchema.parse(request.params);
-    return { users: await rejectRegistrationRequest(context.scope, params.userId) };
-  });
-
-  app.delete("/api/users/:userId", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const params = userParamsSchema.parse(request.params);
-    return { users: await deleteScopedUser(context.scope, context.user.id, params.userId) };
-  });
-
-  app.get("/api/permissions", async (request, reply) => {
-    const scope = await requireAdminScope(request, reply);
-    if (!scope) {
-      return reply;
-    }
-
-    return { permissionRules: await getPermissionRulesForScope(scope) };
-  });
-
-  app.put("/api/permissions/:role", async (request, reply) => {
-    const scope = await requireAdminScope(request, reply);
-    if (!scope) {
-      return reply;
-    }
-
-    const params = permissionRoleParamsSchema.parse(request.params);
-    if (params.role === "admin") {
-      return reply.code(400).send({ error: "Admin permissions are fixed and cannot be changed" });
-    }
-
-    const body = updateRolePermissionsBodySchema.parse(request.body);
-    return {
-      permissionRules: await replaceRolePermissionRules(scope, params.role, body.permissionRules),
-    };
-  });
+  registerCommentRoutes(app);
+  registerUserRoutes(app);
+  registerPermissionRoutes(app);
 
   app.post("/api/objectives", async (request, reply) => {
     const context = await requireWriteContext(request, reply, "objective.create");

@@ -1,0 +1,158 @@
+import { ApiError } from "./apiClient";
+
+export function userMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return "只有管理员可以操作成员";
+    }
+
+    if (error.status === 409) {
+      if (error.message === "Admin cannot delete self") {
+        return "管理员不能删除自己";
+      }
+
+      if (error.message === "Admin cannot demote self") {
+        return "管理员不能将自己降级为成员";
+      }
+
+      if (error.message === "Name already exists") {
+        return "已存在同名成员";
+      }
+
+      if (error.message === "User name is referenced by ORF records") {
+        return "该成员已被 ORF 业务记录引用，不能改名";
+      }
+
+      if (error.message === "User is referenced by ORF records") {
+        return "该成员已被 ORF 业务记录引用，不能删除，请改为停用";
+      }
+
+      if (error.message === "Name is referenced by ORF records") {
+        return "该姓名已被 ORF 历史记录占用，不能创建新成员";
+      }
+
+      if (error.message === "Bound login email cannot be changed") {
+        return "已绑定登录身份的邮箱不能在成员管理中修改";
+      }
+
+      return error.message;
+    }
+
+    if (error.status === 404) {
+      return "用户不存在，已刷新成员列表";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
+export function bountyMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return "你没有接受这个悬赏目标的权限";
+    }
+
+    if (error.status === 404) {
+      return "悬赏目标不存在，已刷新数据";
+    }
+
+    if (error.status === 409) {
+      if (error.message === "Objective already includes this challenger") {
+        return "你已经是这个目标的挑战者";
+      }
+
+      if (error.message === "Challenge application already exists") {
+        return "你已经申请过这个目标";
+      }
+
+      if (error.message === "Objective final due date is too close to start confirmation") {
+        return "目标截止时间太近，不能接受征召";
+      }
+
+      if (
+        error.message === "Objective is not open for challenge acceptance" ||
+        error.message === "Objective is not open for challenge applications" ||
+        error.message === "Objective status does not allow this operation"
+      ) {
+        return "目标状态已变化，请刷新后再试";
+      }
+
+      return error.message || "目标状态已变化，请刷新后再试";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
+export function commentMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    const isImageMutation = fallback.includes("图片");
+
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return isImageMutation ? "没有权限上传这个评论图片" : "只能编辑或删除自己的评论";
+    }
+
+    if (error.status === 404) {
+      return "评论对象不存在，已刷新数据";
+    }
+
+    if (error.status === 413) {
+      return "图片过大，请压缩后再上传";
+    }
+
+    if (error.status === 415) {
+      return "只能上传 PNG、JPEG、GIF 或 WebP 图片";
+    }
+
+    if (error.status === 400) {
+      return isImageMutation ? "图片文件无效" : "评论内容不能为空";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
+export function businessMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 403) {
+      return "没有执行这个操作的权限";
+    }
+
+    if (error.status === 404) {
+      return "操作对象不存在，已刷新数据";
+    }
+
+    if (error.status === 409) {
+      if (error.message === "Feedback owner must be an active member") {
+        return "反馈处理人必须是当前可用成员";
+      }
+      return error.message || "数据状态已变化，请刷新后再试";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
