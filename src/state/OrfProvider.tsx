@@ -17,6 +17,7 @@ import {
 } from "./apiClient";
 import { normalizeState, OrfFlowStore } from "./OrfFlowStore";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
+import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
 import type {
   CommentStatus,
   CommentThread,
@@ -755,13 +756,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           definer: input.definer ?? currentUser?.name ?? "",
         };
         const objective = state.objectives.find((item) => item.id === payload.objectiveId);
-        const reestimateDueAt = objective?.confirmationDueAt ? new Date(objective.confirmationDueAt).getTime() : null;
-        const reestimateWindowOpen = reestimateDueAt == null || (Number.isFinite(reestimateDueAt) && Date.now() <= reestimateDueAt);
         const canAdjustDuringReestimate = Boolean(
-          objective?.flowStatus === "reestimating" &&
+          objective &&
+            isObjectiveReestimateWindowOpen(objective) &&
             currentUser?.name &&
-            objective.challengers.includes(currentUser.name) &&
-            reestimateWindowOpen,
+            objective.challengers.includes(currentUser.name),
         );
         const canCreateManagerDefined = payload.source !== "memberProposed" && hasPermission(currentUser, state.permissionRules, "result.create");
         const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;

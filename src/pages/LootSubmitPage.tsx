@@ -6,6 +6,11 @@ import { Button, Card, Field } from "../components/ui";
 import { equalRatios, summarizeContributionReviews } from "../features/challenge/model/contributionReview";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
+import {
+  canReviewObjectiveLootByFlow,
+  canSubmitObjectiveContributionReviewByFlow,
+  canSubmitObjectiveLootByFlow,
+} from "../domain/orfLifecycle";
 import type { ContributionAllocation, LootResultClaimStatus, ResultAcceptedResult } from "../types/orf";
 
 const lootClaimOptions: Array<{ label: string; value: LootResultClaimStatus }> = [
@@ -74,9 +79,9 @@ export function LootSubmitPage() {
 
   const currentMember = currentUser?.name ?? "";
   const isChallenger = currentUser?.role === "member" && objective.challengers.includes(currentMember);
-  const canSubmit = objective.flowStatus === "frozen" && isChallenger;
-  const canReview = currentUser?.role === "admin" && objective.flowStatus === "submitted" && latestLoot;
-  const canPeerReview = objective.flowStatus === "submitted" && isChallenger;
+  const canSubmit = canSubmitObjectiveLootByFlow(objective) && isChallenger;
+  const canReview = Boolean(currentUser?.role === "admin" && canReviewObjectiveLootByFlow(objective) && latestLoot);
+  const canPeerReview = canSubmitObjectiveContributionReviewByFlow(objective) && isChallenger;
   const contributionReviews = state.objectiveContributionReviews.filter((item) => item.objectiveId === objective.id);
   const contributionSummary = summarizeContributionReviews(objective.challengers, contributionReviews);
   const needsContributionResolution = contributionSummary.status !== "ready";

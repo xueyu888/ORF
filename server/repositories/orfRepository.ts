@@ -36,9 +36,28 @@ import {
   summarizeContributionReviews,
 } from "../../src/features/challenge/model/contributionReview";
 import {
-  objectiveApplicationReviewFlowStatuses as applicationReviewFlowStatuses,
-  objectiveChallengeApplicationFlowStatuses as bountyHallFlowStatuses,
-  objectiveRecruitmentFlowStatuses as challengeRecruitmentFlowStatuses,
+  canAcceptObjectiveChallengeByFlow,
+  canApplyForObjectiveChallenge,
+  canDeleteObjectiveByFlow,
+  canFreezeObjectiveByFlow,
+  canMutateObjectiveCommentsAsChallengerByFlow,
+  canMutateObjectiveCommentsByFlow,
+  canMutateObjectiveResultsByFlow,
+  canMutateObjectiveWorkItemsByFlow,
+  canRecruitObjectiveChallengersByFlow,
+  canReviewObjectiveChallengeApplications,
+  canReviewObjectiveLootByFlow,
+  canSubmitObjectiveContributionReviewByFlow,
+  canSubmitObjectiveLootByFlow,
+  isObjectiveChallengeAcceptedByFlow,
+  isObjectiveChallengeEntryClosedByFlow,
+  isObjectiveReestimateWindowOpen,
+  isObjectiveStageCompatibleWithFlowStatus,
+  objectiveFlowStatusAfterChallengeApplication,
+  objectiveFlowStatusAfterChallengeApplicationReview,
+  objectiveFlowStatusAfterRecruitment,
+  objectiveLifecycleInitialState,
+  objectiveLifecycleTransitions,
 } from "../../src/domain/orfLifecycle";
 import { db } from "../db/client";
 import {
@@ -138,13 +157,6 @@ const difficultyRanks: Record<UncertaintyLevel, number> = {
   渡劫: 4,
   飞升: 5,
 };
-const challengeAcceptanceFlowStatuses = new Set<Objective["flowStatus"]>(["recruiting", "reestimating"]);
-const resultMutationFlowStatuses = new Set<Objective["flowStatus"]>(["candidate", "open", "applying", "recruiting", "reestimating"]);
-const workItemMutationFlowStatuses = new Set<Objective["flowStatus"]>(["candidate", "reestimating", "frozen"]);
-const commentLockedFlowStatuses = new Set<Objective["flowStatus"]>(["settled", "closed"]);
-const memberCommentFlowStatuses = new Set<Objective["flowStatus"]>(["reestimating", "frozen", "submitted"]);
-const objectiveDeleteLockedFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled"]);
-const terminalFlowStatuses = new Set<Objective["flowStatus"]>(["submitted", "settled", "closed"]);
 
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
@@ -228,12 +240,6 @@ function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
   const roundedHalfDays = Math.round((remainingMs * 0.3) / HALF_DAY_MS);
   const confirmationHalves = Math.min(MAX_CONFIRMATION_HALVES, Math.max(1, roundedHalfDays));
   return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
-}
-
-function isReestimateWindowOpen(value: string | null | undefined) {
-  if (!value) return true;
-  const dueTime = new Date(value).getTime();
-  return Number.isFinite(dueTime) && Date.now() <= dueTime;
 }
 
 function addDays(value: string, days: number) {
@@ -511,8 +517,8 @@ function uncertaintyScore(level: UncertaintyLevel | null) {
   return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
 }
 
-function isObjectiveTerminal(objective: Pick<Objective, "acceptedResult" | "flowStatus" | "lootSubmittedAt" | "objectiveSettlementPoints">) {
-  return terminalFlowStatuses.has(objective.flowStatus) || Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null);
+function objectiveClosedForChallengeEntry(objective: Pick<Objective, "acceptedResult" | "flowStatus" | "lootSubmittedAt" | "objectiveSettlementPoints">) {
+  return isObjectiveChallengeEntryClosedByFlow(objective) || Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null);
 }
 
 async function getResultTrendRows(resultIds: string[]) {
@@ -870,11 +876,11 @@ function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
 }
 
 function objectiveClosedForBountyHall(objective: Objective) {
-  return !bountyHallFlowStatuses.has(objective.flowStatus) || isObjectiveTerminal(objective);
+  return !canApplyForObjectiveChallenge(objective) || objectiveClosedForChallengeEntry(objective);
 }
 
 function objectiveAcceptedForBountyHall(objective: Objective) {
-  return objective.challengers.length > 0 || objective.flowStatus === "reestimating" || objective.flowStatus === "frozen";
+  return objective.challengers.length > 0 || isObjectiveChallengeAcceptedByFlow(objective);
 }
 
 function contributionSummaryFor(data: TaskManagementData, member: string) {
@@ -899,7 +905,7 @@ export async function getBountyHallData(viewerName: string, scope: TaskManagemen
   const items = data.objectives.flatMap((objective) => {
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
-    const isRecruitment = canUseChallengeActions && objective.assignedChallengers.includes(viewerName) && challengeAcceptanceFlowStatuses.has(objective.flowStatus);
+    const isRecruitment = canUseChallengeActions && objective.assignedChallengers.includes(viewerName) && canAcceptObjectiveChallengeByFlow(objective);
     if (objectiveClosedForBountyHall(objective) && !isRecruitment) return [];
     if (objectiveAcceptedForBountyHall(objective) && !isRecruitment) return [];
 
@@ -1017,8 +1023,8 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     description: input.whyItMatters,
     whyItMatters: input.whyItMatters,
     cycle: input.cycle,
-    stage: "orfReestimate",
-    flowStatus: "candidate",
+    stage: objectiveLifecycleInitialState.stage,
+    flowStatus: objectiveLifecycleInitialState.flowStatus,
     status: "Draft",
     confidence: 50,
     progress: 0,
@@ -1063,7 +1069,7 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     if (!objective) {
       return null;
     }
-    if (!resultMutationFlowStatuses.has(objective.flowStatus)) {
+    if (!canMutateObjectiveResultsByFlow(objective)) {
       return null;
     }
 
@@ -1134,7 +1140,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     if (currentChallengers.includes(nextChallenger)) {
       return { status: "alreadyAccepted" as const, challengers: currentChallengers };
     }
-    if (isObjectiveTerminal(objective) || !challengeAcceptanceFlowStatuses.has(objective.flowStatus)) {
+    if (objectiveClosedForChallengeEntry(objective) || !canAcceptObjectiveChallengeByFlow(objective)) {
       return { status: "closed" as const };
     }
     if (!(await isActiveChallengerInScope(tx, objective.teamId, nextChallenger))) {
@@ -1159,8 +1165,8 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       .set({
         challengers: [...currentChallengers, nextChallenger],
         assignedChallengers: assignedChallengers.filter((member) => member !== nextChallenger),
-        flowStatus: "reestimating",
-        stage: "orfReestimate",
+        flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
+        stage: objectiveLifecycleTransitions.acceptChallenge.stage,
         acceptedAt: objective.acceptedAt ?? acceptedAt,
         confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
         challengeApplications: applications.map((application) =>
@@ -1220,7 +1226,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     if (challengers.includes(nextApplicant)) {
       return { status: "alreadyAccepted" as const, challengers };
     }
-    if (isObjectiveTerminal(objective) || !bountyHallFlowStatuses.has(objective.flowStatus)) {
+    if (objectiveClosedForChallengeEntry(objective) || !canApplyForObjectiveChallenge(objective)) {
       return { status: "closed" as const };
     }
     if (!(await isActiveChallengerInScope(tx, objective.teamId, nextApplicant))) {
@@ -1244,7 +1250,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
       .update(objectives)
       .set({
         challengeApplications: [application, ...applications],
-        flowStatus: objective.flowStatus === "recruiting" ? "recruiting" : "applying",
+        flowStatus: objectiveFlowStatusAfterChallengeApplication(objective.flowStatus),
         updatedAt: today(),
       })
       .where(eq(objectives.id, objectiveId));
@@ -1285,10 +1291,11 @@ async function objectiveOutcome(objectiveId: string, scope?: RuntimeScope | null
 }
 
 export async function publishObjective(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
+  const transition = objectiveLifecycleTransitions.publishCandidate;
   const updated = await db
     .update(objectives)
-    .set({ flowStatus: "open", stage: "resultClaiming", status: "Draft", updatedAt: today(), updatedBy: actorId })
-    .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "candidate")))
+    .set({ flowStatus: transition.to, stage: transition.stage, status: "Draft", updatedAt: today(), updatedBy: actorId })
+    .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, transition.from)))
     .returning({ id: objectives.id, teamId: objectives.teamId });
   if (updated.length === 0) {
     const [existing] = await db.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
@@ -1305,7 +1312,7 @@ export async function approveObjectiveChallengeApplication(
   const approvedResult = await db.transaction(async (tx) => {
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
-    if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
+    if (objectiveClosedForChallengeEntry(objective) || !canReviewObjectiveChallengeApplications(objective)) return { status: "invalid" as const };
 
     const applications = objective.challengeApplications ?? [];
     const application = applications.find((item) => item.id === applicationId && item.status === "pending");
@@ -1321,8 +1328,8 @@ export async function approveObjectiveChallengeApplication(
       .update(objectives)
       .set({
         challengers,
-        flowStatus: "reestimating",
-        stage: "orfReestimate",
+        flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
+        stage: objectiveLifecycleTransitions.acceptChallenge.stage,
         acceptedAt: objective.acceptedAt ?? acceptedAt,
         confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
         challengeApplications: applications.map((item) =>
@@ -1348,7 +1355,7 @@ export async function rejectObjectiveChallengeApplication(
   const rejectedResult = await db.transaction(async (tx) => {
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
-    if (isObjectiveTerminal(objective) || !applicationReviewFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
+    if (objectiveClosedForChallengeEntry(objective) || !canReviewObjectiveChallengeApplications(objective)) return { status: "invalid" as const };
     const applications = objective.challengeApplications ?? [];
     if (!applications.some((item) => item.id === applicationId && item.status === "pending")) return { status: "notFound" as const };
     const nextApplications = applications.map((item) =>
@@ -1361,7 +1368,11 @@ export async function rejectObjectiveChallengeApplication(
       .update(objectives)
       .set({
         challengeApplications: nextApplications,
-        flowStatus: challengers.length > 0 ? "reestimating" : assignedChallengers.length > 0 ? "recruiting" : hasPending ? "applying" : "open",
+        flowStatus: objectiveFlowStatusAfterChallengeApplicationReview({
+          hasAcceptedChallengers: challengers.length > 0,
+          hasAssignedChallengers: assignedChallengers.length > 0,
+          hasPendingApplications: hasPending,
+        }),
         updatedAt: today(),
         updatedBy: actorId,
       })
@@ -1380,7 +1391,7 @@ export async function recruitObjectiveChallengers(
   const recruitedResult = await db.transaction(async (tx) => {
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
-    if (isObjectiveTerminal(objective) || !challengeRecruitmentFlowStatuses.has(objective.flowStatus)) return { status: "invalid" as const };
+    if (objectiveClosedForChallengeEntry(objective) || !canRecruitObjectiveChallengersByFlow(objective)) return { status: "invalid" as const };
     const currentChallengers = uniqueMembers(objective.challengers ?? []);
     const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
     if (recruitMembers.length === 0) return { status: "invalid" as const };
@@ -1392,7 +1403,10 @@ export async function recruitObjectiveChallengers(
       .update(objectives)
       .set({
         assignedChallengers,
-        flowStatus: currentChallengers.length > 0 || objective.flowStatus === "reestimating" ? "reestimating" : "recruiting",
+        flowStatus: objectiveFlowStatusAfterRecruitment({
+          currentFlowStatus: objective.flowStatus,
+          hasAcceptedChallengers: currentChallengers.length > 0,
+        }),
         updatedAt: today(),
         updatedBy: actorId,
       })
@@ -1421,7 +1435,7 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
   const frozen = await db.transaction(async (tx) => {
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
-    if (objective.flowStatus !== "reestimating") return { status: "invalid" as const };
+    if (!canFreezeObjectiveByFlow(objective)) return { status: "invalid" as const };
 
     const objectiveResults = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId)).limit(1);
     if (objectiveResults.length === 0) return { status: "invalid" as const };
@@ -1438,8 +1452,8 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
       .set({
         assignedChallengers: [],
         challengeApplications,
-        flowStatus: "frozen",
-        stage: "goalFrozen",
+        flowStatus: objectiveLifecycleTransitions.freezeAfterReestimate.to,
+        stage: objectiveLifecycleTransitions.freezeAfterReestimate.stage,
         confirmedAt: decidedAt,
         updatedAt: today(),
         updatedBy: actorId,
@@ -1472,7 +1486,11 @@ export async function canEditResultDuringReestimate(resultId: string, member: st
     .where(eq(results.id, resultId))
     .limit(1);
 
-  return row?.flowStatus === "reestimating" && uniqueMembers(row.challengers ?? []).includes(actorName) && isReestimateWindowOpen(row.confirmationDueAt);
+  return Boolean(
+    row &&
+      isObjectiveReestimateWindowOpen(row) &&
+      uniqueMembers(row.challengers ?? []).includes(actorName),
+  );
 }
 
 export type ObjectiveStateMutationAccess =
@@ -1490,7 +1508,7 @@ export async function canMutateObjectiveResults(objectiveId: string): Promise<Ob
     return { status: "notFound" };
   }
 
-  return resultMutationFlowStatuses.has(objective.flowStatus)
+  return canMutateObjectiveResultsByFlow(objective)
     ? { status: "allowed", flowStatus: objective.flowStatus }
     : { status: "locked", flowStatus: objective.flowStatus };
 }
@@ -1506,7 +1524,7 @@ export async function canMutateResult(resultId: string): Promise<ObjectiveStateM
     return { status: "notFound" };
   }
 
-  return resultMutationFlowStatuses.has(row.flowStatus)
+  return canMutateObjectiveResultsByFlow(row)
     ? { status: "allowed", flowStatus: row.flowStatus }
     : { status: "locked", flowStatus: row.flowStatus };
 }
@@ -1521,9 +1539,9 @@ export async function canDeleteObjective(objectiveId: string): Promise<Objective
     return { status: "notFound" };
   }
 
-  return objectiveDeleteLockedFlowStatuses.has(objective.flowStatus)
-    ? { status: "locked", flowStatus: objective.flowStatus }
-    : { status: "allowed", flowStatus: objective.flowStatus };
+  return canDeleteObjectiveByFlow(objective)
+    ? { status: "allowed", flowStatus: objective.flowStatus }
+    : { status: "locked", flowStatus: objective.flowStatus };
 }
 
 export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string, scope?: RuntimeScope | null): Promise<boolean> {
@@ -1543,10 +1561,10 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
     .limit(1);
 
   return (
-    objective?.flowStatus === "reestimating" &&
+    objective &&
+    isObjectiveReestimateWindowOpen(objective) &&
     (!storageScopeId || objective.teamId === storageScopeId) &&
-    uniqueMembers(objective.challengers ?? []).includes(actorName) &&
-    isReestimateWindowOpen(objective.confirmationDueAt)
+    uniqueMembers(objective.challengers ?? []).includes(actorName)
   );
 }
 
@@ -1683,7 +1701,7 @@ export async function updateResultConfidence(resultId: string, confidence: numbe
       .where(eq(results.id, resultId))
       .limit(1)
       .for("update");
-    if (!target || !resultMutationFlowStatuses.has(target.flowStatus)) {
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
       return false;
     }
 
@@ -1718,7 +1736,7 @@ export async function proposeResultUpdate(
       .where(eq(results.id, input.resultId))
       .limit(1)
       .for("update");
-    if (!target || !resultMutationFlowStatuses.has(target.flowStatus)) {
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
       return false;
     }
 
@@ -1888,7 +1906,7 @@ export async function canMutateObjectiveWorkItem(
     return "notFound";
   }
 
-  if (!workItemMutationFlowStatuses.has(objective.flowStatus)) {
+  if (!canMutateObjectiveWorkItemsByFlow(objective)) {
     return "forbidden";
   }
 
@@ -1922,7 +1940,7 @@ async function canMutateObjectiveComment(
     return "notFound";
   }
 
-  if (commentLockedFlowStatuses.has(objective.flowStatus)) {
+  if (!canMutateObjectiveCommentsByFlow(objective)) {
     return "forbidden";
   }
 
@@ -1932,7 +1950,7 @@ async function canMutateObjectiveComment(
 
   const member = actor.name.trim();
   return member &&
-    memberCommentFlowStatuses.has(objective.flowStatus) &&
+    canMutateObjectiveCommentsAsChallengerByFlow(objective) &&
     uniqueMembers(objective.challengers ?? []).includes(member)
     ? "allowed"
     : "forbidden";
@@ -2649,7 +2667,7 @@ export async function submitObjectiveLoot(
     return { status: "notFound" };
   }
 
-  if (objective.flowStatus !== "frozen") {
+  if (!canSubmitObjectiveLootByFlow(objective)) {
     return { status: "closed" };
   }
 
@@ -2683,8 +2701,8 @@ export async function submitObjectiveLoot(
   const submitted = await db.transaction(async (tx) => {
     const updated = await tx
       .update(objectives)
-      .set({ lootSubmittedAt: submittedAt, flowStatus: "submitted", updatedAt: today(), updatedBy: actor.id })
-      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "frozen")))
+      .set({ lootSubmittedAt: submittedAt, flowStatus: objectiveLifecycleTransitions.submitLoot.to, updatedAt: today(), updatedBy: actor.id })
+      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, objectiveLifecycleTransitions.submitLoot.from)))
       .returning({ id: objectives.id });
     if (updated.length === 0) {
       return false;
@@ -2731,7 +2749,7 @@ export async function submitObjectiveContributionReview(
     return { status: "notFound" };
   }
 
-  if (objective.flowStatus !== "submitted") {
+  if (!canSubmitObjectiveContributionReviewByFlow(objective)) {
     return { status: "closed" };
   }
 
@@ -2777,7 +2795,7 @@ export async function reviewObjectiveLoot(
 ): Promise<ObjectiveFlowMutationOutcome> {
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) return { status: "notFound" };
-  if (objective.flowStatus !== "submitted" || !objective.lootSubmittedAt) return { status: "invalid" };
+  if (!canReviewObjectiveLootByFlow(objective) || !objective.lootSubmittedAt) return { status: "invalid" };
 
   const lootRows = await db
     .select()
@@ -2854,8 +2872,8 @@ export async function reviewObjectiveLoot(
     const updated = await tx
       .update(objectives)
       .set({
-        flowStatus: "settled",
-        stage: "goalFrozen",
+        flowStatus: objectiveLifecycleTransitions.settleLoot.to,
+        stage: objectiveLifecycleTransitions.settleLoot.stage,
         acceptedResult: objectiveAcceptedResult,
         completionMultiplier,
         objectiveBasePoints: basePoints,
@@ -2864,7 +2882,7 @@ export async function reviewObjectiveLoot(
         updatedAt: today(),
         updatedBy: actorId,
       })
-      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, "submitted")))
+      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, objectiveLifecycleTransitions.settleLoot.from)))
       .returning({ id: objectives.id });
     if (updated.length === 0) {
       return false;
@@ -3045,24 +3063,12 @@ export async function updateObjectiveStage(objectiveId: string, stage: OrfStage)
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
     .limit(1);
-  if (!objective || !isStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
+  if (!objective || !isObjectiveStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
     return false;
   }
 
   const updated = await db.update(objectives).set({ stage, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
   return updated.length > 0;
-}
-
-function isStageCompatibleWithFlowStatus(flowStatus: Objective["flowStatus"], stage: OrfStage) {
-  if (flowStatus === "reestimating") {
-    return stage === "orfReestimate";
-  }
-
-  if (flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed") {
-    return stage === "goalFrozen";
-  }
-
-  return stage !== "goalFrozen";
 }
 
 export async function updateResultTitle(resultId: string, title: string): Promise<boolean> {
@@ -3079,7 +3085,7 @@ export async function updateResultTitle(resultId: string, title: string): Promis
       .where(eq(results.id, resultId))
       .limit(1)
       .for("update");
-    if (!target || !resultMutationFlowStatuses.has(target.flowStatus)) {
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
       return false;
     }
 
@@ -3152,7 +3158,7 @@ export async function deleteObjective(objectiveId: string): Promise<boolean> {
     if (!objective) {
       return false;
     }
-    if (objectiveDeleteLockedFlowStatuses.has(objective.flowStatus)) {
+    if (!canDeleteObjectiveByFlow(objective)) {
       return false;
     }
 
@@ -3194,7 +3200,7 @@ export async function deleteResult(resultId: string): Promise<boolean> {
     if (!result) {
       return false;
     }
-    if (!resultMutationFlowStatuses.has(result.flowStatus)) {
+    if (!canMutateObjectiveResultsByFlow(result)) {
       return false;
     }
 
@@ -3274,7 +3280,7 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
     if (!objective) {
       return false;
     }
-    if (!resultMutationFlowStatuses.has(objective.flowStatus)) {
+    if (!canMutateObjectiveResultsByFlow(objective)) {
       return false;
     }
 

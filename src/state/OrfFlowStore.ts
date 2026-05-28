@@ -1,5 +1,10 @@
 import { initialOrfState } from "../data/initialOrfState";
-import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
+import {
+  canApplyForObjectiveChallenge,
+  isObjectiveStageCompatibleWithFlowStatus,
+  objectiveLifecycleInitialState,
+  objectiveLifecycleTransitions,
+} from "../domain/orfLifecycle";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus, UncertaintyLevel } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
@@ -95,14 +100,6 @@ const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStat
   return completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 };
 
-const isStageCompatibleWithFlowStatus = (
-  flowStatus: OrfState["objectives"][number]["flowStatus"],
-  stage: OrfState["objectives"][number]["stage"],
-) => {
-  if (flowStatus === "reestimating") return stage === "orfReestimate";
-  if (flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed") return stage === "goalFrozen";
-  return stage !== "goalFrozen";
-};
 const moveByReference = <T extends { id: string }>(items: T[], movingId: string, referenceId: string, placement: Placement): T[] => {
   const moving = items.find((item) => item.id === movingId);
   if (!moving || movingId === referenceId) {
@@ -385,8 +382,8 @@ export class OrfFlowStore {
       description: input.whyItMatters,
       whyItMatters: input.whyItMatters,
       cycle: input.cycle,
-      stage: "orfReestimate" as const,
-      flowStatus: "candidate" as const,
+      stage: objectiveLifecycleInitialState.stage,
+      flowStatus: objectiveLifecycleInitialState.flowStatus,
       status: "Draft" as const,
       confidence: 50,
       progress: 0,
@@ -634,7 +631,7 @@ export class OrfFlowStore {
 
   updateObjectiveStage(state: OrfState, objectiveId: string, stage: OrfState["objectives"][number]["stage"]): OrfState {
     const objective = state.objectives.find((item) => item.id === objectiveId);
-    if (!objective || !isStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
+    if (!objective || !isObjectiveStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
       return state;
     }
 
@@ -723,8 +720,8 @@ export class OrfFlowStore {
               ...item,
               challengers: [...item.challengers, nextChallenger],
               assignedChallengers: item.assignedChallengers.filter((member) => member !== nextChallenger),
-              flowStatus: "reestimating",
-              stage: "orfReestimate",
+              flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
+              stage: objectiveLifecycleTransitions.acceptChallenge.stage,
               acceptedAt: item.acceptedAt ?? now,
               confirmationDueAt: item.confirmationDueAt ?? nextConfirmationDueAt,
               challengeApplications: (item.challengeApplications ?? []).map((application) =>

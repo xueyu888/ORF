@@ -55,6 +55,8 @@
 
 `Objective.stage` 保留为页面阶段字段：重估对应 `orfReestimate`，冻结后对应 `goalFrozen`。业务流转以 `flowStatus` 为准。
 
+生命周期规则的代码唯一事实源是 `src/domain/orfLifecycle/`：`policy.ts` 定义每个 `flowStatus` 的能力矩阵和排序/文案口径，`guards.ts` 只导出语义化判断，`transitions.ts` 只导出状态迁移和 `stage` 兼容规则。后端仓库、前端 store 和页面能力层不得再各自维护 `flowStatus` 集合或局部状态机。
+
 ## 页面边界
 
 | 页面 | 状态 |
