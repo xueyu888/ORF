@@ -73,6 +73,7 @@ import { registerNotificationRoutes } from "./routes/notificationRoutes";
 import { registerOrfReadRoutes } from "./routes/orfReadRoutes";
 import { registerCommentRoutes } from "./routes/commentRoutes";
 import { registerUserRoutes } from "./routes/userRoutes";
+import { registerUserAvatarRoutes } from "./users/avatar/avatarRoutes";
 import { registerPermissionRoutes } from "./routes/permissionRoutes";
 import { registerRealtimeRoutes } from "./routes/realtimeRoutes";
 import { isDateOnlyString } from "../src/utils/date";
@@ -374,6 +375,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerOrfReadRoutes(app);
   registerSettingsRoutes(app);
   registerCommentRoutes(app);
+  registerUserAvatarRoutes(app);
   registerUserRoutes(app);
   registerPermissionRoutes(app);
 

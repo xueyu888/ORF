@@ -43,6 +43,9 @@ export const users = pgTable(
     status: text("status").$type<UserStatus>().notNull().default("active"),
     createdAt: date("created_at", { mode: "string" }).notNull(),
     lastOnlineAt: timestamp("last_online_at", { mode: "string", withTimezone: true }),
+    avatarObjectKey: text("avatar_object_key"),
+    avatarMimeType: text("avatar_mime_type"),
+    avatarUpdatedAt: timestamp("avatar_updated_at", { mode: "string", withTimezone: true }),
   },
   (table) => ({
     oryIdentityIdUnique: uniqueIndex("users_ory_identity_id_unique").on(table.oryIdentityId),

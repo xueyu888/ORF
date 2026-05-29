@@ -14,6 +14,7 @@ import {
 } from "../db/schema";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
+import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 
 export type UserInput = {
   name: string;
@@ -204,6 +205,8 @@ export async function getScopedUsers(scope: RuntimeScope): Promise<OrfUser[]> {
       role: teamMembers.role,
       status: users.status,
       lastOnlineAt: users.lastOnlineAt,
+      avatarObjectKey: users.avatarObjectKey,
+      avatarUpdatedAt: users.avatarUpdatedAt,
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
@@ -218,6 +221,7 @@ export async function getScopedUsers(scope: RuntimeScope): Promise<OrfUser[]> {
     status: row.status ?? "active",
     authLinked: Boolean(row.oryIdentityId),
     lastOnlineAt: row.lastOnlineAt,
+    avatarUrl: avatarUrlForUser(row),
   }));
 }
 
@@ -232,6 +236,8 @@ export async function getRegistrationRequests(scope: RuntimeScope): Promise<OrfU
       role: teamMembers.role,
       status: users.status,
       lastOnlineAt: users.lastOnlineAt,
+      avatarObjectKey: users.avatarObjectKey,
+      avatarUpdatedAt: users.avatarUpdatedAt,
     })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
@@ -246,6 +252,7 @@ export async function getRegistrationRequests(scope: RuntimeScope): Promise<OrfU
     status: row.status ?? "pending",
     authLinked: Boolean(row.oryIdentityId),
     lastOnlineAt: row.lastOnlineAt,
+    avatarUrl: avatarUrlForUser(row),
   }));
 }
 

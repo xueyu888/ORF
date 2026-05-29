@@ -1,9 +1,16 @@
 import { type Dispatch, type SetStateAction, useMemo } from "react";
-import { apiJson, apiRequest, type PermissionRulesResponse, type UsersResponse } from "./apiClient";
+import {
+  apiJson,
+  apiRequest,
+  deleteCurrentUserAvatarRequest,
+  type PermissionRulesResponse,
+  uploadCurrentUserAvatarRequest,
+  type UsersResponse,
+} from "./apiClient";
 import { mergePermissionRules, mergeUsers } from "./orfProviderData";
-import { userMutationFailureMessage } from "./orfProviderMutationMessages";
+import { avatarMutationFailureMessage, userMutationFailureMessage } from "./orfProviderMutationMessages";
 import type { AuthResult } from "./orfProviderAuth";
-import type { OrfState, UserRole } from "../types/orf";
+import type { OrfState, OrfUser, UserRole } from "../types/orf";
 
 type AuthenticateWithPassword = (path: "/api/auth/login" | "/api/auth/registration", body: unknown) => Promise<AuthResult>;
 
@@ -15,6 +22,15 @@ interface UserActionOptions {
   refreshUsers: () => Promise<void>;
   setAuthUserId: Dispatch<SetStateAction<string | null>>;
   setState: Dispatch<SetStateAction<OrfState>>;
+}
+
+function mergeUser(state: OrfState, user: OrfUser): OrfState {
+  const exists = state.users.some((item) => item.id === user.id);
+  return {
+    ...state,
+    users: exists ? state.users.map((item) => (item.id === user.id ? user : item)) : [...state.users, user],
+    currentUserId: state.currentUserId || user.id,
+  };
 }
 
 export function useOrfProviderUserActions({
@@ -45,6 +61,28 @@ export function useOrfProviderUserActions({
       },
       loginWithPassword: (email: string, password: string) => authenticateWithPassword("/api/auth/login", { email, password }),
       registerWithPassword: (input: { name: string; email: string; password: string }) => authenticateWithPassword("/api/auth/registration", input),
+      uploadCurrentUserAvatar: async (file: File) => {
+        try {
+          const data = await uploadCurrentUserAvatarRequest(file);
+          setState((current) => mergeUser(current, data.user));
+          notify("头像已更新");
+          return true;
+        } catch (error) {
+          notify(avatarMutationFailureMessage(error, "头像更新失败"));
+          return false;
+        }
+      },
+      deleteCurrentUserAvatar: async () => {
+        try {
+          const data = await deleteCurrentUserAvatarRequest();
+          setState((current) => mergeUser(current, data.user));
+          notify("头像已删除");
+          return true;
+        } catch (error) {
+          notify(avatarMutationFailureMessage(error, "头像删除失败"));
+          return false;
+        }
+      },
       logout: () => {
         setAuthUserId(null);
         void apiRequest("/api/auth/logout", { method: "POST" }).finally(() => {

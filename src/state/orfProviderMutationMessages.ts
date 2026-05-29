@@ -52,6 +52,34 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+export function avatarMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "登录已过期，请重新登录";
+    }
+
+    if (error.status === 413) {
+      return "头像图片过大，请压缩后再上传";
+    }
+
+    if (error.status === 415) {
+      return "头像只支持 PNG、JPEG、GIF 或 WebP 图片";
+    }
+
+    if (error.status === 400) {
+      return "头像图片文件无效";
+    }
+
+    if (error.status === 404) {
+      return "当前用户不存在，请重新登录";
+    }
+
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
 export function bountyMutationFailureMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
     if (error.status === 401) {

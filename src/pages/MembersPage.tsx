@@ -1,10 +1,9 @@
 import { clsx } from "clsx";
 import { Ban, CheckCircle2, ChevronDown, Edit3, Plus, Search, Trash2, X, XCircle } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
+import { UserAvatar } from "../components/UserAvatar";
 import { useOrf } from "../state/OrfProvider";
 import type { OrfUser, UserRole } from "../types/orf";
-import { avatarStyleForName } from "../utils/avatar";
-import { initials } from "../utils/format";
 
 type RoleFilter = "all" | UserRole;
 type UserDialogState = {
@@ -231,9 +230,7 @@ export function MembersPage() {
                   <tr key={user.id}>
                     <td>
                       <div className="orf-user-name-cell">
-                        <span className="orf-user-row-avatar" style={avatarStyleForName(user.name)}>
-                          {initials(user.name)}
-                        </span>
+                        <UserAvatar avatarUrl={user.avatarUrl} className="orf-user-row-avatar" name={user.name} size="md" />
                         <span className="min-w-0">
                           <span className="orf-user-name">{user.name}</span>
                           {user.id === currentUserId && <span className="orf-user-current">当前</span>}

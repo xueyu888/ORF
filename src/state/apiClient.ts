@@ -9,6 +9,7 @@ export type TaskManagementData = Pick<
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
+export type CurrentUserResponse = { user: OrfUser };
 export type RegistrationRequestsResponse = { users: OrfUser[] };
 export type NotificationsResponse = {
   notifications: AppNotification[];
@@ -265,4 +266,20 @@ export async function deletePersonalBackground(id: string) {
     method: "DELETE",
   });
   return response.data;
+}
+
+export async function uploadCurrentUserAvatarRequest(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  return apiJson<CurrentUserResponse>("/api/users/me/avatar", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function deleteCurrentUserAvatarRequest() {
+  return apiJson<CurrentUserResponse>("/api/users/me/avatar", {
+    method: "DELETE",
+  });
 }

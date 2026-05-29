@@ -131,6 +131,8 @@ interface OrfContextValue {
   createUser: (input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   loginWithPassword: (email: string, password: string) => Promise<AuthResult>;
   registerWithPassword: (input: { name: string; email: string; password: string }) => Promise<AuthResult>;
+  uploadCurrentUserAvatar: (file: File) => Promise<boolean>;
+  deleteCurrentUserAvatar: () => Promise<boolean>;
   logout: () => void;
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;

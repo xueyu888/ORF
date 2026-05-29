@@ -1115,6 +1115,7 @@ export function ChallengePlanPage() {
           key={`${commentTarget.type}:${commentTarget.id}`}
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
+          currentUserAvatarUrl={currentUser?.avatarUrl}
           currentUserId={currentUser?.id ?? ""}
           onLoadMentionableUsers={loadCommentMentionableUsers}
           targetId={commentTarget.id}

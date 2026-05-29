@@ -1,5 +1,5 @@
 import type { AppNotification } from "../../src/types/orf";
-import type { RealtimeEvent, SystemBroadcast } from "../../src/types/realtime";
+import type { OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../src/types/realtime";
 
 type RealtimeSubscriber = {
   id: string;
@@ -78,6 +78,24 @@ export function publishRealtimeSystemBroadcast(teamId: string, broadcast: System
     kind: "system.broadcast",
     createdAt: nowIso(),
     broadcast,
+  });
+}
+
+export function publishRealtimeReadModelInvalidation(
+  teamId: string,
+  invalidation: Omit<OrfReadModelInvalidation, "createdAt" | "id"> & Partial<Pick<OrfReadModelInvalidation, "createdAt" | "id">>,
+) {
+  const createdAt = invalidation.createdAt ?? nowIso();
+  const id = invalidation.id ?? makeEventId("orf-read-model-invalidation");
+  publishRealtimeEventToTeam(teamId, {
+    id,
+    kind: "orf.read-model.invalidated",
+    createdAt,
+    invalidation: {
+      ...invalidation,
+      id,
+      createdAt,
+    },
   });
 }
 

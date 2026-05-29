@@ -1808,6 +1808,79 @@ test("recent online activity endpoint updates the current user with server time 
   });
 });
 
+test("user avatar upload is self-scoped and projected into users and comments", async () => {
+  const fixture = await createFixture("api-user-avatar");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "avatar comment projection objective");
+
+  await withApiServer(fixture, async (app) => {
+    const upload = await apiMultipartInject(app, fixture.challenger, "/api/users/me/avatar", {
+      fields: {},
+      file: {
+        fieldName: "file",
+        fileName: "avatar.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(upload.statusCode, 200);
+    const uploadPayload = upload.json() as { user: { avatarUrl?: string | null; id: string } };
+    assert.equal(uploadPayload.user.id, fixture.challenger.id);
+    assert.ok(uploadPayload.user.avatarUrl);
+    assert.equal(uploadPayload.user.avatarUrl.includes("127.0.0.1:9000"), false);
+    assert.equal(uploadPayload.user.avatarUrl.includes("orf-comment-attachments"), false);
+    assert.equal(uploadPayload.user.avatarUrl.includes(`/api/users/${encodeURIComponent(fixture.challenger.id)}/avatar`), true);
+
+    const usersResponse = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(usersResponse.statusCode, 200);
+    const usersPayload = usersResponse.json() as { users: Array<{ avatarUrl?: string | null; id: string }> };
+    assert.equal(usersPayload.users.find((user) => user.id === fixture.challenger.id)?.avatarUrl, uploadPayload.user.avatarUrl);
+
+    const avatarContent = await apiInject(app, fixture.commander, "GET", attachmentContentPath(uploadPayload.user.avatarUrl));
+    assert.equal(avatarContent.statusCode, 200);
+    assert.equal(avatarContent.headers["content-type"], "image/png");
+    assert.equal(Buffer.from(avatarContent.rawPayload).subarray(0, 8).equals(tinyPng.subarray(0, 8)), true);
+
+    const body = `${fixture.prefix} avatar projection ${Date.now()}`;
+    const comment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body,
+    });
+    assert.equal(comment.statusCode, 200);
+    const commentPayload = comment.json() as {
+      commentThread: { messages: Array<{ authorAvatarUrl?: string | null; authorUserId?: string | null; body: string }> };
+    };
+    const message = commentPayload.commentThread.messages.find((item) => item.body === body);
+    assert.equal(message?.authorUserId, fixture.challenger.id);
+    assert.equal(message?.authorAvatarUrl, uploadPayload.user.avatarUrl);
+
+    const deleted = await apiInject(app, fixture.challenger, "DELETE", "/api/users/me/avatar");
+    assert.equal(deleted.statusCode, 200);
+    assert.equal((deleted.json() as { user: { avatarUrl?: string | null } }).user.avatarUrl, null);
+    const deletedContent = await apiInject(app, fixture.commander, "GET", attachmentContentPath(uploadPayload.user.avatarUrl));
+    assert.equal(deletedContent.statusCode, 404);
+  });
+});
+
+test("user avatar upload rejects spoofed image payloads", async () => {
+  const fixture = await createFixture("api-user-avatar-reject");
+
+  await withApiServer(fixture, async (app) => {
+    const upload = await apiMultipartInject(app, fixture.challenger, "/api/users/me/avatar", {
+      fields: {},
+      file: {
+        fieldName: "file",
+        fileName: "avatar.png",
+        mimeType: "image/png",
+        content: Buffer.from("not a png", "utf8"),
+      },
+    });
+    assert.equal(upload.statusCode, 415);
+    assert.equal((upload.json() as { error: string }).error, "Unsupported image type");
+  });
+});
+
 test("auth API normalizes login credentials at the route boundary", async () => {
   const fixture = await createFixture("auth-route-login-normalize");
   const email = `${fixture.prefix}-external-login@orf.test`;

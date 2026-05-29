@@ -111,7 +111,7 @@ export function Sidebar({
       <div className="orf-sidebar-footer border-t p-4">
         <div className="orf-sidebar-user-wrap relative">
           <div className="orf-sidebar-user flex w-full items-center gap-3 text-left" title={currentUser?.name ?? "User"} aria-label="当前用户">
-            <Avatar name={currentUser?.name ?? "User"} />
+            <Avatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} />
             <div className="orf-sidebar-label min-w-0 flex-1">
               <div className="orf-sidebar-user-name truncate">{currentUser?.name ?? "User"}</div>
             </div>

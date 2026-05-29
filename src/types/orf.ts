@@ -36,6 +36,7 @@ export interface OrfUser {
   status: UserStatus;
   authLinked?: boolean;
   lastOnlineAt?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface PermissionRule {
@@ -308,6 +309,8 @@ export interface CommentAttachment {
 export interface CommentMessage {
   id: string;
   author: string;
+  authorUserId?: string | null;
+  authorAvatarUrl?: string | null;
   body: string;
   attachments: CommentAttachment[];
   createdAt: string;

@@ -2,10 +2,9 @@ import { ArrowLeft, ChevronRight, ImagePlus, Pencil, Reply, Send, Trash2, X } fr
 import type { ClipboardEvent, FormEvent, ReactNode } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
+import { UserAvatar } from "../../../components/UserAvatar";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
-import { avatarStyleForName } from "../../../utils/avatar";
-import { initials } from "../../../utils/format";
 import { commentTimeDisplay } from "./commentTime";
 import { parseCommentBodyLinks } from "./commentText";
 
@@ -21,7 +20,7 @@ type CommentImagePreview = {
   src: string;
 };
 
-type CommentMentionUser = Pick<OrfUser, "email" | "id" | "name" | "role" | "status">;
+type CommentMentionUser = Pick<OrfUser, "avatarUrl" | "email" | "id" | "name" | "role" | "status">;
 
 type CommentDraftMention = {
   end: number;
@@ -52,6 +51,7 @@ const commentMentionTokenPattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 export function CommentPanel({
   canManageAllComments = false,
   currentMember,
+  currentUserAvatarUrl,
   currentUserId,
   onAddComment,
   onClose,
@@ -66,6 +66,7 @@ export function CommentPanel({
 }: {
   canManageAllComments?: boolean;
   currentMember: string;
+  currentUserAvatarUrl?: string | null;
   currentUserId: string;
   onAddComment: (body: string, replyInput?: CommentReplyInput) => void;
   onClose: () => void;
@@ -305,6 +306,7 @@ export function CommentPanel({
           </div>
           <CommentComposer
             currentMember={currentMember}
+            currentUserAvatarUrl={currentUserAvatarUrl}
             currentUserId={currentUserId}
             defaultReplyAuthor={activeRootEntry?.message.author}
             draft={draft}
@@ -360,7 +362,7 @@ function CommentMessageRow({
 
   return (
     <article className={clsx("orf-comment-message-row", selected && "orf-comment-message-row-selected")} onClick={() => onSelect(message.id)}>
-      <PersonAvatar name={message.author} />
+      <PersonAvatar avatarUrl={message.authorAvatarUrl} name={message.author} />
       <div className="orf-comment-message-main">
         <div className="orf-comment-message-header">
           <span className="orf-comment-author-name">{message.author}</span>
@@ -677,6 +679,7 @@ function replaceCommentDraftText(
 
 function CommentComposer({
   currentMember,
+  currentUserAvatarUrl,
   currentUserId,
   defaultReplyAuthor,
   draft,
@@ -688,6 +691,7 @@ function CommentComposer({
   onUploadAttachment,
 }: {
   currentMember: string;
+  currentUserAvatarUrl?: string | null;
   currentUserId: string;
   defaultReplyAuthor?: string;
   draft: CommentDraft;
@@ -792,7 +796,7 @@ function CommentComposer({
 
   return (
     <form className="orf-comment-composer" onSubmit={onSubmit}>
-      <PersonAvatar name={currentMember} />
+      <PersonAvatar avatarUrl={currentUserAvatarUrl} name={currentMember} />
       <div className="orf-comment-composer-main">
         <span className="orf-comment-author-name">{currentMember}</span>
         {mode.type !== "default" && (
@@ -855,7 +859,7 @@ function CommentComposer({
                   insertMention(user);
                 }}
               >
-                <PersonAvatar name={user.name} />
+                <PersonAvatar avatarUrl={user.avatarUrl} name={user.name} />
                 <span>
                   <span className="orf-comment-mention-name">{user.name}</span>
                   <span className="orf-comment-mention-email">{user.email}</span>
@@ -900,10 +904,6 @@ function CommentComposer({
   );
 }
 
-function PersonAvatar({ name }: { name: string }) {
-  return (
-    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm" style={avatarStyleForName(name)} title={name}>
-      {initials(name)}
-    </div>
-  );
+function PersonAvatar({ avatarUrl, name }: { avatarUrl?: string | null; name: string }) {
+  return <UserAvatar avatarUrl={avatarUrl} className="h-7 w-7 text-[10px] shadow-sm" frame={false} name={name} />;
 }

@@ -94,6 +94,7 @@ import {
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
+import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
 import { publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
 import { objectStorage } from "../storage/objectStorage";
@@ -614,6 +615,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
+  const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();
@@ -648,6 +650,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     messages.push({
       id: message.id,
       author: message.author,
+      authorUserId: optional(message.authorUserId),
+      authorAvatarUrl: message.authorUserId ? commentAuthorAvatarUrls.get(message.authorUserId) ?? null : null,
       body: message.body,
       attachments: attachmentsByMessage.get(message.id) ?? [],
       createdAt: message.createdAt,
@@ -2100,6 +2104,7 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
     messageIds.length > 0
       ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIds))
       : [];
+  const authorAvatarUrls = await getUserAvatarUrlMap(messages.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const attachmentsByMessage = groupCommentAttachmentsByMessage(attachmentRows);
   return {
     id: thread.id,
@@ -2115,6 +2120,8 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
       .map((message) => ({
         id: message.id,
         author: message.author,
+        authorUserId: optional(message.authorUserId),
+        authorAvatarUrl: message.authorUserId ? authorAvatarUrls.get(message.authorUserId) ?? null : null,
         body: message.body,
         attachments: attachmentsByMessage.get(message.id) ?? [],
         createdAt: message.createdAt,
