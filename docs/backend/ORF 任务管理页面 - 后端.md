@@ -121,6 +121,19 @@ type ObjectiveFlowStatus =
 }
 ```
 
+`POST /api/objectives/:objectiveId/contribution-reviews` 请求体：
+
+```json
+{
+  "allocations": [
+    { "member": "Kai Wang", "ratio": 0.6 },
+    { "member": "Mia Zhang", "ratio": 0.4 }
+  ]
+}
+```
+
+匿名互评接口使用 `0..1` 的标准比例，必须覆盖目标全部普通成员挑战者且合计为 `1`。页面输入是 `0..100` 的百分比，由前端在提交前转换为接口比例。
+
 `POST /api/objectives/:objectiveId/review` 请求体：
 
 ```json
@@ -176,6 +189,7 @@ type ObjectiveFlowStatus =
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。
 - `验收结算` 仅允许指挥官在 `submitted` 状态执行。
 - 多挑战者目标结算优先使用匿名互评汇总；缺评、分歧或申诉需要指挥官处理。
+- 匿名互评和指挥官分歧处理的贡献比例必须是每个挑战者一项、范围 `0..1`、合计 `1` 的标准比例；后端不接受任意权重再静默归一化。
 - 注册用户默认为 `pending`，只有 `active` 用户可访问业务 API。
 
 ## 任务与指标解耦迁移

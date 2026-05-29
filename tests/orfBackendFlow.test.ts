@@ -1060,7 +1060,7 @@ test("review rejects invalid state and missing loot", async () => {
   assert.equal(missingLoot.status, "notFound");
 });
 
-test("settlement normalizes multi-challenger contribution ratios and supports overdelivery", async () => {
+test("settlement uses multi-challenger standard contribution ratios and supports overdelivery", async () => {
   const fixture = await createFixture("settlement-ratios");
   const objective = await createPublishedObjective(fixture, "multi challenger settlement");
   const resultA = await createTestResult(objective.id, fixture.commander.name, "ratio result a", "入门");
@@ -1095,8 +1095,8 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
     objective.id,
     {
       allocations: [
-        { member: fixture.challenger.name, ratio: 2 },
-        { member: fixture.observer.name, ratio: 1 },
+        { member: fixture.challenger.name, ratio: 2 / 3 },
+        { member: fixture.observer.name, ratio: 1 / 3 },
       ],
     },
     { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
@@ -1106,8 +1106,8 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
     objective.id,
     {
       allocations: [
-        { member: fixture.challenger.name, ratio: 2 },
-        { member: fixture.observer.name, ratio: 1 },
+        { member: fixture.challenger.name, ratio: 2 / 3 },
+        { member: fixture.observer.name, ratio: 1 / 3 },
       ],
     },
     { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
@@ -1171,8 +1171,8 @@ test("repeated contribution reviews keep history but settlement uses each review
     objective.id,
     {
       allocations: [
-        { member: fixture.challenger.name, ratio: 9 },
-        { member: fixture.observer.name, ratio: 1 },
+        { member: fixture.challenger.name, ratio: 0.9 },
+        { member: fixture.observer.name, ratio: 0.1 },
       ],
     },
     { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
@@ -1183,8 +1183,8 @@ test("repeated contribution reviews keep history but settlement uses each review
     objective.id,
     {
       allocations: [
-        { member: fixture.challenger.name, ratio: 1 },
-        { member: fixture.observer.name, ratio: 1 },
+        { member: fixture.challenger.name, ratio: 0.5 },
+        { member: fixture.observer.name, ratio: 0.5 },
       ],
     },
     { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
@@ -1195,8 +1195,8 @@ test("repeated contribution reviews keep history but settlement uses each review
     objective.id,
     {
       allocations: [
-        { member: fixture.challenger.name, ratio: 1 },
-        { member: fixture.observer.name, ratio: 1 },
+        { member: fixture.challenger.name, ratio: 0.5 },
+        { member: fixture.observer.name, ratio: 0.5 },
       ],
     },
     { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
@@ -1248,9 +1248,9 @@ test("settlement resolves point ledger user ids within the objective runtime sco
   assert.notEqual(ledger.userId, intruder.challenger.id);
 });
 
-test("settlement resolution collapses duplicate member ratios before writing point ledger", async () => {
-  const fixture = await createFixture("settlement-resolution-duplicates");
-  const objective = await createPublishedObjective(fixture, "duplicate resolution ratios");
+test("settlement resolution uses standard contribution ratios before writing point ledger", async () => {
+  const fixture = await createFixture("settlement-resolution-standard-ratios");
+  const objective = await createPublishedObjective(fixture, "standard resolution ratios");
   const result = await createTestResult(objective.id, fixture.commander.name, "duplicate ratio result", "进阶");
 
   const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
@@ -1268,7 +1268,7 @@ test("settlement resolution collapses duplicate member ratios before writing poi
   const loot = await submitObjectiveLoot(
     objective.id,
     {
-      body: "Duplicate resolution ratios should still produce one ledger row per challenger.",
+      body: "Standard resolution ratios should produce one ledger row per challenger.",
       resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }],
     },
     { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
@@ -1280,11 +1280,10 @@ test("settlement resolution collapses duplicate member ratios before writing poi
     {
       contributionResolution: {
         ratios: [
-          { member: fixture.challenger.name, ratio: 1 },
-          { member: fixture.challenger.name, ratio: 3 },
-          { member: fixture.observer.name, ratio: 1 },
+          { member: fixture.challenger.name, ratio: 0.8 },
+          { member: fixture.observer.name, ratio: 0.2 },
         ],
-        reason: "Resolve duplicate contribution input.",
+        reason: "Resolve contribution input.",
       },
     },
     fixture.commander.id,

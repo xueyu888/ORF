@@ -9,7 +9,7 @@ import type {
   ResultAcceptedResult,
   UncertaintyLevel,
 } from "../../types/orf";
-import { summarizeContributionReviews } from "../../features/challenge/model/contributionReview";
+import { summarizeContributionReviews, validateContributionAllocationInput } from "../../features/challenge/model/contributionReview";
 
 const uncertaintyScores: Record<UncertaintyLevel, number> = {
   入门: 10,
@@ -45,21 +45,8 @@ export function completionMultiplierFor(result: ObjectiveAcceptedResult, lootSub
 }
 
 export function normalizeContributionRatios(input: Array<{ member: string; ratio: number }>, challengers: string[]) {
-  const challengerSet = new Set(challengers);
-  const ratioByMember = new Map<string, number>();
-  for (const item of input) {
-    const member = item.member.trim();
-    const ratio = Number(item.ratio);
-    if (!challengerSet.has(member) || !Number.isFinite(ratio) || ratio < 0) continue;
-    ratioByMember.set(member, (ratioByMember.get(member) ?? 0) + ratio);
-  }
-
-  const ratios = challengers
-    .filter((member) => ratioByMember.has(member))
-    .map((member) => ({ member, ratio: ratioByMember.get(member) ?? 0 }));
-  const total = ratios.reduce((sum, item) => sum + item.ratio, 0);
-  if (ratios.length === 0 || total <= 0) return null;
-  return ratios.map((item) => ({ member: item.member, ratio: item.ratio / total }));
+  const result = validateContributionAllocationInput(input, challengers);
+  return result.status === "ok" ? result.allocations : null;
 }
 
 export function objectiveAcceptedResultFromReviews(reviews: ResultAcceptedResult[]): ObjectiveAcceptedResult {

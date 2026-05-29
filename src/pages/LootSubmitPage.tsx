@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field } from "../components/ui";
-import { equalRatios, summarizeContributionReviews } from "../features/challenge/model/contributionReview";
+import { summarizeContributionReviews } from "../features/challenge/model/contributionReview";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
 import {
@@ -26,6 +26,9 @@ const resultReviewOptions: Array<{ label: string; value: ResultAcceptedResult }>
   { label: "失败", value: "failed" },
   { label: "不验收", value: "unreviewed" },
 ];
+
+const CONTRIBUTION_PERCENT_TOTAL = 100;
+const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
 
 export function LootSubmitPage() {
   const { objectiveId } = useParams();
@@ -66,8 +69,8 @@ export function LootSubmitPage() {
   }, [results]);
 
   useEffect(() => {
-    setContributionInputs((current) => ratioInputDefaults(objective?.challengers ?? [], current));
-    setResolutionInputs((current) => ratioInputDefaults(objective?.challengers ?? [], current));
+    setContributionInputs((current) => percentInputDefaults(objective?.challengers ?? [], current));
+    setResolutionInputs((current) => percentInputDefaults(objective?.challengers ?? [], current));
   }, [objective?.challengers]);
 
   if (!objective) {
@@ -138,17 +141,18 @@ export function LootSubmitPage() {
       return;
     }
 
-    const contributionResolution = needsContributionResolution
-      ? {
-          ratios: ratioInputsToAllocations(resolutionInputs, objective.challengers),
-          reason: resolutionReason.trim() || "指挥官处理匿名互评分歧",
-        }
-      : undefined;
-
-    if (needsContributionResolution && (contributionResolution?.ratios.length ?? 0) !== objective.challengers.length) {
-      setError("请完成贡献分歧处理");
+    const resolutionResult = needsContributionResolution ? percentInputsToAllocations(resolutionInputs, objective.challengers) : null;
+    if (resolutionResult?.status === "invalid") {
+      setError(resolutionResult.error);
       return;
     }
+    const contributionResolution =
+      resolutionResult?.status === "ok"
+        ? {
+            ratios: resolutionResult.allocations,
+            reason: resolutionReason.trim() || "指挥官处理匿名互评分歧",
+          }
+        : undefined;
 
     setSubmittingAction("review");
     try {
@@ -169,15 +173,19 @@ export function LootSubmitPage() {
 
   const submitPeerReview = async () => {
     if (submittingAction) return;
-    const allocations = ratioInputsToAllocations(contributionInputs, objective.challengers);
-    if (!canPeerReview || allocations.length !== objective.challengers.length) {
-      setError("请完成匿名互评");
+    const result = percentInputsToAllocations(contributionInputs, objective.challengers);
+    if (!canPeerReview) {
+      setError("目标提交后，挑战者才能提交匿名互评");
+      return;
+    }
+    if (result.status === "invalid") {
+      setError(result.error);
       return;
     }
 
     setSubmittingAction("peerReview");
     try {
-      const ok = await submitContributionReview(objective.id, allocations);
+      const ok = await submitContributionReview(objective.id, result.allocations);
       if (ok) navigate("/tasks");
     } finally {
       setSubmittingAction(null);
@@ -243,9 +251,11 @@ export function LootSubmitPage() {
                 {needsContributionResolution && (
                   <div className="grid gap-3 rounded-md border orf-border p-3">
                     <div className="text-sm font-semibold orf-text-primary">处理分歧</div>
+                    <div className="text-xs orf-text-secondary">填写最终贡献百分比，范围 0-100，所有挑战者合计必须为 100%。</div>
+                    <ContributionPercentTotal total={percentInputTotal(resolutionInputs, objective.challengers)} />
                     {objective.challengers.map((member) => (
-                      <Field key={member} label={`${member} 处理后贡献比例`}>
-                        <input className="orf-input px-3 py-2 text-sm" type="number" min="0" step="0.1" value={resolutionInputs[member] ?? "1"} onChange={(event) => setResolutionInputs((items) => ({ ...items, [member]: event.target.value }))} />
+                      <Field key={member} label={`${member} 处理后贡献百分比`}>
+                        <input className="orf-input px-3 py-2 text-sm" type="number" min="0" max="100" step="0.01" inputMode="decimal" value={resolutionInputs[member] ?? "0"} onChange={(event) => { setResolutionInputs((items) => ({ ...items, [member]: event.target.value })); if (error) setError(""); }} />
                       </Field>
                     ))}
                     <Field label="分歧处理说明">
@@ -276,10 +286,14 @@ export function LootSubmitPage() {
               <div className="text-sm orf-text-secondary">
                 {hasCurrentPeerReview ? "你已提交过匿名互评；再次提交会作为最新评价参与汇总。" : "评价当前目标挑战者的贡献比例，系统会匿名汇总后用于结算。"}
               </div>
+              <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary">
+                给每位目标挑战者填写 0-100 的贡献百分比，合计必须为 100%。需要包含自己；自评只用于一致性核查，结算得分只汇总其他挑战者对该成员的评价。
+              </div>
+              <ContributionPercentTotal total={percentInputTotal(contributionInputs, objective.challengers)} />
               <div className="grid gap-3">
                 {objective.challengers.map((member) => (
-                  <Field key={member} label={`${member} 贡献比例`}>
-                    <input className="orf-input px-3 py-2 text-sm" type="number" min="0" step="0.1" value={contributionInputs[member] ?? "1"} onChange={(event) => setContributionInputs((items) => ({ ...items, [member]: event.target.value }))} />
+                  <Field key={member} label={`${member}${member === currentMember ? "（你）" : ""} 贡献百分比`}>
+                    <input className="orf-input px-3 py-2 text-sm" type="number" min="0" max="100" step="0.01" inputMode="decimal" value={contributionInputs[member] ?? "0"} onChange={(event) => { setContributionInputs((items) => ({ ...items, [member]: event.target.value })); if (error) setError(""); }} />
                   </Field>
                 ))}
               </div>
@@ -370,18 +384,64 @@ function RatioList({ ratios }: { ratios: ContributionAllocation[] }) {
   );
 }
 
-function ratioInputDefaults(members: string[], current: Record<string, string>) {
+function ContributionPercentTotal({ total }: { total: number }) {
+  const valid = Math.abs(total - CONTRIBUTION_PERCENT_TOTAL) <= CONTRIBUTION_PERCENT_TOLERANCE;
+  return (
+    <div className={valid ? "text-xs orf-text-secondary" : "text-xs orf-warning-text"}>
+      当前合计：{formatInputPercent(total)}%
+    </div>
+  );
+}
+
+function percentInputDefaults(members: string[], current: Record<string, string>) {
   const next: Record<string, string> = {};
-  for (const item of equalRatios(members)) {
-    next[item.member] = current[item.member] ?? "1";
+  const defaults = balancedPercentDefaults(members);
+  for (const member of members) {
+    next[member] = current[member] ?? defaults[member] ?? "0";
   }
   return next;
 }
 
-function ratioInputsToAllocations(values: Record<string, string>, members: string[]) {
-  return members
-    .map((member) => ({ member, ratio: Number(values[member] ?? 0) }))
-    .filter((item) => Number.isFinite(item.ratio) && item.ratio >= 0);
+function balancedPercentDefaults(members: string[]) {
+  if (members.length === 0) return {};
+  const next: Record<string, string> = {};
+  const base = Number((CONTRIBUTION_PERCENT_TOTAL / members.length).toFixed(2));
+  let assigned = 0;
+  members.forEach((member, index) => {
+    const value = index === members.length - 1 ? CONTRIBUTION_PERCENT_TOTAL - assigned : base;
+    assigned += value;
+    next[member] = formatInputPercent(value);
+  });
+  return next;
+}
+
+function percentInputsToAllocations(values: Record<string, string>, members: string[]) {
+  const allocations: ContributionAllocation[] = [];
+  for (const member of members) {
+    const rawValue = values[member]?.trim();
+    if (!rawValue) {
+      return { status: "invalid" as const, error: "请填写每个挑战者的贡献百分比" };
+    }
+    const percent = Number(rawValue);
+    if (!Number.isFinite(percent) || percent < 0 || percent > CONTRIBUTION_PERCENT_TOTAL) {
+      return { status: "invalid" as const, error: "贡献百分比必须在 0 到 100 之间" };
+    }
+    allocations.push({ member, ratio: percent / CONTRIBUTION_PERCENT_TOTAL });
+  }
+
+  const total = allocations.reduce((sum, item) => sum + item.ratio, 0) * CONTRIBUTION_PERCENT_TOTAL;
+  if (Math.abs(total - CONTRIBUTION_PERCENT_TOTAL) > CONTRIBUTION_PERCENT_TOLERANCE) {
+    return { status: "invalid" as const, error: "贡献百分比合计必须为 100%" };
+  }
+
+  return { status: "ok" as const, allocations };
+}
+
+function percentInputTotal(values: Record<string, string>, members: string[]) {
+  return members.reduce((sum, member) => {
+    const value = Number(values[member] ?? 0);
+    return Number.isFinite(value) ? sum + value : sum;
+  }, 0);
 }
 
 function objectiveReviewResultLabel(value: ReturnType<typeof objectiveAcceptedResultFromReviews>) {
@@ -392,4 +452,8 @@ function objectiveReviewResultLabel(value: ReturnType<typeof objectiveAcceptedRe
 
 function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatInputPercent(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }

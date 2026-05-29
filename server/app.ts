@@ -181,6 +181,10 @@ const submitLootBodySchema = z.object({
   selfTestReportUrl: z.string().trim().optional().nullable(),
   selfTestReportBody: z.string().trim().optional().nullable(),
 });
+const contributionAllocationSchema = z.object({
+  member: z.string().trim().min(1),
+  ratio: z.number().min(0).max(1),
+});
 const reviewLootBodySchema = z.object({
   lootId: z.string().min(1).optional(),
   acceptedResult: objectiveAcceptedResultSchema.optional(),
@@ -189,19 +193,13 @@ const reviewLootBodySchema = z.object({
     acceptedResult: resultAcceptedResultSchema,
   })).optional(),
   contributionResolution: z.object({
-    ratios: z.array(z.object({
-      member: z.string().trim().min(1),
-      ratio: z.number().min(0),
-    })).min(1),
+    ratios: z.array(contributionAllocationSchema).min(1),
     reason: z.string().trim().min(1),
   }).optional(),
   reason: z.string().trim().optional(),
 });
 const contributionReviewBodySchema = z.object({
-  allocations: z.array(z.object({
-    member: z.string().trim().min(1),
-    ratio: z.number().min(0),
-  })).min(1),
+  allocations: z.array(contributionAllocationSchema).min(1),
 });
 
 function corsOrigin() {

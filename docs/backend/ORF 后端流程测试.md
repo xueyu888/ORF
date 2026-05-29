@@ -32,7 +32,7 @@
 | 申请与接受守卫 | `challenge application duplicate and closed-state guards are enforced` / `challenge acceptance guards duplicate, due-date, unauthorized, and closed states` | 重复申请、已接受、非法接受、截止时间过近、已关闭状态都应被保护 |
 | 冻结/退回保护 | `freeze rejects invalid source states and reopen requests stay disabled` | 只有 `reestimating` 且已有 Result 可冻结；当前不开放退回重估 |
 | 战利品与验收异常 | `loot submission rejects incomplete or out-of-state payloads` / `review rejects invalid state and missing loot` | 提交和验收的非法状态、漏 claim、外部 Result、缺失 loot 均应拒绝 |
-| 多挑战者结算 | `settlement normalizes multi-challenger contribution ratios and supports overdelivery` | 多挑战者贡献比例来自匿名互评并归一化，超预期完成按 1.5 倍结算 |
+| 多挑战者结算 | `settlement uses multi-challenger standard contribution ratios and supports overdelivery` | 多挑战者贡献比例来自匿名互评标准比例，超预期完成按 1.5 倍结算 |
 | API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、验收、全量挑战视图权限 |
 | API 跨作用域写保护 | `API mutations enforce runtime scope boundaries even for administrators` | 管理员不能通过其他底层作用域的目标、指标、评论或反馈 ID 改写数据 |
 | API 指标管理权限 | `API result management routes keep privileged operations behind role permissions` | `managerDefined` 创建、confidence、update-proposal、排序、删除等高权限指标操作 |
