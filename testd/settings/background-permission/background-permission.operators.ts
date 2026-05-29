@@ -1,4 +1,4 @@
 import { createBackgroundSettingsOperators } from "../_support/background-settings.operators";
-import type { BackgroundPermissionCaseData } from "./_support/background-permission.context";
+import type { BackgroundPersonalCaseData } from "./_support/background-permission.context";
 
-export const backgroundPermissionOperators = createBackgroundSettingsOperators<BackgroundPermissionCaseData>();
+export const backgroundPersonalOperators = createBackgroundSettingsOperators<BackgroundPersonalCaseData>();
