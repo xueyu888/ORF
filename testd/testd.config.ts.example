@@ -375,14 +375,6 @@ export const testdCases = [
     traceability: "verified",
   },
   {
-    id: "comments.objective-comment.unauthenticated",
-    title: "目标新增评论-未登录不可评论",
-    doc: "testd-doc/cases/comments/目标新增评论-未登录不可评论.md",
-    changePolicy: "open",
-    enabled: false,
-    note: "测试代码待实现",
-  },
-  {
     id: "settings.background-personal",
     title: "设置页面修改背景",
     doc: "testd-doc/cases/settings/设置页面修改背景.md",
