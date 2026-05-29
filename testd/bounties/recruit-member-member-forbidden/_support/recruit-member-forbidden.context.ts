@@ -18,8 +18,3 @@ export type RecruitMemberForbiddenCaseData = {
   objectiveId: string;
   objectiveTitle: string;
 };
-
-export type RecruitmentAttemptResult = {
-  status: number;
-  body: unknown;
-};

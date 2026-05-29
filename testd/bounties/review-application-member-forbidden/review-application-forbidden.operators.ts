@@ -2,19 +2,19 @@ import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import { requiredString } from "../../_operators/params";
 import type {
-  ReviewApplicationAttemptResult,
   ReviewApplicationForbiddenCaseData,
   ReviewApplicationForbiddenTarget,
   TestContext,
 } from "./_support/review-application-forbidden.context";
 import {
   applicationStatus,
-  attemptApproveApplicationAsCurrentUser,
   createForbiddenPendingApplication,
   createForbiddenReviewTarget,
+  memberWorkbenchMissingObjective,
   objectiveFlowStatus,
   objectiveHasChallenger,
   objectiveStage,
+  readMemberWorkbenchData,
   readForbiddenTarget,
 } from "./_support/review-application-forbidden.helpers";
 
@@ -58,18 +58,13 @@ export const reviewApplicationForbiddenOperators = {
     },
   },
 
-  "api.review_forbidden_approval": {
-    attempt: async ({ ctx, params }) =>
-      attemptApproveApplicationAsCurrentUser(ctx.page, requiredReviewTarget(params, "target")),
+  "api.member_workbench": {
+    read: async ({ ctx }) => readMemberWorkbenchData(ctx.page),
 
-    forbidden: async ({ params }) => {
-      expect([401, 403]).toContain(requiredAttemptResult(params, "result").status);
-    },
-  },
-
-  "page.review_approval_action": {
-    absent: async ({ ctx, params }) => {
-      await expect(ctx.page.getByRole("button", { name: requiredString(params, "name") })).toHaveCount(0);
+    objective_absent: async ({ ctx, params }) => {
+      await expect
+        .poll(() => memberWorkbenchMissingObjective(ctx.page, requiredReviewTarget(params, "target")))
+        .toBe(true);
     },
   },
 } satisfies OperatorRegistry<TestContext, ReviewApplicationForbiddenCaseData>;
@@ -92,21 +87,5 @@ function isReviewTarget(value: unknown): value is ReviewApplicationForbiddenTarg
     typeof (value as ReviewApplicationForbiddenTarget).objective.title === "string" &&
     typeof (value as ReviewApplicationForbiddenTarget).approveApplicationId === "string" &&
     typeof (value as ReviewApplicationForbiddenTarget).approveApplicantName === "string"
-  );
-}
-
-function requiredAttemptResult(params: StepParams, key: string): ReviewApplicationAttemptResult {
-  const value = params[key];
-  if (!isAttemptResult(value)) {
-    throw new Error(`参数 ${key} 必须是审批尝试结果`);
-  }
-  return value;
-}
-
-function isAttemptResult(value: unknown): value is ReviewApplicationAttemptResult {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as ReviewApplicationAttemptResult).status === "number"
   );
 }

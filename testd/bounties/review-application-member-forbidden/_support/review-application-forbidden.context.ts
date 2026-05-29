@@ -21,8 +21,3 @@ export type ReviewApplicationForbiddenCaseData = {
 };
 
 export type ReviewApplicationForbiddenTarget = ReviewApplicationTarget;
-
-export type ReviewApplicationAttemptResult = {
-  status: number;
-  body: unknown;
-};

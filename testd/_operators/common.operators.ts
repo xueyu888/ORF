@@ -549,6 +549,16 @@ export function createCommonOperators<
           expect(response.status).toBe(status);
         }
       },
+
+      rejected: async ({ params }) => {
+        const response = await requiredCapturedResponse(params, "response");
+        expect(response.ok).toBe(false);
+
+        const status = optionalNumber(params, "status");
+        if (status !== undefined) {
+          expect(response.status).toBe(status);
+        }
+      },
     },
   };
 }

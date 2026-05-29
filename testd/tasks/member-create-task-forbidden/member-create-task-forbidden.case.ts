@@ -1,0 +1,133 @@
+import { STATE_CASE_MODEL, type StateCaseSpec } from "../../_framework/types";
+import type { MemberCreateTaskForbiddenCaseData } from "./_support/member-create-task-forbidden.context";
+
+export const memberCreateTaskForbiddenCase = {
+  id: "tasks.member-create-task.forbidden",
+  title: "用户增加行动项和子行动项-无权限用户不可增加",
+  model: STATE_CASE_MODEL,
+  tags: ["tasks", "subtasks", "member", "permission", "negative-path"],
+
+  data: {
+    forbiddenEmail: "orf-member-task-forbidden-e2e@orf.local",
+    forbiddenPassword: "OrfMemberTaskForbiddenE2E!2026",
+    forbiddenName: "ORF Member Task Forbidden E2E",
+    forbiddenRole: "member",
+    challengerEmail: "orf-member-task-challenger-e2e@orf.local",
+    challengerPassword: "OrfMemberTaskChallengerE2E!2026",
+    challengerName: "ORF Member Task Challenger E2E",
+    challengerRole: "member",
+    objectiveId: "obj-testd-task-forbidden",
+    objectiveTitle: "E2E-TASK-FORBIDDEN: 目标前置",
+    taskTitle: "E2E-TASK-FORBIDDEN: 无权限用户增加行动项",
+    subtaskLabel: "无权限用户子行动项",
+  },
+
+  B: {
+    description: "系统服务可用，浏览器处于未登录基准状态",
+    assertions: [
+      { source: { caseStepId: "B-1", method: "api" }, id: "frontend.ready", title: "前端服务 应可用", object: "frontend.service", operator: "available" },
+      { source: { caseStepId: "B-2", method: "api" }, id: "backend.ready", title: "后端服务 应可用", object: "api.health", operator: "ok" },
+      { source: { caseStepId: "B-3", method: "api" }, id: "frontend.login_entry.accessible", title: "前端登录页入口 应可访问", object: "frontend.login_entry", operator: "accessible" },
+      { source: { caseStepId: "B-4", method: "api" }, id: "session.endpoint.accessible", title: "当前会话查询能力 应可用", object: "auth.session", operator: "accessible" },
+      { source: { caseStepId: "B-5", method: "prisma" }, id: "db.ready", title: "ORF 数据库 应可连接", object: "db", operator: "ready" },
+      { source: { caseStepId: "B-6", method: "prisma" }, id: "db.schema.current", title: "ORF 数据库 schema 应为 当前测试版本", object: "db.schema", operator: "current" },
+      { source: { caseStepId: "B-7", method: "api" }, id: "ory.admin_public.ready", title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用", object: "ory.admin_public", operator: "ready" },
+      { source: { caseStepId: "B-8", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
+      { source: { caseStepId: "B-9", method: "playwright" }, id: "cookie.absent", title: "当前浏览器 应不存在 Ory 登录会话 cookie", object: "browser.cookie", operator: "absent" },
+      { source: { caseStepId: "B-10", method: "playwright" }, id: "storage.empty", title: "当前浏览器 应不保留本地登录态", object: "browser.auth_storage", operator: "empty" },
+    ],
+  },
+
+  Setup: {
+    description: "准备无权限普通成员、目标挑战成员和本用例独占行动项目标，并完成无权限普通成员登录",
+    steps: [
+      { source: { caseStepId: "Setup-1", method: "prisma" }, id: "db.task.delete_residue", title: "删除 本用例残留的测试行动项及其子行动项", object: "db.task", operator: "delete", params: { titleFrom: "data.taskTitle" } },
+      { source: { caseStepId: "Setup-2", method: "prisma" }, id: "db.objective.delete_residue", title: "删除 本用例残留的行动项目标及其派生数据", object: "db.objective", operator: "delete_by_title", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Setup-3", method: "api" }, id: "ory.forbidden_identity.upsert", title: "准备邮箱为 `orf-member-task-forbidden-e2e@orf.local`、使用固定测试密码的无权限普通成员登录身份", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.forbiddenEmail", nameFrom: "data.forbiddenName", passwordFrom: "data.forbiddenPassword", saveAs: "forbiddenIdentity" } },
+      { source: { caseStepId: "Setup-4", method: "prisma" }, id: "db.forbidden_user.upsert", title: "准备邮箱为 `orf-member-task-forbidden-e2e@orf.local`、角色为 `member`、状态为 `active` 的无权限普通成员用户和默认团队成员关系", object: "db.user", operator: "upsert", params: { emailFrom: "data.forbiddenEmail", nameFrom: "data.forbiddenName", roleFrom: "data.forbiddenRole", status: "active", identityIdFrom: "runtime.forbiddenIdentity.id", saveAs: "forbiddenUser" } },
+      { source: { caseStepId: "Setup-5", method: "api" }, id: "ory.challenger_identity.upsert", title: "准备邮箱为 `orf-member-task-challenger-e2e@orf.local`、使用固定测试密码的目标挑战成员登录身份", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.challengerEmail", nameFrom: "data.challengerName", passwordFrom: "data.challengerPassword", saveAs: "challengerIdentity" } },
+      { source: { caseStepId: "Setup-6", method: "prisma" }, id: "db.challenger_user.upsert", title: "准备邮箱为 `orf-member-task-challenger-e2e@orf.local`、角色为 `member`、状态为 `active` 的目标挑战成员用户和默认团队成员关系", object: "db.user", operator: "upsert", params: { emailFrom: "data.challengerEmail", nameFrom: "data.challengerName", roleFrom: "data.challengerRole", status: "active", identityIdFrom: "runtime.challengerIdentity.id", saveAs: "challengerUser" } },
+      { source: { caseStepId: "Setup-7", method: "prisma" }, id: "db.objective.upsert_task_target", title: "创建标题为 `E2E-TASK-FORBIDDEN: 目标前置`、流转状态为 `reestimating`、阶段为 `orfReestimate` 的本用例行动项目标", object: "db.objective", operator: "upsert", params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle", teamIdFrom: "runtime.challengerUser.teamId", stage: "orfReestimate", flowStatus: "reestimating", status: "Draft", createdByFrom: "runtime.challengerUser.userId", updatedByFrom: "runtime.challengerUser.userId", saveAs: "fixtureObjective" } },
+      { source: { caseStepId: "Setup-8", method: "prisma" }, id: "db.task_target.from_objective", title: "记录 本用例行动项目标", object: "db.task_target", operator: "from_objective", params: { objectiveIdFrom: "runtime.fixtureObjective.id", saveAs: "taskTarget" } },
+      { source: { caseStepId: "Setup-9", method: "prisma" }, id: "db.task_target.prepare_forbidden", title: "设置本用例行动项目标的挑战者包含目标挑战成员且不包含无权限普通成员", object: "db.task_target", operator: "prepare_forbidden", params: { targetFrom: "runtime.taskTarget", challengerNameFrom: "data.challengerName", forbiddenNameFrom: "data.forbiddenName" } },
+      { source: { caseStepId: "Setup-10", method: "prisma" }, id: "db.task_target.task_absent", title: "本用例行动项目标 应不存在 标题为 `E2E-TASK-FORBIDDEN: 无权限用户增加行动项` 的行动项", object: "db.task_target", operator: "task_absent", params: { targetFrom: "runtime.taskTarget", titleFrom: "data.taskTitle" } },
+      { source: { caseStepId: "Setup-11", method: "api" }, id: "ory.forbidden_sessions.revoke", title: "撤销无权限普通成员登录身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Setup-12", method: "api" }, id: "ory.challenger_sessions.revoke", title: "撤销目标挑战成员登录身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.challengerEmail" } },
+      { source: { caseStepId: "Setup-13", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Setup-14", method: "playwright" }, id: "page.goto.auth", title: "打开 ORF 登录页", object: "page", operator: "goto", params: { path: "/auth" } },
+      { source: { caseStepId: "Setup-15", method: "playwright" }, id: "fill.email", title: "在邮箱输入框输入无权限普通成员固定测试邮箱", object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Setup-16", method: "playwright" }, id: "fill.password", title: "在密码输入框输入无权限普通成员固定测试密码", object: "page", operator: "fill", params: { label: "Password", exact: true, valueFrom: "data.forbiddenPassword" } },
+      { source: { caseStepId: "Setup-17", method: "playwright" }, id: "click.sign_in", title: "点击 \"Sign In\" 登录操作", object: "page", operator: "click", params: { role: "button", name: "Sign In" } },
+    ],
+  },
+
+  S0: {
+    description: "无权限普通成员已登录，本用例目标处于重估阶段且挑战者不包含该成员",
+    assertions: [
+      { source: { caseStepId: "S0-1", method: "api" }, id: "session.authenticated", title: "当前会话 应为 已登录", object: "auth.session", operator: "authenticated" },
+      { source: { caseStepId: "S0-2", method: "api" }, id: "session.email", title: "当前会话用户邮箱 应为 `orf-member-task-forbidden-e2e@orf.local`", object: "auth.session.user_email", operator: "equals", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "S0-3", method: "api" }, id: "session.role", title: "当前会话用户角色 应为 `member`", object: "auth.session.user_role", operator: "equals", params: { roleFrom: "data.forbiddenRole" } },
+      { source: { caseStepId: "S0-4", method: "api" }, id: "session.status", title: "当前会话用户状态 应为 `active`", object: "auth.session.user_status", operator: "equals", params: { status: "active" } },
+      { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.task_target.flow_status", title: "本用例行动项目标的流转状态 应为 `reestimating`", object: "db.task_target", operator: "flow_status", params: { targetFrom: "runtime.taskTarget", status: "reestimating" } },
+      { source: { caseStepId: "S0-6", method: "prisma" }, id: "db.task_target.stage", title: "本用例行动项目标的阶段 应为 `orfReestimate`", object: "db.task_target", operator: "stage", params: { targetFrom: "runtime.taskTarget", stage: "orfReestimate" } },
+      { source: { caseStepId: "S0-7", method: "prisma" }, id: "db.task_target.challenger_present", title: "本用例行动项目标的挑战者列表 应包含 \"ORF Member Task Challenger E2E\"", object: "db.task_target", operator: "challenger_present", params: { targetFrom: "runtime.taskTarget", memberNameFrom: "data.challengerName" } },
+      { source: { caseStepId: "S0-8", method: "prisma" }, id: "db.task_target.forbidden_absent", title: "本用例行动项目标的挑战者列表 应不包含 \"ORF Member Task Forbidden E2E\"", object: "db.task_target", operator: "challenger_absent", params: { targetFrom: "runtime.taskTarget", memberNameFrom: "data.forbiddenName" } },
+      { source: { caseStepId: "S0-9", method: "prisma" }, id: "db.task_target.forbidden_cannot_create", title: "本用例行动项目标 应不允许 无权限普通成员新增行动项", object: "db.task_target", operator: "cannot_create_task", params: { targetFrom: "runtime.taskTarget", actorNameFrom: "data.forbiddenName", roleFrom: "data.forbiddenRole" } },
+      { source: { caseStepId: "S0-10", method: "prisma" }, id: "db.task_target.task_absent", title: "本用例行动项目标 应不存在 标题为 `E2E-TASK-FORBIDDEN: 无权限用户增加行动项` 的行动项", object: "db.task_target", operator: "task_absent", params: { targetFrom: "runtime.taskTarget", titleFrom: "data.taskTitle" } },
+      { source: { caseStepId: "S0-11", method: "prisma" }, id: "db.task_target.subtask_absent", title: "本用例行动项目标 应不存在 标签为 \"无权限用户子行动项\" 的子行动项", object: "db.task_target", operator: "subtask_absent", params: { targetFrom: "runtime.taskTarget", labelFrom: "data.subtaskLabel" } },
+    ],
+  },
+
+  Action: {
+    description: "无权限普通成员进入挑战工作台",
+    steps: [
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.goto.tasks", title: "无权限普通成员打开 挑战工作台", object: "page", operator: "goto", params: { path: "/tasks" } },
+    ],
+  },
+
+  S1: {
+    description: "无权限普通成员看不到本用例目标，系统未新增行动项和子行动项",
+    assertions: [
+      { source: { caseStepId: "S1-1", method: "playwright" }, id: "url.tasks", title: "当前页面 应为 挑战工作台", object: "page.url", operator: "match", params: { pattern: "/tasks$" } },
+      { source: { caseStepId: "S1-2", method: "playwright" }, id: "my_challenges.view.available", title: "\"我的挑战\" 视图 应可用", object: "page", operator: "visible", params: { role: "button", name: "我的挑战" } },
+      { source: { caseStepId: "S1-3", method: "playwright" }, id: "target.panel.absent", title: "本用例行动项目标面板 应不可见", object: "page.task_target", operator: "absent", params: { targetFrom: "runtime.taskTarget" } },
+      { source: { caseStepId: "S1-4", method: "playwright" }, id: "add_task.action.absent", title: "\"新增行动项\" 操作 应不可见", object: "page", operator: "count", params: { role: "button", name: "新增行动项", count: 0 } },
+      { source: { caseStepId: "S1-5", method: "playwright" }, id: "add_subtask.action.absent", title: "\"新增子行动项\" 操作 应不可见", object: "page", operator: "count", params: { role: "button", name: "新增子行动项", count: 0 } },
+      { source: { caseStepId: "S1-6", method: "api" }, id: "api.member_workbench.objective_absent", title: "无权限普通成员挑战工作台数据 应不包含 本用例行动项目标", object: "api.member_workbench", operator: "objective_absent", params: { targetFrom: "runtime.taskTarget" } },
+      { source: { caseStepId: "S1-7", method: "prisma" }, id: "db.task_target.task_absent", title: "本用例行动项目标 应仍不存在 标题为 `E2E-TASK-FORBIDDEN: 无权限用户增加行动项` 的行动项", object: "db.task_target", operator: "task_absent", params: { targetFrom: "runtime.taskTarget", titleFrom: "data.taskTitle" } },
+      { source: { caseStepId: "S1-8", method: "prisma" }, id: "db.task_target.subtask_absent", title: "本用例行动项目标 应仍不存在 标签为 \"无权限用户子行动项\" 的子行动项", object: "db.task_target", operator: "subtask_absent", params: { targetFrom: "runtime.taskTarget", labelFrom: "data.subtaskLabel" } },
+      { source: { caseStepId: "S1-9", method: "prisma" }, id: "db.task_target.forbidden_still_absent", title: "本用例行动项目标的挑战者列表 应仍不包含 \"ORF Member Task Forbidden E2E\"", object: "db.task_target", operator: "challenger_absent", params: { targetFrom: "runtime.taskTarget", memberNameFrom: "data.forbiddenName" } },
+      { source: { caseStepId: "S1-10", method: "prisma" }, id: "db.task_target.flow_status", title: "本用例行动项目标的流转状态 应仍为 `reestimating`", object: "db.task_target", operator: "flow_status", params: { targetFrom: "runtime.taskTarget", status: "reestimating" } },
+      { source: { caseStepId: "S1-11", method: "prisma" }, id: "db.task_target.stage", title: "本用例行动项目标的阶段 应仍为 `orfReestimate`", object: "db.task_target", operator: "stage", params: { targetFrom: "runtime.taskTarget", stage: "orfReestimate" } },
+      { source: { caseStepId: "S1-12", method: "api" }, id: "session.authenticated", title: "当前会话 应为 已登录", object: "auth.session", operator: "authenticated" },
+      { source: { caseStepId: "S1-13", method: "api" }, id: "session.email", title: "当前会话用户邮箱 应为 `orf-member-task-forbidden-e2e@orf.local`", object: "auth.session.user_email", operator: "equals", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "S1-14", method: "api" }, id: "session.role", title: "当前会话用户角色 应为 `member`", object: "auth.session.user_role", operator: "equals", params: { roleFrom: "data.forbiddenRole" } },
+      { source: { caseStepId: "S1-15", method: "api" }, id: "session.status", title: "当前会话用户状态 应为 `active`", object: "auth.session.user_status", operator: "equals", params: { status: "active" } },
+    ],
+  },
+
+  Clean: {
+    description: "删除本用例目标、行动项、两个普通成员身份和浏览器状态",
+    steps: [
+      { source: { caseStepId: "Clean-1", method: "prisma" }, id: "db.task.delete", title: "删除 本用例残留的测试行动项及其子行动项", object: "db.task", operator: "delete", params: { titleFrom: "data.taskTitle" } },
+      { source: { caseStepId: "Clean-2", method: "prisma" }, id: "db.objective.delete", title: "删除 本用例行动项目标及其派生数据", object: "db.objective", operator: "delete_by_title", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Clean-3", method: "api" }, id: "auth.logout", title: "注销当前登录会话", object: "auth", operator: "logout" },
+      { source: { caseStepId: "Clean-4", method: "playwright" }, id: "page.runtime.stop", title: "离开当前 ORF 前端页面", object: "page.runtime", operator: "stop" },
+      { source: { caseStepId: "Clean-5", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Clean-6", method: "api" }, id: "ory.forbidden_sessions.revoke", title: "撤销无权限普通成员登录身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Clean-7", method: "api" }, id: "ory.challenger_sessions.revoke", title: "撤销目标挑战成员登录身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.challengerEmail" } },
+      { source: { caseStepId: "Clean-8", method: "api" }, id: "ory.forbidden_identity.delete", title: "删除邮箱为 `orf-member-task-forbidden-e2e@orf.local` 的无权限普通成员登录身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Clean-9", method: "api" }, id: "ory.challenger_identity.delete", title: "删除邮箱为 `orf-member-task-challenger-e2e@orf.local` 的目标挑战成员登录身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.challengerEmail" } },
+      { source: { caseStepId: "Clean-10", method: "prisma" }, id: "db.forbidden_membership.delete", title: "删除邮箱为 `orf-member-task-forbidden-e2e@orf.local` 的无权限普通成员用户默认团队成员关系", object: "db.user", operator: "delete_memberships", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Clean-11", method: "prisma" }, id: "db.challenger_membership.delete", title: "删除邮箱为 `orf-member-task-challenger-e2e@orf.local` 的目标挑战成员用户默认团队成员关系", object: "db.user", operator: "delete_memberships", params: { emailFrom: "data.challengerEmail" } },
+      { source: { caseStepId: "Clean-12", method: "prisma" }, id: "db.forbidden_user.delete", title: "删除邮箱为 `orf-member-task-forbidden-e2e@orf.local` 的无权限普通成员用户", object: "db.user", operator: "delete", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Clean-13", method: "prisma" }, id: "db.challenger_user.delete", title: "删除邮箱为 `orf-member-task-challenger-e2e@orf.local` 的目标挑战成员用户", object: "db.user", operator: "delete", params: { emailFrom: "data.challengerEmail" } },
+      { source: { caseStepId: "Clean-14", method: "prisma" }, id: "db.task.absent", title: "应不存在 标题为 `E2E-TASK-FORBIDDEN: 无权限用户增加行动项` 的测试行动项", object: "db.task", operator: "absent", params: { titleFrom: "data.taskTitle" } },
+      { source: { caseStepId: "Clean-15", method: "prisma" }, id: "db.objective.absent", title: "应不存在 标题为 `E2E-TASK-FORBIDDEN: 目标前置` 的测试目标", object: "db.objective", operator: "absent", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Clean-16", method: "api" }, id: "ory.forbidden_identity.absent", title: "邮箱为 `orf-member-task-forbidden-e2e@orf.local` 的无权限普通成员登录身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Clean-17", method: "api" }, id: "ory.challenger_identity.absent", title: "邮箱为 `orf-member-task-challenger-e2e@orf.local` 的目标挑战成员登录身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.challengerEmail" } },
+      { source: { caseStepId: "Clean-18", method: "prisma" }, id: "db.forbidden_user.absent", title: "邮箱为 `orf-member-task-forbidden-e2e@orf.local` 的无权限普通成员用户 应不存在", object: "db.user", operator: "absent", params: { emailFrom: "data.forbiddenEmail" } },
+      { source: { caseStepId: "Clean-19", method: "prisma" }, id: "db.challenger_user.absent", title: "邮箱为 `orf-member-task-challenger-e2e@orf.local` 的目标挑战成员用户 应不存在", object: "db.user", operator: "absent", params: { emailFrom: "data.challengerEmail" } },
+    ],
+  },
+} satisfies StateCaseSpec<MemberCreateTaskForbiddenCaseData>;
