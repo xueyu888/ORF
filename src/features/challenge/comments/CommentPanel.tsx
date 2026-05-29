@@ -704,6 +704,7 @@ function CommentComposer({
   const [uploadError, setUploadError] = useState("");
   const [mentionRange, setMentionRange] = useState<CommentMentionRange | null>(null);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const draftRef = useRef(draft);
   const placeholder = mode.type === "edit" ? "编辑评论..." : mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
   const submitLabel = mode.type === "edit" ? "保存评论" : mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";
   const filteredMentionUsers = useMemo(() => {
@@ -716,26 +717,35 @@ function CommentComposer({
   }, [currentUserId, mentionRange, mentionableUsers]);
 
   useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
     setSelectedMentionIndex(0);
   }, [mentionRange?.query, filteredMentionUsers.length]);
 
-  const updateMentionRange = (value: string, cursor: number, mentions = draft.mentions) => {
+  const commitDraftChange = (nextDraft: CommentDraft) => {
+    draftRef.current = nextDraft;
+    onDraftChange(nextDraft);
+  };
+  const updateMentionRange = (value: string, cursor: number, mentions = draftRef.current.mentions) => {
     setMentionRange(commentMentionRangeFor(value, cursor, mentions));
   };
   const insertMention = (user: CommentMentionUser, range = mentionRange) => {
     if (!range) return;
     const textarea = textareaRef.current;
-    const after = draft.text.slice(range.end);
+    const currentDraft = draftRef.current;
+    const after = currentDraft.text.slice(range.end);
     const label = commentMentionLabel(user.name);
     const visibleMention = `@${label}`;
     const suffix = after && /^\s/.test(after) ? "" : " ";
-    const nextDraft = replaceCommentDraftText(draft, range.start, range.end, `${visibleMention}${suffix}`, {
+    const nextDraft = replaceCommentDraftText(currentDraft, range.start, range.end, `${visibleMention}${suffix}`, {
       label,
       length: visibleMention.length,
       userId: user.id,
     });
     const nextCursor = range.start + visibleMention.length + suffix.length;
-    onDraftChange(nextDraft);
+    commitDraftChange(nextDraft);
     setMentionRange(null);
     window.requestAnimationFrame(() => {
       textarea?.focus();
@@ -744,14 +754,15 @@ function CommentComposer({
   };
   const insertMarkdown = (markdown: string) => {
     const textarea = textareaRef.current;
-    const start = textarea?.selectionStart ?? draft.text.length;
-    const end = textarea?.selectionEnd ?? draft.text.length;
-    const before = draft.text.slice(0, start);
-    const after = draft.text.slice(end);
+    const currentDraft = draftRef.current;
+    const start = Math.max(0, Math.min(textarea?.selectionStart ?? currentDraft.text.length, currentDraft.text.length));
+    const end = Math.max(start, Math.min(textarea?.selectionEnd ?? currentDraft.text.length, currentDraft.text.length));
+    const before = currentDraft.text.slice(0, start);
+    const after = currentDraft.text.slice(end);
     const prefix = before && !before.endsWith("\n") ? "\n" : "";
     const suffix = after && !after.startsWith("\n") ? "\n" : "";
     const nextCursor = before.length + prefix.length + markdown.length;
-    onDraftChange(replaceCommentDraftText(draft, start, end, `${prefix}${markdown}${suffix}`));
+    commitDraftChange(replaceCommentDraftText(currentDraft, start, end, `${prefix}${markdown}${suffix}`));
     setMentionRange(null);
     window.requestAnimationFrame(() => {
       textarea?.focus();
@@ -785,8 +796,9 @@ function CommentComposer({
     void uploadImage(image);
   };
   const handleBodyChange = (value: string, cursor: number) => {
-    const mentions = reconcileCommentDraftMentions(draft.text, value, draft.mentions);
-    onDraftChange({ mentions, text: value });
+    const currentDraft = draftRef.current;
+    const mentions = reconcileCommentDraftMentions(currentDraft.text, value, currentDraft.mentions);
+    commitDraftChange({ mentions, text: value });
     updateMentionRange(value, cursor, mentions);
   };
 
