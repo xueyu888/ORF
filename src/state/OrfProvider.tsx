@@ -13,7 +13,10 @@ import {
 } from "./orfProviderMutationMessages";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
+import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
+import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
+import type { SystemBroadcast } from "../types/realtime";
 import type {
   CommentStatus,
   CommentTargetType,
@@ -79,6 +82,7 @@ interface OrfContextValue {
   modal: ModalState;
   toasts: ToastMessage[];
   notifications: AppNotification[];
+  systemBroadcasts: SystemBroadcast[];
   unreadNotificationCount: number;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
@@ -87,6 +91,7 @@ interface OrfContextValue {
   closeModal: () => void;
   notify: (message: string) => void;
   removeToast: (id: string) => void;
+  dismissSystemBroadcast: (id: string) => void;
   resetState: () => void;
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (notificationId: string) => Promise<boolean>;
@@ -179,6 +184,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
       return;
@@ -197,6 +203,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     markAllNotificationsRead,
     markNotificationRead,
     notifications,
+    receiveNotification,
     refreshNotifications,
     unreadNotificationCount,
   } = useNotificationState(businessMutationFailureMessage, notify);
@@ -249,6 +256,32 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     };
   }, [authReady, isApproved, isAuthenticated]);
 
+  const dismissSystemBroadcast = useCallback((id: string) => {
+    setSystemBroadcasts((items) => items.filter((item) => item.id !== id));
+  }, []);
+
+  const receiveRealtimeNotification = useCallback(
+    (notification: AppNotification) => {
+      receiveNotification(notification);
+    },
+    [receiveNotification],
+  );
+  const receiveRealtimeBroadcast = useCallback((broadcast: SystemBroadcast) => {
+    setSystemBroadcasts((items) => enqueueSystemBroadcast(items, broadcast));
+  }, []);
+
+  useRealtimeEvents({
+    enabled: authReady && isAuthenticated && isApproved,
+    onBroadcast: receiveRealtimeBroadcast,
+    onNotification: receiveRealtimeNotification,
+  });
+
+  useEffect(() => {
+    if (!isAuthenticated || !isApproved) {
+      setSystemBroadcasts([]);
+    }
+  }, [isApproved, isAuthenticated]);
+
   useEffect(() => {
     void refreshAuthSession();
   }, [refreshAuthSession]);
@@ -293,6 +326,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       modal,
       toasts,
       notifications,
+      systemBroadcasts,
       unreadNotificationCount,
       theme,
       setTheme: setThemeState,
@@ -300,6 +334,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       openModal: setModal,
       closeModal: () => setModal({ type: null }),
       notify,
+      dismissSystemBroadcast,
       removeToast: (id: string) => setToasts((items) => items.filter((item) => item.id !== id)),
       resetState: () => {
         void refreshTaskManagementData()
@@ -811,6 +846,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       authReady,
       commentActions,
       currentUser,
+      dismissSystemBroadcast,
       isAdmin,
       isApproved,
       isAuthenticated,
@@ -822,6 +858,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       refreshNotifications,
       refreshTaskManagementData,
       state,
+      systemBroadcasts,
       theme,
       toasts,
       unreadNotificationCount,

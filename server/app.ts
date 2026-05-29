@@ -74,6 +74,7 @@ import { registerOrfReadRoutes } from "./routes/orfReadRoutes";
 import { registerCommentRoutes } from "./routes/commentRoutes";
 import { registerUserRoutes } from "./routes/userRoutes";
 import { registerPermissionRoutes } from "./routes/permissionRoutes";
+import { registerRealtimeRoutes } from "./routes/realtimeRoutes";
 import { isDateOnlyString } from "../src/utils/date";
 
 const taskStatusSchema = z.enum(["Backlog", "Todo", "In Progress", "In Review", "Done"]);
@@ -368,6 +369,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   }
   registerAuthRoutes(app);
 
+  registerRealtimeRoutes(app);
   registerNotificationRoutes(app);
   registerOrfReadRoutes(app);
   registerSettingsRoutes(app);

@@ -11,6 +11,7 @@ import { breadcrumb } from "./appShellBreadcrumb";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
+import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -23,7 +24,7 @@ function appShellBackgroundUrlFor(sidebarBackgroundUrl: string) {
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, openModal, state } = useOrf();
+  const { currentUser, dismissSystemBroadcast, openModal, state, systemBroadcasts } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarBackground = useVisualBackground("app_background");
@@ -131,6 +132,7 @@ export function AppShell() {
             <NotificationBell />
           </div>
         </header>
+        <SystemBroadcastBanner broadcasts={systemBroadcasts} onDismiss={dismissSystemBroadcast} />
         <main className="orf-main-content">
           <Outlet />
         </main>

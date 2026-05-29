@@ -12,7 +12,7 @@
 
 | 测试 | 入口 | 覆盖流程 |
 | --- | --- | --- |
-| 目标无指标可见性 | `published objective without concrete results is visible in the bounty hall` | 指挥官发布 Objective 时可以预定义 Result，也可以暂不定义；即使没有 Result，所有已通过用户仍应在悬赏大厅看到该目标，只有 active 普通成员申请能写入 |
+| 目标无指标可见性 | `published objective without concrete results is visible in the bounty hall` | 指挥官发布 Objective 时可以预定义 Result，也可以暂不定义；即使没有 Result，所有已通过用户仍应在悬赏大厅看到该目标，发布会生成 `objective.published` 通知，并向在线 active 用户实时广播 `system.broadcast`，只有 active 普通成员申请能写入 |
 | 征召无指标可见性 | `recruited objective without concrete results is visible as a recruitment item` | 指挥官发布 Objective 时可以预定义 Result，也可以暂不定义；即使没有 Result，征召中目标仍在大厅可见，只有被征召普通成员接受能写入 |
 | 申请到结算 | `commander and challenger can complete the application-to-settlement ORF backend flow` | 指挥官发布悬赏，挑战者申请，指挥官通过，挑战者在重估期提出 / 编辑指标，冻结，提交战利品，验收结算 |
 | 消息接口 | `notification API scopes messages to the current recipient and supports read state` | 申请挑战生成指挥官消息；当前用户只能读取和标记自己的消息 |
@@ -202,7 +202,7 @@ flowchart TD
 | --- | --- |
 | 创建目标 | 返回目标存在，`flowStatus=candidate` |
 | 可选参考指标 | 如果指挥官创建 Result，返回指标存在，不确定性分按难度计算 |
-| 发布目标 | `publishObjective` 返回 `ok`，`flowStatus=open`，写入 `publishedAt`；即使没有 Result，也应进入悬赏大厅 |
+| 发布目标 | `publishObjective` 返回 `ok`，`flowStatus=open`，写入 `publishedAt`，给 active 用户创建 `objective.published` 通知，并向在线 active 用户推送 `system.broadcast`；即使没有 Result，也应进入悬赏大厅 |
 | 悬赏大厅动作阻断 | 发布后目标出现在指挥官读取的 `availableItems`，界面可完整展示申请 / 接受入口，但指挥官触发申请或接受挑战必须被拒绝 |
 | 审核申请 | 申请状态变为 `approved`，目标进入 `reestimating`，并继续出现在 `publicItems` 展示挑战者头像 |
 | 冻结目标 | 已有 Result 的 `reestimating` 目标可进入 `flowStatus=frozen`，挑战者指标调整资格变为 `false` |
@@ -213,7 +213,7 @@ flowchart TD
 
 | 阶段 | 断言 |
 | --- | --- |
-| 悬赏大厅 | 发布后目标出现在 `publicItems` 和 `availableItems`，并展示 `publishedAt`；不依赖指挥官是否已定义具体 Result |
+| 悬赏大厅 | 发布后目标出现在 `publicItems` 和 `availableItems`，并展示 `publishedAt`；不依赖指挥官是否已定义具体 Result；发布通知进入消息中心并可触发在线客户端刷新 |
 | 申请挑战 | 申请必须带非空理由；申请后目标 `flowStatus=applying`，当前用户标记 `hasCurrentApplication=true`，`pendingApplications` 展示申请人与理由 |
 | 进入挑战前 | `canEditObjectiveResultsDuringReestimate` 返回 `false` |
 | 进入挑战 | 申请通过或接受征召后，`/api/my-challenges` 返回该目标；指标可以在此阶段由挑战者提出或编辑 |

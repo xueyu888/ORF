@@ -88,12 +88,14 @@ import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
   getActiveMemberNotificationRecipientsByNames,
+  getActiveTeamNotificationRecipients,
   getUserNameById,
 } from "./notificationRepository";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
+import { publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
 import { objectStorage } from "../storage/objectStorage";
 import { validateImageUpload } from "../storage/images";
 
@@ -386,6 +388,40 @@ async function notifyAdminsOfChallengeApplication(input: {
     targetType: "objective",
     teamId: input.teamId,
     title: "新的挑战申请",
+  });
+}
+
+async function notifyTeamOfObjectivePublication(input: {
+  actorUserId: string;
+  objectiveId: string;
+  objectivePublishedAt: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  const targetHref = challengeObjectiveHref("/bounties", input.objectiveId);
+  const body = `新的悬赏目标「${input.objectiveTitle}」已发布到悬赏大厅。`;
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body,
+    kind: "objective.published",
+    metadata: { objectivePublishedAt: input.objectivePublishedAt, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveTeamNotificationRecipients(input.teamId),
+    targetHref,
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "新悬赏发布",
+  });
+  publishRealtimeSystemBroadcast(input.teamId, {
+    id: `objective-published:${input.objectiveId}`,
+    body,
+    createdAt: nowIso(),
+    notificationKind: "objective.published",
+    targetHref,
+    title: "新悬赏发布",
+    tone: "bounty",
   });
 }
 
@@ -1304,12 +1340,20 @@ export async function publishObjective(objectiveId: string, actorId: string): Pr
     .update(objectives)
     .set({ flowStatus: transition.to, stage: transition.stage, status: "Draft", publishedAt, updatedAt: publishedAt, updatedBy: actorId })
     .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, transition.from)))
-    .returning({ id: objectives.id, teamId: objectives.teamId });
+    .returning({ id: objectives.id, teamId: objectives.teamId, title: objectives.title });
   if (updated.length === 0) {
     const [existing] = await db.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
     return existing ? { status: "invalid" } : { status: "notFound" };
   }
-  return objectiveOutcome(objectiveId, storageScope(updated[0]?.teamId));
+  const published = updated[0]!;
+  await notifyTeamOfObjectivePublication({
+    actorUserId: actorId,
+    objectiveId: published.id,
+    objectivePublishedAt: publishedAt,
+    objectiveTitle: published.title,
+    teamId: published.teamId,
+  });
+  return objectiveOutcome(objectiveId, storageScope(published.teamId));
 }
 
 export async function approveObjectiveChallengeApplication(

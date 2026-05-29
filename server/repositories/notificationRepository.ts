@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { AppNotification, NotificationKind, NotificationTargetType } from "../../src/types/orf";
 import { db } from "../db/client";
 import { notifications, teamMembers, users } from "../db/schema";
+import { publishRealtimeNotification } from "../realtime/realtimeEventBus";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
 
@@ -72,7 +73,11 @@ export async function createNotifications(input: NotificationInput): Promise<App
   }));
 
   const inserted = await db.insert(notifications).values(rows).returning();
-  return inserted.map(toNotification);
+  const created = inserted.map(toNotification);
+  for (const notification of created) {
+    publishRealtimeNotification(input.teamId, notification);
+  }
+  return created;
 }
 
 export async function getActiveAdminNotificationRecipients(teamId: string): Promise<string[]> {
@@ -81,6 +86,15 @@ export async function getActiveAdminNotificationRecipients(teamId: string): Prom
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, "admin"), eq(users.status, "active")));
+  return rows.map((row) => row.id);
+}
+
+export async function getActiveTeamNotificationRecipients(teamId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: users.id })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, teamId), eq(users.status, "active")));
   return rows.map((row) => row.id);
 }
 

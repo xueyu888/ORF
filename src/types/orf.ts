@@ -10,6 +10,7 @@ export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞�
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
 export type NotificationKind =
+  | "objective.published"
   | "challenge.application.created"
   | "challenge.application.approved"
   | "objective.recruitment.created"

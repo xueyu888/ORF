@@ -29,6 +29,7 @@ export function BountyHallPage() {
     applyForBounty,
     currentUser,
     notifications,
+    systemBroadcasts,
   } = useOrf();
   const location = useLocation();
   const navigate = useNavigate();
@@ -81,11 +82,22 @@ export function BountyHallPage() {
       .map((notification) => `${notification.id}:${notification.targetId}:${notification.createdAt}`)
       .join("|");
   }, [notifications]);
+  const bountyBroadcastKey = useMemo(() => {
+    return systemBroadcasts
+      .filter((broadcast) => broadcast.notificationKind === "objective.published")
+      .map((broadcast) => `${broadcast.id}:${broadcast.targetHref}:${broadcast.createdAt}`)
+      .join("|");
+  }, [systemBroadcasts]);
 
   useEffect(() => {
     if (!bountyNotificationKey) return;
     void loadBountyData();
   }, [bountyNotificationKey, loadBountyData]);
+
+  useEffect(() => {
+    if (!bountyBroadcastKey) return;
+    void loadBountyData();
+  }, [bountyBroadcastKey, loadBountyData]);
 
   const recruitmentItems = useMemo(
     () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),

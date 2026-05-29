@@ -8,7 +8,9 @@ import { buildServer } from "../server/app";
 import { loginWithPassword } from "../server/auth/ory";
 import { closeDb, db } from "../server/db/client";
 import { objectives, results as resultRows, taskChecklistItems, tasks as taskRows, teams, teamMembers, users } from "../server/db/schema";
+import { subscribeRealtimeEvents } from "../server/realtime/realtimeEventBus";
 import type { ObjectiveAcceptedResult, Result, Task, UncertaintyLevel } from "../src/types/orf";
+import type { RealtimeEvent } from "../src/types/realtime";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge as applyForObjectiveChallengeRepository,
@@ -70,10 +72,41 @@ test("published objective without concrete results is visible in the bounty hall
   );
   assert.ok(objective);
 
+  const challengerRealtimeEvents: RealtimeEvent[] = [];
+  const unsubscribeChallenger = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.challenger.id,
+    send: (event) => challengerRealtimeEvents.push(event),
+  });
+  const commanderRealtimeEvents: RealtimeEvent[] = [];
+  const unsubscribeCommander = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.commander.id,
+    send: (event) => commanderRealtimeEvents.push(event),
+  });
   const published = await publishObjective(objective.id, fixture.commander.id);
+  unsubscribeChallenger();
+  unsubscribeCommander();
   assert.equal(published.status, "ok");
   assert.equal(published.objective.flowStatus, "open");
   assert.ok(published.objective.publishedAt, "publishing should stamp the bounty-hall publication date");
+  const challengerNotificationEvent = challengerRealtimeEvents.filter((event) => event.kind === "notification.created")[0];
+  const challengerBroadcastEvent = challengerRealtimeEvents.filter((event) => event.kind === "system.broadcast")[0];
+  const commanderBroadcastEvent = commanderRealtimeEvents.filter((event) => event.kind === "system.broadcast")[0];
+  assert.equal(challengerNotificationEvent?.notification.kind, "objective.published");
+  assert.equal(challengerNotificationEvent?.notification.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+  assert.equal(challengerBroadcastEvent?.broadcast.notificationKind, "objective.published");
+  assert.equal(challengerBroadcastEvent?.broadcast.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+  assert.equal(commanderBroadcastEvent?.broadcast.notificationKind, "objective.published");
+  assert.equal(commanderBroadcastEvent?.broadcast.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+  assert.equal(commanderRealtimeEvents.some((event) => event.kind === "notification.created"), false);
+
+  const challengerNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
+  assert.equal(challengerNotifications[0]?.kind, "objective.published");
+  assert.equal(challengerNotifications[0]?.targetId, objective.id);
+  assert.equal(challengerNotifications[0]?.readAt, null);
+  const commanderNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
+  assert.equal(commanderNotifications.some((notification) => notification.kind === "objective.published"), false);
 
   const hall = await getBountyHallData(fixture.challenger.name);
   const item = hall.availableItems.find((item) => item.objective.id === objective.id);
@@ -224,8 +257,9 @@ test("commander and challenger can complete the application-to-settlement ORF ba
     "approved",
   );
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), true);
-  const approvalNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
-  assert.equal(approvalNotifications[0]?.kind, "challenge.application.approved");
+  const approvalNotifications = (await listNotificationsForUser(fixture.challenger.id, fixture.scope)).filter(
+    (notification) => notification.kind === "challenge.application.approved",
+  );
   assert.equal(approvalNotifications[0]?.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
 
   const hallAfterApproval = await getBountyHallData(fixture.challenger.name, { scope: fixture.scope });
@@ -339,7 +373,9 @@ test("notification API scopes messages to the current recipient and supports rea
   await withApiServer(fixture, async (app) => {
     const challengerList = await apiInject(app, fixture.challenger, "GET", "/api/notifications");
     assert.equal(challengerList.statusCode, 200);
-    assert.deepEqual(challengerList.json().notifications, []);
+    const challengerPayload = challengerList.json() as { notifications: Array<{ id: string; kind: string; readAt: string | null }>; unreadCount: number };
+    assert.equal(challengerPayload.unreadCount, 1);
+    assert.equal(challengerPayload.notifications[0]?.kind, "objective.published");
 
     const commanderList = await apiInject(app, fixture.commander, "GET", "/api/notifications");
     assert.equal(commanderList.statusCode, 200);
@@ -393,8 +429,9 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   assert.equal(recruited.status, "ok");
   assert.equal(recruited.objective.flowStatus, "recruiting");
   assert.deepEqual(recruited.objective.assignedChallengers, [fixture.challenger.name]);
-  const recruitmentNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
-  assert.equal(recruitmentNotifications[0]?.kind, "objective.recruitment.created");
+  const recruitmentNotifications = (await listNotificationsForUser(fixture.challenger.id, fixture.scope)).filter(
+    (notification) => notification.kind === "objective.recruitment.created",
+  );
   assert.equal(recruitmentNotifications[0]?.targetId, objective.id);
   assert.equal(recruitmentNotifications[0]?.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
 

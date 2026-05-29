@@ -3141,6 +3141,89 @@ button:disabled {
   background: #c8b693;
 }
 
+.orf-system-broadcast {
+  position: sticky;
+  top: var(--orf-topbar-height);
+  z-index: 29;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 var(--orf-page-padding-x);
+  padding: 8px 10px;
+  border: 1px solid rgba(215, 173, 95, 0.42);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 248, 232, 0.92), rgba(235, 249, 255, 0.86) 54%, rgba(255, 242, 203, 0.9)),
+    rgba(255, 248, 232, 0.92);
+  color: #17314f;
+  box-shadow: 0 14px 36px rgba(27, 48, 75, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+}
+
+.orf-system-broadcast-icon {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+  color: #0b74aa;
+}
+
+.orf-system-broadcast-track {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.orf-system-broadcast-marquee {
+  display: flex;
+  width: max-content;
+  gap: 56px;
+  white-space: nowrap;
+  animation: orf-system-broadcast-scroll 22s linear infinite;
+}
+
+.orf-system-broadcast-marquee > span {
+  font-size: 14px;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.orf-system-broadcast-close {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid rgba(23, 49, 79, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.48);
+  color: #42546c;
+}
+
+.orf-system-broadcast-close:hover {
+  background: rgba(236, 248, 255, 0.78);
+  color: #17314f;
+}
+
+@keyframes orf-system-broadcast-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-50% - 28px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orf-system-broadcast-marquee {
+    animation: none;
+  }
+}
+
 .orf-surface-muted {
   background: var(--orf-bg-muted);
 }
@@ -3790,6 +3873,12 @@ button:disabled {
     margin-left: 0;
     flex: 1 1 auto;
     justify-content: flex-end;
+  }
+
+  .orf-system-broadcast {
+    position: relative;
+    top: auto;
+    margin: 0 12px;
   }
 
   .orf-main-content {
