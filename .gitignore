@@ -25,6 +25,7 @@ test-results/
 .orf/
 .playwright-mcp/
 test-reports/
+testd/testd.config.ts
 ory/.runtime/
 infra/public-ip/bootstrap-certs/
 infra/public-ip/certbot/
