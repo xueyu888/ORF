@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { challengeCycleOptions, filterChallengeGroups, sortChallengeGroups } from "../src/features/challenge/model/challengeFilters";
+import { challengeCycleOptions, challengeMemberOptions, filterChallengeGroups, sortChallengeGroups } from "../src/features/challenge/model/challengeFilters";
 import type { BountyNode, ObjectiveNode } from "../src/features/challenge/model/types";
 import type { Objective, Result } from "../src/types/orf";
 
@@ -10,6 +10,14 @@ test("challengeCycleOptions derives sorted live cycles", () => {
     group({ objective: objective({ cycle: "2999 Q1" }) }),
     group({ objective: objective({ cycle: "2999 Q2" }) }),
   ]), ["2999 Q1", "2999 Q2"]);
+});
+
+test("challengeMemberOptions derives sorted unique formal challengers", () => {
+  assert.deepEqual(challengeMemberOptions([
+    group({ objective: objective({ challengers: ["Kai Wang", "Mia Chen"] }) }),
+    group({ objective: objective({ challengers: ["Kai Wang"] }) }),
+    group({ objective: objective({ challengers: [] }) }),
+  ]), ["Kai Wang", "Mia Chen"]);
 });
 
 test("filterChallengeGroups filters by cycle and bounty status", () => {
@@ -24,7 +32,7 @@ test("filterChallengeGroups filters by cycle and bounty status", () => {
     }),
   ];
 
-  const filtered = filterChallengeGroups(groups, { cycle: "2999 Q2", status: "review" });
+  const filtered = filterChallengeGroups(groups, { cycle: "2999 Q2", member: "all", status: "review" });
 
   assert.deepEqual(filtered.map((item) => item.objective.id), ["objective-q2"]);
   assert.deepEqual(filtered[0]?.bounties.map((item) => item.status), ["review"]);
@@ -44,10 +52,35 @@ test("filterChallengeGroups filters unassigned objectives at objective level", (
     }),
   ];
 
-  const filtered = filterChallengeGroups(groups, { cycle: "all", status: "unassigned" });
+  const filtered = filterChallengeGroups(groups, { cycle: "all", member: "all", status: "unassigned" });
 
   assert.deepEqual(filtered.map((item) => item.objective.id), ["objective-unassigned"]);
   assert.deepEqual(filtered[0]?.bounties.map((item) => item.status), ["active", "review"]);
+});
+
+test("filterChallengeGroups filters by formal objective challengers", () => {
+  const groups = [
+    group({
+      objective: objective({ id: "objective-kai", cycle: "2999 Q2", challengers: ["Kai Wang"] }),
+      bounties: [bounty({ status: "active" }), bounty({ status: "review" })],
+      challengers: ["Kai Wang"],
+    }),
+    group({
+      objective: objective({ id: "objective-mia", cycle: "2999 Q2", challengers: ["Mia Chen"] }),
+      bounties: [bounty({ status: "review" })],
+      challengers: ["Mia Chen"],
+    }),
+    group({
+      objective: objective({ id: "objective-kai-q1", cycle: "2999 Q1", challengers: ["Kai Wang"] }),
+      bounties: [bounty({ status: "review" })],
+      challengers: ["Kai Wang"],
+    }),
+  ];
+
+  const filtered = filterChallengeGroups(groups, { cycle: "2999 Q2", member: "Kai Wang", status: "review" });
+
+  assert.deepEqual(filtered.map((item) => item.objective.id), ["objective-kai"]);
+  assert.deepEqual(filtered[0]?.bounties.map((item) => item.status), ["review"]);
 });
 
 test("sortChallengeGroups preserves source order for objectives with identical business sort keys", () => {

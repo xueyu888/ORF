@@ -1,5 +1,5 @@
-import { CalendarDays, Filter } from "lucide-react";
-import type { ChallengeCycleFilter, ChallengeStatusFilter } from "../model/challengeFilters";
+import { CalendarDays, Filter, UserRound } from "lucide-react";
+import type { ChallengeCycleFilter, ChallengeMemberFilter, ChallengeStatusFilter } from "../model/challengeFilters";
 import type { ChallengeScope } from "../model/types";
 
 const statusOptions: Array<{ label: string; value: ChallengeStatusFilter }> = [
@@ -15,18 +15,26 @@ export function ChallengeToolbar({
   canShowAll,
   cycle,
   cycleOptions,
+  member,
+  memberOptions,
   onScopeChange,
   onCycleChange,
+  onMemberChange,
   onStatusChange,
+  showMemberFilter,
   scope,
   status,
 }: {
   canShowAll: boolean;
   cycle: ChallengeCycleFilter;
   cycleOptions: string[];
+  member: ChallengeMemberFilter;
+  memberOptions: string[];
   onScopeChange: (scope: ChallengeScope) => void;
   onCycleChange: (cycle: ChallengeCycleFilter) => void;
+  onMemberChange: (member: ChallengeMemberFilter) => void;
   onStatusChange: (status: ChallengeStatusFilter) => void;
+  showMemberFilter: boolean;
   scope: ChallengeScope;
   status: ChallengeStatusFilter;
 }) {
@@ -41,6 +49,15 @@ export function ChallengeToolbar({
             {cycleOptions.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
         </label>
+        {showMemberFilter && (
+          <label className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
+            <UserRound className="h-4 w-4 text-[#667085]" />
+            <select aria-label="挑战成员" className="bg-transparent text-sm font-semibold outline-none" value={member} onChange={(event) => onMemberChange(event.target.value)}>
+              <option value="all">全部成员</option>
+              {memberOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </label>
+        )}
         <label className="orf-floating-control orf-filter-chip inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold">
           <Filter className="h-4 w-4 text-[#667085]" />
           <select aria-label="挑战状态" className="bg-transparent text-sm font-semibold outline-none" value={status} onChange={(event) => onStatusChange(event.target.value as ChallengeStatusFilter)}>

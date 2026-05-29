@@ -19,7 +19,7 @@ import {
 } from "../src/features/challenge/model/objectiveCreationSession";
 import type { Objective } from "../src/types/orf";
 
-const returnContext = { cycle: "all" as const, scope: "all" as const, status: "all" as const };
+const returnContext = { cycle: "all" as const, member: "all" as const, scope: "all" as const, status: "all" as const };
 
 test("objective creation session has one explicit draft to submitted overlay transition", () => {
   const editing = beginObjectiveCreationSession(idleObjectiveCreationSession, returnContext);

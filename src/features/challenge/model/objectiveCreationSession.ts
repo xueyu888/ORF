@@ -1,11 +1,12 @@
 import type { Objective } from "../../../types/orf";
-import type { ChallengeCycleFilter, ChallengeStatusFilter } from "./challengeFilters";
+import type { ChallengeCycleFilter, ChallengeMemberFilter, ChallengeStatusFilter } from "./challengeFilters";
 import type { ChallengeScope, ObjectiveNode } from "./types";
 
 export const draftObjectiveId = "draft-objective";
 
 export type DraftReturnContext = {
   cycle: ChallengeCycleFilter;
+  member: ChallengeMemberFilter;
   scope: ChallengeScope;
   status: ChallengeStatusFilter;
 };
