@@ -11,29 +11,29 @@ import {
 } from "../server/settings/visualBackgrounds";
 
 const uploadRacePrefix = "orf-race-upload";
-const userLoginBackgroundDir = path.join(process.cwd(), "public", "settings", "backgrounds", "login_background", "user");
-const userSettingsPath = path.join(process.cwd(), "public", "settings", "user", "settings.json");
+const systemLoginBackgroundDir = path.join(process.cwd(), "public", "settings", "backgrounds", "login_background", "system");
+const systemSettingsPath = path.join(process.cwd(), "public", "settings", "system", "settings.json");
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 async function cleanupRaceUploads() {
-  const entries = await readdir(userLoginBackgroundDir).catch(() => []);
+  const entries = await readdir(systemLoginBackgroundDir).catch(() => []);
   await Promise.all(
     entries
       .filter((entry) => entry.startsWith(uploadRacePrefix))
-      .map((entry) => unlink(path.join(userLoginBackgroundDir, entry)).catch(() => undefined)),
+      .map((entry) => unlink(path.join(systemLoginBackgroundDir, entry)).catch(() => undefined)),
   );
 }
 
 async function withUserSettingsBackup(run: () => Promise<void>) {
-  const originalSettings = await readFile(userSettingsPath, "utf8").catch(() => null);
+  const originalSettings = await readFile(systemSettingsPath, "utf8").catch(() => null);
 
   try {
     await run();
   } finally {
     if (originalSettings === null) {
-      await rm(userSettingsPath, { force: true });
+      await rm(systemSettingsPath, { force: true });
     } else {
-      await writeFile(userSettingsPath, originalSettings, "utf8");
+      await writeFile(systemSettingsPath, originalSettings, "utf8");
     }
   }
 }
@@ -72,7 +72,7 @@ test("concurrent visual background uploads reserve unique file ids", async () =>
     const ids = images.map((image) => image.id);
 
     assert.equal(new Set(ids).size, images.length);
-    assert.ok(ids.every((id) => id.startsWith(`login_background/user/${uploadRacePrefix}`)));
+    assert.ok(ids.every((id) => id.startsWith(`login_background/system/${uploadRacePrefix}`)));
   } finally {
     await cleanupRaceUploads();
   }
@@ -88,7 +88,7 @@ test("concurrent visual background config writes preserve independent scene upda
         switchOrder: "sequential",
         switchIntervalMinutes: 3,
       }),
-      saveVisualBackgroundConfig("sidebar_background", {
+      saveVisualBackgroundConfig("app_background", {
         mode: "fixed",
         fixedBackgroundId: "sidebar_background/default/sidebar-character-guide-bg.png",
         switchTrigger: "interval",
@@ -99,7 +99,7 @@ test("concurrent visual background config writes preserve independent scene upda
 
     const [loginBackgrounds, sidebarBackgrounds] = await Promise.all([
       listVisualBackgrounds("login_background"),
-      listVisualBackgrounds("sidebar_background"),
+      listVisualBackgrounds("app_background"),
     ]);
 
     assert.equal(loginBackgrounds.config.fixedBackgroundId, "login_background/default/orf-login-sky-adventure.png");

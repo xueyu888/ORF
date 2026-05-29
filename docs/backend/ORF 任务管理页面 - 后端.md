@@ -102,7 +102,9 @@ type ObjectiveFlowStatus =
   | "closed";
 ```
 
-`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/settled` 对应 `goalFrozen`。旧的 stage 更新接口不能写入与当前 `flowStatus` 冲突的阶段；业务流转必须走发布、申请、征召、冻结、提交和验收接口。
+代码唯一事实源是 `src/domain/orfLifecycle/`。后端只调用其中的 guard 和 transition，不能在 repository、route 或页面模型里再维护独立的状态集合。
+
+`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/settled/closed` 对应 `goalFrozen`。旧的 stage 更新接口不能写入与当前 `flowStatus` 冲突的阶段；业务流转必须走发布、申请、征召、冻结、提交和验收接口。
 
 ## 战利品与结算
 
@@ -178,13 +180,13 @@ type ObjectiveFlowStatus =
 
 ## 任务与指标解耦迁移
 
-任务从指标下移到目标下时，后端契约按以下方向收敛：
+任务已经从指标下移到目标下，后端契约如下：
 
 - `Task.linkedObjectiveId` 是任务归属、权限、生命周期和排序边界。
 - `Task.assignee` 是执行人提示，不是所有者；`Task.createdBy` / `updatedBy` 是审计信息，不改变同目标挑战者共同维护权限。
-- `Task.linkedResultId` 不再作为任务归属；实现迁移时应从任务创建、移动、删除、DTO 映射和测试夹具中移除。
-- `Result.taskIds` 不再作为指标拥有任务的反向索引；指标删除不能删除目标下任务。
+- `Task.linkedResultId` 已从任务业务类型、DTO、写入路径和数据库表中移除。
+- `Result.taskIds` 已从指标业务类型和 DTO 中移除；指标删除不能删除目标下任务。
 - `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；候选目标和没有指标的目标也可以创建任务。
 - `PATCH /api/tasks/:taskId/move` 只在同一目标下移动任务，不能通过移动任务改变指标归属。
-- 历史数据迁移应以旧 `tasks.linked_result_id -> results.objective_id` 回填 `tasks.linked_objective_id`，保留任务、子任务和评论；确认代码不再读取旧列后再删除旧外键和列。
-- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 必须非空，`tasks.linked_result_id` 必须可空且外键 `ON DELETE SET NULL`。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。
+- 迁移 `0020_drop_task_result_ownership` 删除旧 `tasks.linked_result_id` 外键和列；迁移前必须已完成 `tasks.linked_objective_id` 回填。
+- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 必须非空，`tasks.linked_result_id` 不得存在。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。

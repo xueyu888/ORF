@@ -1,4 +1,11 @@
 import type { Objective, Result, Task, TaskChecklistItem, TaskStatus, UncertaintyLevel } from "../../../types/orf";
+import {
+  isObjectiveChallengeAcceptedByFlow,
+  isObjectiveSubmittedByFlow,
+  isObjectiveSettledOrClosed,
+  objectiveFlowLabel,
+  objectiveFlowTone,
+} from "../../../domain/orfLifecycle";
 import type { ActionVisualStatus, BountyStatus } from "./types";
 
 const difficultyRank: Record<UncertaintyLevel, number> = {
@@ -18,9 +25,9 @@ export const bountyStatusLabel: Record<BountyStatus, string> = {
 
 export function bountyStatus(result: Result, objective?: Objective): BountyStatus {
   if (result.acceptedResult === "completed" || result.acceptedResult === "falsified") return "settled";
-  if (objective?.flowStatus === "settled" || objective?.acceptedResult || objective?.objectiveSettlementPoints != null) return "settled";
-  if (objective?.flowStatus === "submitted" || objective?.lootSubmittedAt) return "review";
-  if (objective?.flowStatus === "reestimating" || objective?.flowStatus === "frozen" || (objective?.challengers.length ?? 0) > 0) return "active";
+  if (isObjectiveSettledOrClosed(objective) || objective?.acceptedResult || objective?.objectiveSettlementPoints != null) return "settled";
+  if (isObjectiveSubmittedByFlow(objective) || objective?.lootSubmittedAt) return "review";
+  if (isObjectiveChallengeAcceptedByFlow(objective) || (objective?.challengers.length ?? 0) > 0) return "active";
   return "open";
 }
 
@@ -33,25 +40,18 @@ export function objectiveComplete(objective: Objective) {
 }
 
 export function objectiveStatusLabel(objective: Objective) {
-  if (objective.flowStatus === "candidate") return "候选中";
-  if (objective.flowStatus === "open") return "可申请";
-  if (objective.flowStatus === "applying") return "申请中";
-  if (objective.flowStatus === "recruiting") return "征召中";
-  if (objective.flowStatus === "reestimating") return "重估中";
-  if (objective.flowStatus === "frozen") return "已冻结";
-  if (objective.flowStatus === "submitted") return "待验收";
-  if (objective.flowStatus === "settled") return "已结算";
-  if (objective.flowStatus === "closed") return "已关闭";
+  const flowLabel = objectiveFlowLabel(objective);
+  if (flowLabel) return flowLabel;
   if (objectiveComplete(objective)) return "已完成";
   if (objective.status === "At Risk" || objective.status === "Blocked") return "有风险";
   return "正常";
 }
 
 export function objectiveStatusTone(objective: Objective) {
-  if (objective.flowStatus === "settled" || objectiveComplete(objective)) return "done";
-  if (objective.flowStatus === "submitted" || objective.lootSubmittedAt) return "review";
-  if (objective.flowStatus === "applying" || objective.flowStatus === "recruiting" || objective.flowStatus === "reestimating" || objective.flowStatus === "frozen") return "active";
-  if (objective.flowStatus === "candidate" || objective.flowStatus === "closed") return "open";
+  if (objectiveComplete(objective)) return "done";
+  if (objective.lootSubmittedAt) return "review";
+  const flowTone = objectiveFlowTone(objective);
+  if (flowTone) return flowTone;
   if (objective.status === "At Risk" || objective.status === "Blocked") return "warning";
   return "success";
 }

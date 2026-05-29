@@ -3,22 +3,31 @@ import multipart from "@fastify/multipart";
 import Fastify from "fastify";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { z, ZodError } from "zod";
-import { getAuthenticatedOrfUser } from "./auth/ory";
-import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./auth/errors";
 import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
+import {
+  authorizeObjectiveWorkItemMutation,
+  commentActorWithPermissions,
+  requireAdminContext,
+  requireAdminScope,
+  requireApiUser,
+  requireFeedbackInScope,
+  requireResultEditContext,
+  requireTargetInScope,
+  requireUserScopeContext,
+  requireWorkItemTargetMutation,
+  requireWriteContext,
+} from "./auth/accessPolicy";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/errors";
 import { assertRuntimeDatabaseSchema, databaseSchemaMismatchPayload, isDatabaseSchemaMismatchError } from "./db/schemaGuard";
 import { env } from "./env";
 import { registerOptionalIntegrations } from "./integrations";
 import {
-  getRolePermissionKeysForScope,
   getPermissionRulesForScope,
   hasRolePermission,
   permissionKeys,
   replaceRolePermissionRules,
 } from "./repositories/permissionRepository";
-import { getDefaultRuntimeScopeForUser, runtimeScopeStorageId, type RuntimeScope } from "./repositories/runtimeScope";
-import type { PermissionKey } from "../src/config/permissions";
+import { getDefaultRuntimeScopeForUser } from "./repositories/runtimeScope";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge,
@@ -26,10 +35,8 @@ import {
   canDeleteObjective,
   canCreateFeedbackForResult,
   canEditObjectiveResultsDuringReestimate,
-  canEditResultDuringReestimate,
   canMutateObjectiveResults,
   canMutateResult,
-  canMutateObjectiveWorkItem,
   createComment,
   createChecklistItem,
   createFeedback,
@@ -58,8 +65,6 @@ import {
   reopenObjectiveReestimate,
   reviewObjectiveLoot,
   resolveObjectiveIdForWorkItem,
-  resolveRuntimeScopeForFeedback,
-  resolveRuntimeScopeForWorkItem,
   setTaskCompletion,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
@@ -87,16 +92,7 @@ import {
   rejectRegistrationRequest,
   updateScopedUser,
 } from "./repositories/userRepository";
-import {
-  backgroundSceneConfigSchema,
-  backgroundSceneSchema,
-  getVisualBackgroundFile,
-  listVisualBackgrounds,
-  saveUploadedVisualBackground,
-  saveVisualBackgroundConfig,
-  setDefaultVisualBackground,
-  visualBackgroundError,
-} from "./settings/visualBackgrounds";
+import { registerSettingsRoutes } from "./routes/settingsRoutes";
 import {
   getUnreadNotificationCount,
   listNotificationsForUser,
@@ -159,21 +155,6 @@ const updateRolePermissionsBodySchema = z.object({
 const myChallengesQuerySchema = z.object({
   scope: z.enum(["mine", "all"]).default("mine"),
 });
-const visualBackgroundQuerySchema = z.object({
-  scene: backgroundSceneSchema,
-});
-const visualBackgroundConfigBodySchema = z.object({
-  scene: backgroundSceneSchema,
-  config: backgroundSceneConfigSchema,
-});
-const visualBackgroundParamsSchema = z.object({
-  id: z.string().min(1),
-});
-const visualBackgroundStaticParamsSchema = z.object({
-  scene: backgroundSceneSchema,
-  scope: z.enum(["default", "user"]),
-  fileName: z.string().min(1),
-});
 const createResultBodySchema = z.object({
   objectiveId: requiredTextSchema,
   title: requiredTextSchema,
@@ -217,7 +198,6 @@ const createTaskBodySchema = z.object({
   assignee: optionalTextSchema,
   priority: prioritySchema.optional(),
   linkedObjectiveId: requiredTextSchema,
-  linkedResultId: optionalTextSchema,
   dueDate: optionalDateOnlySchema,
   feedbackOriginId: optionalTextSchema,
 });
@@ -291,215 +271,12 @@ const contributionReviewBodySchema = z.object({
   })).min(1),
 });
 
-type AuthenticatedOrfUser = NonNullable<Awaited<ReturnType<typeof getAuthenticatedOrfUser>>>;
-type RequestWithOrfUser = FastifyRequest & { orfUser?: AuthenticatedOrfUser | null };
-
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
   }
 
   return env.CORS_ORIGIN.split(",").map((origin) => origin.trim()).filter(Boolean);
-}
-
-async function getRequestOrfUser(request: FastifyRequest, reply: FastifyReply, logMessage: string) {
-  const requestWithUser = request as RequestWithOrfUser;
-  if (requestWithUser.orfUser !== undefined) {
-    return requestWithUser.orfUser;
-  }
-
-  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
-    request.log.warn(error, logMessage);
-    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
-      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
-      return undefined;
-    }
-    return null;
-  });
-
-  if (user !== undefined) {
-    requestWithUser.orfUser = user;
-  }
-
-  return user;
-}
-
-async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
-  const user = await getRequestOrfUser(request, reply, "Ory admin session check failed");
-
-  if (user === undefined) {
-    return null;
-  }
-
-  if (!user) {
-    reply.code(401).send({ error: "Unauthorized" });
-    return null;
-  }
-
-  if (user.status !== "active") {
-    reply.code(403).send({ error: "User is not approved", status: user.status });
-    return null;
-  }
-
-  if (user.role !== "admin") {
-    reply.code(403).send({ error: "Forbidden" });
-    return null;
-  }
-
-  return user;
-}
-
-async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
-  const user = await getRequestOrfUser(request, reply, "Ory API session check failed");
-
-  if (user === undefined) {
-    return null;
-  }
-
-  if (!user) {
-    reply.code(401).send({ error: "Unauthorized" });
-    return null;
-  }
-
-  if (user.status !== "active") {
-    reply.code(403).send({ error: "User is not approved", status: user.status });
-    return null;
-  }
-
-  return user;
-}
-
-async function requireUserScopeContext(request: FastifyRequest, reply: FastifyReply) {
-  const user = await requireApiUser(request, reply);
-  if (!user) {
-    return null;
-  }
-
-  const scope = await getDefaultRuntimeScopeForUser(user.id);
-  if (!scope) {
-    reply.code(404).send({ error: "Runtime scope not found" });
-    return null;
-  }
-
-  return { user, scope };
-}
-
-async function requireAdminScope(request: FastifyRequest, reply: FastifyReply) {
-  const user = await requireAdminUser(request, reply);
-  if (!user) {
-    return null;
-  }
-
-  const scope = await getDefaultRuntimeScopeForUser(user.id);
-  if (!scope) {
-    reply.code(404).send({ error: "Runtime scope not found" });
-    return null;
-  }
-
-  return scope;
-}
-
-async function requireAdminContext(request: FastifyRequest, reply: FastifyReply) {
-  const user = await requireAdminUser(request, reply);
-  if (!user) {
-    return null;
-  }
-
-  const scope = await getDefaultRuntimeScopeForUser(user.id);
-  if (!scope) {
-    reply.code(404).send({ error: "Runtime scope not found" });
-    return null;
-  }
-
-  return { user, scope };
-}
-
-async function requireTargetInScope(
-  reply: FastifyReply,
-  target: Parameters<typeof resolveRuntimeScopeForWorkItem>[0],
-  scope: RuntimeScope,
-  message = "Work item not found",
-) {
-  const targetScope = await resolveRuntimeScopeForWorkItem(target);
-  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
-    reply.code(404).send({ error: message });
-    return false;
-  }
-
-  return true;
-}
-
-async function requireFeedbackInScope(reply: FastifyReply, feedbackId: string, scope: RuntimeScope) {
-  const targetScope = await resolveRuntimeScopeForFeedback(feedbackId);
-  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
-    reply.code(404).send({ error: "Feedback not found" });
-    return false;
-  }
-
-  return true;
-}
-
-async function requireWriteContext(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  permission: PermissionKey,
-) {
-  const user = await getRequestOrfUser(request, reply, "Ory permission session check failed");
-
-  if (user === undefined) {
-    return null;
-  }
-
-  if (!user) {
-    reply.code(401).send({ error: "Unauthorized" });
-    return null;
-  }
-
-  const scope = await getDefaultRuntimeScopeForUser(user.id);
-  if (!scope) {
-    reply.code(404).send({ error: "Runtime scope not found" });
-    return null;
-  }
-
-  if (user.role === "admin") {
-    return { user, scope };
-  }
-
-  const permissionRules = await getPermissionRulesForScope(scope);
-  const allowed = hasRolePermission(user.role, permissionRules, permission);
-
-  if (!allowed) {
-    reply.code(403).send({ error: "Forbidden" });
-    return null;
-  }
-
-  return { user, scope };
-}
-
-async function requireResultEditContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
-  const context = await requireUserScopeContext(request, reply);
-  if (!context) {
-    return null;
-  }
-  const { user, scope } = context;
-
-  if (!(await requireTargetInScope(reply, { type: "result", id: resultId }, scope, "Result not found"))) {
-    return null;
-  }
-
-  if (user.role === "admin") {
-    return { user, scope };
-  }
-
-  const permissionRules = await getPermissionRulesForScope(scope);
-  const allowedByRole = hasRolePermission(user.role, permissionRules, "result.edit");
-  const allowedByReestimate = await canEditResultDuringReestimate(resultId, user.name);
-  if (!allowedByRole && !allowedByReestimate) {
-    reply.code(403).send({ error: "Forbidden" });
-    return null;
-  }
-
-  return { user, scope };
 }
 
 function sendObjectiveResultLock(reply: FastifyReply, access: Awaited<ReturnType<typeof canMutateResult>>): boolean {
@@ -548,78 +325,6 @@ async function requireObjectiveDeleteUnlocked(reply: FastifyReply, objectiveId: 
   }
 
   return true;
-}
-
-async function authorizeObjectiveWorkItemMutation(
-  user: Awaited<ReturnType<typeof requireApiUser>>,
-  reply: FastifyReply,
-  objectiveId: string,
-) {
-  if (!user) {
-    return false;
-  }
-
-  const scope = await getDefaultRuntimeScopeForUser(user.id);
-  if (!scope) {
-    reply.code(404).send({ error: "Runtime scope not found" });
-    return false;
-  }
-
-  const targetScope = await resolveRuntimeScopeForWorkItem({ type: "objective", id: objectiveId });
-  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
-    reply.code(404).send({ error: "Objective not found" });
-    return false;
-  }
-
-  const access = await canMutateObjectiveWorkItem({ ...user, scope }, objectiveId);
-  if (access === "notFound") {
-    reply.code(404).send({ error: "Objective not found" });
-    return false;
-  }
-  if (access === "forbidden") {
-    reply.code(403).send({ error: "Forbidden" });
-    return false;
-  }
-
-  return true;
-}
-
-async function requireObjectiveWorkItemMutation(request: FastifyRequest, reply: FastifyReply, objectiveId: string) {
-  const user = await requireApiUser(request, reply);
-  if (!user) {
-    return null;
-  }
-
-  return (await authorizeObjectiveWorkItemMutation(user, reply, objectiveId)) ? user : null;
-}
-
-async function requireWorkItemTargetMutation(
-  request: FastifyRequest,
-  reply: FastifyReply,
-  target: Parameters<typeof resolveObjectiveIdForWorkItem>[0],
-) {
-  const objectiveId = await resolveObjectiveIdForWorkItem(target);
-  if (!objectiveId) {
-    reply.code(404).send({ error: "Work item not found" });
-    return null;
-  }
-
-  return requireObjectiveWorkItemMutation(request, reply, objectiveId);
-}
-
-async function commentActorWithPermissions(request: FastifyRequest, reply: FastifyReply) {
-  const context = await requireUserScopeContext(request, reply);
-  if (!context) {
-    return null;
-  }
-  const { user, scope } = context;
-
-  if (user.role === "admin") {
-    return { ...user, scope, canManageAllComments: true };
-  }
-
-  const permissions = await getRolePermissionKeysForScope(scope, user.role);
-  return { ...user, scope, canManageAllComments: permissions.includes("comment.manage") };
 }
 
 function sendCommentOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof createComment>>) {
@@ -766,114 +471,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   }
   registerAuthRoutes(app);
 
-  app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
-    try {
-      const params = visualBackgroundStaticParamsSchema.parse(request.params);
-      if (params.scene !== "login_background") {
-        const user = await requireApiUser(request, reply);
-        if (!user) {
-          return reply;
-        }
-      }
-
-      const file = await getVisualBackgroundFile(params.scene, params.scope, params.fileName);
-      reply.header("Content-Type", file.mimeType);
-      return reply.send(file.stream);
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ error: mapped.message });
-    }
-  });
-
-  app.get("/api/settings/visual/backgrounds", async (request, reply) => {
-    try {
-      const query = visualBackgroundQuerySchema.parse(request.query);
-      return {
-        code: 0,
-        message: "ok",
-        data: await listVisualBackgrounds(query.scene),
-      };
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
-    }
-  });
-
-  app.post("/api/settings/visual/backgrounds", async (request, reply) => {
-    if (!(await requireAdminContext(request, reply))) {
-      return reply;
-    }
-
-    try {
-      let scene: z.infer<typeof backgroundSceneSchema> | null = null;
-      let file: { fileName: string; mimeType: string; buffer: Buffer } | null = null;
-
-      for await (const part of request.parts()) {
-        if (part.type === "field" && part.fieldname === "scene") {
-          scene = backgroundSceneSchema.parse(part.value);
-        }
-        if (part.type === "file" && part.fieldname === "file") {
-          file = {
-            fileName: part.filename,
-            mimeType: part.mimetype,
-            buffer: await part.toBuffer(),
-          };
-        }
-      }
-
-      if (!scene) {
-        return reply.code(400).send({ code: 40001, message: "invalid scene", data: null });
-      }
-      if (!file) {
-        return reply.code(400).send({ code: 40002, message: "file is required", data: null });
-      }
-
-      return {
-        code: 0,
-        message: "ok",
-        data: await saveUploadedVisualBackground({ scene, ...file }),
-      };
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
-    }
-  });
-
-  app.put("/api/settings/visual/backgrounds/:id/default", async (request, reply) => {
-    if (!(await requireAdminContext(request, reply))) {
-      return reply;
-    }
-
-    try {
-      const params = visualBackgroundParamsSchema.parse(request.params);
-      return {
-        code: 0,
-        message: "ok",
-        data: await setDefaultVisualBackground(params.id),
-      };
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
-    }
-  });
-
-  app.put("/api/settings/visual/background-config", async (request, reply) => {
-    if (!(await requireAdminContext(request, reply))) {
-      return reply;
-    }
-
-    try {
-      const body = visualBackgroundConfigBodySchema.parse(request.body);
-      return {
-        code: 0,
-        message: "ok",
-        data: await saveVisualBackgroundConfig(body.scene, body.config),
-      };
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
-    }
-  });
+  registerSettingsRoutes(app);
 
   app.get("/api/tasks-page", async (request, reply) => {
     const user = await requireApiUser(request, reply);

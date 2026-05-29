@@ -1,5 +1,6 @@
-import { expect } from "@playwright/test";
+import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import type { CapturedResponse } from "../../_operators/common.context";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
@@ -18,6 +19,8 @@ import {
   userStatusByEmail,
   workbenchContainsObjective,
 } from "./_support/recruit-member.helpers";
+
+const CAPTURED_RESPONSE_TIMEOUT_MS = 5_000;
 
 export const recruitMemberOperators = {
   "api.my_challenges": {
@@ -47,46 +50,10 @@ export const recruitMemberOperators = {
   },
 
   "api.recruitment": {
-    capture_response: async ({ ctx, runtime, params }) => {
-      const target = requiredRecruitTarget(params, "target");
-      runtime.values[requiredString(params, "saveAs")] = ctx.page
-        .waitForResponse((response) => {
-          return (
-            response.request().method().toUpperCase() === "POST" &&
-            response.url().endsWith(`/api/objectives/${encodeURIComponent(target.id)}/recruitments`)
-          );
-        })
-        .then(async (response) => ({
-          ok: response.ok(),
-          status: response.status(),
-          url: response.url(),
-          method: response.request().method(),
-          body: await readResponseBody(response),
-        }));
-    },
-
     record_objective: async ({ params }) => objectiveFromCapturedResponse(await requiredCapturedResponse(params, "response")),
   },
 
   "api.challenge_acceptance": {
-    capture_response: async ({ ctx, runtime, params }) => {
-      const target = requiredRecruitTarget(params, "target");
-      runtime.values[requiredString(params, "saveAs")] = ctx.page
-        .waitForResponse((response) => {
-          return (
-            response.request().method().toUpperCase() === "PATCH" &&
-            response.url().endsWith(`/api/objectives/${encodeURIComponent(target.id)}/challenge`)
-          );
-        })
-        .then(async (response) => ({
-          ok: response.ok(),
-          status: response.status(),
-          url: response.url(),
-          method: response.request().method(),
-          body: await readResponseBody(response),
-        }));
-    },
-
     record_objective: async ({ params }) => objectiveFromCapturedResponse(await requiredCapturedResponse(params, "response")),
   },
 
@@ -211,8 +178,27 @@ export const recruitMemberOperators = {
       await recruitDialog(ctx.page).getByLabel(`征召 ${requiredString(params, "memberName")}`).check();
     },
 
-    submit: async ({ ctx }) => {
-      await recruitDialog(ctx.page).getByRole("button", { name: "发送征召" }).click();
+    submit: async ({ ctx, params }) => {
+      const target = requiredRecruitTarget(params, "target");
+      const responsePromise = ctx.page
+        .waitForResponse(
+          (response) => {
+            return (
+              response.request().method().toUpperCase() === "POST" &&
+              response.url().endsWith(`/api/objectives/${encodeURIComponent(target.id)}/recruitments`)
+            );
+          },
+          { timeout: CAPTURED_RESPONSE_TIMEOUT_MS },
+        )
+        .then(toCapturedResponse);
+
+      try {
+        await recruitDialog(ctx.page).getByRole("button", { name: "发送征召" }).click();
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 
@@ -227,11 +213,40 @@ export const recruitMemberOperators = {
       await expect(acceptChallengeDialog(ctx.page)).toBeVisible();
     },
 
-    confirm: async ({ ctx }) => {
-      await acceptChallengeDialog(ctx.page).getByRole("button", { name: "接受挑战" }).click();
+    confirm: async ({ ctx, params }) => {
+      const target = requiredRecruitTarget(params, "target");
+      const responsePromise = ctx.page
+        .waitForResponse(
+          (response) => {
+            return (
+              response.request().method().toUpperCase() === "PATCH" &&
+              response.url().endsWith(`/api/objectives/${encodeURIComponent(target.id)}/challenge`)
+            );
+          },
+          { timeout: CAPTURED_RESPONSE_TIMEOUT_MS },
+        )
+        .then(toCapturedResponse);
+
+      try {
+        await acceptChallengeDialog(ctx.page).getByRole("button", { name: "接受挑战" }).click();
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 } satisfies OperatorRegistry<TestContext, RecruitMemberCaseData>;
+
+async function toCapturedResponse(response: Response): Promise<CapturedResponse> {
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    url: response.url(),
+    method: response.request().method(),
+    body: await readResponseBody(response),
+  };
+}
 
 async function requiredSnapshot(params: StepParams, key: string): Promise<RecruitMemberDbSnapshot> {
   const target = requiredRecruitTarget(params, key);

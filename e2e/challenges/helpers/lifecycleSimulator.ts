@@ -337,7 +337,7 @@ export class LifecycleSimulator {
         const actor = this.actorForMemberName(objective.challengers[0] ?? "") ?? "commander";
         actions.push(async () => {
           await this.runStep({ action: "seeded-mutation-add-task", actor, expectedState, objectiveKey }, async () => {
-            await this.world.dsl.addTask(this.world.users[actor], objective.id, objectiveResults[0]!.id, `${objective.title} 随机行动项 ${nextStep}`);
+            await this.world.dsl.addTask(this.world.users[actor], objective.id, `${objective.title} 随机行动项 ${nextStep}`);
           }, { includeApiVisibility: false });
         });
 
@@ -432,7 +432,7 @@ export class LifecycleSimulator {
       ? new Set([objectiveId])
       : new Set([...this.world.objectives.values()].map((objective) => objective.id).filter(Boolean) as string[]);
     const resultIds = new Set(data.results.filter((result) => objectiveIds.has(result.objectiveId)).map((result) => result.id));
-    const taskIds = new Set(data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId) || resultIds.has(task.linkedResultId)).map((task) => task.id));
+    const taskIds = new Set(data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId)).map((task) => task.id));
 
     return {
       comments: data.comments.filter((thread) => objectiveIds.has(thread.targetId) || resultIds.has(thread.targetId) || taskIds.has(thread.targetId)),
@@ -441,7 +441,7 @@ export class LifecycleSimulator {
       objectives: data.objectives.filter((objective) => objectiveIds.has(objective.id)),
       pointLedger: data.pointLedger.filter((entry) => objectiveIds.has(entry.objectiveId)),
       results: data.results.filter((result) => objectiveIds.has(result.objectiveId)),
-      tasks: data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId) || resultIds.has(task.linkedResultId)),
+      tasks: data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId)),
     };
   }
 

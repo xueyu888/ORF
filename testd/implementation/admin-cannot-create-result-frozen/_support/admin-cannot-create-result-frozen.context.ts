@@ -14,7 +14,6 @@ export type FrozenAdminCreateResultCaseData = {
   objectiveId: string;
   objectiveTitle: string;
   resultTitle: string;
-  metricName: string;
 };
 
 export type FrozenAdminResultTarget = {
@@ -23,10 +22,4 @@ export type FrozenAdminResultTarget = {
     title: string;
     flowStatus: ObjectiveFlowStatus;
   };
-};
-
-export type RejectedResultCreateResponse = {
-  ok: boolean;
-  status: number;
-  body: unknown;
 };

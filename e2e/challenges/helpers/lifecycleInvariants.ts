@@ -21,7 +21,6 @@ export type LifecycleInvariantContext = {
 export type LifecycleSecurityTargets = {
   frozenObjectiveId: string;
   reestimatingObjectiveId: string;
-  resultId: string;
   taskId: string;
 };
 
@@ -66,7 +65,6 @@ export async function assertLifecycleSecurityBoundaries(
     body: JSON.stringify({
       title: "非挑战者不应新增任务",
       linkedObjectiveId: targets.reestimatingObjectiveId,
-      linkedResultId: targets.resultId,
     }),
     method: "POST",
   });

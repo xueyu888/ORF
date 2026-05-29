@@ -205,7 +205,7 @@ export async function installAuthenticatedAppScenario(page: Page) {
         json: {
           code: 0,
           message: "ok",
-          data: { scene: body.scene ?? "sidebar_background", config: body.config ?? visualBackgroundConfig() },
+          data: { scene: body.scene ?? "app_background", config: body.config ?? visualBackgroundConfig() },
         },
       });
       return;
@@ -395,7 +395,7 @@ function visualBackgroundConfig() {
 }
 
 function sceneFromUrl(url: URL): VisualBackgroundScene {
-  return url.searchParams.get("scene") === "login_background" ? "login_background" : "sidebar_background";
+  return url.searchParams.get("scene") === "login_background" ? "login_background" : "app_background";
 }
 
 function nowIso() {

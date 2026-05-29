@@ -1395,7 +1395,6 @@ test("API task creation is owned by the objective and does not require a result"
     assert.equal(candidateResponse.statusCode, 200, candidateResponse.body);
     const candidatePayload = candidateResponse.json() as { task: Task };
     assert.equal(candidatePayload.task.linkedObjectiveId, candidateObjective.id);
-    assert.equal(candidatePayload.task.linkedResultId, null);
 
     const response = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
       title: `${fixture.prefix} objective-only task`,
@@ -1405,12 +1404,10 @@ test("API task creation is owned by the objective and does not require a result"
     const payload = response.json() as { task: Task };
 
     assert.equal(payload.task.linkedObjectiveId, objective.id);
-    assert.equal(payload.task.linkedResultId, null);
 
     const data = await getTaskManagementData({ scope: fixture.scope });
     const storedTask = data.tasks.find((item) => item.id === payload.task.id);
     assert.equal(storedTask?.linkedObjectiveId, objective.id);
-    assert.equal(storedTask?.linkedResultId, null);
   });
 });
 
@@ -1451,14 +1448,12 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     const blankTaskTitle = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
       title: "   ",
       linkedObjectiveId: objective.id,
-      linkedResultId: result.id,
     });
     assert.equal(blankTaskTitle.statusCode, 400);
 
     const invalidTaskDueDate = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
       title: "valid task title",
       linkedObjectiveId: objective.id,
-      linkedResultId: result.id,
       dueDate: "2999-02-31",
     });
     assert.equal(invalidTaskDueDate.statusCode, 400);
@@ -1467,7 +1462,6 @@ test("API work item creation trims labels and prevents blank persisted titles", 
       title: "valid task title",
       assignee: `${fixture.prefix} Missing Assignee`,
       linkedObjectiveId: objective.id,
-      linkedResultId: result.id,
     });
     assert.equal(invalidTaskAssignee.statusCode, 400);
     assert.equal((invalidTaskAssignee.json() as { error?: string }).error, "Task assignee must be an active member");
@@ -1477,7 +1471,6 @@ test("API work item creation trims labels and prevents blank persisted titles", 
       description: "   ",
       assignee: "   ",
       linkedObjectiveId: objective.id,
-      linkedResultId: result.id,
       dueDate: "2999-02-28",
     });
     assert.equal(trimmedTask.statusCode, 200);
@@ -1494,7 +1487,6 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     assert.equal(objectiveOwnedTask.statusCode, 200, objectiveOwnedTask.body);
     const objectiveOwnedTaskPayload = objectiveOwnedTask.json() as { task: Task };
     assert.equal(objectiveOwnedTaskPayload.task.linkedObjectiveId, objective.id);
-    assert.equal(objectiveOwnedTaskPayload.task.linkedResultId, null);
 
     const defaultLabel = await apiInject(app, fixture.challenger, "POST", `/api/tasks/${encodeURIComponent(trimmedTaskPayload.task.id)}/checklist`, {
       label: "   ",
@@ -1524,13 +1516,11 @@ test("task creation generates collision-resistant ids under concurrent writes", 
     const [firstTask, secondTask] = await Promise.all([
       createTask({
         title: `${fixture.prefix} concurrent task A`,
-        linkedResultId: result.id,
         linkedObjectiveId: result.objectiveId,
         assignee: fixture.challenger.name,
       }),
       createTask({
         title: `${fixture.prefix} concurrent task B`,
-        linkedResultId: result.id,
         linkedObjectiveId: result.objectiveId,
         assignee: fixture.challenger.name,
       }),
@@ -1545,7 +1535,7 @@ test("task creation generates collision-resistant ids under concurrent writes", 
   }
 
   const data = await getTaskManagementData({ scope: fixture.scope });
-  assert.equal(data.tasks.filter((task) => task.linkedResultId === result.id).length, 2);
+  assert.equal(data.tasks.filter((task) => task.linkedObjectiveId === result.objectiveId).length, 2);
 });
 
 test("concurrent result, task, and checklist creation reserve stable sort orders", async () => {
@@ -1577,7 +1567,6 @@ test("concurrent result, task, and checklist creation reserve stable sort orders
     expectedSortOrders.map((index) =>
       createTask({
         title: `${fixture.prefix} concurrent task ${index}`,
-        linkedResultId: workResult.id,
         linkedObjectiveId: objective.id,
         assignee: fixture.challenger.name,
       }),
@@ -1587,7 +1576,7 @@ test("concurrent result, task, and checklist creation reserve stable sort orders
   const storedTasks = await db
     .select({ id: taskRows.id, sortOrder: taskRows.sortOrder })
     .from(taskRows)
-    .where(eq(taskRows.linkedResultId, workResult.id));
+    .where(eq(taskRows.linkedObjectiveId, objective.id));
   assert.deepEqual(storedTasks.map((row) => row.sortOrder).sort((left, right) => left - right), expectedSortOrders);
 
   const checklistTask = createdTasks[0];

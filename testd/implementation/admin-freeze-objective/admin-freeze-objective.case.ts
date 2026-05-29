@@ -318,23 +318,15 @@ export const adminFreezeObjectiveCase = {
     description: "管理员通过页面冻结目标",
     steps: [
       {
-        source: { caseStepId: "Action-1", method: "api" },
-        id: "capture.freeze_response",
-        title: "监听冻结目标请求响应",
-        object: "api.objective_freeze",
-        operator: "capture_response",
-        params: { targetFrom: "runtime.freezeTarget", saveAs: "freezeResponse" },
-      },
-      {
-        source: { caseStepId: "Action-2", method: "playwright" },
+        source: { caseStepId: "Action-1", method: "playwright" },
         id: "click.freeze",
         title: "点击 本用例冻结目标的 \"冻结\" 操作",
         object: "page.freeze_target",
         operator: "freeze",
-        params: { targetFrom: "runtime.freezeTarget" },
+        params: { targetFrom: "runtime.freezeTarget", saveAs: "freezeResponse" },
       },
       {
-        source: { caseStepId: "Action-3", method: "api" },
+        source: { caseStepId: "Action-2", method: "api" },
         id: "freeze_response.record",
         title: "记录 冻结目标结果中的目标",
         object: "api.objective_freeze_response",
@@ -349,14 +341,6 @@ export const adminFreezeObjectiveCase = {
     assertions: [
       {
         source: { caseStepId: "S1-1", method: "api" },
-        id: "freeze_response.ok",
-        title: "冻结目标结果 应成功",
-        object: "api.response",
-        operator: "ok",
-        params: { responseFrom: "runtime.freezeResponse", status: 200 },
-      },
-      {
-        source: { caseStepId: "S1-2", method: "api" },
         id: "frozen_objective.matches",
         title: "冻结目标结果中的目标 应属于本用例目标，流转状态为 `frozen`、阶段为 `goalFrozen` 且冻结确认时间已存在",
         object: "api.objective_freeze_response",
@@ -364,7 +348,7 @@ export const adminFreezeObjectiveCase = {
         params: { objectiveFrom: "runtime.frozenObjective", targetFrom: "runtime.freezeTarget" },
       },
       {
-        source: { caseStepId: "S1-3", method: "prisma" },
+        source: { caseStepId: "S1-2", method: "prisma" },
         id: "db.freeze_target.frozen",
         title: "本用例冻结目标 在数据库中 应为 流转状态 `frozen`、阶段 `goalFrozen` 且冻结确认时间已存在",
         object: "db.freeze_target",
@@ -372,7 +356,7 @@ export const adminFreezeObjectiveCase = {
         params: { targetFrom: "runtime.freezeTarget" },
       },
       {
-        source: { caseStepId: "S1-4", method: "playwright" },
+        source: { caseStepId: "S1-3", method: "playwright" },
         id: "page.freeze_target.frozen_status",
         title: "本用例冻结目标面板 应显示 \"已冻结\"",
         object: "page.freeze_target",
@@ -380,7 +364,7 @@ export const adminFreezeObjectiveCase = {
         params: { targetFrom: "runtime.freezeTarget" },
       },
       {
-        source: { caseStepId: "S1-5", method: "api" },
+        source: { caseStepId: "S1-4", method: "api" },
         id: "session.admin.still_authenticated",
         title: "当前会话 应仍为 管理员的已登录会话",
         object: "auth.session",

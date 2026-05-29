@@ -262,7 +262,7 @@ test.describe("ORF real lifecycle simulation", () => {
         world.recordResult("q1Main", proposedResultId);
         const edited = await world.dsl.editMetric(world.users.member2, proposedResultId, `${world.objective("q1Main").title} 成员2修订指标`);
         expect(edited.status).toBe(200);
-        await addExecutionWork(real, world.dsl, world.users.member1, world.objective("q1Main").id!, proposedResultId, `${world.objective("q1Main").title} 执行协作`);
+        await addExecutionWork(real, world.dsl, world.users.member1, world.objective("q1Main").id!, `${world.objective("q1Main").title} 执行协作`);
       });
       await simulator.runStep({ action: "commander-freezes-q1-main", actor: "commander", expectedState: "frozen", objectiveKey: "q1Main" }, async () => {
         await world.dsl.freezeObjective(world.page("commander"), world.objective("q1Main").title);
@@ -329,7 +329,7 @@ test.describe("ORF real lifecycle simulation", () => {
         world.recordResult("q2Expired", q2ExpiredProposedResultId);
         const edited = await world.dsl.editMetric(world.users.member4, q2ExpiredProposedResultId, `${world.objective("q2Expired").title} 成员4修订指标`);
         expect(edited.status).toBe(200);
-        q2ExpiredTaskId = await addExecutionWork(real, world.dsl, world.users.member3, world.objective("q2Expired").id!, q2ExpiredProposedResultId, `${world.objective("q2Expired").title} 执行协作`);
+        q2ExpiredTaskId = await addExecutionWork(real, world.dsl, world.users.member3, world.objective("q2Expired").id!, `${world.objective("q2Expired").title} 执行协作`);
       });
       await simulator.runStep({ action: "q2-expired-window-removes-propose-button-and-blocks-api", actor: "member3", expectedState: "reestimating", objectiveKey: "q2Expired" }, async () => {
         await world.clock.expireReestimateWindow(world.objective("q2Expired").id!);
@@ -375,7 +375,6 @@ test.describe("ORF real lifecycle simulation", () => {
         securityTargets = {
           frozenObjectiveId: created.objectiveId,
           reestimatingObjectiveId: world.objective("q2Expired").id!,
-          resultId: q2ExpiredProposedResultId,
           taskId: q2ExpiredTaskId,
         };
       });

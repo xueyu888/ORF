@@ -7,15 +7,21 @@ export type TestContext = {
 };
 
 export type MemberCreateTaskCaseData = {
-  email: string;
-  password: string;
-  name: string;
-  role: "member";
+  adminEmail: string;
+  adminPassword: string;
+  adminName: string;
+  adminRole: "admin";
+  memberEmail: string;
+  memberPassword: string;
+  memberName: string;
+  memberRole: "member";
   objectiveId: string;
   objectiveTitle: string;
-  taskTitle: string;
+  adminTaskTitle: string;
+  memberTaskTitle: string;
   taskDescription: string;
-  subtaskLabel: string;
+  adminSubtaskLabel: string;
+  memberSubtaskLabel: string;
 };
 
 export type MemberCreateTaskTarget = {

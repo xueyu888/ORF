@@ -92,7 +92,6 @@ function result(input: Partial<Result> = {}): Result {
     uncertaintyScore: 0,
     acceptedResult: "unreviewed",
     evidenceIds: [],
-    taskIds: [],
     feedbackIds: [],
     trend: [],
     reviewCadence: "",

@@ -20,7 +20,7 @@ export class DatabaseSchemaMismatchError extends Error {
   details: string[];
 
   constructor(details: string[]) {
-    super(`Database schema is not migrated for objective-owned tasks. ${details.join(" ")}`);
+    super(`Database schema is not migrated for result-decoupled tasks. ${details.join(" ")}`);
     this.name = "DatabaseSchemaMismatchError";
     this.details = details;
   }
@@ -49,19 +49,15 @@ export function validateObjectiveOwnedTaskSchema(snapshot: RuntimeSchemaSnapshot
     errors.push("tasks.linked_objective_id must be NOT NULL.");
   }
 
-  if (!linkedResultId) {
-    errors.push("tasks.linked_result_id is missing for legacy compatibility.");
-  } else if (linkedResultId.isNullable !== "YES") {
-    errors.push("tasks.linked_result_id must be nullable.");
+  if (linkedResultId) {
+    errors.push("tasks.linked_result_id must be dropped; tasks are owned by objectives only.");
   }
 
   const linkedResultForeignKey = snapshot.constraints.find((constraint) =>
     /FOREIGN KEY \(linked_result_id\) REFERENCES results\(id\)/i.test(constraint.definition),
   );
-  if (!linkedResultForeignKey) {
-    errors.push("tasks.linked_result_id foreign key is missing.");
-  } else if (!/ON DELETE SET NULL/i.test(linkedResultForeignKey.definition)) {
-    errors.push("tasks.linked_result_id foreign key must use ON DELETE SET NULL.");
+  if (linkedResultForeignKey) {
+    errors.push("tasks.linked_result_id foreign key must be dropped.");
   }
 
   return errors;

@@ -2,11 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../../server/db/client";
 import { objectives, results } from "../../../../server/db/schema";
-import type {
-  FrozenMemberProposalCaseData,
-  FrozenProposalTarget,
-  RejectedResultCreateResponse,
-} from "./member-cannot-propose-result-frozen.context";
+import type { FrozenProposalTarget } from "./member-cannot-propose-result-frozen.context";
 
 export async function frozenProposalTargetFromObjective(objectiveId: string): Promise<FrozenProposalTarget> {
   const selected = await readObjective(objectiveId);
@@ -58,44 +54,16 @@ export async function deleteTestResult(title: string) {
   await db.delete(results).where(eq(results.title, title));
 }
 
-export async function submitMemberProposedResult(
-  page: Page,
-  target: FrozenProposalTarget,
-  input: Pick<FrozenMemberProposalCaseData, "resultTitle" | "metricName">,
-): Promise<RejectedResultCreateResponse> {
-  return page.evaluate(
-    async ({ objectiveId, title, metricName }) => {
-      const response = await fetch("/api/results", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          objectiveId,
-          title,
-          metricName,
-          source: "memberProposed",
-        }),
-      });
-      const contentType = response.headers.get("content-type") ?? "";
-      const body = contentType.includes("application/json")
-        ? await response.json().catch(() => null)
-        : await response.text().catch(() => null);
-      return {
-        ok: response.ok,
-        status: response.status,
-        body,
-      };
-    },
-    {
-      objectiveId: target.objective.id,
-      title: input.resultTitle,
-      metricName: input.metricName,
-    },
-  );
-}
-
 export function objectivePanel(page: Page, target: FrozenProposalTarget) {
   return page.locator("section.orf-objective-panel").filter({ hasText: target.objective.title }).first();
+}
+
+export function targetAddMenuButton(page: Page, target: FrozenProposalTarget) {
+  return objectivePanel(page, target).getByRole("button", { name: "新增子级" }).first();
+}
+
+export function targetActionMenuItem(page: Page, target: FrozenProposalTarget) {
+  return objectivePanel(page, target).getByRole("button", { name: "新增行动项" }).first();
 }
 
 export function targetMetricButton(page: Page, target: FrozenProposalTarget) {

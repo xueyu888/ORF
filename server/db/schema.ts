@@ -245,8 +245,6 @@ export const tasks = pgTable("tasks", {
   linkedObjectiveId: text("linked_objective_id")
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
-  linkedResultId: text("linked_result_id")
-    .references(() => results.id, { onDelete: "set null" }),
   feedbackOriginId: text("feedback_origin_id"),
   dueDate: date("due_date", { mode: "string" }).notNull(),
   tags: jsonb("tags").$type<string[]>().notNull(),

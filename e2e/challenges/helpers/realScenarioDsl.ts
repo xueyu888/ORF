@@ -131,7 +131,7 @@ export class RealScenarioDsl {
     });
   }
 
-  async addTask(user: RealUser, objectiveId: string, resultId: string, title: string) {
+  async addTask(user: RealUser, objectiveId: string, title: string) {
     const response = await this.real.apiAs<{ task: { id: string } }>(user, "/api/tasks", {
       body: JSON.stringify({
         title,
@@ -139,7 +139,6 @@ export class RealScenarioDsl {
         assignee: user.name,
         priority: "High",
         linkedObjectiveId: objectiveId,
-        linkedResultId: resultId,
       }),
       method: "POST",
     });

@@ -1,6 +1,12 @@
 import { hasPermission } from "../../../config/permissions";
 import {
+  canFreezeObjectiveByFlow,
+  canMutateObjectiveWorkItemsByFlow,
   canRecruitObjectiveChallengersByFlow,
+  canReviewObjectiveLootByFlow,
+  canSubmitObjectiveContributionReviewByFlow,
+  canSubmitObjectiveLootByFlow,
+  isObjectiveReestimateWindowOpen,
   isObjectiveResultLockedByFlow,
   isObjectiveSettledOrClosed,
 } from "../../../domain/orfLifecycle";
@@ -23,12 +29,6 @@ type WorkbenchAction = {
   to: string;
 };
 
-const objectiveWorkItemMutationStatuses = new Set([
-  "candidate",
-  "reestimating",
-  "frozen",
-]);
-
 export function isObjectiveResultLocked(objective: Objective | undefined): boolean {
   return isObjectiveResultLockedByFlow(objective) || Boolean(objective?.acceptedResult);
 }
@@ -45,16 +45,7 @@ export function isReestimateWindowOpen(
   objective: Objective,
   now = new Date(),
 ): boolean {
-  if (objective.flowStatus !== "reestimating") {
-    return false;
-  }
-
-  if (!objective.confirmationDueAt) {
-    return true;
-  }
-
-  const dueAt = new Date(objective.confirmationDueAt).getTime();
-  return Number.isFinite(dueAt) && now.getTime() <= dueAt;
+  return isObjectiveReestimateWindowOpen(objective, now);
 }
 
 export function canProposeObjectiveMetric(
@@ -70,7 +61,7 @@ export function canProposeObjectiveMetric(
 }
 
 export function canMutateObjectiveWorkItems(objective: Objective | undefined): boolean {
-  return Boolean(objective && objectiveWorkItemMutationStatuses.has(objective.flowStatus));
+  return canMutateObjectiveWorkItemsByFlow(objective);
 }
 
 export function canFreezeObjectiveAfterReestimate(
@@ -79,7 +70,7 @@ export function canFreezeObjectiveAfterReestimate(
 ): boolean {
   return Boolean(
     objective &&
-      objective.flowStatus === "reestimating" &&
+      canFreezeObjectiveByFlow(objective) &&
       results.some((result) => result.objectiveId === objective.id),
   );
 }
@@ -132,7 +123,7 @@ export function canSubmitObjectiveLoot(
     objective &&
       currentUser &&
       currentUser.role === "member" &&
-      objective.flowStatus === "frozen" &&
+      canSubmitObjectiveLootByFlow(objective) &&
       objective.challengers.includes(currentUser.name),
   );
 }
@@ -145,7 +136,7 @@ export function canSubmitObjectivePeerReview(
     objective &&
       currentUser &&
       currentUser.role === "member" &&
-      objective.flowStatus === "submitted" &&
+      canSubmitObjectiveContributionReviewByFlow(objective) &&
       objective.challengers.includes(currentUser.name),
   );
 }
@@ -174,7 +165,7 @@ export function canReviewObjectiveLoot(
   currentUser: OrfUser | null,
 ): boolean {
   return Boolean(
-    objective && currentUser?.role === "admin" && objective.flowStatus === "submitted",
+    objective && currentUser?.role === "admin" && canReviewObjectiveLootByFlow(objective),
   );
 }
 

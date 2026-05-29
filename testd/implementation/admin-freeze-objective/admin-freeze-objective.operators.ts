@@ -1,5 +1,6 @@
-import { expect } from "@playwright/test";
+import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import type { CapturedResponse } from "../../_operators/common.context";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
@@ -67,23 +68,6 @@ export const adminFreezeObjectiveOperators = {
     },
   },
 
-  "api.objective_freeze": {
-    capture_response: async ({ ctx, runtime, params }) => {
-      const target = requiredFreezeTarget(params, "target");
-      runtime.values[requiredString(params, "saveAs")] = ctx.page
-        .waitForResponse((response) => {
-          return response.request().method().toUpperCase() === "PATCH" && response.url().endsWith(`/api/objectives/${encodeURIComponent(target.objective.id)}/freeze`);
-        })
-        .then(async (response) => ({
-          ok: response.ok(),
-          status: response.status(),
-          url: response.url(),
-          method: response.request().method(),
-          body: await readResponseBody(response),
-        }));
-    },
-  },
-
   "api.objective_freeze_response": {
     record_objective: async ({ params }) => {
       const response = await requiredCapturedResponse(params, "response");
@@ -113,7 +97,20 @@ export const adminFreezeObjectiveOperators = {
     },
 
     freeze: async ({ ctx, params }) => {
-      await freezeButton(ctx.page, requiredFreezeTarget(params, "target")).click();
+      const target = requiredFreezeTarget(params, "target");
+      const responsePromise = ctx.page
+        .waitForResponse((response) => {
+          return response.request().method().toUpperCase() === "PATCH" && response.url().endsWith(`/api/objectives/${encodeURIComponent(target.objective.id)}/freeze`);
+        })
+        .then(toCapturedResponse);
+
+      try {
+        await freezeButton(ctx.page, target).click();
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
 
     frozen_status_visible: async ({ ctx, params }) => {
@@ -121,6 +118,16 @@ export const adminFreezeObjectiveOperators = {
     },
   },
 } satisfies OperatorRegistry<TestContext, AdminFreezeObjectiveCaseData>;
+
+async function toCapturedResponse(response: Response): Promise<CapturedResponse> {
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    url: response.url(),
+    method: response.request().method(),
+    body: await readResponseBody(response),
+  };
+}
 
 function requiredFreezeTarget(params: StepParams, key: string): AdminFreezeObjectiveTarget {
   const value = params[key];

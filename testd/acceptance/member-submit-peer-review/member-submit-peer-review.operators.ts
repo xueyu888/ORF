@@ -11,17 +11,20 @@ import type {
   TestContext,
 } from "./_support/member-submit-peer-review.context";
 import {
+  addPeerReviewTargetChallenger,
   createPeerReviewLoot,
   deletePeerReview,
   deletePeerReviewLoot,
   lootPagePath,
   peerReviewAbsent,
+  peerReviewAllocationPresent,
   peerReviewFromResponse,
   peerReviewPresent,
   peerReviewTargetFromObjective,
-  preparePeerReviewTarget,
+  preparePeerReviewTargetForReview,
+  targetChallengerPresent,
   targetLootPresent,
-  targetSubmittedForMember,
+  targetSubmitted,
   testLootAbsent,
 } from "./_support/member-submit-peer-review.helpers";
 
@@ -29,14 +32,20 @@ export const memberSubmitPeerReviewOperators = {
   "db.peer_review_target": {
     from_objective: async ({ params }) => peerReviewTargetFromObjective(requiredString(params, "objectiveId")),
 
-    prepare: async ({ params }) => {
-      await preparePeerReviewTarget(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName"));
+    add_challenger: async ({ params }) => {
+      await addPeerReviewTargetChallenger(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName"));
     },
 
-    submitted_for_member: async ({ params }) => {
-      await expect
-        .poll(() => targetSubmittedForMember(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName")))
-        .toBe(true);
+    ready_for_review: async ({ params }) => {
+      await preparePeerReviewTargetForReview(requiredPeerReviewTarget(params, "target"));
+    },
+
+    submitted: async ({ params }) => {
+      await expect.poll(() => targetSubmitted(requiredPeerReviewTarget(params, "target"))).toBe(true);
+    },
+
+    challenger_present: async ({ params }) => {
+      await expect.poll(() => targetChallengerPresent(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName"))).toBe(true);
     },
   },
 
@@ -66,8 +75,19 @@ export const memberSubmitPeerReviewOperators = {
     },
 
     present: async ({ params }) => {
+      await expect.poll(() => peerReviewPresent(requiredPeerReviewTarget(params, "target"), requiredString(params, "reviewer"))).toBe(true);
+    },
+
+    allocation_present: async ({ params }) => {
       await expect
-        .poll(() => peerReviewPresent(requiredPeerReviewTarget(params, "target"), requiredString(params, "reviewer"), requiredRatio(params, "ratio")))
+        .poll(() =>
+          peerReviewAllocationPresent(
+            requiredPeerReviewTarget(params, "target"),
+            requiredString(params, "reviewer"),
+            requiredString(params, "memberName"),
+            requiredRatio(params, "ratio"),
+          ),
+        )
         .toBe(true);
     },
 
@@ -87,10 +107,8 @@ export const memberSubmitPeerReviewOperators = {
       await expect(ctx.page.getByRole("heading", { name: "提交匿名互评" })).toBeVisible();
       await expect(ctx.page.getByRole("button", { name: "提交匿名互评" })).toBeVisible();
     },
-  },
 
-  "api.peer_review_submit": {
-    capture_response: async ({ ctx, runtime, params }) => {
+    submit: async ({ ctx, runtime, params }) => {
       const target = requiredPeerReviewTarget(params, "target");
       runtime.values[requiredString(params, "saveAs")] = ctx.page
         .waitForResponse((response) => {
@@ -103,6 +121,7 @@ export const memberSubmitPeerReviewOperators = {
           method: response.request().method(),
           body: await readResponseBody(response),
         }));
+      await ctx.page.getByRole("button", { name: "提交匿名互评" }).click();
     },
   },
 
@@ -113,16 +132,23 @@ export const memberSubmitPeerReviewOperators = {
       return peerReviewFromResponse(response.body);
     },
 
-    matches: async ({ params }) => {
+    belongs_to_target: async ({ params }) => {
       const review = requiredSubmittedPeerReview(params, "review");
       const target = requiredPeerReviewTarget(params, "target");
+      expect(review.objectiveId).toBe(target.objective.id);
+    },
+
+    reviewer: async ({ params }) => {
+      const review = requiredSubmittedPeerReview(params, "review");
       const reviewer = requiredString(params, "reviewer");
-      expect(review).toMatchObject({
-        objectiveId: target.objective.id,
-        reviewer,
-      });
+      expect(review.reviewer).toBe(reviewer);
+    },
+
+    allocation_ratio: async ({ params }) => {
+      const review = requiredSubmittedPeerReview(params, "review");
+      const memberName = requiredString(params, "memberName");
       expect(review.allocations).toContainEqual({
-        member: reviewer,
+        member: memberName,
         ratio: requiredRatio(params, "ratio"),
       });
     },
@@ -207,8 +233,8 @@ function optionalSubmittedPeerReview(params: StepParams, key: string): Submitted
 
 function requiredRatio(params: StepParams, key: string) {
   const ratio = Number(params[key]);
-  if (!Number.isFinite(ratio)) {
-    throw new Error(`参数 ${key} 必须是数字比例`);
+  if (!Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
+    throw new Error(`参数 ${key} 必须是 0 到 1 之间的数字比例`);
   }
   return ratio;
 }

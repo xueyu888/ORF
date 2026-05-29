@@ -25,7 +25,7 @@ export function AppShell() {
   const { currentUser, openModal, state } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const sidebarBackground = useVisualBackground("sidebar_background");
+  const sidebarBackground = useVisualBackground("app_background");
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {

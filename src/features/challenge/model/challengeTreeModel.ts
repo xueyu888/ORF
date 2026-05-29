@@ -1,4 +1,5 @@
 import type { Evidence, Feedback, Objective, Result, Task } from "../../../types/orf";
+import { orderObjectiveTasks } from "../../../domain/orfWorkItems";
 import { resultProgress } from "../../../utils/format";
 import { addDays, bountyUpdatedAt, latestDate } from "./challengeDates";
 import { bountyDifficulty, bountyStatus } from "./challengeStatus";
@@ -27,9 +28,7 @@ export function buildChallengeTree(
         progress: resultProgress(result),
         difficulty: bountyDifficulty(result),
       }) satisfies BountyNode);
-      const actions = input.tasks
-        .filter((task) => task.linkedObjectiveId === objective.id)
-        .sort((left, right) => orderIndex(objective.taskIds, left.id) - orderIndex(objective.taskIds, right.id));
+      const actions = orderObjectiveTasks(input.tasks, objective);
 
       return {
         objective,

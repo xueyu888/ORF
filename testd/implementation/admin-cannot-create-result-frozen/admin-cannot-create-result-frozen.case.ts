@@ -15,7 +15,6 @@ export const adminCannotCreateResultFrozenCase = {
     objectiveId: "obj-testd-admin-frozen-create-result",
     objectiveTitle: "E2E-FROZEN-ADMIN-CREATE: 目标前置",
     resultTitle: "E2E-FROZEN-ADMIN-CREATE: 实施阶段管理员不可新增指标",
-    metricName: "E2E-FROZEN-ADMIN-CREATE: 实施阶段管理员不可新增指标",
   },
 
   B: {
@@ -248,7 +247,7 @@ export const adminCannotCreateResultFrozenCase = {
   },
 
   S0: {
-    description: "管理员已登录并位于挑战工作台，本用例目标已冻结且新增指标操作不可用",
+    description: "管理员已登录并位于挑战工作台，本用例目标已冻结且尚未产生测试指标",
     assertions: [
       {
         source: { caseStepId: "S0-1", method: "api" },
@@ -275,15 +274,7 @@ export const adminCannotCreateResultFrozenCase = {
         params: { targetFrom: "runtime.frozenAdminResultTarget" },
       },
       {
-        source: { caseStepId: "S0-4", method: "playwright" },
-        id: "frozen_admin_result_target.add_metric.absent",
-        title: "本用例冻结目标的 \"新增指标\" 操作 应不存在",
-        object: "page.frozen_admin_result_target",
-        operator: "add_metric_absent",
-        params: { targetFrom: "runtime.frozenAdminResultTarget" },
-      },
-      {
-        source: { caseStepId: "S0-5", method: "prisma" },
+        source: { caseStepId: "S0-4", method: "prisma" },
         id: "db.frozen_admin_result_target.frozen",
         title: "本用例冻结目标 应为 流转状态 `frozen` 且阶段 `goalFrozen`",
         object: "db.frozen_admin_result_target",
@@ -291,7 +282,7 @@ export const adminCannotCreateResultFrozenCase = {
         params: { targetFrom: "runtime.frozenAdminResultTarget" },
       },
       {
-        source: { caseStepId: "S0-6", method: "prisma" },
+        source: { caseStepId: "S0-5", method: "prisma" },
         id: "db.target_result.absent",
         title: "本用例冻结目标 应不存在 标题为 `E2E-FROZEN-ADMIN-CREATE: 实施阶段管理员不可新增指标` 的指标",
         object: "db.frozen_admin_result_target",
@@ -302,37 +293,40 @@ export const adminCannotCreateResultFrozenCase = {
   },
 
   Action: {
-    description: "管理员直接提交管理员定义指标请求",
+    description: "管理员打开冻结目标的新增子级菜单",
     steps: [
       {
-        source: { caseStepId: "Action-1", method: "api" },
-        id: "api.result_create.submit_manager_defined",
-        title: "管理员直接提交并记录新增管理员定义指标请求响应",
-        object: "api.result_create",
-        operator: "submit_manager_defined",
-        params: {
-          targetFrom: "runtime.frozenAdminResultTarget",
-          titleFrom: "data.resultTitle",
-          metricNameFrom: "data.metricName",
-          saveAs: "createResultResponse",
-        },
+        source: { caseStepId: "Action-1", method: "playwright" },
+        id: "frozen_admin_result_target.add_menu.open",
+        title: "点击 本用例冻结目标的新增子级菜单",
+        object: "page.frozen_admin_result_target",
+        operator: "open_add_menu",
+        params: { targetFrom: "runtime.frozenAdminResultTarget" },
       },
     ],
   },
 
   S1: {
-    description: "新增指标请求被阶段锁拒绝，目标未产生测试指标，管理员仍保持登录",
+    description: "新增子级菜单不提供新增指标入口，目标未产生测试指标，管理员仍保持登录",
     assertions: [
       {
-        source: { caseStepId: "S1-1", method: "api" },
-        id: "create_result_response.rejected",
-        title: "新增管理员定义指标结果 应被拒绝且状态码为 `409`",
-        object: "api.result_create_response",
-        operator: "rejected",
-        params: { responseFrom: "runtime.createResultResponse", status: 409 },
+        source: { caseStepId: "S1-1", method: "playwright" },
+        id: "frozen_admin_result_target.add_action.visible",
+        title: "本用例冻结目标的新增子级菜单 应显示 \"新增行动项\"",
+        object: "page.frozen_admin_result_target",
+        operator: "add_action_visible",
+        params: { targetFrom: "runtime.frozenAdminResultTarget" },
       },
       {
-        source: { caseStepId: "S1-2", method: "prisma" },
+        source: { caseStepId: "S1-2", method: "playwright" },
+        id: "frozen_admin_result_target.add_metric.absent",
+        title: "本用例冻结目标的新增子级菜单 应不显示 \"新增指标\"",
+        object: "page.frozen_admin_result_target",
+        operator: "add_metric_absent",
+        params: { targetFrom: "runtime.frozenAdminResultTarget" },
+      },
+      {
+        source: { caseStepId: "S1-3", method: "prisma" },
         id: "db.target_result.still_absent",
         title: "本用例冻结目标 应仍不存在 标题为 `E2E-FROZEN-ADMIN-CREATE: 实施阶段管理员不可新增指标` 的指标",
         object: "db.frozen_admin_result_target",
@@ -340,7 +334,7 @@ export const adminCannotCreateResultFrozenCase = {
         params: { targetFrom: "runtime.frozenAdminResultTarget", titleFrom: "data.resultTitle" },
       },
       {
-        source: { caseStepId: "S1-3", method: "playwright" },
+        source: { caseStepId: "S1-4", method: "playwright" },
         id: "page.result.still_absent",
         title: "本用例冻结目标面板 应仍不显示 测试指标标题",
         object: "page.frozen_admin_result_target",
@@ -348,7 +342,7 @@ export const adminCannotCreateResultFrozenCase = {
         params: { targetFrom: "runtime.frozenAdminResultTarget", titleFrom: "data.resultTitle" },
       },
       {
-        source: { caseStepId: "S1-4", method: "api" },
+        source: { caseStepId: "S1-5", method: "api" },
         id: "session.admin.still_authenticated",
         title: "当前会话 应仍为 管理员的已登录会话",
         object: "auth.session",

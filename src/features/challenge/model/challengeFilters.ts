@@ -1,3 +1,4 @@
+import { objectiveChallengeSortRank } from "../../../domain/orfLifecycle";
 import type { ObjectiveNode, BountyStatus } from "./types";
 
 export type ChallengeCycleFilter = "all" | string;
@@ -51,25 +52,7 @@ function compareChallengeGroups(left: ObjectiveNode, right: ObjectiveNode) {
 }
 
 function objectiveFlowRank(group: ObjectiveNode) {
-  switch (group.objective.flowStatus) {
-    case "candidate":
-      return 0;
-    case "open":
-    case "applying":
-    case "recruiting":
-      return group.challengers.length === 0 ? 1 : 2;
-    case "reestimating":
-    case "frozen":
-      return 3;
-    case "submitted":
-      return 4;
-    case "settled":
-      return 5;
-    case "closed":
-      return 6;
-    default:
-      return 7;
-  }
+  return objectiveChallengeSortRank(group.objective, { hasChallengers: group.challengers.length > 0 });
 }
 
 function compareText(left: string, right: string) {

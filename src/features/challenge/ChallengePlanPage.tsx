@@ -8,6 +8,7 @@ import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
+import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
@@ -141,7 +142,7 @@ function draftObjective(title: string): Objective {
     whyItMatters: "",
     cycle: defaultCycleLabel(),
     stage: "goalSetting",
-    flowStatus: "candidate",
+    flowStatus: objectiveLifecycleInitialState.flowStatus,
     status: "Draft",
     confidence: 50,
     progress: 0,

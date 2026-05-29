@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
-import { canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
+import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
 import type { ObjectiveContributionReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
@@ -301,7 +301,7 @@ function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?:
 
   const actions: ReactNode[] = [];
 
-  if (objective.flowStatus === "candidate") {
+  if (canPublishObjectiveByFlow(objective)) {
     actions.push(
       <button className="orf-flow-action-button orf-flow-action-secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可发布" : "发布到悬赏大厅"} onClick={() => void handlers.onPublishObjective(objective.id)}>
         <Send className="h-3.5 w-3.5" />

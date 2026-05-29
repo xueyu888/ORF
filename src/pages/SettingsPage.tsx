@@ -35,9 +35,9 @@ const backgroundSections: Array<{
     description: "自定义登录页面的背景。",
   },
   {
-    scene: "sidebar_background",
-    title: "侧边栏背景设置",
-    description: "自定义系统左侧边栏背景。",
+    scene: "app_background",
+    title: "应用背景设置",
+    description: "自定义登录后的系统应用背景。",
   },
 ];
 
@@ -49,7 +49,7 @@ const defaultVisualBackgroundConfig: VisualBackgroundConfig = {
   switchIntervalMinutes: 10,
 };
 
-export function SettingsPage() {
+export function SystemSettingsPage() {
   return (
     <div className="orf-settings-page">
       <nav className="orf-settings-nav" aria-label="设置导航">

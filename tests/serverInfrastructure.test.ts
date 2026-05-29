@@ -123,16 +123,8 @@ test("database unavailable errors are classified for 503 responses", () => {
 test("objective-owned task schema guard accepts migrated task ownership contract", () => {
   assert.deepEqual(
     validateObjectiveOwnedTaskSchema({
-      columns: [
-        { columnName: "linked_objective_id", isNullable: "NO" },
-        { columnName: "linked_result_id", isNullable: "YES" },
-      ],
-      constraints: [
-        {
-          constraintName: "tasks_linked_result_id_results_id_fk",
-          definition: "FOREIGN KEY (linked_result_id) REFERENCES results(id) ON DELETE SET NULL",
-        },
-      ],
+      columns: [{ columnName: "linked_objective_id", isNullable: "NO" }],
+      constraints: [],
     }),
     [],
   );
@@ -142,7 +134,7 @@ test("objective-owned task schema guard rejects stale result-owned task schema",
   const details = validateObjectiveOwnedTaskSchema({
     columns: [
       { columnName: "linked_objective_id", isNullable: "NO" },
-      { columnName: "linked_result_id", isNullable: "NO" },
+      { columnName: "linked_result_id", isNullable: "YES" },
     ],
     constraints: [
       {
@@ -153,7 +145,7 @@ test("objective-owned task schema guard rejects stale result-owned task schema",
   });
   const error = new DatabaseSchemaMismatchError(details);
 
-  assert.deepEqual(details, ["tasks.linked_result_id must be nullable.", "tasks.linked_result_id foreign key must use ON DELETE SET NULL."]);
+  assert.deepEqual(details, ["tasks.linked_result_id must be dropped; tasks are owned by objectives only.", "tasks.linked_result_id foreign key must be dropped."]);
   assert.equal(isDatabaseSchemaMismatchError(error), true);
   assert.equal(error.statusCode, 503);
   assert.deepEqual(databaseSchemaMismatchPayload(error), {

@@ -15,7 +15,6 @@ export const memberCannotProposeResultFrozenCase = {
     objectiveId: "obj-testd-member-frozen-propose-result",
     objectiveTitle: "E2E-FROZEN-MEMBER-PROPOSE: 目标前置",
     resultTitle: "E2E-FROZEN-PROPOSE: 实施阶段成员不可提出指标",
-    metricName: "E2E-FROZEN-PROPOSE: 实施阶段成员不可提出指标",
   },
 
   B: {
@@ -240,7 +239,7 @@ export const memberCannotProposeResultFrozenCase = {
   },
 
   S0: {
-    description: "普通成员已登录并位于挑战工作台，本用例目标已冻结且提出指标操作不可用",
+    description: "普通成员已登录并位于挑战工作台，本用例目标已冻结且尚未产生测试指标",
     assertions: [
       {
         source: { caseStepId: "S0-1", method: "api" },
@@ -267,15 +266,7 @@ export const memberCannotProposeResultFrozenCase = {
         params: { targetFrom: "runtime.frozenProposalTarget" },
       },
       {
-        source: { caseStepId: "S0-4", method: "playwright" },
-        id: "frozen_proposal_target.propose_metric.absent",
-        title: "本用例冻结目标的 \"提出指标\" 操作 应不存在",
-        object: "page.frozen_proposal_target",
-        operator: "propose_metric_absent",
-        params: { targetFrom: "runtime.frozenProposalTarget" },
-      },
-      {
-        source: { caseStepId: "S0-5", method: "prisma" },
+        source: { caseStepId: "S0-4", method: "prisma" },
         id: "db.frozen_proposal_target.frozen_for_member",
         title: "本用例冻结目标 应为 流转状态 `frozen`、阶段 `goalFrozen` 且挑战者包含普通成员",
         object: "db.frozen_proposal_target",
@@ -283,7 +274,7 @@ export const memberCannotProposeResultFrozenCase = {
         params: { targetFrom: "runtime.frozenProposalTarget", memberNameFrom: "data.name" },
       },
       {
-        source: { caseStepId: "S0-6", method: "prisma" },
+        source: { caseStepId: "S0-5", method: "prisma" },
         id: "db.target_result.absent",
         title: "本用例冻结目标 应不存在 标题为 `E2E-FROZEN-PROPOSE: 实施阶段成员不可提出指标` 的指标",
         object: "db.frozen_proposal_target",
@@ -294,37 +285,40 @@ export const memberCannotProposeResultFrozenCase = {
   },
 
   Action: {
-    description: "普通成员直接提交成员建议指标请求",
+    description: "普通成员打开冻结目标的新增子级菜单",
     steps: [
       {
-        source: { caseStepId: "Action-1", method: "api" },
-        id: "api.result_create.submit_member_proposed",
-        title: "普通成员直接提交并记录新增成员建议指标请求响应",
-        object: "api.result_create",
-        operator: "submit_member_proposed",
-        params: {
-          targetFrom: "runtime.frozenProposalTarget",
-          titleFrom: "data.resultTitle",
-          metricNameFrom: "data.metricName",
-          saveAs: "createResultResponse",
-        },
+        source: { caseStepId: "Action-1", method: "playwright" },
+        id: "frozen_proposal_target.add_menu.open",
+        title: "点击 本用例冻结目标的新增子级菜单",
+        object: "page.frozen_proposal_target",
+        operator: "open_add_menu",
+        params: { targetFrom: "runtime.frozenProposalTarget" },
       },
     ],
   },
 
   S1: {
-    description: "新增指标请求被拒绝，目标未产生测试指标，普通成员仍保持登录",
+    description: "新增子级菜单不提供提出指标入口，目标未产生测试指标，普通成员仍保持登录",
     assertions: [
       {
-        source: { caseStepId: "S1-1", method: "api" },
-        id: "create_result_response.rejected",
-        title: "新增成员建议指标结果 应被拒绝且状态码为 `403`",
-        object: "api.result_create_response",
-        operator: "rejected",
-        params: { responseFrom: "runtime.createResultResponse", status: 403 },
+        source: { caseStepId: "S1-1", method: "playwright" },
+        id: "frozen_proposal_target.add_action.visible",
+        title: "本用例冻结目标的新增子级菜单 应显示 \"新增行动项\"",
+        object: "page.frozen_proposal_target",
+        operator: "add_action_visible",
+        params: { targetFrom: "runtime.frozenProposalTarget" },
       },
       {
-        source: { caseStepId: "S1-2", method: "prisma" },
+        source: { caseStepId: "S1-2", method: "playwright" },
+        id: "frozen_proposal_target.propose_metric.absent",
+        title: "本用例冻结目标的新增子级菜单 应不显示 \"提出指标\"",
+        object: "page.frozen_proposal_target",
+        operator: "propose_metric_absent",
+        params: { targetFrom: "runtime.frozenProposalTarget" },
+      },
+      {
+        source: { caseStepId: "S1-3", method: "prisma" },
         id: "db.target_result.still_absent",
         title: "本用例冻结目标 应仍不存在 标题为 `E2E-FROZEN-PROPOSE: 实施阶段成员不可提出指标` 的指标",
         object: "db.frozen_proposal_target",
@@ -332,7 +326,7 @@ export const memberCannotProposeResultFrozenCase = {
         params: { targetFrom: "runtime.frozenProposalTarget", titleFrom: "data.resultTitle" },
       },
       {
-        source: { caseStepId: "S1-3", method: "playwright" },
+        source: { caseStepId: "S1-4", method: "playwright" },
         id: "page.result.still_absent",
         title: "本用例冻结目标面板 应仍不显示 测试指标标题",
         object: "page.frozen_proposal_target",
@@ -340,7 +334,7 @@ export const memberCannotProposeResultFrozenCase = {
         params: { targetFrom: "runtime.frozenProposalTarget", titleFrom: "data.resultTitle" },
       },
       {
-        source: { caseStepId: "S1-4", method: "api" },
+        source: { caseStepId: "S1-5", method: "api" },
         id: "session.member.still_authenticated",
         title: "当前会话 应仍为 普通成员的已登录会话",
         object: "auth.session",

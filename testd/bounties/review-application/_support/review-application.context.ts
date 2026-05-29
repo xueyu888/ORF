@@ -21,8 +21,6 @@ export type ReviewApplicationCaseData = {
   rejectApplicantRole: "member";
   objectiveId: string;
   objectiveTitle: string;
-  approveApplicationId: string;
-  rejectApplicationId: string;
 };
 
 export type ReviewApplicationTarget = {
@@ -30,8 +28,8 @@ export type ReviewApplicationTarget = {
     id: string;
     title: string;
   };
-  approveApplicationId: string;
-  rejectApplicationId: string;
+  approveApplicationId?: string;
+  rejectApplicationId?: string;
   approveApplicantName: string;
   rejectApplicantName: string;
   previous: ReviewApplicationObjectiveSnapshot;

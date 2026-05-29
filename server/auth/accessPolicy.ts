@@ -1,0 +1,271 @@
+import type { FastifyReply, FastifyRequest } from "fastify";
+import type { PermissionKey } from "../../src/config/permissions";
+import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
+import { getAuthenticatedOrfUser } from "./ory";
+import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
+import {
+  getRolePermissionKeysForScope,
+  getPermissionRulesForScope,
+  hasRolePermission,
+} from "../repositories/permissionRepository";
+import {
+  canEditResultDuringReestimate,
+  canMutateObjectiveWorkItem,
+  resolveObjectiveIdForWorkItem,
+  resolveRuntimeScopeForFeedback,
+  resolveRuntimeScopeForWorkItem,
+} from "../repositories/orfRepository";
+import { getDefaultRuntimeScopeForUser, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
+
+export type AuthenticatedOrfUser = NonNullable<Awaited<ReturnType<typeof getAuthenticatedOrfUser>>>;
+type RequestWithOrfUser = FastifyRequest & { orfUser?: AuthenticatedOrfUser | null };
+
+async function getRequestOrfUser(request: FastifyRequest, reply: FastifyReply, logMessage: string) {
+  const requestWithUser = request as RequestWithOrfUser;
+  if (requestWithUser.orfUser !== undefined) {
+    return requestWithUser.orfUser;
+  }
+
+  const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
+    request.log.warn(error, logMessage);
+    if (isDatabaseUnavailableError(error) || isAuthServiceUnavailableError(error)) {
+      reply.code(503).send(isDatabaseUnavailableError(error) ? databaseUnavailablePayload() : authServiceUnavailablePayload());
+      return undefined;
+    }
+    return null;
+  });
+
+  if (user !== undefined) {
+    requestWithUser.orfUser = user;
+  }
+
+  return user;
+}
+
+export async function requireApiUser(request: FastifyRequest, reply: FastifyReply) {
+  const user = await getRequestOrfUser(request, reply, "Ory API session check failed");
+
+  if (user === undefined) {
+    return null;
+  }
+
+  if (!user) {
+    reply.code(401).send({ error: "Unauthorized" });
+    return null;
+  }
+
+  if (user.status !== "active") {
+    reply.code(403).send({ error: "User is not approved", status: user.status });
+    return null;
+  }
+
+  return user;
+}
+
+export async function requireAdminUser(request: FastifyRequest, reply: FastifyReply) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  if (user.role !== "admin") {
+    reply.code(403).send({ error: "Forbidden" });
+    return null;
+  }
+
+  return user;
+}
+
+export async function requireUserScopeContext(request: FastifyRequest, reply: FastifyReply) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
+    return null;
+  }
+
+  return { user, scope };
+}
+
+export async function requireAdminScope(request: FastifyRequest, reply: FastifyReply) {
+  const user = await requireAdminUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
+    return null;
+  }
+
+  return scope;
+}
+
+export async function requireAdminContext(request: FastifyRequest, reply: FastifyReply) {
+  const user = await requireAdminUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
+    return null;
+  }
+
+  return { user, scope };
+}
+
+export async function requireWriteContext(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  permission: PermissionKey,
+) {
+  const context = await requireUserScopeContext(request, reply);
+  if (!context) {
+    return null;
+  }
+  const { user, scope } = context;
+
+  if (user.role === "admin") {
+    return context;
+  }
+
+  const permissionRules = await getPermissionRulesForScope(scope);
+  const allowed = hasRolePermission(user.role, permissionRules, permission);
+
+  if (!allowed) {
+    reply.code(403).send({ error: "Forbidden" });
+    return null;
+  }
+
+  return context;
+}
+
+export async function requireTargetInScope(
+  reply: FastifyReply,
+  target: Parameters<typeof resolveRuntimeScopeForWorkItem>[0],
+  scope: RuntimeScope,
+  message = "Work item not found",
+) {
+  const targetScope = await resolveRuntimeScopeForWorkItem(target);
+  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
+    reply.code(404).send({ error: message });
+    return false;
+  }
+
+  return true;
+}
+
+export async function requireFeedbackInScope(reply: FastifyReply, feedbackId: string, scope: RuntimeScope) {
+  const targetScope = await resolveRuntimeScopeForFeedback(feedbackId);
+  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
+    reply.code(404).send({ error: "Feedback not found" });
+    return false;
+  }
+
+  return true;
+}
+
+export async function requireResultEditContext(request: FastifyRequest, reply: FastifyReply, resultId: string) {
+  const context = await requireUserScopeContext(request, reply);
+  if (!context) {
+    return null;
+  }
+  const { user, scope } = context;
+
+  if (!(await requireTargetInScope(reply, { type: "result", id: resultId }, scope, "Result not found"))) {
+    return null;
+  }
+
+  if (user.role === "admin") {
+    return { user, scope };
+  }
+
+  const permissionRules = await getPermissionRulesForScope(scope);
+  const allowedByRole = hasRolePermission(user.role, permissionRules, "result.edit");
+  const allowedByReestimate = await canEditResultDuringReestimate(resultId, user.name);
+  if (!allowedByRole && !allowedByReestimate) {
+    reply.code(403).send({ error: "Forbidden" });
+    return null;
+  }
+
+  return { user, scope };
+}
+
+export async function authorizeObjectiveWorkItemMutation(
+  user: Awaited<ReturnType<typeof requireApiUser>>,
+  reply: FastifyReply,
+  objectiveId: string,
+) {
+  if (!user) {
+    return false;
+  }
+
+  const scope = await getDefaultRuntimeScopeForUser(user.id);
+  if (!scope) {
+    reply.code(404).send({ error: "Runtime scope not found" });
+    return false;
+  }
+
+  const targetScope = await resolveRuntimeScopeForWorkItem({ type: "objective", id: objectiveId });
+  if (!targetScope || runtimeScopeStorageId(targetScope) !== runtimeScopeStorageId(scope)) {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+
+  const access = await canMutateObjectiveWorkItem({ ...user, scope }, objectiveId);
+  if (access === "notFound") {
+    reply.code(404).send({ error: "Objective not found" });
+    return false;
+  }
+  if (access === "forbidden") {
+    reply.code(403).send({ error: "Forbidden" });
+    return false;
+  }
+
+  return true;
+}
+
+export async function requireObjectiveWorkItemMutation(request: FastifyRequest, reply: FastifyReply, objectiveId: string) {
+  const user = await requireApiUser(request, reply);
+  if (!user) {
+    return null;
+  }
+
+  return (await authorizeObjectiveWorkItemMutation(user, reply, objectiveId)) ? user : null;
+}
+
+export async function requireWorkItemTargetMutation(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  target: Parameters<typeof resolveObjectiveIdForWorkItem>[0],
+) {
+  const objectiveId = await resolveObjectiveIdForWorkItem(target);
+  if (!objectiveId) {
+    reply.code(404).send({ error: "Work item not found" });
+    return null;
+  }
+
+  return requireObjectiveWorkItemMutation(request, reply, objectiveId);
+}
+
+export async function commentActorWithPermissions(request: FastifyRequest, reply: FastifyReply) {
+  const context = await requireUserScopeContext(request, reply);
+  if (!context) {
+    return null;
+  }
+  const { user, scope } = context;
+
+  if (user.role === "admin") {
+    return { ...user, scope, canManageAllComments: true };
+  }
+
+  const permissions = await getRolePermissionKeysForScope(scope, user.role);
+  return { ...user, scope, canManageAllComments: permissions.includes("comment.manage") };
+}

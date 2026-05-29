@@ -12,7 +12,7 @@ test("ResultCard labels result evidence as evidence, not objective loot", () => 
       MemoryRouter,
       null,
       createElement(ResultCard, {
-        result: result({ evidenceIds: ["ev-a", "ev-b"], feedbackIds: ["fb-a"], taskIds: ["task-a"] }),
+        result: result({ evidenceIds: ["ev-a", "ev-b"], feedbackIds: ["fb-a"] }),
       }),
     ),
   );
@@ -38,7 +38,6 @@ function result(input: Partial<Result>): Result {
     uncertaintyScore: 10,
     acceptedResult: "unreviewed",
     evidenceIds: [],
-    taskIds: [],
     feedbackIds: [],
     trend: [],
     reviewCadence: "Weekly",

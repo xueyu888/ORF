@@ -17,7 +17,6 @@ export type MemberSubmitLootCaseData = {
   metricName: string;
   lootBody: string;
   evidenceText: string;
-  selfTestReportBody: string;
   reportUrl: string;
 };
 

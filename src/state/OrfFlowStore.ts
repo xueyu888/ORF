@@ -1,5 +1,11 @@
 import { initialOrfState } from "../data/initialOrfState";
-import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
+import {
+  canApplyForObjectiveChallenge,
+  isObjectiveStageCompatibleWithFlowStatus,
+  objectiveLifecycleInitialState,
+  objectiveLifecycleTransitions,
+} from "../domain/orfLifecycle";
+import { taskIdsForObjective } from "../domain/orfWorkItems";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus, UncertaintyLevel } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
@@ -95,14 +101,6 @@ const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStat
   return completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 };
 
-const isStageCompatibleWithFlowStatus = (
-  flowStatus: OrfState["objectives"][number]["flowStatus"],
-  stage: OrfState["objectives"][number]["stage"],
-) => {
-  if (flowStatus === "reestimating") return stage === "orfReestimate";
-  if (flowStatus === "frozen" || flowStatus === "submitted" || flowStatus === "settled" || flowStatus === "closed") return stage === "goalFrozen";
-  return stage !== "goalFrozen";
-};
 const moveByReference = <T extends { id: string }>(items: T[], movingId: string, referenceId: string, placement: Placement): T[] => {
   const moving = items.find((item) => item.id === movingId);
   if (!moving || movingId === referenceId) {
@@ -225,7 +223,6 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
     .filter((result) => !targets.resultIds.has(result.id))
     .map((result) => ({
       ...result,
-      taskIds: result.taskIds.filter((id) => !targets.taskIds.has(id)),
       feedbackIds: result.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
       evidenceIds: result.evidenceIds.filter((id) => !targets.evidenceIds.has(id)),
     })),
@@ -385,8 +382,8 @@ export class OrfFlowStore {
       description: input.whyItMatters,
       whyItMatters: input.whyItMatters,
       cycle: input.cycle,
-      stage: "orfReestimate" as const,
-      flowStatus: "candidate" as const,
+      stage: objectiveLifecycleInitialState.stage,
+      flowStatus: objectiveLifecycleInitialState.flowStatus,
       status: "Draft" as const,
       confidence: 50,
       progress: 0,
@@ -440,7 +437,6 @@ export class OrfFlowStore {
       uncertaintyScore: input.uncertaintyScore ?? uncertaintyScore(input.uncertaintyLevel),
       acceptedResult: input.acceptedResult ?? "unreviewed",
       evidenceIds: [],
-      taskIds: [],
       feedbackIds: [],
       trend: [{ date: "Now", value: input.current ?? 0 }],
       reviewCadence: input.reviewCadence ?? "Weekly",
@@ -500,8 +496,6 @@ export class OrfFlowStore {
     if (!objective) {
       return state;
     }
-    const linkedResultId = input.linkedResultId && state.results.some((item) => item.id === input.linkedResultId && item.objectiveId === objective.id) ? input.linkedResultId : null;
-
     const nextNumber = 128 + state.tasks.length + 1;
     const now = currentDate();
     const task: Task = {
@@ -512,7 +506,6 @@ export class OrfFlowStore {
       priority: input.priority,
       assignee: input.assignee || currentUserName(state),
       linkedObjectiveId: objective.id,
-      linkedResultId,
       feedbackOriginId: input.feedbackOriginId,
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
@@ -634,7 +627,7 @@ export class OrfFlowStore {
 
   updateObjectiveStage(state: OrfState, objectiveId: string, stage: OrfState["objectives"][number]["stage"]): OrfState {
     const objective = state.objectives.find((item) => item.id === objectiveId);
-    if (!objective || !isStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
+    if (!objective || !isObjectiveStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
       return state;
     }
 
@@ -723,8 +716,8 @@ export class OrfFlowStore {
               ...item,
               challengers: [...item.challengers, nextChallenger],
               assignedChallengers: item.assignedChallengers.filter((member) => member !== nextChallenger),
-              flowStatus: "reestimating",
-              stage: "orfReestimate",
+              flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
+              stage: objectiveLifecycleTransitions.acceptChallenge.stage,
               acceptedAt: item.acceptedAt ?? now,
               confirmationDueAt: item.confirmationDueAt ?? nextConfirmationDueAt,
               challengeApplications: (item.challengeApplications ?? []).map((application) =>
@@ -838,7 +831,7 @@ export class OrfFlowStore {
       ...state,
       tasks: nextTasks,
       objectives: state.objectives.map((item) =>
-        item.id === objective.id ? { ...item, taskIds: nextTasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id), updatedAt: now } : item,
+        item.id === objective.id ? { ...item, taskIds: taskIdsForObjective(nextTasks, objective.id), updatedAt: now } : item,
       ),
     };
   }
@@ -912,7 +905,6 @@ export class OrfFlowStore {
     return {
       ...state,
       objectives: state.objectives.map((objective) => ({ ...objective, taskIds: objective.taskIds.filter((id) => id !== taskId) })),
-      results: state.results.map((result) => ({ ...result, taskIds: result.taskIds.filter((id) => id !== taskId) })),
       tasks: state.tasks.filter((item) => item.id !== taskId),
       comments: removeCommentsForTargets(state.comments, {
         taskIds: new Set([taskId]),
