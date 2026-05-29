@@ -1,4 +1,5 @@
 import type { Objective } from "../../../types/orf";
+import { applyListItemAnchor, createListItemAnchor, type ListItemAnchor } from "../../interaction/listItemAnchor";
 import type { ChallengeCycleFilter, ChallengeMemberFilter, ChallengeStatusFilter } from "./challengeFilters";
 import type { ChallengeScope, ObjectiveNode } from "./types";
 
@@ -11,14 +12,11 @@ export type DraftReturnContext = {
   status: ChallengeStatusFilter;
 };
 
-export type ObjectiveDraftOrderAnchor = {
+export type ObjectiveDraftOrderAnchor = ListItemAnchor & {
   challengerCount: number;
   createdAt: string;
   deadline: string;
-  fallbackIndex: number;
   flowStatus: Objective["flowStatus"];
-  nextObjectiveId: string | null;
-  previousObjectiveId: string | null;
 };
 
 export type ObjectiveOrderAnchor = ObjectiveDraftOrderAnchor & {
@@ -62,7 +60,7 @@ export function completeObjectiveCreationDraft(current: ObjectiveCreationSession
   return {
     status: "submittedOverlay",
     objective,
-    orderAnchor: current.draftOrderAnchor ? { ...current.draftOrderAnchor, objectiveId: objective.id } : null,
+    orderAnchor: current.draftOrderAnchor ? { ...current.draftOrderAnchor, itemId: objective.id, objectiveId: objective.id } : null,
   };
 }
 
@@ -118,17 +116,16 @@ export function objectiveCreationSubmittedOrderAnchor(current: ObjectiveCreation
 }
 
 export function draftOrderAnchor(groups: readonly ObjectiveNode[]): ObjectiveDraftOrderAnchor | null {
-  const draftIndex = groups.findIndex((group) => group.objective.id === draftObjectiveId);
-  if (draftIndex < 0) return null;
-  const draft = groups[draftIndex]!;
+  const anchor = createListItemAnchor(groups, draftObjectiveId, objectiveGroupId);
+  if (!anchor) return null;
+
+  const draft = groups.find((group) => group.objective.id === draftObjectiveId)!;
   return {
+    ...anchor,
     challengerCount: draft.challengers.length,
     createdAt: draft.objective.createdAt,
     deadline: draft.deadline,
-    fallbackIndex: draftIndex,
     flowStatus: draft.objective.flowStatus,
-    nextObjectiveId: groups[draftIndex + 1]?.objective.id ?? null,
-    previousObjectiveId: groups[draftIndex - 1]?.objective.id ?? null,
   };
 }
 
@@ -147,18 +144,9 @@ export function applyObjectiveOrderAnchor(groups: readonly ObjectiveNode[], anch
     return [...groups];
   }
 
-  const remainingGroups = groups.filter((_, index) => index !== currentIndex);
-  const previousIndex = anchor.previousObjectiveId ? remainingGroups.findIndex((group) => group.objective.id === anchor.previousObjectiveId) : -1;
-  const nextIndex = anchor.nextObjectiveId ? remainingGroups.findIndex((group) => group.objective.id === anchor.nextObjectiveId) : -1;
-  let targetIndex = Math.max(0, Math.min(anchor.fallbackIndex, remainingGroups.length));
+  return applyListItemAnchor(groups, anchor, objectiveGroupId);
+}
 
-  if (previousIndex >= 0 && nextIndex >= 0 && previousIndex < nextIndex) {
-    targetIndex = previousIndex + 1;
-  } else if (nextIndex >= 0) {
-    targetIndex = nextIndex;
-  } else if (previousIndex >= 0) {
-    targetIndex = previousIndex + 1;
-  }
-
-  return [...remainingGroups.slice(0, targetIndex), anchoredGroup, ...remainingGroups.slice(targetIndex)];
+function objectiveGroupId(group: ObjectiveNode) {
+  return group.objective.id;
 }

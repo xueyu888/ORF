@@ -161,6 +161,7 @@ function ObjectivePanel({
     <section
       ref={setObjectiveElement}
       className={clsx("orf-objective-panel relative", isFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable", isDraftObjective && "orf-objective-panel-draft")}
+      data-objective-panel-id={group.objective.id}
       data-has-open-row-menu={hasOpenRowMenu ? "true" : undefined}
     >
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />

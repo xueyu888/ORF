@@ -11,6 +11,7 @@ import { useOrf } from "../../state/OrfProvider";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
 import { localDateString } from "../../utils/date";
+import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
@@ -248,6 +249,7 @@ export function ChallengePlanPage() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
+  const [objectiveInteractionAnchor, setObjectiveInteractionAnchor] = useState<ListItemAnchor | null>(null);
   const temporaryChildRowRef = useRef<TemporaryChildRow | null>(null);
   const completionOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
@@ -362,9 +364,13 @@ export function ChallengePlanPage() {
     [cycleFilter, displaySourceGroups, effectiveMemberFilter, statusFilter],
   );
   const sortedDisplayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
-  const displayedGroups = useMemo(
+  const creationAnchoredGroups = useMemo(
     () => (draftGroup ? sortedDisplayedGroups : applyObjectiveOrderAnchor(sortedDisplayedGroups, submittedOrderAnchor)),
     [draftGroup, submittedOrderAnchor, sortedDisplayedGroups],
+  );
+  const displayedGroups = useMemo(
+    () => applyListItemAnchor(creationAnchoredGroups, objectiveInteractionAnchor, objectiveGroupId),
+    [creationAnchoredGroups, objectiveInteractionAnchor],
   );
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
   const hasActiveFilters = cycleFilter !== "all" || effectiveMemberFilter !== "all" || statusFilter !== "all";
@@ -384,6 +390,11 @@ export function ChallengePlanPage() {
       setMemberFilter("all");
     }
   }, [canFilterByMember, memberFilter, memberOptions]);
+  useEffect(() => {
+    if (!listContainsAnchoredItem(creationAnchoredGroups, objectiveInteractionAnchor, objectiveGroupId)) {
+      setObjectiveInteractionAnchor(null);
+    }
+  }, [creationAnchoredGroups, objectiveInteractionAnchor]);
   useEffect(() => {
     temporaryChildRowRef.current = temporaryChildRow;
   }, [temporaryChildRow]);
@@ -422,6 +433,7 @@ export function ChallengePlanPage() {
     const objectiveId = objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, challengeState) ?? objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, state);
     if (!objectiveId) return;
     appliedLinkedTargetRef.current = linkedTargetKey;
+    setObjectiveInteractionAnchor(null);
 
     if (canShowAllChallenges && scope !== "all") setScope("all");
     if (cycleFilter !== "all") setCycleFilter("all");
@@ -724,6 +736,7 @@ export function ChallengePlanPage() {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
     setScope(next);
   };
 
@@ -731,6 +744,7 @@ export function ChallengePlanPage() {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
     setCycleFilter(next);
   };
 
@@ -738,6 +752,7 @@ export function ChallengePlanPage() {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
     setMemberFilter(next);
   };
 
@@ -745,6 +760,7 @@ export function ChallengePlanPage() {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
     setStatusFilter(next);
   };
 
@@ -921,6 +937,30 @@ export function ChallengePlanPage() {
     });
   };
 
+  const approveAnchoredChallengeApplication = async (objectiveId: string, applicationId: string) => {
+    const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
+    if (anchor) setObjectiveInteractionAnchor(anchor);
+    const ok = await approveChallengeApplication(objectiveId, applicationId);
+    if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
+    return ok;
+  };
+
+  const rejectAnchoredChallengeApplication = async (objectiveId: string, applicationId: string) => {
+    const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
+    if (anchor) setObjectiveInteractionAnchor(anchor);
+    const ok = await rejectChallengeApplication(objectiveId, applicationId);
+    if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
+    return ok;
+  };
+
+  const releaseObjectiveInteractionAnchorOutside = (target: EventTarget | null) => {
+    if (!objectiveInteractionAnchor || !(target instanceof Element)) return;
+    const panel = target.closest<HTMLElement>("[data-objective-panel-id]");
+    if (panel?.dataset.objectivePanelId !== objectiveInteractionAnchor.itemId) {
+      setObjectiveInteractionAnchor(null);
+    }
+  };
+
   const dragDrop = {
     dragItem,
     dropTarget,
@@ -986,7 +1026,9 @@ export function ChallengePlanPage() {
   return (
     <div
       className="grid gap-4"
+      onFocusCapture={(event) => releaseObjectiveInteractionAnchorOutside(event.target)}
       onPointerDown={(event) => {
+        releaseObjectiveInteractionAnchorOutside(event.target);
         if (!openActionId) return;
         if (event.target instanceof Element && event.target.closest("[data-challenge-row-actions], [data-challenge-disclosure-action]")) return;
         setOpenActionId(null);
@@ -1042,7 +1084,7 @@ export function ChallengePlanPage() {
           onAddAction: addAction,
           onAddBounty: addBounty,
           onAddSubAction: addSubAction,
-          onApproveApplication: approveChallengeApplication,
+          onApproveApplication: approveAnchoredChallengeApplication,
           onCancelEdit: cancelEdit,
           onTemporaryChildTitleChange: (title) =>
             setTemporaryChildRow((current) => {
@@ -1056,7 +1098,7 @@ export function ChallengePlanPage() {
           onOpenActionChange: setOpenActionId,
           onPublishObjective: publishObjective,
           onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
-          onRejectApplication: rejectChallengeApplication,
+          onRejectApplication: rejectAnchoredChallengeApplication,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
@@ -1154,4 +1196,8 @@ function withoutItem<T>(items: Set<T>, item: T) {
   const next = new Set(items);
   next.delete(item);
   return next;
+}
+
+function objectiveGroupId(group: ObjectiveNode) {
+  return group.objective.id;
 }
