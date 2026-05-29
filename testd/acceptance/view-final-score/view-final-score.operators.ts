@@ -17,11 +17,9 @@ export const viewFinalScoreOperators = {
     from_objective: async ({ params }) => finalScoreTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
-      await prepareFinalScoreTarget(
-        requiredFinalScoreTarget(params, "target"),
-        requiredString(params, "memberName"),
-        requiredNumber(params, "points"),
-      );
+      const target = await readFinalScoreTargetParam(params);
+      await prepareFinalScoreTarget(target, requiredStringArray(params, "memberNames"), requiredNumber(params, "points"));
+      return target;
     },
 
     settled_for_member: async ({ params }) => {
@@ -38,8 +36,9 @@ export const viewFinalScoreOperators = {
 
     create: async ({ params }) => {
       return createFinalScoreLedger(requiredFinalScoreTarget(params, "target"), {
+        id: requiredString(params, "id"),
         userId: requiredString(params, "userId"),
-        name: requiredString(params, "memberName"),
+        memberName: requiredString(params, "memberName"),
         points: requiredNumber(params, "points"),
         reason: requiredString(params, "reason"),
       });
@@ -86,6 +85,14 @@ function requiredFinalScoreTarget(params: StepParams, key: string): FinalScoreTa
   return value as FinalScoreTarget;
 }
 
+async function readFinalScoreTargetParam(params: StepParams) {
+  if (params.target !== undefined) {
+    return requiredFinalScoreTarget(params, "target");
+  }
+
+  return finalScoreTargetFromObjective(requiredString(params, "objectiveId"));
+}
+
 function optionalFinalScoreLedger(params: StepParams, key: string): FinalScoreLedger | null {
   const value = params[key];
   if (value === undefined || value === null) {
@@ -105,4 +112,13 @@ function optionalFinalScoreLedger(params: StepParams, key: string): FinalScoreLe
   }
 
   return value as FinalScoreLedger;
+}
+
+function requiredStringArray(params: StepParams, key: string) {
+  const value = params[key];
+  if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
+    return value;
+  }
+
+  throw new Error(`参数 ${key} 必须是字符串数组`);
 }

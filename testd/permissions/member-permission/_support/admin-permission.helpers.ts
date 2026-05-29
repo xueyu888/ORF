@@ -1,12 +1,7 @@
 import type { Page } from "@playwright/test";
-import { closeDb } from "../../../../server/db/client";
 import { normalizePermissionKeys, type PermissionKey } from "../../../../src/config/permissions";
 import type { PermissionRule, UserRole } from "../../../../src/types/orf";
 import type { PermissionRulesResult } from "./admin-permission.context";
-
-export async function closeAdminPermissionTestDb() {
-  await closeDb();
-}
 
 export async function readPermissionRulesAsCurrentUser(page: Page): Promise<PermissionRulesResult> {
   return page.evaluate(async () => {

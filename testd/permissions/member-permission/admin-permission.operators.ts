@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import { readBrowserSession, readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
 import type { AdminPermissionCaseData, TestContext } from "./_support/admin-permission.context";
 import {
@@ -12,6 +13,25 @@ import type { PermissionRule, UserRole } from "../../../src/types/orf";
 import type { PermissionKey } from "../../../src/config/permissions";
 
 export const adminPermissionOperators = {
+  "page.admin_permission_login": {
+    submit_admin: async ({ ctx, data }) => {
+      await ctx.page.getByRole("button", { name: "Sign In" }).click();
+      await expect
+        .poll(() => readBrowserSession(ctx.page))
+        .toMatchObject({
+          status: 200,
+          body: {
+            authenticated: true,
+            user: {
+              email: data.email,
+              role: data.role,
+              status: "active",
+            },
+          },
+        });
+    },
+  },
+
   "api.permissions": {
     read: async ({ ctx }) => {
       const result = await readPermissionRulesAsCurrentUser(ctx.page);
@@ -64,10 +84,54 @@ export const adminPermissionOperators = {
 
   "page.role_tab": {
     visible: async ({ ctx, params }) => {
-      await expect(ctx.page.locator(".orf-role-tabs").getByRole("button").filter({ hasText: requiredString(params, "text") }).first()).toBeVisible();
+      await expect(roleTab(ctx, requiredString(params, "text"))).toBeVisible();
+    },
+
+    click: async ({ ctx, params }) => {
+      await roleTab(ctx, requiredString(params, "text")).click();
+    },
+  },
+
+  "page.permission_toggle": {
+    visible: async ({ ctx, params }) => {
+      await expect(permissionRow(ctx, requiredString(params, "permissionKey")).locator(".orf-permission-toggle")).toBeVisible();
+    },
+
+    toggle: async ({ ctx, params }) => {
+      await permissionRow(ctx, requiredString(params, "permissionKey")).locator(".orf-permission-toggle").click();
+      return toggleRolePermission(
+        requiredPermissionRules(params.originalRules),
+        requiredRole(params, "role"),
+        requiredPermissionKey(params, "permissionKey"),
+      );
+    },
+  },
+
+  "page.permissions_save": {
+    submit: async ({ ctx }) => {
+      const responsePromise = ctx.page
+        .waitForResponse((response) => {
+          return response.request().method().toUpperCase() === "PUT" && response.url().endsWith("/api/permissions/member");
+        })
+        .then(async (response) => ({
+          status: response.status(),
+          body: await readResponseBody(response),
+        }));
+
+      await expect(ctx.page.getByRole("button", { name: "保存角色权限" })).toBeEnabled();
+      await ctx.page.getByRole("button", { name: "保存角色权限" }).click();
+      return responsePromise;
     },
   },
 } satisfies OperatorRegistry<TestContext, AdminPermissionCaseData>;
+
+function roleTab(ctx: TestContext, text: string) {
+  return ctx.page.locator(".orf-role-tabs").getByRole("button").filter({ hasText: text }).first();
+}
+
+function permissionRow(ctx: TestContext, permissionKey: string) {
+  return ctx.page.locator(".orf-role-permission-table tbody tr").filter({ hasText: permissionKey }).first();
+}
 
 function requiredPermissionRules(value: unknown): PermissionRule[] {
   if (!Array.isArray(value)) {

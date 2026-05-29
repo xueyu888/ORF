@@ -1,6 +1,7 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry } from "../../_framework/types";
-import { requiredString } from "../../_operators/params";
+import { readBrowserSession } from "../../_operators/common.helpers";
+import { optionalString, requiredString } from "../../_operators/params";
 import type { AdminEditMemberCaseData, TestContext } from "./_support/admin-edit-member.context";
 import { captureUserUpdateResponse } from "./_support/admin-edit-member.helpers";
 
@@ -8,6 +9,25 @@ export const adminEditMemberOperators = {
   "api.user_update": {
     capture: async ({ ctx, runtime, params }) => {
       runtime.values[requiredString(params, "saveAs")] = captureUserUpdateResponse(ctx.page, requiredString(params, "userId"));
+    },
+  },
+
+  "page.admin_edit_login": {
+    submit_admin: async ({ ctx, data }) => {
+      await ctx.page.getByRole("button", { name: "Sign In" }).click();
+      await expect
+        .poll(() => readBrowserSession(ctx.page))
+        .toMatchObject({
+          status: 200,
+          body: {
+            authenticated: true,
+            user: {
+              email: data.adminEmail,
+              role: data.adminRole,
+              status: "active",
+            },
+          },
+        });
     },
   },
 
@@ -46,7 +66,12 @@ export const adminEditMemberOperators = {
       await memberDialog(ctx).getByLabel("角色").selectOption(requiredString(params, "role"));
     },
 
-    submit: async ({ ctx }) => {
+    submit: async ({ ctx, runtime, params }) => {
+      const saveAs = optionalString(params, "saveAs");
+      const userId = optionalString(params, "userId");
+      if (saveAs && userId) {
+        runtime.values[saveAs] = captureUserUpdateResponse(ctx.page, userId);
+      }
       await memberDialog(ctx).getByRole("button", { name: "保存" }).click();
     },
   },

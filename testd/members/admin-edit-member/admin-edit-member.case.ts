@@ -104,7 +104,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Setup-1", method: "prisma" },
         id: "db.editable_member.delete_residue",
-        title: "删除可能残留的本用例可编辑成员",
+        title: "删除本用例残留的可编辑成员",
         object: "db.user",
         operator: "delete",
         params: {
@@ -115,7 +115,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Setup-2", method: "api" },
         id: "ory.admin_identity.upsert",
-        title: "准备邮箱为 `orf-admin-edit-member-e2e@orf.local`、使用固定测试密码的管理员登录身份",
+        title: "准备管理员认证身份，邮箱为 `orf-admin-edit-member-e2e@orf.local`，密码为固定测试密码",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -143,7 +143,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Setup-4", method: "api" },
         id: "ory.sessions.revoke",
-        title: "撤销管理员登录身份可能残留的登录会话",
+        title: "撤销管理员认证身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.adminEmail" },
@@ -198,22 +198,13 @@ export const adminEditMemberCase = {
         source: { caseStepId: "Setup-10", method: "playwright" },
         id: "click.sign_in",
         title: "点击 \"Sign In\" 登录操作",
-        object: "page",
-        operator: "click",
-        params: { role: "button", name: "Sign In" },
+        object: "page.admin_edit_login",
+        operator: "submit_admin",
       },
       {
-        source: { caseStepId: "Setup-11", method: "api" },
-        id: "session.admin.authenticated",
-        title: "当前会话 应为 管理员的已登录会话",
-        object: "auth.session",
-        operator: "authenticated",
-        params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" },
-      },
-      {
-        source: { caseStepId: "Setup-12", method: "playwright" },
+        source: { caseStepId: "Setup-11", method: "playwright" },
         id: "page.goto.members",
-        title: "打开 系统管理的成员管理页面",
+        title: "打开成员管理页面",
         object: "page",
         operator: "goto",
         params: { path: "/system/members" },
@@ -287,15 +278,7 @@ export const adminEditMemberCase = {
     description: "管理员编辑测试成员姓名、邮箱和角色",
     steps: [
       {
-        source: { caseStepId: "Action-1", method: "api" },
-        id: "api.user_update.capture",
-        title: "监听编辑成员请求响应",
-        object: "api.user_update",
-        operator: "capture",
-        params: { userIdFrom: "data.targetUserId", saveAs: "updateUserResponse" },
-      },
-      {
-        source: { caseStepId: "Action-2", method: "playwright" },
+        source: { caseStepId: "Action-1", method: "playwright" },
         id: "page.member_row.original.edit",
         title: "点击 原测试成员 的 \"编辑\" 操作",
         object: "page.member_row",
@@ -303,7 +286,7 @@ export const adminEditMemberCase = {
         params: { textFrom: "data.originalEmail" },
       },
       {
-        source: { caseStepId: "Action-3", method: "playwright" },
+        source: { caseStepId: "Action-2", method: "playwright" },
         id: "page.member_dialog.fill_name",
         title: "填写 姓名 输入框 为 \"ORF Member Edit Updated E2E\"",
         object: "page.member_dialog",
@@ -311,7 +294,7 @@ export const adminEditMemberCase = {
         params: { valueFrom: "data.updatedName" },
       },
       {
-        source: { caseStepId: "Action-4", method: "playwright" },
+        source: { caseStepId: "Action-3", method: "playwright" },
         id: "page.member_dialog.fill_email",
         title: "填写 邮箱 输入框 为 \"orf-member-edit-updated-e2e@orf.local\"",
         object: "page.member_dialog",
@@ -319,7 +302,7 @@ export const adminEditMemberCase = {
         params: { valueFrom: "data.updatedEmail" },
       },
       {
-        source: { caseStepId: "Action-5", method: "playwright" },
+        source: { caseStepId: "Action-4", method: "playwright" },
         id: "page.member_dialog.select_role",
         title: "选择 角色 为 admin",
         object: "page.member_dialog",
@@ -327,11 +310,12 @@ export const adminEditMemberCase = {
         params: { roleFrom: "data.updatedRole" },
       },
       {
-        source: { caseStepId: "Action-6", method: "playwright" },
+        source: { caseStepId: "Action-5", method: "playwright" },
         id: "page.member_dialog.submit",
         title: "点击 \"保存\" 操作",
         object: "page.member_dialog",
         operator: "submit",
+        params: { userIdFrom: "data.targetUserId", saveAs: "updateUserResponse" },
       },
     ],
   },
@@ -390,7 +374,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "S1-7", method: "api" },
         id: "session.admin.still_authenticated",
-        title: "当前会话 应仍为 管理员的已登录会话",
+        title: "当前会话 应仍为 邮箱为 `orf-admin-edit-member-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" },
@@ -404,7 +388,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Clean-1", method: "prisma" },
         id: "db.editable_member.delete",
-        title: "删除 本用例可编辑成员",
+        title: "删除本用例可编辑成员",
         object: "db.user",
         operator: "delete",
         params: {
@@ -447,7 +431,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Clean-6", method: "api" },
         id: "ory.sessions.revoke",
-        title: "撤销管理员登录身份的残留登录会话",
+        title: "撤销管理员认证身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.adminEmail" },
@@ -455,7 +439,7 @@ export const adminEditMemberCase = {
       {
         source: { caseStepId: "Clean-7", method: "api" },
         id: "ory.admin_identity.delete",
-        title: "删除邮箱为 `orf-admin-edit-member-e2e@orf.local` 的管理员登录身份",
+        title: "删除邮箱为 `orf-admin-edit-member-e2e@orf.local` 的管理员认证身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.adminEmail" },

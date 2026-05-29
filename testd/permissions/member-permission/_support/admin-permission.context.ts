@@ -14,6 +14,7 @@ export type AdminPermissionCaseData = {
   role: "admin";
   targetRole: "member";
   permissionKey: PermissionKey;
+  permissionLabel: string;
 };
 
 export type PermissionRulesResult = {

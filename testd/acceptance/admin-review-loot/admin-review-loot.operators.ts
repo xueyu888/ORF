@@ -13,6 +13,7 @@ import {
   prepareReviewLootTarget,
   reviewLootLedgerPresent,
   reviewLootPresent,
+  reviewLootResultAccepted,
   reviewLootResultPresent,
   reviewLootTargetFromObjective,
   reviewLootTargetSettled,
@@ -27,11 +28,15 @@ export const adminReviewLootOperators = {
     from_objective: async ({ params }) => reviewLootTargetFromObjective(requiredString(params, "objectiveId")),
 
     prepare: async ({ params }) => {
-      await prepareReviewLootTarget(requiredReviewLootTarget(params, "target"), requiredString(params, "memberName"));
+      const target = await readReviewLootTargetParam(params);
+      await prepareReviewLootTarget(target, requiredString(params, "memberName"));
+      return target;
     },
 
     submitted: async ({ params }) => {
-      await expect.poll(() => reviewLootTargetSubmitted(requiredReviewLootTarget(params, "target"))).toBe(true);
+      await expect
+        .poll(() => reviewLootTargetSubmitted(requiredReviewLootTarget(params, "target"), requiredString(params, "memberName")))
+        .toBe(true);
     },
 
     settled: async ({ params }) => {
@@ -54,8 +59,12 @@ export const adminReviewLootOperators = {
 
     present: async ({ params }) => {
       await expect
-        .poll(() => reviewLootResultPresent(requiredReviewLootTarget(params, "target"), requiredReviewLootResult(params, "result")))
+        .poll(() => reviewLootResultPresent(requiredReviewLootTarget(params, "target"), requiredReviewLootResult(params, "result"), requiredNumber(params, "points")))
         .toBe(true);
+    },
+
+    accepted: async ({ params }) => {
+      await expect.poll(() => reviewLootResultAccepted(requiredReviewLootResult(params, "result"))).toBe(true);
     },
 
     delete: async ({ params }) => {
@@ -78,7 +87,7 @@ export const adminReviewLootOperators = {
 
     present: async ({ params }) => {
       await expect
-        .poll(() => reviewLootPresent(requiredReviewLootTarget(params, "target"), requiredReviewLoot(params, "loot")))
+        .poll(() => reviewLootPresent(requiredReviewLootTarget(params, "target"), requiredReviewLoot(params, "loot"), requiredReviewLootResult(params, "result")))
         .toBe(true);
     },
 
@@ -121,6 +130,22 @@ export const adminReviewLootOperators = {
       await expect(ctx.page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
       await expect(ctx.page.getByRole("button", { name: "验收并结算" })).toBeVisible();
     },
+
+    submit: async ({ ctx, runtime, params }) => {
+      const target = requiredReviewLootTarget(params, "target");
+      runtime.values[requiredString(params, "saveAs")] = ctx.page
+        .waitForResponse((response) => {
+          return response.request().method().toUpperCase() === "POST" && response.url().endsWith(`/api/objectives/${encodeURIComponent(target.objective.id)}/review`);
+        })
+        .then(async (response) => ({
+          ok: response.ok(),
+          status: response.status(),
+          url: response.url(),
+          method: response.request().method(),
+          body: await readResponseBody(response),
+        }));
+      await ctx.page.getByRole("button", { name: "验收并结算" }).click();
+    },
   },
 
   "api.review_loot": {
@@ -159,6 +184,14 @@ function requiredReviewLootTarget(params: StepParams, key: string): ReviewLootTa
   return value as ReviewLootTarget;
 }
 
+async function readReviewLootTargetParam(params: StepParams) {
+  if (params.target !== undefined) {
+    return requiredReviewLootTarget(params, "target");
+  }
+
+  return reviewLootTargetFromObjective(requiredString(params, "objectiveId"));
+}
+
 function requiredReviewLootResult(params: StepParams, key: string): ReviewLootResult {
   const value = params[key];
   if (
@@ -190,7 +223,9 @@ function requiredReviewLoot(params: StepParams, key: string): ReviewLoot {
     value === null ||
     typeof (value as ReviewLoot).id !== "string" ||
     typeof (value as ReviewLoot).objectiveId !== "string" ||
-    typeof (value as ReviewLoot).body !== "string"
+    typeof (value as ReviewLoot).body !== "string" ||
+    typeof (value as ReviewLoot).submittedBy !== "string" ||
+    !Array.isArray((value as ReviewLoot).resultClaims)
   ) {
     throw new Error(`参数 ${key} 必须是管理员验收测试战利品`);
   }

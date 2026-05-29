@@ -6,8 +6,8 @@
 
 - 覆盖对象：普通成员成功登录。
 - 不覆盖对象：注册、错误密码、账号不存在、权限配置。
-- Setup 产物：独占普通成员账号、干净浏览器状态和已打开的登录页。
-- Clean 产物：邮箱为 "orf-member-login-e2e@orf.local" 的普通成员测试身份和用户。
+- Setup 产物：独占普通成员账号、默认进入页面为悬赏大厅、干净浏览器状态和已打开的登录页。
+- Clean 产物：邮箱为 "orf-member-login-e2e@orf.local" 的普通成员测试认证身份和用户；该成员默认进入页面恢复为系统默认。
 - Action 边界：只提交普通成员登录表单。
 
 ## 2. 状态模型
@@ -25,11 +25,12 @@
   - [B-10] [playwright] 当前浏览器 应不保留本地登录态。
 
 - Setup：构造 S0。
-  - [Setup-1] [api] 准备邮箱为 `orf-member-login-e2e@orf.local`、使用固定测试密码的普通成员登录身份。
+  - [Setup-1] [api] 准备邮箱为 `orf-member-login-e2e@orf.local`、使用固定测试密码的普通成员认证身份。
   - [Setup-2] [prisma] 准备邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户。
-  - [Setup-3] [api] 撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份可能残留的登录会话。
-  - [Setup-4] [playwright] 移除当前浏览器中的残留登录态。
-  - [Setup-5] [playwright] 打开 ORF 登录页。
+  - [Setup-3] [api] 设置普通成员默认进入页面为 悬赏大厅。
+  - [Setup-4] [api] 撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的残留登录会话。
+  - [Setup-5] [playwright] 移除当前浏览器中的残留登录态。
+  - [Setup-6] [playwright] 打开 ORF 登录页。
 
 - S0：Action 前状态。
   - [S0-1] [playwright] 当前页面 应为 登录页。
@@ -42,8 +43,8 @@
   - [S0-8] [playwright] 登录页的 "Sign In" 登录操作 应可点击。
   - [S0-9] [api] 当前会话 应为 未登录。
   - [S0-10] [playwright] 当前浏览器 应不存在 Ory 登录会话 cookie。
-  - [S0-11] [api] 认证系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份。
-  - [S0-12] [api] 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份的密码凭据 应可用。
+  - [S0-11] [api] 认证系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份。
+  - [S0-12] [api] 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的密码凭据 应可用。
   - [S0-13] [prisma] ORF 业务系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户。
 
 - Action：被测业务动作。
@@ -66,7 +67,8 @@
   - [Clean-1] [api] 注销当前登录会话。
   - [Clean-2] [playwright] 离开当前 ORF 前端页面。
   - [Clean-3] [playwright] 移除当前浏览器中的残留登录态。
-  - [Clean-4] [api] 撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份的残留登录会话。
-  - [Clean-5] [api] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份。
-  - [Clean-6] [prisma] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户的默认团队成员关系。
-  - [Clean-7] [prisma] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户。
+  - [Clean-4] [api] 撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的残留登录会话。
+  - [Clean-5] [api] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份。
+  - [Clean-6] [api] 恢复邮箱为 `orf-member-login-e2e@orf.local` 的普通成员默认进入页面为 系统默认。
+  - [Clean-7] [prisma] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户的默认团队成员关系。
+  - [Clean-8] [prisma] 删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户。

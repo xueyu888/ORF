@@ -91,12 +91,12 @@ export const mloginSuccessCase = {
   },
 
   Setup: {
-    description: "准备普通成员测试账号、清理会话并进入登录页",
+    description: "准备普通成员测试账号、设置默认进入页面、清理会话并进入登录页",
     steps: [
       {
         source: { caseStepId: "Setup-1", method: "api" },
         id: "ory.member_identity.upsert",
-        title: "准备邮箱为 `orf-member-login-e2e@orf.local`、使用固定测试密码的普通成员登录身份",
+        title: "准备邮箱为 `orf-member-login-e2e@orf.local`、使用固定测试密码的普通成员认证身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: { saveAs: "memberIdentity" },
@@ -114,21 +114,32 @@ export const mloginSuccessCase = {
       },
       {
         source: { caseStepId: "Setup-3", method: "api" },
+        id: "user.preferences.default_landing_path.set",
+        title: "设置普通成员默认进入页面为 悬赏大厅",
+        object: "user.preferences",
+        operator: "set_default_landing_path",
+        params: {
+          userIdFrom: "runtime.memberUser.id",
+          path: "/bounties",
+        },
+      },
+      {
+        source: { caseStepId: "Setup-4", method: "api" },
         id: "ory.sessions.revoke",
-        title: "撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份可能残留的登录会话",
+        title: "撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Setup-4", method: "playwright" },
+        source: { caseStepId: "Setup-5", method: "playwright" },
         id: "browser.clear",
         title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
-        source: { caseStepId: "Setup-5", method: "playwright" },
+        source: { caseStepId: "Setup-6", method: "playwright" },
         id: "page.goto.auth",
         title: "打开 ORF 登录页",
         object: "page",
@@ -222,7 +233,7 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "S0-11", method: "api" },
         id: "ory.member_identity.exists",
-        title: "认证系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份",
+        title: "认证系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份",
         object: "ory.identity",
         operator: "exists",
         params: { emailFrom: "data.email" },
@@ -230,7 +241,7 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "S0-12", method: "api" },
         id: "ory.member_identity.password_available",
-        title: "邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份的密码凭据 应可用",
+        title: "邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的密码凭据 应可用",
         object: "ory.identity",
         operator: "password_available",
         params: { emailFrom: "data.email" },
@@ -403,7 +414,7 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "Clean-4", method: "api" },
         id: "ory.sessions.revoke",
-        title: "撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份的残留登录会话",
+        title: "撤销邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -411,13 +422,21 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "Clean-5", method: "api" },
         id: "ory.member_identity.delete",
-        title: "删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员登录身份",
+        title: "删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Clean-6", method: "prisma" },
+        source: { caseStepId: "Clean-6", method: "api" },
+        id: "user.preferences.default_landing_path.reset",
+        title: "恢复邮箱为 `orf-member-login-e2e@orf.local` 的普通成员默认进入页面为 系统默认",
+        object: "user.preferences",
+        operator: "reset_default_landing_path_by_email",
+        params: { emailFrom: "data.email" },
+      },
+      {
+        source: { caseStepId: "Clean-7", method: "prisma" },
         id: "db.member.memberships.delete",
         title: "删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户的默认团队成员关系",
         object: "db.member",
@@ -425,7 +444,7 @@ export const mloginSuccessCase = {
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Clean-7", method: "prisma" },
+        source: { caseStepId: "Clean-8", method: "prisma" },
         id: "db.member.delete",
         title: "删除邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户",
         object: "db.member",
