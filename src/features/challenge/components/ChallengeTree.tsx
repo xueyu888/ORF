@@ -1,12 +1,13 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
-import { useState } from "react";
+import { CalendarDays, Check, CheckCircle2, Clock3, MessageSquare, Pencil, Send, UserPlus, X, type LucideIcon } from "lucide-react";
+import type { FormEvent, ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
+import { minimumObjectiveDeadlineValue } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
-import type { ObjectiveContributionReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
+import type { ObjectiveContributionReview, ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -37,7 +38,9 @@ type RowHandlers = {
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
   contributionReviews: ObjectiveContributionReview[];
+  trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
+  canEditObjectiveDeadline: (objective: ObjectiveNode["objective"]) => boolean;
   canMutateMetrics: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
@@ -60,6 +63,7 @@ type RowHandlers = {
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
+  onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -133,6 +137,7 @@ function ObjectivePanel({
     objective: group.objective,
     currentUser: handlers.currentUser,
     contributionReviews: handlers.contributionReviews,
+    trialReviews: handlers.trialReviews,
   });
   const showApplicationReview =
     handlers.canManageFlow &&
@@ -207,7 +212,11 @@ function ObjectivePanel({
         <AvatarStack names={group.challengers} />
         {statusChip}
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
-        <DateStack primary={group.deadline || "未设置"} />
+        <ObjectiveDeadlineCell
+          canEdit={handlers.canEditObjectiveDeadline(group.objective)}
+          objective={group.objective}
+          onSave={handlers.onSaveObjectiveDeadline}
+        />
         <ProgressValue value={group.objective.progress} />
         {workbenchAction ? (
           <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={workbenchAction.to}>
@@ -787,6 +796,88 @@ function ProgressValue({ value }: { value: number }) {
       </div>
       <span className="w-9 text-right text-sm font-bold text-[#344054]">{bounded}%</span>
     </div>
+  );
+}
+
+function ObjectiveDeadlineCell({
+  canEdit,
+  objective,
+  onSave,
+}: {
+  canEdit: boolean;
+  objective: ObjectiveNode["objective"];
+  onSave: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [value, setValue] = useState(objective.finalDueAt);
+  const [isSaving, setIsSaving] = useState(false);
+  const minimumValue = minimumObjectiveDeadlineValue(objective);
+
+  useEffect(() => {
+    if (!isEditing) setValue(objective.finalDueAt);
+  }, [isEditing, objective.finalDueAt]);
+
+  const cancel = () => {
+    setValue(objective.finalDueAt);
+    setIsEditing(false);
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!value || isSaving) return;
+
+    setIsSaving(true);
+    try {
+      const saved = await onSave(objective.id, value);
+      if (saved) setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (!canEdit) {
+    return <DateStack primary={objective.finalDueAt || "未设置"} />;
+  }
+
+  if (isEditing) {
+    return (
+      <form
+        className="orf-objective-deadline-editor"
+        data-no-row-edit="true"
+        onDoubleClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => void submit(event)}
+      >
+        <input
+          aria-label="目标截止日期"
+          className="orf-objective-deadline-input"
+          disabled={isSaving}
+          min={minimumValue}
+          onChange={(event) => setValue(event.target.value)}
+          type="date"
+          value={value}
+        />
+        <button className="orf-icon-button" disabled={isSaving} title="保存截止日期" type="submit">
+          <Check className="h-4 w-4" />
+        </button>
+        <button className="orf-icon-button" disabled={isSaving} onClick={cancel} title="取消" type="button">
+          <X className="h-4 w-4" />
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <button
+      className="orf-objective-deadline-display"
+      data-no-row-edit="true"
+      onClick={() => setIsEditing(true)}
+      onDoubleClick={(event) => event.stopPropagation()}
+      title={objective.flowStatus === "frozen" ? "延后冻结目标截止日期" : "修改目标截止日期"}
+      type="button"
+    >
+      <DateStack primary={objective.finalDueAt || "未设置"} />
+      <Pencil className="h-3.5 w-3.5" />
+    </button>
   );
 }
 

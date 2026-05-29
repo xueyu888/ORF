@@ -1,4 +1,5 @@
 import { hasPermission } from "../../../config/permissions";
+import { canReviewObjectiveTrialReview, latestObjectiveTrialReview } from "../../../domain/orfTrialReview";
 import {
   canFreezeObjectiveByFlow,
   canMutateObjectiveWorkItemsByFlow,
@@ -13,6 +14,7 @@ import {
 import type {
   Objective,
   ObjectiveContributionReview,
+  ObjectiveTrialReview,
   OrfUser,
   PermissionRule,
   Result,
@@ -24,7 +26,7 @@ type MetricCreationAction = {
 };
 
 type WorkbenchAction = {
-  kind: "submitLoot" | "submitPeerReview" | "reviewLoot";
+  kind: "submitLoot" | "submitPeerReview" | "reviewLoot" | "reviewTrial";
   label: string;
   to: string;
 };
@@ -173,11 +175,22 @@ export function workbenchActionForObjective({
   objective,
   currentUser,
   contributionReviews,
+  trialReviews = [],
 }: {
   objective: Objective;
   currentUser: OrfUser | null;
   contributionReviews: ObjectiveContributionReview[];
+  trialReviews?: ObjectiveTrialReview[];
 }): WorkbenchAction | null {
+  const trialReview = latestObjectiveTrialReview(objective.id, trialReviews);
+  if (canReviewObjectiveTrialReview(objective, currentUser, trialReview)) {
+    return {
+      kind: "reviewTrial",
+      label: "处理试验收",
+      to: `/objectives/${objective.id}/loot`,
+    };
+  }
+
   if (canReviewObjectiveLoot(objective, currentUser)) {
     return {
       kind: "reviewLoot",

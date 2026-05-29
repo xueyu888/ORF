@@ -25,6 +25,7 @@ import type {
   Objective,
   FeedbackStatus,
   LootResultClaim,
+  ObjectiveTrialReviewStatus,
   OrfState,
   OrfUser,
   Result,
@@ -57,6 +58,10 @@ type ReviewObjectiveLootInput = {
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   reason?: string;
+};
+type ReviewObjectiveTrialReviewInput = {
+  status: Exclude<ObjectiveTrialReviewStatus, "requested">;
+  commanderFeedback: string;
 };
 
 interface ModalState {
@@ -115,6 +120,7 @@ interface OrfContextValue {
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
   updateObjectiveTitle: (objectiveId: string, title: string) => void;
+  updateObjectiveFinalDueAt: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   updateObjectiveStage: (objectiveId: string, stage: OrfState["objectives"][number]["stage"]) => void;
   updateResultTitle: (resultId: string, title: string) => void;
   updateTaskTitle: (taskId: string, title: string) => void;
@@ -124,6 +130,8 @@ interface OrfContextValue {
   moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTaskChecklistItem: OrfFlowStore["moveTaskChecklistItem"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   submitLoot: (input: SubmitLootInput) => Promise<boolean>;
+  submitObjectiveTrialReview: (input: SubmitLootInput) => Promise<boolean>;
+  reviewObjectiveTrialReview: (objectiveId: string, trialReviewId: string, input: ReviewObjectiveTrialReviewInput) => Promise<boolean>;
   deleteObjective: (objectiveId: string) => void;
   deleteResult: (resultId: string) => void;
   deleteTask: (taskId: string) => void;
@@ -677,6 +685,21 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
+      updateObjectiveFinalDueAt: async (objectiveId, finalDueAt) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ finalDueAt }),
+          });
+          await refreshTaskManagementData();
+          notify("截止日期已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "截止日期更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
       updateObjectiveStage: (objectiveId, stage) => {
         void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/stage`, {
           method: "PATCH",
@@ -852,6 +875,41 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return true;
         } catch (error) {
           notify(commentMutationFailureMessage(error, "战利品提交失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      submitObjectiveTrialReview: async (input) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(input.objectiveId)}/trial-reviews`, {
+            method: "POST",
+            body: JSON.stringify({
+              body: input.body,
+              resultClaims: input.resultClaims,
+              selfTestReportUrl: input.selfTestReportUrl,
+              selfTestReportBody: input.selfTestReportBody,
+            }),
+          });
+          await refreshTaskManagementData();
+          notify("试验收已提交");
+          return true;
+        } catch (error) {
+          notify(commentMutationFailureMessage(error, "试验收提交失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      reviewObjectiveTrialReview: async (objectiveId, trialReviewId, input) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/trial-reviews/${encodeURIComponent(trialReviewId)}`, {
+            method: "PATCH",
+            body: JSON.stringify(input),
+          });
+          await refreshTaskManagementData();
+          notify("试验收反馈已提交");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "试验收反馈提交失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

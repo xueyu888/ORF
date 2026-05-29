@@ -35,9 +35,10 @@ currentUser in Objective.challengers
 - 目标状态。
 - 挑战者头像组，来源 `Objective.challengers`。
 - 剩余时间，来源 `Objective.finalDueAt`。
-- 截止时间。
+- 截止时间；指挥官可在目标行内编辑 `Objective.finalDueAt`。冻结前可正常调整，`frozen` 只允许延后，`submitted/settled/closed` 不显示编辑入口。
 - 目标进度，来源 `Objective.progress`。
 - `提交战利品` 入口；仅 `flowStatus=frozen` 且当前用户是挑战者时展示。
+- `处理试验收` 入口；仅 `flowStatus=frozen`、当前用户为指挥官且存在待反馈试验收时展示。
 - hover 工具层包含一个主新增 `+`；点击后选择新增指标或新增行动项。
 
 ### 指标行
@@ -99,10 +100,11 @@ currentUser in Objective.challengers
 | 删除 | 同一目标正式挑战者或指挥官可删除任务和子任务；删除前确认，并展示影响范围 |
 | 评论 | 从行操作打开评论 |
 | 提交战利品 | 只在目标冻结后从目标行进入提交页 |
+| 修改截止日期 | 只允许指挥官操作；冻结前可修改为合法日期，冻结后只能延后，待验收、已结算和已关闭目标不可修改 |
 | 发布/冻结 | 指挥官在所有挑战视图中操作 |
 | 审核挑战申请 | 指挥官在目标行处理待审核申请；审批成功后立即刷新目标状态和申请记录，当前目标使用列表位置锚点保持原展示位置，直到用户离开当前目标上下文 |
 
-权限由 `permissionRules` 和状态机共同控制。目标内容只能由指挥官调整；指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑自己参与目标下的指标。候选目标允许指挥官先维护目标行动项；挑战者正式进入 `Objective.challengers` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
+权限由 `permissionRules` 和状态机共同控制。目标内容只能由指挥官调整；截止日期以 `Objective.finalDueAt` 为唯一事实源。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑自己参与目标下的指标。候选目标允许指挥官先维护目标行动项；挑战者正式进入 `Objective.challengers` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
 
 反馈状态控件仅对管理员、反馈创建人或反馈 `owner` 指定处理人显示。普通成员可以看到自己可见范围内的反馈内容，但不能关闭或改写他人反馈状态。
 

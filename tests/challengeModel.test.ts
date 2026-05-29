@@ -395,6 +395,29 @@ test("loot workbench actions keep commander review separate from member challeng
     label: "验收战利品",
     to: `/objectives/${pollutedSubmitted.id}/loot`,
   });
+  assert.deepEqual(
+    workbenchActionForObjective({
+      objective: pollutedFrozen,
+      currentUser: admin,
+      contributionReviews: [],
+      trialReviews: [
+        {
+          id: "trial-review-a",
+          objectiveId: pollutedFrozen.id,
+          requestedBy: challenger.name,
+          body: "Ready for a trial review.",
+          resultClaims: [],
+          status: "requested",
+          requestedAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+    }),
+    {
+      kind: "reviewTrial",
+      label: "处理试验收",
+      to: `/objectives/${pollutedFrozen.id}/loot`,
+    },
+  );
 });
 
 test("challenge permission helpers map target resources to configured permissions", () => {
@@ -425,6 +448,7 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     failureSamples: [],
     comments: [],
     objectiveLoot: [],
+    objectiveTrialReviews: [],
     objectiveContributionReviews: [],
     pointLedger: [],
     causeCategories: [],

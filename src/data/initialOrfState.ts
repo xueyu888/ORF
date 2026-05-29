@@ -132,6 +132,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     objectives,
     results,
     objectiveLoot: state.objectiveLoot ?? [],
+    objectiveTrialReviews: state.objectiveTrialReviews ?? [],
     objectiveContributionReviews: state.objectiveContributionReviews ?? [],
     pointLedger: state.pointLedger ?? [],
   };
@@ -1566,6 +1567,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       submittedAt: "2026-05-17T15:20:00.000Z",
     },
   ],
+  objectiveTrialReviews: [],
   objectiveContributionReviews: [
     {
       id: "contribution-review-demo-mia",

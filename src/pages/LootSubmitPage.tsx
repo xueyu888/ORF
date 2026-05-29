@@ -1,4 +1,4 @@
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
@@ -11,8 +11,14 @@ import {
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
 } from "../domain/orfLifecycle";
+import {
+  canRequestObjectiveTrialReview,
+  canReviewObjectiveTrialReview,
+  latestObjectiveTrialReview,
+  objectiveTrialReviewStatusLabel,
+} from "../domain/orfTrialReview";
 import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
-import type { ContributionAllocation, LootResultClaimStatus, ResultAcceptedResult } from "../types/orf";
+import type { ContributionAllocation, LootResultClaim, LootResultClaimStatus, ObjectiveTrialReviewStatus, ResultAcceptedResult } from "../types/orf";
 
 const lootClaimOptions: Array<{ label: string; value: LootResultClaimStatus }> = [
   { label: "完成", value: "completed" },
@@ -33,12 +39,16 @@ const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
 export function LootSubmitPage() {
   const { objectiveId } = useParams();
   const navigate = useNavigate();
-  const { currentUser, dataReady, reviewObjectiveLoot, state, submitContributionReview, submitLoot } = useOrf();
+  const { currentUser, dataReady, reviewObjectiveLoot, reviewObjectiveTrialReview, state, submitContributionReview, submitLoot, submitObjectiveTrialReview } = useOrf();
   const objective = state.objectives.find((item) => item.id === objectiveId);
   const results = useMemo(() => (objective ? state.results.filter((result) => result.objectiveId === objective.id) : []), [objective, state.results]);
   const latestLoot = useMemo(
     () => state.objectiveLoot.filter((item) => item.objectiveId === objectiveId).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))[0],
     [objectiveId, state.objectiveLoot],
+  );
+  const latestTrialReview = useMemo(
+    () => latestObjectiveTrialReview(objectiveId ?? "", state.objectiveTrialReviews),
+    [objectiveId, state.objectiveTrialReviews],
   );
   const [body, setBody] = useState("");
   const [selfTestReportBody, setSelfTestReportBody] = useState("");
@@ -48,8 +58,10 @@ export function LootSubmitPage() {
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [resolutionReason, setResolutionReason] = useState("");
   const [reason, setReason] = useState("");
+  const [trialDecision, setTrialDecision] = useState<Exclude<ObjectiveTrialReviewStatus, "requested">>("approved");
+  const [trialFeedback, setTrialFeedback] = useState("");
   const [error, setError] = useState("");
-  const [submittingAction, setSubmittingAction] = useState<"loot" | "peerReview" | "review" | null>(null);
+  const [submittingAction, setSubmittingAction] = useState<"loot" | "trialReview" | "trialResponse" | "peerReview" | "review" | null>(null);
 
   useEffect(() => {
     setClaims((current) => {
@@ -85,6 +97,8 @@ export function LootSubmitPage() {
   const isChallenger = currentUser?.role === "member" && objective.challengers.includes(currentMember);
   const canSubmit = canSubmitObjectiveLootByFlow(objective) && isChallenger;
   const canReview = Boolean(currentUser?.role === "admin" && canReviewObjectiveLootByFlow(objective) && latestLoot);
+  const canRequestTrial = canRequestObjectiveTrialReview(objective, currentUser, latestTrialReview);
+  const canReviewTrial = canReviewObjectiveTrialReview(objective, currentUser, latestTrialReview);
   const canPeerReview = canSubmitObjectiveContributionReviewByFlow(objective) && isChallenger;
   const contributionReviews = state.objectiveContributionReviews.filter((item) => item.objectiveId === objective.id);
   const contributionSummary = summarizeContributionReviews(objective.challengers, contributionReviews);
@@ -92,20 +106,15 @@ export function LootSubmitPage() {
   const hasCurrentPeerReview = contributionReviews.some((item) => item.reviewer === currentMember);
   const objectiveReviewResult = objectiveAcceptedResultFromReviews(results.map((result) => resultReviews[result.id] ?? "completed"));
 
-  const submit = async () => {
+  const buildLootSubmission = (): { body: string; resultClaims: LootResultClaim[] } | null => {
     const value = body.trim();
-    if (submittingAction) return;
-    if (!canSubmit) {
-      setError("目标冻结后，挑战者才能提交战利品");
-      return;
-    }
     if (!value) {
       setError("请填写完成说明");
-      return;
+      return null;
     }
     if (results.length === 0) {
       setError("这个目标没有可验收的指标");
-      return;
+      return null;
     }
 
     const resultClaims = results.map((result) => ({
@@ -116,17 +125,77 @@ export function LootSubmitPage() {
     const missingEvidence = resultClaims.find((claim) => claim.claim !== "notClaimed" && !claim.evidenceText);
     if (missingEvidence) {
       setError("请填写每个已声明指标的证据、数据或链接");
+      return null;
+    }
+
+    return { body: value, resultClaims };
+  };
+
+  const submit = async () => {
+    if (submittingAction) return;
+    if (!canSubmit) {
+      setError("目标冻结后，挑战者才能提交战利品");
       return;
     }
+    const submission = buildLootSubmission();
+    if (!submission) return;
 
     setSubmittingAction("loot");
     try {
       const ok = await submitLoot({
         objectiveId: objective.id,
-        body: value,
+        body: submission.body,
         author: currentUser?.name,
         selfTestReportBody: selfTestReportBody.trim() || null,
-        resultClaims,
+        resultClaims: submission.resultClaims,
+      });
+      if (ok) navigate("/tasks");
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
+
+  const requestTrialReview = async () => {
+    if (submittingAction) return;
+    if (!canRequestTrial) {
+      setError("冻结阶段的挑战者只能发起一次试验收");
+      return;
+    }
+    const submission = buildLootSubmission();
+    if (!submission) return;
+
+    setSubmittingAction("trialReview");
+    try {
+      const ok = await submitObjectiveTrialReview({
+        objectiveId: objective.id,
+        body: submission.body,
+        author: currentUser?.name,
+        selfTestReportBody: selfTestReportBody.trim() || null,
+        resultClaims: submission.resultClaims,
+      });
+      if (ok) navigate("/tasks");
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
+
+  const respondTrialReview = async () => {
+    if (submittingAction) return;
+    if (!canReviewTrial || !latestTrialReview) {
+      setError("只有指挥官能处理待反馈的试验收");
+      return;
+    }
+    const feedback = trialFeedback.trim();
+    if (!feedback) {
+      setError("请填写试验收反馈");
+      return;
+    }
+
+    setSubmittingAction("trialResponse");
+    try {
+      const ok = await reviewObjectiveTrialReview(objective.id, latestTrialReview.id, {
+        status: trialDecision,
+        commanderFeedback: feedback,
       });
       if (ok) navigate("/tasks");
     } finally {
@@ -194,7 +263,7 @@ export function LootSubmitPage() {
 
   return (
     <PageScaffold
-      title={canReview ? "验收战利品" : canPeerReview ? "提交匿名互评" : "提交战利品"}
+      title={canReview ? "验收战利品" : canReviewTrial ? "处理试验收" : canPeerReview ? "提交匿名互评" : "提交战利品"}
       subtitle={`目标：${objective.title}`}
       action={
         <Link className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" to="/tasks">
@@ -218,6 +287,26 @@ export function LootSubmitPage() {
               <div className="font-semibold orf-text-primary">最近提交</div>
               <div className="orf-text-secondary whitespace-pre-wrap">{latestLoot.body}</div>
               {latestLoot.selfTestReportBody && <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary whitespace-pre-wrap">{latestLoot.selfTestReportBody}</div>}
+            </div>
+          </Card>
+        )}
+
+        {latestTrialReview && (
+          <Card className="orf-card-padding">
+            <div className="grid gap-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold orf-text-primary">试验收</div>
+                <span className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs font-semibold orf-text-secondary">
+                  {objectiveTrialReviewStatusLabel(latestTrialReview.status)}
+                </span>
+              </div>
+              <div className="orf-text-secondary whitespace-pre-wrap">{latestTrialReview.body}</div>
+              {latestTrialReview.selfTestReportBody && <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary whitespace-pre-wrap">{latestTrialReview.selfTestReportBody}</div>}
+              {latestTrialReview.commanderFeedback && (
+                <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary whitespace-pre-wrap">
+                  {latestTrialReview.commanderFeedback}
+                </div>
+              )}
             </div>
           </Card>
         )}
@@ -274,6 +363,40 @@ export function LootSubmitPage() {
               </div>
             </form>
           </Card>
+        ) : canReviewTrial && latestTrialReview ? (
+          <Card className="orf-card-padding">
+            <form
+              className="grid gap-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void respondTrialReview();
+              }}
+            >
+              <div className="grid gap-3">
+                {latestTrialReview.resultClaims.map((claim) => (
+                  <div key={claim.resultId} className="grid gap-2 rounded-md border orf-border p-3">
+                    <div className="text-sm font-semibold orf-text-primary">{results.find((result) => result.id === claim.resultId)?.title ?? claim.resultId}</div>
+                    <div className="text-xs font-semibold orf-text-secondary">{lootClaimLabel(claim.claim)}</div>
+                    {claim.evidenceText && <div className="text-sm orf-text-secondary whitespace-pre-wrap">{claim.evidenceText}</div>}
+                  </div>
+                ))}
+              </div>
+              <Field label="试验收结论">
+                <select className="orf-input px-3 py-2 text-sm" value={trialDecision} onChange={(event) => setTrialDecision(event.target.value as Exclude<ObjectiveTrialReviewStatus, "requested">)}>
+                  <option value="approved">可正式提交</option>
+                  <option value="needsWork">需补充</option>
+                </select>
+              </Field>
+              <Field label="反馈说明">
+                <textarea className="orf-input min-h-24 px-3 py-2 text-sm" value={trialFeedback} onChange={(event) => { setTrialFeedback(event.target.value); if (error) setError(""); }} />
+              </Field>
+              {error && <div className="text-sm orf-danger-text">{error}</div>}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
+                <Button type="submit" disabled={submittingAction === "trialResponse"}>提交反馈</Button>
+              </div>
+            </form>
+          </Card>
         ) : canPeerReview ? (
           <Card className="orf-card-padding">
             <form
@@ -304,7 +427,7 @@ export function LootSubmitPage() {
               </div>
             </form>
           </Card>
-        ) : (
+        ) : canSubmit ? (
           <Card className="orf-card-padding">
             <form
               className="grid gap-5"
@@ -333,13 +456,21 @@ export function LootSubmitPage() {
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
+                {canRequestTrial && (
+                  <Button type="button" variant="secondary" disabled={submittingAction === "trialReview"} onClick={() => void requestTrialReview()}>
+                    <ClipboardCheck className="h-4 w-4" />
+                    提交试验收
+                  </Button>
+                )}
                 <Button type="submit" disabled={!canSubmit || submittingAction === "loot"}>
                   <Send className="h-4 w-4" />
-                  提交
+                  正式提交
                 </Button>
               </div>
             </form>
           </Card>
+        ) : (
+          <Card className="orf-card-padding text-sm orf-text-secondary">当前状态没有可提交的验收动作。</Card>
         )}
       </div>
     </PageScaffold>
@@ -448,6 +579,10 @@ function objectiveReviewResultLabel(value: ReturnType<typeof objectiveAcceptedRe
   if (value === "completed") return "全部指标完成，目标完成。";
   if (value === "falsified") return "指标全部有效证伪，目标按有效证伪结算。";
   return "存在未完成、失败或未验收指标，目标不按完成结算。";
+}
+
+function lootClaimLabel(value: LootResultClaimStatus) {
+  return lootClaimOptions.find((option) => option.value === value)?.label ?? value;
 }
 
 function formatPercent(value: number) {

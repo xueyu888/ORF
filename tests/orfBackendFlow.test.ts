@@ -34,6 +34,9 @@ import {
   reviewObjectiveLoot,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
+  reviewObjectiveTrialReview,
+  submitObjectiveTrialReview,
+  updateObjectiveDetails,
   updateResultConfidence,
   updateResultTitle,
 } from "../server/repositories/orfRepository";
@@ -1396,6 +1399,15 @@ test("API flow commands enforce commander-only permissions and challenge list sc
     const missingPublish = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(`${fixture.prefix}-missing`)}/publish`);
     assert.equal(missingPublish.statusCode, 404);
 
+    const memberDeadlineUpdate = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}`, {
+      finalDueAt: "2999-11-30",
+    });
+    assert.equal(memberDeadlineUpdate.statusCode, 403);
+    const commanderDeadlineUpdate = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}`, {
+      finalDueAt: "2999-11-30",
+    });
+    assert.equal(commanderDeadlineUpdate.statusCode, 200);
+
     const memberRecruit = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/recruitments`, {
       members: [fixture.observer.name],
     });
@@ -1466,6 +1478,75 @@ test("API objective creation rejects malformed final due dates", async () => {
       assert.equal(response.statusCode, 400);
     }
   });
+});
+
+test("objective final due date updates follow commander and lifecycle rules", async () => {
+  const fixture = await createFixture("objective-deadline-lifecycle");
+  const candidate = await createTestObjective(fixture, "deadline candidate");
+  const candidateUpdate = await updateObjectiveDetails(candidate.id, { finalDueAt: "2999-11-30" }, fixture.commander.id);
+  assert.equal(candidateUpdate.status, "ok");
+  assert.equal(candidateUpdate.status === "ok" ? candidateUpdate.objective.finalDueAt : null, "2999-11-30");
+
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "deadline frozen objective");
+  const reestimateUpdate = await updateObjectiveDetails(objective.id, { finalDueAt: "2999-01-31" }, fixture.commander.id);
+  assert.equal(reestimateUpdate.status, "ok");
+
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  assert.equal((await updateObjectiveDetails(objective.id, { finalDueAt: "2999-01-30" }, fixture.commander.id)).status, "locked");
+  const extended = await updateObjectiveDetails(objective.id, { finalDueAt: "2999-02-01" }, fixture.commander.id);
+  assert.equal(extended.status, "ok");
+  assert.equal(extended.status === "ok" ? extended.objective.finalDueAt : null, "2999-02-01");
+
+  const submitted = await submitObjectiveLoot(
+    objective.id,
+    {
+      body: "Completed deadline lifecycle objective.",
+      resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "Evidence" }],
+    },
+    { ...fixture.challenger, role: "member" },
+  );
+  assert.equal(submitted.status, "ok");
+  assert.equal((await updateObjectiveDetails(objective.id, { finalDueAt: "2999-02-02" }, fixture.commander.id)).status, "locked");
+});
+
+test("objective trial review is a one-time frozen-stage feedback loop without submitting loot", async () => {
+  const fixture = await createFixture("objective-trial-review");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "trial review objective");
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+
+  const trialReview = await submitObjectiveTrialReview(
+    objective.id,
+    {
+      body: "Please check this once before formal submission.",
+      resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "Trial evidence" }],
+      selfTestReportBody: "Self test passed.",
+    },
+    { ...fixture.challenger, role: "member" },
+  );
+  assert.equal(trialReview.status, "ok");
+  assert.equal(trialReview.status === "ok" ? trialReview.trialReview.status : null, "requested");
+  assert.equal((await submitObjectiveTrialReview(objective.id, { body: "Second request", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "Evidence" }] }, { ...fixture.challenger, role: "member" })).status, "duplicate");
+
+  const dataAfterRequest = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(dataAfterRequest.objectives.find((item) => item.id === objective.id)?.flowStatus, "frozen");
+
+  assert.equal(
+    (
+      await reviewObjectiveTrialReview(
+        objective.id,
+        trialReview.status === "ok" ? trialReview.trialReview.id : "",
+        { status: "needsWork", commanderFeedback: "Add one more verification note." },
+        fixture.commander.id,
+      )
+    ).status,
+    "ok",
+  );
+
+  const dataAfterReview = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(dataAfterReview.objectives.find((item) => item.id === objective.id)?.flowStatus, "frozen");
+  assert.equal(dataAfterReview.objectiveTrialReviews.find((item) => item.objectiveId === objective.id)?.status, "needsWork");
 });
 
 test("API task creation is owned by the objective and does not require a result", async () => {

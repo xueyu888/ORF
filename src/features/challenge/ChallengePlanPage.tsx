@@ -8,6 +8,7 @@ import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
+import { canEditObjectiveDeadline as canEditObjectiveDeadlineByModel } from "../../domain/orfDeadline";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
 import { localDateString } from "../../utils/date";
@@ -219,6 +220,7 @@ export function ChallengePlanPage() {
     setTaskCompletion,
     state,
     updateCommentMessage,
+    updateObjectiveFinalDueAt,
     updateObjectiveTitle,
     updateResultTitle,
     updateTaskChecklistItem,
@@ -298,7 +300,7 @@ export function ChallengePlanPage() {
 
   useEffect(() => {
     void loadChallengeData().catch(() => setChallengeData(null));
-  }, [loadChallengeData, state.comments, state.objectives, state.results, state.tasks, taskManagementInvalidationKey]);
+  }, [loadChallengeData, state.comments, state.objectiveContributionReviews, state.objectiveTrialReviews, state.objectives, state.results, state.tasks, taskManagementInvalidationKey]);
 
   const sourceData = challengeData ?? state;
   const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
@@ -427,6 +429,7 @@ export function ChallengePlanPage() {
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
+  const canEditDeadlineForObjective = (objective: ObjectiveNode["objective"]) => currentUser?.role === "admin" && canEditObjectiveDeadlineByModel(objective);
 
   useEffect(() => {
     if (!linkedChallengeTarget) {
@@ -959,6 +962,14 @@ export function ChallengePlanPage() {
     return ok;
   };
 
+  const saveObjectiveDeadline = async (objectiveId: string, finalDueAt: string) => {
+    const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
+    if (anchor) setObjectiveInteractionAnchor(anchor);
+    const ok = await updateObjectiveFinalDueAt(objectiveId, finalDueAt);
+    if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
+    return ok;
+  };
+
   const releaseObjectiveInteractionAnchorOutside = (target: EventTarget | null) => {
     if (!objectiveInteractionAnchor || !(target instanceof Element)) return;
     const panel = target.closest<HTMLElement>("[data-objective-panel-id]");
@@ -1067,6 +1078,7 @@ export function ChallengePlanPage() {
           dragDrop,
           editingTarget: effectiveEditingTarget,
           contributionReviews: challengeState.objectiveContributionReviews,
+          trialReviews: challengeState.objectiveTrialReviews,
           currentUser,
           draftObjectiveId,
           metricActionLabel: (objective) =>
@@ -1084,6 +1096,7 @@ export function ChallengePlanPage() {
             }),
           canMutateMetrics: canMutateMetricForObjective,
           canMutateWorkItems: canMutateWorkItemsForObjective,
+          canEditObjectiveDeadline: canEditDeadlineForObjective,
           onActionDoneChange: setActionDone,
           onActionRowAction: handleRowAction,
           onActiveActionChange: activateRowAction,
@@ -1105,6 +1118,7 @@ export function ChallengePlanPage() {
           onPublishObjective: publishObjective,
           onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
           onRejectApplication: rejectAnchoredChallengeApplication,
+          onSaveObjectiveDeadline: saveObjectiveDeadline,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),

@@ -5,6 +5,8 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `POST` | `/api/objectives/:objectiveId/loot` | 普通成员挑战者提交结构化战利品 |
+| `POST` | `/api/objectives/:objectiveId/trial-reviews` | 普通成员挑战者发起一次试验收 |
+| `PATCH` | `/api/objectives/:objectiveId/trial-reviews/:trialReviewId` | 指挥官反馈试验收 |
 | `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 普通成员挑战者提交匿名互评贡献比例 |
 | `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算积分 |
 
@@ -32,6 +34,34 @@
 - `notClaimed`：不主张该指标完成或证伪。
 
 自测报告文件化能力依赖编辑器接入，当前先保存 `selfTestReportBody` 文本摘要。
+
+## 试验收
+
+`POST /api/objectives/:objectiveId/trial-reviews` 使用与正式提交相同的请求体和指标主张校验，但保存到 `objectiveTrialReviews`：
+
+| 字段 | 说明 |
+| --- | --- |
+| `objectiveId` | 当前悬赏目标 ID |
+| `requestedBy` | 发起试验收的挑战者姓名 |
+| `body` | 完成说明 |
+| `resultClaims` | 每个指标的主张和证据 |
+| `selfTestReportBody` | 自测摘要 |
+| `status` | `requested` / `approved` / `needsWork` |
+| `commanderFeedback` | 指挥官反馈 |
+| `requestedAt` / `reviewedAt` | 发起和反馈时间 |
+
+同一目标只允许一条试验收记录。试验收只允许 `frozen` 目标的普通成员挑战者发起；成功后不修改 `Objective.flowStatus`、`Objective.lootSubmittedAt` 或积分字段。
+
+试验收反馈请求体：
+
+```json
+{
+  "status": "approved",
+  "commanderFeedback": "可正式提交"
+}
+```
+
+`status` 只能是 `approved` 或 `needsWork`。只有指挥官可反馈 `requested` 状态的试验收，反馈后目标仍保持 `frozen`。
 
 ## 匿名互评请求体
 
@@ -98,6 +128,7 @@
 
 - 只有 `Objective.challengers` 中的普通成员可提交。
 - 只有 `frozen` 目标可提交战利品。
+- 试验收仅允许 `frozen` 目标的挑战者发起一次；指挥官反馈试验收不推进状态。
 - 只有指挥官可验收。
 - 只有 `submitted` 目标可验收。
 - 多个普通成员挑战者结算必须有可用匿名互评汇总，或有指挥官分歧处理结果。

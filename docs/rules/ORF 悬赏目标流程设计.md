@@ -78,6 +78,8 @@
 - 同一目标的正式挑战者可以共同新增、编辑、勾选、移动和删除目标下的任务与子任务，并维护评论，用来拆解执行动作和协作记录；任务不挂到指标下，执行人和创建人不形成私有所有权。
 - 目标至少已有一个指标后，指挥官才能冻结目标。
 
+`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/settled/closed` 不允许修改。冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
+
 冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不做续期。
 
 ## 征召与申请
@@ -97,6 +99,8 @@
 ## 战利品
 
 战利品提交发生在目标层级，且仅允许普通成员挑战者在 `frozen` 状态提交。
+
+挑战者在 `frozen` 状态可发起一次目标级试验收。试验收复用战利品的完成说明、指标主张、证据和自测摘要，但保存为 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus`，不触发验收结算。指挥官只能反馈“可正式提交”或“需补充”；正式提交仍必须由挑战者后续提交目标战利品完成，提交后目标才进入 `submitted`。
 
 战利品结构化保存到 `objectiveLoot`：
 

@@ -19,6 +19,8 @@ import type {
   ObjectiveAcceptedResult,
   ObjectiveLoot,
   ObjectiveContributionReview,
+  ObjectiveTrialReview,
+  ObjectiveTrialReviewStatus,
   OrfStage,
   OrfState,
   PointLedgerEntry,
@@ -62,6 +64,7 @@ import {
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../../src/domain/orfLifecycle";
+import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -73,6 +76,7 @@ import {
   objectives,
   objectiveLoot,
   objectiveContributionReviews,
+  objectiveTrialReviews,
   pointLedger,
   results,
   resultTrendPoints,
@@ -102,7 +106,7 @@ import { validateImageUpload } from "../storage/images";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveContributionReviews" | "pointLedger" | "permissionRules"
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveTrialReviews" | "objectiveContributionReviews" | "pointLedger" | "permissionRules"
 >;
 
 export type TaskManagementDataScope = {
@@ -379,6 +383,7 @@ function publishOrfDataInvalidation(input: {
     | "objective.challenge.application.changed"
     | "objective.challenge.recruitment.changed"
     | "objective.loot.changed"
+    | "objective.trialReview.changed"
     | "result.changed"
     | "task.changed"
     | "feedback.changed"
@@ -402,7 +407,8 @@ function publishObjectiveInvalidation(input: {
     | "objective.lifecycle.changed"
     | "objective.challenge.application.changed"
     | "objective.challenge.recruitment.changed"
-    | "objective.loot.changed";
+    | "objective.loot.changed"
+    | "objective.trialReview.changed";
   objectiveId: string;
   teamId: string;
 }) {
@@ -649,6 +655,9 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
   const feedbackRows = storageScopeId ? await db.select().from(feedback).where(eq(feedback.teamId, storageScopeId)) : await db.select().from(feedback);
   const objectiveLootRows = storageScopeId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId)) : await db.select().from(objectiveLoot);
+  const objectiveTrialReviewRows = storageScopeId
+    ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
+    : await db.select().from(objectiveTrialReviews);
   const objectiveContributionReviewRows = storageScopeId
     ? await db.select().from(objectiveContributionReviews).where(eq(objectiveContributionReviews.teamId, storageScopeId))
     : await db.select().from(objectiveContributionReviews);
@@ -837,6 +846,21 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       selfTestReportBody: item.selfTestReportBody,
       submittedAt: item.submittedAt,
     }));
+  const objectiveTrialReviewItems: ObjectiveTrialReview[] = objectiveTrialReviewRows
+    .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt))
+    .map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      requestedBy: item.requestedBy,
+      body: item.body,
+      resultClaims: item.resultClaims,
+      selfTestReportBody: item.selfTestReportBody,
+      status: item.status,
+      commanderFeedback: item.commanderFeedback,
+      reviewedBy: item.reviewedBy,
+      reviewedAt: item.reviewedAt,
+      requestedAt: item.requestedAt,
+    }));
   const objectiveContributionReviewItems: ObjectiveContributionReview[] = objectiveContributionReviewRows
     .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
     .map((item) => ({
@@ -879,6 +903,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     feedback: feedbackItems,
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
+    objectiveTrialReviews: objectiveTrialReviewItems,
     objectiveContributionReviews: objectiveContributionReviewItems,
     pointLedger: pointLedgerItems,
     permissionRules,
@@ -1056,6 +1081,7 @@ export async function getMyChallengesData(member: string, includeAll = false, sc
     feedback: data.feedback.filter((item) => objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)),
     comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveContributionReviews: data.objectiveContributionReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger.filter((item) => objectiveIds.has(item.objectiveId)),
     permissionRules: data.permissionRules,
@@ -2910,6 +2936,44 @@ export type ObjectiveContributionReviewMutationOutcome =
   | { status: "invalid" }
   | { status: "closed" };
 
+export type ObjectiveTrialReviewMutationOutcome =
+  | { status: "ok"; trialReview: ObjectiveTrialReview }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "invalid" }
+  | { status: "closed" }
+  | { status: "duplicate" };
+
+type ObjectiveResultClaimsValidation =
+  | { status: "ok"; resultClaims: LootResultClaim[] }
+  | { status: "invalid" };
+
+async function validateObjectiveResultClaims(objectiveId: string, resultClaims: LootResultClaim[]): Promise<ObjectiveResultClaimsValidation> {
+  const objectiveResults = await db.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
+  const resultIds = new Set(objectiveResults.map((result) => result.id));
+  const claimsByResult = new Map<string, LootResultClaim>();
+
+  for (const claim of resultClaims) {
+    if (!resultIds.has(claim.resultId)) continue;
+    const evidenceText = claim.evidenceText.trim();
+    if (claim.claim !== "notClaimed" && !evidenceText) {
+      return { status: "invalid" };
+    }
+
+    claimsByResult.set(claim.resultId, {
+      resultId: claim.resultId,
+      claim: claim.claim,
+      evidenceText,
+    });
+  }
+
+  if (claimsByResult.size !== resultIds.size) {
+    return { status: "invalid" };
+  }
+
+  return { status: "ok", resultClaims: Array.from(claimsByResult.values()) };
+}
+
 export async function submitObjectiveLoot(
   objectiveId: string,
   input: SubmitObjectiveLootInput,
@@ -2933,24 +2997,8 @@ export async function submitObjectiveLoot(
     return { status: "forbidden" };
   }
 
-  const objectiveResults = await db.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
-  const resultIds = new Set(objectiveResults.map((result) => result.id));
-  const claimsByResult = new Map<string, LootResultClaim>();
-  for (const claim of input.resultClaims) {
-    if (!resultIds.has(claim.resultId)) continue;
-    const evidenceText = claim.evidenceText.trim();
-    if (claim.claim !== "notClaimed" && !evidenceText) {
-      return { status: "invalid" };
-    }
-
-    claimsByResult.set(claim.resultId, {
-      resultId: claim.resultId,
-      claim: claim.claim,
-      evidenceText,
-    });
-  }
-
-  if (claimsByResult.size !== resultIds.size) {
+  const resultClaims = await validateObjectiveResultClaims(objectiveId, input.resultClaims);
+  if (resultClaims.status === "invalid") {
     return { status: "invalid" };
   }
 
@@ -2972,7 +3020,7 @@ export async function submitObjectiveLoot(
       objectiveId: objective.id,
       submittedBy: actor.name,
       body,
-      resultClaims: Array.from(claimsByResult.values()),
+      resultClaims: resultClaims.resultClaims,
       selfTestReportUrl: input.selfTestReportUrl?.trim() || null,
       selfTestReportBody: input.selfTestReportBody?.trim() || null,
       submittedAt,
@@ -3002,6 +3050,145 @@ export async function submitObjectiveLoot(
   const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
   const loot = data.objectiveLoot.find((item) => item.id === lootId);
   return loot ? { status: "ok", loot } : { status: "notFound" };
+}
+
+export async function submitObjectiveTrialReview(
+  objectiveId: string,
+  input: SubmitObjectiveLootInput,
+  actor: Pick<CommentActor, "id" | "name" | "role">,
+): Promise<ObjectiveTrialReviewMutationOutcome> {
+  const body = input.body.trim();
+  if (!body) {
+    return { status: "invalid" };
+  }
+
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) {
+    return { status: "notFound" };
+  }
+
+  if (!canSubmitObjectiveLootByFlow(objective)) {
+    return { status: "closed" };
+  }
+
+  if (actor.role !== "member" || !uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
+    return { status: "forbidden" };
+  }
+
+  const resultClaims = await validateObjectiveResultClaims(objectiveId, input.resultClaims);
+  if (resultClaims.status === "invalid") {
+    return { status: "invalid" };
+  }
+
+  const requestedAt = nowIso();
+  const trialReviewId = makeId("trial-review");
+  const created = await db.transaction(async (tx) => {
+    const [lockedObjective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!lockedObjective) return { status: "notFound" as const };
+    if (!canSubmitObjectiveLootByFlow(lockedObjective)) return { status: "closed" as const };
+
+    const existing = await tx
+      .select({ id: objectiveTrialReviews.id })
+      .from(objectiveTrialReviews)
+      .where(eq(objectiveTrialReviews.objectiveId, objectiveId))
+      .limit(1);
+    if (existing.length > 0) return { status: "duplicate" as const };
+
+    await tx.insert(objectiveTrialReviews).values({
+      id: trialReviewId,
+      teamId: lockedObjective.teamId,
+      objectiveId: lockedObjective.id,
+      requestedBy: actor.name,
+      body,
+      resultClaims: resultClaims.resultClaims,
+      selfTestReportBody: input.selfTestReportBody?.trim() || null,
+      status: "requested",
+      commanderFeedback: null,
+      reviewedBy: null,
+      reviewedAt: null,
+      requestedAt,
+    });
+
+    await tx
+      .update(objectives)
+      .set({ updatedAt: today(), updatedBy: actor.id })
+      .where(eq(objectives.id, objectiveId));
+
+    return { status: "created" as const, teamId: lockedObjective.teamId };
+  });
+
+  if (created.status === "notFound") return { status: "notFound" };
+  if (created.status === "closed") return { status: "closed" };
+  if (created.status === "duplicate") return { status: "duplicate" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actor.id,
+    reason: "objective.trialReview.changed",
+    objectiveId: objective.id,
+    teamId: created.teamId,
+  });
+
+  const data = await getTaskManagementData({ scope: runtimeScope(created.teamId) });
+  const trialReview = data.objectiveTrialReviews.find((item) => item.id === trialReviewId);
+  return trialReview ? { status: "ok", trialReview } : { status: "notFound" };
+}
+
+export async function reviewObjectiveTrialReview(
+  objectiveId: string,
+  trialReviewId: string,
+  input: { status: Exclude<ObjectiveTrialReviewStatus, "requested">; commanderFeedback: string },
+  actorId: string,
+): Promise<ObjectiveTrialReviewMutationOutcome> {
+  const commanderFeedback = input.commanderFeedback.trim();
+  if (!commanderFeedback) {
+    return { status: "invalid" };
+  }
+
+  const reviewedAt = nowIso();
+  const reviewed = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (!canSubmitObjectiveLootByFlow(objective)) return { status: "closed" as const };
+
+    const [trialReview] = await tx
+      .select()
+      .from(objectiveTrialReviews)
+      .where(and(eq(objectiveTrialReviews.id, trialReviewId), eq(objectiveTrialReviews.objectiveId, objectiveId)))
+      .limit(1);
+    if (!trialReview) return { status: "notFound" as const };
+    if (trialReview.status !== "requested") return { status: "closed" as const };
+
+    await tx
+      .update(objectiveTrialReviews)
+      .set({
+        status: input.status,
+        commanderFeedback,
+        reviewedBy: actorId,
+        reviewedAt,
+      })
+      .where(eq(objectiveTrialReviews.id, trialReviewId));
+
+    await tx
+      .update(objectives)
+      .set({ updatedAt: today(), updatedBy: actorId })
+      .where(eq(objectives.id, objectiveId));
+
+    return { status: "reviewed" as const, teamId: objective.teamId };
+  });
+
+  if (reviewed.status === "notFound") return { status: "notFound" };
+  if (reviewed.status === "closed") return { status: "closed" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.trialReview.changed",
+    objectiveId,
+    teamId: reviewed.teamId,
+  });
+
+  const data = await getTaskManagementData({ scope: runtimeScope(reviewed.teamId) });
+  const trialReview = data.objectiveTrialReviews.find((item) => item.id === trialReviewId);
+  return trialReview ? { status: "ok", trialReview } : { status: "notFound" };
 }
 
 export async function submitObjectiveContributionReview(
@@ -3305,39 +3492,75 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
   return created.item;
 }
 
-export async function updateObjectiveTitle(objectiveId: string, title: string): Promise<boolean> {
-  const nextTitle = title.trim();
-  if (!nextTitle) {
-    return false;
+export type ObjectiveDetailsMutationOutcome =
+  | { status: "ok"; objective: Objective }
+  | { status: "notFound" }
+  | { status: "invalid" }
+  | { status: "locked" };
+
+export async function updateObjectiveDetails(
+  objectiveId: string,
+  input: { finalDueAt?: string; title?: string },
+  actorId?: string | null,
+): Promise<ObjectiveDetailsMutationOutcome> {
+  const nextTitle = input.title?.trim();
+  if (input.title !== undefined && !nextTitle) {
+    return { status: "invalid" };
   }
 
   const updatedObjective = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+
+    const update: Partial<typeof objectives.$inferInsert> = {
+      updatedAt: today(),
+      updatedBy: actorId ?? objective.updatedBy,
+    };
+
+    if (nextTitle !== undefined) {
+      update.title = nextTitle;
+    }
+
+    if (input.finalDueAt !== undefined) {
+      const deadlineChange = validateObjectiveDeadlineChange(objective, input.finalDueAt);
+      if (deadlineChange.status === "invalidDate") return { status: "invalid" as const };
+      if (deadlineChange.status === "locked" || deadlineChange.status === "frozenMustExtend") return { status: "locked" as const };
+      update.finalDueAt = input.finalDueAt;
+    }
+
     const updated = await tx
       .update(objectives)
-      .set({ title: nextTitle, updatedAt: today() })
+      .set(update)
       .where(eq(objectives.id, objectiveId))
       .returning({ id: objectives.id, teamId: objectives.teamId });
     if (updated.length === 0) {
-      return null;
+      return { status: "notFound" as const };
     }
 
-    await tx
-      .update(commentThreads)
-      .set({ targetTitle: nextTitle, updatedAt: nowIso() })
-      .where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
-    return { teamId: updated[0]!.teamId };
+    if (nextTitle !== undefined) {
+      await tx
+        .update(commentThreads)
+        .set({ targetTitle: nextTitle, updatedAt: nowIso() })
+        .where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
+    }
+    return { status: "updated" as const, teamId: updated[0]!.teamId };
   });
 
-  if (!updatedObjective) {
-    return false;
-  }
+  if (updatedObjective.status === "notFound") return { status: "notFound" };
+  if (updatedObjective.status === "invalid") return { status: "invalid" };
+  if (updatedObjective.status === "locked") return { status: "locked" };
 
   publishObjectiveInvalidation({
+    actorUserId: actorId,
     reason: "objective.changed",
     objectiveId,
     teamId: updatedObjective.teamId,
   });
-  return true;
+  return objectiveOutcome(objectiveId, runtimeScope(updatedObjective.teamId));
+}
+
+export async function updateObjectiveTitle(objectiveId: string, title: string): Promise<boolean> {
+  return (await updateObjectiveDetails(objectiveId, { title })).status === "ok";
 }
 
 export async function updateObjectiveStage(objectiveId: string, stage: OrfStage): Promise<boolean> {

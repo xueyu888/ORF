@@ -299,6 +299,7 @@ function taskManagementData(comments: CommentThread[]): TaskManagementData {
     feedback: initialOrfState.feedback,
     comments,
     objectiveLoot: initialOrfState.objectiveLoot,
+    objectiveTrialReviews: initialOrfState.objectiveTrialReviews,
     objectiveContributionReviews: initialOrfState.objectiveContributionReviews,
     pointLedger: initialOrfState.pointLedger,
     permissionRules: initialOrfState.permissionRules,

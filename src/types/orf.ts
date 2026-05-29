@@ -27,6 +27,7 @@ export type UserStatus = "pending" | "active" | "rejected" | "disabled";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
 export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "settled" | "closed";
 export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
+export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
 
 export interface OrfUser {
   id: string;
@@ -130,6 +131,20 @@ export interface ObjectiveLoot {
   selfTestReportUrl?: string | null;
   selfTestReportBody?: string | null;
   submittedAt: string;
+}
+
+export interface ObjectiveTrialReview {
+  id: string;
+  objectiveId: string;
+  requestedBy: string;
+  body: string;
+  resultClaims: LootResultClaim[];
+  selfTestReportBody?: string | null;
+  status: ObjectiveTrialReviewStatus;
+  commanderFeedback?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  requestedAt: string;
 }
 
 export interface PointLedgerEntry {
@@ -346,6 +361,7 @@ export interface OrfState {
   failureSamples: FailureSample[];
   comments: CommentThread[];
   objectiveLoot: ObjectiveLoot[];
+  objectiveTrialReviews: ObjectiveTrialReview[];
   objectiveContributionReviews: ObjectiveContributionReview[];
   pointLedger: PointLedgerEntry[];
   causeCategories: string[];

@@ -9,6 +9,7 @@ import type {
   NotificationTargetType,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
+  ObjectiveTrialReviewStatus,
   OrfStage,
   ResultAcceptedResult,
   UserStatus,
@@ -134,6 +135,31 @@ export const objectiveLoot = pgTable("objective_loot", {
   selfTestReportBody: text("self_test_report_body"),
   submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
 });
+
+export const objectiveTrialReviews = pgTable(
+  "objective_trial_reviews",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    objectiveId: text("objective_id")
+      .notNull()
+      .references(() => objectives.id, { onDelete: "cascade" }),
+    requestedBy: text("requested_by").notNull(),
+    body: text("body").notNull(),
+    resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
+    selfTestReportBody: text("self_test_report_body"),
+    status: text("status").$type<ObjectiveTrialReviewStatus>().notNull().default("requested"),
+    commanderFeedback: text("commander_feedback"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { mode: "string", withTimezone: true }),
+    requestedAt: timestamp("requested_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    objectiveOnce: uniqueIndex("objective_trial_reviews_objective_once_idx").on(table.objectiveId),
+  }),
+);
 
 export const objectiveContributionReviews = pgTable("objective_contribution_reviews", {
   id: text("id").primaryKey(),

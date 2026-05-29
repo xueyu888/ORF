@@ -55,10 +55,12 @@ import {
   setTaskCompletion,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
+  submitObjectiveTrialReview,
   updateChecklistItemLabel,
   updateFeedbackStatus,
+  updateObjectiveDetails,
   updateObjectiveStage,
-  updateObjectiveTitle,
+  reviewObjectiveTrialReview,
   updateResultConfidence,
   updateResultTitle,
   updateChecklistItem,
@@ -101,6 +103,7 @@ const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
+const trialReviewParamsSchema = objectiveParamsSchema.extend({ trialReviewId: z.string().min(1) });
 const applicationParamsSchema = objectiveParamsSchema.extend({ applicationId: z.string().min(1) });
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
 const dateOnlySchema = z.string().trim().refine(isDateOnlyString, { message: "Invalid date" });
@@ -127,6 +130,10 @@ const createObjectiveBodySchema = z.object({
   boundary: z.string().trim().min(1),
   finalDueAt: dateOnlySchema.optional(),
 });
+const objectiveDetailsBodySchema = z.object({
+  title: requiredTextSchema.optional(),
+  finalDueAt: dateOnlySchema.optional(),
+}).refine((body) => body.title !== undefined || body.finalDueAt !== undefined, { message: "No objective fields to update" });
 const createFeedbackBodySchema = z.object({
   phenomenon: z.string().trim().min(1),
   causeCategories: z.array(z.string().trim().min(1)).min(1),
@@ -185,6 +192,10 @@ const submitLootBodySchema = z.object({
   })).min(1),
   selfTestReportUrl: z.string().trim().optional().nullable(),
   selfTestReportBody: z.string().trim().optional().nullable(),
+});
+const reviewTrialBodySchema = z.object({
+  status: z.enum(["approved", "needsWork"]),
+  commanderFeedback: requiredTextSchema,
 });
 const contributionAllocationSchema = z.object({
   member: z.string().trim().min(1),
@@ -293,6 +304,49 @@ function sendLootOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof
   }
 
   return { loot: outcome.loot };
+}
+
+function sendObjectiveDetailsOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof updateObjectiveDetails>>) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Objective not found" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Objective details are incomplete or invalid" });
+  }
+
+  if (outcome.status === "locked") {
+    return reply.code(409).send({ error: "Objective deadline is locked for the current lifecycle state" });
+  }
+
+  return { objective: outcome.objective };
+}
+
+function sendTrialReviewOutcome(
+  reply: FastifyReply,
+  outcome: Awaited<ReturnType<typeof submitObjectiveTrialReview>> | Awaited<ReturnType<typeof reviewObjectiveTrialReview>>,
+) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Objective trial review not found" });
+  }
+
+  if (outcome.status === "forbidden") {
+    return reply.code(403).send({ error: "Only challengers can request objective trial review" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Objective trial review is incomplete" });
+  }
+
+  if (outcome.status === "closed") {
+    return reply.code(409).send({ error: "Objective must be frozen before trial review" });
+  }
+
+  if (outcome.status === "duplicate") {
+    return reply.code(409).send({ error: "Objective already has a trial review" });
+  }
+
+  return { trialReview: outcome.trialReview };
 }
 
 function sendContributionReviewOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof submitObjectiveContributionReview>>) {
@@ -529,7 +583,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   app.patch("/api/objectives/:objectiveId", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
-    const body = titleBodySchema.parse(request.body);
+    const body = objectiveDetailsBodySchema.parse(request.body);
     const context = await requireAdminContext(request, reply);
     if (!context) {
       return reply;
@@ -538,13 +592,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
 
-    const updated = await updateObjectiveTitle(params.objectiveId, body.title);
-
-    if (!updated) {
-      return reply.code(404).send({ error: "Objective not found" });
-    }
-
-    return { ok: true };
+    return sendObjectiveDetailsOutcome(reply, await updateObjectiveDetails(params.objectiveId, body, context.user.id));
   });
 
   app.patch("/api/objectives/:objectiveId/stage", async (request, reply) => {
@@ -825,6 +873,35 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const body = submitLootBodySchema.parse(request.body);
     return sendLootOutcome(reply, await submitObjectiveLoot(params.objectiveId, body, user));
+  });
+
+  app.post("/api/objectives/:objectiveId/trial-reviews", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    const { user, scope } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
+      return reply;
+    }
+
+    const body = submitLootBodySchema.parse(request.body);
+    return sendTrialReviewOutcome(reply, await submitObjectiveTrialReview(params.objectiveId, body, user));
+  });
+
+  app.patch("/api/objectives/:objectiveId/trial-reviews/:trialReviewId", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = trialReviewParamsSchema.parse(request.params);
+    const body = reviewTrialBodySchema.parse(request.body);
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
+      return reply;
+    }
+    return sendTrialReviewOutcome(reply, await reviewObjectiveTrialReview(params.objectiveId, params.trialReviewId, body, context.user.id));
   });
 
   app.post("/api/objectives/:objectiveId/contribution-reviews", async (request, reply) => {
