@@ -1,5 +1,5 @@
 import { asc, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
+import { db } from "../../../../server/db/client";
 import { teamMembers, teams, users } from "../../../../server/db/schema";
 import {
   ORY_ADMIN_URL,
@@ -10,10 +10,6 @@ import {
   oryAdminFetch,
 } from "../../../_operators/common.helpers";
 import type { MemberAccountRecord, MloginCaseData } from "./mlogin.context";
-
-export async function closeMloginTestDb() {
-  await closeDb();
-}
 
 export async function memberAccountActive(email: string) {
   const account = await readMemberAccount(email);

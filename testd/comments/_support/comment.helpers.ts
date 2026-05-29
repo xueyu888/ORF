@@ -575,15 +575,16 @@ export async function readMyChallenges(page: Page, scope: MyChallengesScope): Pr
 }
 
 export async function myChallengesLacksTarget(page: Page, target: CommentTarget, scope: MyChallengesScope) {
-  return !(await myChallengesHasTarget(page, target, scope));
+  const response = await readMyChallenges(page, scope);
+  return response.status === 200 && !myChallengesResponseHasTarget(response, target);
 }
 
 export async function myChallengesHasTarget(page: Page, target: CommentTarget, scope: MyChallengesScope) {
   const response = await readMyChallenges(page, scope);
-  if (response.status !== 200) {
-    return false;
-  }
+  return response.status === 200 && myChallengesResponseHasTarget(response, target);
+}
 
+function myChallengesResponseHasTarget(response: MyChallengesResponse, target: CommentTarget) {
   if (target.type === "objective") {
     return (response.body.objectives ?? []).some((objective) => objective.id === target.id && objective.title === target.title);
   }
