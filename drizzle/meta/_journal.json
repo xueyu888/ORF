@@ -148,6 +148,13 @@
       "when": 1779740000000,
       "tag": "0020_drop_task_result_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779820000000,
+      "tag": "0021_objective_published_at",
+      "breakpoints": true
     }
   ]
 }

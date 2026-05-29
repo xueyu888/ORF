@@ -220,13 +220,18 @@ function ObjectivePanel({
           <span className="orf-objective-admin-strip-label">挑战申请</span>
           {pendingApplications.map((application) => (
             <span key={application.id} className="orf-objective-application-pill">
-              <span className="font-semibold orf-text-primary">{application.applicant}</span>
-              <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
-                通过
-              </button>
-              <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
-                拒绝
-              </button>
+              <span className="orf-objective-application-main">
+                <span className="font-semibold orf-text-primary">{application.applicant}</span>
+                {application.reason && <span className="orf-objective-application-reason">{application.reason}</span>}
+              </span>
+              <span className="orf-objective-application-actions">
+                <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
+                  通过
+                </button>
+                <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
+                  拒绝
+                </button>
+              </span>
             </span>
           ))}
         </div>

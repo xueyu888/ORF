@@ -97,7 +97,7 @@ interface OrfContextValue {
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   rejectChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
-  applyForBounty: (objectiveId: string) => Promise<boolean>;
+  applyForBounty: (objectiveId: string, reason: string) => Promise<boolean>;
   acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
@@ -416,15 +416,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      applyForBounty: async (objectiveId) => {
+      applyForBounty: async (objectiveId, reason) => {
         if (currentUser?.role !== "member") {
           notify("只有普通成员可以申请挑战");
           return false;
         }
         const applicant = currentUser?.name ?? "";
+        const applicationReason = reason.trim();
+        if (!applicationReason) {
+          notify("请先填写申请理由");
+          return false;
+        }
         const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
         if (hasScopedObjective) {
-          const next = store.applyForBounty(state, objectiveId, applicant);
+          const next = store.applyForBounty(state, objectiveId, applicant, applicationReason);
           if (next === state) {
             notify("这个目标暂时不能申请挑战");
             return false;
@@ -432,7 +437,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications`, { method: "POST" });
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications`, {
+            method: "POST",
+            body: JSON.stringify({ reason: applicationReason }),
+          });
           await refreshTaskManagementData();
           notify("挑战申请已提交，等待指挥官确认");
           return true;

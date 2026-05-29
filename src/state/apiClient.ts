@@ -1,4 +1,4 @@
-import type { AppNotification, BountySource, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
+import type { AppNotification, BountySource, ChallengeApplication, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
 import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 
@@ -29,18 +29,24 @@ export type CommentAttachmentUploadResponse = {
   markdown: string;
 };
 export type BountyHallItem = {
+  applications: ChallengeApplication[];
+  approvedApplicants: string[];
+  challengers: string[];
   uncertaintyPoints: number;
   deadline: string;
   definer: string;
   difficultyRank: number;
   hasCurrentApplication: boolean;
+  isCurrentChallenger: boolean;
   isRecruitment: boolean;
   objective: Objective;
+  pendingApplications: ChallengeApplication[];
   result: Result | null;
   results: Result[];
   source: BountySource;
 };
 export type BountyHallData = {
+  publicItems: BountyHallItem[];
   recruitmentItems: BountyHallItem[];
   availableItems: BountyHallItem[];
   objectiveOptions: Objective[];

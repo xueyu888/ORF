@@ -339,7 +339,7 @@ test("applyForBounty refuses objectives outside bounty application statuses", ()
       ],
     });
 
-    const next = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang");
+    const next = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang", "I can take ownership of this objective.");
 
     assert.equal(next, current, `expected ${flowStatus} objective to reject challenge applications`);
   }
@@ -348,10 +348,12 @@ test("applyForBounty refuses objectives outside bounty application statuses", ()
     const current = state({
       objectives: [objective({ id: `obj-${flowStatus}`, flowStatus, stage: "resultClaiming" })],
     });
-    const applied = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang");
+    const applied = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang", "I can take ownership of this objective.");
 
     assert.notEqual(applied, current, `expected ${flowStatus} objective to accept challenge applications`);
+    assert.equal(applied.objectives[0]?.flowStatus, flowStatus === "recruiting" ? "recruiting" : "applying");
     assert.equal(applied.objectives[0]?.challengeApplications[0]?.status, "pending");
+    assert.equal(applied.objectives[0]?.challengeApplications[0]?.reason, "I can take ownership of this objective.");
   }
 });
 

@@ -11,7 +11,7 @@ import { objectives, results as resultRows, taskChecklistItems, tasks as taskRow
 import type { ObjectiveAcceptedResult, Result, Task, UncertaintyLevel } from "../src/types/orf";
 import {
   acceptObjectiveChallenge,
-  applyForObjectiveChallenge,
+  applyForObjectiveChallenge as applyForObjectiveChallengeRepository,
   approveObjectiveChallengeApplication,
   canEditObjectiveResultsDuringReestimate,
   createChecklistItem,
@@ -73,10 +73,12 @@ test("published objective without concrete results is visible in the bounty hall
   const published = await publishObjective(objective.id, fixture.commander.id);
   assert.equal(published.status, "ok");
   assert.equal(published.objective.flowStatus, "open");
+  assert.ok(published.objective.publishedAt, "publishing should stamp the bounty-hall publication date");
 
   const hall = await getBountyHallData(fixture.challenger.name);
   const item = hall.availableItems.find((item) => item.objective.id === objective.id);
   assert.ok(item, "a published Objective should not require a commander-defined Result to be visible");
+  assert.equal(item.objective.publishedAt, published.objective.publishedAt);
   assert.equal(item.result, null);
   assert.deepEqual(item.results, []);
   assert.equal(item.uncertaintyPoints, 0);
@@ -222,6 +224,17 @@ test("commander and challenger can complete the application-to-settlement ORF ba
     "approved",
   );
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), true);
+  const approvalNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
+  assert.equal(approvalNotifications[0]?.kind, "challenge.application.approved");
+  assert.equal(approvalNotifications[0]?.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+
+  const hallAfterApproval = await getBountyHallData(fixture.challenger.name, { scope: fixture.scope });
+  const publicApprovalItem = hallAfterApproval.publicItems.find((item) => item.objective.id === objective.id);
+  assert.ok(publicApprovalItem, "approved objectives remain visible in the public bounty hall");
+  assert.equal(publicApprovalItem.isCurrentChallenger, true);
+  assert.deepEqual(publicApprovalItem.challengers, [fixture.challenger.name]);
+  assert.equal(publicApprovalItem.applications.find((application) => application.id === applicationId)?.status, "approved");
+  assert.equal(hallAfterApproval.availableItems.some((item) => item.objective.id === objective.id), false);
 
   const challengerResult = await createResult({
     objectiveId: objective.id,
@@ -761,6 +774,12 @@ test("rejecting remaining pending applications keeps an accepted objective in re
   const approved = await approveObjectiveChallengeApplication(objective.id, challengerApplicationId, fixture.commander.id);
   assert.equal(approved.status, "ok");
   assert.equal(approved.objective.flowStatus, "reestimating");
+
+  const observerHall = await getBountyHallData(fixture.observer.name, { scope: fixture.scope });
+  const publicItem = observerHall.publicItems.find((item) => item.objective.id === objective.id);
+  assert.ok(publicItem, "accepted objectives stay visible with both approved challengers and pending applicants");
+  assert.deepEqual(publicItem.challengers, [fixture.challenger.name]);
+  assert.deepEqual(publicItem.pendingApplications.map((application) => application.applicant), [fixture.observer.name]);
 
   const rejected = await rejectObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id);
   assert.equal(rejected.status, "ok");
@@ -1306,6 +1325,7 @@ test("API flow commands enforce commander-only permissions and challenge list sc
   const objective = await createPublishedObjective(fixture, "api flow permission");
   assert.equal((await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id)).status, "ok");
   const reviewObjective = await createPublishedObjective(fixture, "api review permission");
+  const apiApplicationObjective = await createPublishedObjective(fixture, "api application reason permission");
 
   await withApiServer(fixture, async (app) => {
     const memberPublish = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
@@ -1318,6 +1338,18 @@ test("API flow commands enforce commander-only permissions and challenge list sc
       members: [fixture.observer.name],
     });
     assert.equal(memberRecruit.statusCode, 403);
+
+    const missingReasonApplication = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/challenge-applications`, {});
+    assert.equal(missingReasonApplication.statusCode, 400);
+
+    const memberApplication = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/challenge-applications`, {
+      reason: "I have the right context and can own this challenge.",
+    });
+    assert.equal(memberApplication.statusCode, 200);
+    const memberApplicationPayload = memberApplication.json() as { objective: { challengeApplications: Array<{ applicant: string; reason?: string; status: string }> } };
+    const storedApplication = memberApplicationPayload.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name);
+    assert.equal(storedApplication?.status, "pending");
+    assert.equal(storedApplication?.reason, "I have the right context and can own this challenge.");
 
     const application = await applyForObjectiveChallenge(reviewObjective.id, fixture.challenger.name);
     assert.equal(application.status, "applied");
@@ -3125,6 +3157,10 @@ async function createFixture(label: string) {
 
 type Fixture = Awaited<ReturnType<typeof createFixture>>;
 type FixtureUser = Fixture["commander"];
+
+function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId?: string | null, reason = `${applicant} wants to challenge this objective.`) {
+  return applyForObjectiveChallengeRepository(objectiveId, applicant, actorUserId, reason);
+}
 
 async function createTestObjective(fixture: Fixture, title: string, finalDueAt = farFutureDueDate) {
   const objective = await createObjective(

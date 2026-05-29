@@ -11,6 +11,7 @@ export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
 export type NotificationKind =
   | "challenge.application.created"
+  | "challenge.application.approved"
   | "objective.recruitment.created"
   | "objective.challenge.accepted"
   | "objective.loot.submitted"
@@ -49,6 +50,7 @@ export interface TrendPoint {
 export interface ChallengeApplication {
   id: string;
   applicant: string;
+  reason?: string;
   status: ChallengeApplicationStatus;
   createdAt: string;
   decidedAt?: string | null;
@@ -106,6 +108,7 @@ export interface Objective {
   completionMultiplier?: number | null;
   objectiveBasePoints: number;
   objectiveSettlementPoints?: number | null;
+  publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

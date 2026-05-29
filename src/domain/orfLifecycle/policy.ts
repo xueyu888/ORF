@@ -153,7 +153,7 @@ export const objectiveFlowPolicy = {
     canSubmitLoot: false,
     canSubmitContributionReview: false,
     canReviewLoot: false,
-    challengeDiscoverable: false,
+    challengeDiscoverable: true,
     challengeAccepted: true,
     challengeEntryClosed: false,
     resultLocked: false,

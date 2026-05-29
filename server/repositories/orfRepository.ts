@@ -52,7 +52,7 @@ import {
   canReviewObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
-  isObjectiveChallengeAcceptedByFlow,
+  isObjectiveChallengeDiscoverableByFlow,
   isObjectiveChallengeEntryClosedByFlow,
   isObjectiveReestimateWindowOpen,
   isObjectiveStageCompatibleWithFlowStatus,
@@ -371,20 +371,44 @@ async function notifyAdminsOfChallengeApplication(input: {
   applicant: string;
   objectiveId: string;
   objectiveTitle: string;
+  reason: string;
   teamId: string;
 }) {
   await createNotifications({
     actorName: input.applicant,
     actorUserId: input.actorUserId,
-    body: `${input.applicant} 申请挑战「${input.objectiveTitle}」，需要指挥官确认。`,
+    body: `${input.applicant} 申请挑战「${input.objectiveTitle}」：${input.reason}`,
     kind: "challenge.application.created",
-    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
+    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle, reason: input.reason },
     recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
     targetHref: challengeObjectiveHref("/tasks", input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
     title: "新的挑战申请",
+  });
+}
+
+async function notifyMemberOfChallengeApplicationApproval(input: {
+  actorUserId: string;
+  applicant: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `你申请挑战「${input.objectiveTitle}」已通过，头像已挂到悬赏大厅目标上。`,
+    kind: "challenge.application.approved",
+    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, [input.applicant]),
+    targetHref: challengeObjectiveHref("/bounties", input.objectiveId),
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "挑战申请已通过",
   });
 }
 
@@ -710,6 +734,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       completionMultiplier: objective.completionMultiplier,
       objectiveBasePoints,
       objectiveSettlementPoints: objective.objectiveSettlementPoints,
+      publishedAt: objective.publishedAt,
       createdAt: objective.createdAt,
       updatedAt: objective.updatedAt,
     };
@@ -802,19 +827,25 @@ export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): 
 }
 
 export type BountyHallItem = {
+  applications: ChallengeApplication[];
+  approvedApplicants: string[];
+  challengers: string[];
   uncertaintyPoints: number;
   deadline: string;
   definer: string;
   difficultyRank: number;
   hasCurrentApplication: boolean;
+  isCurrentChallenger: boolean;
   isRecruitment: boolean;
   objective: Objective;
+  pendingApplications: ChallengeApplication[];
   result: Result | null;
   results: Result[];
   source: BountySource;
 };
 
 export type BountyHallData = {
+  publicItems: BountyHallItem[];
   recruitmentItems: BountyHallItem[];
   availableItems: BountyHallItem[];
   objectiveOptions: Objective[];
@@ -830,17 +861,18 @@ function bountySortTitle(item: BountyHallItem) {
 }
 
 function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
+  if (left.isRecruitment !== right.isRecruitment) return left.isRecruitment ? -1 : 1;
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
   return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
-function objectiveClosedForBountyHall(objective: Objective) {
-  return !canApplyForObjectiveChallenge(objective) || objectiveClosedForChallengeEntry(objective);
+function objectiveVisibleInBountyHall(objective: Objective) {
+  return isObjectiveChallengeDiscoverableByFlow(objective) && !objectiveClosedForChallengeEntry(objective);
 }
 
-function objectiveAcceptedForBountyHall(objective: Objective) {
-  return objective.challengers.length > 0 || isObjectiveChallengeAcceptedByFlow(objective);
+function objectiveAvailableForBountyApplication(objective: Objective) {
+  return canApplyForObjectiveChallenge(objective) && !objectiveClosedForChallengeEntry(objective);
 }
 
 function contributionSummaryFor(data: TaskManagementData, member: string) {
@@ -866,28 +898,36 @@ export async function getBountyHallData(viewerName: string, scope: TaskManagemen
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
     const isRecruitment = canUseChallengeActions && objective.assignedChallengers.includes(viewerName) && canAcceptObjectiveChallengeByFlow(objective);
-    if (objectiveClosedForBountyHall(objective) && !isRecruitment) return [];
-    if (objectiveAcceptedForBountyHall(objective) && !isRecruitment) return [];
+    if (!objectiveVisibleInBountyHall(objective) && !isRecruitment) return [];
 
-    const pendingApplications = (objective.challengeApplications ?? []).filter((application) => application.status === "pending");
+    const applications = objective.challengeApplications ?? [];
+    const pendingApplications = applications.filter((application) => application.status === "pending");
+    const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
+    const challengers = uniqueMembers(objective.challengers ?? []);
     return [{
+      applications,
+      approvedApplicants,
+      challengers,
       uncertaintyPoints: objectiveResults.reduce((sum, item) => sum + item.uncertaintyScore, 0),
       deadline: objective.finalDueAt,
       definer: result?.definer ?? "",
       difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
       hasCurrentApplication: canUseChallengeActions && pendingApplications.some((application) => application.applicant === viewerName),
+      isCurrentChallenger: canUseChallengeActions && challengers.includes(viewerName),
       isRecruitment,
       objective,
+      pendingApplications,
       result: result ?? null,
       results: objectiveResults,
       source: result?.source ?? "managerDefined",
     }];
   }).sort(compareBountyItems);
 
-  const availableItems = items.filter((item) => !item.isRecruitment);
-  const objectiveOptionIds = new Set(availableItems.map((item) => item.objective.id));
+  const availableItems = items.filter((item) => !item.isRecruitment && objectiveAvailableForBountyApplication(item.objective));
+  const objectiveOptionIds = new Set(items.map((item) => item.objective.id));
 
   return {
+    publicItems: items,
     recruitmentItems: items.filter((item) => item.isRecruitment),
     availableItems,
     objectiveOptions: data.objectives.filter((objective) => objectiveOptionIds.has(objective.id)),
@@ -1001,6 +1041,7 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     completionMultiplier: null,
     objectiveBasePoints: 0,
     objectiveSettlementPoints: null,
+    publishedAt: null,
     createdAt: now,
     updatedAt: now,
     createdBy: context.userId,
@@ -1166,13 +1207,18 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "alreadyApplied" }
   | { status: "alreadyAccepted"; challengers: string[] }
   | { status: "forbidden" }
+  | { status: "invalidReason" }
   | { status: "closed" }
   | { status: "notFound" };
 
-export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId?: string | null): Promise<ApplyObjectiveChallengeOutcome> {
+export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId: string | null | undefined, reason: string): Promise<ApplyObjectiveChallengeOutcome> {
   const nextApplicant = applicant.trim();
   if (!nextApplicant) {
     return { status: "notFound" };
+  }
+  const applicationReason = reason.trim();
+  if (!applicationReason) {
+    return { status: "invalidReason" };
   }
 
   const appliedResult = await db.transaction(async (tx) => {
@@ -1200,6 +1246,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     const application: ChallengeApplication = {
       id: makeId("challenge-application"),
       applicant: nextApplicant,
+      reason: applicationReason,
       status: "pending",
       createdAt: nowIso(),
       decidedAt: null,
@@ -1222,6 +1269,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
         applicant: nextApplicant,
         objectiveId,
         objectiveTitle: objective.title,
+        reason: applicationReason,
         teamId: objective.teamId,
       },
     };
@@ -1251,9 +1299,10 @@ async function objectiveOutcome(objectiveId: string, scope?: RuntimeScope | null
 
 export async function publishObjective(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
   const transition = objectiveLifecycleTransitions.publishCandidate;
+  const publishedAt = today();
   const updated = await db
     .update(objectives)
-    .set({ flowStatus: transition.to, stage: transition.stage, status: "Draft", updatedAt: today(), updatedBy: actorId })
+    .set({ flowStatus: transition.to, stage: transition.stage, status: "Draft", publishedAt, updatedAt: publishedAt, updatedBy: actorId })
     .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, transition.from)))
     .returning({ id: objectives.id, teamId: objectives.teamId });
   if (updated.length === 0) {
@@ -1300,10 +1349,22 @@ export async function approveObjectiveChallengeApplication(
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "ok" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        applicant: application.applicant,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
 
-  return approvedResult.status === "ok" ? objectiveOutcome(objectiveId, approvedResult.scope) : approvedResult;
+  if (approvedResult.status !== "ok") return approvedResult;
+  await notifyMemberOfChallengeApplicationApproval(approvedResult.notification);
+  return objectiveOutcome(objectiveId, approvedResult.scope);
 }
 
 export async function rejectObjectiveChallengeApplication(

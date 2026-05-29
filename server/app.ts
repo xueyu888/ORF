@@ -171,6 +171,9 @@ const moveChecklistBodySchema = z.object({
 const recruitBodySchema = z.object({
   members: z.array(z.string().trim().min(1)).min(1),
 });
+const challengeApplicationBodySchema = z.object({
+  reason: requiredTextSchema,
+});
 const submitLootBodySchema = z.object({
   body: z.string().trim().min(1),
   resultClaims: z.array(z.object({
@@ -780,7 +783,8 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(403).send({ error: "Only active members can apply for objective challenges" });
     }
 
-    const outcome = await applyForObjectiveChallenge(params.objectiveId, user.name, user.id);
+    const body = challengeApplicationBodySchema.parse(request.body);
+    const outcome = await applyForObjectiveChallenge(params.objectiveId, user.name, user.id, body.reason);
 
     if (outcome.status === "notFound") {
       return reply.code(404).send({ error: "Objective not found" });
@@ -793,6 +797,9 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
     if (outcome.status === "forbidden") {
       return reply.code(403).send({ error: "Only active members can apply for objective challenges" });
+    }
+    if (outcome.status === "invalidReason") {
+      return reply.code(400).send({ error: "Challenge application reason is required" });
     }
     if (outcome.status === "closed") {
       return reply.code(409).send({ error: "Objective is not open for challenge applications" });

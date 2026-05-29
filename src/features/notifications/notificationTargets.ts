@@ -13,7 +13,7 @@ export function notificationTargetHref(notification: AppNotification) {
     return challengePathForTarget({ id: notification.targetId, type: "objective" });
   }
 
-  if (notification.kind === "objective.recruitment.created") {
+  if (notification.kind === "challenge.application.approved" || notification.kind === "objective.recruitment.created") {
     return challengePathForTarget({ id: notification.targetId, type: "objective" }, "/bounties");
   }
 

@@ -109,6 +109,7 @@ export const objectives = pgTable("objectives", {
   completionMultiplier: real("completion_multiplier"),
   objectiveBasePoints: integer("objective_base_points").notNull().default(0),
   objectiveSettlementPoints: real("objective_settlement_points"),
+  publishedAt: date("published_at", { mode: "string" }),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
   createdBy: text("created_by").references(() => users.id),

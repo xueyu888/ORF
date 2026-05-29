@@ -2,6 +2,7 @@ import { initialOrfState } from "../data/initialOrfState";
 import {
   canApplyForObjectiveChallenge,
   isObjectiveStageCompatibleWithFlowStatus,
+  objectiveFlowStatusAfterChallengeApplication,
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../domain/orfLifecycle";
@@ -653,9 +654,10 @@ export class OrfFlowStore {
     };
   }
 
-  applyForBounty(state: OrfState, objectiveId: string, applicant: string): OrfState {
+  applyForBounty(state: OrfState, objectiveId: string, applicant: string, reason: string): OrfState {
     const nextApplicant = applicant.trim();
-    if (!nextApplicant) {
+    const applicationReason = reason.trim();
+    if (!nextApplicant || !applicationReason) {
       return state;
     }
 
@@ -672,6 +674,7 @@ export class OrfFlowStore {
     const application: ChallengeApplication = {
       id: makeId("challenge-application"),
       applicant: nextApplicant,
+      reason: applicationReason,
       status: "pending",
       createdAt: currentTime(),
       decidedAt: null,
@@ -684,6 +687,7 @@ export class OrfFlowStore {
           ? {
               ...item,
               challengeApplications: [application, ...(item.challengeApplications ?? [])],
+              flowStatus: objectiveFlowStatusAfterChallengeApplication(item.flowStatus),
               updatedAt: currentDate(),
             }
           : item,
