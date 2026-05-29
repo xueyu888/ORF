@@ -39,6 +39,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate-db.ts",
     "db:push": "drizzle-kit push",
+    "db:audit:leaderboard": "tsx scripts/audit-leaderboard-data.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:bounties": "tsx scripts/seed-bounty-hall.ts",
     "notify:email": "tsx scripts/send-email-notification.ts",

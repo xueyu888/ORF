@@ -10,14 +10,23 @@ const titleMap: Record<string, string> = {
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",
   reports: "统计",
+  system: "系统管理",
   members: "成员管理",
   permissions: "权限管理",
-  settings: "设置",
+  settings: "系统设置",
 };
 
 export function breadcrumb(pathname: string) {
   if (/^\/objectives\/[^/]+\/loot\/?$/.test(pathname)) {
     return "目标战利品";
+  }
+
+  if (/^\/settings\/?$/.test(pathname)) {
+    return "个人设置";
+  }
+
+  if (/^\/settings\/system\/?$/.test(pathname)) {
+    return "系统管理 / 系统设置";
   }
 
   const parts = pathname.split("/").filter(Boolean);

@@ -7,10 +7,11 @@ import {
   ShieldAlert,
   type LucideIcon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { canShowFrontend } from "../config/frontendVisibility";
 import { remainingTime } from "../features/challenge/model/challengeDates";
-import { parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
+import { challengePathForTarget, parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
 import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
 import {
   BountyBadge,
@@ -66,6 +67,7 @@ export function BountyHallPage() {
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
   const challengeActionsBlocked = currentUser?.role !== "member";
+  const canOpenChallengeTarget = canShowFrontend(currentUser, "challenge.scope.all");
   const linkedBountyObjectiveId = useMemo(() => {
     const target = parseChallengeTargetHash(location.hash);
     return target?.type === "objective" ? target.id : null;
@@ -192,6 +194,10 @@ export function BountyHallPage() {
     }
   };
 
+  const openChallengeTarget = (objectiveId: string) => {
+    navigate(challengePathForTarget({ id: objectiveId, type: "objective" }));
+  };
+
   return (
     <div className="bounty-hall-page grid gap-5">
       <BountyOverview
@@ -228,6 +234,7 @@ export function BountyHallPage() {
             activeObjectiveId={linkedBountyObjectiveId}
             items={filteredHallItems}
             now={now}
+            onOpenObjective={canOpenChallengeTarget ? openChallengeTarget : undefined}
             processingBountyId={processingBountyId}
             onAction={(item, action) => setConfirmTarget({ action, blocked: challengeActionsBlocked, item })}
           />
@@ -351,12 +358,14 @@ function BountyObjectiveList({
   activeObjectiveId,
   items,
   now,
+  onOpenObjective,
   processingBountyId,
   onAction,
 }: {
   activeObjectiveId: string | null;
   items: BountyItem[];
   now: Date;
+  onOpenObjective?: (objectiveId: string) => void;
   processingBountyId: string | null;
   onAction: (item: BountyItem, action: ChallengeAction) => void;
 }) {
@@ -375,6 +384,7 @@ function BountyObjectiveList({
           active={item.objective.id === activeObjectiveId}
           item={item}
           now={now}
+          onOpenObjective={onOpenObjective}
           processing={processingBountyId === item.objective.id}
           onAction={(action) => onAction(item, action)}
         />
@@ -386,6 +396,7 @@ function BountyObjectiveList({
 function BountyListRow({
   item,
   now,
+  onOpenObjective,
   processing,
   onAction,
   active,
@@ -393,20 +404,40 @@ function BountyListRow({
   active: boolean;
   item: BountyItem;
   now: Date;
+  onOpenObjective?: (objectiveId: string) => void;
   processing: boolean;
   onAction: (action: ChallengeAction) => void;
 }) {
   const actionLabel = item.isRecruitment ? "接受挑战" : item.hasCurrentApplication ? "已申请" : "申请挑战";
   const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
   const actionDisabled = processing || !canApply || (!item.isRecruitment && item.hasCurrentApplication);
+  const openable = Boolean(onOpenObjective);
+  const openObjective = () => onOpenObjective?.(item.objective.id);
+  const handleRowClick = (event: ReactMouseEvent<HTMLElement>) => {
+    event.currentTarget.focus();
+  };
+  const handleRowDoubleClick = () => {
+    if (!openable) return;
+    openObjective();
+  };
+  const handleRowKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (!openable || (event.key !== "Enter" && event.key !== " ")) return;
+
+    event.preventDefault();
+    openObjective();
+  };
 
   return (
     <article
       className={`bounty-list-row${item.isRecruitment ? " bounty-list-row-priority" : ""}`}
       data-bounty-objective-id={item.objective.id}
       data-linked-target={active ? "true" : undefined}
+      data-open-target={openable ? "true" : undefined}
       tabIndex={0}
-      aria-label={`${item.objective.title}，移入或聚焦后显示完整信息`}
+      aria-label={`${item.objective.title}，${openable ? "双击打开挑战页目标；" : ""}单击、移入或聚焦后显示完整信息`}
+      onClick={handleRowClick}
+      onDoubleClick={handleRowDoubleClick}
+      onKeyDown={handleRowKeyDown}
     >
       <div className="bounty-row-reward" data-label="奖励">
         {item.isRecruitment && (
@@ -433,7 +464,13 @@ function BountyListRow({
       <div className="bounty-row-time" data-label="剩余时间">
         {item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}
       </div>
-      <div className="bounty-row-actions" data-label="操作" onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+      <div
+        className="bounty-row-actions"
+        data-label="操作"
+        onClick={(event) => event.stopPropagation()}
+        onDoubleClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
         {item.isRecruitment ? (
           <BountyButton onClick={() => onAction("accept")} disabled={actionDisabled}>
             {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}

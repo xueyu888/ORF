@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { VisualBackgroundScene } from "../../src/state/apiClient";
-import { fulfillVisualBackgroundImage, visualBackgroundFixture } from "../helpers/visualBackgroundMocks";
+import { fulfillVisualBackgroundImage, personalBackgroundFixture, visualBackgroundFixture } from "../helpers/visualBackgroundMocks";
 
 function taskManagementData() {
   return {
@@ -30,10 +30,19 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/users", async (route) => {
     await route.fulfill({ json: { users: initialOrfState.users } });
   });
+  await page.route("**/api/settings/personal/preferences", async (route) => {
+    await route.fulfill({ json: { code: 0, message: "ok", data: personalBackgroundFixture().preferences } });
+  });
 });
 
 test("settings page only exposes implemented visual configuration", async ({ page }) => {
   const requestedScenes: VisualBackgroundScene[] = [];
+  let requestedPersonalBackgrounds = false;
+
+  await page.route("**/api/settings/personal/backgrounds", async (route) => {
+    requestedPersonalBackgrounds = true;
+    await route.fulfill({ json: { code: 0, message: "ok", data: personalBackgroundFixture() } });
+  });
 
   await page.route("**/api/settings/visual/backgrounds?**", async (route) => {
     const url = new URL(route.request().url());
@@ -45,7 +54,7 @@ test("settings page only exposes implemented visual configuration", async ({ pag
 
   await page.route("**/settings/backgrounds/**", fulfillVisualBackgroundImage);
 
-  await page.goto("/settings/system");
+  await page.goto("/system/settings");
 
   await expect(page.getByRole("heading", { name: "视觉设置" })).toBeVisible();
   await expect(page.locator(".orf-sidebar-background-image")).toHaveAttribute("src", /\/settings\/backgrounds\/app_background\/default\/test-bg\.png$/);
@@ -65,17 +74,22 @@ test("settings page only exposes implemented visual configuration", async ({ pag
       };
     }),
   ).toEqual({ backgroundColor: "rgba(0, 0, 0, 0)", beforeBackgroundImage: "none" });
-  await expect(page.getByLabel("设置导航")).toContainText("视觉设置");
+  await expect(page.getByLabel("系统管理导航")).toContainText("系统设置");
   await expect(page.getByText("Coming Soon")).toHaveCount(0);
 
   for (const hiddenLabel of ["周期与团队", "反馈分类", "ORF 规则", "存储"]) {
     await expect(page.getByText(hiddenLabel, { exact: true })).toHaveCount(0);
   }
 
+  await expect.poll(() => requestedPersonalBackgrounds).toBe(true);
   await expect.poll(() => Array.from(new Set(requestedScenes)).sort()).toEqual(["app_background", "login_background"]);
 });
 
 test("sidebar background image load failure is reported instead of falling back to a color", async ({ page }) => {
+  await page.route("**/api/settings/personal/backgrounds", async (route) => {
+    await route.fulfill({ json: { code: 0, message: "ok", data: personalBackgroundFixture() } });
+  });
+
   await page.route("**/api/settings/visual/backgrounds?**", async (route) => {
     const url = new URL(route.request().url());
     const scene = (url.searchParams.get("scene") ?? "login_background") as VisualBackgroundScene;
@@ -93,7 +107,7 @@ test("sidebar background image load failure is reported instead of falling back 
   });
 
   const pageError = page.waitForEvent("pageerror");
-  await page.goto("/settings/system");
+  await page.goto("/system/settings");
   const error = await pageError;
   expect(error.message).toContain("Sidebar background image failed to load");
 });

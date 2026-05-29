@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
-import type { BountyHallData, BountyHallItem } from "../../src/state/apiClient";
+import type { BountyHallData, BountyHallItem, TaskManagementData } from "../../src/state/apiClient";
 import type { AppNotification } from "../../src/types/orf";
 import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
@@ -44,6 +44,18 @@ const bountyHallData: BountyHallData = {
   ].filter((item): item is NonNullable<typeof item> => Boolean(item)),
   contribution: { points: 0 },
 };
+const taskPageData: TaskManagementData = {
+  objectives: initialOrfState.objectives,
+  results: initialOrfState.results,
+  tasks: initialOrfState.tasks,
+  evidence: initialOrfState.evidence,
+  feedback: initialOrfState.feedback,
+  comments: initialOrfState.comments,
+  objectiveLoot: initialOrfState.objectiveLoot,
+  objectiveContributionReviews: initialOrfState.objectiveContributionReviews,
+  pointLedger: initialOrfState.pointLedger,
+  permissionRules: initialOrfState.permissionRules,
+};
 const bountyHallUser = initialOrfState.users.find((user) => user.role === "member") ?? initialOrfState.users[0]!;
 const bountyHallCommander = initialOrfState.users.find((user) => user.role === "admin") ?? initialOrfState.users[0]!;
 
@@ -55,17 +67,13 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ json: { authenticated: true, user: bountyHallUser } });
   });
   await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: {
-        objectives: initialOrfState.objectives,
-        results: initialOrfState.results,
-        tasks: initialOrfState.tasks,
-        evidence: initialOrfState.evidence,
-        feedback: initialOrfState.feedback,
-        comments: initialOrfState.comments,
-        permissionRules: initialOrfState.permissionRules,
-      },
-    });
+    await route.fulfill({ json: taskPageData });
+  });
+  await page.route("**/api/my-challenges?scope=all", async (route) => {
+    await route.fulfill({ json: taskPageData });
+  });
+  await page.route("**/api/my-challenges?scope=mine", async (route) => {
+    await route.fulfill({ json: taskPageData });
   });
   await page.route("**/api/bounties", async (route) => {
     await route.fulfill({ json: bountyHallData });
@@ -144,6 +152,32 @@ test("commander sees bounty hall actions but challenge writes are blocked", asyn
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("不能成为挑战者");
   await expect.poll(() => applicationRequests).toBe(0);
+});
+
+test("commander focuses a bounty row on click and opens the matching challenge workbench objective on double click", async ({ page }) => {
+  const objectiveId = "obj-bounty-cost-routing";
+  const objectiveTitle = "建立成本感知的模型路由策略";
+
+  await page.route("**/api/auth/session", async (route) => {
+    await route.fulfill({ json: { authenticated: true, user: bountyHallCommander } });
+  });
+
+  await page.goto("/bounties");
+
+  const availableRow = page.locator(".bounty-list-row").filter({ hasText: objectiveTitle });
+  await expect(availableRow).toBeVisible();
+
+  await availableRow.click();
+
+  await expect(page).toHaveURL(/\/bounties$/);
+  await expect(availableRow).toBeFocused();
+
+  await availableRow.dblclick();
+
+  const challengeTargetRow = page.locator(`[data-challenge-row-target="objective:${objectiveId}"]`);
+  await expect(page).toHaveURL(new RegExp(`/tasks#objective:${objectiveId}$`));
+  await expect(challengeTargetRow).toBeVisible();
+  await expect(challengeTargetRow).toContainText(objectiveTitle);
 });
 
 test("refreshes the bounty hall when a recruitment notification is received", async ({ page }) => {

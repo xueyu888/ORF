@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getVisualBackgrounds, type VisualBackgroundScene } from "../state/apiClient";
+import { getPersonalBackgrounds, getVisualBackgrounds, type VisualBackgroundScene } from "../state/apiClient";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
 
 type VisualBackgroundLoadState =
@@ -22,6 +22,10 @@ function requiredVisualBackgroundUrl(scene: VisualBackgroundScene, data: Awaited
   }
 
   return background.url;
+}
+
+function loadVisualBackgrounds(scene: VisualBackgroundScene) {
+  return scene === "app_background" ? getPersonalBackgrounds() : getVisualBackgrounds(scene);
 }
 
 export function useVisualBackground(scene: VisualBackgroundScene) {
@@ -50,7 +54,7 @@ export function useVisualBackground(scene: VisualBackgroundScene) {
         }
       };
 
-      void getVisualBackgrounds(scene)
+      void loadVisualBackgrounds(scene)
         .then((data) => {
           if (cancelled) {
             return;

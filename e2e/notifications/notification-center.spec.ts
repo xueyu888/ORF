@@ -45,7 +45,7 @@ test("topbar notification entry is visible across authenticated pages", async ({
     await route.fulfill({ json: { notifications: [], unreadCount: 0 } });
   });
 
-  for (const path of ["/bounties", "/tasks", "/feedback", "/reports", "/members", "/permissions", "/settings"]) {
+  for (const path of ["/bounties", "/tasks", "/feedback", "/reports", "/system/members", "/system/permissions", "/settings"]) {
     await page.goto(path);
     await expect(page.getByRole("button", { name: "消息" })).toBeVisible();
   }

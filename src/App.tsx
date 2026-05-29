@@ -1,83 +1,98 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
 import { canShowFrontend, type FrontendVisibilityKey } from "./config/frontendVisibility";
-import { AIEvaluationPage } from "./pages/AIEvaluationPage";
-import { AuthPage } from "./pages/AuthPage";
-import { BountyHallPage } from "./pages/BountyHallPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { FeedbackDetailPage } from "./pages/FeedbackDetailPage";
-import { FeedbackInboxPage } from "./pages/FeedbackInboxPage";
-import { FantasyUiPreviewPage } from "./features/fantasy-ui";
-import { GenshinUIKitPreviewPage } from "./features/genshin-ui-kit";
-import { LootSubmitPage } from "./pages/LootSubmitPage";
-import { MembersPage } from "./pages/MembersPage";
-import { NotificationsPage } from "./pages/NotificationsPage";
-import { ObjectiveDetailPage } from "./pages/ObjectiveDetailPage";
-import { ObjectivesPage } from "./pages/ObjectivesPage";
-import { PersonalSettingsPage } from "./pages/PersonalSettingsPage";
-import { PermissionsPage } from "./pages/PermissionsPage";
-import { ReportsPage } from "./pages/ReportsPage";
-import { ResultDetailPage } from "./pages/ResultDetailPage";
-import { SystemSettingsPage } from "./pages/SettingsPage";
-import { StrategyMapPage } from "./pages/StrategyMapPage";
-import { ChallengePlanPage } from "./pages/TasksPage";
 import { useOrf } from "./state/OrfProvider";
+
+const AIEvaluationPage = lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage");
+const AuthPage = lazyNamed(() => import("./pages/AuthPage"), "AuthPage");
+const BountyHallPage = lazyNamed(() => import("./pages/BountyHallPage"), "BountyHallPage");
+const ChallengePlanPage = lazyNamed(() => import("./pages/TasksPage"), "ChallengePlanPage");
+const DashboardPage = lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage");
+const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage");
+const FeedbackDetailPage = lazyNamed(() => import("./pages/FeedbackDetailPage"), "FeedbackDetailPage");
+const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
+const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
+const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
+const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
+const NotificationsPage = lazyNamed(() => import("./pages/NotificationsPage"), "NotificationsPage");
+const ObjectiveDetailPage = lazyNamed(() => import("./pages/ObjectiveDetailPage"), "ObjectiveDetailPage");
+const ObjectivesPage = lazyNamed(() => import("./pages/ObjectivesPage"), "ObjectivesPage");
+const PermissionsPage = lazyNamed(() => import("./pages/PermissionsPage"), "PermissionsPage");
+const PersonalSettingsPage = lazyNamed(() => import("./pages/PersonalSettingsPage"), "PersonalSettingsPage");
+const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage");
+const ResultDetailPage = lazyNamed(() => import("./pages/ResultDetailPage"), "ResultDetailPage");
+const StrategyMapPage = lazyNamed(() => import("./pages/StrategyMapPage"), "StrategyMapPage");
+const SystemManagementPage = lazyNamed(() => import("./pages/SystemManagementPage"), "SystemManagementPage");
+const SystemSettingsPage = lazyNamed(() => import("./pages/SettingsPage"), "SystemSettingsPage");
 
 export function App() {
   return (
     <Routes>
       <Route path="auth" element={<AuthRoute />} />
-      <Route path="preview/genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
+      <Route path="preview/genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
       <Route element={<RequireAuth />}>
-        <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="bounties" element={<BountyHallPage />} />
-        <Route path="objectives" element={<ObjectivesPage />} />
-        <Route path="objectives/:objectiveId" element={<ObjectiveDetailPage />} />
-        <Route path="objectives/:objectiveId/results/:resultId" element={<ResultDetailPage />} />
-        <Route path="tasks" element={<ChallengePlanPage />} />
-        <Route path="objectives/:objectiveId/loot" element={<LootSubmitPage />} />
-        <Route path="fantasy-ui" element={<FantasyUiPreviewPage />} />
-        <Route path="genshin-ui-kit" element={<GenshinUIKitPreviewPage />} />
-        <Route path="feedback" element={<FeedbackInboxPage />} />
-        <Route path="feedback/:feedbackId" element={<FeedbackDetailPage />} />
-        <Route path="notifications" element={<NotificationsPage />} />
-        <Route path="strategy-map" element={<StrategyMapPage />} />
-        <Route path="ai-evaluation" element={<AIEvaluationPage />} />
-        <Route path="reports" element={<ReportsPage />} />
-        <Route
-          path="members"
-          element={
-            <RequireFrontendVisibility visibilityKey="page.members">
-              <MembersPage />
-            </RequireFrontendVisibility>
-          }
-        />
-        <Route
-          path="permissions"
-          element={
-            <RequireFrontendVisibility visibilityKey="page.permissions">
-              <PermissionsPage />
-            </RequireFrontendVisibility>
-          }
-        />
+        <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
+        <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
+        <Route path="objectives" element={<LazyRoute><ObjectivesPage /></LazyRoute>} />
+        <Route path="objectives/:objectiveId" element={<LazyRoute><ObjectiveDetailPage /></LazyRoute>} />
+        <Route path="objectives/:objectiveId/results/:resultId" element={<LazyRoute><ResultDetailPage /></LazyRoute>} />
+        <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
+        <Route path="objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
+        <Route path="fantasy-ui" element={<LazyRoute><FantasyUiPreviewPage /></LazyRoute>} />
+        <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
+        <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
+        <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackDetailPage /></LazyRoute>} />
+        <Route path="notifications" element={<LazyRoute><NotificationsPage /></LazyRoute>} />
+        <Route path="strategy-map" element={<LazyRoute><StrategyMapPage /></LazyRoute>} />
+        <Route path="ai-evaluation" element={<LazyRoute><AIEvaluationPage /></LazyRoute>} />
+        <Route path="reports" element={<LazyRoute><ReportsPage /></LazyRoute>} />
+        <Route path="members" element={<Navigate to="/system/members" replace />} />
+        <Route path="permissions" element={<Navigate to="/system/permissions" replace />} />
         <Route
           path="settings"
           element={
             <RequireFrontendVisibility visibilityKey="page.personalSettings">
-              <PersonalSettingsPage />
+              <LazyRoute><PersonalSettingsPage /></LazyRoute>
             </RequireFrontendVisibility>
           }
         />
+        <Route path="settings/system" element={<Navigate to="/system/settings" replace />} />
         <Route
-          path="settings/system"
+          path="system"
           element={
-            <RequireFrontendVisibility visibilityKey="page.systemSettings">
-              <SystemSettingsPage />
+            <RequireFrontendVisibility visibilityKey="page.systemManagement">
+              <LazyRoute><SystemManagementPage /></LazyRoute>
             </RequireFrontendVisibility>
           }
-        />
+        >
+          <Route index element={<Navigate to="/system/members" replace />} />
+          <Route
+            path="members"
+            element={
+              <RequireFrontendVisibility visibilityKey="page.systemMembers">
+                <LazyRoute><MembersPage /></LazyRoute>
+              </RequireFrontendVisibility>
+            }
+          />
+          <Route
+            path="permissions"
+            element={
+              <RequireFrontendVisibility visibilityKey="page.systemPermissions">
+                <LazyRoute><PermissionsPage /></LazyRoute>
+              </RequireFrontendVisibility>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <RequireFrontendVisibility visibilityKey="page.systemSettings">
+                <LazyRoute><SystemSettingsPage /></LazyRoute>
+              </RequireFrontendVisibility>
+            }
+          />
+        </Route>
         <Route path="*" element={<Navigate to="/bounties" replace />} />
       </Route>
     </Routes>
@@ -86,7 +101,7 @@ export function App() {
 
 function AuthRoute() {
   const { authReady, isAuthenticated, isApproved } = useOrf();
-  return authReady && isAuthenticated && isApproved ? <Navigate to="/bounties" replace /> : <AuthPage />;
+  return authReady && isAuthenticated && isApproved ? <Navigate to="/bounties" replace /> : <LazyRoute><AuthPage /></LazyRoute>;
 }
 
 function RequireAuth() {
@@ -118,6 +133,25 @@ function AuthLoadingScreen() {
       </div>
     </main>
   );
+}
+
+function RouteLoadingScreen() {
+  return (
+    <div className="grid min-h-[40vh] place-items-center" role="status" aria-live="polite">
+      <Loader2 className="h-6 w-6 animate-spin" />
+    </div>
+  );
+}
+
+function LazyRoute({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteLoadingScreen />}>{children}</Suspense>;
+}
+
+function lazyNamed<TComponent extends ComponentType, TKey extends string>(
+  loader: () => Promise<Record<TKey, TComponent>>,
+  exportName: TKey,
+) {
+  return lazy(async () => ({ default: (await loader())[exportName] }));
 }
 
 function ApprovalPendingScreen({ onLogout, status }: { onLogout: () => void; status: string }) {

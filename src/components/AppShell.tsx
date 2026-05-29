@@ -1,6 +1,6 @@
 import { Loader2, Plus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
@@ -12,6 +12,7 @@ import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { useVisualBackground } from "../hooks/useVisualBackground";
+import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 
 function appShellBackgroundUrlFor(sidebarBackgroundUrl: string) {
@@ -26,6 +27,30 @@ export function AppShell() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarBackground = useVisualBackground("app_background");
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!currentUser) {
+      return undefined;
+    }
+
+    void getUserPreferences()
+      .then((preferences) => {
+        if (!cancelled && preferences.sidebarCollapsed !== null) {
+          setSidebarCollapsed(preferences.sidebarCollapsed);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser]);
+
+  const handleSidebarCollapsedChange = useCallback((collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    void saveUserPreferences({ sidebarCollapsed: collapsed }).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -65,7 +90,7 @@ export function AppShell() {
       <Sidebar
         backgroundUrl={sidebarBackgroundUrl}
         collapsed={sidebarCollapsed}
-        onCollapsedChange={setSidebarCollapsed}
+        onCollapsedChange={handleSidebarCollapsedChange}
         onCommand={() => setCommandOpen(true)}
         unifiedBackgroundUrl={appShellBackgroundUrl}
       />

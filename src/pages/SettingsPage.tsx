@@ -1,6 +1,5 @@
 import { clsx } from "clsx";
-import { Check, Image, Loader2, MousePointerClick, Palette, Shuffle, Timer, ToggleLeft, Upload } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Check, Image, Loader2, MousePointerClick, Shuffle, Timer, ToggleLeft, Upload } from "lucide-react";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
   getVisualBackgrounds,
@@ -17,12 +16,7 @@ import {
 import { useOrf } from "../state/OrfProvider";
 import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 
-type NavigationKey = "visual";
 type RequestStatus = "idle" | "loading" | "success" | "error";
-
-const settingsNavigation: Array<{ key: NavigationKey; label: string; icon: LucideIcon }> = [
-  { key: "visual", label: "视觉设置", icon: Palette },
-];
 
 const backgroundSections: Array<{
   scene: VisualBackgroundScene;
@@ -51,20 +45,7 @@ const defaultVisualBackgroundConfig: VisualBackgroundConfig = {
 
 export function SystemSettingsPage() {
   return (
-    <div className="orf-settings-page">
-      <nav className="orf-settings-nav" aria-label="设置导航">
-        {settingsNavigation.map((item) => (
-          <div
-            key={item.key}
-            className="orf-settings-nav-item orf-settings-nav-active"
-            aria-current="page"
-          >
-            <item.icon className="h-5 w-5" />
-            <span>{item.label}</span>
-          </div>
-        ))}
-      </nav>
-
+    <div className="orf-settings-page orf-settings-page-single">
       <section className="orf-settings-detail" aria-label="设置详情">
         <div className="orf-settings-detail-heading">
           <span>Visual Config</span>

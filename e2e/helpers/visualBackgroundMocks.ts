@@ -31,6 +31,19 @@ export function visualBackgroundFixture(scene: VisualBackgroundScene) {
   };
 }
 
+export function personalBackgroundFixture() {
+  return {
+    ...visualBackgroundFixture("app_background"),
+    preferences: {
+      userId: "test-user",
+      defaultLandingPath: null,
+      sidebarCollapsed: null,
+      appBackground: null,
+      notificationDisplay: { toastEnabled: true },
+    },
+  };
+}
+
 export async function fulfillVisualBackgroundImage(route: Route) {
   await route.fulfill({
     contentType: "image/png",
@@ -39,6 +52,26 @@ export async function fulfillVisualBackgroundImage(route: Route) {
 }
 
 export async function routeVisualBackgroundMocks(page: Page) {
+  await page.route("**/api/settings/personal/backgrounds", async (route) => {
+    await route.fulfill({
+      json: {
+        code: 0,
+        message: "ok",
+        data: personalBackgroundFixture(),
+      },
+    });
+  });
+
+  await page.route("**/api/settings/personal/preferences", async (route) => {
+    await route.fulfill({
+      json: {
+        code: 0,
+        message: "ok",
+        data: personalBackgroundFixture().preferences,
+      },
+    });
+  });
+
   await page.route("**/api/settings/visual/backgrounds?**", async (route) => {
     const url = new URL(route.request().url());
     const scene = (url.searchParams.get("scene") ?? "login_background") as VisualBackgroundScene;

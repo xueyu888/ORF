@@ -1,4 +1,5 @@
 import { closeDb, db } from "../server/db/client";
+import { eq, inArray } from "drizzle-orm";
 import {
   commentMessages,
   commentThreads,
@@ -20,10 +21,18 @@ import {
 } from "../server/db/schema";
 import { permissionStorageResource, permissionStorageStage } from "../server/repositories/permissionRepository";
 import { initialOrfState } from "../src/data/initialOrfState";
+import {
+  assertDemoSeedSafety,
+  namespacedSeedId,
+  seedBootstrapAdmin,
+  seedTeamId,
+  seedTeamName,
+  seedUserIdForName,
+} from "./seedSafety";
 
 const team = {
-  id: "team-ai-app",
-  name: "AI 应用团队",
+  id: seedTeamId(),
+  name: seedTeamName(),
   createdAt: "2026-04-01",
 };
 type SeedUser = {
@@ -34,17 +43,14 @@ type SeedUser = {
   createdAt: string;
   lastOnlineAt: string | null;
 };
-const bootstrapAdmin: SeedUser = {
-  id: "user-xueyu",
-  name: "xueyu",
-  email: "xueyu@qq.com",
-  status: "active",
-  createdAt: "2026-04-01",
-  lastOnlineAt: "2026-05-05T09:42:00.000Z",
-};
+const bootstrapAdmin: SeedUser = seedBootstrapAdmin(team.id);
 
 function userIdForName(name: string) {
-  return `user-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+  return seedUserIdForName(team.id, name);
+}
+
+function seedId(id: string | null | undefined) {
+  return id ? namespacedSeedId(team.id, id) : null;
 }
 
 function emailForName(name: string) {
@@ -61,6 +67,10 @@ function collectUserNames() {
       ...initialOrfState.tasks.map((item) => item.assignee),
       ...initialOrfState.feedback.map((item) => item.owner),
       ...initialOrfState.evidence.map((item) => item.owner),
+      ...initialOrfState.objectiveLoot.map((item) => item.submittedBy),
+      ...initialOrfState.objectiveContributionReviews.map((item) => item.reviewer),
+      ...initialOrfState.objectiveContributionReviews.flatMap((item) => item.allocations.map((allocation) => allocation.member)),
+      ...initialOrfState.pointLedger.map((item) => item.memberName),
       ...initialOrfState.comments.map((item) => item.createdBy),
       ...initialOrfState.comments.flatMap((thread) => thread.messages.map((message) => message.author)),
     ]),
@@ -68,24 +78,34 @@ function collectUserNames() {
 }
 
 async function seed() {
+  const connectionString = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
+  assertDemoSeedSafety({
+    connectionString,
+    scriptName: "db:seed",
+    targetTeamId: team.id,
+  });
+
   await db.transaction(async (tx) => {
-    await tx.delete(commentMessages);
-    await tx.delete(commentThreads);
-    await tx.delete(pointLedger);
-    await tx.delete(objectiveContributionReviews);
-    await tx.delete(objectiveLoot);
-    await tx.delete(evidence);
-    await tx.delete(feedbackCauseCategories);
-    await tx.delete(feedback);
-    await tx.delete(taskChecklistItems);
-    await tx.delete(tasks);
-    await tx.delete(resultTrendPoints);
-    await tx.delete(results);
-    await tx.delete(objectives);
-    await tx.delete(rolePermissions);
-    await tx.delete(teamMembers);
-    await tx.delete(users);
-    await tx.delete(teams);
+    const userRowsById = new Map<string, SeedUser>(
+      collectUserNames().map((name) => [
+        userIdForName(name),
+        {
+          id: userIdForName(name),
+          name,
+          email: emailForName(name),
+          status: "active",
+          createdAt: "2026-04-01",
+          lastOnlineAt: "2026-05-01T11:06:00.000Z",
+        },
+      ]),
+    );
+    userRowsById.set(bootstrapAdmin.id, bootstrapAdmin);
+    const userRows = Array.from(userRowsById.values());
+
+    await tx.delete(teams).where(eq(teams.id, team.id));
+    if (userRows.length > 0) {
+      await tx.delete(users).where(inArray(users.id, userRows.map((user) => user.id)));
+    }
 
     await tx.insert(teams).values(team);
     await tx.insert(rolePermissions).values(
@@ -98,22 +118,6 @@ async function seed() {
       })),
     );
 
-    const userRowsById = new Map<string, SeedUser>(
-      collectUserNames().map((name) => [
-        userIdForName(name),
-        {
-          id: userIdForName(name),
-          name,
-	          email: emailForName(name),
-	          status: "active",
-	          createdAt: "2026-04-01",
-	          lastOnlineAt: "2026-05-01T11:06:00.000Z",
-	        },
-      ]),
-    );
-    userRowsById.set(bootstrapAdmin.id, bootstrapAdmin);
-    const userRows = Array.from(userRowsById.values());
-
     if (userRows.length > 0) {
       await tx.insert(users).values(userRows);
       await tx.insert(teamMembers).values(userRows.map((user) => ({ teamId: team.id, userId: user.id, role: user.id === bootstrapAdmin.id ? ("admin" as const) : ("member" as const) })));
@@ -121,7 +125,7 @@ async function seed() {
 
     await tx.insert(objectives).values(
       initialOrfState.objectives.map((objective) => ({
-        id: objective.id,
+        id: seedId(objective.id)!,
         teamId: team.id,
         title: objective.title,
         description: objective.description,
@@ -155,9 +159,9 @@ async function seed() {
 
     await tx.insert(results).values(
       initialOrfState.results.map((result) => ({
-        id: result.id,
+        id: seedId(result.id)!,
         teamId: team.id,
-        objectiveId: result.objectiveId,
+        objectiveId: seedId(result.objectiveId)!,
         title: result.title,
         description: result.description,
         metricName: result.metricName,
@@ -187,7 +191,7 @@ async function seed() {
 
     const trendRows = initialOrfState.results.flatMap((result) =>
       result.trend.map((point, index) => ({
-        resultId: result.id,
+        resultId: seedId(result.id)!,
         date: point.date,
         value: point.value,
         sortOrder: index,
@@ -200,12 +204,12 @@ async function seed() {
     if (initialOrfState.objectiveLoot.length > 0) {
       await tx.insert(objectiveLoot).values(
         initialOrfState.objectiveLoot.map((loot) => ({
-          id: loot.id,
+          id: seedId(loot.id)!,
           teamId: team.id,
-          objectiveId: loot.objectiveId,
+          objectiveId: seedId(loot.objectiveId)!,
           submittedBy: loot.submittedBy,
           body: loot.body,
-          resultClaims: loot.resultClaims,
+          resultClaims: loot.resultClaims.map((claim) => ({ ...claim, resultId: seedId(claim.resultId)! })),
           selfTestReportUrl: loot.selfTestReportUrl ?? null,
           selfTestReportBody: loot.selfTestReportBody ?? null,
           submittedAt: loot.submittedAt,
@@ -216,9 +220,9 @@ async function seed() {
     if (initialOrfState.objectiveContributionReviews.length > 0) {
       await tx.insert(objectiveContributionReviews).values(
         initialOrfState.objectiveContributionReviews.map((review) => ({
-          id: review.id,
+          id: seedId(review.id)!,
           teamId: team.id,
-          objectiveId: review.objectiveId,
+          objectiveId: seedId(review.objectiveId)!,
           reviewer: review.reviewer,
           allocations: review.allocations,
           submittedAt: review.submittedAt,
@@ -229,10 +233,10 @@ async function seed() {
     if (initialOrfState.pointLedger.length > 0) {
       await tx.insert(pointLedger).values(
         initialOrfState.pointLedger.map((entry) => ({
-          id: entry.id,
+          id: seedId(entry.id)!,
           teamId: team.id,
-          objectiveId: entry.objectiveId,
-          userId: entry.userId ?? userIdForName(entry.memberName),
+          objectiveId: seedId(entry.objectiveId)!,
+          userId: userIdForName(entry.memberName),
           memberName: entry.memberName,
           points: entry.points,
           reason: entry.reason,
@@ -243,15 +247,15 @@ async function seed() {
 
     await tx.insert(tasks).values(
       initialOrfState.tasks.map((task) => ({
-        id: task.id,
+        id: seedId(task.id)!,
         teamId: team.id,
         title: task.title,
         description: task.description,
         status: task.status,
         priority: task.priority,
         assignee: task.assignee,
-        linkedObjectiveId: task.linkedObjectiveId,
-        feedbackOriginId: task.feedbackOriginId ?? null,
+        linkedObjectiveId: seedId(task.linkedObjectiveId)!,
+        feedbackOriginId: seedId(task.feedbackOriginId),
         dueDate: task.dueDate,
         tags: task.tags,
         createdAt: task.createdAt,
@@ -264,8 +268,8 @@ async function seed() {
 
     const checklistRows = initialOrfState.tasks.flatMap((task) =>
       task.checklist.map((item, index) => ({
-        id: item.id,
-        taskId: task.id,
+        id: seedId(item.id)!,
+        taskId: seedId(task.id)!,
         label: item.label,
         done: item.done,
         sortOrder: index,
@@ -278,12 +282,12 @@ async function seed() {
 
     await tx.insert(feedback).values(
       initialOrfState.feedback.map((item) => ({
-        id: item.id,
+        id: seedId(item.id)!,
         teamId: team.id,
         phenomenon: item.phenomenon,
         impact: item.impact,
-        linkedObjectiveId: item.linkedObjectiveId,
-        linkedResultId: item.linkedResultId,
+        linkedObjectiveId: seedId(item.linkedObjectiveId)!,
+        linkedResultId: seedId(item.linkedResultId)!,
         suggestedAdjustment: item.suggestedAdjustment,
         source: item.source,
         status: item.status,
@@ -297,7 +301,7 @@ async function seed() {
 
     const causeRows = initialOrfState.feedback.flatMap((item) =>
       item.causeCategories.map((category, index) => ({
-        feedbackId: item.id,
+        feedbackId: seedId(item.id)!,
         category,
         sortOrder: index,
       })),
@@ -308,7 +312,7 @@ async function seed() {
 
     await tx.insert(evidence).values(
       initialOrfState.evidence.map((item) => ({
-        id: item.id,
+        id: seedId(item.id)!,
         teamId: team.id,
         type: item.type,
         title: item.title,
@@ -316,8 +320,8 @@ async function seed() {
         source: item.source,
         date: item.date,
         owner: item.owner,
-        linkedResultId: item.linkedResultId,
-        linkedFeedbackId: item.linkedFeedbackId ?? null,
+        linkedResultId: seedId(item.linkedResultId)!,
+        linkedFeedbackId: seedId(item.linkedFeedbackId),
         createdBy: userIdForName(item.owner),
         updatedBy: userIdForName(item.owner),
       })),
@@ -326,10 +330,10 @@ async function seed() {
     if (initialOrfState.comments.length > 0) {
       await tx.insert(commentThreads).values(
         initialOrfState.comments.map((thread) => ({
-          id: thread.id,
+          id: seedId(thread.id)!,
           teamId: team.id,
           targetType: thread.targetType,
-          targetId: thread.targetId,
+          targetId: seedId(thread.targetId)!,
           targetTitle: thread.targetTitle,
           status: thread.status,
           createdBy: userIdForName(thread.createdBy),
@@ -340,14 +344,14 @@ async function seed() {
       await tx.insert(commentMessages).values(
         initialOrfState.comments.flatMap((thread) =>
           thread.messages.map((message, index) => ({
-            id: message.id,
-            threadId: thread.id,
+            id: seedId(message.id)!,
+            threadId: seedId(thread.id)!,
             authorUserId: userIdForName(message.author),
             author: message.author,
             body: message.body,
             createdAt: message.createdAt,
-            parentMessageId: message.parentMessageId ?? null,
-            replyToMessageId: message.replyToMessageId ?? null,
+            parentMessageId: seedId(message.parentMessageId),
+            replyToMessageId: seedId(message.replyToMessageId),
             replyToAuthor: message.replyToAuthor ?? null,
             sortOrder: index,
           })),

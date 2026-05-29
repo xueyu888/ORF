@@ -1,0 +1,20 @@
+{
+  "visual": {
+    "backgrounds": {
+      "login_background": {
+        "mode": "fixed",
+        "fixedBackgroundId": null,
+        "switchTrigger": "on_open",
+        "switchOrder": "random",
+        "switchIntervalMinutes": 10
+      },
+      "app_background": {
+        "mode": "fixed",
+        "fixedBackgroundId": null,
+        "switchTrigger": "on_open",
+        "switchOrder": "random",
+        "switchIntervalMinutes": 10
+      }
+    }
+  }
+}

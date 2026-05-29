@@ -372,15 +372,15 @@ export const aloginSuccessCase = {
         title: "登录后的管理员入口 \"成员管理\" 应可见",
         object: "page",
         operator: "visible",
-        params: { label: "成员管理" },
+        params: { label: "系统管理" },
       },
       {
         source: { caseStepId: "S1-9", method: "playwright" },
         id: "permissions.nav.visible",
         title: "登录后的管理员入口 \"权限管理\" 应可见",
         object: "page",
-        operator: "visible",
-        params: { label: "权限管理" },
+        operator: "count",
+        params: { text: "权限管理", count: 0 },
       },
       {
         source: { caseStepId: "S1-10", method: "playwright" },

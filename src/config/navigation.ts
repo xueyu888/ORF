@@ -17,13 +17,18 @@ export const navItems = [
   { label: "反馈", path: "/feedback", icon: Inbox },
   { label: "消息", path: "/notifications", icon: Bell },
   { label: "统计", path: "/reports", icon: BarChart3 },
-  { label: "成员管理", path: "/members", icon: UsersRound },
-  { label: "权限管理", path: "/permissions", icon: ShieldCheck },
-  { label: "系统设置", path: "/settings/system", icon: Settings },
+  { label: "系统管理", path: "/system", icon: Settings },
+];
+
+export const systemManagementPages = [
+  { label: "成员管理", path: "/system/members", icon: UsersRound },
+  { label: "权限管理", path: "/system/permissions", icon: ShieldCheck },
+  { label: "系统设置", path: "/system/settings", icon: Settings },
 ];
 
 export const quickPages = [
   ...navItems,
+  ...systemManagementPages,
 ];
 
 export const quickActions = [

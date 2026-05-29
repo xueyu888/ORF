@@ -233,9 +233,10 @@ async function writeUniqueUploadFile(directory: string, fileName: string, buffer
 }
 
 async function ensureBackgroundDirectories() {
+  const systemScopes: CanonicalBackgroundScope[] = ["default", "system"];
   await Promise.all([
     mkdir(systemSettingsDir, { recursive: true }),
-    ...visualBackgroundScenes.flatMap((scene) => visualBackgroundScopes.map((scope) => mkdir(sceneDir(scene, scope), { recursive: true }))),
+    ...visualBackgroundScenes.flatMap((scene) => systemScopes.map((scope) => mkdir(sceneDir(scene, scope), { recursive: true }))),
   ]);
 }
 
@@ -467,6 +468,9 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
   let fixedBackgroundId: string | null = null;
   if (config.fixedBackgroundId) {
     const fixedBackground = await assertBackgroundExists(config.fixedBackgroundId);
+    if (fixedBackground.scope === "personal") {
+      throw new Error("background not found");
+    }
     if (fixedBackground.scene !== scene) {
       throw new Error("background not found");
     }
@@ -488,6 +492,9 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
 
 export async function setDefaultVisualBackground(id: string) {
   const parsed = await assertBackgroundExists(id);
+  if (parsed.scope === "personal") {
+    throw new Error("background not found");
+  }
 
   return updateUserSettings((settings) => {
     settings.visual.backgrounds[parsed.scene] = {

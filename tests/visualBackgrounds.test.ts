@@ -9,11 +9,20 @@ import {
   saveUploadedVisualBackground,
   saveVisualBackgroundConfig,
 } from "../server/settings/visualBackgrounds";
+import {
+  deletePersonalBackground,
+  listPersonalBackgrounds,
+  readUserPreferences,
+  saveUploadedPersonalBackground,
+  saveUserPreferences,
+} from "../server/settings/personalSettings";
 
 const uploadRacePrefix = "orf-race-upload";
 const systemLoginBackgroundDir = path.join(process.cwd(), "public", "settings", "backgrounds", "login_background", "system");
 const systemSettingsPath = path.join(process.cwd(), "public", "settings", "system", "settings.json");
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const personalSettingsUserId = "visual-personal-settings-test";
+const otherPersonalSettingsUserId = "visual-personal-settings-other";
 
 async function cleanupRaceUploads() {
   const entries = await readdir(systemLoginBackgroundDir).catch(() => []);
@@ -35,6 +44,26 @@ async function withUserSettingsBackup(run: () => Promise<void>) {
     } else {
       await writeFile(systemSettingsPath, originalSettings, "utf8");
     }
+  }
+}
+
+function personalSettingsDir(userId: string) {
+  return path.join(process.cwd(), "public", "settings", "users", Buffer.from(userId, "utf8").toString("base64url"));
+}
+
+async function withPersonalSettingsCleanup(run: () => Promise<void>) {
+  await Promise.all([
+    rm(personalSettingsDir(personalSettingsUserId), { recursive: true, force: true }),
+    rm(personalSettingsDir(otherPersonalSettingsUserId), { recursive: true, force: true }),
+  ]);
+
+  try {
+    await run();
+  } finally {
+    await Promise.all([
+      rm(personalSettingsDir(personalSettingsUserId), { recursive: true, force: true }),
+      rm(personalSettingsDir(otherPersonalSettingsUserId), { recursive: true, force: true }),
+    ]);
   }
 }
 
@@ -108,5 +137,49 @@ test("concurrent visual background config writes preserve independent scene upda
     assert.equal(sidebarBackgrounds.config.fixedBackgroundId, "sidebar_background/default/sidebar-character-guide-bg.png");
     assert.equal(sidebarBackgrounds.config.switchTrigger, "interval");
     assert.equal(sidebarBackgrounds.config.switchIntervalMinutes, 17);
+  });
+});
+
+test("personal background preferences are scoped to the current user", async () => {
+  await withPersonalSettingsCleanup(async () => {
+    const uploaded = await saveUploadedPersonalBackground({
+      userId: personalSettingsUserId,
+      fileName: "my background.png",
+      mimeType: "image/png",
+      buffer: Buffer.concat([pngSignature, Buffer.from([1])]),
+    });
+
+    assert.match(uploaded.id, /^app_background\/personal\//);
+    await saveUserPreferences(personalSettingsUserId, {
+      appBackground: {
+        mode: "fixed",
+        fixedBackgroundId: uploaded.id,
+        switchTrigger: "on_open",
+        switchOrder: "random",
+        switchIntervalMinutes: 10,
+      },
+    });
+
+    await assert.rejects(
+      () =>
+        saveUserPreferences(otherPersonalSettingsUserId, {
+          appBackground: {
+            mode: "fixed",
+            fixedBackgroundId: uploaded.id,
+            switchTrigger: "on_open",
+            switchOrder: "random",
+            switchIntervalMinutes: 10,
+          },
+        }),
+      /background not found/,
+    );
+
+    const personalBackgrounds = await listPersonalBackgrounds(personalSettingsUserId);
+    assert.equal(personalBackgrounds.config.fixedBackgroundId, uploaded.id);
+    assert.equal(personalBackgrounds.list.some((image) => image.id === uploaded.id && image.isDefault), true);
+
+    await deletePersonalBackground(personalSettingsUserId, uploaded.id);
+    const preferencesAfterDelete = await readUserPreferences(personalSettingsUserId);
+    assert.equal(preferencesAfterDelete.appBackground, null);
   });
 });
