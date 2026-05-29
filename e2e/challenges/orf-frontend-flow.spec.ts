@@ -233,13 +233,13 @@ test("real user launch flow links commander and challengers from publish to sett
     await challengerPage.goto("/bounties");
     await expect(challengerPage.getByRole("heading", { name: objective.title })).toBeVisible();
     await challengerPage.getByRole("button", { name: "申请挑战" }).click();
-    await challengerPage.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(challengerPage.getByRole("button", { name: "已申请" })).toBeDisabled();
+    await submitChallengeApplicationDialog(challengerPage, "我来承接第一轮验证。");
+    await expect(challengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
 
     await secondChallengerPage.goto("/bounties");
     await secondChallengerPage.getByRole("button", { name: "申请挑战" }).click();
-    await secondChallengerPage.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(secondChallengerPage.getByRole("button", { name: "已申请" })).toBeDisabled();
+    await submitChallengeApplicationDialog(secondChallengerPage, "我来承接第二轮验证。");
+    await expect(secondChallengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
 
     await commanderPage.reload();
     const reviewPanel = objectivePanel(commanderPage, objective.title);
@@ -295,6 +295,129 @@ test("real user launch flow links commander and challengers from publish to sett
     await commanderPage.getByRole("button", { name: "验收并结算" }).click();
     await expect(commanderPage).toHaveURL(/\/reports$/);
     await expect(commanderPage.getByLabel("50 积分")).toHaveCount(2);
+  } finally {
+    await context.close();
+  }
+});
+
+test("commander sees two challenge applications from realtime read-model invalidation without refresh", async ({ browser }) => {
+  const objective = objectiveFixture({
+    id: "obj-ui-realtime-applications",
+    title: "实时同步 两人申请目标",
+    flowStatus: "open",
+    stage: "resultClaiming",
+    resultIds: ["res-ui-realtime-applications"],
+  });
+  const result = resultFixture({
+    id: "res-ui-realtime-applications",
+    objectiveId: objective.id,
+    title: "实时同步 两人申请指标",
+  });
+  let data = taskManagementData({ objectives: [objective], results: [result] });
+  let applicationIndex = 0;
+
+  const currentObjective = () => data.objectives.find((item) => item.id === objective.id)!;
+  const replaceObjective = (nextObjective: Objective) => {
+    data = taskManagementData({
+      objectives: [nextObjective],
+      results: data.results,
+    });
+  };
+  const appendApplication = (applicant: string) => {
+    const current = currentObjective();
+    if (current.challengeApplications.some((application) => application.applicant === applicant && application.status === "pending")) return;
+    applicationIndex += 1;
+    replaceObjective({
+      ...current,
+      flowStatus: "applying",
+      challengeApplications: [
+        ...current.challengeApplications,
+        {
+          id: `app-ui-realtime-${applicationIndex}`,
+          applicant,
+          reason: `${applicant} 申请实时同步目标`,
+          status: "pending",
+          createdAt: `2026-05-18T10:0${applicationIndex}:00.000Z`,
+          decidedAt: null,
+        },
+      ],
+    });
+  };
+  const bountiesForMember = (member: string) => {
+    const current = currentObjective();
+    return bountyHallData([
+      bountyHallItem(current, [result], {
+        hasCurrentApplication: current.challengeApplications.some((application) => application.applicant === member && application.status === "pending"),
+      }),
+    ]);
+  };
+
+  const context = await browser.newContext();
+  const commanderPage = await context.newPage();
+  const challengerPage = await context.newPage();
+  const secondChallengerPage = await context.newPage();
+  let commanderAllChallengeCalls = 0;
+  let commanderLastApplicationCount = 0;
+  await Promise.all([
+    commanderPage.addInitScript(() => window.localStorage.clear()),
+    challengerPage.addInitScript(() => window.localStorage.clear()),
+    secondChallengerPage.addInitScript(() => window.localStorage.clear()),
+    installMockRealtime(commanderPage),
+    installMockRealtime(challengerPage),
+    installMockRealtime(secondChallengerPage),
+  ]);
+
+  await mockOrfApp(commanderPage, adminUser, data, {
+    allChallenges: () => {
+      commanderAllChallengeCalls += 1;
+      commanderLastApplicationCount = currentObjective().challengeApplications.length;
+      return data;
+    },
+    tasks: () => data,
+  });
+  await mockOrfApp(challengerPage, memberUser, data, {
+    bounties: () => bountiesForMember(memberUser.name),
+    onApply: () => appendApplication(memberUser.name),
+    tasks: () => data,
+  });
+  await mockOrfApp(secondChallengerPage, observerUser, data, {
+    bounties: () => bountiesForMember(observerUser.name),
+    onApply: () => appendApplication(observerUser.name),
+    tasks: () => data,
+  });
+
+  try {
+    await commanderPage.goto("/tasks");
+    const panel = objectivePanel(commanderPage, objective.title);
+    await expect(panel).toContainText("可申请");
+    await expect(panel).not.toContainText(memberUser.name);
+    await expect(panel).not.toContainText(observerUser.name);
+    const callsBeforeFirstInvalidation = commanderAllChallengeCalls;
+
+    await challengerPage.goto("/bounties");
+    await expect(challengerPage.getByRole("heading", { name: objective.title })).toBeVisible();
+    await challengerPage.getByRole("button", { name: "申请挑战" }).click();
+    await submitChallengeApplicationDialog(challengerPage, "我来承接第一轮验证。");
+    await expect(challengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
+    await expect.poll(() => currentObjective().challengeApplications.length).toBe(1);
+    await emitObjectiveApplicationInvalidation(commanderPage, objective.id, "first");
+    await expect.poll(() => commanderAllChallengeCalls).toBeGreaterThan(callsBeforeFirstInvalidation);
+    await expect.poll(() => commanderLastApplicationCount).toBe(1);
+    await expect(panel).toContainText(memberUser.name);
+    await expect(panel).not.toContainText(observerUser.name);
+    const callsBeforeSecondInvalidation = commanderAllChallengeCalls;
+
+    await secondChallengerPage.goto("/bounties");
+    await expect(secondChallengerPage.getByRole("heading", { name: objective.title })).toBeVisible();
+    await secondChallengerPage.getByRole("button", { name: "申请挑战" }).click();
+    await submitChallengeApplicationDialog(secondChallengerPage, "我来承接第二轮验证。");
+    await expect(secondChallengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
+    await expect.poll(() => currentObjective().challengeApplications.length).toBe(2);
+    await emitObjectiveApplicationInvalidation(commanderPage, objective.id, "second");
+    await expect.poll(() => commanderAllChallengeCalls).toBeGreaterThan(callsBeforeSecondInvalidation);
+    await expect.poll(() => commanderLastApplicationCount).toBe(2);
+    await expect(panel).toContainText(memberUser.name);
+    await expect(panel).toContainText(observerUser.name);
   } finally {
     await context.close();
   }
@@ -541,8 +664,8 @@ test.describe("ORF high-level audit coverage", () => {
         await page.goto("/bounties");
         await expect(page.getByRole("heading", { name: round.title })).toBeVisible();
         await page.getByRole("button", { name: "申请挑战" }).click();
-        await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-        await expect(page.getByRole("button", { name: "已申请" })).toBeDisabled();
+        await submitChallengeApplicationDialog(page, `${user.name} 申请 ${round.title}`);
+        await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
       }
 
       await commanderPage.goto("/tasks");
@@ -942,9 +1065,8 @@ test("bounty hall apply action waits for API success and refreshed bounty data",
   await page.getByRole("button", { name: "申请挑战" }).click();
   await expect(page.getByRole("dialog")).toContainText("提交后等待指挥官确认");
 
-  await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-  await expect(page.getByRole("button", { name: "已申请" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "已申请" })).toBeDisabled();
+  await submitChallengeApplicationDialog(page, "前端测试申请挑战理由。");
+  await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
 });
 
 test("commander publishes a candidate objective and the bounty hall exposes it after refresh", async ({ page }) => {
@@ -1411,10 +1533,10 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/bounties");
     await page.getByRole("button", { name: "申请挑战" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
+    await submitChallengeApplicationDialog(page, "错误处理路径验证。");
 
     await expect(page.getByText("apply rejected")).toBeVisible();
-    await expect(page.getByRole("button", { name: "已申请" })).toHaveCount(0);
+    await expect(page.getByText("申请中", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("dialog").getByRole("button", { name: "申请挑战" })).toBeEnabled();
   });
 
@@ -2573,16 +2695,22 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/bounties");
     await page.getByRole("button", { name: "申请挑战" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(page.getByRole("button", { name: "已申请" })).toBeVisible();
+    await submitChallengeApplicationDialog(page, "浏览器返回状态保持验证。");
+    await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
     await page.goto("/tasks");
     await page.goBack();
-    await expect(page.getByRole("button", { name: "已申请" })).toBeVisible();
+    await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
   });
 });
 
 function objectivePanel(page: Page, title: string) {
   return page.locator("section.orf-objective-panel").filter({ hasText: title });
+}
+
+async function submitChallengeApplicationDialog(page: Page, reason: string) {
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "申请理由" }).fill(reason);
+  await dialog.getByRole("button", { name: "申请挑战" }).click();
 }
 
 async function createInlineMetric(panel: Locator, actionName: "新增指标" | "提出指标", title: string) {
@@ -2625,6 +2753,130 @@ async function attachAuditScreenshot(page: Page, testInfo: TestInfo, name: strin
   const path = testInfo.outputPath(`${safeName}.png`);
   await page.screenshot({ fullPage: true, path });
   await testInfo.attach(safeName, { contentType: "image/png", path });
+}
+
+async function installMockRealtime(page: Page) {
+  await page.addInitScript(() => {
+    type MockRealtimeSource = EventTarget & {
+      readyState: number;
+      onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null;
+    };
+    const sources: MockRealtimeSource[] = [];
+
+    class MockEventSource extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSED = 2;
+
+      readonly url: string | URL;
+      readonly withCredentials: boolean;
+      readonly listenerTypes = new Map<string, number>();
+      readonly realtimeListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+      readyState = MockEventSource.OPEN;
+      onerror: ((this: EventSource, ev: Event) => unknown) | null = null;
+      onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null;
+      onopen: ((this: EventSource, ev: Event) => unknown) | null = null;
+
+      constructor(url: string | URL, eventSourceInitDict?: EventSourceInit) {
+        super();
+        this.url = url;
+        this.withCredentials = Boolean(eventSourceInitDict?.withCredentials);
+        sources.push(this);
+      }
+
+      addEventListener(type: string, callback: EventListenerOrEventListenerObject | null, options?: AddEventListenerOptions | boolean) {
+        if (callback) {
+          const listeners = this.realtimeListeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+          listeners.add(callback);
+          this.realtimeListeners.set(type, listeners);
+        }
+        this.listenerTypes.set(type, (this.listenerTypes.get(type) ?? 0) + 1);
+        super.addEventListener(type, callback, options);
+      }
+
+      removeEventListener(type: string, callback: EventListenerOrEventListenerObject | null, options?: EventListenerOptions | boolean) {
+        if (callback) {
+          const listeners = this.realtimeListeners.get(type);
+          listeners?.delete(callback);
+          if (listeners?.size === 0) this.realtimeListeners.delete(type);
+        }
+        this.listenerTypes.set(type, Math.max(0, (this.listenerTypes.get(type) ?? 1) - 1));
+        super.removeEventListener(type, callback, options);
+      }
+
+      emitRealtimeEvent(event: { kind: string }) {
+        const message = new MessageEvent(event.kind, { data: JSON.stringify(event) });
+        const listeners = Array.from(this.realtimeListeners.get(event.kind) ?? []);
+        window.setTimeout(() => {
+          for (const listener of listeners) {
+            if (typeof listener === "function") {
+              listener.call(this, message);
+            } else {
+              listener.handleEvent(message);
+            }
+          }
+          if (event.kind === "message") {
+            this.onmessage?.call(this as unknown as EventSource, message);
+          }
+        }, 0);
+      }
+
+      close() {
+        this.readyState = MockEventSource.CLOSED;
+        const index = sources.indexOf(this);
+        if (index >= 0) sources.splice(index, 1);
+      }
+    }
+
+    const mockWindow = window as Window &
+      typeof globalThis & {
+        __orfEmitRealtime?: (event: { kind: string }) => void;
+        __orfRealtimeListenerCount?: (type: string) => number;
+        __orfRealtimeSourceCount?: () => number;
+      };
+
+    mockWindow.__orfRealtimeListenerCount = (type) =>
+      sources.reduce((sum, source) => sum + (source instanceof MockEventSource ? source.listenerTypes.get(type) ?? 0 : 0), 0);
+    mockWindow.__orfRealtimeSourceCount = () => sources.length;
+    mockWindow.__orfEmitRealtime = (event) => {
+      for (const source of sources) {
+        if (source.readyState !== MockEventSource.OPEN) continue;
+        if (source instanceof MockEventSource) source.emitRealtimeEvent(event);
+      }
+    };
+    mockWindow.EventSource = MockEventSource as unknown as typeof EventSource;
+  });
+}
+
+async function emitObjectiveApplicationInvalidation(page: Page, objectiveId: string, label: string) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const mockWindow = window as Window & typeof globalThis & { __orfRealtimeListenerCount?: (type: string) => number };
+        return mockWindow.__orfRealtimeListenerCount?.("orf.read-model.invalidated") ?? 0;
+      }),
+    )
+    .toBeGreaterThan(0);
+
+  await page.evaluate(
+    ({ label: eventLabel, targetId }) => {
+      const mockWindow = window as Window & typeof globalThis & { __orfEmitRealtime?: (event: { kind: string }) => void };
+      mockWindow.__orfEmitRealtime?.({
+        id: `evt-ui-application-${eventLabel}`,
+        kind: "orf.read-model.invalidated",
+        createdAt: "2026-05-18T10:00:00.000Z",
+        invalidation: {
+          id: `inv-ui-application-${eventLabel}`,
+          models: ["taskManagement", "bountyHall"],
+          reason: "objective.challenge.application.changed",
+          target: { type: "objective", id: targetId },
+          actorUserId: null,
+          createdAt: "2026-05-18T10:00:00.000Z",
+        },
+      });
+    },
+    { label, targetId: objectiveId },
+  );
 }
 
 async function mockOrfApp(
@@ -2956,6 +3208,7 @@ function toastByText(page: Page, text: string) {
 function bountyHallData(availableItems: BountyHallItem[], recruitmentItems: BountyHallItem[] = []): BountyHallData {
   return {
     availableItems,
+    publicItems: [],
     recruitmentItems,
     objectiveOptions: [...recruitmentItems, ...availableItems].map((item) => item.objective),
     contribution: { points: 0 },
@@ -2963,14 +3216,20 @@ function bountyHallData(availableItems: BountyHallItem[], recruitmentItems: Boun
 }
 
 function bountyHallItem(objective: Objective, results: Result[], overrides: Partial<BountyHallItem> = {}): BountyHallItem {
+  const applications = objective.challengeApplications;
   return {
+    applications,
+    approvedApplicants: applications.filter((application) => application.status === "approved").map((application) => application.applicant),
+    challengers: objective.challengers,
     uncertaintyPoints: results.reduce((sum, result) => sum + result.uncertaintyScore, 0),
     deadline: objective.finalDueAt,
     definer: results[0]?.definer ?? "",
     difficultyRank: 2,
     hasCurrentApplication: false,
+    isCurrentChallenger: false,
     isRecruitment: false,
     objective,
+    pendingApplications: applications.filter((application) => application.status === "pending"),
     result: results[0] ?? null,
     results,
     source: results[0]?.source ?? "managerDefined",

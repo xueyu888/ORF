@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  publishRealtimeReadModelInvalidation,
   publishRealtimeSystemBroadcast,
   subscribeRealtimeEvents,
 } from "../server/realtime/realtimeEventBus";
@@ -40,4 +41,31 @@ test("team realtime broadcast skips stale subscribers without blocking healthy c
 
   unsubscribeStale();
   unsubscribeHealthy();
+});
+
+test("read model invalidation broadcasts model scope without business snapshots", () => {
+  const teamId = `team-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const received: RealtimeEvent[] = [];
+  const unsubscribe = subscribeRealtimeEvents({
+    teamId,
+    userId: "user-healthy",
+    send: (event) => received.push(event),
+  });
+
+  publishRealtimeReadModelInvalidation(teamId, {
+    actorUserId: "member-1",
+    models: ["taskManagement", "bountyHall"],
+    reason: "objective.challenge.application.changed",
+    target: { id: "objective-1", type: "objective" },
+  });
+  unsubscribe();
+
+  assert.equal(received.length, 1);
+  assert.equal(received[0]?.kind, "orf.read-model.invalidated");
+  if (received[0]?.kind !== "orf.read-model.invalidated") {
+    throw new Error("Expected read model invalidation event");
+  }
+  assert.deepEqual(received[0].invalidation.models, ["taskManagement", "bountyHall"]);
+  assert.equal(received[0].invalidation.reason, "objective.challenge.application.changed");
+  assert.equal("objective" in received[0].invalidation, false);
 });

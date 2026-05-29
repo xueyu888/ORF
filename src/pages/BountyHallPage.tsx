@@ -20,6 +20,7 @@ import {
 import { bountyCycleLabel } from "../features/bounty-hall/model/bountyHallSummary";
 import type { BountyItem, ChallengeConfirmTarget, DifficultyFilter, HallTab, SortKey } from "../features/bounty-hall/model/bountyHallTypes";
 import { challengePathForTarget, parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { getBountyHallData, type BountyHallData } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 
@@ -28,8 +29,7 @@ export function BountyHallPage() {
     acceptBountyChallenge,
     applyForBounty,
     currentUser,
-    notifications,
-    systemBroadcasts,
+    readModelInvalidations,
   } = useOrf();
   const location = useLocation();
   const navigate = useNavigate();
@@ -74,30 +74,15 @@ export function BountyHallPage() {
     void loadBountyData();
   }, [loadBountyData]);
 
-  const bountyNotificationKey = useMemo(() => {
-    return notifications
-      .filter((notification) =>
-        ["challenge.application.created", "challenge.application.approved", "objective.challenge.accepted", "objective.recruitment.created"].includes(notification.kind),
-      )
-      .map((notification) => `${notification.id}:${notification.targetId}:${notification.createdAt}`)
-      .join("|");
-  }, [notifications]);
-  const bountyBroadcastKey = useMemo(() => {
-    return systemBroadcasts
-      .filter((broadcast) => broadcast.notificationKind === "objective.published")
-      .map((broadcast) => `${broadcast.id}:${broadcast.targetHref}:${broadcast.createdAt}`)
-      .join("|");
-  }, [systemBroadcasts]);
+  const bountyInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "bountyHall"),
+    [readModelInvalidations],
+  );
 
   useEffect(() => {
-    if (!bountyNotificationKey) return;
+    if (!bountyInvalidationKey) return;
     void loadBountyData();
-  }, [bountyNotificationKey, loadBountyData]);
-
-  useEffect(() => {
-    if (!bountyBroadcastKey) return;
-    void loadBountyData();
-  }, [bountyBroadcastKey, loadBountyData]);
+  }, [bountyInvalidationKey, loadBountyData]);
 
   const recruitmentItems = useMemo(
     () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),

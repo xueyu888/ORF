@@ -229,12 +229,37 @@ test("commander and challenger can complete the application-to-settlement ORF ba
   assert.ok(availableItem, "challenger should see the published objective in the bounty hall");
   assert.equal(availableItem.hasCurrentApplication, false);
 
-  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  const commanderApplicationEvents: RealtimeEvent[] = [];
+  const unsubscribeCommanderApplication = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.commander.id,
+    send: (event) => commanderApplicationEvents.push(event),
+  });
+  const challengerApplicationEvents: RealtimeEvent[] = [];
+  const unsubscribeChallengerApplication = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.challenger.id,
+    send: (event) => challengerApplicationEvents.push(event),
+  });
+  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id, "我来承接这个测试目标。");
+  unsubscribeCommanderApplication();
+  unsubscribeChallengerApplication();
   assert.equal(applied.status, "applied");
   assert.equal(applied.objective.flowStatus, "applying");
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), false);
   const applicationId = applied.objective.challengeApplications.find((application) => application.applicant === fixture.challenger.name)?.id;
   assert.ok(applicationId);
+  const commanderApplicationInvalidation = commanderApplicationEvents.find(
+    (event) => event.kind === "orf.read-model.invalidated" && event.invalidation.reason === "objective.challenge.application.changed",
+  );
+  assert.equal(commanderApplicationInvalidation?.invalidation.reason, "objective.challenge.application.changed");
+  assert.deepEqual(commanderApplicationInvalidation?.invalidation.models, ["taskManagement", "bountyHall"]);
+  assert.equal(commanderApplicationInvalidation?.invalidation.target?.type, "objective");
+  assert.equal(commanderApplicationInvalidation?.invalidation.target?.id, objective.id);
+  const challengerApplicationInvalidation = challengerApplicationEvents.find(
+    (event) => event.kind === "orf.read-model.invalidated" && event.invalidation.reason === "objective.challenge.application.changed",
+  );
+  assert.equal(challengerApplicationInvalidation?.invalidation.reason, "objective.challenge.application.changed");
   const applicationNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
   assert.equal(applicationNotifications[0]?.kind, "challenge.application.created");
   assert.equal(applicationNotifications[0]?.targetId, objective.id);

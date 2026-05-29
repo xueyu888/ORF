@@ -13,6 +13,7 @@ import {
   type UserPreferences,
   type VisualBackgroundConfig,
 } from "../state/apiClient";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
 import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 import { dispatchPersonalPreferencesChanged } from "../utils/personalPreferences";
@@ -36,7 +37,7 @@ const landingOptions = [
 ];
 
 export function PersonalSettingsPage() {
-  const { currentUser, deleteCurrentUserAvatar, notify, theme, toggleTheme, uploadCurrentUserAvatar } = useOrf();
+  const { currentUser, deleteCurrentUserAvatar, notify, readModelInvalidations, theme, toggleTheme, uploadCurrentUserAvatar } = useOrf();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
@@ -47,6 +48,7 @@ export function PersonalSettingsPage() {
   const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
   const [avatarStatus, setAvatarStatus] = useState<RequestStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
 
   const loadSettings = async () => {
     setLoadStatus("loading");
@@ -66,7 +68,7 @@ export function PersonalSettingsPage() {
 
   useEffect(() => {
     void loadSettings();
-  }, []);
+  }, [settingsInvalidationKey]);
 
   const savePreferencePatch = async (patch: Parameters<typeof saveUserPreferences>[0], message = "个人设置已保存") => {
     setSaveStatus("loading");

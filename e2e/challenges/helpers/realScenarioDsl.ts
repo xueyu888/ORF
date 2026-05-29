@@ -64,8 +64,10 @@ export class RealScenarioDsl {
     const row = bountyRow(page, title);
     await expect(row).toBeVisible();
     await row.getByRole("button", { name: "申请挑战" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(row.getByRole("button", { name: "已申请" })).toBeDisabled();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "申请理由" }).fill(`${title} 申请挑战`);
+    await dialog.getByRole("button", { name: "申请挑战" }).click();
+    await expect(row.getByText("申请中", { exact: true })).toBeVisible();
   }
 
   async approveApplication(page: Page, title: string, count = 1) {

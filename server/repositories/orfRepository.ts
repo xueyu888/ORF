@@ -96,7 +96,7 @@ import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
-import { publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
+import { publishRealtimeReadModelInvalidation, publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
 import { objectStorage } from "../storage/objectStorage";
 import { validateImageUpload } from "../storage/images";
 
@@ -367,6 +367,52 @@ function challengeCommentTargetHref(targetType: CommentTargetType, targetId: str
     task: "action",
   };
   return `/tasks#${challengeTargetTypeByCommentTarget[targetType]}:${encodeURIComponent(targetId)}`;
+}
+
+function publishOrfDataInvalidation(input: {
+  actorUserId?: string | null;
+  models?: Array<"taskManagement" | "bountyHall">;
+  reason:
+    | "objective.created"
+    | "objective.changed"
+    | "objective.lifecycle.changed"
+    | "objective.challenge.application.changed"
+    | "objective.challenge.recruitment.changed"
+    | "objective.loot.changed"
+    | "result.changed"
+    | "task.changed"
+    | "feedback.changed"
+    | "comment.changed";
+  target?: { id: string; type: "objective" | "result" | "task" | "subtask" | "feedback" | "comment" };
+  teamId: string;
+}) {
+  publishRealtimeReadModelInvalidation(input.teamId, {
+    actorUserId: input.actorUserId,
+    models: input.models ?? ["taskManagement"],
+    reason: input.reason,
+    target: input.target,
+  });
+}
+
+function publishObjectiveInvalidation(input: {
+  actorUserId?: string | null;
+  reason:
+    | "objective.created"
+    | "objective.changed"
+    | "objective.lifecycle.changed"
+    | "objective.challenge.application.changed"
+    | "objective.challenge.recruitment.changed"
+    | "objective.loot.changed";
+  objectiveId: string;
+  teamId: string;
+}) {
+  publishOrfDataInvalidation({
+    actorUserId: input.actorUserId,
+    models: ["taskManagement", "bountyHall"],
+    reason: input.reason,
+    target: { id: input.objectiveId, type: "objective" },
+    teamId: input.teamId,
+  });
 }
 
 async function notifyAdminsOfChallengeApplication(input: {
@@ -1088,6 +1134,14 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     updatedBy: context.userId,
   });
 
+  publishOrfDataInvalidation({
+    actorUserId: context.userId,
+    models: ["taskManagement"],
+    reason: "objective.created",
+    target: { id, type: "objective" },
+    teamId: storageScopeId,
+  });
+
   const data = await getTaskManagementData({ scope: context.scope });
   return data.objectives.find((objective) => objective.id === id) ?? null;
 }
@@ -1151,6 +1205,13 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
   if (!created) {
     return null;
   }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: created.id, type: "result" },
+    teamId: runtimeScopeStorageId(created.scope),
+  });
 
   const data = await getTaskManagementData({ scope: created.scope });
   return data.results.find((result) => result.id === created.id) ?? null;
@@ -1236,6 +1297,12 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
   }
 
   await notifyAdminsOfChallengeAcceptance(acceptedResult.notification);
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.lifecycle.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(acceptedResult.scope),
+  });
 
   const data = await getTaskManagementData({ scope: acceptedResult.scope });
   const accepted = data.objectives.find((item) => item.id === objectiveId);
@@ -1320,6 +1387,12 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
   }
 
   await notifyAdminsOfChallengeApplication(appliedResult.notification);
+  publishObjectiveInvalidation({
+    actorUserId,
+    reason: "objective.challenge.application.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(appliedResult.scope),
+  });
 
   const data = await getTaskManagementData({ scope: appliedResult.scope });
   const applied = data.objectives.find((item) => item.id === objectiveId);
@@ -1355,6 +1428,12 @@ export async function publishObjective(objectiveId: string, actorId: string): Pr
     objectiveId: published.id,
     objectivePublishedAt: publishedAt,
     objectiveTitle: published.title,
+    teamId: published.teamId,
+  });
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.lifecycle.changed",
+    objectiveId,
     teamId: published.teamId,
   });
   return objectiveOutcome(objectiveId, storageScope(published.teamId));
@@ -1412,6 +1491,12 @@ export async function approveObjectiveChallengeApplication(
 
   if (approvedResult.status !== "ok") return approvedResult;
   await notifyMemberOfChallengeApplicationApproval(approvedResult.notification);
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.challenge.application.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(approvedResult.scope),
+  });
   return objectiveOutcome(objectiveId, approvedResult.scope);
 }
 
@@ -1448,7 +1533,17 @@ export async function rejectObjectiveChallengeApplication(
     return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return rejectedResult.status === "ok" ? objectiveOutcome(objectiveId, rejectedResult.scope) : rejectedResult;
+  if (rejectedResult.status === "ok") {
+    publishObjectiveInvalidation({
+      actorUserId: actorId,
+      reason: "objective.challenge.application.changed",
+      objectiveId,
+      teamId: runtimeScopeStorageId(rejectedResult.scope),
+    });
+    return objectiveOutcome(objectiveId, rejectedResult.scope);
+  }
+
+  return rejectedResult;
 }
 
 export async function recruitObjectiveChallengers(
@@ -1494,6 +1589,12 @@ export async function recruitObjectiveChallengers(
 
   if (recruitedResult.status === "ok") {
     await notifyMembersOfRecruitment(recruitedResult.notification);
+    publishObjectiveInvalidation({
+      actorUserId: actorId,
+      reason: "objective.challenge.recruitment.changed",
+      objectiveId,
+      teamId: runtimeScopeStorageId(recruitedResult.scope),
+    });
   }
 
   return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.scope) : recruitedResult;
@@ -1531,7 +1632,17 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
     return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return frozen.status === "ok" ? objectiveOutcome(objectiveId, frozen.scope) : frozen;
+  if (frozen.status === "ok") {
+    publishObjectiveInvalidation({
+      actorUserId: actorId,
+      reason: "objective.lifecycle.changed",
+      objectiveId,
+      teamId: runtimeScopeStorageId(frozen.scope),
+    });
+    return objectiveOutcome(objectiveId, frozen.scope);
+  }
+
+  return frozen;
 }
 
 export async function reopenObjectiveReestimate(_objectiveId: string, _actorId: string): Promise<ObjectiveFlowMutationOutcome> {
@@ -1712,6 +1823,14 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
     }
   });
 
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "feedback.changed",
+    target: { id, type: "feedback" },
+    teamId: result.teamId,
+  });
+
   const data = await getTaskManagementData({ scope: runtimeScope(result.teamId) });
   const item = data.feedback.find((entry) => entry.id === id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
@@ -1757,13 +1876,24 @@ export async function updateFeedbackStatus(
     .set({ status, updatedAt: today(), updatedBy: actor.id })
     .where(eq(feedback.id, feedbackId))
     .returning({ id: feedback.id });
-  return updated.length > 0 ? { status: "ok" } : { status: "notFound" };
+  if (updated.length === 0) {
+    return { status: "notFound" };
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "feedback.changed",
+    target: { id: feedbackId, type: "feedback" },
+    teamId: target.teamId,
+  });
+  return { status: "ok" };
 }
 
 export async function updateResultConfidence(resultId: string, confidence: number, actorId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
-      .select({ flowStatus: objectives.flowStatus })
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
@@ -1778,8 +1908,21 @@ export async function updateResultConfidence(resultId: string, confidence: numbe
       .set({ confidence, updatedBy: actorId })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
-    return updated.length > 0;
+    return updated.length > 0 ? { teamId: target.teamId } : null;
   });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
 }
 
 export async function proposeResultUpdate(
@@ -1792,7 +1935,7 @@ export async function proposeResultUpdate(
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
       .select({
         id: results.id,
@@ -1815,7 +1958,7 @@ export async function proposeResultUpdate(
         .where(eq(feedback.id, input.feedbackId))
         .limit(1);
       if (!linkedFeedback || linkedFeedback.teamId !== target.teamId || linkedFeedback.linkedResultId !== target.id) {
-        return false;
+        return null;
       }
     }
 
@@ -1825,7 +1968,7 @@ export async function proposeResultUpdate(
       .where(eq(results.id, input.resultId))
       .returning({ id: results.id });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx
@@ -1867,8 +2010,21 @@ export async function proposeResultUpdate(
       sortOrder: 0,
     });
 
-    return true;
+    return { teamId: target.teamId };
   });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: input.resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
 }
 
 export interface CreateCommentInput {
@@ -2493,6 +2649,14 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     teamId: target.storageScopeId,
   });
 
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: createdComment.threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
+
   return { status: "ok", thread: (await getCommentThread(createdComment.threadId)) ?? undefined };
 }
 
@@ -2520,6 +2684,13 @@ export async function updateCommentThreadStatus(
   }
 
   await db.update(commentThreads).set({ status, updatedAt: nowIso() }).where(eq(commentThreads.id, threadId));
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
   return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
 
@@ -2611,6 +2782,14 @@ export async function updateCommentMessage(
 
   await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
 
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
+
   return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
 
@@ -2684,6 +2863,14 @@ export async function deleteCommentMessage(
     return false;
   });
   await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
+
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
 
   return threadRemoved ? { status: "ok" } : { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
@@ -2805,6 +2992,13 @@ export async function submitObjectiveLoot(
     teamId: objective.teamId,
   });
 
+  publishObjectiveInvalidation({
+    actorUserId: actor.id,
+    reason: "objective.loot.changed",
+    objectiveId: objective.id,
+    teamId: objective.teamId,
+  });
+
   const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
   const loot = data.objectiveLoot.find((item) => item.id === lootId);
   return loot ? { status: "ok", loot } : { status: "notFound" };
@@ -2843,6 +3037,14 @@ export async function submitObjectiveContributionReview(
     reviewer: actor.name,
     allocations,
     submittedAt,
+  });
+
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "objective.loot.changed",
+    target: { id: objective.id, type: "objective" },
+    teamId: objective.teamId,
   });
 
   const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
@@ -2968,6 +3170,13 @@ export async function reviewObjectiveLoot(
   });
   if (!settled) return { status: "invalid" };
 
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.lifecycle.changed",
+    objectiveId,
+    teamId: objective.teamId,
+  });
+
   return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
 }
 
@@ -3031,12 +3240,19 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     return null;
   }
 
+  publishOrfDataInvalidation({
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: created.id, type: "task" },
+    teamId: runtimeScopeStorageId(created.scope),
+  });
+
   const data = await getTaskManagementData({ scope: created.scope });
   return data.tasks.find((task) => task.id === created.id) ?? null;
 }
 
 export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput, actorId?: string | null): Promise<TaskChecklistItem | null> {
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
       return null;
@@ -3072,8 +3288,21 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
       .set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt, ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId));
 
-    return { id, label, done: false, updatedAt };
+    return { item: { id, label, done: false, updatedAt }, teamId: task.teamId };
   });
+
+  if (!created) {
+    return null;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: created.item.id, type: "subtask" },
+    teamId: created.teamId,
+  });
+  return created.item;
 }
 
 export async function updateObjectiveTitle(objectiveId: string, title: string): Promise<boolean> {
@@ -3082,22 +3311,33 @@ export async function updateObjectiveTitle(objectiveId: string, title: string): 
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedObjective = await db.transaction(async (tx) => {
     const updated = await tx
       .update(objectives)
       .set({ title: nextTitle, updatedAt: today() })
       .where(eq(objectives.id, objectiveId))
-      .returning({ id: objectives.id });
+      .returning({ id: objectives.id, teamId: objectives.teamId });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
-    return true;
+    return { teamId: updated[0]!.teamId };
   });
+
+  if (!updatedObjective) {
+    return false;
+  }
+
+  publishObjectiveInvalidation({
+    reason: "objective.changed",
+    objectiveId,
+    teamId: updatedObjective.teamId,
+  });
+  return true;
 }
 
 export async function updateObjectiveStage(objectiveId: string, stage: OrfStage): Promise<boolean> {
@@ -3110,8 +3350,17 @@ export async function updateObjectiveStage(objectiveId: string, stage: OrfStage)
     return false;
   }
 
-  const updated = await db.update(objectives).set({ stage, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
-  return updated.length > 0;
+  const updated = await db.update(objectives).set({ stage, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id, teamId: objectives.teamId });
+  if (updated.length === 0) {
+    return false;
+  }
+
+  publishObjectiveInvalidation({
+    reason: "objective.lifecycle.changed",
+    objectiveId,
+    teamId: updated[0]!.teamId,
+  });
+  return true;
 }
 
 export async function updateResultTitle(resultId: string, title: string): Promise<boolean> {
@@ -3120,29 +3369,41 @@ export async function updateResultTitle(resultId: string, title: string): Promis
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
-      .select({ flowStatus: objectives.flowStatus })
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
       .limit(1)
       .for("update");
     if (!target || !canMutateObjectiveResultsByFlow(target)) {
-      return false;
+      return null;
     }
 
     const updated = await tx.update(results).set({ title: nextTitle }).where(eq(results.id, resultId)).returning({ id: results.id });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
-    return true;
+    return { teamId: target.teamId };
   });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
 }
 
 export async function updateTaskTitle(taskId: string, title: string, actorId?: string | null): Promise<boolean> {
@@ -3151,22 +3412,35 @@ export async function updateTaskTitle(taskId: string, title: string, actorId?: s
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedTask = await db.transaction(async (tx) => {
     const updated = await tx
       .update(tasks)
       .set({ title: nextTitle, updatedAt: today(), ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId))
-      .returning({ id: tasks.id });
+      .returning({ id: tasks.id, teamId: tasks.teamId });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "task"), eq(commentThreads.targetId, taskId)));
-    return true;
+    return { teamId: updated[0]!.teamId };
   });
+
+  if (!updatedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: updatedTask.teamId,
+  });
+  return true;
 }
 
 export async function updateChecklistItemLabel(taskId: string, itemId: string, label: string, actorId?: string | null): Promise<boolean> {
@@ -3175,7 +3449,11 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedItem = await db.transaction(async (tx) => {
+    const [task] = await tx.select({ teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
+    if (!task) {
+      return null;
+    }
     const updated = await tx
       .update(taskChecklistItems)
       .set({ label: nextLabel, updatedAt: today() })
@@ -3183,7 +3461,7 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
       .returning({ id: taskChecklistItems.id });
 
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx.update(tasks).set({ updatedAt: today(), ...taskAuditUpdate(actorId) }).where(eq(tasks.id, taskId));
@@ -3191,18 +3469,31 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
       .update(commentThreads)
       .set({ targetTitle: nextLabel, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "subtask"), eq(commentThreads.targetId, itemId)));
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!updatedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: updatedItem.teamId,
+  });
+  return true;
 }
 
 export async function deleteObjective(objectiveId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    const [objective] = await tx.select({ flowStatus: objectives.flowStatus, id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  const deletedObjective = await db.transaction(async (tx) => {
+    const [objective] = await tx.select({ flowStatus: objectives.flowStatus, id: objectives.id, teamId: objectives.teamId }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
     if (!objective) {
-      return false;
+      return null;
     }
     if (!canDeleteObjectiveByFlow(objective)) {
-      return false;
+      return null;
     }
 
     const resultRows = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
@@ -3227,38 +3518,61 @@ export async function deleteObjective(objectiveId: string): Promise<boolean> {
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
 
     const deleted = await tx.delete(objectives).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
-    return deleted.length > 0;
+    return deleted.length > 0 ? { teamId: objective.teamId } : null;
   });
+
+  if (!deletedObjective) {
+    return false;
+  }
+
+  publishObjectiveInvalidation({
+    reason: "objective.changed",
+    objectiveId,
+    teamId: deletedObjective.teamId,
+  });
+  return true;
 }
 
 export async function deleteResult(resultId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const deletedResult = await db.transaction(async (tx) => {
     const [result] = await tx
-      .select({ flowStatus: objectives.flowStatus, id: results.id })
+      .select({ flowStatus: objectives.flowStatus, id: results.id, objectiveId: results.objectiveId, teamId: results.teamId })
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
       .limit(1)
       .for("update");
     if (!result) {
-      return false;
+      return null;
     }
     if (!canMutateObjectiveResultsByFlow(result)) {
-      return false;
+      return null;
     }
 
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
 
     const deleted = await tx.delete(results).where(eq(results.id, resultId)).returning({ id: results.id });
-    return deleted.length > 0;
+    return deleted.length > 0 ? { objectiveId: result.objectiveId, teamId: result.teamId } : null;
   });
+
+  if (!deletedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: deletedResult.teamId,
+  });
+  return true;
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    const [task] = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  const deletedTask = await db.transaction(async (tx) => {
+    const [task] = await tx.select({ id: tasks.id, teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
     if (!task) {
-      return false;
+      return null;
     }
 
     const checklistRows = await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId));
@@ -3270,15 +3584,27 @@ export async function deleteTask(taskId: string): Promise<boolean> {
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), eq(commentThreads.targetId, taskId)));
 
     const deleted = await tx.delete(tasks).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
-    return deleted.length > 0;
+    return deleted.length > 0 ? { teamId: task.teamId } : null;
   });
+
+  if (!deletedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: deletedTask.teamId,
+  });
+  return true;
 }
 
 export async function deleteChecklistItem(taskId: string, itemId: string, actorId?: string | null): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const deletedItem = await db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
-      return false;
+      return null;
     }
 
     const deleted = await tx
@@ -3286,7 +3612,7 @@ export async function deleteChecklistItem(taskId: string, itemId: string, actorI
       .where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)))
       .returning({ id: taskChecklistItems.id });
     if (deleted.length === 0) {
-      return false;
+      return null;
     }
 
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), eq(commentThreads.targetId, itemId)));
@@ -3302,16 +3628,29 @@ export async function deleteChecklistItem(taskId: string, itemId: string, actorI
       .update(tasks)
       .set({ status: statusFromChecklist(rows, task.status), updatedAt: today(), ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId));
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!deletedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: deletedItem.teamId,
+  });
+  return true;
 }
 
 export async function moveResult(resultId: string, referenceResultId: string, placement: "before" | "after"): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const movedResult = await db.transaction(async (tx) => {
     const [moving] = await tx.select().from(results).where(eq(results.id, resultId)).limit(1);
     const [reference] = await tx.select().from(results).where(eq(results.id, referenceResultId)).limit(1);
     if (!moving || !reference || moving.objectiveId !== reference.objectiveId || moving.id === reference.id) {
-      return false;
+      return null;
     }
     const [objective] = await tx
       .select({ flowStatus: objectives.flowStatus, id: objectives.id })
@@ -3320,10 +3659,10 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
       .limit(1)
       .for("update");
     if (!objective) {
-      return false;
+      return null;
     }
     if (!canMutateObjectiveResultsByFlow(objective)) {
-      return false;
+      return null;
     }
 
     const rows = await tx
@@ -3336,8 +3675,20 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
       await tx.update(results).set({ sortOrder: index }).where(eq(results.id, id));
     }
     await tx.update(objectives).set({ updatedAt: today() }).where(eq(objectives.id, moving.objectiveId));
-    return true;
+    return { teamId: moving.teamId };
   });
+
+  if (!movedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: movedResult.teamId,
+  });
+  return true;
 }
 
 export async function moveTask(
@@ -3345,16 +3696,16 @@ export async function moveTask(
   input: { objectiveId: string; referenceTaskId?: string; placement?: "before" | "after" },
   actorId?: string | null,
 ): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const movedTask = await db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
     const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
     if (!task || !objective || task.linkedObjectiveId !== objective.id) {
-      return false;
+      return null;
     }
     if (input.referenceTaskId) {
       const [referenceTask] = await tx.select().from(tasks).where(eq(tasks.id, input.referenceTaskId)).limit(1);
       if (!referenceTask || referenceTask.linkedObjectiveId !== objective.id || referenceTask.id === task.id) {
-        return false;
+        return null;
       }
     }
 
@@ -3374,8 +3725,21 @@ export async function moveTask(
       await tx.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id));
     }
 
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!movedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: movedTask.teamId,
+  });
+  return true;
 }
 
 export async function moveChecklistItem(
@@ -3384,7 +3748,7 @@ export async function moveChecklistItem(
   input: { toTaskId: string; referenceItemId?: string; placement?: "before" | "after" },
   actorId?: string | null,
 ): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const movedItem = await db.transaction(async (tx) => {
     const [item] = await tx
       .select()
       .from(taskChecklistItems)
@@ -3393,7 +3757,7 @@ export async function moveChecklistItem(
     const [targetTask] = await tx.select().from(tasks).where(eq(tasks.id, input.toTaskId)).limit(1);
     const [sourceTask] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
     if (!item || !targetTask || !sourceTask) {
-      return false;
+      return null;
     }
     const affectedTaskIds = Array.from(new Set([taskId, input.toTaskId])).sort();
     const lockedTasks = await tx
@@ -3402,12 +3766,12 @@ export async function moveChecklistItem(
       .where(inArray(tasks.id, affectedTaskIds))
       .for("update");
     if (lockedTasks.length !== affectedTaskIds.length) {
-      return false;
+      return null;
     }
     if (input.referenceItemId) {
       const [referenceItem] = await tx.select().from(taskChecklistItems).where(eq(taskChecklistItems.id, input.referenceItemId)).limit(1);
       if (!referenceItem || referenceItem.taskId !== input.toTaskId || referenceItem.id === itemId) {
-        return false;
+        return null;
       }
     }
 
@@ -3437,8 +3801,21 @@ export async function moveChecklistItem(
         .where(eq(tasks.id, currentTaskId));
     }
 
-    return true;
+    return { teamId: sourceTask.teamId };
   });
+
+  if (!movedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: movedItem.teamId,
+  });
+  return true;
 }
 
 export async function updateTaskStatus(taskId: string, status: TaskStatus, actorId?: string | null): Promise<boolean> {
@@ -3446,29 +3823,53 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus, actor
     .update(tasks)
     .set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) })
     .where(eq(tasks.id, taskId))
-    .returning({ id: tasks.id });
-  return updated.length > 0;
+    .returning({ id: tasks.id, teamId: tasks.teamId });
+  if (updated.length === 0) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: updated[0]!.teamId,
+  });
+  return true;
 }
 
 export async function setTaskCompletion(taskId: string, done: boolean, actorId?: string | null): Promise<boolean> {
   const status: TaskStatus = done ? "Done" : "Todo";
-  return db.transaction(async (tx) => {
+  const updatedTask = await db.transaction(async (tx) => {
     const updated = await tx
       .update(tasks)
       .set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId))
-      .returning({ id: tasks.id });
+      .returning({ id: tasks.id, teamId: tasks.teamId });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx.update(taskChecklistItems).set({ done, updatedAt: today() }).where(eq(taskChecklistItems.taskId, taskId));
-    return true;
+    return { teamId: updated[0]!.teamId };
   });
+
+  if (!updatedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: updatedTask.teamId,
+  });
+  return true;
 }
 
 export async function updateChecklistItem(taskId: string, itemId: string, done: boolean, actorId?: string | null): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const updatedItem = await db.transaction(async (tx) => {
     const updated = await tx
       .update(taskChecklistItems)
       .set({ done, updatedAt: today() })
@@ -3476,7 +3877,12 @@ export async function updateChecklistItem(taskId: string, itemId: string, done: 
       .returning({ id: taskChecklistItems.id });
 
     if (updated.length === 0) {
-      return false;
+      return null;
+    }
+
+    const [task] = await tx.select({ teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (!task) {
+      return null;
     }
 
     const checklist = await tx.select({ done: taskChecklistItems.done }).from(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId));
@@ -3484,6 +3890,19 @@ export async function updateChecklistItem(taskId: string, itemId: string, done: 
     const status: TaskStatus = completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 
     await tx.update(tasks).set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) }).where(eq(tasks.id, taskId));
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!updatedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: updatedItem.teamId,
+  });
+  return true;
 }

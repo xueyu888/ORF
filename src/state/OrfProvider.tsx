@@ -14,9 +14,10 @@ import {
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
-import type { SystemBroadcast } from "../types/realtime";
+import type { OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
   CommentStatus,
   CommentTargetType,
@@ -82,6 +83,7 @@ interface OrfContextValue {
   modal: ModalState;
   toasts: ToastMessage[];
   notifications: AppNotification[];
+  readModelInvalidations: OrfReadModelInvalidation[];
   systemBroadcasts: SystemBroadcast[];
   unreadNotificationCount: number;
   theme: ThemeMode;
@@ -162,7 +164,6 @@ const OrfContext = createContext<OrfContextValue | null>(null);
 
 const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
-const NOTIFICATION_POLL_MS = 30_000;
 
 function loadInitialState() {
   return store.load();
@@ -186,6 +187,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [readModelInvalidations, setReadModelInvalidations] = useState<OrfReadModelInvalidation[]>([]);
   const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
@@ -271,15 +273,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const receiveRealtimeBroadcast = useCallback((broadcast: SystemBroadcast) => {
     setSystemBroadcasts((items) => enqueueSystemBroadcast(items, broadcast));
   }, []);
+  const receiveReadModelInvalidation = useCallback((invalidation: OrfReadModelInvalidation) => {
+    setReadModelInvalidations((items) => [invalidation, ...items.filter((item) => item.id !== invalidation.id)].slice(0, 64));
+  }, []);
 
   useRealtimeEvents({
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
     onNotification: receiveRealtimeNotification,
+    onReadModelInvalidation: receiveReadModelInvalidation,
   });
 
   useEffect(() => {
     if (!isAuthenticated || !isApproved) {
+      setReadModelInvalidations([]);
       setSystemBroadcasts([]);
     }
   }, [isApproved, isAuthenticated]);
@@ -288,17 +295,39 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     void refreshAuthSession();
   }, [refreshAuthSession]);
 
+  const taskManagementInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),
+    [readModelInvalidations],
+  );
+  const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
+  const permissionsInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "permissions"),
+    [readModelInvalidations],
+  );
+  const notificationsInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "notifications"),
+    [readModelInvalidations],
+  );
+
   useEffect(() => {
-    if (!authReady || !isAuthenticated || !isApproved) {
-      return undefined;
-    }
+    if (!taskManagementInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
+    void refreshTaskManagementData().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, refreshTaskManagementData, taskManagementInvalidationKey]);
 
-    const intervalId = window.setInterval(() => {
-      void refreshNotifications().catch(() => undefined);
-    }, NOTIFICATION_POLL_MS);
+  useEffect(() => {
+    if (!usersInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
+    void refreshUsers().catch(() => undefined);
+  }, [authReady, isAdmin, isApproved, isAuthenticated, refreshUsers, usersInvalidationKey]);
 
-    return () => window.clearInterval(intervalId);
-  }, [authReady, isAuthenticated, isApproved, refreshNotifications]);
+  useEffect(() => {
+    if (!permissionsInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
+    void refreshPermissionRules().catch(() => undefined);
+  }, [authReady, isAdmin, isApproved, isAuthenticated, permissionsInvalidationKey, refreshPermissionRules]);
+
+  useEffect(() => {
+    if (!notificationsInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
+    void refreshNotifications().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, notificationsInvalidationKey, refreshNotifications]);
 
   const userActions = useOrfProviderUserActions({
     authenticateWithPassword,
@@ -328,6 +357,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       modal,
       toasts,
       notifications,
+      readModelInvalidations,
       systemBroadcasts,
       unreadNotificationCount,
       theme,
@@ -857,6 +887,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       markNotificationRead,
       notify,
       notifications,
+      readModelInvalidations,
       refreshNotifications,
       refreshTaskManagementData,
       state,

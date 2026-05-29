@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requireAdminContext, requireApiUser } from "../auth/accessPolicy";
+import { requireAdminContext, requireApiUser, requireUserScopeContext } from "../auth/accessPolicy";
+import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
+import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
   backgroundSceneConfigSchema,
   backgroundScenePathSchema,
@@ -39,6 +41,15 @@ const visualBackgroundStaticParamsSchema = z.object({
   scope: backgroundScopePathSchema,
   fileName: z.string().min(1),
 });
+
+function publishSettingsInvalidation(input: { actorUserId?: string | null; scope: { id: string }; targetId: string }) {
+  publishRealtimeReadModelInvalidation(runtimeScopeStorageId(input.scope), {
+    actorUserId: input.actorUserId,
+    models: ["settings"],
+    reason: "setting.changed",
+    target: { id: input.targetId, type: "setting" },
+  });
+}
 
 export function registerSettingsRoutes(app: FastifyInstance) {
   app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
@@ -90,17 +101,19 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.put("/api/settings/personal/preferences", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
       return reply;
     }
 
     try {
       const body = userPreferencesPatchSchema.parse(request.body);
+      const data = await saveUserPreferences(context.user.id, body);
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `personal:${context.user.id}` });
       return {
         code: 0,
         message: "ok",
-        data: await saveUserPreferences(user.id, body),
+        data,
       };
     } catch (error) {
       const mapped = personalSettingsError(error);
@@ -127,8 +140,8 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/settings/personal/backgrounds", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
       return reply;
     }
 
@@ -149,10 +162,12 @@ export function registerSettingsRoutes(app: FastifyInstance) {
         return reply.code(400).send({ code: 40002, message: "file is required", data: null });
       }
 
+      const data = await saveUploadedPersonalBackground({ userId: context.user.id, ...file });
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `personal:${context.user.id}` });
       return {
         code: 0,
         message: "ok",
-        data: await saveUploadedPersonalBackground({ userId: user.id, ...file }),
+        data,
       };
     } catch (error) {
       const mapped = personalSettingsError(error);
@@ -161,17 +176,19 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.delete("/api/settings/personal/backgrounds/:id", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
       return reply;
     }
 
     try {
       const params = visualBackgroundParamsSchema.parse(request.params);
+      const data = await deletePersonalBackground(context.user.id, params.id);
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `personal:${context.user.id}` });
       return {
         code: 0,
         message: "ok",
-        data: await deletePersonalBackground(user.id, params.id),
+        data,
       };
     } catch (error) {
       const mapped = personalSettingsError(error);
@@ -194,7 +211,8 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/settings/visual/backgrounds", async (request, reply) => {
-    if (!(await requireAdminContext(request, reply))) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
       return reply;
     }
 
@@ -222,10 +240,12 @@ export function registerSettingsRoutes(app: FastifyInstance) {
         return reply.code(400).send({ code: 40002, message: "file is required", data: null });
       }
 
+      const data = await saveUploadedVisualBackground({ scene, ...file });
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `visual:${scene}` });
       return {
         code: 0,
         message: "ok",
-        data: await saveUploadedVisualBackground({ scene, ...file }),
+        data,
       };
     } catch (error) {
       const mapped = visualBackgroundError(error);
@@ -234,16 +254,19 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.put("/api/settings/visual/backgrounds/:id/default", async (request, reply) => {
-    if (!(await requireAdminContext(request, reply))) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
       return reply;
     }
 
     try {
       const params = visualBackgroundParamsSchema.parse(request.params);
+      const data = await setDefaultVisualBackground(params.id);
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `visual:${params.id}` });
       return {
         code: 0,
         message: "ok",
-        data: await setDefaultVisualBackground(params.id),
+        data,
       };
     } catch (error) {
       const mapped = visualBackgroundError(error);
@@ -252,16 +275,19 @@ export function registerSettingsRoutes(app: FastifyInstance) {
   });
 
   app.put("/api/settings/visual/background-config", async (request, reply) => {
-    if (!(await requireAdminContext(request, reply))) {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
       return reply;
     }
 
     try {
       const body = visualBackgroundConfigBodySchema.parse(request.body);
+      const data = await saveVisualBackgroundConfig(body.scene, body.config);
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `visual:${body.scene}` });
       return {
         code: 0,
         message: "ok",
-        data: await saveVisualBackgroundConfig(body.scene, body.config),
+        data,
       };
     } catch (error) {
       const mapped = visualBackgroundError(error);

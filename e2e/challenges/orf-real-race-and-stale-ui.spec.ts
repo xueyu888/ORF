@@ -6,6 +6,33 @@ test.describe("ORF real stale UI and duplicate mutation guards", () => {
   test.skip(!realSystemEnabled, "Set ORF_REAL_E2E=1 to run against the real Fastify API and database.");
   test.describe.configure({ mode: "serial", timeout: 240_000 });
 
+  test("commander sees two challenge applications through realtime read-model invalidation without refresh", async ({ browser, real }, testInfo) => {
+    const dsl = new RealScenarioDsl(real);
+    const commander = await real.newLoggedInPage(browser, real.fixture.commander);
+    const firstApplicant = await real.newLoggedInPage(browser, real.fixture.challengerA);
+    const secondApplicant = await real.newLoggedInPage(browser, real.fixture.challengerB);
+
+    try {
+      const title = `${real.fixture.runLabel} 实时申请同步目标`;
+      await dsl.apiCreatePublishedObjectiveWithMetric(real.fixture.commander, title, `${title} 指标`);
+
+      await dsl.openTasks(commander.page);
+      const panel = objectivePanel(commander.page, title);
+      await expect(panel).toContainText("可申请");
+
+      await dsl.applyForObjective(firstApplicant.page, title);
+      await expect(panel).toContainText(real.fixture.challengerA.name);
+      await expect(panel).not.toContainText(real.fixture.challengerB.name);
+
+      await dsl.applyForObjective(secondApplicant.page, title);
+      await expect(panel).toContainText(real.fixture.challengerA.name);
+      await expect(panel).toContainText(real.fixture.challengerB.name);
+      await real.attachScreenshot(commander.page, testInfo, "commander-realtime-two-applications");
+    } finally {
+      await dsl.closePages(commander, firstApplicant, secondApplicant);
+    }
+  });
+
   test("stale pages fail safely and duplicate loot/review mutations do not duplicate records", async ({ browser, real }, testInfo) => {
     const dsl = new RealScenarioDsl(real);
     const commander = await real.newLoggedInPage(browser, real.fixture.commander);
@@ -20,6 +47,7 @@ test.describe("ORF real stale UI and duplicate mutation guards", () => {
       await dsl.recruitViaApi(real.fixture.commander, staleBounty.objectiveId, [real.fixture.challengerA.name]);
       await dsl.acceptRecruitmentViaApi(real.fixture.challengerA, staleBounty.objectiveId);
       await bountyRow(staleApplicant.page, staleBountyTitle).getByRole("button", { name: "申请挑战" }).click();
+      await staleApplicant.page.getByRole("dialog").getByRole("textbox", { name: "申请理由" }).fill("旧页面申请挑战验证。");
       await staleApplicant.page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
       await expect(staleApplicant.page.getByText("目标状态已变化，请刷新后再试")).toBeVisible();
       await staleApplicant.page.reload();

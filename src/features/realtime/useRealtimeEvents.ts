@@ -1,16 +1,18 @@
 import { useEffect, useRef } from "react";
 import type { AppNotification } from "../../types/orf";
-import type { RealtimeEvent, SystemBroadcast } from "../../types/realtime";
+import type { OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../types/realtime";
 
 type RealtimeEventOptions = {
   enabled: boolean;
   onBroadcast: (broadcast: SystemBroadcast) => void;
+  onReadModelInvalidation: (invalidation: OrfReadModelInvalidation) => void;
   onNotification: (notification: AppNotification) => void;
 };
 
-export function useRealtimeEvents({ enabled, onBroadcast, onNotification }: RealtimeEventOptions) {
+export function useRealtimeEvents({ enabled, onBroadcast, onNotification, onReadModelInvalidation }: RealtimeEventOptions) {
   const onBroadcastRef = useRef(onBroadcast);
   const onNotificationRef = useRef(onNotification);
+  const onReadModelInvalidationRef = useRef(onReadModelInvalidation);
 
   useEffect(() => {
     onBroadcastRef.current = onBroadcast;
@@ -19,6 +21,10 @@ export function useRealtimeEvents({ enabled, onBroadcast, onNotification }: Real
   useEffect(() => {
     onNotificationRef.current = onNotification;
   }, [onNotification]);
+
+  useEffect(() => {
+    onReadModelInvalidationRef.current = onReadModelInvalidation;
+  }, [onReadModelInvalidation]);
 
   useEffect(() => {
     if (!enabled || typeof EventSource === "undefined") {
@@ -38,12 +44,20 @@ export function useRealtimeEvents({ enabled, onBroadcast, onNotification }: Real
         onBroadcastRef.current(payload.broadcast);
       }
     };
+    const handleReadModelInvalidation = (event: MessageEvent<string>) => {
+      const payload = parseRealtimeEvent(event.data);
+      if (payload?.kind === "orf.read-model.invalidated") {
+        onReadModelInvalidationRef.current(payload.invalidation);
+      }
+    };
 
     source.addEventListener("notification.created", handleNotification);
     source.addEventListener("system.broadcast", handleBroadcast);
+    source.addEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
     return () => {
       source.removeEventListener("notification.created", handleNotification);
       source.removeEventListener("system.broadcast", handleBroadcast);
+      source.removeEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
       source.close();
     };
   }, [enabled]);

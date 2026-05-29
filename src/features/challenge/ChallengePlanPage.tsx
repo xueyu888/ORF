@@ -12,6 +12,7 @@ import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
+import { readModelInvalidationKey } from "../realtime/readModelInvalidations";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
@@ -208,6 +209,7 @@ export function ChallengePlanPage() {
     notify,
     openModal,
     publishObjective,
+    readModelInvalidations,
     freezeObjective,
     createObjective,
     createResult,
@@ -289,10 +291,14 @@ export function ChallengePlanPage() {
   const loadChallengeData = useCallback(async () => {
     setChallengeData(await getMyChallengesData(showAll ? "all" : "mine"));
   }, [showAll]);
+  const taskManagementInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),
+    [readModelInvalidations],
+  );
 
   useEffect(() => {
     void loadChallengeData().catch(() => setChallengeData(null));
-  }, [loadChallengeData, state.comments, state.objectives, state.results, state.tasks]);
+  }, [loadChallengeData, state.comments, state.objectives, state.results, state.tasks, taskManagementInvalidationKey]);
 
   const sourceData = challengeData ?? state;
   const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
