@@ -24,6 +24,7 @@ import {
   restorePersonalSettingsSnapshot,
   sameVisualBackgroundConfig,
   saveVisualBackgroundConfigAsCurrentUser,
+  savePersonalBackgroundConfigAsCurrentUser,
   selectPersonalBackgroundFromSettingsPage,
   selectSystemBackgroundFromSettingsPage,
   setSelectedSystemBackgroundAsDefaultFromSettingsPage,
@@ -174,6 +175,25 @@ export function createBackgroundSettingsOperators<
         const expectedConfig = requiredVisualBackgroundConfig(params, "config");
         expect(readVisualBackgroundConfigFromResult(result)).toEqual(expectedConfig);
       },
+
+      forbidden: async ({ params }) => {
+        expect(requiredApiAttemptResult(params, "result")).toMatchObject({ status: 403 });
+      },
+    },
+
+    "api.personal_background_config": {
+      generate_new: async ({ params }) =>
+        generateDifferentBackgroundConfig(requiredBackgroundSnapshots(params, "snapshot"), "app_background"),
+
+      submit: async ({ ctx, params }) =>
+        savePersonalBackgroundConfigAsCurrentUser(
+          ctx.page,
+          requiredVisualBackgroundConfig(params, "config"),
+        ),
+
+      unauthenticated: async ({ params }) => {
+        expect(requiredApiAttemptResult(params, "result")).toMatchObject({ status: 401 });
+      },
     },
 
     "api.visual_background_default": {
@@ -237,6 +257,13 @@ export function createBackgroundSettingsOperators<
         const background = requiredVisualBackgroundImage(params, "background");
         await expect(systemBackgroundSection(ctx.page, scene)).toBeVisible();
         await expect(systemBackgroundCard(ctx.page, scene, background).getByText("默认", { exact: true })).toBeVisible();
+      },
+    },
+
+    "page.system_settings_entry": {
+      hidden: async ({ ctx }) => {
+        await expect(ctx.page.getByRole("link", { name: "系统管理", exact: true })).toHaveCount(0);
+        await expect(ctx.page.getByRole("link", { name: "系统设置", exact: true })).toHaveCount(0);
       },
     },
 

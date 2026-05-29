@@ -13,6 +13,10 @@ export type CommentCaseData = {
   password: string;
   name: string;
   role: "admin" | "member";
+  secondaryEmail?: string;
+  secondaryPassword?: string;
+  secondaryName?: string;
+  secondaryRole?: "admin" | "member";
   objectiveId: string;
   objectiveTitle: string;
   taskId: string;
@@ -24,6 +28,7 @@ export type CommentCaseData = {
   replyBody?: string;
   editedCommentBody?: string;
   imageFileName?: string;
+  invalidFileName?: string;
 };
 
 export type CommentTarget = {

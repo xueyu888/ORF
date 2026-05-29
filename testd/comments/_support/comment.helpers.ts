@@ -2,8 +2,10 @@ import type { Page } from "@playwright/test";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { canMutateObjectiveCommentsAsChallengerByFlow, canMutateObjectiveCommentsByFlow } from "../../../src/domain/orfLifecycle";
 import { db } from "../../../server/db/client";
-import { commentAttachments, commentMessages, commentThreads, objectives, tasks, users } from "../../../server/db/schema";
+import { commentAttachments, commentMessages, commentThreads, objectives, rolePermissions, tasks, users } from "../../../server/db/schema";
 import { objectStorage } from "../../../server/storage/objectStorage";
+import { normalizePermissionKeys, type PermissionKey } from "../../../src/config/permissions";
+import { permissionStorageResource, permissionStorageStage } from "../../../server/repositories/permissionRepository";
 import {
   deleteTestObjectives,
   deleteTestUserMemberships,
@@ -26,6 +28,11 @@ import type {
 } from "./comment.context";
 
 export type MyChallengesScope = "mine" | "all";
+
+export type MemberCommentManagePermissionSnapshot = {
+  actions: PermissionKey[] | null;
+  teamId: string;
+};
 
 export async function prepareCommentActor(input: {
   email: string;
@@ -163,6 +170,79 @@ export async function setCommentObjectiveParticipant(objectiveId: string, member
     .where(eq(objectives.id, objectiveId));
 }
 
+export async function readMemberCommentManagePermissionSnapshot(teamId: string): Promise<MemberCommentManagePermissionSnapshot> {
+  const [row] = await db
+    .select({ actions: rolePermissions.actions })
+    .from(rolePermissions)
+    .where(
+      and(
+        eq(rolePermissions.teamId, teamId),
+        eq(rolePermissions.role, "member"),
+        eq(rolePermissions.stage, permissionStorageStage),
+        eq(rolePermissions.resource, permissionStorageResource),
+      ),
+    )
+    .limit(1);
+
+  return {
+    actions: row ? normalizePermissionKeys(row.actions) : null,
+    teamId,
+  };
+}
+
+export async function disableMemberCommentManagePermission(teamId: string) {
+  const snapshot = await readMemberCommentManagePermissionSnapshot(teamId);
+  const nextActions = normalizePermissionKeys((snapshot.actions ?? []).filter((permission) => permission !== "comment.manage"));
+
+  await db
+    .insert(rolePermissions)
+    .values({
+      teamId,
+      role: "member",
+      stage: permissionStorageStage,
+      resource: permissionStorageResource,
+      actions: nextActions,
+    })
+    .onConflictDoUpdate({
+      target: [rolePermissions.teamId, rolePermissions.role, rolePermissions.stage, rolePermissions.resource],
+      set: { actions: nextActions },
+    });
+}
+
+export async function restoreMemberCommentManagePermissionSnapshot(snapshot: MemberCommentManagePermissionSnapshot | null | undefined) {
+  if (!snapshot) {
+    return;
+  }
+
+  if (!snapshot.actions) {
+    await db
+      .delete(rolePermissions)
+      .where(
+        and(
+          eq(rolePermissions.teamId, snapshot.teamId),
+          eq(rolePermissions.role, "member"),
+          eq(rolePermissions.stage, permissionStorageStage),
+          eq(rolePermissions.resource, permissionStorageResource),
+        ),
+      );
+    return;
+  }
+
+  await db
+    .insert(rolePermissions)
+    .values({
+      teamId: snapshot.teamId,
+      role: "member",
+      stage: permissionStorageStage,
+      resource: permissionStorageResource,
+      actions: snapshot.actions,
+    })
+    .onConflictDoUpdate({
+      target: [rolePermissions.teamId, rolePermissions.role, rolePermissions.stage, rolePermissions.resource],
+      set: { actions: snapshot.actions },
+    });
+}
+
 export async function commentTargetFromFixture(input: {
   objectiveId: string;
   taskId: string;
@@ -211,6 +291,14 @@ export async function commentTargetCanMutate(input: {
     canMutateObjectiveCommentsAsChallengerByFlow(objective) &&
     objective.challengers.includes(input.actorName)
   );
+}
+
+export async function commentTargetCannotMutate(input: {
+  actorName: string;
+  role: "admin" | "member";
+  target: CommentTarget;
+}) {
+  return !(await commentTargetCanMutate(input));
 }
 
 export async function createRootFixtureComment(input: {
@@ -434,6 +522,14 @@ export async function replyCommentPersisted(input: {
   return !!row && row.parentMessageId === input.parent.messageId;
 }
 
+export async function replyCountForParent(parent: FixtureComment) {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(commentMessages)
+    .where(and(eq(commentMessages.threadId, parent.threadId), eq(commentMessages.parentMessageId, parent.messageId)));
+  return row?.count ?? 0;
+}
+
 export async function imageCommentPersisted(input: {
   bodyMarker: string;
   fileName: string;
@@ -476,6 +572,10 @@ export async function readMyChallenges(page: Page, scope: MyChallengesScope): Pr
       body,
     };
   }, scope);
+}
+
+export async function myChallengesLacksTarget(page: Page, target: CommentTarget, scope: MyChallengesScope) {
+  return !(await myChallengesHasTarget(page, target, scope));
 }
 
 export async function myChallengesHasTarget(page: Page, target: CommentTarget, scope: MyChallengesScope) {
@@ -599,6 +699,14 @@ export function makeMockPngFile(fileName: string): MockImageFile {
     ),
     fileName,
     mimeType: "image/png",
+  };
+}
+
+export function makeMockTextFile(fileName: string): MockImageFile {
+  return {
+    buffer: Buffer.from("not an image\n", "utf8"),
+    fileName,
+    mimeType: "text/plain",
   };
 }
 

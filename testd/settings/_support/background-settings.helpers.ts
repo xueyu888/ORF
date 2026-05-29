@@ -116,6 +116,25 @@ export async function saveVisualBackgroundConfigAsCurrentUser(
   );
 }
 
+export async function savePersonalBackgroundConfigAsCurrentUser(
+  page: Page,
+  config: VisualBackgroundConfig,
+): Promise<ApiAttemptResult> {
+  return page.evaluate(async (nextConfig) => {
+    const response = await fetch("/api/settings/personal/preferences", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ appBackground: nextConfig }),
+    });
+
+    return {
+      status: response.status,
+      body: await response.json().catch(() => null),
+    };
+  }, config);
+}
+
 export async function uploadPersonalBackgroundFromSettingsPage(
   page: Page,
   fileName: string,

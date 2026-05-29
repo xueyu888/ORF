@@ -1,7 +1,7 @@
 import { expect, type Dialog } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../_framework/types";
 import { requiredCapturedResponse } from "../_operators/common.operators";
-import { requiredString } from "../_operators/params";
+import { requiredNumber, requiredString } from "../_operators/params";
 import type { CommentCaseData, CommentTarget, FixtureComment, MockImageFile, TestContext } from "./_support/comment.context";
 import {
   commentBodyAbsent,
@@ -12,25 +12,32 @@ import {
   commentPanel,
   commentTargetAndTaskAbsent,
   commentTargetCanMutate,
+  commentTargetCannotMutate,
   commentTargetFromFixture,
   commentTargetRow,
   createCommentTask,
   createRootFixtureComment,
   deleteCommentActor,
+  disableMemberCommentManagePermission,
   deleteCommentAttachmentObjects,
   deleteCommentTargetAndTask,
   deleteCommentTask,
   imageCommentPersisted,
+  makeMockTextFile,
   makeMockPngFile,
   myChallengesHasImageComment,
   myChallengesHasReply,
   myChallengesHasRootComment,
   myChallengesHasTarget,
   myChallengesLacksComment,
+  myChallengesLacksTarget,
   myChallengesScopeFor,
   openCommentPanel,
   prepareCommentActor,
+  readMemberCommentManagePermissionSnapshot,
+  replyCountForParent,
   removeTestComments,
+  restoreMemberCommentManagePermissionSnapshot,
   replyCommentPersisted,
   rootCommentPersisted,
   setCommentObjectiveParticipant,
@@ -104,6 +111,18 @@ export const commentOperators = {
     },
   },
 
+  "db.member_comment_manage_permission": {
+    snapshot: async ({ params }) => readMemberCommentManagePermissionSnapshot(requiredString(params, "teamId")),
+
+    disable: async ({ params }) => {
+      await disableMemberCommentManagePermission(requiredString(params, "teamId"));
+    },
+
+    restore_snapshot: async ({ params }) => {
+      await restoreMemberCommentManagePermissionSnapshot(params.snapshot as Parameters<typeof restoreMemberCommentManagePermissionSnapshot>[0]);
+    },
+  },
+
   "db.comment_task": {
     create: async ({ params }) =>
       createCommentTask({
@@ -135,6 +154,18 @@ export const commentOperators = {
       await expect
         .poll(() =>
           commentTargetCanMutate({
+            actorName: requiredString(params, "actorName"),
+            role: requiredRole(params, "role"),
+            target: requiredCommentTarget(params, "target"),
+          }),
+        )
+        .toBe(true);
+    },
+
+    not_mutable: async ({ params }) => {
+      await expect
+        .poll(() =>
+          commentTargetCannotMutate({
             actorName: requiredString(params, "actorName"),
             role: requiredRole(params, "role"),
             target: requiredCommentTarget(params, "target"),
@@ -178,6 +209,12 @@ export const commentOperators = {
         .toBe(true);
     },
 
+    reply_count_equals: async ({ params }) => {
+      await expect
+        .poll(() => replyCountForParent(requiredFixtureComment(params, "parent")))
+        .toBe(requiredNumber(params, "count"));
+    },
+
     body_absent: async ({ params }) => {
       await expect.poll(() => commentBodyAbsent(requiredString(params, "body"))).toBe(true);
     },
@@ -203,10 +240,20 @@ export const commentOperators = {
     prepare: async ({ params }) => makeMockPngFile(requiredString(params, "fileName")),
   },
 
+  "mock.comment_file": {
+    prepare_text: async ({ params }) => makeMockTextFile(requiredString(params, "fileName")),
+  },
+
   "api.my_challenges.comment_target": {
     present: async ({ ctx, data, params }) => {
       await expect
         .poll(() => myChallengesHasTarget(ctx.page, requiredCommentTarget(params, "target"), myChallengesScopeFor(data.role)))
+        .toBe(true);
+    },
+
+    absent: async ({ ctx, data, params }) => {
+      await expect
+        .poll(() => myChallengesLacksTarget(ctx.page, requiredCommentTarget(params, "target"), myChallengesScopeFor(data.role)))
         .toBe(true);
     },
   },
@@ -341,6 +388,11 @@ export const commentOperators = {
         },
       });
     },
+
+    forbidden: async ({ params }) => {
+      const response = requiredApiAttemptResult(params, "result");
+      expect(response.status).toBe(403);
+    },
   },
 
   "api.comment_upload_response": {
@@ -354,6 +406,105 @@ export const commentOperators = {
           fileName: requiredString(params, "fileName"),
         },
       });
+    },
+
+    unsupported: async ({ params }) => {
+      const response = requiredApiAttemptResult(params, "result");
+      expect(response.status).toBe(415);
+    },
+  },
+
+  "api.comment_direct": {
+    create: async ({ ctx, params }) =>
+      ctx.page.evaluate(async (input) => {
+        const response = await fetch("/api/comments", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        return {
+          status: response.status,
+          body: await response.json().catch(() => null),
+        };
+      }, createCommentPayload(params)),
+
+    reply: async ({ ctx, params }) =>
+      ctx.page.evaluate(async (input) => {
+        const response = await fetch("/api/comments", {
+          method: "POST",
+          credentials: "include",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(input),
+        });
+        return {
+          status: response.status,
+          body: await response.json().catch(() => null),
+        };
+      }, createReplyPayload(params)),
+
+    update: async ({ ctx, params }) => {
+      const comment = requiredFixtureComment(params, "comment");
+      return ctx.page.evaluate(
+        async ({ body, url }) => {
+          const response = await fetch(url, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ body }),
+          });
+          return {
+            status: response.status,
+            body: await response.json().catch(() => null),
+          };
+        },
+        { body: requiredString(params, "body"), url: comment.messageApiPath },
+      );
+    },
+
+    delete: async ({ ctx, params }) => {
+      const comment = requiredFixtureComment(params, "comment");
+      return ctx.page.evaluate(async (url) => {
+        const response = await fetch(url, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        return {
+          status: response.status,
+          body: await response.json().catch(() => null),
+        };
+      }, comment.messageApiPath);
+    },
+  },
+
+  "api.comment_attachment_direct": {
+    upload: async ({ ctx, params }) => {
+      const file = requiredMockImageFile(params, "file");
+      const target = requiredCommentTarget(params, "target");
+      return ctx.page.evaluate(
+        async ({ fileName, mimeType, bytes, targetId, targetType }) => {
+          const formData = new FormData();
+          formData.set("targetId", targetId);
+          formData.set("targetType", targetType);
+          formData.set("file", new File([new Uint8Array(bytes)], fileName, { type: mimeType }));
+          const response = await fetch("/api/comments/attachments", {
+            method: "POST",
+            credentials: "include",
+            body: formData,
+          });
+          return {
+            status: response.status,
+            body: await response.json().catch(() => null),
+          };
+        },
+        {
+          bytes: Array.from(file.buffer),
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          targetId: target.id,
+          targetType: target.type,
+        },
+      );
     },
   },
 
@@ -373,6 +524,10 @@ export const commentOperators = {
   "page.comment_target": {
     visible: async ({ ctx, params }) => {
       await expect(commentTargetRow(ctx.page, requiredCommentTarget(params, "target"))).toBeVisible();
+    },
+
+    hidden: async ({ ctx, params }) => {
+      await expect(commentTargetRow(ctx.page, requiredCommentTarget(params, "target"))).toHaveCount(0);
     },
 
     open_comment_panel: async ({ ctx, params }) => {
@@ -473,6 +628,20 @@ export const commentOperators = {
         name: file.fileName,
       });
     },
+
+    choose_file: async ({ ctx, params }) => {
+      const file = requiredMockImageFile(params, "file");
+      await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片" })).toBeEnabled();
+      await commentPanel(ctx.page).locator('input[type="file"]').setInputFiles({
+        buffer: file.buffer,
+        mimeType: file.mimeType,
+        name: file.fileName,
+      });
+    },
+
+    upload_error_visible: async ({ ctx, params }) => {
+      await expect(commentPanel(ctx.page).getByText(requiredString(params, "message"), { exact: true })).toBeVisible();
+    },
   },
 
   "page.comment_message": {
@@ -488,12 +657,20 @@ export const commentOperators = {
       await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "编辑评论" })).toBeEnabled();
     },
 
+    edit_hidden: async ({ ctx, params }) => {
+      await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "编辑评论" })).toHaveCount(0);
+    },
+
     click_edit: async ({ ctx, params }) => {
       await commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "编辑评论" }).click();
     },
 
     delete_enabled: async ({ ctx, params }) => {
       await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" })).toBeEnabled();
+    },
+
+    delete_hidden: async ({ ctx, params }) => {
+      await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" })).toHaveCount(0);
     },
 
     click_delete: async ({ ctx, runtime, params }) => {
@@ -603,6 +780,32 @@ function requiredMockImageFile(params: StepParams, key: string): MockImageFile {
     throw new Error(`参数 ${key} 必须是测试图片文件`);
   }
   return value as MockImageFile;
+}
+
+function requiredApiAttemptResult(params: StepParams, key: string): { status?: number; body?: unknown } {
+  const value = params[key];
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`参数 ${key} 必须是接口尝试结果`);
+  }
+  return value as { status?: number; body?: unknown };
+}
+
+function createCommentPayload(params: StepParams) {
+  const target = requiredCommentTarget(params, "target");
+  return {
+    targetType: target.type,
+    targetId: target.id,
+    targetTitle: target.title,
+    body: requiredString(params, "body"),
+  };
+}
+
+function createReplyPayload(params: StepParams) {
+  const parent = requiredFixtureComment(params, "parent");
+  return {
+    ...createCommentPayload(params),
+    parentMessageId: parent.messageId,
+  };
 }
 
 function isDialog(value: unknown): value is Dialog {
