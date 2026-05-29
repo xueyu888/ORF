@@ -1,11 +1,12 @@
-import { Command, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
-import { type CSSProperties, useEffect, useState } from "react";
+import { Command, Eye, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
+import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
@@ -39,10 +40,44 @@ export function Sidebar({
   const useUnifiedBackground = Boolean(unifiedBackgroundUrl);
   const backgroundImageUrl = (useUnifiedBackground ? unifiedBackgroundUrl : backgroundUrl) ?? "";
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
+  const avatarPreview = currentUser?.avatarUrl
+    ? { alt: `${currentUser.name} 头像`, label: `${currentUser.name} 头像`, src: currentUser.avatarUrl }
+    : null;
 
   useEffect(() => {
     setFailedBackgroundUrl(null);
   }, [backgroundImageUrl]);
+
+  useEffect(() => {
+    if (!userMenuOpen) return undefined;
+
+    const closeOnPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !userMenuRef.current?.contains(event.target)) {
+        setUserMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("pointerdown", closeOnPointerDown);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnPointerDown);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [userMenuOpen]);
+
+  useEffect(() => {
+    if (!currentUser?.avatarUrl) {
+      setAvatarPreviewOpen(false);
+    }
+  }, [currentUser?.avatarUrl]);
 
   if (!backgroundImageUrl) {
     throw new Error("Sidebar background image URL is missing");
@@ -109,12 +144,21 @@ export function Sidebar({
       </nav>
 
       <div className="orf-sidebar-footer border-t p-4">
-        <div className="orf-sidebar-user-wrap relative">
-          <div className="orf-sidebar-user flex w-full items-center gap-3 text-left" title={currentUser?.name ?? "User"} aria-label="当前用户">
-            <Avatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} />
-            <div className="orf-sidebar-label min-w-0 flex-1">
-              <div className="orf-sidebar-user-name truncate">{currentUser?.name ?? "User"}</div>
-            </div>
+        <div ref={userMenuRef} className="orf-sidebar-user-wrap relative">
+          <div className="orf-sidebar-user flex w-full items-center gap-3 text-left" title={currentUser?.name ?? "User"}>
+            <button
+              type="button"
+              className="orf-sidebar-user-profile flex min-w-0 flex-1 items-center gap-3 text-left"
+              aria-haspopup="menu"
+              aria-expanded={userMenuOpen}
+              aria-label="用户菜单"
+              onClick={() => setUserMenuOpen((open) => !open)}
+            >
+              <Avatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} />
+              <span className="orf-sidebar-label min-w-0 flex-1">
+                <span className="orf-sidebar-user-name block truncate">{currentUser?.name ?? "User"}</span>
+              </span>
+            </button>
             <div className="orf-sidebar-user-actions" aria-label="用户操作">
               <button
                 type="button"
@@ -125,34 +169,52 @@ export function Sidebar({
               >
                 <Command className="h-4 w-4" />
               </button>
+            </div>
+          </div>
+          {userMenuOpen && (
+            <div className="orf-sidebar-user-menu" role="menu" aria-label="用户菜单">
+              {avatarPreview && (
+                <button
+                  type="button"
+                  className="orf-sidebar-user-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    setAvatarPreviewOpen(true);
+                  }}
+                >
+                  <Eye className="h-4 w-4" />
+                  查看头像
+                </button>
+              )}
               {canShowFrontend(currentUser, "nav.personalSettings") && (
                 <NavLink
                   to="/settings"
-                  className={({ isActive }) =>
-                    [
-                      "orf-sidebar-user-action inline-flex items-center justify-center transition",
-                      isActive ? "orf-sidebar-user-action-active" : "",
-                    ].join(" ")
-                  }
-                  aria-label="设置"
-                  title="设置"
+                  className="orf-sidebar-user-menu-item"
+                  role="menuitem"
+                  onClick={() => setUserMenuOpen(false)}
                 >
                   <Settings className="h-4 w-4" />
+                  个人设置
                 </NavLink>
               )}
               <button
                 type="button"
-                onClick={logout}
-                className="orf-sidebar-user-action inline-flex items-center justify-center transition"
-                aria-label="退出登录"
-                title="退出登录"
+                className="orf-sidebar-user-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setUserMenuOpen(false);
+                  logout();
+                }}
               >
                 <LogOut className="h-4 w-4" />
+                退出登录
               </button>
             </div>
-          </div>
+          )}
         </div>
       </div>
+      {avatarPreviewOpen && avatarPreview && <ImagePreviewDialog preview={avatarPreview} onClose={() => setAvatarPreviewOpen(false)} />}
     </aside>
   );
 }

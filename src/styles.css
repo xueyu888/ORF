@@ -3748,6 +3748,21 @@ button:disabled {
   box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.16);
 }
 
+.orf-sidebar-user-profile {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.orf-sidebar-user-profile:focus-visible {
+  outline: 2px solid rgba(125, 211, 252, 0.55);
+  outline-offset: 3px;
+}
+
 .orf-sidebar-user-actions {
   display: flex;
   flex-shrink: 0;
@@ -3792,15 +3807,58 @@ button:disabled {
 }
 
 .orf-sidebar-user-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: 40;
+  display: grid;
+  min-width: 176px;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid rgba(125, 211, 252, 0.2);
+  border-radius: var(--orf-radius-control);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 44px rgba(15, 23, 42, 0.24);
+  backdrop-filter: blur(14px);
   color: #344054;
 }
 
 .orf-sidebar-user-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
   color: #344054;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .orf-sidebar-user-menu-item:hover {
   background: var(--orf-bg-muted);
+}
+
+.orf-sidebar-user-menu-item svg {
+  color: #667085;
+}
+
+.orf-sidebar-user-menu-item:focus-visible {
+  outline: 2px solid rgba(47, 156, 137, 0.45);
+  outline-offset: 2px;
+}
+
+.orf-sidebar-collapsed .orf-sidebar-user-menu {
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .orf-sidebar-logo {
@@ -6181,7 +6239,22 @@ body[data-dragging-floating="true"] {
   box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
 }
 
-.orf-comment-image-preview-backdrop {
+.orf-avatar-preview-trigger {
+  display: inline-flex;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  line-height: 0;
+  cursor: zoom-in;
+}
+
+.orf-avatar-preview-trigger:focus-visible {
+  outline: 2px solid rgba(47, 156, 137, 0.55);
+  outline-offset: 4px;
+}
+
+.orf-image-preview-backdrop {
   position: fixed;
   inset: 0;
   z-index: 120;
@@ -6193,7 +6266,7 @@ body[data-dragging-floating="true"] {
   pointer-events: auto;
 }
 
-.orf-comment-image-preview-dialog {
+.orf-image-preview-dialog {
   position: relative;
   display: flex;
   max-height: calc(100vh - 48px);
@@ -6202,7 +6275,7 @@ body[data-dragging-floating="true"] {
   justify-content: center;
 }
 
-.orf-comment-image-preview {
+.orf-image-preview {
   display: block;
   max-height: calc(100vh - 48px);
   max-width: 100%;
@@ -6212,7 +6285,7 @@ body[data-dragging-floating="true"] {
   object-fit: contain;
 }
 
-.orf-comment-image-preview-close {
+.orf-image-preview-close {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -6230,7 +6303,7 @@ body[data-dragging-floating="true"] {
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
 }
 
-.orf-comment-image-preview-close:hover {
+.orf-image-preview-close:hover {
   color: #0b8f7f;
 }
 
@@ -6583,4 +6656,8 @@ a.orf-row-loot-action,
 .orf-role-permission-save-button,
 .orf-user-dialog-actions button {
   clip-path: none;
+}
+
+.orf-avatar-preview-trigger {
+  border-radius: 999px;
 }

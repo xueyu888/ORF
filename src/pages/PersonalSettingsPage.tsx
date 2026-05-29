@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import { Check, Image, Loader2, Trash2, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
 import { Button, Card, Field } from "../components/ui";
@@ -47,8 +48,12 @@ export function PersonalSettingsPage() {
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
   const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
   const [avatarStatus, setAvatarStatus] = useState<RequestStatus>("idle");
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
+  const avatarPreview = currentUser?.avatarUrl
+    ? { alt: `${currentUser.name} 头像`, label: `${currentUser.name} 头像`, src: currentUser.avatarUrl }
+    : null;
 
   const loadSettings = async () => {
     setLoadStatus("loading");
@@ -69,6 +74,12 @@ export function PersonalSettingsPage() {
   useEffect(() => {
     void loadSettings();
   }, [settingsInvalidationKey]);
+
+  useEffect(() => {
+    if (!currentUser?.avatarUrl) {
+      setAvatarPreviewOpen(false);
+    }
+  }, [currentUser?.avatarUrl]);
 
   const savePreferencePatch = async (patch: Parameters<typeof saveUserPreferences>[0], message = "个人设置已保存") => {
     setSaveStatus("loading");
@@ -165,6 +176,9 @@ export function PersonalSettingsPage() {
     setErrorMessage(null);
     const ok = await deleteCurrentUserAvatar();
     setAvatarStatus(ok ? "success" : "error");
+    if (ok) {
+      setAvatarPreviewOpen(false);
+    }
     if (!ok) {
       setErrorMessage("头像删除失败");
     }
@@ -231,7 +245,19 @@ export function PersonalSettingsPage() {
         <div className="grid content-start gap-4">
           <Card className="orf-card-padding">
             <div className="flex items-start gap-4">
-              <UserAvatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} size="xl" />
+              {avatarPreview ? (
+                <button
+                  type="button"
+                  className="orf-avatar-preview-trigger"
+                  aria-label="查看头像原图"
+                  title="查看头像"
+                  onClick={() => setAvatarPreviewOpen(true)}
+                >
+                  <UserAvatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} size="xl" />
+                </button>
+              ) : (
+                <UserAvatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} size="xl" />
+              )}
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold orf-text-primary">{currentUser?.name ?? "User"}</div>
                 <div className="truncate text-sm orf-text-secondary">{currentUser?.email ?? "未绑定邮箱"}</div>
@@ -373,6 +399,7 @@ export function PersonalSettingsPage() {
           )}
         </Card>
       </div>
+      {avatarPreviewOpen && avatarPreview && <ImagePreviewDialog preview={avatarPreview} onClose={() => setAvatarPreviewOpen(false)} />}
     </PageScaffold>
   );
 }
