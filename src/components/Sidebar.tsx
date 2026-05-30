@@ -169,29 +169,6 @@ export function Sidebar({
               >
                 <Command className="h-4 w-4" />
               </button>
-              {canShowFrontend(currentUser, "nav.personalSettings") && (
-                <NavLink
-                  to="/settings"
-                  className="orf-sidebar-user-action inline-flex items-center justify-center transition"
-                  aria-label="设置"
-                  title="设置"
-                  onClick={() => setUserMenuOpen(false)}
-                >
-                  <Settings className="h-4 w-4" />
-                </NavLink>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setUserMenuOpen(false);
-                  logout();
-                }}
-                className="orf-sidebar-user-action inline-flex items-center justify-center transition"
-                aria-label="退出登录"
-                title="退出登录"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
             </div>
           </div>
           {userMenuOpen && (
