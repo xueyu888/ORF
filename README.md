@@ -30,12 +30,19 @@ ORF 是一个基于 ORF 思想设计的项目管理工具。它在产品理念�
 
 ## 启动方式
 
-### 1) 安装依赖
+### 1) 安装依赖与 `orf` 启动指令
 
 ```bash
 npm install
 npm run cli:link
 ```
+
+安装完成后，先验证命令是否可用：
+
+```bash
+orf --help
+```
+
 
 首次运行 Playwright E2E 测试前，需要安装 Chromium 测试浏览器：
 
@@ -49,7 +56,7 @@ npx playwright install chromium
 sudo npx playwright install-deps chromium
 ```
 
-`cli:link` 会把当前仓库的 `orf` 命令链接到用户级 `~/.local/bin/orf`。如果 `~/.local/bin` 不在 `PATH`，脚本会提示你补到 shell 配置里。也可以不链接，改用 `npm run orf -- <command>`。
+`cli:link` 会把当前仓库的 `orf` 命令链接到用户级 `~/.local/bin/orf`。
 
 ### 2) 安装 Git Hooks
 
