@@ -1,11 +1,11 @@
 import { clsx } from "clsx";
-import { CalendarDays, Check, CheckCircle2, Clock3, MessageSquare, Pencil, Send, UserPlus, X, type LucideIcon } from "lucide-react";
-import type { FormEvent, ReactNode } from "react";
+import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
-import { minimumObjectiveDeadlineValue } from "../../../domain/orfDeadline";
+import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
 import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
@@ -39,7 +39,7 @@ type RowHandlers = {
   editingTarget: ChallengeTarget | null;
   trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
-  canEditObjectiveDeadline: (objective: ObjectiveNode["objective"]) => boolean;
+  objectiveDeadlineEditState: (objective: ObjectiveNode["objective"]) => ObjectiveDeadlineEditState;
   canMutateMetrics: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
@@ -63,6 +63,7 @@ type RowHandlers = {
   onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
   onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -211,9 +212,10 @@ function ObjectivePanel({
         {statusChip}
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
         <ObjectiveDeadlineCell
-          canEdit={handlers.canEditObjectiveDeadline(group.objective)}
+          editState={handlers.objectiveDeadlineEditState(group.objective)}
           objective={group.objective}
           onSave={handlers.onSaveObjectiveDeadline}
+          onUnavailable={handlers.onUnavailableObjectiveDeadline}
         />
         <ProgressValue value={group.objective.progress} />
         {workbenchAction ? (
@@ -798,85 +800,97 @@ function ProgressValue({ value }: { value: number }) {
 }
 
 function ObjectiveDeadlineCell({
-  canEdit,
+  editState,
   objective,
   onSave,
+  onUnavailable,
 }: {
-  canEdit: boolean;
+  editState: ObjectiveDeadlineEditState;
   objective: ObjectiveNode["objective"];
   onSave: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  onUnavailable: (objective: ObjectiveNode["objective"]) => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(objective.finalDueAt);
   const [isSaving, setIsSaving] = useState(false);
   const minimumValue = minimumObjectiveDeadlineValue(objective);
+  const canEdit = editState.status === "editable";
 
   useEffect(() => {
     if (!isEditing) setValue(objective.finalDueAt);
   }, [isEditing, objective.finalDueAt]);
 
-  const cancel = () => {
-    setValue(objective.finalDueAt);
-    setIsEditing(false);
-  };
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!value || isSaving) return;
+  const saveSelectedDate = async (nextValue: string) => {
+    if (!nextValue || isSaving) return;
+    setValue(nextValue);
 
     setIsSaving(true);
     try {
-      const saved = await onSave(objective.id, value);
+      const saved = await onSave(objective.id, nextValue);
       if (saved) setIsEditing(false);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (!canEdit) {
-    return <DateStack primary={objective.finalDueAt || "未设置"} />;
-  }
-
-  if (isEditing) {
+  if (canEdit && isEditing) {
     return (
-      <form
+      <div
         className="orf-objective-deadline-editor"
         data-no-row-edit="true"
         onDoubleClick={(event) => event.stopPropagation()}
-        onSubmit={(event) => void submit(event)}
       >
         <input
           aria-label="目标截止日期"
+          autoFocus
           className="orf-objective-deadline-input"
           disabled={isSaving}
           min={minimumValue}
-          onChange={(event) => setValue(event.target.value)}
+          onChange={(event) => void saveSelectedDate(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setIsEditing(false);
+          }}
           type="date"
           value={value}
         />
-        <button className="orf-icon-button" disabled={isSaving} title="保存截止日期" type="submit">
-          <Check className="h-4 w-4" />
-        </button>
-        <button className="orf-icon-button" disabled={isSaving} onClick={cancel} title="取消" type="button">
-          <X className="h-4 w-4" />
-        </button>
-      </form>
+      </div>
     );
   }
 
   return (
     <button
-      className="orf-objective-deadline-display"
+      className={clsx("orf-objective-deadline-display", canEdit ? "orf-objective-deadline-display-editable" : "orf-objective-deadline-display-blocked")}
       data-no-row-edit="true"
-      onClick={() => setIsEditing(true)}
+      onClick={() => {
+        if (canEdit) {
+          setIsEditing(true);
+          return;
+        }
+        onUnavailable(objective);
+      }}
       onDoubleClick={(event) => event.stopPropagation()}
-      title={objective.flowStatus === "frozen" ? "延后冻结目标截止日期" : "修改目标截止日期"}
+      title={objectiveDeadlineTitle(editState)}
       type="button"
     >
       <DateStack primary={objective.finalDueAt || "未设置"} />
-      <Pencil className="h-3.5 w-3.5" />
     </button>
   );
+}
+
+function objectiveDeadlineTitle(editState: ObjectiveDeadlineEditState) {
+  if (editState.status === "editable") {
+    return editState.mode === "extendFrozen" ? "点击延后冻结目标截止日期" : "点击修改目标截止日期";
+  }
+
+  if (editState.reason === "noPermission") {
+    return "只有指挥官可以修改截止日期";
+  }
+
+  if (editState.reason === "lifecycleLocked") {
+    return "当前状态不允许修改截止日期";
+  }
+
+  return "目标不可用，不能修改截止日期";
 }
 
 function DateStack({ primary, secondary }: { primary: string; secondary?: string }) {

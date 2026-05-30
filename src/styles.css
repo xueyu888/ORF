@@ -5500,23 +5500,33 @@ body[data-dragging-floating="true"] {
   border-radius: 6px;
   padding: 0 6px;
   color: inherit;
+  cursor: pointer;
   transition:
     border-color 140ms ease,
-    background 140ms ease;
+    background 140ms ease,
+    box-shadow 140ms ease;
 }
 
-.orf-objective-deadline-display:hover {
+.orf-objective-deadline-display:hover,
+.orf-objective-deadline-display:focus-visible {
   border-color: var(--orf-border-strong);
   background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
 }
 
-.orf-objective-deadline-display svg:last-child {
-  flex: 0 0 auto;
-  color: var(--orf-text-muted);
+.orf-objective-deadline-display-blocked {
+  cursor: help;
+}
+
+.orf-objective-deadline-display-blocked:hover,
+.orf-objective-deadline-display-blocked:focus-visible {
+  border-color: rgba(148, 163, 184, 0.5);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: none;
 }
 
 .orf-objective-deadline-editor {
-  width: 178px;
+  width: 136px;
 }
 
 .orf-objective-deadline-input {
@@ -5529,24 +5539,6 @@ body[data-dragging-floating="true"] {
   padding: 0 4px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--orf-text-primary);
-}
-
-.orf-objective-deadline-editor .orf-icon-button {
-  display: inline-flex;
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--orf-border);
-  border-radius: 6px;
-  background: var(--orf-bg-card);
-  color: var(--orf-text-secondary);
-}
-
-.orf-objective-deadline-editor .orf-icon-button:hover:not(:disabled) {
-  border-color: var(--orf-border-strong);
   color: var(--orf-text-primary);
 }
 

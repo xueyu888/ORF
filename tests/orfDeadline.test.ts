@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   canEditObjectiveDeadline,
   minimumObjectiveDeadlineValue,
+  resolveObjectiveDeadlineEditState,
   validateObjectiveDeadlineChange,
 } from "../src/domain/orfDeadline";
 import type { ObjectiveFlowStatus } from "../src/types/orf";
@@ -27,6 +28,15 @@ test("frozen objective deadline changes only allow extensions", () => {
   assert.deepEqual(validateObjectiveDeadlineChange(frozen, "2026-06-11"), { status: "allowed", mode: "extendFrozen" });
   assert.deepEqual(validateObjectiveDeadlineChange(frozen, "2026-06-10"), { status: "frozenMustExtend" });
   assert.deepEqual(validateObjectiveDeadlineChange(frozen, "2026-06-09"), { status: "frozenMustExtend" });
+});
+
+test("objective deadline edit state combines commander permission and lifecycle", () => {
+  assert.deepEqual(resolveObjectiveDeadlineEditState(target("open"), "member"), { status: "blocked", reason: "noPermission" });
+  assert.deepEqual(resolveObjectiveDeadlineEditState(target("open"), "admin"), { status: "editable", mode: "edit" });
+  assert.deepEqual(resolveObjectiveDeadlineEditState(target("frozen"), "admin"), { status: "editable", mode: "extendFrozen" });
+  assert.deepEqual(resolveObjectiveDeadlineEditState(target("submitted"), "admin"), { status: "blocked", reason: "lifecycleLocked" });
+  assert.deepEqual(resolveObjectiveDeadlineEditState(target("submitted"), "member"), { status: "blocked", reason: "lifecycleLocked" });
+  assert.deepEqual(resolveObjectiveDeadlineEditState(null, "admin"), { status: "blocked", reason: "missingObjective" });
 });
 
 test("objective deadline changes reject invalid date strings before lifecycle checks", () => {

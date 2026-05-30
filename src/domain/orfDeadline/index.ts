@@ -1,4 +1,4 @@
-import type { Objective, ObjectiveFlowStatus } from "../../types/orf";
+import type { Objective, ObjectiveFlowStatus, UserRole } from "../../types/orf";
 import { isDateOnlyString } from "../../utils/date";
 
 type ObjectiveDeadlineTarget = Pick<Objective, "finalDueAt" | "flowStatus"> | null | undefined;
@@ -17,8 +17,28 @@ export type ObjectiveDeadlineChangeValidation =
   | { status: "locked" }
   | { status: "frozenMustExtend" };
 
+export type ObjectiveDeadlineEditState =
+  | { status: "editable"; mode: "edit" | "extendFrozen" }
+  | { status: "blocked"; reason: "missingObjective" | "noPermission" | "lifecycleLocked" };
+
 export function canEditObjectiveDeadline(target: ObjectiveDeadlineTarget): boolean {
   return Boolean(target && (directlyEditableDeadlineStatuses.has(target.flowStatus) || target.flowStatus === "frozen"));
+}
+
+export function resolveObjectiveDeadlineEditState(target: ObjectiveDeadlineTarget, role: UserRole | null | undefined): ObjectiveDeadlineEditState {
+  if (!target) {
+    return { status: "blocked", reason: "missingObjective" };
+  }
+
+  if (directlyEditableDeadlineStatuses.has(target.flowStatus)) {
+    return role === "admin" ? { status: "editable", mode: "edit" } : { status: "blocked", reason: "noPermission" };
+  }
+
+  if (target.flowStatus === "frozen") {
+    return role === "admin" ? { status: "editable", mode: "extendFrozen" } : { status: "blocked", reason: "noPermission" };
+  }
+
+  return { status: "blocked", reason: "lifecycleLocked" };
 }
 
 export function validateObjectiveDeadlineChange(

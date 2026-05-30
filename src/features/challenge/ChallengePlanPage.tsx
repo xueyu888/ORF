@@ -8,7 +8,7 @@ import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
-import { canEditObjectiveDeadline as canEditObjectiveDeadlineByModel } from "../../domain/orfDeadline";
+import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
 import { localDateString } from "../../utils/date";
@@ -429,7 +429,12 @@ export function ChallengePlanPage() {
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
-  const canEditDeadlineForObjective = (objective: ObjectiveNode["objective"]) => currentUser?.role === "admin" && canEditObjectiveDeadlineByModel(objective);
+  const objectiveDeadlineEditState = (objective: ObjectiveNode["objective"]) => resolveObjectiveDeadlineEditState(objective, currentUser?.role);
+  const notifyUnavailableObjectiveDeadline = (objective: ObjectiveNode["objective"]) => {
+    const editState = objectiveDeadlineEditState(objective);
+    if (editState.status === "editable") return;
+    notify(objectiveDeadlineUnavailableMessage(editState));
+  };
 
   useEffect(() => {
     if (!linkedChallengeTarget) {
@@ -1095,7 +1100,7 @@ export function ChallengePlanPage() {
             }),
           canMutateMetrics: canMutateMetricForObjective,
           canMutateWorkItems: canMutateWorkItemsForObjective,
-          canEditObjectiveDeadline: canEditDeadlineForObjective,
+          objectiveDeadlineEditState,
           onActionDoneChange: setActionDone,
           onActionRowAction: handleRowAction,
           onActiveActionChange: activateRowAction,
@@ -1118,6 +1123,7 @@ export function ChallengePlanPage() {
           onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
           onRejectApplication: rejectAnchoredChallengeApplication,
           onSaveObjectiveDeadline: saveObjectiveDeadline,
+          onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
@@ -1192,6 +1198,12 @@ function rowActionIdForLinkedChallengeTarget(target: ChallengeUrlTarget, state: 
 
   const parentActionId = parentActionIdForLinkedSubAction(target, state);
   return parentActionId ? `subAction:${parentActionId}:${target.id}` : null;
+}
+
+function objectiveDeadlineUnavailableMessage(editState: Extract<ObjectiveDeadlineEditState, { status: "blocked" }>) {
+  if (editState.reason === "noPermission") return "只有指挥官可以修改截止日期";
+  if (editState.reason === "lifecycleLocked") return "当前状态不允许修改截止日期";
+  return "目标不可用，不能修改截止日期";
 }
 
 function useMinuteNow() {

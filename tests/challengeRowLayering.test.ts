@@ -35,7 +35,14 @@ test("open row menu foreground state is backed by the objective panel layer rule
   );
 });
 
-function renderChallengeTree(openActionId: string | null): string {
+test("objective deadline uses the date itself as the edit affordance", () => {
+  const html = renderChallengeTree(null, { status: "editable", mode: "edit" });
+
+  assert.match(html, /title="点击修改目标截止日期"/);
+  assert.doesNotMatch(html, /lucide-pencil/);
+});
+
+function renderChallengeTree(openActionId: string | null, deadlineEditState = { status: "blocked", reason: "noPermission" } as const): string {
   return renderToStaticMarkup(
     createElement(
       MemoryRouter,
@@ -43,7 +50,7 @@ function renderChallengeTree(openActionId: string | null): string {
       createElement(ChallengeTree, {
         emptyText: "暂无目标",
         groups: challengeGroups(),
-        handlers: rowHandlers(openActionId),
+        handlers: rowHandlers(openActionId, deadlineEditState),
         now: new Date(`${date}T00:00:00.000Z`),
         scope: "all",
       }),
@@ -55,7 +62,7 @@ function objectivePanels(html: string): string[] {
   return html.match(/<section\b[\s\S]*?<\/section>/g) ?? [];
 }
 
-function rowHandlers(openActionId: string | null) {
+function rowHandlers(openActionId: string | null, deadlineEditState: { status: "editable"; mode: "edit" } | { status: "blocked"; reason: "noPermission" }) {
   const noop = () => {};
   const noopAsync = async () => false;
 
@@ -66,7 +73,7 @@ function rowHandlers(openActionId: string | null) {
     commentCounts: new Map<string, number>(),
     trialReviews: [],
     canManageFlow: false,
-    canEditObjectiveDeadline: () => false,
+    objectiveDeadlineEditState: () => deadlineEditState,
     canMutateMetrics: () => true,
     canMutateWorkItems: () => true,
     canRecruitObjective: () => false,
@@ -96,6 +103,7 @@ function rowHandlers(openActionId: string | null) {
     onRecruitObjective: noop,
     onRejectApplication: noopAsync,
     onSaveObjectiveDeadline: noopAsync,
+    onUnavailableObjectiveDeadline: noop,
     onSaveTitle: noop,
     onSubActionDoneChange: noop,
     onToggleAction: noop,
