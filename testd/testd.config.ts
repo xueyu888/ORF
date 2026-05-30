@@ -418,9 +418,10 @@ export const testdCases = [
     doc: "testd-doc/cases/permissions/管理员修改member权限.md",
     changePolicy: "locked",
     spec: "testd/permissions/member-permission/_entry/admin-permission.spec.ts",
-    enabled: true,
+    enabled: false,
     fixtureLifecycle: "isolated",
     traceability: "verified",
+    note: "Temporarily disabled by #40 until permission-mutating testd fixtures stop sharing default-team role_permissions under full parallel runs.",
   },
   {
     id: "permissions.member.update.member-forbidden",
