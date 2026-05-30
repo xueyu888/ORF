@@ -51,6 +51,7 @@ export async function createReviewLootResult(
     id: "res-testd-admin-review-loot",
     objectiveId: objective.id,
     title: input.resultTitle,
+    points: input.points,
   };
 
   await db.insert(results).values({
@@ -98,6 +99,8 @@ export async function createReviewLoot(
     id: "loot-testd-admin-review-loot",
     objectiveId: objective.id,
     body: input.lootBody,
+    submittedBy: input.memberName,
+    resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: input.evidenceText }],
   };
 
   await db.insert(objectiveLoot).values({
@@ -106,7 +109,7 @@ export async function createReviewLoot(
     objectiveId: objective.id,
     submittedBy: input.memberName,
     body: input.lootBody,
-    resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: input.evidenceText }],
+    resultClaims: loot.resultClaims,
     selfTestReportUrl: null,
     selfTestReportBody: null,
     submittedAt: new Date().toISOString(),
@@ -145,33 +148,60 @@ export async function testReviewLootLedgerAbsent(reason: string) {
   return (await readLedgerByReason(reason)) === null;
 }
 
-export async function reviewLootTargetSubmitted(target: ReviewLootTarget) {
+export async function reviewLootTargetSubmitted(target: ReviewLootTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "submitted" && !!objective.lootSubmittedAt;
+  return (
+    !!objective &&
+    objective.flowStatus === "submitted" &&
+    objective.stage === "goalFrozen" &&
+    !!objective.lootSubmittedAt &&
+    objective.challengers.length === 1 &&
+    objective.challengers[0] === memberName
+  );
 }
 
 export async function reviewLootTargetSettled(target: ReviewLootTarget, points: number) {
   const [row] = await db
     .select({
       flowStatus: objectives.flowStatus,
+      stage: objectives.stage,
       acceptedResult: objectives.acceptedResult,
+      objectiveBasePoints: objectives.objectiveBasePoints,
       objectiveSettlementPoints: objectives.objectiveSettlementPoints,
     })
     .from(objectives)
     .where(eq(objectives.id, target.objective.id))
     .limit(1);
 
-  return !!row && row.flowStatus === "settled" && row.acceptedResult === "completed" && row.objectiveSettlementPoints === points;
+  return (
+    !!row &&
+    row.flowStatus === "settled" &&
+    row.stage === "goalFrozen" &&
+    row.acceptedResult === "completed" &&
+    row.objectiveBasePoints === points &&
+    row.objectiveSettlementPoints === points
+  );
 }
 
-export async function reviewLootResultPresent(target: ReviewLootTarget, result: ReviewLootResult) {
+export async function reviewLootResultPresent(target: ReviewLootTarget, result: ReviewLootResult, points: number) {
   const row = await readResultByTitle(result.title);
-  return !!row && row.id === result.id && row.objectiveId === target.objective.id;
+  return !!row && row.id === result.id && row.objectiveId === target.objective.id && row.uncertaintyScore === points;
 }
 
-export async function reviewLootPresent(target: ReviewLootTarget, loot: ReviewLoot) {
+export async function reviewLootResultAccepted(result: ReviewLootResult) {
+  const row = await readResultByTitle(result.title);
+  return !!row && row.id === result.id && row.acceptedResult === "completed";
+}
+
+export async function reviewLootPresent(target: ReviewLootTarget, loot: ReviewLoot, result: ReviewLootResult) {
   const row = await readLootByBody(loot.body);
-  return !!row && row.id === loot.id && row.objectiveId === target.objective.id;
+  return (
+    !!row &&
+    row.id === loot.id &&
+    row.objectiveId === target.objective.id &&
+    row.submittedBy === loot.submittedBy &&
+    row.resultClaims.some((claim) => claim.resultId === result.id && claim.claim === "completed")
+  );
 }
 
 export async function reviewLootLedgerPresent(target: ReviewLootTarget, memberName: string, points: number, reason: string) {
@@ -189,12 +219,30 @@ export function lootPagePath(target: ReviewLootTarget) {
 }
 
 async function readResultByTitle(title: string) {
-  const [row] = await db.select({ id: results.id, objectiveId: results.objectiveId }).from(results).where(eq(results.title, title)).limit(1);
+  const [row] = await db
+    .select({
+      id: results.id,
+      objectiveId: results.objectiveId,
+      uncertaintyScore: results.uncertaintyScore,
+      acceptedResult: results.acceptedResult,
+    })
+    .from(results)
+    .where(eq(results.title, title))
+    .limit(1);
   return row ?? null;
 }
 
 async function readLootByBody(body: string) {
-  const [row] = await db.select({ id: objectiveLoot.id, objectiveId: objectiveLoot.objectiveId }).from(objectiveLoot).where(eq(objectiveLoot.body, body)).limit(1);
+  const [row] = await db
+    .select({
+      id: objectiveLoot.id,
+      objectiveId: objectiveLoot.objectiveId,
+      submittedBy: objectiveLoot.submittedBy,
+      resultClaims: objectiveLoot.resultClaims,
+    })
+    .from(objectiveLoot)
+    .where(eq(objectiveLoot.body, body))
+    .limit(1);
   return row ?? null;
 }
 
@@ -211,6 +259,7 @@ async function readObjective(objectiveId: string) {
       title: objectives.title,
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
+      challengers: objectives.challengers,
       lootSubmittedAt: objectives.lootSubmittedAt,
     })
     .from(objectives)

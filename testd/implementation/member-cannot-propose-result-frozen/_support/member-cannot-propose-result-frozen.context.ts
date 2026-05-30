@@ -14,7 +14,6 @@ export type FrozenMemberProposalCaseData = {
   objectiveId: string;
   objectiveTitle: string;
   resultTitle: string;
-  metricName: string;
 };
 
 export interface FrozenProposalTarget {
@@ -23,10 +22,4 @@ export interface FrozenProposalTarget {
     title: string;
     flowStatus: ObjectiveFlowStatus;
   };
-}
-
-export interface RejectedResultCreateResponse {
-  ok: boolean;
-  status: number;
-  body: unknown;
 }

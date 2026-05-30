@@ -17,6 +17,14 @@ export type TestUserAccountRecord = {
   lastOnlineAt: string | null;
 };
 
+export type TestUserRecord = {
+  userId: string;
+  name: string;
+  email: string;
+  status: UserStatus;
+  lastOnlineAt: string | null;
+};
+
 export type TestObjectiveFixtureInput = {
   id?: string;
   teamId: string;
@@ -291,7 +299,18 @@ export async function upsertTestUserAccount(input: {
   status?: UserStatus;
   identityId?: string;
 }) {
-  const teamId = await ensureDefaultTeam();
+  const user = await upsertTestUserRecord(input);
+  await upsertDefaultTeamMembership({ userId: user.userId, role: input.role });
+  return readTestUserAccount({ userId: user.userId, role: input.role });
+}
+
+export async function upsertTestUserRecord(input: {
+  userId?: string;
+  email: string;
+  name: string;
+  status?: UserStatus;
+  identityId?: string;
+}) {
   const [existingById] = input.userId ? await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1) : [];
   const [existingByEmail] = existingById
     ? []
@@ -321,6 +340,24 @@ export async function upsertTestUserAccount(input: {
     });
   }
 
+  const record = await readTestUserRecord({ userId });
+  if (!record) {
+    throw new Error("测试用户记录创建后无法读取");
+  }
+  return record;
+}
+
+export async function upsertDefaultTeamMembership(input: {
+  email?: string;
+  userId?: string;
+  role: UserRole;
+}) {
+  const teamId = await ensureDefaultTeam();
+  const userId = input.userId ?? (await readTestUserIds({ email: input.email }))[0];
+  if (!userId) {
+    throw new Error("默认团队成员关系需要已存在的测试用户");
+  }
+
   await db
     .insert(teamMembers)
     .values({ teamId, userId, role: input.role })
@@ -332,9 +369,75 @@ export async function upsertTestUserAccount(input: {
   return readTestUserAccount({ userId, role: input.role });
 }
 
+export async function readTestUserRecord(input: { email?: string; userId?: string }) {
+  const [row] = await db
+    .select({
+      userId: users.id,
+      name: users.name,
+      email: users.email,
+      status: users.status,
+      lastOnlineAt: users.lastOnlineAt,
+    })
+    .from(users)
+    .where(userPredicate(input))
+    .limit(1);
+
+  return row
+    ? {
+        userId: row.userId,
+        name: row.name,
+        email: row.email ?? "",
+        status: row.status,
+        lastOnlineAt: row.lastOnlineAt,
+      }
+    : null;
+}
+
 export async function readTestUserAccount(input: { email?: string; userId?: string; role?: UserRole }) {
   const rows = await readTestUserAccountRecords(input);
   return input.role ? rows.find((row) => row.role === input.role) ?? null : rows[0] ?? null;
+}
+
+export async function testUserRecordMatches(input: {
+  email?: string;
+  userId?: string;
+  name?: string;
+  status?: UserStatus;
+}) {
+  const user = await readTestUserRecord({ email: input.email, userId: input.userId });
+  if (!user) {
+    return false;
+  }
+
+  return (
+    (input.email === undefined || user.email.toLowerCase() === input.email.toLowerCase()) &&
+    (input.userId === undefined || user.userId === input.userId) &&
+    (input.name === undefined || user.name === input.name) &&
+    (input.status === undefined || user.status === input.status)
+  );
+}
+
+export async function testDefaultTeamMembershipMatches(input: {
+  email?: string;
+  userId?: string;
+  role?: UserRole;
+}) {
+  const teamId = await ensureDefaultTeam();
+  const userId = input.userId ?? (await readTestUserIds({ email: input.email }))[0];
+  if (!userId) {
+    return false;
+  }
+
+  const rows = await db
+    .select({ teamId: teamMembers.teamId, role: teamMembers.role })
+    .from(teamMembers)
+    .where(eq(teamMembers.userId, userId));
+
+  return rows.some(
+    (row) =>
+      row.teamId === teamId &&
+      (input.role === undefined || row.role === input.role),
+  );
 }
 
 export async function testUserAccountMatches(input: {

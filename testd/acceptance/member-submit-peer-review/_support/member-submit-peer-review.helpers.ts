@@ -24,7 +24,22 @@ export async function peerReviewTargetFromObjective(objectiveId: string): Promis
   };
 }
 
-export async function preparePeerReviewTarget(target: PeerReviewTarget, memberName: string) {
+export async function addPeerReviewTargetChallenger(target: PeerReviewTarget, memberName: string) {
+  const objective = await readObjective(target.objective.id);
+  if (!objective) {
+    throw new Error("目标不存在，无法设置成员提交匿名互评挑战者");
+  }
+
+  await db
+    .update(objectives)
+    .set({
+      challengers: uniqueMembers([...objective.challengers, memberName]),
+      updatedAt: today(),
+    })
+    .where(eq(objectives.id, target.objective.id));
+}
+
+export async function preparePeerReviewTargetForReview(target: PeerReviewTarget) {
   const objective = await readObjective(target.objective.id);
   if (!objective) {
     throw new Error("目标不存在，无法准备成员提交匿名互评状态");
@@ -35,7 +50,6 @@ export async function preparePeerReviewTarget(target: PeerReviewTarget, memberNa
     .set({
       stage: "goalFrozen",
       flowStatus: "submitted",
-      challengers: [memberName],
       lootSubmittedAt: new Date().toISOString(),
       acceptedResult: null,
       objectiveSettlementPoints: null,
@@ -87,9 +101,14 @@ export async function deletePeerReview(target: PeerReviewTarget | null, reviewer
   await db.delete(objectiveContributionReviews).where(eq(objectiveContributionReviews.reviewer, reviewer));
 }
 
-export async function targetSubmittedForMember(target: PeerReviewTarget, memberName: string) {
+export async function targetSubmitted(target: PeerReviewTarget) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "submitted" && !!objective.lootSubmittedAt && objective.challengers.includes(memberName);
+  return !!objective && objective.flowStatus === "submitted" && !!objective.lootSubmittedAt;
+}
+
+export async function targetChallengerPresent(target: PeerReviewTarget, memberName: string) {
+  const objective = await readObjective(target.objective.id);
+  return !!objective && objective.challengers.includes(memberName);
 }
 
 export async function testLootAbsent(body: string) {
@@ -103,9 +122,13 @@ export async function peerReviewAbsent(target: PeerReviewTarget | null, reviewer
   return (await readPeerReview(target.objective.id, reviewer)) === null;
 }
 
-export async function peerReviewPresent(target: PeerReviewTarget, reviewer: string, ratio: number) {
+export async function peerReviewPresent(target: PeerReviewTarget, reviewer: string) {
+  return (await readPeerReview(target.objective.id, reviewer)) !== null;
+}
+
+export async function peerReviewAllocationPresent(target: PeerReviewTarget, reviewer: string, memberName: string, ratio: number) {
   const row = await readPeerReview(target.objective.id, reviewer);
-  return !!row && row.allocations.some((allocation) => allocation.member === reviewer && allocation.ratio === ratio);
+  return !!row && row.allocations.some((allocation) => allocation.member === memberName && allocation.ratio === ratio);
 }
 
 export async function targetLootPresent(target: PeerReviewTarget, loot: PeerReviewLoot) {
@@ -192,4 +215,8 @@ async function readObjective(objectiveId: string) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function uniqueMembers(values: string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }

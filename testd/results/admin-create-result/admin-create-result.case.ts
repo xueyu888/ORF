@@ -45,7 +45,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "B-4", method: "api" },
         id: "session.endpoint.accessible",
-        title: "当前会话查询接口 应可访问",
+        title: "当前会话查询能力 应可用",
         object: "auth.session",
         operator: "accessible",
       },
@@ -66,7 +66,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "B-7", method: "api" },
         id: "ory.admin_public.ready",
-        title: "Ory/Kratos Admin/Public API 应可访问",
+        title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用",
         object: "ory.admin_public",
         operator: "ready",
       },
@@ -80,14 +80,14 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "B-9", method: "playwright" },
         id: "cookie.absent",
-        title: "当前浏览器 应不存在 Ory session cookie",
+        title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
         source: { caseStepId: "B-10", method: "playwright" },
         id: "storage.empty",
-        title: "当前浏览器 storage 应不包含 登录态",
+        title: "当前浏览器 应不保留本地登录态",
         object: "browser.auth_storage",
         operator: "empty",
       },
@@ -116,7 +116,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-3", method: "api" },
         id: "ory.admin_identity.upsert",
-        title: '准备邮箱为 "orf-admin-create-result-e2e@orf.local" 的管理员登录身份，并设置固定测试密码',
+        title: "准备邮箱为 `orf-admin-create-result-e2e@orf.local`、使用固定测试密码的管理员登录身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: {
@@ -129,7 +129,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-4", method: "prisma" },
         id: "db.admin.upsert",
-        title: '准备邮箱为 "orf-admin-create-result-e2e@orf.local"、角色为 admin、状态为 active 的管理员用户和默认团队成员关系',
+        title: "准备邮箱为 `orf-admin-create-result-e2e@orf.local`、角色为 `admin`、状态为 `active` 的管理员用户和默认团队成员关系",
         object: "db.user",
         operator: "upsert",
         params: {
@@ -144,7 +144,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-5", method: "prisma" },
         id: "db.objective.upsert_result_target",
-        title: '创建标题为 "E2E-ADMIN-CREATE-RESULT: 目标前置"、流转状态为 open、阶段为 resultClaiming 的本用例指标目标',
+        title: "创建标题为 `E2E-ADMIN-CREATE-RESULT: 目标前置`、流转状态为 `open`、阶段为 `resultClaiming` 的本用例指标目标",
         object: "db.objective",
         operator: "upsert",
         params: {
@@ -160,7 +160,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-6", method: "prisma" },
         id: "db.result_target.from_objective",
-        title: "记录本用例指标目标为 runtime.resultTarget",
+        title: "记录 本用例指标目标",
         object: "db.result_target",
         operator: "from_objective",
         params: { objectiveIdFrom: "runtime.fixtureObjective.id", saveAs: "resultTarget" },
@@ -168,7 +168,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-7", method: "api" },
         id: "ory.admin_sessions.revoke",
-        title: "撤销管理员登录身份可能残留的 Ory session",
+        title: "撤销管理员登录身份可能残留的登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -176,14 +176,14 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-8", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Setup-9", method: "playwright" },
         id: "page.goto.auth",
-        title: "打开 登录页",
+        title: "打开 ORF 登录页",
         object: "page",
         operator: "goto",
         params: { path: "/auth" },
@@ -191,7 +191,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-10", method: "playwright" },
         id: "fill.email",
-        title: "在邮箱输入框输入管理员测试邮箱",
+        title: "在邮箱输入框输入管理员固定测试邮箱",
         object: "page",
         operator: "fill",
         params: { label: "Email", valueFrom: "data.email" },
@@ -199,7 +199,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-11", method: "playwright" },
         id: "fill.password",
-        title: "在密码输入框输入管理员测试密码",
+        title: "在密码输入框输入管理员固定测试密码",
         object: "page",
         operator: "fill",
         params: { label: "Password", exact: true, valueFrom: "data.password" },
@@ -207,7 +207,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-12", method: "playwright" },
         id: "click.sign_in",
-        title: '点击 "Sign In" 登录操作',
+        title: "点击 \"Sign In\" 登录操作",
         object: "page",
         operator: "click",
         params: { role: "button", name: "Sign In" },
@@ -215,7 +215,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-13", method: "api" },
         id: "session.admin.authenticated",
-        title: "当前会话 应为 管理员已登录",
+        title: "当前会话 应为 管理员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -231,7 +231,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Setup-15", method: "playwright" },
         id: "scope.all",
-        title: '切换到 "所有挑战" 视图',
+        title: "切换到 \"所有挑战\" 视图",
         object: "page",
         operator: "click",
         params: { role: "button", name: "所有挑战" },
@@ -245,7 +245,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S0-1", method: "api" },
         id: "session.admin.authenticated",
-        title: '当前会话 应为 邮箱为 "orf-admin-create-result-e2e@orf.local"、角色为 admin、状态为 active 的已登录会话',
+        title: "当前会话 应为 邮箱为 `orf-admin-create-result-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -269,7 +269,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S0-4", method: "playwright" },
         id: "result_target.add_metric.enabled",
-        title: '本用例指标目标的 "新增指标" 操作 应可点击',
+        title: "本用例指标目标的 \"新增指标\" 操作 应可点击",
         object: "page.result_target",
         operator: "add_metric_enabled",
         params: { targetFrom: "runtime.resultTarget" },
@@ -285,7 +285,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S0-6", method: "prisma" },
         id: "db.target_result.absent",
-        title: '本用例指标目标 应不存在 标题为 "E2E-RESULT-CREATE: 管理员新增指标" 的指标',
+        title: "本用例指标目标 应不存在 标题为 `E2E-RESULT-CREATE: 管理员新增指标` 的指标",
         object: "db.result_target",
         operator: "result_absent",
         params: { targetFrom: "runtime.resultTarget", titleFrom: "data.resultTitle" },
@@ -299,7 +299,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Action-1", method: "playwright" },
         id: "click.add_metric",
-        title: '点击本用例指标目标的 "新增指标" 操作',
+        title: "点击 本用例指标目标的 \"新增指标\" 操作",
         object: "page.result_target",
         operator: "add_metric",
         params: { targetFrom: "runtime.resultTarget" },
@@ -315,30 +315,23 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Action-3", method: "playwright" },
         id: "fill.result_title",
-        title: "在新增指标内联标题编辑器输入测试指标标题",
+        title: "在新增指标内联标题编辑器输入 测试指标标题",
         object: "page",
         operator: "fill",
         params: { label: "编辑指标标题", valueFrom: "data.resultTitle" },
       },
       {
-        source: { caseStepId: "Action-4", method: "api" },
-        id: "capture.create_result_response",
-        title: "在提交新增指标内联标题前注册新增指标接口响应捕获",
-        object: "api",
-        operator: "capture_response",
-        params: { urlEndsWith: "/api/results", method: "POST", saveAs: "createResultResponse" },
-      },
-      {
-        source: { caseStepId: "Action-5", method: "playwright" },
+        source: { caseStepId: "Action-4", method: "playwright" },
         id: "submit.result_title",
         title: "提交新增指标内联标题编辑器",
         object: "page.result_inline_editor",
         operator: "submit",
+        params: { saveAs: "createResultResponse" },
       },
       {
-        source: { caseStepId: "Action-6", method: "api" },
+        source: { caseStepId: "Action-5", method: "api" },
         id: "create_result_response.record",
-        title: "记录新增指标接口返回的指标为 runtime.createdResult",
+        title: "记录 新增指标结果中的测试指标",
         object: "api.result_create_response",
         operator: "record_result",
         params: { responseFrom: "runtime.createResultResponse", saveAs: "createdResult" },
@@ -352,7 +345,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S1-1", method: "api" },
         id: "create_result_response.ok",
-        title: "新增指标接口响应 应成功",
+        title: "新增指标结果 应成功",
         object: "api.response",
         operator: "ok",
         params: { responseFrom: "runtime.createResultResponse", status: 200 },
@@ -360,7 +353,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S1-2", method: "api" },
         id: "created_result.matches",
-        title: "新增指标接口返回的指标 应属于本用例目标，标题、衡量指标和来源正确",
+        title: "新增指标结果中的指标 应属于本用例目标，标题、衡量指标和来源正确",
         object: "api.result_create_response",
         operator: "matches",
         params: {
@@ -374,7 +367,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S1-3", method: "prisma" },
         id: "db.created_result.present",
-        title: '本用例指标目标 应存在 标题为 "E2E-RESULT-CREATE: 管理员新增指标"、来源为 managerDefined 的指标',
+        title: "本用例指标目标 应存在 标题为 `E2E-RESULT-CREATE: 管理员新增指标`、来源为 `managerDefined` 的指标",
         object: "db.result_target",
         operator: "result_present",
         params: { targetFrom: "runtime.resultTarget", titleFrom: "data.resultTitle", metricNameFrom: "data.metricName" },
@@ -390,7 +383,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S1-5", method: "api" },
         id: "session.admin.still_authenticated",
-        title: "当前会话 应保持 管理员已登录",
+        title: "当前会话 应仍为 管理员的已登录会话",
         object: "auth.session",
         operator: "authenticated",
         params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" },
@@ -404,7 +397,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-1", method: "prisma" },
         id: "db.result.delete",
-        title: "删除本用例创建的测试指标",
+        title: "删除 本用例创建的测试指标",
         object: "db.result",
         operator: "delete",
         params: { titleFrom: "data.resultTitle", resultFrom: "runtime.createdResult" },
@@ -412,7 +405,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-2", method: "prisma" },
         id: "db.objective.delete_by_title",
-        title: "删除本用例指标目标及其派生数据",
+        title: "删除 本用例指标目标及其派生数据",
         object: "db.objective",
         operator: "delete_by_title",
         params: { titleFrom: "data.objectiveTitle" },
@@ -420,28 +413,28 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-3", method: "api" },
         id: "auth.logout",
-        title: "调用退出登录接口撤销当前登录会话",
+        title: "注销当前登录会话",
         object: "auth",
         operator: "logout",
       },
       {
         source: { caseStepId: "Clean-4", method: "playwright" },
         id: "page.runtime.stop",
-        title: "当前页面离开 ORF 前端应用",
+        title: "离开当前 ORF 前端页面",
         object: "page.runtime",
         operator: "stop",
       },
       {
         source: { caseStepId: "Clean-5", method: "playwright" },
         id: "browser.clear",
-        title: "清空当前浏览器上下文的 cookies/localStorage/sessionStorage",
+        title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
         source: { caseStepId: "Clean-6", method: "api" },
         id: "ory.admin_sessions.revoke",
-        title: "撤销管理员登录身份的残留 Ory session",
+        title: "撤销管理员登录身份的残留登录会话",
         object: "ory.sessions",
         operator: "revoke_by_email",
         params: { emailFrom: "data.email" },
@@ -449,7 +442,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-7", method: "api" },
         id: "ory.admin_identity.delete",
-        title: '删除邮箱为 "orf-admin-create-result-e2e@orf.local" 的管理员登录身份',
+        title: "删除邮箱为 `orf-admin-create-result-e2e@orf.local` 的管理员登录身份",
         object: "ory.identity",
         operator: "delete_by_email",
         params: { emailFrom: "data.email" },
@@ -465,7 +458,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-9", method: "prisma" },
         id: "db.admin.delete",
-        title: '删除邮箱为 "orf-admin-create-result-e2e@orf.local" 的管理员用户',
+        title: "删除邮箱为 `orf-admin-create-result-e2e@orf.local` 的管理员用户",
         object: "db.user",
         operator: "delete",
         params: { emailFrom: "data.email" },
@@ -473,7 +466,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-10", method: "prisma" },
         id: "db.result.absent",
-        title: '应不存在 标题为 "E2E-RESULT-CREATE: 管理员新增指标" 的测试指标',
+        title: "应不存在 标题为 `E2E-RESULT-CREATE: 管理员新增指标` 的测试指标",
         object: "db.result",
         operator: "absent",
         params: { titleFrom: "data.resultTitle" },
@@ -481,7 +474,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-11", method: "prisma" },
         id: "db.objective.absent",
-        title: '应不存在 标题为 "E2E-ADMIN-CREATE-RESULT: 目标前置" 的测试目标',
+        title: "应不存在 标题为 `E2E-ADMIN-CREATE-RESULT: 目标前置` 的测试目标",
         object: "db.objective",
         operator: "absent",
         params: { titleFrom: "data.objectiveTitle" },
@@ -489,7 +482,7 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "Clean-12", method: "prisma" },
         id: "db.admin.absent",
-        title: '应不存在 邮箱为 "orf-admin-create-result-e2e@orf.local" 的管理员用户',
+        title: "应不存在 邮箱为 `orf-admin-create-result-e2e@orf.local` 的管理员用户",
         object: "db.user",
         operator: "absent",
         params: { emailFrom: "data.email" },

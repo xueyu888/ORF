@@ -1,5 +1,7 @@
-import { expect } from "@playwright/test";
+import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import type { CapturedResponse } from "../../_operators/common.context";
+import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { requiredString } from "../../_operators/params";
 import type {
@@ -20,6 +22,8 @@ import {
   workbenchContainsObjective,
   workbenchMissingObjectiveTitle,
 } from "./_support/objective-publish.helpers";
+
+const CAPTURED_RESPONSE_TIMEOUT_MS = 5_000;
 
 export const objectivePublishOperators = {
   "db.objective": {
@@ -70,27 +74,6 @@ export const objectivePublishOperators = {
     },
   },
 
-  "api.objective_publish": {
-    capture_response: async ({ ctx, runtime, params }) => {
-      const target = requiredObjective(params, "target");
-      const saveAs = requiredString(params, "saveAs");
-      runtime.values[saveAs] = ctx.page
-        .waitForResponse((response) => {
-          return (
-            response.request().method().toUpperCase() === "PATCH" &&
-            response.url().endsWith(`/api/objectives/${encodeURIComponent(target.id)}/publish`)
-          );
-        })
-        .then(async (response) => ({
-          ok: response.ok(),
-          status: response.status(),
-          url: response.url(),
-          method: response.request().method(),
-          body: await response.json().catch(() => null),
-        }));
-    },
-  },
-
   "api.objective_publish_response": {
     record_objective: async ({ params }) => objectiveFromCapturedResponse(await requiredCapturedResponse(params, "response")),
 
@@ -112,7 +95,22 @@ export const objectivePublishOperators = {
 
   "page.objective_title": {
     submit: async ({ ctx }) => {
-      await ctx.page.getByLabel("编辑目标标题").press("Enter");
+      const responsePromise = ctx.page
+        .waitForResponse(
+          (response) => {
+            return response.request().method().toUpperCase() === "POST" && response.url().endsWith("/api/objectives");
+          },
+          { timeout: CAPTURED_RESPONSE_TIMEOUT_MS },
+        )
+        .then(toCapturedResponse);
+
+      try {
+        await ctx.page.getByLabel("编辑目标标题").press("Enter");
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 
@@ -132,7 +130,25 @@ export const objectivePublishOperators = {
 
     publish: async ({ ctx, params }) => {
       const target = requiredObjective(params, "target");
-      await objectivePanel(ctx.page, target).getByRole("button", { name: "发布" }).click();
+      const responsePromise = ctx.page
+        .waitForResponse(
+          (response) => {
+            return (
+              response.request().method().toUpperCase() === "PATCH" &&
+              response.url().endsWith(`/api/objectives/${encodeURIComponent(target.id)}/publish`)
+            );
+          },
+          { timeout: CAPTURED_RESPONSE_TIMEOUT_MS },
+        )
+        .then(toCapturedResponse);
+
+      try {
+        await objectivePanel(ctx.page, target).getByRole("button", { name: "发布" }).click();
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 
@@ -142,6 +158,16 @@ export const objectivePublishOperators = {
     },
   },
 } satisfies OperatorRegistry<TestContext, ObjectivePublishCaseData>;
+
+async function toCapturedResponse(response: Response): Promise<CapturedResponse> {
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    url: response.url(),
+    method: response.request().method(),
+    body: await readResponseBody(response),
+  };
+}
 
 function objectiveFromCapturedResponse(response: Awaited<ReturnType<typeof requiredCapturedResponse>>): ObjectivePublishTarget {
   expect(response.ok).toBe(true);

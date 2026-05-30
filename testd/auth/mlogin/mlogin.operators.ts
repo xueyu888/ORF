@@ -13,7 +13,9 @@ import {
   memberAccountActive,
   oryIdentityPasswordAvailable,
   readMemberAccount,
+  resetMemberDefaultLandingPathByEmail,
   revokeOrySessionsByEmail,
+  setMemberDefaultLandingPath,
   upsertOrfMember,
   upsertOryIdentityWithPassword,
 } from "./_support/mlogin.helpers";
@@ -76,6 +78,21 @@ export const mloginOperators = {
 
     delete: async ({ params }) => {
       await deleteMemberByEmail(requiredString(params, "email"));
+    },
+  },
+
+  "user.preferences": {
+    set_default_landing_path: async ({ params }) => {
+      await setMemberDefaultLandingPath(
+        requiredString(params, "userId"),
+        requiredString(params, "path"),
+      );
+    },
+
+    reset_default_landing_path_by_email: async ({ params }) => {
+      await resetMemberDefaultLandingPathByEmail(
+        requiredString(params, "email"),
+      );
     },
   },
 } satisfies OperatorRegistry<TestContext, MloginCaseData>;

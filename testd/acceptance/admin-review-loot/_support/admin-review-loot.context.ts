@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
+import type { LootResultClaim, ObjectiveFlowStatus, OrfStage, ResultAcceptedResult } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -15,6 +15,7 @@ export type AdminReviewLootCaseData = {
   memberPassword: string;
   memberName: string;
   memberRole: "member";
+  cleanupEmails: string[];
   objectiveId: string;
   objectiveTitle: string;
   resultTitle: string;
@@ -39,10 +40,14 @@ export type ReviewLootResult = {
   id: string;
   objectiveId: string;
   title: string;
+  points: number;
+  acceptedResult?: ResultAcceptedResult;
 };
 
 export type ReviewLoot = {
   id: string;
   objectiveId: string;
   body: string;
+  submittedBy: string;
+  resultClaims: LootResultClaim[];
 };

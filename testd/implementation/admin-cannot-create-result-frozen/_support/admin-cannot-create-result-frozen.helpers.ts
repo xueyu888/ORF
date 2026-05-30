@@ -2,11 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../../server/db/client";
 import { objectives, results } from "../../../../server/db/schema";
-import type {
-  FrozenAdminCreateResultCaseData,
-  FrozenAdminResultTarget,
-  RejectedResultCreateResponse,
-} from "./admin-cannot-create-result-frozen.context";
+import type { FrozenAdminResultTarget } from "./admin-cannot-create-result-frozen.context";
 
 export async function frozenAdminResultTargetFromObjective(objectiveId: string): Promise<FrozenAdminResultTarget> {
   const selected = await readObjective(objectiveId);
@@ -57,42 +53,6 @@ export async function deleteTestResult(title: string) {
   await db.delete(results).where(eq(results.title, title));
 }
 
-export async function submitManagerDefinedResult(
-  page: Page,
-  target: FrozenAdminResultTarget,
-  input: Pick<FrozenAdminCreateResultCaseData, "resultTitle" | "metricName">,
-): Promise<RejectedResultCreateResponse> {
-  return page.evaluate(
-    async ({ objectiveId, title, metricName }) => {
-      const response = await fetch("/api/results", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          objectiveId,
-          title,
-          metricName,
-          source: "managerDefined",
-        }),
-      });
-      const contentType = response.headers.get("content-type") ?? "";
-      const body = contentType.includes("application/json")
-        ? await response.json().catch(() => null)
-        : await response.text().catch(() => null);
-      return {
-        ok: response.ok,
-        status: response.status,
-        body,
-      };
-    },
-    {
-      objectiveId: target.objective.id,
-      title: input.resultTitle,
-      metricName: input.metricName,
-    },
-  );
-}
-
 export function objectivePanel(page: Page, target: FrozenAdminResultTarget) {
   return page
     .locator("section.orf-objective-panel")
@@ -102,7 +62,15 @@ export function objectivePanel(page: Page, target: FrozenAdminResultTarget) {
     .first();
 }
 
-export function addMetricButton(page: Page, target: FrozenAdminResultTarget) {
+export function targetAddMenuButton(page: Page, target: FrozenAdminResultTarget) {
+  return objectivePanel(page, target).getByRole("button", { name: "新增子级" }).first();
+}
+
+export function targetActionMenuItem(page: Page, target: FrozenAdminResultTarget) {
+  return objectivePanel(page, target).getByRole("button", { name: "新增行动项" }).first();
+}
+
+export function targetMetricButton(page: Page, target: FrozenAdminResultTarget) {
   return objectivePanel(page, target).getByRole("button", { name: "新增指标" });
 }
 

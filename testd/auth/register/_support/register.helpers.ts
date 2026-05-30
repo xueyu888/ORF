@@ -1,5 +1,5 @@
 import { and, asc, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
+import { db } from "../../../../server/db/client";
 import { teamMembers, teams, users } from "../../../../server/db/schema";
 import {
   ORY_ADMIN_URL,
@@ -13,10 +13,6 @@ import type {
   RegisterCaseData,
   RegisteredUserRecord,
 } from "./register.context";
-
-export async function closeRegisterTestDb() {
-  await closeDb();
-}
 
 export async function oryIdentityAbsent(email: string) {
   return (await findOryIdentityByEmail(email)) === null;

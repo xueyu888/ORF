@@ -11,6 +11,7 @@ import type {
   TestContext,
 } from "./_support/member-submit-loot.context";
 import {
+  addLootTargetChallenger,
   claimEvidenceInput,
   createLootPrerequisiteResult,
   deleteLootPrerequisiteResult,
@@ -18,7 +19,7 @@ import {
   lootFromResponse,
   lootPagePath,
   lootTargetFromObjective,
-  prepareLootTarget,
+  prepareLootTargetForSubmission,
   targetFrozenForMember,
   targetLootPresent,
   targetResultPresent,
@@ -31,8 +32,12 @@ export const memberSubmitLootOperators = {
   "db.loot_target": {
     from_objective: async ({ params }) => lootTargetFromObjective(requiredString(params, "objectiveId")),
 
-    prepare: async ({ params }) => {
-      await prepareLootTarget(requiredLootTarget(params, "target"), requiredString(params, "memberName"));
+    add_challenger: async ({ params }) => {
+      await addLootTargetChallenger(requiredLootTarget(params, "target"), requiredString(params, "memberName"));
+    },
+
+    ready_for_submission: async ({ params }) => {
+      await prepareLootTargetForSubmission(requiredLootTarget(params, "target"));
     },
 
     frozen_for_member: async ({ params }) => {
@@ -109,10 +114,8 @@ export const memberSubmitLootOperators = {
     fill_evidence: async ({ ctx, params }) => {
       await claimEvidenceInput(ctx.page).fill(requiredString(params, "value"));
     },
-  },
 
-  "api.loot_submit": {
-    capture_response: async ({ ctx, runtime, params }) => {
+    submit: async ({ ctx, runtime, params }) => {
       const target = requiredLootTarget(params, "target");
       runtime.values[requiredString(params, "saveAs")] = ctx.page
         .waitForResponse((response) => {
@@ -125,6 +128,28 @@ export const memberSubmitLootOperators = {
           method: response.request().method(),
           body: await readResponseBody(response),
         }));
+      await ctx.page.getByRole("button", { name: "提交" }).click();
+    },
+
+    click_self_test_report_link: async ({ ctx, params }) => {
+      const reportUrl = requiredString(params, "reportUrl");
+      await ctx.page.route(reportUrl, async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: "<!doctype html><title>ORF test self report</title><main>ORF test self report</main>",
+        });
+      });
+
+      const link = ctx.page.getByRole("link", { name: reportUrl });
+      await expect(link).toHaveAttribute("href", reportUrl);
+      await link.click();
+    },
+  },
+
+  "page.self_test_report": {
+    current_url: async ({ ctx, params }) => {
+      await expect(ctx.page).toHaveURL(requiredString(params, "reportUrl"));
     },
   },
 
@@ -135,22 +160,35 @@ export const memberSubmitLootOperators = {
       return lootFromResponse(response.body);
     },
 
-    matches: async ({ params }) => {
+    belongs_to_target: async ({ params }) => {
       const loot = requiredSubmittedLoot(params, "loot");
       const target = requiredLootTarget(params, "target");
+      expect(loot.objectiveId).toBe(target.objective.id);
+    },
+
+    submitted_by_member: async ({ params }) => {
+      const loot = requiredSubmittedLoot(params, "loot");
+      expect(loot.submittedBy).toBe(requiredString(params, "memberName"));
+    },
+
+    contains_body: async ({ params }) => {
+      const loot = requiredSubmittedLoot(params, "loot");
+      expect(loot.body).toBe(requiredString(params, "body"));
+    },
+
+    contains_evidence: async ({ params }) => {
+      const loot = requiredSubmittedLoot(params, "loot");
       const result = requiredLootResult(params, "result");
-      expect(loot).toMatchObject({
-        objectiveId: target.objective.id,
-        submittedBy: requiredString(params, "memberName"),
-        body: requiredString(params, "body"),
-      });
-      expect(loot.selfTestReportBody).toBe(requiredString(params, "selfTestReportBody"));
-      expect(loot.selfTestReportBody).toContain(requiredString(params, "reportUrl"));
       expect(loot.resultClaims).toContainEqual({
         resultId: result.id,
         claim: "completed",
         evidenceText: requiredString(params, "evidenceText"),
       });
+    },
+
+    report_url_exact: async ({ params }) => {
+      const loot = requiredSubmittedLoot(params, "loot");
+      expect(loot.selfTestReportBody).toBe(requiredString(params, "reportUrl"));
     },
   },
 } satisfies OperatorRegistry<TestContext, MemberSubmitLootCaseData>;

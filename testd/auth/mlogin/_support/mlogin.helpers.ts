@@ -1,6 +1,7 @@
 import { asc, eq, sql } from "drizzle-orm";
-import { closeDb, db } from "../../../../server/db/client";
+import { db } from "../../../../server/db/client";
 import { teamMembers, teams, users } from "../../../../server/db/schema";
+import { saveUserPreferences } from "../../../../server/settings/personalSettings";
 import {
   ORY_ADMIN_URL,
   type OryIdentity,
@@ -10,10 +11,6 @@ import {
   oryAdminFetch,
 } from "../../../_operators/common.helpers";
 import type { MemberAccountRecord, MloginCaseData } from "./mlogin.context";
-
-export async function closeMloginTestDb() {
-  await closeDb();
-}
 
 export async function memberAccountActive(email: string) {
   const account = await readMemberAccount(email);
@@ -170,6 +167,17 @@ export async function upsertOrfMember(
     });
 
   return { id: effectiveUserId, teamId };
+}
+
+export async function setMemberDefaultLandingPath(userId: string, path: string) {
+  await saveUserPreferences(userId, { defaultLandingPath: path });
+}
+
+export async function resetMemberDefaultLandingPathByEmail(email: string) {
+  const rows = await readMemberUserIds(email);
+  for (const row of rows) {
+    await saveUserPreferences(row.id, { defaultLandingPath: null });
+  }
 }
 
 export async function deleteMemberMembershipsByEmail(email: string) {

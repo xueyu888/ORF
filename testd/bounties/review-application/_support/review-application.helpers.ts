@@ -2,14 +2,13 @@ import type { Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
 import { db } from "../../../../server/db/client";
 import { objectives } from "../../../../server/db/schema";
-import type { ChallengeApplication, ObjectiveFlowStatus } from "../../../../src/types/orf";
+import type { BountyHallData, TaskManagementData } from "../../../../server/repositories/orfRepository";
+import type { ChallengeApplication, ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 import type { ReviewApplicationObjectiveSnapshot, ReviewApplicationTarget } from "./review-application.context";
 
 export async function createReviewTargetFromObjective(input: {
   objectiveId: string;
   objectiveTitle: string;
-  approveApplicationId: string;
-  rejectApplicationId: string;
   approveApplicantName: string;
   rejectApplicantName: string;
 }): Promise<ReviewApplicationTarget> {
@@ -23,50 +22,20 @@ export async function createReviewTargetFromObjective(input: {
       id: input.objectiveId,
       title: input.objectiveTitle,
     },
-    approveApplicationId: input.approveApplicationId,
-    rejectApplicationId: input.rejectApplicationId,
     approveApplicantName: input.approveApplicantName,
     rejectApplicantName: input.rejectApplicantName,
     previous,
   };
 }
 
-export async function createPendingApplication(target: ReviewApplicationTarget, applicant: string, applicationId: string) {
-  const objective = await readObjectiveWithApplications(target.objective.id);
-  if (!objective) {
-    throw new Error("目标不存在，无法创建待审批挑战申请");
-  }
-
-  const now = new Date().toISOString();
-  const previousApplications = objective.challengeApplications.filter(
-    (application) => application.id !== applicationId && application.applicant !== applicant,
-  );
-  const nextApplications: ChallengeApplication[] = [
-    {
-      id: applicationId,
-      applicant,
-      status: "pending",
-      createdAt: now,
-      decidedAt: null,
-    },
-    ...previousApplications,
-  ];
-
-  await db
-    .update(objectives)
-    .set({
-      challengeApplications: nextApplications,
-      flowStatus: target.previous.flowStatus === "recruiting" || target.previous.flowStatus === "reestimating"
-        ? target.previous.flowStatus
-        : "applying",
-      updatedAt: today(),
-    })
-    .where(eq(objectives.id, target.objective.id));
-}
-
 export async function applicationStatus(target: ReviewApplicationTarget, applicant: string) {
   const objective = await readObjective(target.objective.id);
   return objective?.challengeApplications.find((application) => application.applicant === applicant)?.status ?? null;
+}
+
+export async function applicationAbsent(target: ReviewApplicationTarget, applicant: string) {
+  const objective = await readObjective(target.objective.id);
+  return !objective?.challengeApplications.some((application) => application.applicant === applicant);
 }
 
 export async function objectiveHasChallenger(target: ReviewApplicationTarget, applicant: string) {
@@ -78,12 +47,67 @@ export async function objectiveFlowStatus(target: ReviewApplicationTarget) {
   return (await readObjective(target.objective.id))?.flowStatus ?? null;
 }
 
+export async function objectiveStage(target: ReviewApplicationTarget) {
+  return (await readObjective(target.objective.id))?.stage ?? null;
+}
+
+export async function bountyHallHasAvailableTarget(page: Page, target: ReviewApplicationTarget) {
+  const response = await readBountyHall(page);
+  if (response.status !== 200) {
+    return false;
+  }
+
+  return response.body.availableItems.some((item) => {
+    return (
+      item.objective.id === target.objective.id &&
+      item.objective.title === target.objective.title &&
+      item.hasCurrentApplication === false &&
+      item.isRecruitment === false
+    );
+  });
+}
+
+export async function bountyHallHasCurrentApplication(page: Page, target: ReviewApplicationTarget) {
+  const response = await readBountyHall(page);
+  if (response.status !== 200) {
+    return false;
+  }
+
+  return response.body.availableItems.some((item) => item.objective.id === target.objective.id && item.hasCurrentApplication === true);
+}
+
+export async function memberWorkbenchContainsObjective(page: Page, target: ReviewApplicationTarget) {
+  const response = await readMemberWorkbench(page);
+  if (response.status !== 200) {
+    return false;
+  }
+
+  return (response.body.objectives ?? []).some((objective) => objective.id === target.objective.id && objective.title === target.objective.title);
+}
+
+export async function memberWorkbenchMissingObjective(page: Page, target: ReviewApplicationTarget) {
+  const response = await readMemberWorkbench(page);
+  if (response.status !== 200) {
+    return false;
+  }
+
+  return !(response.body.objectives ?? []).some((objective) => objective.id === target.objective.id && objective.title === target.objective.title);
+}
+
 export function objectivePanel(page: Page, target: ReviewApplicationTarget) {
   return page.locator("section.orf-objective-panel").filter({ hasText: target.objective.title }).first();
 }
 
 export function applicationPill(page: Page, target: ReviewApplicationTarget, applicant: string) {
   return objectivePanel(page, target).locator(".orf-objective-application-pill").filter({ hasText: applicant }).first();
+}
+
+export function bountyRow(page: Page, target: ReviewApplicationTarget) {
+  return page.locator(".bounty-list-row").filter({ hasText: target.objective.title }).first();
+}
+
+export function challengeApplicationDialog(page: Page) {
+  return page.getByRole("dialog").filter({ hasText: "提交后等待指挥官确认" }).first();
 }
 
 async function readObjectiveSnapshot(objectiveId: string): Promise<ReviewApplicationObjectiveSnapshot | null> {
@@ -109,29 +133,15 @@ async function readObjectiveSnapshot(objectiveId: string): Promise<ReviewApplica
   return row ?? null;
 }
 
-async function readObjectiveWithApplications(objectiveId: string): Promise<{
-  flowStatus: ObjectiveFlowStatus;
-  challengeApplications: ChallengeApplication[];
-} | null> {
-  const [row] = await db
-    .select({
-      flowStatus: objectives.flowStatus,
-      challengeApplications: objectives.challengeApplications,
-    })
-    .from(objectives)
-    .where(eq(objectives.id, objectiveId))
-    .limit(1);
-
-  return row ?? null;
-}
-
 async function readObjective(objectiveId: string): Promise<{
+  stage: OrfStage;
   flowStatus: ObjectiveFlowStatus;
   challengers: string[];
   challengeApplications: ChallengeApplication[];
 } | null> {
   const [row] = await db
     .select({
+      stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
       challengeApplications: objectives.challengeApplications,
@@ -143,6 +153,22 @@ async function readObjective(objectiveId: string): Promise<{
   return row ?? null;
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+async function readBountyHall(page: Page): Promise<{ status: number; body: BountyHallData }> {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/bounties", { credentials: "include" });
+    return {
+      status: response.status,
+      body: await response.json(),
+    };
+  });
+}
+
+async function readMemberWorkbench(page: Page): Promise<{ status: number; body: Partial<TaskManagementData> }> {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/my-challenges?scope=mine", { credentials: "include" });
+    return {
+      status: response.status,
+      body: await response.json().catch(() => ({})),
+    };
+  });
 }

@@ -1,5 +1,6 @@
-import { expect } from "@playwright/test";
+import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import type { CapturedResponse } from "../../_operators/common.context";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
@@ -29,6 +30,8 @@ import {
   testTaskAbsent,
 } from "./_support/member-create-task.helpers";
 
+const CAPTURED_RESPONSE_TIMEOUT_MS = 5_000;
+
 export const memberCreateTaskOperators = {
   "db.task_target": {
     from_objective: async ({ params }) => taskTargetFromObjective(requiredString(params, "objectiveId")),
@@ -39,7 +42,12 @@ export const memberCreateTaskOperators = {
 
     can_create_task: async ({ params }) => {
       await expect
-        .poll(() => targetCanCreateTask(requiredTaskTarget(params, "target"), requiredString(params, "memberName")))
+        .poll(() =>
+          targetCanCreateTask(requiredTaskTarget(params, "target"), {
+            name: requiredString(params, "actorName"),
+            role: requiredString(params, "role"),
+          }),
+        )
         .toBe(true);
     },
 
@@ -53,7 +61,7 @@ export const memberCreateTaskOperators = {
       await expect
         .poll(() =>
           targetTaskPresent(requiredTaskTarget(params, "target"), {
-            name: requiredString(params, "assignee"),
+            assignee: requiredString(params, "assignee"),
             taskTitle: requiredString(params, "title"),
             taskDescription: requiredString(params, "description"),
           }),
@@ -92,23 +100,6 @@ export const memberCreateTaskOperators = {
         description: requiredString(params, "description"),
         assignee: requiredString(params, "assignee"),
       });
-    },
-  },
-
-  "api.subtask_create": {
-    capture_response: async ({ ctx, runtime, params }) => {
-      const task = requiredTask(params, "task");
-      runtime.values[requiredString(params, "saveAs")] = ctx.page
-        .waitForResponse((response) => {
-          return response.request().method().toUpperCase() === "POST" && response.url().endsWith(`/api/tasks/${encodeURIComponent(task.id)}/checklist`);
-        })
-        .then(async (response) => ({
-          ok: response.ok(),
-          status: response.status(),
-          url: response.url(),
-          method: response.request().method(),
-          body: await readResponseBody(response),
-        }));
     },
   },
 
@@ -157,16 +148,55 @@ export const memberCreateTaskOperators = {
 
   "page.task_inline_editor": {
     submit: async ({ ctx }) => {
-      await ctx.page.getByLabel("编辑行动项标题").press("Enter");
+      const responsePromise = ctx.page
+        .waitForResponse(
+          (response) => response.request().method().toUpperCase() === "POST" && response.url().endsWith("/api/tasks"),
+          { timeout: CAPTURED_RESPONSE_TIMEOUT_MS },
+        )
+        .then(toCapturedResponse);
+
+      try {
+        await ctx.page.getByLabel("编辑行动项标题").press("Enter");
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 
   "page.subtask_inline_editor": {
-    submit: async ({ ctx }) => {
-      await ctx.page.getByLabel("编辑子行动项标题").press("Enter");
+    submit: async ({ ctx, params }) => {
+      const task = requiredTask(params, "task");
+      const responsePromise = ctx.page
+        .waitForResponse(
+          (response) =>
+            response.request().method().toUpperCase() === "POST" &&
+            response.url().endsWith(`/api/tasks/${encodeURIComponent(task.id)}/checklist`),
+          { timeout: CAPTURED_RESPONSE_TIMEOUT_MS },
+        )
+        .then(toCapturedResponse);
+
+      try {
+        await ctx.page.getByLabel("编辑子行动项标题").press("Enter");
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 } satisfies OperatorRegistry<TestContext, MemberCreateTaskCaseData>;
+
+async function toCapturedResponse(response: Response): Promise<CapturedResponse> {
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    url: response.url(),
+    method: response.request().method(),
+    body: await readResponseBody(response),
+  };
+}
 
 async function openTaskCreationMenu(ctx: TestContext, target: MemberCreateTaskTarget) {
   await objectivePanel(ctx.page, target).hover();
@@ -188,7 +218,7 @@ function requiredTaskTarget(params: StepParams, key: string): MemberCreateTaskTa
     typeof (value as MemberCreateTaskTarget).objective.title !== "string" ||
     typeof (value as MemberCreateTaskTarget).objective.flowStatus !== "string"
   ) {
-    throw new Error(`参数 ${key} 必须是成员新增行动项目标`);
+    throw new Error(`参数 ${key} 必须是用户新增行动项目标`);
   }
 
   return value as MemberCreateTaskTarget;

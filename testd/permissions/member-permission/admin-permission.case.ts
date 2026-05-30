@@ -1,0 +1,98 @@
+import { STATE_CASE_MODEL, type StateCaseSpec } from "../../_framework/types";
+import type { AdminPermissionCaseData } from "./_support/admin-permission.context";
+
+export const adminPermissionUpdateCase = {
+  id: "permissions.member.update",
+  title: "管理员修改member权限",
+  model: STATE_CASE_MODEL,
+  tags: ["permissions", "member", "admin", "happy-path"],
+
+  data: {
+    email: "orf-admin-permission-e2e@orf.local",
+    password: "OrfAdminPermissionE2E!2026",
+    name: "ORF Admin Permission E2E",
+    role: "admin",
+    targetRole: "member",
+    permissionKey: "comment.manage",
+    permissionLabel: "管理所有评论",
+  },
+
+  B: {
+    description: "系统服务可用，浏览器处于未登录基准状态",
+    assertions: [
+      { source: { caseStepId: "B-1", method: "api" }, id: "frontend.ready", title: "前端服务 应可用", object: "frontend.service", operator: "available" },
+      { source: { caseStepId: "B-2", method: "api" }, id: "backend.ready", title: "后端服务 应可用", object: "api.health", operator: "ok" },
+      { source: { caseStepId: "B-3", method: "api" }, id: "frontend.login_entry.accessible", title: "前端登录页入口 应可访问", object: "frontend.login_entry", operator: "accessible" },
+      { source: { caseStepId: "B-4", method: "api" }, id: "session.endpoint.accessible", title: "当前会话查询能力 应可用", object: "auth.session", operator: "accessible" },
+      { source: { caseStepId: "B-5", method: "prisma" }, id: "db.ready", title: "ORF 数据库 应可连接", object: "db", operator: "ready" },
+      { source: { caseStepId: "B-6", method: "prisma" }, id: "db.schema.current", title: "ORF 数据库 schema 应为 当前测试版本", object: "db.schema", operator: "current" },
+      { source: { caseStepId: "B-7", method: "api" }, id: "ory.admin_public.ready", title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用", object: "ory.admin_public", operator: "ready" },
+      { source: { caseStepId: "B-8", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
+      { source: { caseStepId: "B-9", method: "playwright" }, id: "cookie.absent", title: "当前浏览器 应不存在 Ory 登录会话 cookie", object: "browser.cookie", operator: "absent" },
+      { source: { caseStepId: "B-10", method: "playwright" }, id: "storage.empty", title: "当前浏览器 应不保留本地登录态", object: "browser.auth_storage", operator: "empty" },
+    ],
+  },
+
+  Setup: {
+    description: "准备管理员账号、登录管理员、记录原权限并打开权限管理页",
+    steps: [
+      { source: { caseStepId: "Setup-1", method: "api" }, id: "ory.admin_identity.upsert", title: "准备管理员认证身份，邮箱为 `orf-admin-permission-e2e@orf.local`，密码为固定测试密码", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.email", nameFrom: "data.name", passwordFrom: "data.password", saveAs: "adminIdentity" } },
+      { source: { caseStepId: "Setup-2", method: "prisma" }, id: "db.admin.upsert", title: "准备管理员用户和默认团队成员关系，邮箱为 `orf-admin-permission-e2e@orf.local`、角色为 `admin`、状态为 `active`", object: "db.user", operator: "upsert", params: { emailFrom: "data.email", nameFrom: "data.name", roleFrom: "data.role", status: "active", identityIdFrom: "runtime.adminIdentity.id", saveAs: "adminUser" } },
+      { source: { caseStepId: "Setup-3", method: "api" }, id: "ory.admin_sessions.revoke", title: "撤销管理员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.email" } },
+      { source: { caseStepId: "Setup-4", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Setup-5", method: "playwright" }, id: "page.goto.auth", title: "打开 ORF 登录页", object: "page", operator: "goto", params: { path: "/auth" } },
+      { source: { caseStepId: "Setup-6", method: "playwright" }, id: "fill.email", title: "在邮箱输入框输入管理员固定测试邮箱", object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.email" } },
+      { source: { caseStepId: "Setup-7", method: "playwright" }, id: "fill.password", title: "在密码输入框输入管理员固定测试密码", object: "page", operator: "fill", params: { label: "Password", exact: true, valueFrom: "data.password" } },
+      { source: { caseStepId: "Setup-8", method: "playwright" }, id: "click.sign_in", title: "点击 \"Sign In\" 登录操作", object: "page.admin_permission_login", operator: "submit_admin" },
+      { source: { caseStepId: "Setup-9", method: "api" }, id: "api.permissions.read_original", title: "记录修改前的 `member` 角色权限配置", object: "api.permissions", operator: "read", params: { saveAs: "originalMemberPermissionRules" } },
+      { source: { caseStepId: "Setup-10", method: "playwright" }, id: "page.goto.permissions", title: "打开权限管理页面", object: "page", operator: "goto", params: { path: "/system/permissions" } },
+    ],
+  },
+
+  S0: {
+    description: "管理员位于权限管理页面，成员角色页签和指定权限开关可见",
+    assertions: [
+      { source: { caseStepId: "S0-1", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 邮箱为 `orf-admin-permission-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" } },
+      { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.permissions", title: "当前页面 应为 权限管理页面", object: "page.url", operator: "match", params: { pattern: "/system/permissions$" } },
+      { source: { caseStepId: "S0-3", method: "playwright" }, id: "member.tab.visible", title: "权限管理页面中 \"成员\" 角色页签 应可见", object: "page.role_tab", operator: "visible", params: { text: "成员" } },
+      { source: { caseStepId: "S0-4", method: "playwright" }, id: "comment_manage.toggle.visible", title: "权限管理页面中 `comment.manage` 权限开关 应可见", object: "page.permission_toggle", operator: "visible", params: { permissionKeyFrom: "data.permissionKey" } },
+      { source: { caseStepId: "S0-5", method: "api" }, id: "api.permissions.original_recorded", title: "修改前的 `member` 角色权限配置 应已记录", object: "api.permissions", operator: "recorded", params: { rulesFrom: "runtime.originalMemberPermissionRules" } },
+    ],
+  },
+
+  Action: {
+    description: "管理员在权限管理页面切换成员角色的 comment.manage 权限并保存",
+    steps: [
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "member.tab.click", title: "选择 \"成员\" 角色页签", object: "page.role_tab", operator: "click", params: { text: "成员" } },
+      { source: { caseStepId: "Action-2", method: "playwright" }, id: "comment_manage.toggle", title: "切换 `comment.manage` 权限开关", object: "page.permission_toggle", operator: "toggle", params: { originalRulesFrom: "runtime.originalMemberPermissionRules", roleFrom: "data.targetRole", permissionKeyFrom: "data.permissionKey", saveAs: "changedMemberPermissionRules" } },
+      { source: { caseStepId: "Action-3", method: "playwright" }, id: "permissions.save", title: "点击 \"保存角色权限\" 操作", object: "page.permissions_save", operator: "submit", params: { saveAs: "permissionUpdateResponse" } },
+    ],
+  },
+
+  S1: {
+    description: "成员权限已保存并可再次读取",
+    assertions: [
+      { source: { caseStepId: "S1-1", method: "api" }, id: "permission_update.response_ok", title: "`member` 角色权限保存结果 应成功", object: "api.permissions", operator: "response_ok", params: { resultFrom: "runtime.permissionUpdateResponse" } },
+      { source: { caseStepId: "S1-2", method: "api" }, id: "permission_rules.persisted", title: "重新读取的 `member` 角色权限配置 应等于 Action 保存的新权限配置", object: "api.permissions", operator: "member_rules_match", params: { expectedRulesFrom: "runtime.changedMemberPermissionRules", roleFrom: "data.targetRole" } },
+      { source: { caseStepId: "S1-3", method: "api" }, id: "session.admin.still_authenticated", title: "当前会话 应仍为 邮箱为 `orf-admin-permission-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" } },
+      { source: { caseStepId: "S1-4", method: "prisma" }, id: "db.admin.matches", title: "管理员用户 应仍存在，邮箱为 `orf-admin-permission-e2e@orf.local`、状态为 `active`", object: "db.user", operator: "matches", params: { emailFrom: "data.email", status: "active" } },
+      { source: { caseStepId: "S1-5", method: "prisma" }, id: "db.admin.membership.matches", title: "管理员用户的默认团队成员关系 应仍存在，角色为 `admin`", object: "db.default_team_membership", operator: "matches", params: { emailFrom: "data.email", roleFrom: "data.role" } },
+    ],
+  },
+
+  Clean: {
+    description: "恢复成员权限并删除管理员权限测试独占 fixture",
+    steps: [
+      { source: { caseStepId: "Clean-1", method: "api" }, id: "api.permissions.restore_member", title: "恢复 `member` 角色权限配置为修改前状态", object: "api.permissions", operator: "restore_member", params: { rulesFrom: "runtime.originalMemberPermissionRules", saveAs: "permissionRestoreResponse" } },
+      { source: { caseStepId: "Clean-2", method: "api" }, id: "auth.logout", title: "注销当前登录会话", object: "auth", operator: "logout" },
+      { source: { caseStepId: "Clean-3", method: "playwright" }, id: "page.runtime.stop", title: "离开当前 ORF 前端页面", object: "page.runtime", operator: "stop" },
+      { source: { caseStepId: "Clean-4", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Clean-5", method: "api" }, id: "ory.admin_sessions.revoke", title: "撤销管理员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.email" } },
+      { source: { caseStepId: "Clean-6", method: "api" }, id: "ory.admin_identity.delete", title: "删除邮箱为 `orf-admin-permission-e2e@orf.local` 的管理员认证身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.email" } },
+      { source: { caseStepId: "Clean-7", method: "prisma" }, id: "db.admin.memberships.delete", title: "删除管理员用户的默认团队成员关系", object: "db.user", operator: "delete_memberships", params: { emailFrom: "data.email" } },
+      { source: { caseStepId: "Clean-8", method: "prisma" }, id: "db.admin.delete", title: "删除邮箱为 `orf-admin-permission-e2e@orf.local` 的管理员用户", object: "db.user", operator: "delete", params: { emailFrom: "data.email" } },
+      { source: { caseStepId: "Clean-9", method: "api" }, id: "ory.admin_identity.absent", title: "邮箱为 `orf-admin-permission-e2e@orf.local` 的管理员认证身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.email" } },
+      { source: { caseStepId: "Clean-10", method: "prisma" }, id: "db.admin.absent", title: "邮箱为 `orf-admin-permission-e2e@orf.local` 的管理员用户 应不存在", object: "db.user", operator: "absent", params: { emailFrom: "data.email" } },
+    ],
+  },
+} satisfies StateCaseSpec<AdminPermissionCaseData>;

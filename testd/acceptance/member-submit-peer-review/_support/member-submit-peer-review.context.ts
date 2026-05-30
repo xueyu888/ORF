@@ -10,11 +10,15 @@ export type MemberSubmitPeerReviewCaseData = {
   email: string;
   password: string;
   name: string;
+  peerEmail: string;
+  peerPassword: string;
+  peerName: string;
   role: "member";
   objectiveId: string;
   objectiveTitle: string;
   lootBody: string;
-  ratio: string;
+  reviewerRatio: string;
+  peerRatio: string;
 };
 
 export type PeerReviewTarget = {

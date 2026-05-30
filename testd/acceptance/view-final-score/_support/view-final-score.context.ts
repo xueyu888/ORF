@@ -7,13 +7,24 @@ export type TestContext = {
 };
 
 export type ViewFinalScoreCaseData = {
-  email: string;
-  password: string;
-  name: string;
-  role: "member";
-  objectiveId: string;
-  objectiveTitle: string;
-  points: number;
+  primaryEmail: string;
+  primaryPassword: string;
+  primaryName: string;
+  otherEmail: string;
+  otherPassword: string;
+  otherName: string;
+  memberRole: "member";
+  cleanupEmails: string[];
+  primaryMemberNames: string[];
+  otherMemberNames: string[];
+  primaryObjectiveId: string;
+  primaryObjectiveTitle: string;
+  otherObjectiveId: string;
+  otherObjectiveTitle: string;
+  primaryPoints: number;
+  otherPoints: number;
+  primaryLedgerId: string;
+  otherLedgerId: string;
   reason: string;
 };
 

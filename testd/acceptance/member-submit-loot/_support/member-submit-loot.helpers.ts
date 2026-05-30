@@ -26,7 +26,22 @@ export async function lootTargetFromObjective(objectiveId: string): Promise<Loot
   };
 }
 
-export async function prepareLootTarget(target: LootTarget, memberName: string) {
+export async function addLootTargetChallenger(target: LootTarget, memberName: string) {
+  const objective = await readObjective(target.objective.id);
+  if (!objective) {
+    throw new Error("目标不存在，无法设置成员提交战利品挑战者");
+  }
+
+  await db
+    .update(objectives)
+    .set({
+      challengers: uniqueMembers([...objective.challengers, memberName]),
+      updatedAt: today(),
+    })
+    .where(eq(objectives.id, target.objective.id));
+}
+
+export async function prepareLootTargetForSubmission(target: LootTarget) {
   const objective = await readObjective(target.objective.id);
   if (!objective) {
     throw new Error("目标不存在，无法准备成员提交战利品状态");
@@ -37,7 +52,6 @@ export async function prepareLootTarget(target: LootTarget, memberName: string) 
     .set({
       stage: "goalFrozen",
       flowStatus: "frozen",
-      challengers: uniqueMembers([...objective.challengers, memberName]),
       confirmationDueAt: null,
       confirmedAt: new Date().toISOString(),
       lootSubmittedAt: null,
@@ -137,7 +151,7 @@ export async function targetResultPresent(target: LootTarget, result: LootPrereq
   return !!row && row.id === result.id && row.metricName === result.metricName;
 }
 
-export async function targetLootPresent(target: LootTarget, expected: Pick<MemberSubmitLootCaseData, "lootBody" | "selfTestReportBody">) {
+export async function targetLootPresent(target: LootTarget, expected: { lootBody: string; selfTestReportBody: string }) {
   const row = await readLootByBody(expected.lootBody);
   return !!row && row.objectiveId === target.objective.id && row.selfTestReportBody === expected.selfTestReportBody;
 }

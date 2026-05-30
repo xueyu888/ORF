@@ -2,17 +2,12 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../../server/db/client";
 import { objectives, taskChecklistItems, tasks } from "../../../../server/db/schema";
-import type {
-  MemberCreateTaskCaseData,
-  MemberCreateTaskTarget,
-  MemberCreatedSubtask,
-  MemberCreatedTask,
-} from "./member-create-task.context";
+import type { MemberCreateTaskTarget, MemberCreatedSubtask, MemberCreatedTask } from "./member-create-task.context";
 
 export async function taskTargetFromObjective(objectiveId: string): Promise<MemberCreateTaskTarget> {
   const selected = await readObjective(objectiveId);
   if (!selected) {
-    throw new Error(`成员新增行动项目标不存在: ${objectiveId}`);
+    throw new Error(`用户新增行动项目标不存在: ${objectiveId}`);
   }
   return {
     objective: {
@@ -26,7 +21,7 @@ export async function taskTargetFromObjective(objectiveId: string): Promise<Memb
 export async function prepareTaskTarget(target: MemberCreateTaskTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
   if (!objective) {
-    throw new Error("目标不存在，无法准备成员新增行动项状态");
+    throw new Error("目标不存在，无法准备用户新增行动项状态");
   }
 
   await db
@@ -40,9 +35,9 @@ export async function prepareTaskTarget(target: MemberCreateTaskTarget, memberNa
     .where(eq(objectives.id, target.objective.id));
 }
 
-export async function targetCanCreateTask(target: MemberCreateTaskTarget, memberName: string) {
+export async function targetCanCreateTask(target: MemberCreateTaskTarget, actor: { name: string; role: string }) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "reestimating" && objective.challengers.includes(memberName);
+  return !!objective && objective.flowStatus === "reestimating" && (actor.role === "admin" || objective.challengers.includes(actor.name));
 }
 
 export async function testTaskAbsent(title: string) {
@@ -55,14 +50,14 @@ export async function targetTaskAbsent(target: MemberCreateTaskTarget, title: st
 
 export async function targetTaskPresent(
   target: MemberCreateTaskTarget,
-  expected: Pick<MemberCreateTaskCaseData, "name" | "taskTitle" | "taskDescription">,
+  expected: { assignee: string; taskTitle: string; taskDescription: string },
 ) {
   const row = await readTargetTask(target.objective.id, expected.taskTitle);
   return (
     !!row &&
     row.linkedObjectiveId === target.objective.id &&
     row.description === expected.taskDescription &&
-    row.assignee === expected.name
+    row.assignee === expected.assignee
   );
 }
 

@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../../server/db/client";
 import { objectives, pointLedger } from "../../../../server/db/schema";
-import type { FinalScoreLedger, FinalScoreTarget, ViewFinalScoreCaseData } from "./view-final-score.context";
+import type { FinalScoreLedger, FinalScoreTarget } from "./view-final-score.context";
 
 export async function finalScoreTargetFromObjective(objectiveId: string): Promise<FinalScoreTarget> {
   const selected = await readObjective(objectiveId);
@@ -20,13 +20,13 @@ export async function finalScoreTargetFromObjective(objectiveId: string): Promis
   };
 }
 
-export async function prepareFinalScoreTarget(target: FinalScoreTarget, memberName: string, points: number) {
+export async function prepareFinalScoreTarget(target: FinalScoreTarget, memberNames: string[], points: number) {
   await db
     .update(objectives)
     .set({
       stage: "goalFrozen",
       flowStatus: "settled",
-      challengers: [memberName],
+      challengers: memberNames,
       acceptedResult: "completed",
       completionMultiplier: 1,
       objectiveBasePoints: points,
@@ -38,7 +38,7 @@ export async function prepareFinalScoreTarget(target: FinalScoreTarget, memberNa
 
 export async function createFinalScoreLedger(
   target: FinalScoreTarget,
-  data: Pick<ViewFinalScoreCaseData, "name" | "points" | "reason"> & { userId: string },
+  data: { id: string; memberName: string; points: number; reason: string; userId: string },
 ): Promise<FinalScoreLedger> {
   const objective = await readObjective(target.objective.id);
   if (!objective) {
@@ -46,9 +46,9 @@ export async function createFinalScoreLedger(
   }
 
   const ledger: FinalScoreLedger = {
-    id: "points-testd-view-final-score",
+    id: data.id,
     objectiveId: objective.id,
-    memberName: data.name,
+    memberName: data.memberName,
     points: data.points,
     reason: data.reason,
   };
@@ -58,7 +58,7 @@ export async function createFinalScoreLedger(
     teamId: objective.teamId,
     objectiveId: objective.id,
     userId: data.userId,
-    memberName: data.name,
+    memberName: data.memberName,
     points: data.points,
     reason: data.reason,
     createdAt: new Date().toISOString(),
@@ -80,7 +80,7 @@ export async function testFinalScoreLedgerAbsent(reason: string) {
 
 export async function finalScoreTargetSettledForMember(target: FinalScoreTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "settled" && objective.challengers.includes(memberName);
+  return !!objective && objective.flowStatus === "settled" && objective.challengers.length === 1 && objective.challengers[0] === memberName;
 }
 
 export async function finalScoreLedgerPresent(target: FinalScoreTarget, memberName: string, points: number) {

@@ -1,5 +1,7 @@
-import { expect } from "@playwright/test";
+import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import type { CapturedResponse } from "../../_operators/common.context";
+import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { requiredString } from "../../_operators/params";
 import type {
@@ -22,6 +24,8 @@ import {
   targetResultRow,
   testResultAbsent,
 } from "./_support/member-propose-result.helpers";
+
+const CAPTURED_RESPONSE_TIMEOUT_MS = 5_000;
 
 export const memberProposeResultOperators = {
   "db.proposal_target": {
@@ -111,10 +115,33 @@ export const memberProposeResultOperators = {
 
   "page.result_inline_editor": {
     submit: async ({ ctx }) => {
-      await ctx.page.getByLabel("编辑指标标题").press("Enter");
+      const responsePromise = ctx.page
+        .waitForResponse(
+          (response) => response.request().method().toUpperCase() === "POST" && response.url().endsWith("/api/results"),
+          { timeout: CAPTURED_RESPONSE_TIMEOUT_MS },
+        )
+        .then(toCapturedResponse);
+
+      try {
+        await ctx.page.getByLabel("编辑指标标题").press("Enter");
+        return await responsePromise;
+      } catch (error) {
+        await responsePromise.catch(() => undefined);
+        throw error;
+      }
     },
   },
 } satisfies OperatorRegistry<TestContext, MemberProposeResultCaseData>;
+
+async function toCapturedResponse(response: Response): Promise<CapturedResponse> {
+  return {
+    ok: response.ok(),
+    status: response.status(),
+    url: response.url(),
+    method: response.request().method(),
+    body: await readResponseBody(response),
+  };
+}
 
 async function openMetricProposalMenu(ctx: TestContext, target: MemberProposeResultTarget) {
   await objectivePanel(ctx.page, target).hover();

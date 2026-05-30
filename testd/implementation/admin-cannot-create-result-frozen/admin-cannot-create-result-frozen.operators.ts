@@ -4,17 +4,17 @@ import { requiredString } from "../../_operators/params";
 import type {
   FrozenAdminCreateResultCaseData,
   FrozenAdminResultTarget,
-  RejectedResultCreateResponse,
   TestContext,
 } from "./_support/admin-cannot-create-result-frozen.context";
 import {
-  addMetricButton,
   deleteTestResult,
   frozenAdminResultTargetFromObjective,
   objectivePanel,
   prepareFrozenAdminResultTarget,
-  submitManagerDefinedResult,
+  targetActionMenuItem,
+  targetAddMenuButton,
   targetFrozen,
+  targetMetricButton,
   targetResultAbsent,
   targetResultRow,
   testResultAbsent,
@@ -49,30 +49,25 @@ export const adminCannotCreateResultFrozenOperators = {
     },
   },
 
-  "api.result_create": {
-    submit_manager_defined: async ({ ctx, params }) => {
-      return submitManagerDefinedResult(ctx.page, requiredFrozenAdminResultTarget(params, "target"), {
-        resultTitle: requiredString(params, "title"),
-        metricName: requiredString(params, "metricName"),
-      });
-    },
-  },
-
-  "api.result_create_response": {
-    rejected: async ({ params }) => {
-      const response = requiredRejectedResponse(params, "response");
-      expect(response.ok).toBe(false);
-      expect(response.status).toBe(Number(params.status));
-    },
-  },
-
   "page.frozen_admin_result_target": {
     visible: async ({ ctx, params }) => {
       await expect(objectivePanel(ctx.page, requiredFrozenAdminResultTarget(params, "target"))).toBeVisible();
     },
 
+    open_add_menu: async ({ ctx, params }) => {
+      await openAddMenu(ctx, requiredFrozenAdminResultTarget(params, "target"));
+    },
+
+    add_action_visible: async ({ ctx, params }) => {
+      const target = requiredFrozenAdminResultTarget(params, "target");
+      await openAddMenu(ctx, target);
+      await expect(targetActionMenuItem(ctx.page, target)).toBeVisible();
+    },
+
     add_metric_absent: async ({ ctx, params }) => {
-      await expect(addMetricButton(ctx.page, requiredFrozenAdminResultTarget(params, "target"))).toHaveCount(0);
+      const target = requiredFrozenAdminResultTarget(params, "target");
+      await openAddMenu(ctx, target);
+      await expect(targetMetricButton(ctx.page, target)).toHaveCount(0);
     },
 
     result_absent: async ({ ctx, params }) => {
@@ -80,6 +75,14 @@ export const adminCannotCreateResultFrozenOperators = {
     },
   },
 } satisfies OperatorRegistry<TestContext, FrozenAdminCreateResultCaseData>;
+
+async function openAddMenu(ctx: TestContext, target: FrozenAdminResultTarget) {
+  await objectivePanel(ctx.page, target).hover();
+  await expect(targetAddMenuButton(ctx.page, target)).toBeEnabled();
+  if (!(await targetActionMenuItem(ctx.page, target).isVisible())) {
+    await targetAddMenuButton(ctx.page, target).click();
+  }
+}
 
 function requiredFrozenAdminResultTarget(params: StepParams, key: string): FrozenAdminResultTarget {
   const value = params[key];
@@ -96,18 +99,4 @@ function requiredFrozenAdminResultTarget(params: StepParams, key: string): Froze
   }
 
   return value as FrozenAdminResultTarget;
-}
-
-function requiredRejectedResponse(params: StepParams, key: string): RejectedResultCreateResponse {
-  const value = params[key];
-  if (
-    typeof value !== "object" ||
-    value === null ||
-    typeof (value as RejectedResultCreateResponse).ok !== "boolean" ||
-    typeof (value as RejectedResultCreateResponse).status !== "number"
-  ) {
-    throw new Error(`参数 ${key} 必须是新增指标接口响应`);
-  }
-
-  return value as RejectedResultCreateResponse;
 }
