@@ -31,7 +31,6 @@ import {
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
   reviewObjectiveLoot,
-  submitObjectiveContributionReview,
   submitObjectiveLoot,
   reviewObjectiveTrialReview,
   submitObjectiveTrialReview,
@@ -1171,29 +1170,6 @@ test("settlement uses multi-challenger standard contribution ratios and supports
   );
   assert.equal(loot.status, "ok");
 
-  const challengerReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 2 / 3 },
-        { member: fixture.observer.name, ratio: 1 / 3 },
-      ],
-    },
-    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
-  );
-  assert.equal(challengerReview.status, "ok");
-  const observerReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 2 / 3 },
-        { member: fixture.observer.name, ratio: 1 / 3 },
-      ],
-    },
-    { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
-  );
-  assert.equal(observerReview.status, "ok");
-
   const reviewed = await reviewObjectiveLoot(
     objective.id,
     {
@@ -1202,6 +1178,13 @@ test("settlement uses multi-challenger standard contribution ratios and supports
         { resultId: resultA.id, acceptedResult: "completed" },
         { resultId: resultB.id, acceptedResult: "completed" },
       ],
+      contributionResolution: {
+        ratios: [
+          { member: fixture.challenger.name, ratio: 2 / 3 },
+          { member: fixture.observer.name, ratio: 1 / 3 },
+        ],
+        reason: "Resolved by local anonymous settlement service.",
+      },
     },
     fixture.commander.id,
   );
@@ -1210,19 +1193,28 @@ test("settlement uses multi-challenger standard contribution ratios and supports
   assert.equal(reviewed.objective.completionMultiplier, 1.5);
   assert.equal(reviewed.objective.objectiveSettlementPoints, 60);
 
-  const data = await getTaskManagementData();
-  assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 2);
+  const data = await getTaskManagementData({ scope: fixture.scope });
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
   assert.equal(ledger.length, 2);
   assert.equal(ledger[0]?.memberName, fixture.challenger.name);
   assert.equal(ledger[0]?.points, 40);
   assert.equal(ledger[1]?.memberName, fixture.observer.name);
   assert.equal(ledger[1]?.points, 20);
+
+  const challengerReadModel = await getMyChallengesData(fixture.challenger.name, false, { scope: fixture.scope });
+  const challengerLedger = challengerReadModel.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
+  assert.deepEqual(challengerLedger.map((entry) => entry.memberName), [fixture.challenger.name, fixture.observer.name]);
+  assert.deepEqual(challengerLedger.map((entry) => entry.points), [40, 20]);
+
+  const observerReadModel = await getMyChallengesData(fixture.observer.name, false, { scope: fixture.scope });
+  const observerLedger = observerReadModel.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
+  assert.deepEqual(observerLedger.map((entry) => entry.memberName), [fixture.challenger.name, fixture.observer.name]);
+  assert.deepEqual(observerLedger.map((entry) => entry.points), [40, 20]);
 });
 
-test("repeated contribution reviews keep history but settlement uses each reviewer latest record", async () => {
-  const fixture = await createFixture("peer-review-latest-record");
-  const objective = await createPublishedObjective(fixture, "latest peer review settlement");
+test("multi-challenger settlement requires final contribution resolution without raw backend reviews", async () => {
+  const fixture = await createFixture("peer-review-local-resolution");
+  const objective = await createPublishedObjective(fixture, "local peer review settlement");
   const result = await createTestResult(objective.id, fixture.commander.name, "latest peer review result", "进阶");
 
   const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
@@ -1240,58 +1232,41 @@ test("repeated contribution reviews keep history but settlement uses each review
   const loot = await submitObjectiveLoot(
     objective.id,
     {
-      body: "Repeated peer review target loot.",
+      body: "Local peer review target loot.",
       resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }],
     },
     { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
   );
   assert.equal(loot.status, "ok");
 
-  const firstReview = await submitObjectiveContributionReview(
+  const missingResolution = await reviewObjectiveLoot(
     objective.id,
     {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 0.9 },
-        { member: fixture.observer.name, ratio: 0.1 },
-      ],
+      lootId: loot.loot.id,
+      resultReviews: [{ resultId: result.id, acceptedResult: "completed" }],
     },
-    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+    fixture.commander.id,
   );
-  assert.equal(firstReview.status, "ok");
-
-  const latestReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 0.5 },
-        { member: fixture.observer.name, ratio: 0.5 },
-      ],
-    },
-    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
-  );
-  assert.equal(latestReview.status, "ok");
-
-  const observerReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 0.5 },
-        { member: fixture.observer.name, ratio: 0.5 },
-      ],
-    },
-    { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
-  );
-  assert.equal(observerReview.status, "ok");
+  assert.equal(missingResolution.status, "invalid");
 
   const reviewed = await reviewObjectiveLoot(
     objective.id,
-    { lootId: loot.loot.id, resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    {
+      lootId: loot.loot.id,
+      resultReviews: [{ resultId: result.id, acceptedResult: "completed" }],
+      contributionResolution: {
+        ratios: [
+          { member: fixture.challenger.name, ratio: 0.5 },
+          { member: fixture.observer.name, ratio: 0.5 },
+        ],
+        reason: "Resolved by local anonymous settlement service.",
+      },
+    },
     fixture.commander.id,
   );
   assert.equal(reviewed.status, "ok");
 
   const data = await getTaskManagementData({ scope: fixture.scope });
-  assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 3);
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => left.memberName.localeCompare(right.memberName));
   assert.equal(ledger.length, 2);
   assert.equal(ledger[0]?.points, 15);
@@ -1411,6 +1386,11 @@ test("API flow commands enforce commander-only permissions and challenge list sc
 
     const missingReasonApplication = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/challenge-applications`, {});
     assert.equal(missingReasonApplication.statusCode, 400);
+
+    const rawContributionReview = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/contribution-reviews`, {
+      allocations: [{ member: fixture.challenger.name, ratio: 1 }],
+    });
+    assert.equal(rawContributionReview.statusCode, 410);
 
     const memberApplication = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/challenge-applications`, {
       reason: "I have the right context and can own this challenge.",
@@ -2192,7 +2172,7 @@ test("API user creation rejects names already reserved by ORF records", async ()
   });
 });
 
-test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
+test("task-page and state snapshot APIs scope private records but expose public point ledger to ordinary members", async () => {
   const fixture = await createFixture("api-read-boundary");
   const { objective } = await createSettledObjective(fixture, "scoped settled objective");
 
@@ -2208,7 +2188,11 @@ test("task-page and state snapshot APIs do not leak full data to ordinary member
     assert.equal(observerData.objectives.some((item) => item.id === objective.id), false);
     assert.equal(observerData.results.some((item) => item.objectiveId === objective.id), false);
     assert.equal(observerData.objectiveLoot.some((item) => item.objectiveId === objective.id), false);
-    assert.equal(observerData.pointLedger.some((item) => item.objectiveId === objective.id), false);
+    assert.equal(observerData.pointLedger.some((item) => item.objectiveId === objective.id), true);
+
+    const observerMyChallenges = await apiInject(app, fixture.observer, "GET", "/api/my-challenges?scope=mine");
+    assert.equal(observerMyChallenges.statusCode, 200);
+    assert.equal((observerMyChallenges.json() as { pointLedger: Array<{ objectiveId: string }> }).pointLedger.some((item) => item.objectiveId === objective.id), true);
 
     const challengerTasks = await apiInject(app, fixture.challenger, "GET", "/api/tasks-page");
     assert.equal(challengerTasks.statusCode, 200);

@@ -7,7 +7,7 @@ import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTree
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { minimumObjectiveDeadlineValue } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
-import type { ObjectiveContributionReview, ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
+import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -37,7 +37,6 @@ type RowHandlers = {
   temporaryChildRow: TemporaryChildRow | null;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
-  contributionReviews: ObjectiveContributionReview[];
   trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
   canEditObjectiveDeadline: (objective: ObjectiveNode["objective"]) => boolean;
@@ -136,7 +135,6 @@ function ObjectivePanel({
   const workbenchAction = workbenchActionForObjective({
     objective: group.objective,
     currentUser: handlers.currentUser,
-    contributionReviews: handlers.contributionReviews,
     trialReviews: handlers.trialReviews,
   });
   const showApplicationReview =

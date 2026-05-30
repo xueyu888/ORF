@@ -240,7 +240,6 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   failureSamples: state.failureSamples.filter((item) => !targets.resultIds.has(item.linkedResultId)),
   objectiveLoot: state.objectiveLoot.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   objectiveTrialReviews: (state.objectiveTrialReviews ?? []).filter((item) => !targets.objectiveIds.has(item.objectiveId)),
-  objectiveContributionReviews: state.objectiveContributionReviews.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   pointLedger: state.pointLedger.filter((item) => !targets.objectiveIds.has(item.objectiveId)),
   comments: removeCommentsForTargets(state.comments, {
     objectiveIds: targets.objectiveIds,
@@ -264,7 +263,6 @@ const emptyBusinessState = (): OrfState => ({
   comments: [],
   objectiveLoot: [],
   objectiveTrialReviews: [],
-  objectiveContributionReviews: [],
   pointLedger: [],
 });
 
@@ -305,7 +303,6 @@ export const normalizeState = (state: OrfState): OrfState => {
     tasks,
     objectiveLoot: state.objectiveLoot ?? [],
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
-    objectiveContributionReviews: state.objectiveContributionReviews ?? [],
     pointLedger: state.pointLedger ?? [],
   };
 };

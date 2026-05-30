@@ -16,6 +16,7 @@
     "dev:web": "vite --host 0.0.0.0",
     "server:dev": "node scripts/with-public-ca.mjs tsx watch server/index.ts",
     "server:start": "node scripts/with-public-ca.mjs tsx server/index.ts",
+    "settlement:local": "tsx scripts/local-settlement-server.ts",
     "test": "node scripts/with-public-ca.mjs tsx --test tests/*.test.ts",
     "testd": "node scripts/with-public-ca.mjs playwright test",
     "test:e2e": "node scripts/with-public-ca.mjs playwright test",

@@ -436,7 +436,6 @@ export class LifecycleSimulator {
 
     return {
       comments: data.comments.filter((thread) => objectiveIds.has(thread.targetId) || resultIds.has(thread.targetId) || taskIds.has(thread.targetId)),
-      objectiveContributionReviews: data.objectiveContributionReviews.filter((review) => objectiveIds.has(review.objectiveId)),
       objectiveLoot: data.objectiveLoot.filter((loot) => objectiveIds.has(loot.objectiveId)),
       objectives: data.objectives.filter((objective) => objectiveIds.has(objective.id)),
       pointLedger: data.pointLedger.filter((entry) => objectiveIds.has(entry.objectiveId)),

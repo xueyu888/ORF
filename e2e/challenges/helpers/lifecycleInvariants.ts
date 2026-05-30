@@ -1,4 +1,4 @@
-import type { ContributionAllocation, Objective, ObjectiveFlowStatus, Result, Task } from "../../../src/types/orf";
+import type { Objective, ObjectiveFlowStatus, Result, Task } from "../../../src/types/orf";
 import { expect, type RealSystemHarness, type RealUser } from "./realSystemHarness";
 
 type TaskPageResponse = {
@@ -6,7 +6,6 @@ type TaskPageResponse = {
   results: Result[];
   tasks: Task[];
   objectiveLoot: Array<{ objectiveId: string }>;
-  objectiveContributionReviews: Array<{ objectiveId: string }>;
   pointLedger: Array<{ objectiveId: string; memberName: string; points: number }>;
 };
 
@@ -102,28 +101,6 @@ export async function assertLifecycleSecurityBoundaries(
   expect(submitLoot.status).toBe(403);
 }
 
-export async function assertLatestPeerReviewWins(
-  real: RealSystemHarness,
-  objectiveId: string,
-  reviewer: string,
-  expectedLatest: ContributionAllocation[],
-) {
-  const data = await real.taskData();
-  const reviews = data.objectiveContributionReviews
-    .filter((review) => review.objectiveId === objectiveId && review.reviewer === reviewer)
-    .sort((left, right) => left.submittedAt.localeCompare(right.submittedAt));
-
-  expect(reviews.length, "repeat peer review should keep an auditable history").toBeGreaterThanOrEqual(2);
-  const latest = reviews.at(-1);
-  expect(latest, "latest peer review should exist").toBeTruthy();
-  if (!latest) return;
-
-  for (const allocation of expectedLatest) {
-    const actual = latest.allocations.find((item) => item.member === allocation.member);
-    expect(actual?.ratio, `latest peer review ratio for ${allocation.member}`).toBeCloseTo(allocation.ratio, 5);
-  }
-}
-
 export async function assertStatusCoverage(real: RealSystemHarness, objectiveIds: string[], expectedStatuses: ObjectiveFlowStatus[]) {
   const data = await real.taskData();
   const statuses = new Set(
@@ -212,11 +189,6 @@ async function assertMemberVisibility(real: RealSystemHarness, members: RealUser
     for (const loot of tasksPage.body.objectiveLoot) {
       if (trackedIds.has(loot.objectiveId)) {
         expect(visibleObjectiveIds.has(loot.objectiveId), `${member.name} should not receive hidden objective loot`).toBe(true);
-      }
-    }
-    for (const review of tasksPage.body.objectiveContributionReviews) {
-      if (trackedIds.has(review.objectiveId)) {
-        expect(visibleObjectiveIds.has(review.objectiveId), `${member.name} should not receive hidden objective peer reviews`).toBe(true);
       }
     }
     for (const ledger of tasksPage.body.pointLedger) {

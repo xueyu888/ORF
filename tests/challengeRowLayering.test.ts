@@ -64,7 +64,6 @@ function rowHandlers(openActionId: string | null) {
     collapsedActionIds: new Set<string>(),
     collapsedBountyIds: new Set<string>(),
     commentCounts: new Map<string, number>(),
-    contributionReviews: [],
     trialReviews: [],
     canManageFlow: false,
     canEditObjectiveDeadline: () => false,

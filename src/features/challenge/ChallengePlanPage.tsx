@@ -300,7 +300,7 @@ export function ChallengePlanPage() {
 
   useEffect(() => {
     void loadChallengeData().catch(() => setChallengeData(null));
-  }, [loadChallengeData, state.comments, state.objectiveContributionReviews, state.objectiveTrialReviews, state.objectives, state.results, state.tasks, taskManagementInvalidationKey]);
+  }, [loadChallengeData, state.comments, state.objectiveTrialReviews, state.objectives, state.results, state.tasks, taskManagementInvalidationKey]);
 
   const sourceData = challengeData ?? state;
   const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
@@ -1077,7 +1077,6 @@ export function ChallengePlanPage() {
           temporaryChildRow,
           dragDrop,
           editingTarget: effectiveEditingTarget,
-          contributionReviews: challengeState.objectiveContributionReviews,
           trialReviews: challengeState.objectiveTrialReviews,
           currentUser,
           draftObjectiveId,

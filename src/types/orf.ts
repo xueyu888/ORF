@@ -362,7 +362,6 @@ export interface OrfState {
   comments: CommentThread[];
   objectiveLoot: ObjectiveLoot[];
   objectiveTrialReviews: ObjectiveTrialReview[];
-  objectiveContributionReviews: ObjectiveContributionReview[];
   pointLedger: PointLedgerEntry[];
   causeCategories: string[];
   rules: OrfRules;

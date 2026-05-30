@@ -390,7 +390,7 @@ test("loot workbench actions keep commander review separate from member challeng
   assert.equal(canSubmitObjectiveLoot(pollutedFrozen, challenger), true);
   assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, admin), false);
   assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, challenger), true);
-  assert.deepEqual(workbenchActionForObjective({ objective: pollutedSubmitted, currentUser: admin, contributionReviews: [] }), {
+  assert.deepEqual(workbenchActionForObjective({ objective: pollutedSubmitted, currentUser: admin }), {
     kind: "reviewLoot",
     label: "验收战利品",
     to: `/objectives/${pollutedSubmitted.id}/loot`,
@@ -399,7 +399,6 @@ test("loot workbench actions keep commander review separate from member challeng
     workbenchActionForObjective({
       objective: pollutedFrozen,
       currentUser: admin,
-      contributionReviews: [],
       trialReviews: [
         {
           id: "trial-review-a",
@@ -449,7 +448,6 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     comments: [],
     objectiveLoot: [],
     objectiveTrialReviews: [],
-    objectiveContributionReviews: [],
     pointLedger: [],
     causeCategories: [],
     rules: {

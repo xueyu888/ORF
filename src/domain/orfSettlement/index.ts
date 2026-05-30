@@ -3,13 +3,12 @@ import type {
   LootResultClaimStatus,
   Objective,
   ObjectiveAcceptedResult,
-  ObjectiveContributionReview,
   ObjectiveLoot,
   Result,
   ResultAcceptedResult,
   UncertaintyLevel,
 } from "../../types/orf";
-import { summarizeContributionReviews, validateContributionAllocationInput } from "../../features/challenge/model/contributionReview";
+import { validateContributionAllocationInput } from "../../features/challenge/model/contributionReview";
 
 const uncertaintyScores: Record<UncertaintyLevel, number> = {
   入门: 10,
@@ -67,7 +66,6 @@ export function planObjectiveSettlement(input: {
   loot: SettlementLoot;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
   acceptedResult?: ObjectiveAcceptedResult;
-  contributionReviews: ObjectiveContributionReview[];
   contributionResolution?: { ratios: ContributionAllocation[] };
   contributionRatios?: Array<{ member: string; ratio: number }>;
 }): SettlementPlan | null {
@@ -90,12 +88,12 @@ export function planObjectiveSettlement(input: {
   const completionMultiplier = completionMultiplierFor(objectiveAcceptedResult, input.loot.submittedAt, input.objective.finalDueAt);
   const settlementPoints = Number((basePoints * completionMultiplier).toFixed(2));
   const challengers = Array.from(new Set(input.objective.challengers.map((member) => member.trim()).filter(Boolean)));
-  const contributionSummary = summarizeContributionReviews(challengers, input.contributionReviews);
-  const resolutionRatios = input.contributionResolution?.ratios ?? input.contributionRatios ?? [];
-  const contributionRatios =
-    contributionSummary.status === "ready"
-      ? contributionSummary.ratios
-      : normalizeContributionRatios(resolutionRatios, challengers);
+  const resolutionRatios = input.contributionResolution?.ratios ?? input.contributionRatios;
+  const contributionRatios = resolutionRatios
+    ? normalizeContributionRatios(resolutionRatios, challengers)
+    : challengers.length === 1
+      ? [{ member: challengers[0]!, ratio: 1 }]
+      : null;
 
   if (!contributionRatios || contributionRatios.length === 0) {
     return null;

@@ -15,6 +15,7 @@ import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { fetchLocalSettlementSummary, submitLocalEncryptedContributionReview } from "../services/localSettlementClient";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
@@ -564,9 +565,17 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       reviewObjectiveLoot: async (objectiveId, input) => {
         try {
+          const objective = state.objectives.find((item) => item.id === objectiveId);
+          const localSummary = objective && objective.challengers.length > 1
+            ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
+            : null;
+          const settlementInput =
+            localSummary?.status === "ready" && localSummary.contributionResolution
+              ? { ...input, contributionResolution: localSummary.contributionResolution }
+              : input;
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
             method: "POST",
-            body: JSON.stringify(input),
+            body: JSON.stringify(settlementInput),
           });
           await refreshTaskManagementData();
           notify("战利品已验收结算");
@@ -579,16 +588,22 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       submitContributionReview: async (objectiveId, allocations) => {
         try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/contribution-reviews`, {
-            method: "POST",
-            body: JSON.stringify({ allocations }),
+          const objective = state.objectives.find((item) => item.id === objectiveId);
+          if (!objective || !currentUser) {
+            notify("匿名互评提交失败：目标或当前用户不可用");
+            return false;
+          }
+          await submitLocalEncryptedContributionReview({
+            allocations,
+            challengers: objective.challengers,
+            objectiveId,
+            objectiveTitle: objective.title,
+            reviewer: currentUser.name,
           });
-          await refreshTaskManagementData();
-          notify("匿名互评已提交");
+          notify("匿名互评已提交到本地结算服务");
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "匿名互评提交失败"));
-          void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
       },

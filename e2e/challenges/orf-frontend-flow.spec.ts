@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page, type Route, type TestInfo } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
+import type { LocalSettlementSummary } from "../../src/services/localSettlementClient";
 import type { BountyHallData, BountyHallItem, TaskManagementData } from "../../src/state/apiClient";
-import type { CommentThread, ContributionAllocation, Objective, ObjectiveContributionReview, ObjectiveLoot, OrfUser, PointLedgerEntry, Result, Task } from "../../src/types/orf";
+import type { CommentThread, Objective, ObjectiveLoot, OrfUser, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 const adminUser = initialOrfState.users.find((user) => user.role === "admin")!;
@@ -38,7 +39,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: data.objectives.map((item) => (item.id === nextObjective.id ? nextObjective : item)),
       results: data.results,
       objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: data.objectiveContributionReviews,
       pointLedger: data.pointLedger,
     });
   };
@@ -84,7 +84,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: data.objectives.filter((item) => item.challengers.includes(member)),
       results: data.results.filter((result) => data.objectives.some((objectiveItem) => objectiveItem.challengers.includes(member) && objectiveItem.id === result.objectiveId)),
       objectiveLoot: data.objectiveLoot.filter((loot) => data.objectives.some((objectiveItem) => objectiveItem.challengers.includes(member) && objectiveItem.id === loot.objectiveId)),
-      objectiveContributionReviews: data.objectiveContributionReviews.filter((review) => data.objectives.some((objectiveItem) => objectiveItem.challengers.includes(member) && objectiveItem.id === review.objectiveId)),
       pointLedger: data.pointLedger,
     });
   const bountiesForMember = (member: string) => {
@@ -110,7 +109,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: [{ ...current, resultIds: [created.id] }],
       results: [created],
       objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: data.objectiveContributionReviews,
       pointLedger: data.pointLedger,
     });
     return { json: { result: created } };
@@ -135,29 +133,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: [submitted],
       results: data.results,
       objectiveLoot: [loot],
-      objectiveContributionReviews: data.objectiveContributionReviews,
-      pointLedger: data.pointLedger,
-    });
-  };
-  const submitContributionReview = (reviewer: string, payload: unknown) => {
-    const input = payload as ContributionReviewPayload;
-    data = taskManagementData({
-      objectives: data.objectives,
-      results: data.results,
-      objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: [
-        ...data.objectiveContributionReviews,
-        contributionReviewFixture({
-          id: `review-ui-live-${reviewer.toLowerCase().replace(/\s+/g, "-")}`,
-          objectiveId: objective.id,
-          reviewer,
-          allocations: input.allocations ?? [
-            { member: memberUser.name, ratio: 1 },
-            { member: observerUser.name, ratio: 1 },
-          ],
-          submittedAt: acceleratedAt(),
-        }),
-      ],
       pointLedger: data.pointLedger,
     });
   };
@@ -173,7 +148,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: [settledObjective],
       results: data.results.map((result) => ({ ...result, acceptedResult: "completed" as const })),
       objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: data.objectiveContributionReviews,
       pointLedger: [
         pointLedgerFixture({ id: "ledger-ui-live-mia", objectiveId: objective.id, memberName: memberUser.name, points: 50, reason: "匿名互评贡献比例 50%" }),
         pointLedgerFixture({ id: "ledger-ui-live-ethan", objectiveId: objective.id, memberName: observerUser.name, points: 50, reason: "匿名互评贡献比例 50%" }),
@@ -212,7 +186,6 @@ test("real user launch flow links commander and challengers from publish to sett
     mineChallenges: () => dataForMember(memberUser.name),
     onApply: () => appendApplication(memberUser.name),
     onCreateResult: createResult,
-    onSubmitContributionReview: (payload) => submitContributionReview(memberUser.name, payload),
     onSubmitLoot: submitLoot,
     tasks: () => data,
   });
@@ -220,7 +193,6 @@ test("real user launch flow links commander and challengers from publish to sett
     bounties: () => bountiesForMember(observerUser.name),
     mineChallenges: () => dataForMember(observerUser.name),
     onApply: () => appendApplication(observerUser.name),
-    onSubmitContributionReview: (payload) => submitContributionReview(observerUser.name, payload),
     tasks: () => data,
   });
 
@@ -290,7 +262,7 @@ test("real user launch flow links commander and challengers from publish to sett
     await commanderPage.goto(`/objectives/${objective.id}/loot`);
     await expect(commanderPage.getByRole("heading", { name: "验收战利品" })).toBeVisible();
     await expect(commanderPage.getByText("匿名互评贡献结果")).toBeVisible();
-    await expect(commanderPage.getByText("50%")).toHaveCount(2);
+    await expect(commanderPage.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
     await commanderPage.getByLabel("验收说明").fill("验收通过，按匿名互评比例结算。");
     await commanderPage.getByRole("button", { name: "验收并结算" }).click();
     await expect(commanderPage).toHaveURL(/\/reports$/);
@@ -469,7 +441,6 @@ test.describe("ORF high-level audit coverage", () => {
         objectives: next.objectives ?? data.objectives,
         results: next.results ?? data.results,
         objectiveLoot: next.objectiveLoot ?? data.objectiveLoot,
-        objectiveContributionReviews: next.objectiveContributionReviews ?? data.objectiveContributionReviews,
         pointLedger: next.pointLedger ?? data.pointLedger,
       });
     };
@@ -483,7 +454,6 @@ test.describe("ORF high-level audit coverage", () => {
         objectives,
         results: data.results.filter((result) => objectiveIds.has(result.objectiveId)),
         objectiveLoot: data.objectiveLoot.filter((loot) => objectiveIds.has(loot.objectiveId)),
-        objectiveContributionReviews: data.objectiveContributionReviews.filter((review) => objectiveIds.has(review.objectiveId)),
         pointLedger: data.pointLedger,
       });
     };
@@ -570,24 +540,6 @@ test.describe("ORF high-level audit coverage", () => {
       }));
       rebuildData({ objectiveLoot: [...data.objectiveLoot.filter((item) => item.id !== loot.id), loot] });
     };
-    const submitContributionReview = (reviewer: string, payload: unknown) => {
-      const input = payload as ContributionReviewPayload;
-      rebuildData({
-        objectiveContributionReviews: [
-          ...data.objectiveContributionReviews,
-          contributionReviewFixture({
-            id: `review-ui-audit-${activeObjectiveId}-${reviewer.toLowerCase().replace(/\s+/g, "-")}`,
-            objectiveId: activeObjectiveId,
-            reviewer,
-            allocations: input.allocations ?? [
-              { member: memberUser.name, ratio: 1 },
-              { member: observerUser.name, ratio: 1 },
-            ],
-            submittedAt: acceleratedAt(),
-          }),
-        ],
-      });
-    };
     const settleLoot = () => {
       const round = currentRound();
       updateObjective(activeObjectiveId, (objective) => ({
@@ -637,7 +589,6 @@ test.describe("ORF high-level audit coverage", () => {
       mineChallenges: () => dataForMember(memberUser.name),
       onApply: () => appendApplication(activeObjectiveId, memberUser.name),
       onCreateResult: createResult,
-      onSubmitContributionReview: (payload) => submitContributionReview(memberUser.name, payload),
       onSubmitLoot: submitLoot,
       tasks: () => data,
     });
@@ -645,7 +596,6 @@ test.describe("ORF high-level audit coverage", () => {
       bounties: () => bountiesForMember(observerUser.name),
       mineChallenges: () => dataForMember(observerUser.name),
       onApply: () => appendApplication(activeObjectiveId, observerUser.name),
-      onSubmitContributionReview: (payload) => submitContributionReview(observerUser.name, payload),
       tasks: () => data,
     });
 
@@ -712,7 +662,7 @@ test.describe("ORF high-level audit coverage", () => {
       activeObjectiveId = round.id;
       await commanderPage.goto(`/objectives/${round.id}/loot`);
       await attachAuditScreenshot(commanderPage, testInfo, `audit-multi-round-${index}-review`);
-      await expect(commanderPage.getByText("50%")).toHaveCount(2);
+      await expect(commanderPage.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
       await commanderPage.getByLabel("验收说明").fill(`${round.title} 验收通过。`);
       await commanderPage.getByRole("button", { name: "验收并结算" }).click();
       await expect(commanderPage).toHaveURL(/\/reports$/);
@@ -2237,44 +2187,41 @@ test.describe("ORF frontend guard coverage", () => {
     await context.close();
   });
 
-  test("review form uses peer review contribution results", async ({ page }) => {
+  test("review form keeps anonymous contribution data behind local settlement service", async ({ page }) => {
     const objective = submittedObjectiveFixture("obj-ui-multi-review-inputs", "前端测试 多人验收互评目标", [memberUser.name, observerUser.name], ["res-ui-multi-review-inputs"]);
     const result = resultFixture({ id: "res-ui-multi-review-inputs", objectiveId: objective.id, title: "前端测试 多人验收互评指标" });
     const loot = objectiveLootFixture({ id: "loot-ui-multi-review-inputs", objectiveId: objective.id, submittedBy: memberUser.name, body: "多人验收", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "evidence" }] });
-    const contributionReviews = [
-      contributionReviewFixture({ id: "review-ui-mia", objectiveId: objective.id, reviewer: memberUser.name, allocations: [{ member: memberUser.name, ratio: 1 }, { member: observerUser.name, ratio: 1 }] }),
-      contributionReviewFixture({ id: "review-ui-ethan", objectiveId: objective.id, reviewer: observerUser.name, allocations: [{ member: memberUser.name, ratio: 1 }, { member: observerUser.name, ratio: 1 }] }),
-    ];
-    const data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot], objectiveContributionReviews: contributionReviews });
+    const data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot] });
 
     await mockOrfApp(page, adminUser, data, { tasks: () => data });
 
     await page.goto(`/objectives/${objective.id}/loot`);
     await expect(page.getByText("匿名互评贡献结果")).toBeVisible();
-    await expect(page.getByText(memberUser.name)).toBeVisible();
-    await expect(page.getByText(observerUser.name)).toBeVisible();
-    await expect(page.getByText("50%")).toHaveCount(2);
-    await expect(page.getByLabel(`${memberUser.name} 处理后贡献比例`)).toHaveCount(0);
+    await expect(page.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
+    await expect(page.getByLabel(`${memberUser.name} 处理后贡献百分比`)).toBeVisible();
+    await expect(page.getByLabel(`${observerUser.name} 处理后贡献百分比`)).toBeVisible();
   });
 
   test("multi challenger settlement updates leaderboard by contribution ratios", async ({ page }) => {
     const objective = submittedObjectiveFixture("obj-ui-multi-settlement", "前端测试 多人结算目标", [memberUser.name, observerUser.name], ["res-ui-multi-settlement"]);
     const result = resultFixture({ id: "res-ui-multi-settlement", objectiveId: objective.id, title: "前端测试 多人结算指标" });
     const loot = objectiveLootFixture({ id: "loot-ui-multi-settlement", objectiveId: objective.id, submittedBy: memberUser.name, body: "多人结算", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "evidence" }] });
-    const contributionReviews = [
-      contributionReviewFixture({ id: "review-ui-settlement-mia", objectiveId: objective.id, reviewer: memberUser.name, allocations: [{ member: memberUser.name, ratio: 3 }, { member: observerUser.name, ratio: 1 }] }),
-      contributionReviewFixture({ id: "review-ui-settlement-ethan", objectiveId: objective.id, reviewer: observerUser.name, allocations: [{ member: memberUser.name, ratio: 3 }, { member: observerUser.name, ratio: 1 }] }),
-    ];
-    let data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot], objectiveContributionReviews: contributionReviews });
+    const localSummary = localContributionSummaryFixture(objective.id, [
+      { member: memberUser.name, ratio: 0.75 },
+      { member: observerUser.name, ratio: 0.25 },
+    ]);
+    let reviewPayload: unknown = null;
+    let data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot] });
 
     await mockOrfApp(page, adminUser, data, {
-      onReviewLoot: async () => {
+      localContributionSummary: () => localSummary,
+      onReviewLoot: async (payload) => {
+        reviewPayload = payload;
         const settled = { ...objective, flowStatus: "settled" as const, acceptedResult: "completed" as const, objectiveSettlementPoints: 100 };
         data = taskManagementData({
           objectives: [settled],
           results: [{ ...result, acceptedResult: "completed" as const }],
           objectiveLoot: [loot],
-          objectiveContributionReviews: contributionReviews,
           pointLedger: [
             pointLedgerFixture({ id: "ledger-ui-multi-mia", objectiveId: objective.id, memberName: memberUser.name, points: 75, reason: "匿名互评贡献比例 75%" }),
             pointLedgerFixture({ id: "ledger-ui-multi-ethan", objectiveId: objective.id, memberName: observerUser.name, points: 25, reason: "匿名互评贡献比例 25%" }),
@@ -2285,12 +2232,11 @@ test.describe("ORF frontend guard coverage", () => {
     });
 
     await page.goto(`/objectives/${objective.id}/loot`);
-    await expect(page.getByText("75%")).toBeVisible();
-    await expect(page.getByText("25%")).toBeVisible();
-    await expect(page.getByLabel(`${memberUser.name} 处理后贡献比例`)).toHaveCount(0);
+    await expect(page.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
     await page.getByRole("button", { name: "验收并结算" }).click();
 
     await expect(page).toHaveURL(/\/reports$/);
+    expect(reviewPayload).toMatchObject({ contributionResolution: localSummary.contributionResolution });
     await expect(page.getByLabel("75 积分")).toBeVisible();
     await expect(page.getByLabel("25 积分")).toBeVisible();
   });
@@ -2307,7 +2253,7 @@ test.describe("ORF frontend guard coverage", () => {
     await expect(page.getByText(memberUser.name)).toBeVisible();
     await expect(page.getByText("100%")).toBeVisible();
     await expect(page.getByText(observerUser.name)).toHaveCount(0);
-    await expect(page.getByLabel(`${observerUser.name} 处理后贡献比例`)).toHaveCount(0);
+    await expect(page.getByLabel(`${observerUser.name} 处理后贡献百分比`)).toHaveCount(0);
   });
 
   test("loot deep link opens submit form for frozen challenger", async ({ page }) => {
@@ -2879,6 +2825,41 @@ async function emitObjectiveApplicationInvalidation(page: Page, objectiveId: str
   );
 }
 
+const localSettlementPublicKey = {
+  algorithm: "RSA-OAEP-256",
+  keyId: "e2e-local-settlement",
+  publicKeyJwk: {
+    alg: "RSA-OAEP-256",
+    e: "AQAB",
+    ext: true,
+    key_ops: ["encrypt"],
+    kty: "RSA",
+    n: "i45jM-b7LfXjm6EZpgZngqOTFzCgIrev-C6mdxC1RgjW44yxTCFPPVYojRRQ-bI73pxUzIzUAuKouXlPp7OHQDlIVk_2pHED5QEs6XVkcVBbXhnC3tVLcHJUgoPiHaKnblFIIbNe2uE-myibBIFRHuvSGOLfXsHBUhZVb12NTZKgAy1pJo22YyOZr_M67SbsY1r68GEt6SXGh2EbW8QERp0l1F7V_x8_qKcEQz6u4Aw-9K_s5CfHBy9TZ66893MV1um07sHdSblSahHQMbgbUbqCcIx6RNGNR_JY6viG2xHd_wFQd_SbGSZC50RACQwPpwf8sqmCJokXOYQI3oAf_w",
+  },
+};
+
+function localContributionSummaryFixture(objectiveId: string, ratios: LocalSettlementSummary["ratios"]): LocalSettlementSummary {
+  return {
+    contributionResolution: { ratios, reason: "本地匿名互评结算汇总" },
+    missingReviewers: [],
+    objectiveId,
+    ratios,
+    reviewers: ratios.map((item) => item.member),
+    status: "ready",
+  };
+}
+
+function localContributionSummaryFromRoute(route: Route): LocalSettlementSummary {
+  const body = route.request().postDataJSON() as { challengers?: string[] };
+  const challengers = Array.isArray(body.challengers) ? body.challengers : [];
+  const ratio = challengers.length > 0 ? Number((1 / challengers.length).toFixed(6)) : 0;
+  const objectiveId = decodeURIComponent(new URL(route.request().url()).pathname.split("/")[2] ?? "");
+  return localContributionSummaryFixture(
+    objectiveId,
+    challengers.map((member) => ({ member, ratio })),
+  );
+}
+
 async function mockOrfApp(
   page: Page,
   user: OrfUser,
@@ -2899,6 +2880,7 @@ async function mockOrfApp(
     onReviewLoot?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onSubmitContributionReview?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onSubmitLoot?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
+    localContributionSummary?: MockRouteSource<LocalSettlementSummary>;
     tasks?: () => MockRouteResponse<TaskManagementData> | Promise<MockRouteResponse<TaskManagementData>>;
   } = {},
 ) {
@@ -3007,13 +2989,24 @@ async function mockOrfApp(
 
     await fulfillMutation(route, options.onSubmitLoot?.(route.request().postDataJSON()));
   });
-  await page.route("**/api/objectives/*/contribution-reviews", async (route) => {
+  await page.route("http://127.0.0.1:8799/public-key", async (route) => {
+    await route.fulfill({ json: localSettlementPublicKey });
+  });
+  await page.route("http://127.0.0.1:8799/reviews", async (route) => {
     if (route.request().method() !== "POST") {
       await route.fallback();
       return;
     }
 
     await fulfillMutation(route, options.onSubmitContributionReview?.(route.request().postDataJSON()));
+  });
+  await page.route("http://127.0.0.1:8799/objectives/*/summary", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+
+    await fulfillData(route, resolveRouteSource(options.localContributionSummary) ?? localContributionSummaryFromRoute(route));
   });
   await page.route("**/api/objectives/*/review", async (route) => {
     if (route.request().method() !== "POST") {
@@ -3031,7 +3024,6 @@ type MockRouteSource<T> = MockRouteResponse<T> | (() => MockRouteResponse<T> | P
 type ResultCreatePayload = { definer?: string; metricName?: string; objectiveId?: string; source?: string; title?: string };
 type TaskCreatePayload = { assignee?: string; linkedObjectiveId?: string; priority?: Task["priority"]; title?: string };
 type LootSubmitPayload = { body?: string; resultClaims?: ObjectiveLoot["resultClaims"]; selfTestReportBody?: string | null };
-type ContributionReviewPayload = { allocations?: ContributionAllocation[] };
 
 async function fulfillMutation(route: Route, result: Promise<void | MockMutationResult> | void | MockMutationResult) {
   const resolved = await result;
@@ -3073,7 +3065,6 @@ function taskManagementData(input: {
   tasks?: Task[];
   comments?: CommentThread[];
   objectiveLoot?: ObjectiveLoot[];
-  objectiveContributionReviews?: ObjectiveContributionReview[];
   pointLedger?: PointLedgerEntry[];
 }): TaskManagementData {
   return {
@@ -3084,7 +3075,6 @@ function taskManagementData(input: {
     feedback: [],
     comments: input.comments ?? [],
     objectiveLoot: input.objectiveLoot ?? [],
-    objectiveContributionReviews: input.objectiveContributionReviews ?? [],
     pointLedger: input.pointLedger ?? [],
     permissionRules: initialOrfState.permissionRules,
   };
@@ -3161,19 +3151,6 @@ function objectiveLootFixture(overrides: Partial<ObjectiveLoot> & Pick<Objective
     selfTestReportUrl: null,
     selfTestReportBody: null,
     submittedAt: "2026-05-18T11:20:00.000Z",
-    ...overrides,
-  };
-}
-
-function contributionReviewFixture(
-  overrides: Partial<ObjectiveContributionReview> & Pick<ObjectiveContributionReview, "id" | "objectiveId" | "reviewer" | "allocations">,
-): ObjectiveContributionReview {
-  return {
-    id: overrides.id,
-    objectiveId: overrides.objectiveId,
-    reviewer: overrides.reviewer,
-    allocations: overrides.allocations,
-    submittedAt: "2026-05-18T11:30:00.000Z",
     ...overrides,
   };
 }

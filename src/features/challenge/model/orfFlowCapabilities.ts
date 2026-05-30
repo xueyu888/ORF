@@ -13,7 +13,6 @@ import {
 } from "../../../domain/orfLifecycle";
 import type {
   Objective,
-  ObjectiveContributionReview,
   ObjectiveTrialReview,
   OrfUser,
   PermissionRule,
@@ -143,25 +142,6 @@ export function canSubmitObjectivePeerReview(
   );
 }
 
-export function hasSubmittedObjectivePeerReview({
-  objectiveId,
-  currentUser,
-  contributionReviews,
-}: {
-  objectiveId: string;
-  currentUser: OrfUser | null;
-  contributionReviews: ObjectiveContributionReview[];
-}): boolean {
-  return Boolean(
-    currentUser &&
-      contributionReviews.some(
-        (review) =>
-          review.objectiveId === objectiveId &&
-          review.reviewer === currentUser.name,
-      ),
-  );
-}
-
 export function canReviewObjectiveLoot(
   objective: Objective | undefined,
   currentUser: OrfUser | null,
@@ -174,12 +154,10 @@ export function canReviewObjectiveLoot(
 export function workbenchActionForObjective({
   objective,
   currentUser,
-  contributionReviews,
   trialReviews = [],
 }: {
   objective: Objective;
   currentUser: OrfUser | null;
-  contributionReviews: ObjectiveContributionReview[];
   trialReviews?: ObjectiveTrialReview[];
 }): WorkbenchAction | null {
   const trialReview = latestObjectiveTrialReview(objective.id, trialReviews);
@@ -210,13 +188,7 @@ export function workbenchActionForObjective({
   if (canSubmitObjectivePeerReview(objective, currentUser)) {
     return {
       kind: "submitPeerReview",
-      label: hasSubmittedObjectivePeerReview({
-        objectiveId: objective.id,
-        currentUser,
-        contributionReviews,
-      })
-        ? "更新匿名互评"
-        : "提交匿名互评",
+      label: "提交匿名互评",
       to: `/objectives/${objective.id}/loot`,
     };
   }

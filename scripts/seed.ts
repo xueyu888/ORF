@@ -7,7 +7,6 @@ import {
   feedback,
   feedbackCauseCategories,
   objectives,
-  objectiveContributionReviews,
   objectiveLoot,
   pointLedger,
   results,
@@ -68,8 +67,6 @@ function collectUserNames() {
       ...initialOrfState.feedback.map((item) => item.owner),
       ...initialOrfState.evidence.map((item) => item.owner),
       ...initialOrfState.objectiveLoot.map((item) => item.submittedBy),
-      ...initialOrfState.objectiveContributionReviews.map((item) => item.reviewer),
-      ...initialOrfState.objectiveContributionReviews.flatMap((item) => item.allocations.map((allocation) => allocation.member)),
       ...initialOrfState.pointLedger.map((item) => item.memberName),
       ...initialOrfState.comments.map((item) => item.createdBy),
       ...initialOrfState.comments.flatMap((thread) => thread.messages.map((message) => message.author)),
@@ -213,19 +210,6 @@ async function seed() {
           selfTestReportUrl: loot.selfTestReportUrl ?? null,
           selfTestReportBody: loot.selfTestReportBody ?? null,
           submittedAt: loot.submittedAt,
-        })),
-      );
-    }
-
-    if (initialOrfState.objectiveContributionReviews.length > 0) {
-      await tx.insert(objectiveContributionReviews).values(
-        initialOrfState.objectiveContributionReviews.map((review) => ({
-          id: seedId(review.id)!,
-          teamId: team.id,
-          objectiveId: seedId(review.objectiveId)!,
-          reviewer: review.reviewer,
-          allocations: review.allocations,
-          submittedAt: review.submittedAt,
         })),
       );
     }

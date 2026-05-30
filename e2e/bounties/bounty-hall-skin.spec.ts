@@ -68,7 +68,6 @@ const taskPageData: TaskManagementData = {
   feedback: initialOrfState.feedback,
   comments: initialOrfState.comments,
   objectiveLoot: initialOrfState.objectiveLoot,
-  objectiveContributionReviews: initialOrfState.objectiveContributionReviews,
   pointLedger: initialOrfState.pointLedger,
   permissionRules: initialOrfState.permissionRules,
 };

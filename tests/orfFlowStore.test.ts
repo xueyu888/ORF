@@ -27,7 +27,6 @@ test("load starts from empty business data instead of bundled seed records", () 
   assert.deepEqual(state.feedback, []);
   assert.deepEqual(state.comments, []);
   assert.deepEqual(state.objectiveLoot, []);
-  assert.deepEqual(state.objectiveContributionReviews, []);
   assert.deepEqual(state.pointLedger, []);
   assert.ok(state.users.length > 0);
 });
@@ -167,7 +166,6 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
     scenarios: [scenario({ id: "scenario-delete", linkedObjectiveId: "obj-delete" })],
     failureSamples: [failureSample({ id: "sample-delete", linkedResultId: "res-delete" })],
     objectiveLoot: [{ id: "loot-delete", objectiveId: "obj-delete", submittedBy: "Kai Wang", body: "done", resultClaims: [], submittedAt: date }],
-    objectiveContributionReviews: [{ id: "review-delete", objectiveId: "obj-delete", reviewer: "Kai Wang", allocations: [{ member: "Kai Wang", ratio: 1 }], submittedAt: date }],
     pointLedger: [{ id: "points-delete", objectiveId: "obj-delete", memberName: "Kai Wang", points: 10, reason: "settlement", createdAt: date }],
     comments: [
       comment("comment-objective", "objective", "obj-delete"),
@@ -190,7 +188,6 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
   assert.deepEqual(next.scenarios, []);
   assert.deepEqual(next.failureSamples, []);
   assert.deepEqual(next.objectiveLoot, []);
-  assert.deepEqual(next.objectiveContributionReviews, []);
   assert.deepEqual(next.pointLedger, []);
   assert.deepEqual(next.comments.map((item) => item.id), ["comment-keep"]);
 });
@@ -373,7 +370,6 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     failureSamples: [],
     comments: [],
     objectiveLoot: [],
-    objectiveContributionReviews: [],
     pointLedger: [],
     causeCategories: [],
     rules: {

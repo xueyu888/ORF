@@ -52,7 +52,6 @@ import {
   reviewObjectiveLoot,
   resolveObjectiveIdForWorkItem,
   setTaskCompletion,
-  submitObjectiveContributionReview,
   submitObjectiveLoot,
   submitObjectiveTrialReview,
   updateChecklistItemLabel,
@@ -210,10 +209,6 @@ const reviewLootBodySchema = z.object({
   }).optional(),
   reason: z.string().trim().optional(),
 });
-const contributionReviewBodySchema = z.object({
-  allocations: z.array(contributionAllocationSchema).min(1),
-});
-
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
@@ -343,26 +338,6 @@ function sendTrialReviewOutcome(
   }
 
   return { trialReview: outcome.trialReview };
-}
-
-function sendContributionReviewOutcome(reply: FastifyReply, outcome: Awaited<ReturnType<typeof submitObjectiveContributionReview>>) {
-  if (outcome.status === "notFound") {
-    return reply.code(404).send({ error: "Objective not found" });
-  }
-
-  if (outcome.status === "forbidden") {
-    return reply.code(403).send({ error: "Only challengers can submit contribution reviews" });
-  }
-
-  if (outcome.status === "invalid") {
-    return reply.code(400).send({ error: "Contribution review is incomplete" });
-  }
-
-  if (outcome.status === "closed") {
-    return reply.code(409).send({ error: "Objective must be submitted before contribution review" });
-  }
-
-  return { review: outcome.review };
 }
 
 export async function buildServer(options: { logger?: boolean; registerOptionalIntegrations?: boolean } = {}) {
@@ -584,6 +559,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
+    const { user } = context;
     if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
@@ -751,8 +727,8 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    const { user, scope } = context;
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
+    const { user } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     if (user.role !== "member" || user.status !== "active") {
@@ -790,8 +766,8 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    const { user, scope } = context;
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
+    const { user } = context;
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
     if (user.role !== "member" || user.status !== "active") {
@@ -873,13 +849,11 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     if (!context) {
       return reply;
     }
-    const { user, scope } = context;
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, scope, "Objective not found"))) {
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
 
-    const body = contributionReviewBodySchema.parse(request.body);
-    return sendContributionReviewOutcome(reply, await submitObjectiveContributionReview(params.objectiveId, body, user));
+    return reply.code(410).send({ error: "Anonymous contribution reviews must be submitted to the local settlement service" });
   });
 
   app.patch("/api/tasks/:taskId", async (request, reply) => {

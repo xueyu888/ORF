@@ -18,7 +18,6 @@ import type {
   Objective,
   ObjectiveAcceptedResult,
   ObjectiveLoot,
-  ObjectiveContributionReview,
   ObjectiveTrialReview,
   ObjectiveTrialReviewStatus,
   OrfState,
@@ -32,9 +31,6 @@ import type {
   UncertaintyLevel,
   UserRole,
 } from "../../src/types/orf";
-import {
-  normalizeContributionAllocations,
-} from "../../src/features/challenge/model/contributionReview";
 import {
   planObjectiveSettlement,
   uncertaintyScoreFor,
@@ -51,7 +47,6 @@ import {
   canRecruitObjectiveChallengersByFlow,
   canReviewObjectiveChallengeApplications,
   canReviewObjectiveLootByFlow,
-  canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
   isObjectiveChallengeDiscoverableByFlow,
   isObjectiveChallengeEntryClosedByFlow,
@@ -73,7 +68,6 @@ import {
   feedbackCauseCategories,
   objectives,
   objectiveLoot,
-  objectiveContributionReviews,
   objectiveTrialReviews,
   pointLedger,
   results,
@@ -104,7 +98,7 @@ import { validateImageUpload } from "../storage/images";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveTrialReviews" | "objectiveContributionReviews" | "pointLedger" | "permissionRules"
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveTrialReviews" | "pointLedger" | "permissionRules"
 >;
 
 export type TaskManagementDataScope = {
@@ -656,9 +650,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const objectiveTrialReviewRows = storageScopeId
     ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
     : await db.select().from(objectiveTrialReviews);
-  const objectiveContributionReviewRows = storageScopeId
-    ? await db.select().from(objectiveContributionReviews).where(eq(objectiveContributionReviews.teamId, storageScopeId))
-    : await db.select().from(objectiveContributionReviews);
   const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
   const scopeRows = storageScopeId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)) : await db.select({ id: teams.id }).from(teams);
   const resultIds = resultRows.map((result) => result.id);
@@ -859,15 +850,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       reviewedAt: item.reviewedAt,
       requestedAt: item.requestedAt,
     }));
-  const objectiveContributionReviewItems: ObjectiveContributionReview[] = objectiveContributionReviewRows
-    .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
-    .map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      reviewer: item.reviewer,
-      allocations: item.allocations,
-      submittedAt: item.submittedAt,
-    }));
   const pointLedgerItems: PointLedgerEntry[] = pointLedgerRows
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map((item) => ({
@@ -902,7 +884,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
     objectiveTrialReviews: objectiveTrialReviewItems,
-    objectiveContributionReviews: objectiveContributionReviewItems,
     pointLedger: pointLedgerItems,
     permissionRules,
   };
@@ -1080,8 +1061,7 @@ export async function getMyChallengesData(member: string, includeAll = false, sc
     comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
-    objectiveContributionReviews: data.objectiveContributionReviews.filter((item) => objectiveIds.has(item.objectiveId)),
-    pointLedger: data.pointLedger.filter((item) => objectiveIds.has(item.objectiveId)),
+    pointLedger: data.pointLedger,
     permissionRules: data.permissionRules,
   };
 }
@@ -2922,13 +2902,6 @@ export type ObjectiveLootMutationOutcome =
   | { status: "invalid" }
   | { status: "closed" };
 
-export type ObjectiveContributionReviewMutationOutcome =
-  | { status: "ok"; review: ObjectiveContributionReview }
-  | { status: "notFound" }
-  | { status: "forbidden" }
-  | { status: "invalid" }
-  | { status: "closed" };
-
 export type ObjectiveTrialReviewMutationOutcome =
   | { status: "ok"; trialReview: ObjectiveTrialReview }
   | { status: "notFound" }
@@ -3184,54 +3157,6 @@ export async function reviewObjectiveTrialReview(
   return trialReview ? { status: "ok", trialReview } : { status: "notFound" };
 }
 
-export async function submitObjectiveContributionReview(
-  objectiveId: string,
-  input: { allocations: ContributionAllocation[] },
-  actor: Pick<CommentActor, "id" | "name" | "role">,
-): Promise<ObjectiveContributionReviewMutationOutcome> {
-  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
-  if (!objective) {
-    return { status: "notFound" };
-  }
-
-  if (!canSubmitObjectiveContributionReviewByFlow(objective)) {
-    return { status: "closed" };
-  }
-
-  const challengers = uniqueMembers(objective.challengers ?? []);
-  if (actor.role !== "member" || !challengers.includes(actor.name)) {
-    return { status: "forbidden" };
-  }
-
-  const allocations = normalizeContributionAllocations(input.allocations, challengers);
-  if (allocations.length !== challengers.length) {
-    return { status: "invalid" };
-  }
-
-  const reviewId = makeId("contribution-review");
-  const submittedAt = nowIso();
-  await db.insert(objectiveContributionReviews).values({
-    id: reviewId,
-    teamId: objective.teamId,
-    objectiveId: objective.id,
-    reviewer: actor.name,
-    allocations,
-    submittedAt,
-  });
-
-  publishOrfDataInvalidation({
-    actorUserId: actor.id,
-    models: ["taskManagement"],
-    reason: "objective.loot.changed",
-    target: { id: objective.id, type: "objective" },
-    teamId: objective.teamId,
-  });
-
-  const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
-  const review = data.objectiveContributionReviews.find((item) => item.id === reviewId);
-  return review ? { status: "ok", review } : { status: "notFound" };
-}
-
 export interface ReviewObjectiveLootInput {
   lootId?: string;
   acceptedResult?: ObjectiveAcceptedResult;
@@ -3260,10 +3185,6 @@ export async function reviewObjectiveLoot(
 
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
   const challengers = uniqueMembers(objective.challengers ?? []);
-  const contributionReviews = await db
-    .select()
-    .from(objectiveContributionReviews)
-    .where(eq(objectiveContributionReviews.objectiveId, objectiveId));
   const settlementPlan = planObjectiveSettlement({
     objective: { ...objective, challengers },
     results: resultRows.map((result) => ({
@@ -3274,13 +3195,6 @@ export async function reviewObjectiveLoot(
     loot,
     resultReviews: input.resultReviews,
     acceptedResult: input.acceptedResult,
-    contributionReviews: contributionReviews.map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      reviewer: item.reviewer,
-      allocations: item.allocations,
-      submittedAt: item.submittedAt,
-    })),
     contributionResolution: input.contributionResolution,
     contributionRatios: input.contributionRatios,
   });

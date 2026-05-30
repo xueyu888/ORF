@@ -76,11 +76,6 @@ export function summarizeContributionReviews(
   };
 }
 
-export function normalizeContributionAllocations(allocations: ContributionAllocation[], challengers: string[]) {
-  const result = validateContributionAllocationInput(allocations, challengers);
-  return result.status === "ok" ? result.allocations : [];
-}
-
 export function equalRatios(challengers: string[]): ContributionAllocation[] {
   const members = uniqueMembers(challengers);
   if (members.length === 0) return [];

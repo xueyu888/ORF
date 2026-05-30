@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field } from "../components/ui";
-import { summarizeContributionReviews } from "../features/challenge/model/contributionReview";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
 import {
@@ -100,10 +99,8 @@ export function LootSubmitPage() {
   const canRequestTrial = canRequestObjectiveTrialReview(objective, currentUser, latestTrialReview);
   const canReviewTrial = canReviewObjectiveTrialReview(objective, currentUser, latestTrialReview);
   const canPeerReview = canSubmitObjectiveContributionReviewByFlow(objective) && isChallenger;
-  const contributionReviews = state.objectiveContributionReviews.filter((item) => item.objectiveId === objective.id);
-  const contributionSummary = summarizeContributionReviews(objective.challengers, contributionReviews);
-  const needsContributionResolution = contributionSummary.status !== "ready";
-  const hasCurrentPeerReview = contributionReviews.some((item) => item.reviewer === currentMember);
+  const usesLocalContributionSettlement = objective.challengers.length > 1;
+  const needsContributionResolution = usesLocalContributionSettlement;
   const objectiveReviewResult = objectiveAcceptedResultFromReviews(results.map((result) => resultReviews[result.id] ?? "completed"));
 
   const buildLootSubmission = (): { body: string; resultClaims: LootResultClaim[] } | null => {
@@ -210,7 +207,9 @@ export function LootSubmitPage() {
       return;
     }
 
-    const resolutionResult = needsContributionResolution ? percentInputsToAllocations(resolutionInputs, objective.challengers) : null;
+    const manualResolutionReason = resolutionReason.trim();
+    const shouldUseManualResolution = needsContributionResolution && Boolean(manualResolutionReason);
+    const resolutionResult = shouldUseManualResolution ? percentInputsToAllocations(resolutionInputs, objective.challengers) : null;
     if (resolutionResult?.status === "invalid") {
       setError(resolutionResult.error);
       return;
@@ -219,7 +218,7 @@ export function LootSubmitPage() {
       resolutionResult?.status === "ok"
         ? {
             ratios: resolutionResult.allocations,
-            reason: resolutionReason.trim() || "指挥官处理匿名互评分歧",
+            reason: manualResolutionReason,
           }
         : undefined;
 
@@ -336,11 +335,11 @@ export function LootSubmitPage() {
               </div>
               <div className="grid gap-3">
                 <div className="text-sm font-semibold orf-text-primary">匿名互评贡献结果</div>
-                <ContributionSummaryView summary={contributionSummary} />
+                {usesLocalContributionSettlement ? <LocalSettlementSummaryView /> : <SingleContributionSummaryView member={objective.challengers[0] ?? currentMember} />}
                 {needsContributionResolution && (
                   <div className="grid gap-3 rounded-md border orf-border p-3">
                     <div className="text-sm font-semibold orf-text-primary">处理分歧</div>
-                    <div className="text-xs orf-text-secondary">填写最终贡献百分比，范围 0-100，所有挑战者合计必须为 100%。</div>
+                    <div className="text-xs orf-text-secondary">默认优先使用本地结算服务的匿名互评结果；只有需要手动处理时，填写最终贡献百分比和说明。</div>
                     <ContributionPercentTotal total={percentInputTotal(resolutionInputs, objective.challengers)} />
                     {objective.challengers.map((member) => (
                       <Field key={member} label={`${member} 处理后贡献百分比`}>
@@ -407,7 +406,7 @@ export function LootSubmitPage() {
               }}
             >
               <div className="text-sm orf-text-secondary">
-                {hasCurrentPeerReview ? "你已提交过匿名互评；再次提交会作为最新评价参与汇总。" : "评价当前目标挑战者的贡献比例，系统会匿名汇总后用于结算。"}
+                评价当前目标挑战者的贡献比例，提交后会加密发送到本地结算服务；再次提交会作为最新评价参与汇总。
               </div>
               <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary">
                 给每位目标挑战者填写 0-100 的贡献百分比，合计必须为 100%。需要包含自己；自评只用于一致性核查，结算得分只汇总其他挑战者对该成员的评价。
@@ -477,40 +476,21 @@ export function LootSubmitPage() {
   );
 }
 
-function ContributionSummaryView({ summary }: { summary: ReturnType<typeof summarizeContributionReviews> }) {
-  if (summary.status === "missing") {
-    return (
-      <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
-        <div className="orf-text-secondary">等待匿名互评：{summary.missingReviewers.join("、") || "未收到评价"}</div>
-      </div>
-    );
-  }
-
-  if (summary.status === "conflict") {
-    return (
-      <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
-        <div className="orf-warning-text">匿名互评存在分歧，需指挥官处理后结算。</div>
-        <RatioList ratios={summary.ratios} />
-      </div>
-    );
-  }
-
+function LocalSettlementSummaryView() {
   return (
     <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
-      <RatioList ratios={summary.ratios} />
+      <div className="orf-text-secondary">验收时从本地结算服务读取匿名互评汇总。</div>
     </div>
   );
 }
 
-function RatioList({ ratios }: { ratios: ContributionAllocation[] }) {
+function SingleContributionSummaryView({ member }: { member: string }) {
   return (
-    <div className="grid gap-1">
-      {ratios.map((item) => (
-        <div key={item.member} className="flex justify-between gap-3">
-          <span className="orf-text-primary">{item.member}</span>
-          <span className="orf-text-secondary">{formatPercent(item.ratio)}</span>
-        </div>
-      ))}
+    <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
+      <div className="flex justify-between gap-3">
+        <span className="orf-text-primary">{member}</span>
+        <span className="orf-text-secondary">100%</span>
+      </div>
     </div>
   );
 }
@@ -583,10 +563,6 @@ function objectiveReviewResultLabel(value: ReturnType<typeof objectiveAcceptedRe
 
 function lootClaimLabel(value: LootResultClaimStatus) {
   return lootClaimOptions.find((option) => option.value === value)?.label ?? value;
-}
-
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
 }
 
 function formatInputPercent(value: number) {

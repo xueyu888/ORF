@@ -133,7 +133,6 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     results,
     objectiveLoot: state.objectiveLoot ?? [],
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
-    objectiveContributionReviews: state.objectiveContributionReviews ?? [],
     pointLedger: state.pointLedger ?? [],
   };
 }
@@ -1568,28 +1567,6 @@ const legacyInitialOrfState: LegacyInitialState = {
     },
   ],
   objectiveTrialReviews: [],
-  objectiveContributionReviews: [
-    {
-      id: "contribution-review-demo-mia",
-      objectiveId: "obj-demo-submitted-peer-review",
-      reviewer: "Mia Zhang",
-      allocations: [
-        { member: "Mia Zhang", ratio: 0.55 },
-        { member: "Ethan Liu", ratio: 0.45 },
-      ],
-      submittedAt: "2026-05-17T16:00:00.000Z",
-    },
-    {
-      id: "contribution-review-demo-ethan",
-      objectiveId: "obj-demo-submitted-peer-review",
-      reviewer: "Ethan Liu",
-      allocations: [
-        { member: "Mia Zhang", ratio: 0.52 },
-        { member: "Ethan Liu", ratio: 0.48 },
-      ],
-      submittedAt: "2026-05-17T16:10:00.000Z",
-    },
-  ],
   pointLedger: [
     {
       id: "ledger-demo-routing-kai",
