@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import type { OperatorRegistry, StateCaseRuntime, StepParams } from "../../_framework/types";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
@@ -17,9 +17,6 @@ import {
   deletePeerReviewLoot,
   lootPagePath,
   peerReviewAbsent,
-  peerReviewAllocationPresent,
-  peerReviewFromResponse,
-  peerReviewPresent,
   peerReviewTargetFromObjective,
   preparePeerReviewTargetForReview,
   targetChallengerPresent,
@@ -74,23 +71,6 @@ export const memberSubmitPeerReviewOperators = {
       await expect.poll(() => peerReviewAbsent(optionalPeerReviewTarget(params, "target"), requiredString(params, "reviewer"))).toBe(true);
     },
 
-    present: async ({ params }) => {
-      await expect.poll(() => peerReviewPresent(requiredPeerReviewTarget(params, "target"), requiredString(params, "reviewer"))).toBe(true);
-    },
-
-    allocation_present: async ({ params }) => {
-      await expect
-        .poll(() =>
-          peerReviewAllocationPresent(
-            requiredPeerReviewTarget(params, "target"),
-            requiredString(params, "reviewer"),
-            requiredString(params, "memberName"),
-            requiredRatio(params, "ratio"),
-          ),
-        )
-        .toBe(true);
-    },
-
     delete: async ({ params }) => {
       await deletePeerReview(optionalPeerReviewTarget(params, "target"), requiredString(params, "reviewer"), optionalSubmittedPeerReview(params, "review"));
     },
@@ -109,10 +89,10 @@ export const memberSubmitPeerReviewOperators = {
     },
 
     submit: async ({ ctx, runtime, params }) => {
-      const target = requiredPeerReviewTarget(params, "target");
+      await installLocalSettlementMock(ctx, runtime);
       runtime.values[requiredString(params, "saveAs")] = ctx.page
         .waitForResponse((response) => {
-          return response.request().method().toUpperCase() === "POST" && response.url().endsWith(`/api/objectives/${encodeURIComponent(target.objective.id)}/contribution-reviews`);
+          return response.request().method().toUpperCase() === "POST" && response.url() === "http://127.0.0.1:8799/reviews";
         })
         .then(async (response) => ({
           ok: response.ok(),
@@ -126,31 +106,35 @@ export const memberSubmitPeerReviewOperators = {
   },
 
   "api.peer_review_submit_response": {
-    record_review: async ({ params }) => {
+    record_review: async ({ runtime, params }) => {
       const response = await requiredCapturedResponse(params, "response");
       expect(response.ok).toBe(true);
-      return peerReviewFromResponse(response.body);
+      const review = requiredSubmittedPeerReview({ review: runtime.values.localPeerReviewSubmission }, "review");
+      expect(response.body).toMatchObject(review.response);
+      return review;
     },
 
-    belongs_to_target: async ({ params }) => {
+    sent_to_local_service: async ({ params }) => {
       const review = requiredSubmittedPeerReview(params, "review");
-      const target = requiredPeerReviewTarget(params, "target");
-      expect(review.objectiveId).toBe(target.objective.id);
+      expect(review.method).toBe("POST");
+      expect(review.url).toBe("http://127.0.0.1:8799/reviews");
     },
 
-    reviewer: async ({ params }) => {
+    accepted: async ({ params }) => {
       const review = requiredSubmittedPeerReview(params, "review");
-      const reviewer = requiredString(params, "reviewer");
-      expect(review.reviewer).toBe(reviewer);
+      expect(review.response.ok).toBe(true);
+      expect(review.response.payloadHash).toBeTruthy();
     },
 
-    allocation_ratio: async ({ params }) => {
+    encrypted_field: async ({ params }) => {
       const review = requiredSubmittedPeerReview(params, "review");
-      const memberName = requiredString(params, "memberName");
-      expect(review.allocations).toContainEqual({
-        member: memberName,
-        ratio: requiredRatio(params, "ratio"),
-      });
+      const field = requiredEncryptedEnvelopeField(params, "field");
+      expect(review.body[field]).toBeTruthy();
+    },
+
+    no_plaintext: async ({ params }) => {
+      const review = requiredSubmittedPeerReview(params, "review");
+      expect(JSON.stringify(review.body)).not.toContain(requiredString(params, "text"));
     },
   },
 } satisfies OperatorRegistry<TestContext, MemberSubmitPeerReviewCaseData>;
@@ -211,10 +195,10 @@ function requiredSubmittedPeerReview(params: StepParams, key: string): Submitted
   if (
     typeof value !== "object" ||
     value === null ||
-    typeof (value as SubmittedPeerReview).id !== "string" ||
-    typeof (value as SubmittedPeerReview).objectiveId !== "string" ||
-    typeof (value as SubmittedPeerReview).reviewer !== "string" ||
-    !Array.isArray((value as SubmittedPeerReview).allocations)
+    typeof (value as SubmittedPeerReview).url !== "string" ||
+    typeof (value as SubmittedPeerReview).method !== "string" ||
+    !isEncryptedEnvelope((value as SubmittedPeerReview).body) ||
+    !isLocalSettlementAcceptedResponse((value as SubmittedPeerReview).response)
   ) {
     throw new Error(`参数 ${key} 必须是提交后的匿名互评`);
   }
@@ -231,10 +215,76 @@ function optionalSubmittedPeerReview(params: StepParams, key: string): Submitted
   return requiredSubmittedPeerReview(params, key);
 }
 
-function requiredRatio(params: StepParams, key: string) {
-  const ratio = Number(params[key]);
-  if (!Number.isFinite(ratio) || ratio < 0 || ratio > 1) {
-    throw new Error(`参数 ${key} 必须是 0 到 1 之间的数字比例`);
+function requiredEncryptedEnvelopeField(params: StepParams, key: string): keyof SubmittedPeerReview["body"] {
+  const field = requiredString(params, key);
+  if (field === "ciphertext" || field === "encryptedKey" || field === "iv" || field === "keyId") {
+    return field;
   }
-  return ratio;
+  throw new Error(`参数 ${key} 必须是匿名互评加密信封字段`);
 }
+
+async function installLocalSettlementMock(ctx: TestContext, runtime: StateCaseRuntime) {
+  await ctx.page.route("http://127.0.0.1:8799/public-key", async (route) => {
+    await route.fulfill({ json: localSettlementPublicKey });
+  });
+  await ctx.page.route("http://127.0.0.1:8799/reviews", async (route) => {
+    if (route.request().method().toUpperCase() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    const body = requiredEncryptedEnvelope(route.request().postDataJSON());
+    const response = {
+      ok: true as const,
+      payloadHash: "testd-local-peer-review",
+      receivedAt: new Date().toISOString(),
+    };
+    runtime.values.localPeerReviewSubmission = {
+      body,
+      method: route.request().method(),
+      response,
+      url: route.request().url(),
+    } satisfies SubmittedPeerReview;
+    await route.fulfill({ json: response });
+  });
+}
+
+function requiredEncryptedEnvelope(value: unknown): SubmittedPeerReview["body"] {
+  if (!isEncryptedEnvelope(value)) {
+    throw new Error("本地匿名互评请求必须是加密信封");
+  }
+  return value;
+}
+
+function isEncryptedEnvelope(value: unknown): value is SubmittedPeerReview["body"] {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as SubmittedPeerReview["body"]).ciphertext === "string" &&
+    typeof (value as SubmittedPeerReview["body"]).encryptedKey === "string" &&
+    typeof (value as SubmittedPeerReview["body"]).iv === "string" &&
+    typeof (value as SubmittedPeerReview["body"]).keyId === "string"
+  );
+}
+
+function isLocalSettlementAcceptedResponse(value: unknown): value is SubmittedPeerReview["response"] {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as SubmittedPeerReview["response"]).ok === true &&
+    typeof (value as SubmittedPeerReview["response"]).payloadHash === "string" &&
+    typeof (value as SubmittedPeerReview["response"]).receivedAt === "string"
+  );
+}
+
+const localSettlementPublicKey = {
+  algorithm: "RSA-OAEP-256",
+  keyId: "testd-local-settlement",
+  publicKeyJwk: {
+    alg: "RSA-OAEP-256",
+    e: "AQAB",
+    ext: true,
+    key_ops: ["encrypt"],
+    kty: "RSA",
+    n: "i45jM-b7LfXjm6EZpgZngqOTFzCgIrev-C6mdxC1RgjW44yxTCFPPVYojRRQ-bI73pxUzIzUAuKouXlPp7OHQDlIVk_2pHED5QEs6XVkcVBbXhnC3tVLcHJUgoPiHaKnblFIIbNe2uE-myibBIFRHuvSGOLfXsHBUhZVb12NTZKgAy1pJo22YyOZr_M67SbsY1r68GEt6SXGh2EbW8QERp0l1F7V_x8_qKcEQz6u4Aw-9K_s5CfHBy9TZ66893MV1um07sHdSblSahHQMbgbUbqCcIx6RNGNR_JY6viG2xHd_wFQd_SbGSZC50RACQwPpwf8sqmCJokXOYQI3oAf_w",
+  },
+};

@@ -26,7 +26,7 @@
 | `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品，进入 `submitted` |
 | `POST` | `/api/objectives/:objectiveId/trial-reviews` | 挑战者发起一次试验收，目标仍保持 `frozen` |
 | `PATCH` | `/api/objectives/:objectiveId/trial-reviews/:trialReviewId` | 指挥官反馈试验收，目标仍保持 `frozen` |
-| `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 目标挑战者提交匿名互评贡献比例 |
+| `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 已关闭的旧匿名互评接口，返回 `410`，原始互评只提交到本地结算服务 |
 | `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算，进入 `settled` |
 | `POST` | `/api/results` | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
 | `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
@@ -81,9 +81,10 @@
 | `comments` | 目标、指标、任务、子任务评论 |
 | `objectiveLoot` | 结构化战利品提交记录 |
 | `objectiveTrialReviews` | 目标试验收请求和指挥官反馈 |
-| `objectiveContributionReviews` | 目标挑战者匿名互评记录 |
 | `pointLedger` | 验收结算后的成员积分流水 |
 | `permissionRules` | 前端操作权限 |
+
+ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只进入本地结算服务。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
 
 `PATCH /api/objectives/:objectiveId/publish` 是候选目标进入悬赏大厅的唯一发布动作，必须写入 `Objective.publishedAt`，并为当前作用域 active 用户创建 `objective.published` 系统通知；持久化通知遵守“触发人不接收自己消息”的原则。通知写入后，后端还会通过 `/api/events` 发送 `system.broadcast`，让当前作用域所有在线 active 用户即时看到横幅并刷新大厅。后续申请、征召、审核、重估、编辑和冻结只能更新对应业务字段或 `updatedAt`，不能覆盖 `publishedAt`。
 
@@ -127,18 +128,13 @@ type ObjectiveFlowStatus =
 }
 ```
 
-`POST /api/objectives/:objectiveId/contribution-reviews` 请求体：
+旧 `POST /api/objectives/:objectiveId/contribution-reviews` 不再接受请求体，固定返回 `410`：
 
 ```json
-{
-  "allocations": [
-    { "member": "Kai Wang", "ratio": 0.6 },
-    { "member": "Mia Zhang", "ratio": 0.4 }
-  ]
-}
+{ "error": "Anonymous contribution reviews must be submitted to the local settlement service" }
 ```
 
-匿名互评接口使用 `0..1` 的标准比例，必须覆盖目标全部普通成员挑战者且合计为 `1`。页面输入是 `0..100` 的百分比，由前端在提交前转换为接口比例。
+新前端不调用该接口。普通成员页面把 `0..100` 的百分比转换为 `0..1` 的标准比例后，在浏览器本地用本地结算服务公钥加密，并直接提交到本地结算服务。
 
 `POST /api/objectives/:objectiveId/trial-reviews` 使用与 `POST /api/objectives/:objectiveId/loot` 相同的请求体和指标主张校验。成功后写入 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus` 和 `Objective.lootSubmittedAt`。同一目标只能有一条试验收记录。
 
@@ -166,7 +162,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。匿名互评无缺评和分歧时，后端直接使用互评汇总比例；有缺评、分歧或申诉时，指挥官通过 `contributionResolution` 提供处理后的比例和说明。
+目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。本地结算服务解密匿名互评并计算贡献比例；ORF 后端只读取 `contributionResolution`，不读取新匿名互评原始数据。有缺评、分歧或申诉时，指挥官通过 `contributionResolution` 提供处理后的比例和说明。
 
 结算后后端写入：
 
@@ -177,7 +173,7 @@ type ObjectiveFlowStatus =
 - `Objective.objectiveSettlementPoints`
 - `pointLedger`
 
-前端排行榜只读取 `pointLedger`，不自行计算个人贡献比例。
+前端排行榜只读取公开 `pointLedger`，不自行计算个人贡献比例。普通成员和管理员都可以看到公开积分榜；匿名互评原始数据不通过该读模型返回。
 
 ## 权限约束
 

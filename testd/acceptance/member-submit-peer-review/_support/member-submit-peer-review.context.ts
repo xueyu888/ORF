@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { ContributionAllocation, ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
+import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 
 export type TestContext = {
   context: BrowserContext;
@@ -38,8 +38,17 @@ export type PeerReviewLoot = {
 };
 
 export type SubmittedPeerReview = {
-  id: string;
-  objectiveId: string;
-  reviewer: string;
-  allocations: ContributionAllocation[];
+  body: {
+    ciphertext: string;
+    encryptedKey: string;
+    iv: string;
+    keyId: string;
+  };
+  method: string;
+  response: {
+    ok: true;
+    payloadHash: string;
+    receivedAt: string;
+  };
+  url: string;
 };
