@@ -1,5 +1,10 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import type { VisualBackgroundsData } from "../../../src/state/apiClient";
+import type {
+  PersonalBackgroundsData,
+  VisualBackgroundConfig,
+  VisualBackgroundImage,
+  VisualBackgroundsData,
+} from "../../../src/state/apiClient";
 
 export type BackgroundSettingsTestContext = {
   context: BrowserContext;
@@ -13,17 +18,51 @@ export type BackgroundSettingsCaseData = {
   role: "member" | "admin";
 };
 
+export type FileSnapshot = {
+  existed: boolean;
+  content: string | null;
+};
+
+export type DirectorySnapshot = {
+  existed: boolean;
+  files: Array<{
+    relativePath: string;
+    content: Buffer;
+  }>;
+};
+
 export type BackgroundSnapshots = {
   login_background: VisualBackgroundsData;
-  sidebar_background: VisualBackgroundsData;
-  userSettingsFile: {
-    existed: boolean;
-    content: string | null;
-  };
+  app_background: VisualBackgroundsData;
+  systemSettingsFile: FileSnapshot;
+  legacySystemSettingsFile: FileSnapshot;
+  loginBackgroundSystemDirectory: DirectorySnapshot;
+  appBackgroundSystemDirectory: DirectorySnapshot;
+  lockOwner: string;
+};
+
+export type PersonalSettingsSnapshot = {
+  userId: string;
+  userSettingsDirectory: DirectorySnapshot;
 };
 
 export type ApiAttemptResult = {
   skipped?: boolean;
   status?: number;
   body?: unknown;
+};
+
+export type PersonalBackgroundUploadResult = VisualBackgroundImage;
+
+export type VisualBackgroundConfigByScene = {
+  scene: "login_background" | "app_background";
+  config: VisualBackgroundConfig;
+};
+
+export type PersonalBackgroundsApiResult = ApiAttemptResult & {
+  body?: {
+    code?: number;
+    message?: string;
+    data?: PersonalBackgroundsData;
+  };
 };
