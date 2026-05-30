@@ -1047,7 +1047,7 @@ export function ChallengePlanPage() {
 
   return (
     <div
-      className="grid gap-4"
+      className="orf-challenge-workbench grid gap-4"
       onFocusCapture={(event) => releaseObjectiveInteractionAnchorOutside(event.target)}
       onPointerDown={(event) => {
         releaseObjectiveInteractionAnchorOutside(event.target);

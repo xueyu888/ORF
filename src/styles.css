@@ -5615,6 +5615,155 @@ body[data-dragging-floating="true"] {
   min-height: 38px;
 }
 
+.orf-challenge-workbench {
+  --orf-challenge-objective-title-size: 16px;
+  --orf-challenge-row-title-size: 14px;
+  --orf-challenge-subtitle-size: 13px;
+  --orf-challenge-meta-size: 13px;
+  --orf-challenge-chip-size: 11px;
+}
+
+.orf-challenge-workbench .orf-task-toolbar {
+  gap: 12px;
+  margin: -2px -8px 0;
+  padding: 6px 8px;
+}
+
+.orf-challenge-workbench .orf-filter-chip {
+  min-width: 108px;
+  height: 34px;
+  font-size: var(--orf-challenge-meta-size);
+  line-height: 1;
+}
+
+.orf-challenge-workbench .orf-filter-chip select {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.orf-challenge-workbench .orf-scope-tabs {
+  padding: 3px;
+  font-size: var(--orf-challenge-meta-size);
+  line-height: 1;
+}
+
+.orf-challenge-workbench .orf-scope-tab {
+  min-width: 68px;
+  height: 30px;
+}
+
+.orf-challenge-workbench .orf-challenge-row {
+  grid-template-columns:
+    minmax(300px, 1fr)
+    88px
+    96px
+    92px
+    132px
+    160px
+    96px;
+  column-gap: 10px;
+  row-gap: 6px;
+  font-size: var(--orf-challenge-meta-size);
+  line-height: 1.2;
+}
+
+.orf-challenge-workbench .orf-challenge-row-objective[data-scope="mine"],
+.orf-challenge-workbench .orf-challenge-row-objective[data-has-workbench-action="true"],
+.orf-challenge-workbench .orf-challenge-row-bounty[data-scope="mine"] {
+  grid-template-columns:
+    minmax(260px, 1fr)
+    88px
+    96px
+    92px
+    132px
+    160px
+    96px
+    110px;
+}
+
+.orf-challenge-workbench .orf-objective-header {
+  min-height: 46px;
+  margin: 1px 8px 0;
+}
+
+.orf-challenge-workbench .orf-result-row {
+  min-height: 44px;
+  margin: 2px 8px;
+}
+
+.orf-challenge-workbench .orf-task-row {
+  min-height: 36px;
+  margin: 1px 8px;
+}
+
+.orf-challenge-workbench .orf-subtask-row {
+  min-height: 32px;
+  margin: 1px 8px;
+}
+
+.orf-challenge-workbench .orf-objective-title {
+  font-size: var(--orf-challenge-objective-title-size);
+  line-height: 1.25;
+}
+
+.orf-challenge-workbench .orf-result-title,
+.orf-challenge-workbench .orf-task-title {
+  font-size: var(--orf-challenge-row-title-size);
+  line-height: 1.25;
+}
+
+.orf-challenge-workbench .orf-subtask-title {
+  font-size: var(--orf-challenge-subtitle-size);
+  line-height: 1.25;
+}
+
+.orf-challenge-workbench .orf-status-chip {
+  height: 24px;
+  min-width: 58px;
+  padding-right: 7px;
+  padding-left: 7px;
+  font-size: var(--orf-challenge-chip-size);
+}
+
+.orf-challenge-workbench .orf-time-value {
+  height: 24px;
+  gap: 6px;
+  font-size: var(--orf-challenge-meta-size);
+  line-height: 1;
+}
+
+.orf-challenge-workbench .orf-time-value svg {
+  width: 14px;
+  height: 14px;
+}
+
+.orf-challenge-workbench .orf-progress-value {
+  width: 96px;
+  gap: 6px;
+}
+
+.orf-challenge-workbench .orf-progress-track {
+  width: 56px;
+}
+
+.orf-challenge-workbench .orf-progress-value-label,
+.orf-challenge-workbench .orf-avatar-stack {
+  font-size: var(--orf-challenge-meta-size);
+  line-height: 1;
+}
+
+.orf-challenge-workbench .orf-row-loot-action {
+  width: 100px;
+  height: 32px;
+  font-size: var(--orf-challenge-meta-size);
+  line-height: 1;
+}
+
+.orf-challenge-workbench .orf-objective-deadline-display,
+.orf-challenge-workbench .orf-objective-deadline-picker {
+  height: 30px;
+}
+
 .orf-result-row:hover::before,
 .orf-task-row:hover::before,
 .orf-subtask-row:hover::before,
@@ -5917,6 +6066,37 @@ body[data-dragging-floating="true"] {
 
   .orf-progress-value {
     width: 100px;
+  }
+
+  .orf-challenge-workbench .orf-challenge-row {
+    grid-template-columns:
+      minmax(240px, 1fr)
+      76px
+      80px
+      82px
+      106px
+      144px
+      92px;
+    column-gap: 8px;
+  }
+
+  .orf-challenge-workbench .orf-challenge-row-objective[data-scope="mine"],
+  .orf-challenge-workbench .orf-challenge-row-objective[data-has-workbench-action="true"],
+  .orf-challenge-workbench .orf-challenge-row-bounty[data-scope="mine"] {
+    grid-template-columns:
+      minmax(210px, 1fr)
+      76px
+      80px
+      82px
+      106px
+      144px
+      92px
+      94px;
+  }
+
+  .orf-challenge-workbench .orf-progress-value,
+  .orf-challenge-workbench .orf-row-loot-action {
+    width: 92px;
   }
 
   .orf-objective-header,

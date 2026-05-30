@@ -42,6 +42,22 @@ test("objective deadline uses the date itself as the edit affordance", () => {
   assert.doesNotMatch(html, /lucide-pencil/);
 });
 
+test("challenge workbench owns compact row typography through scoped CSS", () => {
+  const css = readFileSync("src/styles.css", "utf8");
+  const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
+
+  assert.match(
+    css,
+    /\.orf-challenge-workbench\s*{[^}]*--orf-challenge-objective-title-size:\s*16px;[^}]*--orf-challenge-row-title-size:\s*14px;/s,
+    "Challenge workbench typography must stay scoped to the challenge page.",
+  );
+  assert.doesNotMatch(
+    treeSource,
+    /orf-(?:objective|result|task|subtask)-title[^"]*\btext-(?:lg|base|sm)\b/,
+    "Challenge row title components must not hard-code large Tailwind font-size utilities.",
+  );
+});
+
 function renderChallengeTree(openActionId: string | null, deadlineEditState = { status: "blocked", reason: "noPermission" } as const): string {
   return renderToStaticMarkup(
     createElement(
