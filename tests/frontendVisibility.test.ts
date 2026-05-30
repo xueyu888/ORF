@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { breadcrumb } from "../src/components/appShellBreadcrumb";
+import { designTokens } from "../src/config/designTokens";
 import { canShowFrontend, canShowFrontendPath, frontendVisibilityByPath, frontendVisibilityTable } from "../src/config/frontendVisibility";
 import { quickActions, quickPages } from "../src/config/navigation";
 import type { OrfUser } from "../src/types/orf";
@@ -118,6 +119,20 @@ test("sidebar keeps search separate and account actions in the avatar menu", () 
       `Sidebar avatar menu must include ${label}`,
     );
   }
+});
+
+test("app shell chrome keeps sidebar and icons compact", () => {
+  assert.equal(designTokens.size.sidebarWidth, "260px");
+  assert.equal(designTokens.size.sidebarCollapsedWidth, "76px");
+  assert.equal(designTokens.size.topbarHeight, "60px");
+
+  const sidebarSource = readFileSync(path.resolve("src/components/Sidebar.tsx"), "utf8");
+  const appShellSource = readFileSync(path.resolve("src/components/AppShell.tsx"), "utf8");
+  const stylesSource = readFileSync(path.resolve("src/styles.css"), "utf8");
+  assert.match(sidebarSource, /<item\.icon className="orf-sidebar-icon h-4 w-4 shrink-0" \/>/);
+  assert.doesNotMatch(sidebarSource, /PanelLeft(?:Open|Close) className="h-6 w-6"/);
+  assert.doesNotMatch(appShellSource, /orf-topbar[^\n"]*border-b/);
+  assert.doesNotMatch(stylesSource, /\.orf-topbar::(?:before|after)/);
 });
 
 test("system messages stay out of the primary sidebar navigation", () => {

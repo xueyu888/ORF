@@ -40,13 +40,13 @@ export function NotificationBell() {
     <div ref={popoverRef} className="relative">
       <button
         type="button"
-        className="orf-notification-trigger orf-control orf-ghost-action inline-flex h-10 w-10 items-center justify-center transition"
+        className="orf-notification-trigger orf-control orf-ghost-action inline-flex h-8 w-8 items-center justify-center transition"
         data-unread={unreadNotificationCount > 0}
         aria-label={`消息${unreadNotificationCount > 0 ? `，${unreadNotificationCount} 条未读` : ""}`}
         title="消息"
         onClick={() => setOpen((current) => !current)}
       >
-        <Bell className="h-4 w-4" />
+        <Bell className="h-3.5 w-3.5" />
         {unreadNotificationCount > 0 && <span className="orf-notification-badge">{unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}</span>}
       </button>
 

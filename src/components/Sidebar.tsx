@@ -112,9 +112,9 @@ export function Sidebar({
         decoding="async"
         onError={() => setFailedBackgroundUrl(backgroundImageUrl)}
       />
-      <div className="orf-sidebar-brand flex items-center justify-between border-b px-5">
-        <div className="orf-sidebar-brand-main flex items-center gap-3">
-          <div className="orf-sidebar-logo flex h-11 w-11 items-center justify-center shadow-sm">
+      <div className="orf-sidebar-brand flex items-center justify-between border-b px-4">
+        <div className="orf-sidebar-brand-main flex items-center gap-2.5">
+          <div className="orf-sidebar-logo flex h-10 w-10 items-center justify-center shadow-sm">
             <img className="orf-sidebar-logo-image" src={brandLogo} alt="" aria-hidden="true" />
           </div>
           <div className="orf-sidebar-label orf-sidebar-brand-title whitespace-nowrap">ORF Flow</div>
@@ -126,14 +126,14 @@ export function Sidebar({
           title={collapsed ? "展开侧边栏" : "折叠侧边栏"}
           onClick={() => onCollapsedChange(!collapsed)}
         >
-          {collapsed ? <PanelLeftOpen className="h-6 w-6" /> : <PanelLeftClose className="h-6 w-6" />}
+          {collapsed ? <PanelLeftOpen className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
         </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-2">
         {visibleGroups.map((group) => (
           <div key={group.title} className="orf-sidebar-section border-b py-4">
-            <div className="orf-sidebar-group-title px-7 pb-2 uppercase">{group.title}</div>
+            <div className="orf-sidebar-group-title px-6 pb-2 uppercase">{group.title}</div>
             <div className="space-y-1">
               {group.items.map((item) => (
                 <SidebarLink key={item.path} item={item} />
@@ -238,7 +238,7 @@ function SidebarLink({
         ].join(" ")
       }
     >
-      <item.icon className="orf-sidebar-icon h-5 w-5 shrink-0" />
+      <item.icon className="orf-sidebar-icon h-4 w-4 shrink-0" />
       <span className="orf-sidebar-label truncate">{label}</span>
     </NavLink>
   );

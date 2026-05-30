@@ -96,11 +96,11 @@ export function AppShell() {
         unifiedBackgroundUrl={appShellBackgroundUrl}
       />
       <div className="orf-shell-body min-w-0 flex-1">
-        <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-3 border-b orf-border">
-          <div className="orf-topbar-title orf-text-primary min-w-[180px] text-2xl font-semibold tracking-tight" role="heading" aria-level={1}>
+        <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2">
+          <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
             {isBountyHall && (
               <span className="orf-topbar-title-icon" aria-hidden="true">
-                <Shield className="h-5 w-5" />
+                <Shield className="h-4 w-4" />
               </span>
             )}
             <span>{breadcrumb(location.pathname)}</span>
@@ -108,23 +108,23 @@ export function AppShell() {
           {!isBountyHall && (
             <>
               <div className="relative min-w-[180px] max-w-xl flex-1">
-                <Search className="orf-text-muted pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+                <Search className="orf-text-muted pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
                 <button
                   onClick={() => setCommandOpen(true)}
-                  className="orf-search-trigger h-10 w-full pl-9 pr-3 text-left text-sm transition"
+                  className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
                 >
                   搜索目标、指标、行动项、反馈...
                 </button>
               </div>
-              {canCreateFeedback && <Button variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
+              {canCreateFeedback && <Button className="h-8 px-2.5 text-xs" variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
                 <Plus className="h-4 w-4" />
                 新建反馈
               </Button>}
             </>
           )}
-          <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-2">
+          <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-1.5">
             {canCreateObjective && (
-              <Button onClick={() => navigate("/tasks?create=objective")}>
+              <Button className="h-8 px-2.5 text-xs" onClick={() => navigate("/tasks?create=objective")}>
                 <Plus className="h-4 w-4" />
                 新建目标
               </Button>

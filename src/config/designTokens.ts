@@ -72,10 +72,10 @@ export const designTokens = {
   size: {
     rowHeight: "48px",
     treeIndent: "28px",
-    topbarHeight: "76px",
-    sidebarWidth: "280px",
-    sidebarCollapsedWidth: "88px",
-    sidebarHeaderHeight: "108px",
+    topbarHeight: "60px",
+    sidebarWidth: "260px",
+    sidebarCollapsedWidth: "76px",
+    sidebarHeaderHeight: "100px",
   },
   border: {
     width: "1px",
