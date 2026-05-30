@@ -21,7 +21,6 @@ import type {
   ObjectiveContributionReview,
   ObjectiveTrialReview,
   ObjectiveTrialReviewStatus,
-  OrfStage,
   OrfState,
   PointLedgerEntry,
   Priority,
@@ -57,7 +56,6 @@ import {
   isObjectiveChallengeDiscoverableByFlow,
   isObjectiveChallengeEntryClosedByFlow,
   isObjectiveReestimateWindowOpen,
-  isObjectiveStageCompatibleWithFlowStatus,
   objectiveFlowStatusAfterChallengeApplication,
   objectiveFlowStatusAfterChallengeApplicationReview,
   objectiveFlowStatusAfterRecruitment,
@@ -1669,11 +1667,6 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
   }
 
   return frozen;
-}
-
-export async function reopenObjectiveReestimate(_objectiveId: string, _actorId: string): Promise<ObjectiveFlowMutationOutcome> {
-  // Reestimate is a bounded adjustment window. Once it expires or the objective is frozen, this flow intentionally stays closed.
-  return { status: "invalid" };
 }
 
 export async function canEditResultDuringReestimate(resultId: string, member: string): Promise<boolean> {
@@ -3561,29 +3554,6 @@ export async function updateObjectiveDetails(
 
 export async function updateObjectiveTitle(objectiveId: string, title: string): Promise<boolean> {
   return (await updateObjectiveDetails(objectiveId, { title })).status === "ok";
-}
-
-export async function updateObjectiveStage(objectiveId: string, stage: OrfStage): Promise<boolean> {
-  const [objective] = await db
-    .select({ flowStatus: objectives.flowStatus })
-    .from(objectives)
-    .where(eq(objectives.id, objectiveId))
-    .limit(1);
-  if (!objective || !isObjectiveStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
-    return false;
-  }
-
-  const updated = await db.update(objectives).set({ stage, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id, teamId: objectives.teamId });
-  if (updated.length === 0) {
-    return false;
-  }
-
-  publishObjectiveInvalidation({
-    reason: "objective.lifecycle.changed",
-    objectiveId,
-    teamId: updated[0]!.teamId,
-  });
-  return true;
 }
 
 export async function updateResultTitle(resultId: string, title: string): Promise<boolean> {

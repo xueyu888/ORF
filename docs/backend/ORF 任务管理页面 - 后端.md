@@ -110,7 +110,7 @@ type ObjectiveFlowStatus =
 
 代码唯一事实源是 `src/domain/orfLifecycle/`。后端只调用其中的 guard 和 transition，不能在 repository、route 或页面模型里再维护独立的状态集合。
 
-`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/settled/closed` 对应 `goalFrozen`。旧的 stage 更新接口不能写入与当前 `flowStatus` 冲突的阶段；业务流转必须走发布、申请、征召、冻结、提交和验收接口。
+`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/settled/closed` 对应 `goalFrozen`。业务流转必须走发布、申请、征召、冻结、提交和验收接口，由这些接口同步写入兼容阶段字段；后端不提供单独改写 `stage` 或退回重估的旧入口。
 
 ## 战利品与结算
 

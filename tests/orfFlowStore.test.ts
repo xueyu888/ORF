@@ -357,28 +357,6 @@ test("applyForBounty refuses objectives outside bounty application statuses", ()
   }
 });
 
-test("updateObjectiveStage refuses stages that contradict lifecycle status", () => {
-  const current = state({
-    objectives: [
-      objective({ id: "obj-reestimating", flowStatus: "reestimating", stage: "orfReestimate" }),
-      objective({ id: "obj-frozen", flowStatus: "frozen", stage: "goalFrozen" }),
-    ],
-  });
-
-  const invalidReestimating = store.updateObjectiveStage(current, "obj-reestimating", "goalFrozen");
-  assert.equal(invalidReestimating.objectives.find((item) => item.id === "obj-reestimating")?.stage, "orfReestimate");
-
-  const invalidFrozen = store.updateObjectiveStage(current, "obj-frozen", "orfReestimate");
-  assert.equal(invalidFrozen.objectives.find((item) => item.id === "obj-frozen")?.stage, "goalFrozen");
-
-  const compatibleOpenStage = store.updateObjectiveStage(
-    state({ objectives: [objective({ id: "obj-open", flowStatus: "open", stage: "resultClaiming" })] }),
-    "obj-open",
-    "orfReestimate",
-  );
-  assert.equal(compatibleOpenStage.objectives[0]?.stage, "orfReestimate");
-});
-
 function state(overrides: Partial<OrfState> = {}): OrfState {
   return {
     users: initialOrfState.users,

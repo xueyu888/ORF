@@ -30,7 +30,6 @@ import {
   proposeResultUpdate,
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
-  reopenObjectiveReestimate,
   reviewObjectiveLoot,
   submitObjectiveContributionReview,
   submitObjectiveLoot,
@@ -1043,22 +1042,19 @@ test("challenge acceptance guards duplicate, due-date, unauthorized, and closed 
   assert.equal(closed.status, "closed");
 });
 
-test("freeze rejects invalid source states and reopen requests stay disabled", async () => {
-  const fixture = await createFixture("freeze-reopen-disabled-guards");
+test("freeze rejects invalid source states and stays closed after freezing", async () => {
+  const fixture = await createFixture("freeze-source-state-guards");
   const candidate = await createTestObjective(fixture, "candidate freeze guard");
   assert.equal((await freezeObjectiveAfterReestimate(candidate.id, fixture.commander.id)).status, "invalid");
-  assert.equal((await reopenObjectiveReestimate(candidate.id, fixture.commander.id)).status, "invalid");
 
   const applying = await createPublishedObjective(fixture, "applying freeze guard");
   assert.equal((await applyForObjectiveChallenge(applying.id, fixture.challenger.name)).status, "applied");
   assert.equal((await freezeObjectiveAfterReestimate(applying.id, fixture.commander.id)).status, "invalid");
 
   const { objective: approved } = await createApprovedObjectiveWithResult(fixture, "approved freeze guard");
-  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "invalid");
   const frozen = await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id);
   assert.equal(frozen.status, "ok");
   assert.equal((await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id)).status, "invalid");
-  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "invalid");
 });
 
 test("loot submission rejects incomplete or out-of-state payloads", async () => {
@@ -1446,10 +1442,6 @@ test("API flow commands enforce commander-only permissions and challenge list sc
 
     const memberFreeze = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/freeze`);
     assert.equal(memberFreeze.statusCode, 403);
-    const memberReopen = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/reopen-reestimate`);
-    assert.equal(memberReopen.statusCode, 403);
-    const commanderReopen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/reopen-reestimate`);
-    assert.equal(commanderReopen.statusCode, 409);
     const memberReview = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/review`, {
       acceptedResult: "completed",
     });
@@ -1770,37 +1762,6 @@ test("concurrent result, task, and checklist creation reserve stable sort orders
     .from(taskChecklistItems)
     .where(eq(taskChecklistItems.taskId, checklistTask.id));
   assert.deepEqual(storedChecklist.map((row) => row.sortOrder).sort((left, right) => left - right), expectedSortOrders);
-});
-
-test("API objective stage updates cannot violate lifecycle compatibility", async () => {
-  const fixture = await createFixture("api-stage-compatibility");
-  const { objective } = await createApprovedObjectiveWithResult(fixture, "stage compatibility objective");
-
-  await withApiServer(fixture, async (app) => {
-    const frozenStageOnReestimating = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
-      stage: "goalFrozen",
-    });
-    assert.equal(frozenStageOnReestimating.statusCode, 409);
-
-    let data = await getTaskManagementData({ scope: fixture.scope });
-    assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "orfReestimate");
-
-    const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
-    assert.equal(frozen.status, "ok");
-
-    const reestimateStageOnFrozen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
-      stage: "orfReestimate",
-    });
-    assert.equal(reestimateStageOnFrozen.statusCode, 409);
-
-    const currentStageOnFrozen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
-      stage: "goalFrozen",
-    });
-    assert.equal(currentStageOnFrozen.statusCode, 200);
-
-    data = await getTaskManagementData({ scope: fixture.scope });
-    assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "goalFrozen");
-  });
 });
 
 test("API user deletion reports missing members instead of a successful no-op", async () => {

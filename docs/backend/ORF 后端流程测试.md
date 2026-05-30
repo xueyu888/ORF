@@ -22,7 +22,6 @@
 | API 创建任务归属 | `API task creation is owned by the objective and does not require a result` | `POST /api/tasks` 基于 `linkedObjectiveId` 创建任务，不接受或持久化任务级 `linkedResultId`；候选目标和无指标目标也能维护目标行动项 |
 | API 任务共同维护权限 | `objective challengers share task and subtask maintenance` | 任务和子任务写入权限来自父级 Objective 参与关系；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除，旁观成员拒绝，指挥官按管理员权限通过 |
 | API 输入归一化 | `API work item creation trims labels and prevents blank persisted titles` | 指标、任务、子任务创建接口会 trim 用户输入，拒绝空白必填标题，非法日期和非 active 成员执行人返回 400，空执行人回落为当前用户 |
-| API stage 兼容保护 | `API objective stage updates cannot violate lifecycle compatibility` | 旧 stage 接口不能把重估目标标成冻结阶段，也不能把冻结后目标改回重估阶段 |
 | 发布前征召保护 | `recruitment is only allowed after an objective is published` | `candidate` 目标不能被征召，必须先发布 |
 | 冻结后旧申请保护 | `approving stale pending applications cannot mutate a frozen objective` / `rejecting stale pending applications cannot reopen a frozen objective` | 冻结后不能通过或拒绝旧申请来改写目标状态 |
 | 已接受后旧申请保护 | `rejecting remaining pending applications keeps an accepted objective in reestimate` | 目标已有挑战者后，继续拒绝剩余 pending application 不能把目标退回可申请或待征召状态 |
@@ -30,7 +29,7 @@
 | 征召拒绝禁用 | `recruitment decline is not an available API action` | 当前不开放成员拒绝征召接口，旧拒绝路径不能改写待征召成员 |
 | 冻结前指标保护 | `freezing after reestimate requires at least one concrete result` | 没有具体 Result 的目标不能冻结，避免后续无法提交战利品 |
 | 申请与接受守卫 | `challenge application duplicate and closed-state guards are enforced` / `challenge acceptance guards duplicate, due-date, unauthorized, and closed states` | 重复申请、已接受、非法接受、截止时间过近、已关闭状态都应被保护 |
-| 冻结/退回保护 | `freeze rejects invalid source states and reopen requests stay disabled` | 只有 `reestimating` 且已有 Result 可冻结；当前不开放退回重估 |
+| 冻结状态保护 | `freeze rejects invalid source states and stays closed after freezing` | 只有 `reestimating` 且已有 Result 可冻结；冻结后不开放退回重估 |
 | 战利品与验收异常 | `loot submission rejects incomplete or out-of-state payloads` / `review rejects invalid state and missing loot` | 提交和验收的非法状态、漏 claim、外部 Result、缺失 loot 均应拒绝 |
 | 多挑战者结算 | `settlement uses multi-challenger standard contribution ratios and supports overdelivery` | 多挑战者贡献比例来自匿名互评标准比例，超预期完成按 1.5 倍结算 |
 | API 流程权限 | `API flow commands enforce commander-only permissions and challenge list scope` | 发布、征召、审核、冻结、验收、全量挑战视图权限 |
@@ -153,12 +152,12 @@ flowchart TD
 | ORF-BE-R023 | 目标冻结后，旧 pending application 不能再被拒绝；目标已有挑战者后，拒绝剩余 pending application 也不能把 `reestimating` 改回 `open/applying/recruiting`。 | 冻结后旧申请保护、已接受后旧申请保护 |
 | ORF-BE-R024 | 当前不开放成员拒绝征召；被征召成员只能接受，异议由线下找指挥官处理。 | 征召拒绝禁用 |
 | ORF-BE-R025 | 旧拒绝征召 API 不应存在，也不能从 `assignedChallengers` 移除成员。 | 征召拒绝禁用 |
-| ORF-BE-R026 | 当前不开放从 `frozen` 退回 `reestimating`；退回请求应被拒绝，`confirmationDueAt` 不续期。 | 冻结/退回保护 |
+| ORF-BE-R026 | 当前不提供从 `frozen` 退回 `reestimating` 的接口；`confirmationDueAt` 不续期。 | 冻结状态保护 |
 | ORF-BE-R027 | `reestimating` 目标冻结前必须至少有一个具体 Result。 | 冻结前指标保护 |
 | ORF-BE-R028 | 同一成员重复申请同一目标应返回 `alreadyApplied`；已成为挑战者后再次申请应返回 `alreadyAccepted`。 | 申请与接受守卫 |
 | ORF-BE-R029 | `reestimating/frozen/submitted/settled/closed` 等非可申请状态不接受新的挑战申请；其中 `reestimating` 仍可作为公开参与状态显示在悬赏大厅。 | 申请与接受守卫 |
 | ORF-BE-R030 | 未被征召成员不能接受挑战；重复接受应返回 `alreadyAccepted`；目标截止时间过近应返回 `invalidDueDate`；冻结或终态目标应返回 `closed`。 | 申请与接受守卫、冻结后旧征召保护 |
-| ORF-BE-R031 | 只有 `reestimating` 可冻结；冻结后不允许退回重估。 | 冻结/退回保护 |
+| ORF-BE-R031 | 只有 `reestimating` 可冻结；冻结后不允许退回重估。 | 冻结状态保护 |
 | ORF-BE-R032 | 战利品只能在 `frozen` 提交；空 body、漏 claim、claim 其他目标 Result 都应拒绝。 | 战利品与验收异常 |
 | ORF-BE-R033 | 只有 `submitted` 目标可验收；指定不存在的 loot 应返回 `notFound`。 | 战利品与验收异常 |
 | ORF-BE-R034 | 多挑战者结算时，贡献比例来自目标挑战者匿名互评；无缺评和分歧时直接使用汇总比例，缺评或分歧时由指挥官处理后再结算。 | 多挑战者结算 |
@@ -169,7 +168,7 @@ flowchart TD
 | ORF-BE-R039 | 指标标题、指标名称、任务标题等必填文本必须在 trim 后非空；选填空白文本不能写入数据库，任务日期必须是合法 `YYYY-MM-DD`；行动项执行人必须是当前作用域 active 成员，空执行人回落为当前用户。 | API 输入归一化 |
 | ORF-BE-R039A | 候选目标允许指挥官创建目标级行动项；任务仍以 `linkedObjectiveId` 为归属事实源，不依赖指标存在。 | API 创建任务归属 |
 | ORF-BE-R039B | 任务和子任务维护权限来自 `Objective.challengers`；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务和子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务；`assignee` 与 `tasks.createdBy` 不作为维护授权边界。 | API 任务共同维护权限 |
-| ORF-BE-R040 | `Objective.stage` 是兼容字段，旧接口不能写入与 `flowStatus` 冲突的阶段；生命周期状态只能由 ORF 流程接口推进。 | API stage 兼容保护 |
+| ORF-BE-R040 | `Objective.stage` 是兼容字段，由 ORF 生命周期流程接口同步写入；后端不提供单独改写 `stage` 的旧入口。 | 生命周期状态事实源 |
 | ORF-BE-R041 | 指标更新提案携带的 `feedbackId` 必须和当前指标同默认作用域、同指标；任务创建携带的 `feedbackOriginId` 必须和当前目标同默认作用域、同目标。合法指标或任务请求不能连带改写或挂接其他作用域数据。 | API 跨作用域写保护 |
 | ORF-BE-R042 | 目标结算写入 `pointLedger.userId` 时，只能在目标所属默认作用域内解析挑战者；其他作用域同名用户不能抢占积分流水身份。 | 积分流水作用域边界 |
 | ORF-BE-R043 | 用户管理创建和编辑成员时，当前默认作用域内的显示名必须大小写不敏感唯一；不能制造会混淆挑战者身份的同名成员。 | 用户身份唯一性 |

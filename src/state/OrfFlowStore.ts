@@ -1,7 +1,6 @@
 import { initialOrfState } from "../data/initialOrfState";
 import {
   canApplyForObjectiveChallenge,
-  isObjectiveStageCompatibleWithFlowStatus,
   objectiveFlowStatusAfterChallengeApplication,
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
@@ -626,19 +625,6 @@ export class OrfFlowStore {
       comments: state.comments.map((thread) =>
         thread.targetType === "objective" && thread.targetId === objectiveId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
       ),
-    };
-  }
-
-  updateObjectiveStage(state: OrfState, objectiveId: string, stage: OrfState["objectives"][number]["stage"]): OrfState {
-    const objective = state.objectives.find((item) => item.id === objectiveId);
-    if (!objective || !isObjectiveStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
-      return state;
-    }
-
-    const now = currentDate();
-    return {
-      ...state,
-      objectives: state.objectives.map((objective) => (objective.id === objectiveId ? { ...objective, stage, updatedAt: now } : objective)),
     };
   }
 

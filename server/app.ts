@@ -49,7 +49,6 @@ import {
   proposeResultUpdate,
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
-  reopenObjectiveReestimate,
   reviewObjectiveLoot,
   resolveObjectiveIdForWorkItem,
   setTaskCompletion,
@@ -59,7 +58,6 @@ import {
   updateChecklistItemLabel,
   updateFeedbackStatus,
   updateObjectiveDetails,
-  updateObjectiveStage,
   reviewObjectiveTrialReview,
   updateResultConfidence,
   updateResultTitle,
@@ -93,12 +91,10 @@ const objectiveAcceptedResultSchema = z.enum(["completed", "falsified", "overtur
 const resultAcceptedResultSchema = z.enum(["unreviewed", "completed", "falsified", "failed"]);
 const requiredTextSchema = z.string().trim().min(1);
 const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
-const objectiveStageSchema = z.enum(["goalSetting", "resultClaiming", "orfReestimate", "goalFrozen"]);
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const titleBodySchema = z.object({ title: requiredTextSchema });
 const labelBodySchema = z.object({ label: requiredTextSchema });
 const completionBodySchema = z.object({ done: z.boolean() });
-const objectiveStageBodySchema = z.object({ stage: objectiveStageSchema });
 const taskParamsSchema = z.object({ taskId: z.string().min(1) });
 const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1) });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
@@ -595,26 +591,6 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     return sendObjectiveDetailsOutcome(reply, await updateObjectiveDetails(params.objectiveId, body, context.user.id));
   });
 
-  app.patch("/api/objectives/:objectiveId/stage", async (request, reply) => {
-    const params = objectiveParamsSchema.parse(request.params);
-    const body = objectiveStageBodySchema.parse(request.body);
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
-      return reply;
-    }
-
-    const updated = await updateObjectiveStage(params.objectiveId, body.stage);
-
-    if (!updated) {
-      return reply.code(409).send({ error: "Objective stage is incompatible with the current lifecycle state" });
-    }
-
-    return { ok: true };
-  });
-
   app.patch("/api/objectives/:objectiveId/publish", async (request, reply) => {
     const context = await requireAdminContext(request, reply);
     if (!context) {
@@ -685,19 +661,6 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await freezeObjectiveAfterReestimate(params.objectiveId, context.user.id));
-  });
-
-  app.patch("/api/objectives/:objectiveId/reopen-reestimate", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    const params = objectiveParamsSchema.parse(request.params);
-    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
-      return reply;
-    }
-    return sendObjectiveFlowOutcome(reply, await reopenObjectiveReestimate(params.objectiveId, context.user.id));
   });
 
   app.post("/api/objectives/:objectiveId/review", async (request, reply) => {

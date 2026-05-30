@@ -1,4 +1,4 @@
-import type { Objective, OrfState, Result, Task, TaskStatus, WorkStatus } from "../../../types/orf";
+import type { Objective, Result, Task, TaskStatus, WorkStatus } from "../../../types/orf";
 
 export interface StrategyNode {
   id: string;

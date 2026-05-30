@@ -121,7 +121,6 @@ interface OrfContextValue {
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
   updateObjectiveTitle: (objectiveId: string, title: string) => void;
   updateObjectiveFinalDueAt: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
-  updateObjectiveStage: (objectiveId: string, stage: OrfState["objectives"][number]["stage"]) => void;
   updateResultTitle: (resultId: string, title: string) => void;
   updateTaskTitle: (taskId: string, title: string) => void;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => void;
@@ -699,18 +698,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
-      },
-      updateObjectiveStage: (objectiveId, stage) => {
-        void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/stage`, {
-          method: "PATCH",
-          body: JSON.stringify({ stage }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("目标状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "目标状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
       },
       updateResultTitle: (resultId, title) => {
         void apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
