@@ -5454,8 +5454,7 @@ body[data-dragging-floating="true"] {
   gap: 2px;
 }
 
-.orf-objective-deadline-display,
-.orf-objective-deadline-editor {
+.orf-objective-deadline-display {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
@@ -5465,7 +5464,9 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-objective-deadline-display {
+  position: relative;
   height: 32px;
+  overflow: hidden;
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 0 6px;
@@ -5495,21 +5496,14 @@ body[data-dragging-floating="true"] {
   box-shadow: none;
 }
 
-.orf-objective-deadline-editor {
-  width: 136px;
-}
-
-.orf-objective-deadline-input {
-  min-width: 0;
+.orf-objective-deadline-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   width: 100%;
-  height: 32px;
-  border: 1px solid var(--orf-border);
-  border-radius: 6px;
-  background: var(--orf-bg-card);
-  padding: 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--orf-text-primary);
+  height: 100%;
+  cursor: pointer;
+  opacity: 0;
 }
 
 .orf-time-value {
@@ -6009,10 +6003,6 @@ body[data-dragging-floating="true"] {
 
   .orf-progress-value {
     width: min(220px, 100%);
-  }
-
-  .orf-objective-deadline-editor {
-    width: min(178px, 100%);
   }
 
   .orf-objective-admin-strip {

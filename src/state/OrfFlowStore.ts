@@ -318,7 +318,6 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
     flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
     finalDueAt:
       objective.finalDueAt ||
-      latestDate(objectiveResults.map((result) => result.finalDueAt)) ||
       latestDate(tasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.dueDate)) ||
       addDays(objective.updatedAt, 14),
     challengers,

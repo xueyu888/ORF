@@ -94,7 +94,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     const challengers = uniqueMembers(objective.challengers ?? objectiveResults.map((result) => result.owner));
     const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger));
     const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
-    const finalDueAt = objective.finalDueAt || latestDate(objectiveResults.map((result) => result.finalDueAt)) || addDays(objective.updatedAt, 14);
+    const finalDueAt = objective.finalDueAt || addDays(objective.updatedAt, 14);
     const acceptedResults = results.filter(
       (result) => result.objectiveId === objective.id && (result.acceptedResult === "completed" || result.acceptedResult === "falsified"),
     );
@@ -404,7 +404,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
-      finalDueAt: "2026-06-30",
       assignedChallenger: "Alex Chen",
       evidenceIds: ["ev-eval-coverage", "ev-regression-gap"],
       feedbackIds: [],
@@ -671,7 +670,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "memberProposed",
       definer: "Alex Chen",
-      finalDueAt: "2026-06-21",
       priorityChallengeExpiresAt: "2026-06-01T10:00:00.000Z",
       evidenceIds: [],
       feedbackIds: [],
@@ -694,7 +692,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
-      finalDueAt: "2026-06-07",
       evidenceIds: [],
       feedbackIds: ["fb-cost-latency"],
       trend: confidenceTrend,

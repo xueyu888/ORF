@@ -3,7 +3,7 @@
 ## 核心口径
 
 - 挑战对象是 `Objective`，页面称为“悬赏目标”。
-- `Result` 是“指标”，只作为目标的验收口径和计分基础。
+- `Result` 是“指标”，只作为目标的验收口径和计分基础，不拥有独立截止日期。
 - `Task` 是目标执行行动项，归属于 `Objective`，不归属于 `Result`。
 - 挑战者绑定到 `Objective.challengers`，不绑定到 `Result`。
 - 挑战者只能是当前作用域内的 active 普通成员；指挥官/管理员不进入 `Objective.challengers`、`Objective.assignedChallengers` 或挑战申请。

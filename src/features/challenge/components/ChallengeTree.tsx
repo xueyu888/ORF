@@ -461,7 +461,7 @@ function MetricRow({
         <EmptySlot />
         <StatusChip tone={bounty ? bounty.status : "open"}>{statusLabel}</StatusChip>
         <EmptySlot />
-        <DateStack primary={bounty ? bounty.updatedAt || "未设置" : "未设置"} />
+        <EmptySlot />
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
@@ -810,49 +810,47 @@ function ObjectiveDeadlineCell({
   onSave: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   onUnavailable: (objective: ObjectiveNode["objective"]) => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(objective.finalDueAt);
   const [isSaving, setIsSaving] = useState(false);
   const minimumValue = minimumObjectiveDeadlineValue(objective);
   const canEdit = editState.status === "editable";
 
   useEffect(() => {
-    if (!isEditing) setValue(objective.finalDueAt);
-  }, [isEditing, objective.finalDueAt]);
+    setValue(objective.finalDueAt);
+  }, [objective.finalDueAt]);
 
   const saveSelectedDate = async (nextValue: string) => {
     if (!nextValue || isSaving) return;
     setValue(nextValue);
+    if (nextValue === objective.finalDueAt) return;
 
     setIsSaving(true);
     try {
       const saved = await onSave(objective.id, nextValue);
-      if (saved) setIsEditing(false);
+      if (!saved) setValue(objective.finalDueAt);
     } finally {
       setIsSaving(false);
     }
   };
 
-  if (canEdit && isEditing) {
+  if (canEdit) {
     return (
       <div
-        className="orf-objective-deadline-editor"
+        className="orf-objective-deadline-display orf-objective-deadline-display-editable"
         data-no-row-edit="true"
         onDoubleClick={(event) => event.stopPropagation()}
+        title={objectiveDeadlineTitle(editState)}
       >
         <input
           aria-label="目标截止日期"
-          autoFocus
-          className="orf-objective-deadline-input"
+          className="orf-objective-deadline-picker"
           disabled={isSaving}
           min={minimumValue}
           onChange={(event) => void saveSelectedDate(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setIsEditing(false);
-          }}
           type="date"
           value={value}
         />
+        <DateStack primary={objective.finalDueAt || "未设置"} />
       </div>
     );
   }
@@ -862,10 +860,6 @@ function ObjectiveDeadlineCell({
       className={clsx("orf-objective-deadline-display", canEdit ? "orf-objective-deadline-display-editable" : "orf-objective-deadline-display-blocked")}
       data-no-row-edit="true"
       onClick={() => {
-        if (canEdit) {
-          setIsEditing(true);
-          return;
-        }
         onUnavailable(objective);
       }}
       onDoubleClick={(event) => event.stopPropagation()}

@@ -39,7 +39,25 @@ test("objective deadline uses the date itself as the edit affordance", () => {
   const html = renderChallengeTree(null, { status: "editable", mode: "edit" });
 
   assert.match(html, /title="点击修改目标截止日期"/);
+  assert.match(html, /class="[^"]*orf-objective-deadline-picker/);
+  assert.doesNotMatch(html, /orf-objective-deadline-editor/);
+  assert.doesNotMatch(html, /orf-objective-deadline-input/);
   assert.doesNotMatch(html, /lucide-pencil/);
+});
+
+test("result rows do not render an independent deadline cell", () => {
+  const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
+
+  assert.doesNotMatch(
+    treeSource,
+    /DateStack primary=\{bounty \? bounty\.updatedAt/,
+    "Indicators must not project an update date as a deadline-like date cell.",
+  );
+  assert.match(
+    treeSource,
+    /<StatusChip tone=\{bounty \? bounty\.status : "open"\}>\{statusLabel\}<\/StatusChip>\s*<EmptySlot \/>\s*<EmptySlot \/>\s*<ProgressValue/,
+    "Indicator rows should leave both objective time columns empty.",
+  );
 });
 
 test("challenge workbench owns compact row typography through scoped CSS", () => {

@@ -31,7 +31,7 @@ test("load starts from empty business data instead of bundled seed records", () 
   assert.ok(state.users.length > 0);
 });
 
-test("normalizeState migrates legacy challenge fields and result defaults", () => {
+test("normalizeState migrates legacy challenge fields while ignoring result deadlines", () => {
   const legacyObjective = {
     ...objective({ id: "obj-legacy", resultIds: ["res-legacy"], taskIds: ["task-legacy"] }),
     flowStatus: undefined,
@@ -66,10 +66,11 @@ test("normalizeState migrates legacy challenge fields and result defaults", () =
 
   assert.equal(normalized.objectives[0]?.stage, "orfReestimate");
   assert.equal(normalized.objectives[0]?.flowStatus, "reestimating");
-  assert.equal(normalized.objectives[0]?.finalDueAt, "2026-06-10");
+  assert.equal(normalized.objectives[0]?.finalDueAt, "2026-06-20");
   assert.deepEqual(normalized.objectives[0]?.challengers, ["Kai Wang"]);
   assert.deepEqual(normalized.objectives[0]?.assignedChallengers, []);
   assert.equal(normalized.objectives[0]?.challengeApplications[0]?.applicant, "Nora Li");
+  assert.equal("finalDueAt" in normalized.results[0]!, false);
   assert.equal(normalized.results[0]?.source, "managerDefined");
   assert.equal(normalized.results[0]?.uncertaintyScore, 810);
   assert.equal(normalized.results[0]?.acceptedResult, "unreviewed");
