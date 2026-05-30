@@ -1,13 +1,6 @@
-import type { ChallengeApplication, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
+import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
+import type { ChallengeApplication, Objective, OrfState, Result } from "../types/orf";
 import { addCalendarDays } from "../utils/date";
-
-const uncertaintyScores: Record<UncertaintyLevel, number> = {
-  入门: 10,
-  进阶: 30,
-  破局: 90,
-  渡劫: 270,
-  飞升: 810,
-};
 
 type ObjectiveChallengeFields = Pick<
   Objective,
@@ -60,9 +53,7 @@ function uniqueMembers(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
 }
 
-function uncertaintyScore(level: UncertaintyLevel | undefined) {
-  return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
-}
+const uncertaintyScore = uncertaintyScoreFor;
 
 function inferFlowStatus(objective: LegacyObjective, challengers: string[], assignedChallengers: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
@@ -121,7 +112,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
       lootSubmittedAt: objective.lootSubmittedAt ?? null,
       acceptedResult: objective.acceptedResult ?? null,
       completionMultiplier: objective.completionMultiplier ?? null,
-      objectiveBasePoints: objective.objectiveBasePoints ?? acceptedResults.reduce((sum, result) => sum + result.uncertaintyScore, 0),
+      objectiveBasePoints: objective.objectiveBasePoints ?? objectiveBasePointsForResults(acceptedResults),
       objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
     };
   });

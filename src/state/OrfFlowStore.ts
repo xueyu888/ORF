@@ -5,8 +5,9 @@ import {
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../domain/orfLifecycle";
+import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { taskIdsForObjective } from "../domain/orfWorkItems";
-import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus, UncertaintyLevel } from "../types/orf";
+import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
 type Placement = "before" | "after";
@@ -60,13 +61,6 @@ const currentUserName = (state: OrfState) => state.users.find((user) => user.id 
 const latestDate = (values: Array<string | undefined | null>) => values.filter(Boolean).sort().at(-1) ?? "";
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
-const uncertaintyScores: Record<UncertaintyLevel, number> = {
-  入门: 10,
-  进阶: 30,
-  破局: 90,
-  渡劫: 270,
-  飞升: 810,
-};
 
 const addDays = (value: string, days: number) => {
   return addCalendarDays(value, days);
@@ -91,7 +85,7 @@ const isRealMember = (owner: string | undefined | null) => {
   return value !== "" && value !== "User" && value !== "未分配";
 };
 const uniqueMembers = (values: Array<string | undefined | null>) => Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
-const uncertaintyScore = (level: UncertaintyLevel | undefined) => (level ? uncertaintyScores[level] : uncertaintyScores["进阶"]);
+const uncertaintyScore = uncertaintyScoreFor;
 const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStatus): TaskStatus => {
   if (checklist.length === 0) {
     return fallback === "Done" ? "Todo" : fallback;
@@ -336,7 +330,7 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
     lootSubmittedAt: objective.lootSubmittedAt ?? null,
     acceptedResult: objective.acceptedResult ?? null,
     completionMultiplier: objective.completionMultiplier ?? null,
-    objectiveBasePoints: objective.objectiveBasePoints ?? acceptedResults.reduce((sum, result) => sum + result.uncertaintyScore, 0),
+    objectiveBasePoints: objective.objectiveBasePoints ?? objectiveBasePointsForResults(acceptedResults),
     objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
   };
 }
@@ -424,7 +418,7 @@ export class OrfFlowStore {
       completionStandard: input.completionStandard ?? "完成标准清楚，并有战利品说明支撑",
       sampleSet: input.sampleSet ?? "指挥官确认的标准样本集",
       measurementScope: input.measurementScope ?? "固定测试环境下统计系统侧链路表现",
-      uncertaintyLevel: input.uncertaintyLevel ?? "进阶",
+      uncertaintyLevel: input.uncertaintyLevel,
       baseline: input.baseline ?? 0,
       current: input.current ?? 0,
       target: input.target ?? 100,

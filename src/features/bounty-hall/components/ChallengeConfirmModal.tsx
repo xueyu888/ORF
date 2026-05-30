@@ -1,7 +1,7 @@
 import { Check, Loader2, Send } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { BountyBadge, BountyButton, BountyCardSurface, BountyDialog } from "../BountyHallSkin";
-import { highestDifficultyLabel, resultCountLabel } from "../model/bountyHallItems";
+import { bountyPointsLabel, highestDifficultyLabel, resultCountLabel } from "../model/bountyHallItems";
 import type { ChallengeConfirmTarget } from "../model/bountyHallTypes";
 
 export function ChallengeConfirmModal({
@@ -62,7 +62,7 @@ export function ChallengeConfirmModal({
           <p className="mt-2 truncate text-sm">{resultCountLabel(item.item)}</p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Chip>{highestDifficultyLabel(item.item)}</Chip>
-            <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
+            <Chip tone="gold">{bountyPointsLabel(item.item)}</Chip>
           </div>
         </div>
       </BountyCardSurface>

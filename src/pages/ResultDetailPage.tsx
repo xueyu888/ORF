@@ -1,10 +1,12 @@
 import { Send } from "lucide-react";
+import { useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import { Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { ChartFrame } from "../components/ChartFrame";
 import { PageScaffold } from "../components/PageScaffold";
 import { FeedbackCard } from "../components/SharedCards";
 import { Button, Card, ConfidenceBadge, ProgressBar, StatusBadge } from "../components/ui";
+import { uncertaintyLevelOptions, uncertaintyScores } from "../domain/orfSettlement";
 import { resultDetailCapabilities } from "../features/challenge/model/orfFlowCapabilities";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { canCreateFeedbackForResult } from "../features/feedback/model/feedbackCapabilities";
@@ -18,7 +20,8 @@ function EmptyPanel({ label }: { label: string }) {
 
 export function ResultDetailPage() {
   const { resultId } = useParams();
-  const { currentUser, dataReady, state, openModal, updateResultConfidence } = useOrf();
+  const { currentUser, dataReady, state, openModal, updateResultConfidence, updateResultUncertaintyLevel } = useOrf();
+  const [updatingUncertainty, setUpdatingUncertainty] = useState(false);
   const result = state.results.find((item) => item.id === resultId);
   if (!result) {
     return dataReady ? <Navigate to="/objectives" replace /> : <PageScaffold title="加载中" subtitle="正在加载指标数据。"><Card className="orf-card-padding text-sm orf-text-secondary">正在加载。</Card></PageScaffold>;
@@ -36,6 +39,7 @@ export function ResultDetailPage() {
   const sampleSet = result.sampleSet?.trim() || "待补充";
   const measurementScope = result.measurementScope?.trim() || "待补充";
   const uncertaintyLevel = result.uncertaintyLevel?.trim() || "待补充";
+  const uncertaintyPoints = result.uncertaintyLevel ? `${result.uncertaintyScore} 分` : "待校准";
   const reviewCadence = result.reviewCadence === "Weekly" ? "每周" : result.reviewCadence === "Biweekly" ? "每两周" : result.reviewCadence || "待补充";
   const capabilities = resultDetailCapabilities({
     objective,
@@ -97,10 +101,31 @@ export function ResultDetailPage() {
               <p><span className="orf-text-primary">完成标准：</span>{completionStandard}</p>
               <p><span className="orf-text-primary">标准样本集：</span>{sampleSet}</p>
               <p><span className="orf-text-primary">测量范围：</span>{measurementScope}</p>
-              <p><span className="orf-text-primary">不确定性等级：</span><span className="orf-badge-accent ml-1 inline-flex orf-status-tag border px-2 py-0.5 text-xs">{uncertaintyLevel}</span></p>
+              <p><span className="orf-text-primary">积分等级：</span><span className="orf-badge-accent ml-1 inline-flex orf-status-tag border px-2 py-0.5 text-xs">{uncertaintyLevel}</span></p>
+              <p><span className="orf-text-primary">指标积分：</span>{uncertaintyPoints}</p>
               <p><span className="orf-text-primary">复盘节奏：</span>{reviewCadence}</p>
             </div>
           </Card>
+          {capabilities.canEditMetricCalibration && (
+            <Card className="orf-card-padding">
+              <div className="text-sm font-semibold orf-text-primary">积分校准</div>
+              <select
+                className="orf-input mt-4 w-full px-3 py-2"
+                disabled={updatingUncertainty}
+                value={result.uncertaintyLevel ?? ""}
+                onChange={(event) => {
+                  const nextLevel = event.target.value;
+                  if (!nextLevel) return;
+                  setUpdatingUncertainty(true);
+                  void updateResultUncertaintyLevel(result.id, nextLevel as (typeof uncertaintyLevelOptions)[number])
+                    .finally(() => setUpdatingUncertainty(false));
+                }}
+              >
+                <option value="">待校准</option>
+                {uncertaintyLevelOptions.map((level) => <option key={level} value={level}>{level} · {uncertaintyScores[level]} 分</option>)}
+              </select>
+            </Card>
+          )}
           <Card className="orf-card-padding">
             <div className="text-sm font-semibold orf-text-primary">ORF 质量检查</div>
             <div className="mt-3 grid gap-2 text-xs">

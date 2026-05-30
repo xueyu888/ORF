@@ -32,6 +32,8 @@ import type {
   UserRole,
 } from "../../src/types/orf";
 import {
+  hasUncalibratedResultPoints,
+  objectiveBasePointsForResults,
   planObjectiveSettlement,
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
@@ -786,7 +788,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
 
   const objectiveItems: Objective[] = objectiveRows.map((objective) => {
     const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
-    const objectiveBasePoints = objectiveResults.reduce((sum, result) => sum + result.uncertaintyScore, 0);
+    const objectiveBasePoints = objectiveBasePointsForResults(objectiveResults);
     const challengers = uniqueMembers(objective.challengers ?? []);
     const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []).filter((member) => !challengers.includes(member));
 
@@ -943,7 +945,7 @@ export type BountyHallData = {
 };
 
 function resultDifficultyRank(result: Result) {
-  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : difficultyRanks["进阶"];
+  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : 0;
 }
 
 function bountySortTitle(item: BountyHallItem) {
@@ -998,7 +1000,7 @@ export async function getBountyHallData(viewerName: string, scope: TaskManagemen
       applications,
       approvedApplicants,
       challengers,
-      uncertaintyPoints: objectiveResults.reduce((sum, item) => sum + item.uncertaintyScore, 0),
+      uncertaintyPoints: objectiveBasePointsForResults(objectiveResults),
       deadline: objective.finalDueAt,
       definer: result?.definer ?? "",
       difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
@@ -1610,8 +1612,12 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
     if (!objective) return { status: "notFound" as const };
     if (!canFreezeObjectiveByFlow(objective)) return { status: "invalid" as const };
 
-    const objectiveResults = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId)).limit(1);
+    const objectiveResults = await tx
+      .select({ id: results.id, uncertaintyLevel: results.uncertaintyLevel, uncertaintyScore: results.uncertaintyScore })
+      .from(results)
+      .where(eq(results.objectiveId, objectiveId));
     if (objectiveResults.length === 0) return { status: "invalid" as const };
+    if (hasUncalibratedResultPoints(objectiveResults)) return { status: "invalid" as const };
 
     const decidedAt = nowIso();
     const challengeApplications = (objective.challengeApplications ?? []).map((application) =>
@@ -1905,6 +1911,41 @@ export async function updateResultConfidence(resultId: string, confidence: numbe
     const updated = await tx
       .update(results)
       .set({ confidence, updatedBy: actorId })
+      .where(eq(results.id, resultId))
+      .returning({ id: results.id });
+    return updated.length > 0 ? { teamId: target.teamId } : null;
+  });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
+}
+
+export async function updateResultUncertaintyLevel(resultId: string, uncertaintyLevel: UncertaintyLevel, actorId: string): Promise<boolean> {
+  const updatedResult = await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
+      return false;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ uncertaintyLevel, uncertaintyScore: uncertaintyScore(uncertaintyLevel), updatedBy: actorId })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
     return updated.length > 0 ? { teamId: target.teamId } : null;

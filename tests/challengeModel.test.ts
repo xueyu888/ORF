@@ -332,6 +332,7 @@ test("freeze action requires reestimating objectives with concrete metrics", () 
   const frozen = objective({ flowStatus: "frozen" });
 
   assert.equal(canFreezeObjectiveAfterReestimate(reestimating, []), false);
+  assert.equal(canFreezeObjectiveAfterReestimate(reestimating, [result({ objectiveId: reestimating.id, uncertaintyLevel: undefined, uncertaintyScore: 0 })]), false);
   assert.equal(canFreezeObjectiveAfterReestimate(reestimating, [result({ objectiveId: reestimating.id })]), true);
   assert.equal(canFreezeObjectiveAfterReestimate(frozen, [result({ objectiveId: frozen.id })]), false);
   assert.equal(canFreezeObjectiveAfterReestimate(undefined, [result()]), false);

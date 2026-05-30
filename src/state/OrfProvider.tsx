@@ -37,6 +37,7 @@ import type {
   BountySource,
   ContributionAllocation,
   AppNotification,
+  UncertaintyLevel,
   UserRole,
 } from "../types/orf";
 
@@ -123,6 +124,7 @@ interface OrfContextValue {
   updateObjectiveTitle: (objectiveId: string, title: string) => void;
   updateObjectiveFinalDueAt: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   updateResultTitle: (resultId: string, title: string) => void;
+  updateResultUncertaintyLevel: (resultId: string, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   updateTaskTitle: (taskId: string, title: string) => void;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => void;
   createTaskChecklistItem: (taskId: string, input?: { afterItemId?: string; label?: string }) => Promise<TaskChecklistItem | null>;
@@ -725,6 +727,21 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             notify(businessMutationFailureMessage(error, "指标更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
+      },
+      updateResultUncertaintyLevel: async (resultId, uncertaintyLevel) => {
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/uncertainty`, {
+            method: "PATCH",
+            body: JSON.stringify({ uncertaintyLevel }),
+          });
+          await refreshTaskManagementData();
+          notify("指标积分已校准");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标积分校准失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       updateTaskTitle: (taskId, title) => {
         void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, {

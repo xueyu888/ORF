@@ -128,7 +128,7 @@ flowchart TD
 | --- | --- | --- |
 | ORF-BE-R001 | Objective 是悬赏流程的必填核心对象，指挥官必须先创建 Objective。 | 申请到结算、征召到接受 |
 | ORF-BE-R002 | 指挥官发布 Objective 时，Result 是可选参考指标，不是发布和展示的前置条件。 | 目标无指标可见性、征召无指标可见性 |
-| ORF-BE-R003 | 无 Result 的 `open` Objective 仍应出现在所有已通过用户的 `availableItems` 中，`results=[]`、`result=null`、`uncertaintyPoints=0`，并带有发布到大厅时写入的 `publishedAt`；只有 active 普通成员能申请。 | 目标无指标可见性 |
+| ORF-BE-R003 | 无 Result 的 `open` Objective 仍应出现在所有已通过用户的 `availableItems` 中，`results=[]`、`result=null`、`uncertaintyPoints=0`，并带有发布到大厅时写入的 `publishedAt`；前端应展示待校准而不是 `0 分`；只有 active 普通成员能申请。 | 目标无指标可见性 |
 | ORF-BE-R003A | `GET /api/bounties` 不能因为当前用户是指挥官 / 管理员而返回空列表；角色只限制申请和接受 mutation 是否写入，不限制大厅发现数据或前端操作区展示。 | API 流程权限、目标无指标可见性 |
 | ORF-BE-R004 | 无 Result 的 `recruiting` Objective 仍应出现在悬赏大厅；被征召 active 普通成员接受能写入，指挥官 / 管理员触发接受必须被拒绝。 | 征召无指标可见性 |
 | ORF-BE-R005 | 成员申请后仅进入 `applying`，在指挥官批准前不是正式挑战者，不能提出或编辑指标。 | 申请到结算 |

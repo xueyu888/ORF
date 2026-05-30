@@ -1,5 +1,6 @@
 import { hasPermission } from "../../../config/permissions";
 import { canReviewObjectiveTrialReview, latestObjectiveTrialReview } from "../../../domain/orfTrialReview";
+import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import {
   canFreezeObjectiveByFlow,
   canMutateObjectiveWorkItemsByFlow,
@@ -67,12 +68,13 @@ export function canMutateObjectiveWorkItems(objective: Objective | undefined): b
 
 export function canFreezeObjectiveAfterReestimate(
   objective: Objective | undefined,
-  results: readonly Pick<Result, "objectiveId">[],
+  results: readonly Pick<Result, "objectiveId" | "uncertaintyLevel" | "uncertaintyScore">[],
 ): boolean {
   return Boolean(
     objective &&
       canFreezeObjectiveByFlow(objective) &&
-      results.some((result) => result.objectiveId === objective.id),
+      results.some((result) => result.objectiveId === objective.id) &&
+      !hasUncalibratedResultPoints(results.filter((result) => result.objectiveId === objective.id)),
   );
 }
 
@@ -211,11 +213,13 @@ export function resultDetailCapabilities({
       currentUser &&
       objective.challengers.includes(currentUser.name),
   );
+  const canEditAsReestimateChallenger = Boolean(objective && isAssignedChallenger && isObjectiveReestimateWindowOpen(objective));
 
   return {
     canSubmitLoot: canSubmitObjectiveLoot(objective, currentUser),
     canCreateTask: canMutateObjectiveWorkItems(objective) && (canEditResult || isAssignedChallenger),
     canProposeUpdate: canEditResult && !isObjectiveResultLocked(objective),
     canEditConfidence: canEditResult && !isObjectiveResultLocked(objective),
+    canEditMetricCalibration: (canEditResult || canEditAsReestimateChallenger) && !isObjectiveResultLocked(objective),
   };
 }

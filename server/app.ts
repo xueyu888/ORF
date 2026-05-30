@@ -59,6 +59,7 @@ import {
   updateObjectiveDetails,
   reviewObjectiveTrialReview,
   updateResultConfidence,
+  updateResultUncertaintyLevel,
   updateResultTitle,
   updateChecklistItem,
   updateTaskTitle,
@@ -140,6 +141,7 @@ const createFeedbackBodySchema = z.object({
 });
 const updateFeedbackStatusBodySchema = z.object({ status: feedbackStatusSchema });
 const updateResultConfidenceBodySchema = z.object({ confidence: z.number().int().min(0).max(100) });
+const updateResultUncertaintyBodySchema = z.object({ uncertaintyLevel: uncertaintyLevelSchema });
 const resultUpdateProposalBodySchema = z.object({
   title: z.string().trim().min(1),
   reason: z.string().trim().min(1),
@@ -687,6 +689,26 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const updated = await updateResultConfidence(params.resultId, body.confidence, context.user.id);
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.patch("/api/results/:resultId/uncertainty", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const body = updateResultUncertaintyBodySchema.parse(request.body);
+    const context = await requireResultEditContext(request, reply, params.resultId);
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
+
+    const updated = await updateResultUncertaintyLevel(params.resultId, body.uncertaintyLevel, context.user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Result not found" });

@@ -10,7 +10,9 @@ import type {
 } from "../../types/orf";
 import { validateContributionAllocationInput } from "../../features/challenge/model/contributionReview";
 
-const uncertaintyScores: Record<UncertaintyLevel, number> = {
+export const uncertaintyLevelOptions: UncertaintyLevel[] = ["入门", "进阶", "破局", "渡劫", "飞升"];
+
+export const uncertaintyScores: Record<UncertaintyLevel, number> = {
   入门: 10,
   进阶: 30,
   破局: 90,
@@ -21,6 +23,7 @@ const uncertaintyScores: Record<UncertaintyLevel, number> = {
 export type SettlementResult = Pick<Result, "id" | "uncertaintyLevel" | "uncertaintyScore">;
 export type SettlementObjective = Pick<Objective, "challengers" | "finalDueAt" | "title">;
 export type SettlementLoot = Pick<ObjectiveLoot, "resultClaims" | "submittedAt">;
+type ResultPointsTarget = { uncertaintyLevel?: UncertaintyLevel | null; uncertaintyScore: number };
 export type SettlementPlan = {
   acceptedResultByResultId: Map<string, ResultAcceptedResult>;
   objectiveAcceptedResult: ObjectiveAcceptedResult;
@@ -31,7 +34,23 @@ export type SettlementPlan = {
 };
 
 export function uncertaintyScoreFor(level: UncertaintyLevel | null | undefined) {
-  return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
+  return level ? uncertaintyScores[level] : 0;
+}
+
+export function isResultPointsCalibrated(result: ResultPointsTarget | null | undefined) {
+  return Boolean(result?.uncertaintyLevel && Number.isFinite(result.uncertaintyScore) && result.uncertaintyScore > 0);
+}
+
+export function calibratedResultPoints(result: ResultPointsTarget | null | undefined) {
+  return isResultPointsCalibrated(result) ? result!.uncertaintyScore : 0;
+}
+
+export function objectiveBasePointsForResults(results: readonly ResultPointsTarget[]) {
+  return results.reduce((sum, result) => sum + calibratedResultPoints(result), 0);
+}
+
+export function hasUncalibratedResultPoints(results: readonly ResultPointsTarget[]) {
+  return results.length === 0 || results.some((result) => !isResultPointsCalibrated(result));
 }
 
 export function completionMultiplierFor(result: ObjectiveAcceptedResult, lootSubmittedAt: string | null, finalDueAt: string) {
@@ -84,7 +103,7 @@ export function planObjectiveSettlement(input: {
 
   const acceptedResults = input.results.map((result) => acceptedResultByResultId.get(result.id) ?? "failed");
   const objectiveAcceptedResult = input.acceptedResult ?? objectiveAcceptedResultFromReviews(acceptedResults);
-  const basePoints = input.results.reduce((sum, result) => sum + (result.uncertaintyScore ?? uncertaintyScoreFor(result.uncertaintyLevel)), 0);
+  const basePoints = objectiveBasePointsForResults(input.results);
   const completionMultiplier = completionMultiplierFor(objectiveAcceptedResult, input.loot.submittedAt, input.objective.finalDueAt);
   const settlementPoints = Number((basePoints * completionMultiplier).toFixed(2));
   const challengers = Array.from(new Set(input.objective.challengers.map((member) => member.trim()).filter(Boolean)));

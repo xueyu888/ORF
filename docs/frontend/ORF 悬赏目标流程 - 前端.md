@@ -31,7 +31,7 @@
 
 - 征召令标记；仅征召目标显示。
 - 最高难度。
-- 目标总分。
+- 目标总分；无指标或存在未校准指标时显示“待校准”，不显示 `0 分` 误导用户。
 - 目标标题。
 - 参与状态：已通过挑战者头像、申请中成员和申请理由摘要；如果当前用户在其中，头像或申请标记必须用克制高亮表示“你”。
 - 指标摘要。
@@ -58,7 +58,7 @@
 | 可申请 | 所有已通过用户可见并显示申请操作区；active 普通成员可正常申请，指挥官/管理员点击申请时弹窗阻断 |
 | 申请中 | 所有已通过用户可见；已申请成员显示已申请，其他用户仍按当前状态显示完整操作区，指挥官/管理员点击挑战动作时弹窗阻断 |
 | 征召中 | 所有已通过用户可见；被征召普通成员置顶显示 `征召令` 并可接受，指挥官/管理员点击接受或申请类动作时弹窗阻断 |
-| 重估中 | 继续显示在悬赏大厅，展示已通过挑战者头像和未处理申请；同时显示在我的挑战；指挥官可新增和编辑指标，挑战者可提出和编辑指标；已有至少一个指标时指挥官可冻结 |
+| 重估中 | 继续显示在悬赏大厅，展示已通过挑战者头像和未处理申请；同时显示在我的挑战；指挥官可新增和编辑指标，挑战者可提出和编辑指标；已有至少一个指标且每个指标都已校准积分等级时指挥官可冻结 |
 | 已冻结 | 显示提交战利品入口；不再开放指标调整 |
 | 待验收 | 显示验收入口 |
 | 已结算 | 显示结算结果和积分 |
@@ -77,7 +77,7 @@
 | `Objective.flowStatus` | 候选、申请、征召、重估、冻结、验收和结算状态 |
 | `Objective.publishedAt` | 指挥官发布到悬赏大厅的日期；大厅显示和发布时间排序使用该字段 |
 | `Objective.finalDueAt` | 剩余时间、排序和按时结算判断 |
-| `Result[]` | 目标下的指标清单、最高难度和目标总分来源 |
+| `Result[]` | 目标下的指标清单、最高难度和目标总分来源；`uncertaintyLevel` 未设置时该指标积分仍为待校准 |
 | `ObjectiveLoot[]` | 战利品提交和验收展示 |
 | `PointLedgerEntry[]` | 统计页积分来源 |
 | `BountyHallData.publicItems` | 大厅公开列表，包含 `open/applying/recruiting/reestimating` 目标 |
@@ -102,6 +102,7 @@
 | `PATCH /api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
 | `PATCH /api/objectives/:objectiveId/publish` | 指挥官发布候选目标 |
 | `PATCH /api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结 |
+| `PATCH /api/results/:resultId/uncertainty` | 指挥官或重估期内挑战者校准指标积分等级 |
 | `POST /api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
 | `POST /api/objectives/:objectiveId/review` | 指挥官验收并结算 |
 

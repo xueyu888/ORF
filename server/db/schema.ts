@@ -244,7 +244,7 @@ export const results = pgTable("results", {
   confidence: integer("confidence").notNull(),
   source: text("source").$type<BountySource>().notNull().default("managerDefined"),
   definer: text("definer").notNull().default(""),
-  uncertaintyScore: integer("uncertainty_score").notNull().default(30),
+  uncertaintyScore: integer("uncertainty_score").notNull().default(0),
   acceptedResult: text("accepted_result").$type<ResultAcceptedResult>().notNull().default("unreviewed"),
   reviewCadence: text("review_cadence").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),

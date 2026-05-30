@@ -32,7 +32,7 @@ export function bountyStatus(result: Result, objective?: Objective): BountyStatu
 }
 
 export function bountyDifficulty(result: Result) {
-  return result.uncertaintyLevel ? `${difficultyRank[result.uncertaintyLevel]} 星` : "2 星";
+  return result.uncertaintyLevel ? `${difficultyRank[result.uncertaintyLevel]} 星` : "待校准";
 }
 
 export function objectiveComplete(objective: Objective) {

@@ -173,6 +173,8 @@ type ObjectiveFlowStatus =
 - `Objective.objectiveSettlementPoints`
 - `pointLedger`
 
+`Result.uncertaintyScore` 是指标积分事实源，由 `Result.uncertaintyLevel` 映射写入。指标可以先创建为待校准，但 `reestimating -> frozen` 前，后端必须校验目标下每个指标都已设置积分等级；`Objective.objectiveBasePoints` 只从这些指标积分汇总得到，不作为目标创建或发布接口的输入字段。
+
 前端排行榜只读取公开 `pointLedger`，不自行计算个人贡献比例。普通成员和管理员都可以看到公开积分榜；匿名互评原始数据不通过该读模型返回。
 
 ## 权限约束

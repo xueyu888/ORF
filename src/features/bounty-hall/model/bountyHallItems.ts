@@ -1,4 +1,5 @@
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
+import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import type { UncertaintyLevel } from "../../../types/orf";
 import type { BountyItem, DifficultyFilter, HallTab, SortKey } from "./bountyHallTypes";
 
@@ -72,6 +73,10 @@ export function highestDifficultyLabel(item: BountyItem) {
 
 export function resultCountLabel(item: BountyItem) {
   return item.results.length > 0 ? `${item.results.length} 个指标` : "待定义指标";
+}
+
+export function bountyPointsLabel(item: BountyItem) {
+  return hasUncalibratedResultPoints(item.results) ? "待校准" : `${item.uncertaintyPoints} 分`;
 }
 
 export function bountyTargetElement(objectiveId: string) {

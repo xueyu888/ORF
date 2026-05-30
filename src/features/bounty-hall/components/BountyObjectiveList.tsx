@@ -3,7 +3,7 @@ import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouse
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
 import { remainingTime } from "../../challenge/model/challengeDates";
 import { BountyBadge } from "../BountyHallSkin";
-import { highestDifficultyLabel, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
+import { bountyPointsLabel, highestDifficultyLabel, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
 import type { BountyItem, ChallengeAction } from "../model/bountyHallTypes";
 import { BountyRowActions } from "./BountyRowActions";
 import { ParticipationPreview } from "./ParticipationPreview";
@@ -113,7 +113,7 @@ function BountyListRow({
           </Chip>
         )}
         <Chip tone={item.isRecruitment ? "accent" : "neutral"}>{highestDifficultyLabel(item)}</Chip>
-        <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
+        <Chip tone="gold">{bountyPointsLabel(item)}</Chip>
       </div>
       <div className="bounty-row-main" data-label="悬赏目标">
         <div className="bounty-row-title">

@@ -36,6 +36,7 @@ import {
   submitObjectiveTrialReview,
   updateObjectiveDetails,
   updateResultConfidence,
+  updateResultUncertaintyLevel,
   updateResultTitle,
 } from "../server/repositories/orfRepository";
 import { listNotificationsForUser } from "../server/repositories/notificationRepository";
@@ -975,6 +976,34 @@ test("freezing after reestimate requires at least one concrete result", async ()
 
   const data = await getTaskManagementData();
   assert.equal(data.objectives.find((item) => item.id === objective.id)?.flowStatus, "reestimating");
+});
+
+test("freezing after reestimate requires calibrated points on every result", async () => {
+  const fixture = await createFixture("freeze-uncalibrated-result");
+  const objective = await createPublishedObjective(fixture, "uncalibrated result freeze guard");
+  const application = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  assert.equal(application.status, "applied");
+  const applicationId = application.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  assert.ok(applicationId);
+  const approved = await approveObjectiveChallengeApplication(objective.id, applicationId, fixture.commander.id);
+  assert.equal(approved.status, "ok");
+
+  const result = await createResult({
+    objectiveId: objective.id,
+    title: `${fixture.prefix} uncalibrated result`,
+    metricName: "Uncalibrated metric",
+    source: "managerDefined",
+    definer: fixture.commander.name,
+  });
+  assert.ok(result);
+  assert.equal(result.uncertaintyLevel, undefined);
+  assert.equal(result.uncertaintyScore, 0);
+
+  assert.equal((await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id)).status, "invalid");
+  assert.equal(await updateResultUncertaintyLevel(result.id, "进阶", fixture.commander.id), true);
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  assert.equal(frozen.objective.objectiveBasePoints, 30);
 });
 
 test("challenge application duplicate and closed-state guards are enforced", async () => {
