@@ -10,6 +10,7 @@ export type OrfReadModelInvalidationReason =
   | "objective.lifecycle.changed"
   | "objective.challenge.application.changed"
   | "objective.challenge.recruitment.changed"
+  | "objective.alignment.changed"
   | "objective.loot.changed"
   | "objective.trialReview.changed"
   | "result.changed"

@@ -15,6 +15,8 @@ export type NotificationKind =
   | "challenge.application.approved"
   | "objective.recruitment.created"
   | "objective.challenge.accepted"
+  | "objective.alignment.requested"
+  | "objective.alignment.reviewed"
   | "objective.loot.submitted"
   | "comment.mention.created";
 export type NotificationTargetType = "objective" | "objectiveLoot" | "comment";
@@ -28,6 +30,8 @@ export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goa
 export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "settled" | "closed";
 export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
+export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance";
+export type ObjectiveAlignmentRequestStatus = "requested" | "scheduled" | "completed" | "needsWork" | "cancelled";
 
 export interface OrfUser {
   id: string;
@@ -145,6 +149,21 @@ export interface ObjectiveTrialReview {
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   requestedAt: string;
+}
+
+export interface ObjectiveAlignmentRequest {
+  id: string;
+  objectiveId: string;
+  kind: ObjectiveAlignmentRequestKind;
+  requestedBy: string;
+  status: ObjectiveAlignmentRequestStatus;
+  proposedAt: string;
+  scheduledAt?: string | null;
+  meetingRoom?: string | null;
+  note?: string | null;
+  commanderFeedback?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
 }
 
 export interface PointLedgerEntry {
@@ -364,6 +383,7 @@ export interface OrfState {
   comments: CommentThread[];
   objectiveLoot: ObjectiveLoot[];
   objectiveTrialReviews: ObjectiveTrialReview[];
+  objectiveAlignmentRequests: ObjectiveAlignmentRequest[];
   pointLedger: PointLedgerEntry[];
   causeCategories: string[];
   rules: OrfRules;

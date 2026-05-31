@@ -5,10 +5,27 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
+import {
+  canRequestObjectiveAlignment,
+  isOpenObjectiveAlignmentRequest,
+  latestOpenObjectiveAlignmentRequest,
+  objectiveAlignmentRequestActionLabel,
+  objectiveAlignmentRequestKindLabel,
+  objectiveAlignmentRequestStatusLabel,
+} from "../../../domain/orfAlignment";
 import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
 import { uncertaintyLevelOptions } from "../../../domain/orfSettlement";
-import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem, UncertaintyLevel } from "../../../types/orf";
+import type {
+  ObjectiveAlignmentRequest,
+  ObjectiveAlignmentRequestKind,
+  ObjectiveAlignmentRequestStatus,
+  ObjectiveTrialReview,
+  OrfUser,
+  Task,
+  TaskChecklistItem,
+  UncertaintyLevel,
+} from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -32,6 +49,7 @@ import { handleRowDoubleClick, InlineTitleEditor, isSameTarget } from "./InlineT
 
 type RowHandlers = {
   activeActionId: string | null;
+  alignmentRequests: ObjectiveAlignmentRequest[];
   collapsedActionIds: Set<string>;
   collapsedBountyIds: Set<string>;
   commentCounts: Map<string, number>;
@@ -60,6 +78,8 @@ type RowHandlers = {
   onDraftTitleChange: (title: string) => void;
   onEditTarget: (target: ChallengeTarget) => void;
   onFreezeObjective: (objectiveId: string) => Promise<boolean>;
+  onRequestAlignment: (objectiveId: string, input: { kind: ObjectiveAlignmentRequestKind; note?: string | null }) => Promise<boolean>;
+  onReviewAlignment: (objectiveId: string, requestId: string, input: { status: Extract<ObjectiveAlignmentRequestStatus, "completed" | "needsWork">; commanderFeedback?: string | null }) => Promise<boolean>;
   onOpenActionChange: (id: string | null) => void;
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
@@ -132,6 +152,8 @@ function ObjectivePanel({
   const metricTemporaryRow = activeTemporaryChild?.kind === "metric" ? activeTemporaryChild : null;
   const actionTemporaryRow = activeTemporaryChild?.kind === "action" ? activeTemporaryChild : null;
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
+  const objectiveAlignmentRequests = (handlers.alignmentRequests ?? []).filter((request) => request.objectiveId === group.objective.id);
+  const openAlignmentRequests = objectiveAlignmentRequests.filter(isOpenObjectiveAlignmentRequest);
   const statusChip = isDraftObjective ? (
     <StatusChip tone="open">{draftObjectiveIsSubmitting ? "保存中" : "草稿"}</StatusChip>
   ) : (
@@ -142,6 +164,7 @@ function ObjectivePanel({
     currentUser: handlers.currentUser,
     trialReviews: handlers.trialReviews,
   });
+  const alignmentAction = isDraftObjective ? null : alignmentActionForObjective(group.objective, handlers.currentUser, objectiveAlignmentRequests);
   const showApplicationReview =
     handlers.canManageFlow &&
     canReviewObjectiveChallengeApplications(group.objective) &&
@@ -227,6 +250,13 @@ function ObjectivePanel({
             {workbenchAction.label}
           </Link>
         ) : null}
+        {alignmentAction ? (
+          <AlignmentActionButton
+            action={alignmentAction}
+            objectiveId={group.objective.id}
+            onRequestAlignment={handlers.onRequestAlignment}
+          />
+        ) : null}
       </div>
 
       {showApplicationReview && (
@@ -244,6 +274,46 @@ function ObjectivePanel({
                 </button>
                 <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
                   拒绝
+                </button>
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {handlers.canManageFlow && openAlignmentRequests.length > 0 && (
+        <div className="orf-objective-admin-strip">
+          <span className="orf-objective-admin-strip-label">阶段对齐</span>
+          {openAlignmentRequests.map((request) => (
+            <span key={request.id} className="orf-objective-application-pill">
+              <span className="orf-objective-application-main">
+                <span className="font-semibold orf-text-primary">{objectiveAlignmentRequestKindLabel(request.kind)}</span>
+                <span className="orf-objective-application-reason">
+                  {request.requestedBy} · {objectiveAlignmentRequestStatusLabel(request.status)}
+                  {request.meetingRoom ? ` · ${request.meetingRoom}` : " · 约时间并定会议室"}
+                </span>
+              </span>
+              <span className="orf-objective-application-actions">
+                {request.kind === "reestimateCompletion" ? (
+                  <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onReviewAlignment(group.objective.id, request.id, { status: "completed" })}>
+                    完成并冻结
+                  </button>
+                ) : (
+                  <Link className="orf-objective-application-approve" to={`/objectives/${group.objective.id}/loot`}>
+                    去验收
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  className="orf-objective-application-reject"
+                  onClick={() =>
+                    void handlers.onReviewAlignment(group.objective.id, request.id, {
+                      status: "needsWork",
+                      commanderFeedback: request.kind === "reestimateCompletion" ? "请继续重估指标口径后再申请对齐。" : "请补充验收材料后再申请对齐。",
+                    })
+                  }
+                >
+                  需补充
                 </button>
               </span>
             </span>
@@ -312,6 +382,56 @@ function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string
 
 function isRowActionOpen(openActionId: string | null, actionId: string) {
   return openActionId === actionId || openActionId === `${actionId}:add`;
+}
+
+type AlignmentAction = {
+  kind: ObjectiveAlignmentRequestKind;
+  label: string;
+};
+
+function alignmentActionForObjective(
+  objective: ObjectiveNode["objective"],
+  currentUser: OrfUser | null,
+  requests: ObjectiveAlignmentRequest[],
+): AlignmentAction | null {
+  const kind =
+    objective.flowStatus === "reestimating"
+      ? "reestimateCompletion"
+      : objective.flowStatus === "submitted"
+        ? "acceptance"
+        : null;
+  if (!kind) return null;
+
+  const existing = latestOpenObjectiveAlignmentRequest(objective.id, kind, requests);
+  if (!canRequestObjectiveAlignment(objective, currentUser, kind, existing)) return null;
+
+  return { kind, label: objectiveAlignmentRequestActionLabel(kind) };
+}
+
+function AlignmentActionButton({
+  action,
+  objectiveId,
+  onRequestAlignment,
+}: {
+  action: AlignmentAction;
+  objectiveId: string;
+  onRequestAlignment: RowHandlers["onRequestAlignment"];
+}) {
+  return (
+    <button
+      className="orf-row-loot-action orf-control orf-secondary-action inline-flex items-center justify-center gap-2 px-3 font-semibold"
+      type="button"
+      title="申请与指挥官对齐，请约时间并定好会议室"
+      onClick={() =>
+        void onRequestAlignment(objectiveId, {
+          kind: action.kind,
+          note: "请和指挥官约时间，并定好会议室。",
+        })
+      }
+    >
+      {action.label}
+    </button>
+  );
 }
 
 function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?: boolean; group: ObjectiveNode; handlers: RowHandlers }) {

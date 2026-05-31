@@ -6,6 +6,12 @@ import { Button, Card, Field } from "../components/ui";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
 import {
+  canRequestObjectiveAlignment,
+  latestObjectiveAlignmentRequest,
+  latestOpenObjectiveAlignmentRequest,
+  objectiveAlignmentRequestStatusLabel,
+} from "../domain/orfAlignment";
+import {
   canReviewObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
@@ -38,7 +44,7 @@ const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
 export function LootSubmitPage() {
   const { objectiveId } = useParams();
   const navigate = useNavigate();
-  const { currentUser, dataReady, reviewObjectiveLoot, reviewObjectiveTrialReview, state, submitContributionReview, submitLoot, submitObjectiveTrialReview } = useOrf();
+  const { currentUser, dataReady, requestObjectiveAlignment, reviewObjectiveLoot, reviewObjectiveTrialReview, state, submitContributionReview, submitLoot, submitObjectiveTrialReview } = useOrf();
   const objective = state.objectives.find((item) => item.id === objectiveId);
   const results = useMemo(() => (objective ? state.results.filter((result) => result.objectiveId === objective.id) : []), [objective, state.results]);
   const latestLoot = useMemo(
@@ -48,6 +54,14 @@ export function LootSubmitPage() {
   const latestTrialReview = useMemo(
     () => latestObjectiveTrialReview(objectiveId ?? "", state.objectiveTrialReviews),
     [objectiveId, state.objectiveTrialReviews],
+  );
+  const latestAcceptanceAlignment = useMemo(
+    () => latestObjectiveAlignmentRequest(objectiveId ?? "", "acceptance", state.objectiveAlignmentRequests),
+    [objectiveId, state.objectiveAlignmentRequests],
+  );
+  const openAcceptanceAlignment = useMemo(
+    () => latestOpenObjectiveAlignmentRequest(objectiveId ?? "", "acceptance", state.objectiveAlignmentRequests),
+    [objectiveId, state.objectiveAlignmentRequests],
   );
   const [body, setBody] = useState("");
   const [selfTestReportBody, setSelfTestReportBody] = useState("");
@@ -60,7 +74,7 @@ export function LootSubmitPage() {
   const [trialDecision, setTrialDecision] = useState<Exclude<ObjectiveTrialReviewStatus, "requested">>("approved");
   const [trialFeedback, setTrialFeedback] = useState("");
   const [error, setError] = useState("");
-  const [submittingAction, setSubmittingAction] = useState<"loot" | "trialReview" | "trialResponse" | "peerReview" | "review" | null>(null);
+  const [submittingAction, setSubmittingAction] = useState<"loot" | "trialReview" | "trialResponse" | "peerReview" | "review" | "alignment" | null>(null);
 
   useEffect(() => {
     setClaims((current) => {
@@ -99,6 +113,7 @@ export function LootSubmitPage() {
   const canRequestTrial = canRequestObjectiveTrialReview(objective, currentUser, latestTrialReview);
   const canReviewTrial = canReviewObjectiveTrialReview(objective, currentUser, latestTrialReview);
   const canPeerReview = canSubmitObjectiveContributionReviewByFlow(objective) && isChallenger;
+  const canRequestAcceptanceAlignment = canRequestObjectiveAlignment(objective, currentUser, "acceptance", openAcceptanceAlignment);
   const usesLocalContributionSettlement = objective.challengers.length > 1;
   const needsContributionResolution = usesLocalContributionSettlement;
   const objectiveReviewResult = objectiveAcceptedResultFromReviews(results.map((result) => resultReviews[result.id] ?? "completed"));
@@ -260,6 +275,24 @@ export function LootSubmitPage() {
     }
   };
 
+  const requestAcceptanceAlignment = async () => {
+    if (submittingAction) return;
+    if (!canRequestAcceptanceAlignment) {
+      setError("当前状态不能申请验收对齐");
+      return;
+    }
+
+    setSubmittingAction("alignment");
+    try {
+      await requestObjectiveAlignment(objective.id, {
+        kind: "acceptance",
+        note: "请和指挥官约验收时间，并定好会议室。",
+      });
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
+
   return (
     <PageScaffold
       title={canReview ? "验收战利品" : canReviewTrial ? "处理试验收" : canPeerReview ? "提交匿名互评" : "提交战利品"}
@@ -304,6 +337,35 @@ export function LootSubmitPage() {
               {latestTrialReview.commanderFeedback && (
                 <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary whitespace-pre-wrap">
                   {latestTrialReview.commanderFeedback}
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {(latestAcceptanceAlignment || canRequestAcceptanceAlignment || canReview) && (
+          <Card className="orf-card-padding">
+            <div className="grid gap-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold orf-text-primary">验收对齐</div>
+                {latestAcceptanceAlignment && (
+                  <span className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs font-semibold orf-text-secondary">
+                    {objectiveAlignmentRequestStatusLabel(latestAcceptanceAlignment.status)}
+                  </span>
+                )}
+              </div>
+              <div className="orf-text-secondary">验收前请挑战者和指挥官约好时间，并定好会议室。</div>
+              {latestAcceptanceAlignment?.meetingRoom && <div className="text-xs orf-text-secondary">会议室：{latestAcceptanceAlignment.meetingRoom}</div>}
+              {latestAcceptanceAlignment?.commanderFeedback && (
+                <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary whitespace-pre-wrap">
+                  {latestAcceptanceAlignment.commanderFeedback}
+                </div>
+              )}
+              {canRequestAcceptanceAlignment && (
+                <div>
+                  <Button type="button" variant="secondary" disabled={submittingAction === "alignment"} onClick={() => void requestAcceptanceAlignment()}>
+                    申请验收对齐
+                  </Button>
                 </div>
               )}
             </div>

@@ -183,6 +183,8 @@ export function ChallengePlanPage() {
     createTask,
     loadCommentMentionableUsers,
     rejectChallengeApplication,
+    requestObjectiveAlignment,
+    reviewObjectiveAlignment,
     setTaskCompletion,
     state,
     updateCommentMessage,
@@ -283,7 +285,16 @@ export function ChallengePlanPage() {
 
   useEffect(() => {
     void loadChallengeData().catch(() => setChallengeData(null));
-  }, [loadChallengeData, state.comments, state.objectiveTrialReviews, state.objectives, state.results, state.tasks, taskManagementInvalidationKey]);
+  }, [
+    loadChallengeData,
+    state.comments,
+    state.objectiveAlignmentRequests,
+    state.objectiveTrialReviews,
+    state.objectives,
+    state.results,
+    state.tasks,
+    taskManagementInvalidationKey,
+  ]);
 
   const sourceData = challengeData ?? state;
   const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
@@ -1102,6 +1113,7 @@ export function ChallengePlanPage() {
           temporaryChildRow,
           dragDrop,
           editingTarget: effectiveEditingTarget,
+          alignmentRequests: challengeState.objectiveAlignmentRequests,
           trialReviews: challengeState.objectiveTrialReviews,
           currentUser,
           draftObjectiveId,
@@ -1134,6 +1146,8 @@ export function ChallengePlanPage() {
           onDraftTitleChange: (title) => setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title)),
           onEditTarget: beginEdit,
           onFreezeObjective: freezeObjective,
+          onRequestAlignment: requestObjectiveAlignment,
+          onReviewAlignment: reviewObjectiveAlignment,
           onOpenActionChange: setOpenActionId,
           onPublishObjective: publishObjective,
           onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),

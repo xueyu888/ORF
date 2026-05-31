@@ -496,6 +496,7 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     comments: [],
     objectiveLoot: [],
     objectiveTrialReviews: [],
+    objectiveAlignmentRequests: [],
     pointLedger: [],
     causeCategories: [],
     rules: {

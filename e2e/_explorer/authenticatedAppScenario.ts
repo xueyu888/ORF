@@ -300,6 +300,7 @@ function taskManagementData(comments: CommentThread[]): TaskManagementData {
     comments,
     objectiveLoot: initialOrfState.objectiveLoot,
     objectiveTrialReviews: initialOrfState.objectiveTrialReviews,
+    objectiveAlignmentRequests: initialOrfState.objectiveAlignmentRequests,
     pointLedger: initialOrfState.pointLedger,
     permissionRules: initialOrfState.permissionRules,
   };

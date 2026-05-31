@@ -15,6 +15,9 @@ import type {
   FeedbackStatus,
   LootResultClaim,
   MetricDirection,
+  ObjectiveAlignmentRequest,
+  ObjectiveAlignmentRequestKind,
+  ObjectiveAlignmentRequestStatus,
   Objective,
   ObjectiveAcceptedResult,
   ObjectiveLoot,
@@ -68,6 +71,7 @@ import {
   evidence,
   feedback,
   feedbackCauseCategories,
+  objectiveAlignmentRequests,
   objectives,
   objectiveLoot,
   objectiveTrialReviews,
@@ -100,7 +104,17 @@ import { validateImageUpload } from "../storage/images";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveTrialReviews" | "pointLedger" | "permissionRules"
+  | "objectives"
+  | "results"
+  | "tasks"
+  | "evidence"
+  | "feedback"
+  | "comments"
+  | "objectiveLoot"
+  | "objectiveTrialReviews"
+  | "objectiveAlignmentRequests"
+  | "pointLedger"
+  | "permissionRules"
 >;
 
 export type TaskManagementDataScope = {
@@ -376,6 +390,7 @@ function publishOrfDataInvalidation(input: {
     | "objective.lifecycle.changed"
     | "objective.challenge.application.changed"
     | "objective.challenge.recruitment.changed"
+    | "objective.alignment.changed"
     | "objective.loot.changed"
     | "objective.trialReview.changed"
     | "result.changed"
@@ -401,6 +416,7 @@ function publishObjectiveInvalidation(input: {
     | "objective.lifecycle.changed"
     | "objective.challenge.application.changed"
     | "objective.challenge.recruitment.changed"
+    | "objective.alignment.changed"
     | "objective.loot.changed"
     | "objective.trialReview.changed";
   objectiveId: string;
@@ -563,6 +579,81 @@ async function notifyAdminsOfObjectiveLoot(input: {
   });
 }
 
+function objectiveAlignmentKindLabel(kind: ObjectiveAlignmentRequestKind) {
+  return kind === "reestimateCompletion" ? "重估完成" : "验收";
+}
+
+function objectiveAlignmentTargetHref(kind: ObjectiveAlignmentRequestKind, objectiveId: string) {
+  return kind === "acceptance" ? `/objectives/${encodeURIComponent(objectiveId)}/loot` : challengeObjectiveHref("/tasks", objectiveId);
+}
+
+async function notifyAdminsOfObjectiveAlignmentRequest(input: {
+  actorName: string;
+  actorUserId: string;
+  kind: ObjectiveAlignmentRequestKind;
+  meetingRoom?: string | null;
+  objectiveId: string;
+  objectiveTitle: string;
+  requestId: string;
+  scheduledAt?: string | null;
+  teamId: string;
+}) {
+  const label = objectiveAlignmentKindLabel(input.kind);
+  const scheduleText = input.scheduledAt ? `，建议时间 ${input.scheduledAt}` : "";
+  const roomText = input.meetingRoom ? `，会议室 ${input.meetingRoom}` : "，请约时间并定好会议室";
+  await createNotifications({
+    actorName: input.actorName,
+    actorUserId: input.actorUserId,
+    body: `${input.actorName} 申请「${input.objectiveTitle}」${label}对齐${scheduleText}${roomText}。`,
+    kind: "objective.alignment.requested",
+    metadata: { kind: input.kind, objectiveTitle: input.objectiveTitle, requestedBy: input.actorName },
+    recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
+    targetHref: objectiveAlignmentTargetHref(input.kind, input.objectiveId),
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: `${label}待对齐`,
+  });
+}
+
+async function notifyMemberOfObjectiveAlignmentReview(input: {
+  actorUserId: string;
+  commanderFeedback?: string | null;
+  kind: ObjectiveAlignmentRequestKind;
+  objectiveId: string;
+  objectiveTitle: string;
+  requestedBy: string;
+  status: ObjectiveAlignmentRequestStatus;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  const label = objectiveAlignmentKindLabel(input.kind);
+  const statusText =
+    input.status === "scheduled"
+      ? "已约定"
+      : input.status === "completed"
+        ? "已完成"
+        : input.status === "needsWork"
+          ? "需要补充"
+          : input.status;
+  const feedback = input.commanderFeedback?.trim();
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: feedback
+      ? `「${input.objectiveTitle}」${label}对齐${statusText}：${feedback}`
+      : `「${input.objectiveTitle}」${label}对齐${statusText}。`,
+    kind: "objective.alignment.reviewed",
+    metadata: { kind: input.kind, objectiveTitle: input.objectiveTitle, status: input.status },
+    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, [input.requestedBy]),
+    targetHref: objectiveAlignmentTargetHref(input.kind, input.objectiveId),
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: `${label}对齐更新`,
+  });
+}
+
 function extractCommentMentionUserIds(body: string) {
   const userIds: string[] = [];
   for (const match of body.matchAll(COMMENT_MENTION_TOKEN_PATTERN)) {
@@ -652,6 +743,9 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const objectiveTrialReviewRows = storageScopeId
     ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
     : await db.select().from(objectiveTrialReviews);
+  const objectiveAlignmentRequestRows = storageScopeId
+    ? await db.select().from(objectiveAlignmentRequests).where(eq(objectiveAlignmentRequests.teamId, storageScopeId))
+    : await db.select().from(objectiveAlignmentRequests);
   const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
   const scopeRows = storageScopeId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)) : await db.select({ id: teams.id }).from(teams);
   const resultIds = resultRows.map((result) => result.id);
@@ -854,6 +948,22 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       reviewedAt: item.reviewedAt,
       requestedAt: item.requestedAt,
     }));
+  const objectiveAlignmentRequestItems: ObjectiveAlignmentRequest[] = objectiveAlignmentRequestRows
+    .sort((left, right) => right.proposedAt.localeCompare(left.proposedAt))
+    .map((item) => ({
+      id: item.id,
+      objectiveId: item.objectiveId,
+      kind: item.kind,
+      requestedBy: item.requestedBy,
+      status: item.status,
+      proposedAt: item.proposedAt,
+      scheduledAt: item.scheduledAt,
+      meetingRoom: item.meetingRoom,
+      note: item.note,
+      commanderFeedback: item.commanderFeedback,
+      reviewedBy: item.reviewedBy,
+      reviewedAt: item.reviewedAt,
+    }));
   const pointLedgerItems: PointLedgerEntry[] = pointLedgerRows
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
     .map((item) => ({
@@ -888,6 +998,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
     objectiveTrialReviews: objectiveTrialReviewItems,
+    objectiveAlignmentRequests: objectiveAlignmentRequestItems,
     pointLedger: pointLedgerItems,
     permissionRules,
   };
@@ -1065,6 +1176,7 @@ export async function getMyChallengesData(member: string, includeAll = false, sc
     comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger,
     permissionRules: data.permissionRules,
   };
@@ -1418,10 +1530,24 @@ export type ObjectiveFlowMutationOutcome =
   | { status: "invalid" }
   | { status: "notFound" };
 
+export type ObjectiveAlignmentMutationOutcome =
+  | { status: "ok"; request: ObjectiveAlignmentRequest }
+  | { status: "invalid" }
+  | { status: "notFound" }
+  | { status: "forbidden" }
+  | { status: "duplicate" }
+  | { status: "closed" };
+
 async function objectiveOutcome(objectiveId: string, scope?: RuntimeScope | null): Promise<ObjectiveFlowMutationOutcome> {
   const data = await getTaskManagementData({ scope });
   const objective = data.objectives.find((item) => item.id === objectiveId);
   return objective ? { status: "ok", objective } : { status: "notFound" };
+}
+
+async function objectiveAlignmentOutcome(requestId: string, scope?: RuntimeScope | null): Promise<ObjectiveAlignmentMutationOutcome> {
+  const data = await getTaskManagementData({ scope });
+  const request = data.objectiveAlignmentRequests.find((item) => item.id === requestId);
+  return request ? { status: "ok", request } : { status: "notFound" };
 }
 
 export async function publishObjective(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
@@ -1647,6 +1773,22 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
       })
       .where(eq(objectives.id, objectiveId));
 
+    await tx
+      .update(objectiveAlignmentRequests)
+      .set({
+        status: "completed",
+        commanderFeedback: "重估对齐完成，目标已冻结。",
+        reviewedBy: actorId,
+        reviewedAt: decidedAt,
+      })
+      .where(
+        and(
+          eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+          eq(objectiveAlignmentRequests.kind, "reestimateCompletion"),
+          inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+        ),
+      );
+
     return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
@@ -1661,6 +1803,201 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
   }
 
   return frozen;
+}
+
+export interface CreateObjectiveAlignmentRequestInput {
+  kind: ObjectiveAlignmentRequestKind;
+  scheduledAt?: string | null;
+  meetingRoom?: string | null;
+  note?: string | null;
+}
+
+export interface ReviewObjectiveAlignmentRequestInput {
+  status: Extract<ObjectiveAlignmentRequestStatus, "scheduled" | "completed" | "needsWork" | "cancelled">;
+  scheduledAt?: string | null;
+  meetingRoom?: string | null;
+  commanderFeedback?: string | null;
+}
+
+function objectiveAcceptsAlignmentRequest(objective: Pick<Objective, "flowStatus">, kind: ObjectiveAlignmentRequestKind) {
+  if (kind === "reestimateCompletion") return objective.flowStatus === "reestimating";
+  return objective.flowStatus === "submitted";
+}
+
+export async function createObjectiveAlignmentRequest(
+  objectiveId: string,
+  input: CreateObjectiveAlignmentRequestInput,
+  actor: Pick<CommentActor, "id" | "name" | "role">,
+): Promise<ObjectiveAlignmentMutationOutcome> {
+  const requestId = makeId("alignment");
+  const proposedAt = nowIso();
+  const requested = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (!objectiveAcceptsAlignmentRequest(objective, input.kind)) return { status: "closed" as const };
+    if (actor.role !== "member" || !uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
+      return { status: "forbidden" as const };
+    }
+
+    const openRequests = await tx
+      .select({ id: objectiveAlignmentRequests.id })
+      .from(objectiveAlignmentRequests)
+      .where(
+        and(
+          eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+          eq(objectiveAlignmentRequests.kind, input.kind),
+          inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+        ),
+      )
+      .limit(1);
+    if (openRequests.length > 0) return { status: "duplicate" as const };
+
+    await tx.insert(objectiveAlignmentRequests).values({
+      id: requestId,
+      teamId: objective.teamId,
+      objectiveId: objective.id,
+      kind: input.kind,
+      requestedBy: actor.name,
+      status: input.scheduledAt || input.meetingRoom ? "scheduled" : "requested",
+      proposedAt,
+      scheduledAt: input.scheduledAt?.trim() || null,
+      meetingRoom: input.meetingRoom?.trim() || null,
+      note: input.note?.trim() || null,
+      commanderFeedback: null,
+      reviewedBy: null,
+      reviewedAt: null,
+    });
+
+    await tx.update(objectives).set({ updatedAt: today(), updatedBy: actor.id }).where(eq(objectives.id, objectiveId));
+
+    return {
+      status: "created" as const,
+      notification: {
+        kind: input.kind,
+        meetingRoom: input.meetingRoom?.trim() || null,
+        objectiveId: objective.id,
+        objectiveTitle: objective.title,
+        requestId,
+        scheduledAt: input.scheduledAt?.trim() || null,
+        teamId: objective.teamId,
+      },
+      scope: runtimeScope(objective.teamId),
+    };
+  });
+
+  if (requested.status === "notFound") return { status: "notFound" };
+  if (requested.status === "closed") return { status: "closed" };
+  if (requested.status === "forbidden") return { status: "forbidden" };
+  if (requested.status === "duplicate") return { status: "duplicate" };
+
+  await notifyAdminsOfObjectiveAlignmentRequest({
+    actorName: actor.name,
+    actorUserId: actor.id,
+    ...requested.notification,
+  });
+  publishObjectiveInvalidation({
+    actorUserId: actor.id,
+    reason: "objective.alignment.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(requested.scope),
+  });
+
+  return objectiveAlignmentOutcome(requestId, requested.scope);
+}
+
+export async function reviewObjectiveAlignmentRequest(
+  objectiveId: string,
+  requestId: string,
+  input: ReviewObjectiveAlignmentRequestInput,
+  actorId: string,
+): Promise<ObjectiveAlignmentMutationOutcome> {
+  const existing = await db
+    .select({
+      id: objectiveAlignmentRequests.id,
+      kind: objectiveAlignmentRequests.kind,
+      objectiveId: objectiveAlignmentRequests.objectiveId,
+      requestedBy: objectiveAlignmentRequests.requestedBy,
+      status: objectiveAlignmentRequests.status,
+      teamId: objectiveAlignmentRequests.teamId,
+      objectiveTitle: objectives.title,
+    })
+    .from(objectiveAlignmentRequests)
+    .innerJoin(objectives, eq(objectiveAlignmentRequests.objectiveId, objectives.id))
+    .where(and(eq(objectiveAlignmentRequests.id, requestId), eq(objectiveAlignmentRequests.objectiveId, objectiveId)))
+    .limit(1);
+  const request = existing[0];
+  if (!request) return { status: "notFound" };
+  if (!["requested", "scheduled"].includes(request.status)) return { status: "closed" };
+
+  if (input.status === "completed") {
+    if (request.kind !== "reestimateCompletion") return { status: "invalid" };
+    const frozen = await freezeObjectiveAfterReestimate(objectiveId, actorId);
+    if (frozen.status !== "ok") return frozen.status === "notFound" ? { status: "notFound" } : { status: "invalid" };
+
+    const completed = await objectiveAlignmentOutcome(requestId, runtimeScope(request.teamId));
+    if (completed.status === "ok") {
+      await notifyMemberOfObjectiveAlignmentReview({
+        actorUserId: actorId,
+        commanderFeedback: completed.request.commanderFeedback,
+        kind: completed.request.kind,
+        objectiveId,
+        objectiveTitle: request.objectiveTitle,
+        requestedBy: completed.request.requestedBy,
+        status: completed.request.status,
+        teamId: request.teamId,
+      });
+    }
+    return completed;
+  }
+
+  const reviewedAt = nowIso();
+  const feedback = input.commanderFeedback?.trim() || (input.status === "needsWork" ? "请补充后重新对齐。" : null);
+  const updated = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(objectiveAlignmentRequests)
+      .set({
+        status: input.status,
+        scheduledAt: input.scheduledAt?.trim() || null,
+        meetingRoom: input.meetingRoom?.trim() || null,
+        commanderFeedback: feedback,
+        reviewedBy: actorId,
+        reviewedAt,
+      })
+      .where(
+        and(
+          eq(objectiveAlignmentRequests.id, requestId),
+          eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+          inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+        ),
+      )
+      .returning({ id: objectiveAlignmentRequests.id });
+    if (rows.length === 0) return false;
+    await tx.update(objectives).set({ updatedAt: today(), updatedBy: actorId }).where(eq(objectives.id, objectiveId));
+    return true;
+  });
+  if (!updated) return { status: "closed" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.alignment.changed",
+    objectiveId,
+    teamId: request.teamId,
+  });
+
+  const outcome = await objectiveAlignmentOutcome(requestId, runtimeScope(request.teamId));
+  if (outcome.status === "ok") {
+    await notifyMemberOfObjectiveAlignmentReview({
+      actorUserId: actorId,
+      commanderFeedback: outcome.request.commanderFeedback,
+      kind: outcome.request.kind,
+      objectiveId,
+      objectiveTitle: request.objectiveTitle,
+      requestedBy: outcome.request.requestedBy,
+      status: outcome.request.status,
+      teamId: request.teamId,
+    });
+  }
+  return outcome;
 }
 
 export async function canEditResultDuringReestimate(resultId: string, member: string): Promise<boolean> {
@@ -3309,6 +3646,21 @@ export async function reviewObjectiveLoot(
         })),
       );
     }
+    await tx
+      .update(objectiveAlignmentRequests)
+      .set({
+        status: "completed",
+        commanderFeedback: "验收对齐完成，目标已结算。",
+        reviewedBy: actorId,
+        reviewedAt: createdAt,
+      })
+      .where(
+        and(
+          eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+          eq(objectiveAlignmentRequests.kind, "acceptance"),
+          inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+        ),
+      );
     return true;
   });
   if (!settled) return { status: "invalid" };

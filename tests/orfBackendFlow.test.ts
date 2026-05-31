@@ -18,6 +18,7 @@ import {
   canEditObjectiveResultsDuringReestimate,
   createChecklistItem,
   createObjective,
+  createObjectiveAlignmentRequest,
   createResult,
   createTask,
   deleteResult,
@@ -30,6 +31,7 @@ import {
   proposeResultUpdate,
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
+  reviewObjectiveAlignmentRequest,
   reviewObjectiveLoot,
   submitObjectiveLoot,
   reviewObjectiveTrialReview,
@@ -1009,6 +1011,86 @@ test("freezing after reestimate requires calibrated points on every result", asy
   const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
   assert.equal(frozen.status, "ok");
   assert.equal(frozen.objective.objectiveBasePoints, 30);
+});
+
+test("challenger alignment request lets commander complete reestimate early", async () => {
+  const fixture = await createFixture("reestimate-alignment");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "reestimate alignment objective");
+
+  const request = await createObjectiveAlignmentRequest(
+    objective.id,
+    {
+      kind: "reestimateCompletion",
+      meetingRoom: "ORF-3A",
+      note: "指标已经和挑战者对齐，请安排冻结确认。",
+      scheduledAt: "2999-01-02T10:00:00.000Z",
+    },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(request.status, "ok");
+  assert.equal(request.request.kind, "reestimateCompletion");
+  assert.equal(request.request.status, "scheduled");
+  assert.equal(request.request.meetingRoom, "ORF-3A");
+
+  const duplicate = await createObjectiveAlignmentRequest(
+    objective.id,
+    { kind: "reestimateCompletion" },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(duplicate.status, "duplicate");
+
+  const notifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
+  assert.equal(notifications[0]?.kind, "objective.alignment.requested");
+  assert.equal(notifications[0]?.targetHref, `/tasks#objective:${encodeURIComponent(objective.id)}`);
+
+  assert.equal(request.status, "ok");
+  const reviewed = await reviewObjectiveAlignmentRequest(
+    objective.id,
+    request.request.id,
+    { status: "completed" },
+    fixture.commander.id,
+  );
+  assert.equal(reviewed.status, "ok");
+  assert.equal(reviewed.request.status, "completed");
+
+  const data = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(data.objectives.find((item) => item.id === objective.id)?.flowStatus, "frozen");
+  assert.equal(data.objectiveAlignmentRequests.find((item) => item.id === request.request.id)?.status, "completed");
+  const challengerNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
+  assert.equal(challengerNotifications[0]?.kind, "objective.alignment.reviewed");
+});
+
+test("acceptance alignment request stays separate from submitted lifecycle and closes on settlement", async () => {
+  const fixture = await createFixture("acceptance-alignment");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "acceptance alignment objective");
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  const loot = await submitObjectiveLoot(
+    objective.id,
+    { body: "Acceptance alignment loot.", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }] },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(loot.status, "ok");
+
+  const request = await createObjectiveAlignmentRequest(
+    objective.id,
+    { kind: "acceptance", meetingRoom: "ORF-5B", note: "战利品已提交，请安排验收。" },
+    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+  );
+  assert.equal(request.status, "ok");
+  assert.equal(request.request.status, "scheduled");
+  const afterRequest = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(afterRequest.objectives.find((item) => item.id === objective.id)?.flowStatus, "submitted");
+
+  const reviewed = await reviewObjectiveLoot(
+    objective.id,
+    { lootId: loot.loot.id, resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    fixture.commander.id,
+  );
+  assert.equal(reviewed.status, "ok");
+  const afterSettlement = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(afterSettlement.objectives.find((item) => item.id === objective.id)?.flowStatus, "settled");
+  assert.equal(afterSettlement.objectiveAlignmentRequests.find((item) => item.id === request.request.id)?.status, "completed");
 });
 
 test("challenge application duplicate and closed-state guards are enforced", async () => {

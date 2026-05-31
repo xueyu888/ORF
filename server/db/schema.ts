@@ -7,6 +7,8 @@ import type {
   LootResultClaim,
   NotificationKind,
   NotificationTargetType,
+  ObjectiveAlignmentRequestKind,
+  ObjectiveAlignmentRequestStatus,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
   ObjectiveTrialReviewStatus,
@@ -158,6 +160,33 @@ export const objectiveTrialReviews = pgTable(
   },
   (table) => ({
     objectiveOnce: uniqueIndex("objective_trial_reviews_objective_once_idx").on(table.objectiveId),
+  }),
+);
+
+export const objectiveAlignmentRequests = pgTable(
+  "objective_alignment_requests",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    objectiveId: text("objective_id")
+      .notNull()
+      .references(() => objectives.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<ObjectiveAlignmentRequestKind>().notNull(),
+    requestedBy: text("requested_by").notNull(),
+    status: text("status").$type<ObjectiveAlignmentRequestStatus>().notNull().default("requested"),
+    proposedAt: timestamp("proposed_at", { mode: "string", withTimezone: true }).notNull(),
+    scheduledAt: timestamp("scheduled_at", { mode: "string", withTimezone: true }),
+    meetingRoom: text("meeting_room"),
+    note: text("note"),
+    commanderFeedback: text("commander_feedback"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    objectiveKindStatus: index("objective_alignment_requests_objective_kind_status_idx").on(table.objectiveId, table.kind, table.status),
+    teamProposedAt: index("objective_alignment_requests_team_proposed_at_idx").on(table.teamId, table.proposedAt),
   }),
 );
 

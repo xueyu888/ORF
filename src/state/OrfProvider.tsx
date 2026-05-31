@@ -24,6 +24,8 @@ import type {
   CommentTargetType,
   Feedback,
   Objective,
+  ObjectiveAlignmentRequestKind,
+  ObjectiveAlignmentRequestStatus,
   FeedbackStatus,
   LootResultClaim,
   ObjectiveTrialReviewStatus,
@@ -64,6 +66,18 @@ type ReviewObjectiveLootInput = {
 type ReviewObjectiveTrialReviewInput = {
   status: Exclude<ObjectiveTrialReviewStatus, "requested">;
   commanderFeedback: string;
+};
+type RequestObjectiveAlignmentInput = {
+  kind: ObjectiveAlignmentRequestKind;
+  scheduledAt?: string | null;
+  meetingRoom?: string | null;
+  note?: string | null;
+};
+type ReviewObjectiveAlignmentInput = {
+  status: Extract<ObjectiveAlignmentRequestStatus, "scheduled" | "completed" | "needsWork" | "cancelled">;
+  scheduledAt?: string | null;
+  meetingRoom?: string | null;
+  commanderFeedback?: string | null;
 };
 
 interface ModalState {
@@ -133,6 +147,8 @@ interface OrfContextValue {
   submitLoot: (input: SubmitLootInput) => Promise<boolean>;
   submitObjectiveTrialReview: (input: SubmitLootInput) => Promise<boolean>;
   reviewObjectiveTrialReview: (objectiveId: string, trialReviewId: string, input: ReviewObjectiveTrialReviewInput) => Promise<boolean>;
+  requestObjectiveAlignment: (objectiveId: string, input: RequestObjectiveAlignmentInput) => Promise<boolean>;
+  reviewObjectiveAlignment: (objectiveId: string, requestId: string, input: ReviewObjectiveAlignmentInput) => Promise<boolean>;
   deleteObjective: (objectiveId: string) => void;
   deleteResult: (resultId: string) => void;
   deleteTask: (taskId: string) => void;
@@ -906,7 +922,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             }),
           });
           await refreshTaskManagementData();
-          notify("战利品已提交");
+          notify("战利品已提交，请申请验收对齐并定好会议室");
           return true;
         } catch (error) {
           notify(commentMutationFailureMessage(error, "战利品提交失败"));
@@ -945,6 +961,36 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "试验收反馈提交失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      requestObjectiveAlignment: async (objectiveId, input) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/alignment-requests`, {
+            method: "POST",
+            body: JSON.stringify(input),
+          });
+          await refreshTaskManagementData();
+          notify(input.kind === "reestimateCompletion" ? "已申请重估对齐，请约时间并定好会议室" : "已申请验收对齐，请约时间并定好会议室");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "对齐申请失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      reviewObjectiveAlignment: async (objectiveId, requestId, input) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/alignment-requests/${encodeURIComponent(requestId)}`, {
+            method: "PATCH",
+            body: JSON.stringify(input),
+          });
+          await refreshTaskManagementData();
+          notify(input.status === "completed" ? "对齐已完成" : "对齐反馈已提交");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "对齐处理失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

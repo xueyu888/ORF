@@ -183,6 +183,13 @@
       "when": 1780140000000,
       "tag": "0025_result_timestamps",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1780220000000,
+      "tag": "0026_objective_alignment_requests",
+      "breakpoints": true
     }
   ]
 }

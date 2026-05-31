@@ -30,6 +30,7 @@ export function mergeTaskManagementData(state: OrfState, data: TaskManagementDat
     comments: data.comments ?? state.comments ?? [],
     objectiveLoot: data.objectiveLoot ?? state.objectiveLoot ?? [],
     objectiveTrialReviews: data.objectiveTrialReviews ?? state.objectiveTrialReviews ?? [],
+    objectiveAlignmentRequests: data.objectiveAlignmentRequests ?? state.objectiveAlignmentRequests ?? [],
     pointLedger: data.pointLedger ?? state.pointLedger ?? [],
     permissionRules: data.permissionRules,
   });

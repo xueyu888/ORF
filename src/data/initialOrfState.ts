@@ -128,6 +128,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     results,
     objectiveLoot: state.objectiveLoot ?? [],
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
+    objectiveAlignmentRequests: state.objectiveAlignmentRequests ?? [],
     pointLedger: state.pointLedger ?? [],
   };
 }
@@ -1559,6 +1560,7 @@ const legacyInitialOrfState: LegacyInitialState = {
     },
   ],
   objectiveTrialReviews: [],
+  objectiveAlignmentRequests: [],
   pointLedger: [
     {
       id: "ledger-demo-routing-kai",

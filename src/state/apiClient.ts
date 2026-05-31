@@ -4,7 +4,17 @@ export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveTrialReviews" | "pointLedger" | "permissionRules"
+  | "objectives"
+  | "results"
+  | "tasks"
+  | "evidence"
+  | "feedback"
+  | "comments"
+  | "objectiveLoot"
+  | "objectiveTrialReviews"
+  | "objectiveAlignmentRequests"
+  | "pointLedger"
+  | "permissionRules"
 >;
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;

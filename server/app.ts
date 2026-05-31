@@ -35,6 +35,7 @@ import {
   createChecklistItem,
   createFeedback,
   createObjective,
+  createObjectiveAlignmentRequest,
   createResult,
   createTask,
   deleteChecklistItem,
@@ -50,6 +51,7 @@ import {
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
   reviewObjectiveLoot,
+  reviewObjectiveAlignmentRequest,
   resolveObjectiveIdForWorkItem,
   setTaskCompletion,
   submitObjectiveLoot,
@@ -100,8 +102,10 @@ const checklistParamsSchema = taskParamsSchema.extend({ itemId: z.string().min(1
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
 const trialReviewParamsSchema = objectiveParamsSchema.extend({ trialReviewId: z.string().min(1) });
+const alignmentRequestParamsSchema = objectiveParamsSchema.extend({ alignmentRequestId: z.string().min(1) });
 const applicationParamsSchema = objectiveParamsSchema.extend({ applicationId: z.string().min(1) });
 const feedbackParamsSchema = z.object({ feedbackId: z.string().min(1) });
+const optionalDateTimeSchema = z.string().trim().datetime().transform((value) => value || undefined).optional();
 const dateOnlySchema = z.string().trim().refine(isDateOnlyString, { message: "Invalid date" });
 const optionalDateOnlySchema = z.string().trim().transform((value) => value || undefined).pipe(dateOnlySchema.optional()).optional();
 const placementSchema = z.enum(["before", "after"]);
@@ -193,6 +197,18 @@ const submitLootBodySchema = z.object({
 const reviewTrialBodySchema = z.object({
   status: z.enum(["approved", "needsWork"]),
   commanderFeedback: requiredTextSchema,
+});
+const createAlignmentRequestBodySchema = z.object({
+  kind: z.enum(["reestimateCompletion", "acceptance"]),
+  scheduledAt: optionalDateTimeSchema,
+  meetingRoom: optionalTextSchema,
+  note: optionalTextSchema,
+});
+const reviewAlignmentRequestBodySchema = z.object({
+  status: z.enum(["scheduled", "completed", "needsWork", "cancelled"]),
+  scheduledAt: optionalDateTimeSchema,
+  meetingRoom: optionalTextSchema,
+  commanderFeedback: optionalTextSchema,
 });
 const contributionAllocationSchema = z.object({
   member: z.string().trim().min(1),
@@ -340,6 +356,33 @@ function sendTrialReviewOutcome(
   }
 
   return { trialReview: outcome.trialReview };
+}
+
+function sendAlignmentRequestOutcome(
+  reply: FastifyReply,
+  outcome: Awaited<ReturnType<typeof createObjectiveAlignmentRequest>> | Awaited<ReturnType<typeof reviewObjectiveAlignmentRequest>>,
+) {
+  if (outcome.status === "notFound") {
+    return reply.code(404).send({ error: "Objective alignment request not found" });
+  }
+
+  if (outcome.status === "forbidden") {
+    return reply.code(403).send({ error: "Only objective challengers can request alignment" });
+  }
+
+  if (outcome.status === "invalid") {
+    return reply.code(400).send({ error: "Objective alignment request is invalid" });
+  }
+
+  if (outcome.status === "closed") {
+    return reply.code(409).send({ error: "Objective is not open for this alignment request" });
+  }
+
+  if (outcome.status === "duplicate") {
+    return reply.code(409).send({ error: "Objective already has an open alignment request" });
+  }
+
+  return { alignmentRequest: outcome.request };
 }
 
 export async function buildServer(options: { logger?: boolean; registerOptionalIntegrations?: boolean } = {}) {
@@ -640,6 +683,37 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await freezeObjectiveAfterReestimate(params.objectiveId, context.user.id));
+  });
+
+  app.post("/api/objectives/:objectiveId/alignment-requests", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
+      return reply;
+    }
+
+    const body = createAlignmentRequestBodySchema.parse(request.body);
+    return sendAlignmentRequestOutcome(reply, await createObjectiveAlignmentRequest(params.objectiveId, body, context.user));
+  });
+
+  app.patch("/api/objectives/:objectiveId/alignment-requests/:alignmentRequestId", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = alignmentRequestParamsSchema.parse(request.params);
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
+      return reply;
+    }
+    const body = reviewAlignmentRequestBodySchema.parse(request.body);
+    return sendAlignmentRequestOutcome(
+      reply,
+      await reviewObjectiveAlignmentRequest(params.objectiveId, params.alignmentRequestId, body, context.user.id),
+    );
   });
 
   app.post("/api/objectives/:objectiveId/review", async (request, reply) => {
