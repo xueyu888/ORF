@@ -1,9 +1,8 @@
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, ClipboardCheck, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { Button, Card, Field } from "../components/ui";
-import { equalRatios, summarizeContributionReviews } from "../features/challenge/model/contributionReview";
 import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVisibility";
 import { useOrf } from "../state/OrfProvider";
 import {
@@ -11,8 +10,14 @@ import {
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
 } from "../domain/orfLifecycle";
+import {
+  canRequestObjectiveTrialReview,
+  canReviewObjectiveTrialReview,
+  latestObjectiveTrialReview,
+  objectiveTrialReviewStatusLabel,
+} from "../domain/orfTrialReview";
 import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
-import type { ContributionAllocation, LootResultClaimStatus, ResultAcceptedResult } from "../types/orf";
+import type { ContributionAllocation, LootResultClaim, LootResultClaimStatus, ObjectiveTrialReviewStatus, ResultAcceptedResult } from "../types/orf";
 
 const lootClaimOptions: Array<{ label: string; value: LootResultClaimStatus }> = [
   { label: "完成", value: "completed" },
@@ -27,15 +32,22 @@ const resultReviewOptions: Array<{ label: string; value: ResultAcceptedResult }>
   { label: "不验收", value: "unreviewed" },
 ];
 
+const CONTRIBUTION_PERCENT_TOTAL = 100;
+const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
+
 export function LootSubmitPage() {
   const { objectiveId } = useParams();
   const navigate = useNavigate();
-  const { currentUser, dataReady, reviewObjectiveLoot, state, submitContributionReview, submitLoot } = useOrf();
+  const { currentUser, dataReady, reviewObjectiveLoot, reviewObjectiveTrialReview, state, submitContributionReview, submitLoot, submitObjectiveTrialReview } = useOrf();
   const objective = state.objectives.find((item) => item.id === objectiveId);
   const results = useMemo(() => (objective ? state.results.filter((result) => result.objectiveId === objective.id) : []), [objective, state.results]);
   const latestLoot = useMemo(
     () => state.objectiveLoot.filter((item) => item.objectiveId === objectiveId).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))[0],
     [objectiveId, state.objectiveLoot],
+  );
+  const latestTrialReview = useMemo(
+    () => latestObjectiveTrialReview(objectiveId ?? "", state.objectiveTrialReviews),
+    [objectiveId, state.objectiveTrialReviews],
   );
   const [body, setBody] = useState("");
   const [selfTestReportBody, setSelfTestReportBody] = useState("");
@@ -45,8 +57,10 @@ export function LootSubmitPage() {
   const [resolutionInputs, setResolutionInputs] = useState<Record<string, string>>({});
   const [resolutionReason, setResolutionReason] = useState("");
   const [reason, setReason] = useState("");
+  const [trialDecision, setTrialDecision] = useState<Exclude<ObjectiveTrialReviewStatus, "requested">>("approved");
+  const [trialFeedback, setTrialFeedback] = useState("");
   const [error, setError] = useState("");
-  const [submittingAction, setSubmittingAction] = useState<"loot" | "peerReview" | "review" | null>(null);
+  const [submittingAction, setSubmittingAction] = useState<"loot" | "trialReview" | "trialResponse" | "peerReview" | "review" | null>(null);
 
   useEffect(() => {
     setClaims((current) => {
@@ -66,8 +80,8 @@ export function LootSubmitPage() {
   }, [results]);
 
   useEffect(() => {
-    setContributionInputs((current) => ratioInputDefaults(objective?.challengers ?? [], current));
-    setResolutionInputs((current) => ratioInputDefaults(objective?.challengers ?? [], current));
+    setContributionInputs((current) => percentInputDefaults(objective?.challengers ?? [], current));
+    setResolutionInputs((current) => percentInputDefaults(objective?.challengers ?? [], current));
   }, [objective?.challengers]);
 
   if (!objective) {
@@ -82,27 +96,22 @@ export function LootSubmitPage() {
   const isChallenger = currentUser?.role === "member" && objective.challengers.includes(currentMember);
   const canSubmit = canSubmitObjectiveLootByFlow(objective) && isChallenger;
   const canReview = Boolean(currentUser?.role === "admin" && canReviewObjectiveLootByFlow(objective) && latestLoot);
+  const canRequestTrial = canRequestObjectiveTrialReview(objective, currentUser, latestTrialReview);
+  const canReviewTrial = canReviewObjectiveTrialReview(objective, currentUser, latestTrialReview);
   const canPeerReview = canSubmitObjectiveContributionReviewByFlow(objective) && isChallenger;
-  const contributionReviews = state.objectiveContributionReviews.filter((item) => item.objectiveId === objective.id);
-  const contributionSummary = summarizeContributionReviews(objective.challengers, contributionReviews);
-  const needsContributionResolution = contributionSummary.status !== "ready";
-  const hasCurrentPeerReview = contributionReviews.some((item) => item.reviewer === currentMember);
+  const usesLocalContributionSettlement = objective.challengers.length > 1;
+  const needsContributionResolution = usesLocalContributionSettlement;
   const objectiveReviewResult = objectiveAcceptedResultFromReviews(results.map((result) => resultReviews[result.id] ?? "completed"));
 
-  const submit = async () => {
+  const buildLootSubmission = (): { body: string; resultClaims: LootResultClaim[] } | null => {
     const value = body.trim();
-    if (submittingAction) return;
-    if (!canSubmit) {
-      setError("目标冻结后，挑战者才能提交战利品");
-      return;
-    }
     if (!value) {
       setError("请填写完成说明");
-      return;
+      return null;
     }
     if (results.length === 0) {
       setError("这个目标没有可验收的指标");
-      return;
+      return null;
     }
 
     const resultClaims = results.map((result) => ({
@@ -113,17 +122,77 @@ export function LootSubmitPage() {
     const missingEvidence = resultClaims.find((claim) => claim.claim !== "notClaimed" && !claim.evidenceText);
     if (missingEvidence) {
       setError("请填写每个已声明指标的证据、数据或链接");
+      return null;
+    }
+
+    return { body: value, resultClaims };
+  };
+
+  const submit = async () => {
+    if (submittingAction) return;
+    if (!canSubmit) {
+      setError("目标冻结后，挑战者才能提交战利品");
       return;
     }
+    const submission = buildLootSubmission();
+    if (!submission) return;
 
     setSubmittingAction("loot");
     try {
       const ok = await submitLoot({
         objectiveId: objective.id,
-        body: value,
+        body: submission.body,
         author: currentUser?.name,
         selfTestReportBody: selfTestReportBody.trim() || null,
-        resultClaims,
+        resultClaims: submission.resultClaims,
+      });
+      if (ok) navigate("/tasks");
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
+
+  const requestTrialReview = async () => {
+    if (submittingAction) return;
+    if (!canRequestTrial) {
+      setError("冻结阶段的挑战者只能发起一次试验收");
+      return;
+    }
+    const submission = buildLootSubmission();
+    if (!submission) return;
+
+    setSubmittingAction("trialReview");
+    try {
+      const ok = await submitObjectiveTrialReview({
+        objectiveId: objective.id,
+        body: submission.body,
+        author: currentUser?.name,
+        selfTestReportBody: selfTestReportBody.trim() || null,
+        resultClaims: submission.resultClaims,
+      });
+      if (ok) navigate("/tasks");
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
+
+  const respondTrialReview = async () => {
+    if (submittingAction) return;
+    if (!canReviewTrial || !latestTrialReview) {
+      setError("只有指挥官能处理待反馈的试验收");
+      return;
+    }
+    const feedback = trialFeedback.trim();
+    if (!feedback) {
+      setError("请填写试验收反馈");
+      return;
+    }
+
+    setSubmittingAction("trialResponse");
+    try {
+      const ok = await reviewObjectiveTrialReview(objective.id, latestTrialReview.id, {
+        status: trialDecision,
+        commanderFeedback: feedback,
       });
       if (ok) navigate("/tasks");
     } finally {
@@ -138,17 +207,20 @@ export function LootSubmitPage() {
       return;
     }
 
-    const contributionResolution = needsContributionResolution
-      ? {
-          ratios: ratioInputsToAllocations(resolutionInputs, objective.challengers),
-          reason: resolutionReason.trim() || "指挥官处理匿名互评分歧",
-        }
-      : undefined;
-
-    if (needsContributionResolution && (contributionResolution?.ratios.length ?? 0) !== objective.challengers.length) {
-      setError("请完成贡献分歧处理");
+    const manualResolutionReason = resolutionReason.trim();
+    const shouldUseManualResolution = needsContributionResolution && Boolean(manualResolutionReason);
+    const resolutionResult = shouldUseManualResolution ? percentInputsToAllocations(resolutionInputs, objective.challengers) : null;
+    if (resolutionResult?.status === "invalid") {
+      setError(resolutionResult.error);
       return;
     }
+    const contributionResolution =
+      resolutionResult?.status === "ok"
+        ? {
+            ratios: resolutionResult.allocations,
+            reason: manualResolutionReason,
+          }
+        : undefined;
 
     setSubmittingAction("review");
     try {
@@ -169,15 +241,19 @@ export function LootSubmitPage() {
 
   const submitPeerReview = async () => {
     if (submittingAction) return;
-    const allocations = ratioInputsToAllocations(contributionInputs, objective.challengers);
-    if (!canPeerReview || allocations.length !== objective.challengers.length) {
-      setError("请完成匿名互评");
+    const result = percentInputsToAllocations(contributionInputs, objective.challengers);
+    if (!canPeerReview) {
+      setError("目标提交后，挑战者才能提交匿名互评");
+      return;
+    }
+    if (result.status === "invalid") {
+      setError(result.error);
       return;
     }
 
     setSubmittingAction("peerReview");
     try {
-      const ok = await submitContributionReview(objective.id, allocations);
+      const ok = await submitContributionReview(objective.id, result.allocations);
       if (ok) navigate("/tasks");
     } finally {
       setSubmittingAction(null);
@@ -186,7 +262,7 @@ export function LootSubmitPage() {
 
   return (
     <PageScaffold
-      title={canReview ? "验收战利品" : canPeerReview ? "提交匿名互评" : "提交战利品"}
+      title={canReview ? "验收战利品" : canReviewTrial ? "处理试验收" : canPeerReview ? "提交匿名互评" : "提交战利品"}
       subtitle={`目标：${objective.title}`}
       action={
         <Link className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" to="/tasks">
@@ -210,6 +286,26 @@ export function LootSubmitPage() {
               <div className="font-semibold orf-text-primary">最近提交</div>
               <div className="orf-text-secondary whitespace-pre-wrap">{latestLoot.body}</div>
               {latestLoot.selfTestReportBody && <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary whitespace-pre-wrap">{latestLoot.selfTestReportBody}</div>}
+            </div>
+          </Card>
+        )}
+
+        {latestTrialReview && (
+          <Card className="orf-card-padding">
+            <div className="grid gap-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="font-semibold orf-text-primary">试验收</div>
+                <span className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs font-semibold orf-text-secondary">
+                  {objectiveTrialReviewStatusLabel(latestTrialReview.status)}
+                </span>
+              </div>
+              <div className="orf-text-secondary whitespace-pre-wrap">{latestTrialReview.body}</div>
+              {latestTrialReview.selfTestReportBody && <div className="rounded-md border orf-border p-3 text-xs orf-text-secondary whitespace-pre-wrap">{latestTrialReview.selfTestReportBody}</div>}
+              {latestTrialReview.commanderFeedback && (
+                <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary whitespace-pre-wrap">
+                  {latestTrialReview.commanderFeedback}
+                </div>
+              )}
             </div>
           </Card>
         )}
@@ -239,13 +335,15 @@ export function LootSubmitPage() {
               </div>
               <div className="grid gap-3">
                 <div className="text-sm font-semibold orf-text-primary">匿名互评贡献结果</div>
-                <ContributionSummaryView summary={contributionSummary} />
+                {usesLocalContributionSettlement ? <LocalSettlementSummaryView /> : <SingleContributionSummaryView member={objective.challengers[0] ?? currentMember} />}
                 {needsContributionResolution && (
                   <div className="grid gap-3 rounded-md border orf-border p-3">
                     <div className="text-sm font-semibold orf-text-primary">处理分歧</div>
+                    <div className="text-xs orf-text-secondary">默认优先使用本地结算服务的匿名互评结果；只有需要手动处理时，填写最终贡献百分比和说明。</div>
+                    <ContributionPercentTotal total={percentInputTotal(resolutionInputs, objective.challengers)} />
                     {objective.challengers.map((member) => (
-                      <Field key={member} label={`${member} 处理后贡献比例`}>
-                        <input className="orf-input px-3 py-2 text-sm" type="number" min="0" step="0.1" value={resolutionInputs[member] ?? "1"} onChange={(event) => setResolutionInputs((items) => ({ ...items, [member]: event.target.value }))} />
+                      <Field key={member} label={`${member} 处理后贡献百分比`}>
+                        <input className="orf-input px-3 py-2 text-sm" type="number" min="0" max="100" step="0.01" inputMode="decimal" value={resolutionInputs[member] ?? "0"} onChange={(event) => { setResolutionInputs((items) => ({ ...items, [member]: event.target.value })); if (error) setError(""); }} />
                       </Field>
                     ))}
                     <Field label="分歧处理说明">
@@ -264,6 +362,40 @@ export function LootSubmitPage() {
               </div>
             </form>
           </Card>
+        ) : canReviewTrial && latestTrialReview ? (
+          <Card className="orf-card-padding">
+            <form
+              className="grid gap-5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void respondTrialReview();
+              }}
+            >
+              <div className="grid gap-3">
+                {latestTrialReview.resultClaims.map((claim) => (
+                  <div key={claim.resultId} className="grid gap-2 rounded-md border orf-border p-3">
+                    <div className="text-sm font-semibold orf-text-primary">{results.find((result) => result.id === claim.resultId)?.title ?? claim.resultId}</div>
+                    <div className="text-xs font-semibold orf-text-secondary">{lootClaimLabel(claim.claim)}</div>
+                    {claim.evidenceText && <div className="text-sm orf-text-secondary whitespace-pre-wrap">{claim.evidenceText}</div>}
+                  </div>
+                ))}
+              </div>
+              <Field label="试验收结论">
+                <select className="orf-input px-3 py-2 text-sm" value={trialDecision} onChange={(event) => setTrialDecision(event.target.value as Exclude<ObjectiveTrialReviewStatus, "requested">)}>
+                  <option value="approved">可正式提交</option>
+                  <option value="needsWork">需补充</option>
+                </select>
+              </Field>
+              <Field label="反馈说明">
+                <textarea className="orf-input min-h-24 px-3 py-2 text-sm" value={trialFeedback} onChange={(event) => { setTrialFeedback(event.target.value); if (error) setError(""); }} />
+              </Field>
+              {error && <div className="text-sm orf-danger-text">{error}</div>}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
+                <Button type="submit" disabled={submittingAction === "trialResponse"}>提交反馈</Button>
+              </div>
+            </form>
+          </Card>
         ) : canPeerReview ? (
           <Card className="orf-card-padding">
             <form
@@ -274,12 +406,16 @@ export function LootSubmitPage() {
               }}
             >
               <div className="text-sm orf-text-secondary">
-                {hasCurrentPeerReview ? "你已提交过匿名互评；再次提交会作为最新评价参与汇总。" : "评价当前目标挑战者的贡献比例，系统会匿名汇总后用于结算。"}
+                评价当前目标挑战者的贡献比例，提交后会加密发送到本地结算服务；再次提交会作为最新评价参与汇总。
               </div>
+              <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary">
+                给每位目标挑战者填写 0-100 的贡献百分比，合计必须为 100%。需要包含自己；自评只用于一致性核查，结算得分只汇总其他挑战者对该成员的评价。
+              </div>
+              <ContributionPercentTotal total={percentInputTotal(contributionInputs, objective.challengers)} />
               <div className="grid gap-3">
                 {objective.challengers.map((member) => (
-                  <Field key={member} label={`${member} 贡献比例`}>
-                    <input className="orf-input px-3 py-2 text-sm" type="number" min="0" step="0.1" value={contributionInputs[member] ?? "1"} onChange={(event) => setContributionInputs((items) => ({ ...items, [member]: event.target.value }))} />
+                  <Field key={member} label={`${member}${member === currentMember ? "（你）" : ""} 贡献百分比`}>
+                    <input className="orf-input px-3 py-2 text-sm" type="number" min="0" max="100" step="0.01" inputMode="decimal" value={contributionInputs[member] ?? "0"} onChange={(event) => { setContributionInputs((items) => ({ ...items, [member]: event.target.value })); if (error) setError(""); }} />
                   </Field>
                 ))}
               </div>
@@ -290,7 +426,7 @@ export function LootSubmitPage() {
               </div>
             </form>
           </Card>
-        ) : (
+        ) : canSubmit ? (
           <Card className="orf-card-padding">
             <form
               className="grid gap-5"
@@ -319,69 +455,104 @@ export function LootSubmitPage() {
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="secondary" onClick={() => navigate("/tasks")}>取消</Button>
+                {canRequestTrial && (
+                  <Button type="button" variant="secondary" disabled={submittingAction === "trialReview"} onClick={() => void requestTrialReview()}>
+                    <ClipboardCheck className="h-4 w-4" />
+                    提交试验收
+                  </Button>
+                )}
                 <Button type="submit" disabled={!canSubmit || submittingAction === "loot"}>
                   <Send className="h-4 w-4" />
-                  提交
+                  正式提交
                 </Button>
               </div>
             </form>
           </Card>
+        ) : (
+          <Card className="orf-card-padding text-sm orf-text-secondary">当前状态没有可提交的验收动作。</Card>
         )}
       </div>
     </PageScaffold>
   );
 }
 
-function ContributionSummaryView({ summary }: { summary: ReturnType<typeof summarizeContributionReviews> }) {
-  if (summary.status === "missing") {
-    return (
-      <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
-        <div className="orf-text-secondary">等待匿名互评：{summary.missingReviewers.join("、") || "未收到评价"}</div>
-      </div>
-    );
-  }
-
-  if (summary.status === "conflict") {
-    return (
-      <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
-        <div className="orf-warning-text">匿名互评存在分歧，需指挥官处理后结算。</div>
-        <RatioList ratios={summary.ratios} />
-      </div>
-    );
-  }
-
+function LocalSettlementSummaryView() {
   return (
     <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
-      <RatioList ratios={summary.ratios} />
+      <div className="orf-text-secondary">验收时从本地结算服务读取匿名互评汇总。</div>
     </div>
   );
 }
 
-function RatioList({ ratios }: { ratios: ContributionAllocation[] }) {
+function SingleContributionSummaryView({ member }: { member: string }) {
   return (
-    <div className="grid gap-1">
-      {ratios.map((item) => (
-        <div key={item.member} className="flex justify-between gap-3">
-          <span className="orf-text-primary">{item.member}</span>
-          <span className="orf-text-secondary">{formatPercent(item.ratio)}</span>
-        </div>
-      ))}
+    <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
+      <div className="flex justify-between gap-3">
+        <span className="orf-text-primary">{member}</span>
+        <span className="orf-text-secondary">100%</span>
+      </div>
     </div>
   );
 }
 
-function ratioInputDefaults(members: string[], current: Record<string, string>) {
+function ContributionPercentTotal({ total }: { total: number }) {
+  const valid = Math.abs(total - CONTRIBUTION_PERCENT_TOTAL) <= CONTRIBUTION_PERCENT_TOLERANCE;
+  return (
+    <div className={valid ? "text-xs orf-text-secondary" : "text-xs orf-warning-text"}>
+      当前合计：{formatInputPercent(total)}%
+    </div>
+  );
+}
+
+function percentInputDefaults(members: string[], current: Record<string, string>) {
   const next: Record<string, string> = {};
-  for (const item of equalRatios(members)) {
-    next[item.member] = current[item.member] ?? "1";
+  const defaults = balancedPercentDefaults(members);
+  for (const member of members) {
+    next[member] = current[member] ?? defaults[member] ?? "0";
   }
   return next;
 }
 
-function ratioInputsToAllocations(values: Record<string, string>, members: string[]) {
-  return members
-    .map((member) => ({ member, ratio: Number(values[member] ?? 0) }))
-    .filter((item) => Number.isFinite(item.ratio) && item.ratio >= 0);
+function balancedPercentDefaults(members: string[]) {
+  if (members.length === 0) return {};
+  const next: Record<string, string> = {};
+  const base = Number((CONTRIBUTION_PERCENT_TOTAL / members.length).toFixed(2));
+  let assigned = 0;
+  members.forEach((member, index) => {
+    const value = index === members.length - 1 ? CONTRIBUTION_PERCENT_TOTAL - assigned : base;
+    assigned += value;
+    next[member] = formatInputPercent(value);
+  });
+  return next;
+}
+
+function percentInputsToAllocations(values: Record<string, string>, members: string[]) {
+  const allocations: ContributionAllocation[] = [];
+  for (const member of members) {
+    const rawValue = values[member]?.trim();
+    if (!rawValue) {
+      return { status: "invalid" as const, error: "请填写每个挑战者的贡献百分比" };
+    }
+    const percent = Number(rawValue);
+    if (!Number.isFinite(percent) || percent < 0 || percent > CONTRIBUTION_PERCENT_TOTAL) {
+      return { status: "invalid" as const, error: "贡献百分比必须在 0 到 100 之间" };
+    }
+    allocations.push({ member, ratio: percent / CONTRIBUTION_PERCENT_TOTAL });
+  }
+
+  const total = allocations.reduce((sum, item) => sum + item.ratio, 0) * CONTRIBUTION_PERCENT_TOTAL;
+  if (Math.abs(total - CONTRIBUTION_PERCENT_TOTAL) > CONTRIBUTION_PERCENT_TOLERANCE) {
+    return { status: "invalid" as const, error: "贡献百分比合计必须为 100%" };
+  }
+
+  return { status: "ok" as const, allocations };
+}
+
+function percentInputTotal(values: Record<string, string>, members: string[]) {
+  return members.reduce((sum, member) => {
+    const value = Number(values[member] ?? 0);
+    return Number.isFinite(value) ? sum + value : sum;
+  }, 0);
 }
 
 function objectiveReviewResultLabel(value: ReturnType<typeof objectiveAcceptedResultFromReviews>) {
@@ -390,6 +561,10 @@ function objectiveReviewResultLabel(value: ReturnType<typeof objectiveAcceptedRe
   return "存在未完成、失败或未验收指标，目标不按完成结算。";
 }
 
-function formatPercent(value: number) {
-  return `${Math.round(value * 100)}%`;
+function lootClaimLabel(value: LootResultClaimStatus) {
+  return lootClaimOptions.find((option) => option.value === value)?.label ?? value;
+}
+
+function formatInputPercent(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }

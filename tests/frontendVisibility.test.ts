@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { breadcrumb } from "../src/components/appShellBreadcrumb";
+import { designTokens } from "../src/config/designTokens";
 import { canShowFrontend, canShowFrontendPath, frontendVisibilityByPath, frontendVisibilityTable } from "../src/config/frontendVisibility";
 import { quickActions, quickPages } from "../src/config/navigation";
 import type { OrfUser } from "../src/types/orf";
@@ -79,7 +80,7 @@ test("app shell breadcrumb labels objective loot deep links", () => {
   );
 });
 
-test("sidebar keeps utility actions inside the user panel", () => {
+test("sidebar keeps search separate and account actions in the avatar menu", () => {
   const source = readFileSync(path.resolve("src/components/Sidebar.tsx"), "utf8");
   const footerStart = source.indexOf('<div className="orf-sidebar-footer');
   const footerEnd = source.indexOf("</aside>", footerStart);
@@ -88,7 +89,9 @@ test("sidebar keeps utility actions inside the user panel", () => {
 
   const footerSource = source.slice(footerStart, footerEnd);
   const userActionsStart = footerSource.indexOf('className="orf-sidebar-user-actions"');
-  assert.notEqual(userActionsStart, -1, "Sidebar footer utilities must live inside the user panel action group");
+  const userActionsEnd = footerSource.indexOf("</div>", userActionsStart);
+  assert.notEqual(userActionsStart, -1, "Sidebar footer search must live inside the user panel action group");
+  assert.notEqual(userActionsEnd, -1, "Sidebar user action group must be closed before the avatar menu");
 
   assert.doesNotMatch(
     footerSource.slice(0, userActionsStart),
@@ -100,12 +103,36 @@ test("sidebar keeps utility actions inside the user panel", () => {
     /className="orf-sidebar-command/,
     "Sidebar utilities must not use full-width footer command buttons",
   );
-  for (const label of ["搜索", "设置", "退出登录"]) {
+  const userActionsSource = footerSource.slice(userActionsStart, userActionsEnd);
+  assert.match(userActionsSource, /aria-label="搜索"/, "Sidebar search must remain a separate icon action");
+  assert.doesNotMatch(
+    userActionsSource,
+    /aria-label="(?:设置|退出登录)"/,
+    "Sidebar account actions must move from utility icons into the avatar menu",
+  );
+
+  const userMenuStart = footerSource.indexOf('className="orf-sidebar-user-menu"');
+  assert.notEqual(userMenuStart, -1, "Sidebar user avatar must open an account menu");
+  for (const label of ["查看头像", "个人设置", "退出登录"]) {
     assert.ok(
-      footerSource.indexOf(`aria-label="${label}"`, userActionsStart) > userActionsStart,
-      `Sidebar user panel must include ${label}`,
+      footerSource.indexOf(label, userMenuStart) > userMenuStart,
+      `Sidebar avatar menu must include ${label}`,
     );
   }
+});
+
+test("app shell chrome keeps sidebar and icons compact", () => {
+  assert.equal(designTokens.size.sidebarWidth, "260px");
+  assert.equal(designTokens.size.sidebarCollapsedWidth, "76px");
+  assert.equal(designTokens.size.topbarHeight, "60px");
+
+  const sidebarSource = readFileSync(path.resolve("src/components/Sidebar.tsx"), "utf8");
+  const appShellSource = readFileSync(path.resolve("src/components/AppShell.tsx"), "utf8");
+  const stylesSource = readFileSync(path.resolve("src/styles.css"), "utf8");
+  assert.match(sidebarSource, /<item\.icon className="orf-sidebar-icon h-4 w-4 shrink-0" \/>/);
+  assert.doesNotMatch(sidebarSource, /PanelLeft(?:Open|Close) className="h-6 w-6"/);
+  assert.doesNotMatch(appShellSource, /orf-topbar[^\n"]*border-b/);
+  assert.doesNotMatch(stylesSource, /\.orf-topbar::(?:before|after)/);
 });
 
 test("system messages stay out of the primary sidebar navigation", () => {

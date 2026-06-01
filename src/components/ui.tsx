@@ -2,8 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { FeedbackStatus, Priority, TaskStatus, WorkStatus } from "../types/orf";
-import { avatarStyleForName } from "../utils/avatar";
-import { initials } from "../utils/format";
+import { UserAvatar } from "./UserAvatar";
 import { statusLabel } from "../utils/labels";
 
 const statusClasses: Record<WorkStatus | FeedbackStatus | TaskStatus | Priority, string> = {
@@ -96,21 +95,8 @@ export function ProgressBar({ value, className }: { value: number; className?: s
   );
 }
 
-export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg" }) {
-  return (
-    <div
-      className={clsx(
-        "inline-flex shrink-0 items-center justify-center rounded-full border-2 border-white font-bold shadow-sm",
-        size === "sm" && "h-6 w-6 text-[10px]",
-        size === "md" && "h-8 w-8 text-xs",
-        size === "lg" && "h-10 w-10 text-sm",
-      )}
-      style={avatarStyleForName(name)}
-      title={name}
-    >
-      {initials(name)}
-    </div>
-  );
+export function Avatar({ avatarUrl, name, size = "md" }: { avatarUrl?: string | null; name: string; size?: "sm" | "md" | "lg" }) {
+  return <UserAvatar avatarUrl={avatarUrl} name={name} size={size} />;
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {

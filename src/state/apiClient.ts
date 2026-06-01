@@ -1,14 +1,15 @@
-import type { AppNotification, BountySource, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
+import type { AppNotification, BountySource, ChallengeApplication, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
 import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveContributionReviews" | "pointLedger" | "permissionRules"
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveTrialReviews" | "pointLedger" | "permissionRules"
 >;
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
+export type CurrentUserResponse = { user: OrfUser };
 export type RegistrationRequestsResponse = { users: OrfUser[] };
 export type NotificationsResponse = {
   notifications: AppNotification[];
@@ -29,18 +30,24 @@ export type CommentAttachmentUploadResponse = {
   markdown: string;
 };
 export type BountyHallItem = {
+  applications: ChallengeApplication[];
+  approvedApplicants: string[];
+  challengers: string[];
   uncertaintyPoints: number;
   deadline: string;
   definer: string;
   difficultyRank: number;
   hasCurrentApplication: boolean;
+  isCurrentChallenger: boolean;
   isRecruitment: boolean;
   objective: Objective;
+  pendingApplications: ChallengeApplication[];
   result: Result | null;
   results: Result[];
   source: BountySource;
 };
 export type BountyHallData = {
+  publicItems: BountyHallItem[];
   recruitmentItems: BountyHallItem[];
   availableItems: BountyHallItem[];
   objectiveOptions: Objective[];
@@ -259,4 +266,20 @@ export async function deletePersonalBackground(id: string) {
     method: "DELETE",
   });
   return response.data;
+}
+
+export async function uploadCurrentUserAvatarRequest(file: File) {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  return apiJson<CurrentUserResponse>("/api/users/me/avatar", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function deleteCurrentUserAvatarRequest() {
+  return apiJson<CurrentUserResponse>("/api/users/me/avatar", {
+    method: "DELETE",
+  });
 }

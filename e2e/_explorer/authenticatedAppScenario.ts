@@ -299,16 +299,19 @@ function taskManagementData(comments: CommentThread[]): TaskManagementData {
     feedback: initialOrfState.feedback,
     comments,
     objectiveLoot: initialOrfState.objectiveLoot,
-    objectiveContributionReviews: initialOrfState.objectiveContributionReviews,
+    objectiveTrialReviews: initialOrfState.objectiveTrialReviews,
     pointLedger: initialOrfState.pointLedger,
     permissionRules: initialOrfState.permissionRules,
   };
 }
 
 function bountyHallData(): BountyHallData {
+  const recruitmentItems = [bountyHallItem("obj-bounty-agent-retry", true)];
+  const availableItems = [bountyHallItem("obj-bounty-cost-routing")];
   return {
-    recruitmentItems: [bountyHallItem("obj-bounty-agent-retry", true)],
-    availableItems: [bountyHallItem("obj-bounty-cost-routing")],
+    publicItems: [...recruitmentItems, ...availableItems],
+    recruitmentItems,
+    availableItems,
     objectiveOptions: [
       initialOrfState.objectives.find((item) => item.id === "obj-bounty-agent-retry"),
       initialOrfState.objectives.find((item) => item.id === "obj-bounty-cost-routing"),
@@ -327,13 +330,18 @@ function bountyHallItem(objectiveId: string, isRecruitment = false): BountyHallI
   }
 
   return {
+    applications: objective.challengeApplications,
+    approvedApplicants: objective.challengeApplications.filter((application) => application.status === "approved").map((application) => application.applicant),
+    challengers: objective.challengers,
     uncertaintyPoints: results.reduce((sum, item) => sum + item.uncertaintyScore, 0),
     deadline: objective.finalDueAt,
     definer: result.definer ?? "",
     difficultyRank: Math.max(...results.map((item) => difficultyRanks[item.uncertaintyLevel ?? "进阶"])),
     hasCurrentApplication: false,
+    isCurrentChallenger: false,
     isRecruitment,
     objective,
+    pendingApplications: objective.challengeApplications.filter((application) => application.status === "pending"),
     result,
     results,
     source: result.source ?? "managerDefined",

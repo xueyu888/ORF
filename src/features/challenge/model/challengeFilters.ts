@@ -2,10 +2,12 @@ import { objectiveChallengeSortRank } from "../../../domain/orfLifecycle";
 import type { ObjectiveNode, BountyStatus } from "./types";
 
 export type ChallengeCycleFilter = "all" | string;
+export type ChallengeMemberFilter = "all" | string;
 export type ChallengeStatusFilter = "all" | "unassigned" | BountyStatus;
 
 export interface ChallengeFilters {
   cycle: ChallengeCycleFilter;
+  member: ChallengeMemberFilter;
   status: ChallengeStatusFilter;
 }
 
@@ -13,9 +15,16 @@ export function challengeCycleOptions(groups: readonly ObjectiveNode[]) {
   return Array.from(new Set(groups.map((group) => group.objective.cycle.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
 }
 
+export function challengeMemberOptions(groups: readonly ObjectiveNode[]) {
+  return Array.from(new Set(groups.flatMap((group) => group.challengers.map((member) => member.trim()).filter(Boolean)))).sort((left, right) =>
+    left.localeCompare(right, "zh-Hans-CN"),
+  );
+}
+
 export function filterChallengeGroups(groups: readonly ObjectiveNode[], filters: ChallengeFilters): ObjectiveNode[] {
   return groups
     .filter((group) => filters.cycle === "all" || group.objective.cycle === filters.cycle)
+    .filter((group) => filters.member === "all" || group.challengers.includes(filters.member))
     .map((group) => {
       if (filters.status === "all") {
         return group;

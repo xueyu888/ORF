@@ -1,12 +1,13 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
+import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
-import type { ObjectiveContributionReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
+import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -36,8 +37,9 @@ type RowHandlers = {
   temporaryChildRow: TemporaryChildRow | null;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
-  contributionReviews: ObjectiveContributionReview[];
+  trialReviews: ObjectiveTrialReview[];
   canManageFlow: boolean;
+  objectiveDeadlineEditState: (objective: ObjectiveNode["objective"]) => ObjectiveDeadlineEditState;
   canMutateMetrics: (objectiveId: string) => boolean;
   canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
@@ -60,6 +62,8 @@ type RowHandlers = {
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
+  onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
   onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -132,7 +136,7 @@ function ObjectivePanel({
   const workbenchAction = workbenchActionForObjective({
     objective: group.objective,
     currentUser: handlers.currentUser,
-    contributionReviews: handlers.contributionReviews,
+    trialReviews: handlers.trialReviews,
   });
   const showApplicationReview =
     handlers.canManageFlow &&
@@ -161,11 +165,12 @@ function ObjectivePanel({
     <section
       ref={setObjectiveElement}
       className={clsx("orf-objective-panel relative", isFrozen ? "orf-objective-panel-frozen" : "orf-objective-panel-editable", isDraftObjective && "orf-objective-panel-draft")}
+      data-objective-panel-id={group.objective.id}
       data-has-open-row-menu={hasOpenRowMenu ? "true" : undefined}
     >
       <HierarchyTreeOverlay container={objectiveElement} layoutKey={layoutKey} />
       <div
-        className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid min-h-[58px] items-center px-5 text-sm", rowActive && "orf-row-active")}
+        className={clsx("orf-objective-header orf-challenge-row orf-challenge-row-objective group relative grid items-center px-5", rowActive && "orf-row-active")}
         data-challenge-row-target={anchorId}
         data-has-workbench-action={workbenchAction ? "true" : undefined}
         data-scope={scope}
@@ -191,14 +196,14 @@ function ObjectivePanel({
           {isEditingTarget ? (
             <InlineTitleEditor
               ariaLabel="编辑目标标题"
-              className="orf-objective-title text-lg font-bold"
+              className="orf-objective-title font-bold"
               onDraftChange={isDraftObjective ? handlers.onDraftTitleChange : undefined}
               onCancel={handlers.onCancelEdit}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
               value={group.objective.title}
             />
           ) : (
-            <div className={clsx("orf-objective-title min-w-0 truncate text-lg font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{group.objective.title}</div>
+            <div className={clsx("orf-objective-title min-w-0 truncate font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{group.objective.title}</div>
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
         </HierarchyRootCell>
@@ -206,10 +211,15 @@ function ObjectivePanel({
         <AvatarStack names={group.challengers} />
         {statusChip}
         <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
-        <DateStack primary={group.deadline || "未设置"} />
+        <ObjectiveDeadlineCell
+          editState={handlers.objectiveDeadlineEditState(group.objective)}
+          objective={group.objective}
+          onSave={handlers.onSaveObjectiveDeadline}
+          onUnavailable={handlers.onUnavailableObjectiveDeadline}
+        />
         <ProgressValue value={group.objective.progress} />
         {workbenchAction ? (
-          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex h-9 items-center justify-center gap-2 px-3 text-sm font-semibold" to={workbenchAction.to}>
+          <Link className="orf-row-loot-action orf-control orf-primary-action inline-flex items-center justify-center gap-2 px-3 font-semibold" to={workbenchAction.to}>
             {workbenchAction.label}
           </Link>
         ) : null}
@@ -220,13 +230,18 @@ function ObjectivePanel({
           <span className="orf-objective-admin-strip-label">挑战申请</span>
           {pendingApplications.map((application) => (
             <span key={application.id} className="orf-objective-application-pill">
-              <span className="font-semibold orf-text-primary">{application.applicant}</span>
-              <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
-                通过
-              </button>
-              <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
-                拒绝
-              </button>
+              <span className="orf-objective-application-main">
+                <span className="font-semibold orf-text-primary">{application.applicant}</span>
+                {application.reason && <span className="orf-objective-application-reason">{application.reason}</span>}
+              </span>
+              <span className="orf-objective-application-actions">
+                <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onApproveApplication(group.objective.id, application.id)}>
+                  通过
+                </button>
+                <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
+                  拒绝
+                </button>
+              </span>
             </span>
           ))}
         </div>
@@ -386,7 +401,7 @@ function MetricRow({
     <div className="relative">
       <div
         className={clsx(
-          "orf-result-row orf-challenge-row orf-challenge-row-bounty orf-row-depth-1 group relative grid min-h-[56px] items-center px-5 text-sm",
+          "orf-result-row orf-challenge-row orf-challenge-row-bounty orf-row-depth-1 group relative grid items-center px-5",
           rowActive && "orf-row-active",
           bounty && handlers.dragDrop.dragItem?.type === "bounty" && handlers.dragDrop.dragItem.id === bounty.result.id && "orf-row-dragging",
           dropClass,
@@ -431,14 +446,14 @@ function MetricRow({
           {isEditingTarget ? (
             <InlineTitleEditor
               ariaLabel="编辑指标标题"
-              className="orf-result-title text-base font-semibold"
+              className="orf-result-title font-semibold"
               onCancel={handlers.onCancelEdit}
               onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
               value={temporary ? temporary.title : bounty!.result.title}
             />
           ) : (
-            <div className={clsx("orf-result-title truncate text-base font-semibold", complete ? "text-[#98a2b3] line-through" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
+            <div className={clsx("orf-result-title truncate font-semibold", complete ? "text-[#98a2b3] line-through" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
           )}
           {bounty && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
@@ -446,7 +461,7 @@ function MetricRow({
         <EmptySlot />
         <StatusChip tone={bounty ? bounty.status : "open"}>{statusLabel}</StatusChip>
         <EmptySlot />
-        <DateStack primary={bounty ? bounty.updatedAt || "未设置" : "未设置"} />
+        <EmptySlot />
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
@@ -505,7 +520,7 @@ function ActionRow({
     <div className="relative">
       <div
         className={clsx(
-          "orf-task-row orf-challenge-row orf-challenge-row-action orf-row-depth-1 group relative grid min-h-[42px] items-center px-5 text-sm",
+          "orf-task-row orf-challenge-row orf-challenge-row-action orf-row-depth-1 group relative grid items-center px-5",
           rowActive && "orf-row-active",
           action && handlers.dragDrop.dragItem?.type === "action" && handlers.dragDrop.dragItem.id === action.id && "orf-row-dragging",
           dropClass,
@@ -579,14 +594,14 @@ function ActionRow({
           {isSameTarget(handlers.editingTarget, target) ? (
             <InlineTitleEditor
               ariaLabel="编辑行动项标题"
-              className="orf-task-title text-base font-medium"
+              className="orf-task-title font-medium"
               onCancel={handlers.onCancelEdit}
               onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
               onSubmit={(title) => handlers.onSaveTitle(target, title)}
               value={temporary ? temporary.title : action!.title}
             />
           ) : (
-            <div className={clsx("orf-task-title truncate text-base font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
+            <div className={clsx("orf-task-title truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
           )}
           {action && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "task", action.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
@@ -667,7 +682,7 @@ function SubActionRow({
   return (
     <div
       className={clsx(
-        "orf-subtask-row orf-challenge-row orf-challenge-row-action orf-row-depth-2 group relative grid min-h-[36px] items-center px-5 text-sm",
+        "orf-subtask-row orf-challenge-row orf-challenge-row-action orf-row-depth-2 group relative grid items-center px-5",
         rowActive && "orf-row-active",
         item && handlers.dragDrop.dragItem?.type === "subAction" && handlers.dragDrop.dragItem.id === item.id && "orf-row-dragging",
         dropClass,
@@ -711,14 +726,14 @@ function SubActionRow({
         {isSameTarget(handlers.editingTarget, target) ? (
           <InlineTitleEditor
             ariaLabel="编辑子行动项标题"
-            className="orf-subtask-title text-sm font-medium"
+            className="orf-subtask-title font-medium"
             onCancel={handlers.onCancelEdit}
             onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
             onSubmit={(title) => handlers.onSaveTitle(target, title)}
             value={temporary ? temporary.title : item!.label}
           />
         ) : (
-          <div className={clsx("orf-subtask-title truncate text-sm font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#344054]")}>{title}</div>
+          <div className={clsx("orf-subtask-title truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#344054]")}>{title}</div>
         )}
         {item && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "subtask", item.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
       </HierarchyCell>
@@ -779,9 +794,97 @@ function ProgressValue({ value }: { value: number }) {
       <div className="orf-progress-track h-1.5 w-16 overflow-hidden rounded-full bg-[#dfe4eb]">
         <div className="h-full rounded-full bg-[#7f8da3]" style={{ width: `${bounded}%` }} />
       </div>
-      <span className="w-9 text-right text-sm font-bold text-[#344054]">{bounded}%</span>
+      <span className="orf-progress-value-label w-9 text-right font-bold text-[#344054]">{bounded}%</span>
     </div>
   );
+}
+
+function ObjectiveDeadlineCell({
+  editState,
+  objective,
+  onSave,
+  onUnavailable,
+}: {
+  editState: ObjectiveDeadlineEditState;
+  objective: ObjectiveNode["objective"];
+  onSave: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  onUnavailable: (objective: ObjectiveNode["objective"]) => void;
+}) {
+  const [value, setValue] = useState(objective.finalDueAt);
+  const [isSaving, setIsSaving] = useState(false);
+  const minimumValue = minimumObjectiveDeadlineValue(objective);
+  const canEdit = editState.status === "editable";
+
+  useEffect(() => {
+    setValue(objective.finalDueAt);
+  }, [objective.finalDueAt]);
+
+  const saveSelectedDate = async (nextValue: string) => {
+    if (!nextValue || isSaving) return;
+    setValue(nextValue);
+    if (nextValue === objective.finalDueAt) return;
+
+    setIsSaving(true);
+    try {
+      const saved = await onSave(objective.id, nextValue);
+      if (!saved) setValue(objective.finalDueAt);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (canEdit) {
+    return (
+      <div
+        className="orf-objective-deadline-display orf-objective-deadline-display-editable"
+        data-no-row-edit="true"
+        onDoubleClick={(event) => event.stopPropagation()}
+        title={objectiveDeadlineTitle(editState)}
+      >
+        <input
+          aria-label="目标截止日期"
+          className="orf-objective-deadline-picker"
+          disabled={isSaving}
+          min={minimumValue}
+          onChange={(event) => void saveSelectedDate(event.target.value)}
+          type="date"
+          value={value}
+        />
+        <DateStack primary={objective.finalDueAt || "未设置"} />
+      </div>
+    );
+  }
+
+  return (
+    <button
+      className={clsx("orf-objective-deadline-display", canEdit ? "orf-objective-deadline-display-editable" : "orf-objective-deadline-display-blocked")}
+      data-no-row-edit="true"
+      onClick={() => {
+        onUnavailable(objective);
+      }}
+      onDoubleClick={(event) => event.stopPropagation()}
+      title={objectiveDeadlineTitle(editState)}
+      type="button"
+    >
+      <DateStack primary={objective.finalDueAt || "未设置"} />
+    </button>
+  );
+}
+
+function objectiveDeadlineTitle(editState: ObjectiveDeadlineEditState) {
+  if (editState.status === "editable") {
+    return editState.mode === "extendFrozen" ? "点击延后冻结目标截止日期" : "点击修改目标截止日期";
+  }
+
+  if (editState.reason === "noPermission") {
+    return "只有指挥官可以修改截止日期";
+  }
+
+  if (editState.reason === "lifecycleLocked") {
+    return "当前状态不允许修改截止日期";
+  }
+
+  return "目标不可用，不能修改截止日期";
 }
 
 function DateStack({ primary, secondary }: { primary: string; secondary?: string }) {
@@ -803,7 +906,7 @@ function TimeValue({ icon: Icon, subtle, value }: { icon: LucideIcon; subtle?: b
 }
 
 function AvatarStack({ names }: { names: string[] }) {
-  if (names.length === 0) return <span className="orf-avatar-stack text-sm font-medium text-[#98a2b3]">未分配</span>;
+  if (names.length === 0) return <span className="orf-avatar-stack font-medium text-[#98a2b3]">未分配</span>;
 
   return (
     <div className="orf-avatar-stack flex items-center">

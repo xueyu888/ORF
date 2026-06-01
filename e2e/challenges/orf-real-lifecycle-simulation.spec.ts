@@ -1,4 +1,4 @@
-import { assertLatestPeerReviewWins, assertLifecycleSecurityBoundaries, assertStatusCoverage, assertAcceptedResultCoverage } from "./helpers/lifecycleInvariants";
+import { assertLifecycleSecurityBoundaries, assertStatusCoverage, assertAcceptedResultCoverage } from "./helpers/lifecycleInvariants";
 import {
   addExecutionWork,
   createCandidateLifecycleObjective,
@@ -239,6 +239,7 @@ test.describe("ORF real lifecycle simulation", () => {
         const accepted = await world.dsl.acceptRecruitmentViaApi(world.users.member1, created.objectiveId);
         expect(accepted.status).toBe(200);
         await bountyRow(world.page("member4"), world.objective("q1StaleBounty").title).getByRole("button", { name: "申请挑战" }).click();
+        await world.page("member4").getByRole("dialog").getByRole("textbox", { name: "申请理由" }).fill("旧页面申请挑战验证。");
         await world.page("member4").getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
         await expect(world.page("member4").getByText("目标状态已变化，请刷新后再试")).toBeVisible();
         await world.page("member4").reload();
@@ -270,16 +271,9 @@ test.describe("ORF real lifecycle simulation", () => {
       await simulator.runStep({ action: "member1-submits-q1-main-loot", actor: "member1", expectedState: "submitted", objectiveKey: "q1Main" }, async () => {
         await world.dsl.submitLoot(world.page("member1"), world.objective("q1Main").id!, world.objective("q1Main").title, `${world.objective("q1Main").title} 战利品`);
       });
-      await simulator.runStep({ action: "q1-main-repeat-peer-review-latest-wins", actor: "member1", expectedState: "submitted", objectiveKey: "q1Main" }, async () => {
+      await simulator.runStep({ action: "q1-main-local-peer-review-submissions", actor: "member1", expectedState: "submitted", objectiveKey: "q1Main" }, async () => {
         const objective = await world.dsl.objective(world.objective("q1Main").id!);
-        const first = await world.dsl.submitPeerReviewViaApi(world.users.member1, objective.id, [
-          { member: world.users.member1.name, ratio: 9 },
-          { member: world.users.member2.name, ratio: 1 },
-        ]);
-        expect(first.status).toBe(200);
-        await new Promise((resolve) => setTimeout(resolve, 5));
         await world.dsl.submitPeerReview(world.page("member1"), objective.id, objective.challengers.map((member) => ({ member, ratio: 1 })));
-        await assertLatestPeerReviewWins(real, objective.id, world.users.member1.name, objective.challengers.map((member) => ({ member, ratio: 0.5 })));
         await world.dsl.submitPeerReview(world.page("member2"), objective.id, objective.challengers.map((member) => ({ member, ratio: 1 })));
       });
       await simulator.runStep({ action: "commander-settles-q1-main-and-reports", actor: "commander", expectedState: "settled", objectiveKey: "q1Main" }, async () => {

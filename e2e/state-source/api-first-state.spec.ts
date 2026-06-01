@@ -194,15 +194,39 @@ test("bounty hall labels resultless objectives as pending metrics", async ({ pag
     resultIds: [],
   };
   const bounties: BountyHallData = {
-    availableItems: [
+    publicItems: [
       {
+        applications: [],
+        approvedApplicants: [],
+        challengers: [],
         uncertaintyPoints: 0,
         deadline: objective.finalDueAt,
         definer: "",
         difficultyRank: 0,
         hasCurrentApplication: false,
+        isCurrentChallenger: false,
         isRecruitment: false,
         objective,
+        pendingApplications: [],
+        result: null,
+        results: [],
+        source: "managerDefined",
+      },
+    ],
+    availableItems: [
+      {
+        applications: [],
+        approvedApplicants: [],
+        challengers: [],
+        uncertaintyPoints: 0,
+        deadline: objective.finalDueAt,
+        definer: "",
+        difficultyRank: 0,
+        hasCurrentApplication: false,
+        isCurrentChallenger: false,
+        isRecruitment: false,
+        objective,
+        pendingApplications: [],
         result: null,
         results: [],
         source: "managerDefined",
@@ -224,6 +248,7 @@ test("bounty hall labels resultless objectives as pending metrics", async ({ pag
 
   await expect(page.getByText("真实待定义指标悬赏")).toBeVisible();
   await expect(page.locator(".bounty-result-preview").getByText("待定义指标", { exact: true })).toBeVisible();
+  await expect(page.locator(".bounty-list-row").filter({ hasText: "真实待定义指标悬赏" }).locator(".bounty-badge-gold")).toHaveText("待校准");
   await expect(page.getByText("重估阶段校准")).toHaveCount(0);
 });
 

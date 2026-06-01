@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { AppNotification, NotificationKind, NotificationTargetType } from "../../src/types/orf";
 import { db } from "../db/client";
 import { notifications, teamMembers, users } from "../db/schema";
+import { publishRealtimeNotification, publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
 
@@ -72,7 +73,17 @@ export async function createNotifications(input: NotificationInput): Promise<App
   }));
 
   const inserted = await db.insert(notifications).values(rows).returning();
-  return inserted.map(toNotification);
+  const created = inserted.map(toNotification);
+  for (const notification of created) {
+    publishRealtimeNotification(input.teamId, notification);
+  }
+  publishRealtimeReadModelInvalidation(input.teamId, {
+    actorUserId: input.actorUserId,
+    models: ["notifications"],
+    reason: "notification.changed",
+    target: { id: created[0]?.id ?? "batch", type: "notification" },
+  });
+  return created;
 }
 
 export async function getActiveAdminNotificationRecipients(teamId: string): Promise<string[]> {
@@ -81,6 +92,15 @@ export async function getActiveAdminNotificationRecipients(teamId: string): Prom
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.role, "admin"), eq(users.status, "active")));
+  return rows.map((row) => row.id);
+}
+
+export async function getActiveTeamNotificationRecipients(teamId: string): Promise<string[]> {
+  const rows = await db
+    .select({ id: users.id })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, teamId), eq(users.status, "active")));
   return rows.map((row) => row.id);
 }
 
@@ -147,7 +167,16 @@ export async function markNotificationRead(notificationId: string, userId: strin
     .set({ readAt: nowIso() })
     .where(and(eq(notifications.id, notificationId), eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId)))
     .returning();
-  return row ? toNotification(row) : null;
+  if (!row) {
+    return null;
+  }
+  publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
+    actorUserId: userId,
+    models: ["notifications"],
+    reason: "notification.changed",
+    target: { id: notificationId, type: "notification" },
+  });
+  return toNotification(row);
 }
 
 export async function markAllNotificationsRead(userId: string, scope: RuntimeScope): Promise<number> {
@@ -156,5 +185,13 @@ export async function markAllNotificationsRead(userId: string, scope: RuntimeSco
     .set({ readAt: nowIso() })
     .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId), isNull(notifications.readAt)))
     .returning({ id: notifications.id });
+  if (rows.length > 0) {
+    publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
+      actorUserId: userId,
+      models: ["notifications"],
+      reason: "notification.changed",
+      target: { id: "all", type: "notification" },
+    });
+  }
   return rows.length;
 }

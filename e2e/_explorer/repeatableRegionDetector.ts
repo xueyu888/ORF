@@ -230,17 +230,6 @@ function interactiveHints(node: DomTreeNodeSnapshot): string[] {
   return [...self, ...node.children.flatMap((child) => interactiveHints(child))];
 }
 
-function isListLikeContainer(node: DomTreeNodeSnapshot) {
-  const classText = node.classTokens.join(" ");
-  const dataText = Object.entries(node.dataAttributes)
-    .map(([key, value]) => `${key}:${value}`)
-    .join(" ");
-  return (
-    isExplicitListLikeContainer(node) ||
-    node.children.length >= 2 && (listLikeClassPattern.test(classText) || /thread-list|list/i.test(dataText))
-  );
-}
-
 function isExplicitListLikeContainer(node: DomTreeNodeSnapshot) {
   const classText = node.classTokens.join(" ");
   const dataText = Object.entries(node.dataAttributes)

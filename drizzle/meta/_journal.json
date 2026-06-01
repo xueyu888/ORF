@@ -148,6 +148,27 @@
       "when": 1779740000000,
       "tag": "0020_drop_task_result_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1779820000000,
+      "tag": "0021_objective_published_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1779900000000,
+      "tag": "0022_user_avatar",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1779980000000,
+      "tag": "0023_objective_trial_reviews",
+      "breakpoints": true
     }
   ]
 }

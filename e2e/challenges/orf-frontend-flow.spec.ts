@@ -1,7 +1,8 @@
 import { expect, test, type Locator, type Page, type Route, type TestInfo } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
+import type { LocalSettlementSummary } from "../../src/services/localSettlementClient";
 import type { BountyHallData, BountyHallItem, TaskManagementData } from "../../src/state/apiClient";
-import type { CommentThread, ContributionAllocation, Objective, ObjectiveContributionReview, ObjectiveLoot, OrfUser, PointLedgerEntry, Result, Task } from "../../src/types/orf";
+import type { CommentThread, Objective, ObjectiveLoot, OrfUser, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
 const adminUser = initialOrfState.users.find((user) => user.role === "admin")!;
@@ -38,7 +39,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: data.objectives.map((item) => (item.id === nextObjective.id ? nextObjective : item)),
       results: data.results,
       objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: data.objectiveContributionReviews,
       pointLedger: data.pointLedger,
     });
   };
@@ -84,7 +84,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: data.objectives.filter((item) => item.challengers.includes(member)),
       results: data.results.filter((result) => data.objectives.some((objectiveItem) => objectiveItem.challengers.includes(member) && objectiveItem.id === result.objectiveId)),
       objectiveLoot: data.objectiveLoot.filter((loot) => data.objectives.some((objectiveItem) => objectiveItem.challengers.includes(member) && objectiveItem.id === loot.objectiveId)),
-      objectiveContributionReviews: data.objectiveContributionReviews.filter((review) => data.objectives.some((objectiveItem) => objectiveItem.challengers.includes(member) && objectiveItem.id === review.objectiveId)),
       pointLedger: data.pointLedger,
     });
   const bountiesForMember = (member: string) => {
@@ -110,7 +109,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: [{ ...current, resultIds: [created.id] }],
       results: [created],
       objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: data.objectiveContributionReviews,
       pointLedger: data.pointLedger,
     });
     return { json: { result: created } };
@@ -135,29 +133,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: [submitted],
       results: data.results,
       objectiveLoot: [loot],
-      objectiveContributionReviews: data.objectiveContributionReviews,
-      pointLedger: data.pointLedger,
-    });
-  };
-  const submitContributionReview = (reviewer: string, payload: unknown) => {
-    const input = payload as ContributionReviewPayload;
-    data = taskManagementData({
-      objectives: data.objectives,
-      results: data.results,
-      objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: [
-        ...data.objectiveContributionReviews,
-        contributionReviewFixture({
-          id: `review-ui-live-${reviewer.toLowerCase().replace(/\s+/g, "-")}`,
-          objectiveId: objective.id,
-          reviewer,
-          allocations: input.allocations ?? [
-            { member: memberUser.name, ratio: 1 },
-            { member: observerUser.name, ratio: 1 },
-          ],
-          submittedAt: acceleratedAt(),
-        }),
-      ],
       pointLedger: data.pointLedger,
     });
   };
@@ -173,7 +148,6 @@ test("real user launch flow links commander and challengers from publish to sett
       objectives: [settledObjective],
       results: data.results.map((result) => ({ ...result, acceptedResult: "completed" as const })),
       objectiveLoot: data.objectiveLoot,
-      objectiveContributionReviews: data.objectiveContributionReviews,
       pointLedger: [
         pointLedgerFixture({ id: "ledger-ui-live-mia", objectiveId: objective.id, memberName: memberUser.name, points: 50, reason: "匿名互评贡献比例 50%" }),
         pointLedgerFixture({ id: "ledger-ui-live-ethan", objectiveId: objective.id, memberName: observerUser.name, points: 50, reason: "匿名互评贡献比例 50%" }),
@@ -212,7 +186,6 @@ test("real user launch flow links commander and challengers from publish to sett
     mineChallenges: () => dataForMember(memberUser.name),
     onApply: () => appendApplication(memberUser.name),
     onCreateResult: createResult,
-    onSubmitContributionReview: (payload) => submitContributionReview(memberUser.name, payload),
     onSubmitLoot: submitLoot,
     tasks: () => data,
   });
@@ -220,7 +193,6 @@ test("real user launch flow links commander and challengers from publish to sett
     bounties: () => bountiesForMember(observerUser.name),
     mineChallenges: () => dataForMember(observerUser.name),
     onApply: () => appendApplication(observerUser.name),
-    onSubmitContributionReview: (payload) => submitContributionReview(observerUser.name, payload),
     tasks: () => data,
   });
 
@@ -233,13 +205,13 @@ test("real user launch flow links commander and challengers from publish to sett
     await challengerPage.goto("/bounties");
     await expect(challengerPage.getByRole("heading", { name: objective.title })).toBeVisible();
     await challengerPage.getByRole("button", { name: "申请挑战" }).click();
-    await challengerPage.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(challengerPage.getByRole("button", { name: "已申请" })).toBeDisabled();
+    await submitChallengeApplicationDialog(challengerPage, "我来承接第一轮验证。");
+    await expect(challengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
 
     await secondChallengerPage.goto("/bounties");
     await secondChallengerPage.getByRole("button", { name: "申请挑战" }).click();
-    await secondChallengerPage.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(secondChallengerPage.getByRole("button", { name: "已申请" })).toBeDisabled();
+    await submitChallengeApplicationDialog(secondChallengerPage, "我来承接第二轮验证。");
+    await expect(secondChallengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
 
     await commanderPage.reload();
     const reviewPanel = objectivePanel(commanderPage, objective.title);
@@ -290,11 +262,134 @@ test("real user launch flow links commander and challengers from publish to sett
     await commanderPage.goto(`/objectives/${objective.id}/loot`);
     await expect(commanderPage.getByRole("heading", { name: "验收战利品" })).toBeVisible();
     await expect(commanderPage.getByText("匿名互评贡献结果")).toBeVisible();
-    await expect(commanderPage.getByText("50%")).toHaveCount(2);
+    await expect(commanderPage.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
     await commanderPage.getByLabel("验收说明").fill("验收通过，按匿名互评比例结算。");
     await commanderPage.getByRole("button", { name: "验收并结算" }).click();
     await expect(commanderPage).toHaveURL(/\/reports$/);
     await expect(commanderPage.getByLabel("50 积分")).toHaveCount(2);
+  } finally {
+    await context.close();
+  }
+});
+
+test("commander sees two challenge applications from realtime read-model invalidation without refresh", async ({ browser }) => {
+  const objective = objectiveFixture({
+    id: "obj-ui-realtime-applications",
+    title: "实时同步 两人申请目标",
+    flowStatus: "open",
+    stage: "resultClaiming",
+    resultIds: ["res-ui-realtime-applications"],
+  });
+  const result = resultFixture({
+    id: "res-ui-realtime-applications",
+    objectiveId: objective.id,
+    title: "实时同步 两人申请指标",
+  });
+  let data = taskManagementData({ objectives: [objective], results: [result] });
+  let applicationIndex = 0;
+
+  const currentObjective = () => data.objectives.find((item) => item.id === objective.id)!;
+  const replaceObjective = (nextObjective: Objective) => {
+    data = taskManagementData({
+      objectives: [nextObjective],
+      results: data.results,
+    });
+  };
+  const appendApplication = (applicant: string) => {
+    const current = currentObjective();
+    if (current.challengeApplications.some((application) => application.applicant === applicant && application.status === "pending")) return;
+    applicationIndex += 1;
+    replaceObjective({
+      ...current,
+      flowStatus: "applying",
+      challengeApplications: [
+        ...current.challengeApplications,
+        {
+          id: `app-ui-realtime-${applicationIndex}`,
+          applicant,
+          reason: `${applicant} 申请实时同步目标`,
+          status: "pending",
+          createdAt: `2026-05-18T10:0${applicationIndex}:00.000Z`,
+          decidedAt: null,
+        },
+      ],
+    });
+  };
+  const bountiesForMember = (member: string) => {
+    const current = currentObjective();
+    return bountyHallData([
+      bountyHallItem(current, [result], {
+        hasCurrentApplication: current.challengeApplications.some((application) => application.applicant === member && application.status === "pending"),
+      }),
+    ]);
+  };
+
+  const context = await browser.newContext();
+  const commanderPage = await context.newPage();
+  const challengerPage = await context.newPage();
+  const secondChallengerPage = await context.newPage();
+  let commanderAllChallengeCalls = 0;
+  let commanderLastApplicationCount = 0;
+  await Promise.all([
+    commanderPage.addInitScript(() => window.localStorage.clear()),
+    challengerPage.addInitScript(() => window.localStorage.clear()),
+    secondChallengerPage.addInitScript(() => window.localStorage.clear()),
+    installMockRealtime(commanderPage),
+    installMockRealtime(challengerPage),
+    installMockRealtime(secondChallengerPage),
+  ]);
+
+  await mockOrfApp(commanderPage, adminUser, data, {
+    allChallenges: () => {
+      commanderAllChallengeCalls += 1;
+      commanderLastApplicationCount = currentObjective().challengeApplications.length;
+      return data;
+    },
+    tasks: () => data,
+  });
+  await mockOrfApp(challengerPage, memberUser, data, {
+    bounties: () => bountiesForMember(memberUser.name),
+    onApply: () => appendApplication(memberUser.name),
+    tasks: () => data,
+  });
+  await mockOrfApp(secondChallengerPage, observerUser, data, {
+    bounties: () => bountiesForMember(observerUser.name),
+    onApply: () => appendApplication(observerUser.name),
+    tasks: () => data,
+  });
+
+  try {
+    await commanderPage.goto("/tasks");
+    const panel = objectivePanel(commanderPage, objective.title);
+    await expect(panel).toContainText("可申请");
+    await expect(panel).not.toContainText(memberUser.name);
+    await expect(panel).not.toContainText(observerUser.name);
+    const callsBeforeFirstInvalidation = commanderAllChallengeCalls;
+
+    await challengerPage.goto("/bounties");
+    await expect(challengerPage.getByRole("heading", { name: objective.title })).toBeVisible();
+    await challengerPage.getByRole("button", { name: "申请挑战" }).click();
+    await submitChallengeApplicationDialog(challengerPage, "我来承接第一轮验证。");
+    await expect(challengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
+    await expect.poll(() => currentObjective().challengeApplications.length).toBe(1);
+    await emitObjectiveApplicationInvalidation(commanderPage, objective.id, "first");
+    await expect.poll(() => commanderAllChallengeCalls).toBeGreaterThan(callsBeforeFirstInvalidation);
+    await expect.poll(() => commanderLastApplicationCount).toBe(1);
+    await expect(panel).toContainText(memberUser.name);
+    await expect(panel).not.toContainText(observerUser.name);
+    const callsBeforeSecondInvalidation = commanderAllChallengeCalls;
+
+    await secondChallengerPage.goto("/bounties");
+    await expect(secondChallengerPage.getByRole("heading", { name: objective.title })).toBeVisible();
+    await secondChallengerPage.getByRole("button", { name: "申请挑战" }).click();
+    await submitChallengeApplicationDialog(secondChallengerPage, "我来承接第二轮验证。");
+    await expect(secondChallengerPage.getByText("申请中", { exact: true }).first()).toBeVisible();
+    await expect.poll(() => currentObjective().challengeApplications.length).toBe(2);
+    await emitObjectiveApplicationInvalidation(commanderPage, objective.id, "second");
+    await expect.poll(() => commanderAllChallengeCalls).toBeGreaterThan(callsBeforeSecondInvalidation);
+    await expect.poll(() => commanderLastApplicationCount).toBe(2);
+    await expect(panel).toContainText(memberUser.name);
+    await expect(panel).toContainText(observerUser.name);
   } finally {
     await context.close();
   }
@@ -346,7 +441,6 @@ test.describe("ORF high-level audit coverage", () => {
         objectives: next.objectives ?? data.objectives,
         results: next.results ?? data.results,
         objectiveLoot: next.objectiveLoot ?? data.objectiveLoot,
-        objectiveContributionReviews: next.objectiveContributionReviews ?? data.objectiveContributionReviews,
         pointLedger: next.pointLedger ?? data.pointLedger,
       });
     };
@@ -360,7 +454,6 @@ test.describe("ORF high-level audit coverage", () => {
         objectives,
         results: data.results.filter((result) => objectiveIds.has(result.objectiveId)),
         objectiveLoot: data.objectiveLoot.filter((loot) => objectiveIds.has(loot.objectiveId)),
-        objectiveContributionReviews: data.objectiveContributionReviews.filter((review) => objectiveIds.has(review.objectiveId)),
         pointLedger: data.pointLedger,
       });
     };
@@ -447,24 +540,6 @@ test.describe("ORF high-level audit coverage", () => {
       }));
       rebuildData({ objectiveLoot: [...data.objectiveLoot.filter((item) => item.id !== loot.id), loot] });
     };
-    const submitContributionReview = (reviewer: string, payload: unknown) => {
-      const input = payload as ContributionReviewPayload;
-      rebuildData({
-        objectiveContributionReviews: [
-          ...data.objectiveContributionReviews,
-          contributionReviewFixture({
-            id: `review-ui-audit-${activeObjectiveId}-${reviewer.toLowerCase().replace(/\s+/g, "-")}`,
-            objectiveId: activeObjectiveId,
-            reviewer,
-            allocations: input.allocations ?? [
-              { member: memberUser.name, ratio: 1 },
-              { member: observerUser.name, ratio: 1 },
-            ],
-            submittedAt: acceleratedAt(),
-          }),
-        ],
-      });
-    };
     const settleLoot = () => {
       const round = currentRound();
       updateObjective(activeObjectiveId, (objective) => ({
@@ -514,7 +589,6 @@ test.describe("ORF high-level audit coverage", () => {
       mineChallenges: () => dataForMember(memberUser.name),
       onApply: () => appendApplication(activeObjectiveId, memberUser.name),
       onCreateResult: createResult,
-      onSubmitContributionReview: (payload) => submitContributionReview(memberUser.name, payload),
       onSubmitLoot: submitLoot,
       tasks: () => data,
     });
@@ -522,7 +596,6 @@ test.describe("ORF high-level audit coverage", () => {
       bounties: () => bountiesForMember(observerUser.name),
       mineChallenges: () => dataForMember(observerUser.name),
       onApply: () => appendApplication(activeObjectiveId, observerUser.name),
-      onSubmitContributionReview: (payload) => submitContributionReview(observerUser.name, payload),
       tasks: () => data,
     });
 
@@ -541,8 +614,8 @@ test.describe("ORF high-level audit coverage", () => {
         await page.goto("/bounties");
         await expect(page.getByRole("heading", { name: round.title })).toBeVisible();
         await page.getByRole("button", { name: "申请挑战" }).click();
-        await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-        await expect(page.getByRole("button", { name: "已申请" })).toBeDisabled();
+        await submitChallengeApplicationDialog(page, `${user.name} 申请 ${round.title}`);
+        await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
       }
 
       await commanderPage.goto("/tasks");
@@ -589,7 +662,7 @@ test.describe("ORF high-level audit coverage", () => {
       activeObjectiveId = round.id;
       await commanderPage.goto(`/objectives/${round.id}/loot`);
       await attachAuditScreenshot(commanderPage, testInfo, `audit-multi-round-${index}-review`);
-      await expect(commanderPage.getByText("50%")).toHaveCount(2);
+      await expect(commanderPage.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
       await commanderPage.getByLabel("验收说明").fill(`${round.title} 验收通过。`);
       await commanderPage.getByRole("button", { name: "验收并结算" }).click();
       await expect(commanderPage).toHaveURL(/\/reports$/);
@@ -942,9 +1015,8 @@ test("bounty hall apply action waits for API success and refreshed bounty data",
   await page.getByRole("button", { name: "申请挑战" }).click();
   await expect(page.getByRole("dialog")).toContainText("提交后等待指挥官确认");
 
-  await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-  await expect(page.getByRole("button", { name: "已申请" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "已申请" })).toBeDisabled();
+  await submitChallengeApplicationDialog(page, "前端测试申请挑战理由。");
+  await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
 });
 
 test("commander publishes a candidate objective and the bounty hall exposes it after refresh", async ({ page }) => {
@@ -1411,10 +1483,10 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/bounties");
     await page.getByRole("button", { name: "申请挑战" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
+    await submitChallengeApplicationDialog(page, "错误处理路径验证。");
 
     await expect(page.getByText("apply rejected")).toBeVisible();
-    await expect(page.getByRole("button", { name: "已申请" })).toHaveCount(0);
+    await expect(page.getByText("申请中", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("dialog").getByRole("button", { name: "申请挑战" })).toBeEnabled();
   });
 
@@ -2115,44 +2187,41 @@ test.describe("ORF frontend guard coverage", () => {
     await context.close();
   });
 
-  test("review form uses peer review contribution results", async ({ page }) => {
+  test("review form keeps anonymous contribution data behind local settlement service", async ({ page }) => {
     const objective = submittedObjectiveFixture("obj-ui-multi-review-inputs", "前端测试 多人验收互评目标", [memberUser.name, observerUser.name], ["res-ui-multi-review-inputs"]);
     const result = resultFixture({ id: "res-ui-multi-review-inputs", objectiveId: objective.id, title: "前端测试 多人验收互评指标" });
     const loot = objectiveLootFixture({ id: "loot-ui-multi-review-inputs", objectiveId: objective.id, submittedBy: memberUser.name, body: "多人验收", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "evidence" }] });
-    const contributionReviews = [
-      contributionReviewFixture({ id: "review-ui-mia", objectiveId: objective.id, reviewer: memberUser.name, allocations: [{ member: memberUser.name, ratio: 1 }, { member: observerUser.name, ratio: 1 }] }),
-      contributionReviewFixture({ id: "review-ui-ethan", objectiveId: objective.id, reviewer: observerUser.name, allocations: [{ member: memberUser.name, ratio: 1 }, { member: observerUser.name, ratio: 1 }] }),
-    ];
-    const data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot], objectiveContributionReviews: contributionReviews });
+    const data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot] });
 
     await mockOrfApp(page, adminUser, data, { tasks: () => data });
 
     await page.goto(`/objectives/${objective.id}/loot`);
     await expect(page.getByText("匿名互评贡献结果")).toBeVisible();
-    await expect(page.getByText(memberUser.name)).toBeVisible();
-    await expect(page.getByText(observerUser.name)).toBeVisible();
-    await expect(page.getByText("50%")).toHaveCount(2);
-    await expect(page.getByLabel(`${memberUser.name} 处理后贡献比例`)).toHaveCount(0);
+    await expect(page.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
+    await expect(page.getByLabel(`${memberUser.name} 处理后贡献百分比`)).toBeVisible();
+    await expect(page.getByLabel(`${observerUser.name} 处理后贡献百分比`)).toBeVisible();
   });
 
   test("multi challenger settlement updates leaderboard by contribution ratios", async ({ page }) => {
     const objective = submittedObjectiveFixture("obj-ui-multi-settlement", "前端测试 多人结算目标", [memberUser.name, observerUser.name], ["res-ui-multi-settlement"]);
     const result = resultFixture({ id: "res-ui-multi-settlement", objectiveId: objective.id, title: "前端测试 多人结算指标" });
     const loot = objectiveLootFixture({ id: "loot-ui-multi-settlement", objectiveId: objective.id, submittedBy: memberUser.name, body: "多人结算", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "evidence" }] });
-    const contributionReviews = [
-      contributionReviewFixture({ id: "review-ui-settlement-mia", objectiveId: objective.id, reviewer: memberUser.name, allocations: [{ member: memberUser.name, ratio: 3 }, { member: observerUser.name, ratio: 1 }] }),
-      contributionReviewFixture({ id: "review-ui-settlement-ethan", objectiveId: objective.id, reviewer: observerUser.name, allocations: [{ member: memberUser.name, ratio: 3 }, { member: observerUser.name, ratio: 1 }] }),
-    ];
-    let data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot], objectiveContributionReviews: contributionReviews });
+    const localSummary = localContributionSummaryFixture(objective.id, [
+      { member: memberUser.name, ratio: 0.75 },
+      { member: observerUser.name, ratio: 0.25 },
+    ]);
+    let reviewPayload: unknown = null;
+    let data = taskManagementData({ objectives: [objective], results: [result], objectiveLoot: [loot] });
 
     await mockOrfApp(page, adminUser, data, {
-      onReviewLoot: async () => {
+      localContributionSummary: () => localSummary,
+      onReviewLoot: async (payload) => {
+        reviewPayload = payload;
         const settled = { ...objective, flowStatus: "settled" as const, acceptedResult: "completed" as const, objectiveSettlementPoints: 100 };
         data = taskManagementData({
           objectives: [settled],
           results: [{ ...result, acceptedResult: "completed" as const }],
           objectiveLoot: [loot],
-          objectiveContributionReviews: contributionReviews,
           pointLedger: [
             pointLedgerFixture({ id: "ledger-ui-multi-mia", objectiveId: objective.id, memberName: memberUser.name, points: 75, reason: "匿名互评贡献比例 75%" }),
             pointLedgerFixture({ id: "ledger-ui-multi-ethan", objectiveId: objective.id, memberName: observerUser.name, points: 25, reason: "匿名互评贡献比例 25%" }),
@@ -2163,12 +2232,11 @@ test.describe("ORF frontend guard coverage", () => {
     });
 
     await page.goto(`/objectives/${objective.id}/loot`);
-    await expect(page.getByText("75%")).toBeVisible();
-    await expect(page.getByText("25%")).toBeVisible();
-    await expect(page.getByLabel(`${memberUser.name} 处理后贡献比例`)).toHaveCount(0);
+    await expect(page.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
     await page.getByRole("button", { name: "验收并结算" }).click();
 
     await expect(page).toHaveURL(/\/reports$/);
+    expect(reviewPayload).toMatchObject({ contributionResolution: localSummary.contributionResolution });
     await expect(page.getByLabel("75 积分")).toBeVisible();
     await expect(page.getByLabel("25 积分")).toBeVisible();
   });
@@ -2185,7 +2253,7 @@ test.describe("ORF frontend guard coverage", () => {
     await expect(page.getByText(memberUser.name)).toBeVisible();
     await expect(page.getByText("100%")).toBeVisible();
     await expect(page.getByText(observerUser.name)).toHaveCount(0);
-    await expect(page.getByLabel(`${observerUser.name} 处理后贡献比例`)).toHaveCount(0);
+    await expect(page.getByLabel(`${observerUser.name} 处理后贡献百分比`)).toHaveCount(0);
   });
 
   test("loot deep link opens submit form for frozen challenger", async ({ page }) => {
@@ -2573,16 +2641,22 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/bounties");
     await page.getByRole("button", { name: "申请挑战" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(page.getByRole("button", { name: "已申请" })).toBeVisible();
+    await submitChallengeApplicationDialog(page, "浏览器返回状态保持验证。");
+    await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
     await page.goto("/tasks");
     await page.goBack();
-    await expect(page.getByRole("button", { name: "已申请" })).toBeVisible();
+    await expect(page.getByText("申请中", { exact: true }).first()).toBeVisible();
   });
 });
 
 function objectivePanel(page: Page, title: string) {
   return page.locator("section.orf-objective-panel").filter({ hasText: title });
+}
+
+async function submitChallengeApplicationDialog(page: Page, reason: string) {
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("textbox", { name: "申请理由" }).fill(reason);
+  await dialog.getByRole("button", { name: "申请挑战" }).click();
 }
 
 async function createInlineMetric(panel: Locator, actionName: "新增指标" | "提出指标", title: string) {
@@ -2627,6 +2701,165 @@ async function attachAuditScreenshot(page: Page, testInfo: TestInfo, name: strin
   await testInfo.attach(safeName, { contentType: "image/png", path });
 }
 
+async function installMockRealtime(page: Page) {
+  await page.addInitScript(() => {
+    type MockRealtimeSource = EventTarget & {
+      readyState: number;
+      onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null;
+    };
+    const sources: MockRealtimeSource[] = [];
+
+    class MockEventSource extends EventTarget {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSED = 2;
+
+      readonly url: string | URL;
+      readonly withCredentials: boolean;
+      readonly listenerTypes = new Map<string, number>();
+      readonly realtimeListeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+      readyState = MockEventSource.OPEN;
+      onerror: ((this: EventSource, ev: Event) => unknown) | null = null;
+      onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null;
+      onopen: ((this: EventSource, ev: Event) => unknown) | null = null;
+
+      constructor(url: string | URL, eventSourceInitDict?: EventSourceInit) {
+        super();
+        this.url = url;
+        this.withCredentials = Boolean(eventSourceInitDict?.withCredentials);
+        sources.push(this);
+      }
+
+      addEventListener(type: string, callback: EventListenerOrEventListenerObject | null, options?: AddEventListenerOptions | boolean) {
+        if (callback) {
+          const listeners = this.realtimeListeners.get(type) ?? new Set<EventListenerOrEventListenerObject>();
+          listeners.add(callback);
+          this.realtimeListeners.set(type, listeners);
+        }
+        this.listenerTypes.set(type, (this.listenerTypes.get(type) ?? 0) + 1);
+        super.addEventListener(type, callback, options);
+      }
+
+      removeEventListener(type: string, callback: EventListenerOrEventListenerObject | null, options?: EventListenerOptions | boolean) {
+        if (callback) {
+          const listeners = this.realtimeListeners.get(type);
+          listeners?.delete(callback);
+          if (listeners?.size === 0) this.realtimeListeners.delete(type);
+        }
+        this.listenerTypes.set(type, Math.max(0, (this.listenerTypes.get(type) ?? 1) - 1));
+        super.removeEventListener(type, callback, options);
+      }
+
+      emitRealtimeEvent(event: { kind: string }) {
+        const message = new MessageEvent(event.kind, { data: JSON.stringify(event) });
+        const listeners = Array.from(this.realtimeListeners.get(event.kind) ?? []);
+        window.setTimeout(() => {
+          for (const listener of listeners) {
+            if (typeof listener === "function") {
+              listener.call(this, message);
+            } else {
+              listener.handleEvent(message);
+            }
+          }
+          if (event.kind === "message") {
+            this.onmessage?.call(this as unknown as EventSource, message);
+          }
+        }, 0);
+      }
+
+      close() {
+        this.readyState = MockEventSource.CLOSED;
+        const index = sources.indexOf(this);
+        if (index >= 0) sources.splice(index, 1);
+      }
+    }
+
+    const mockWindow = window as Window &
+      typeof globalThis & {
+        __orfEmitRealtime?: (event: { kind: string }) => void;
+        __orfRealtimeListenerCount?: (type: string) => number;
+        __orfRealtimeSourceCount?: () => number;
+      };
+
+    mockWindow.__orfRealtimeListenerCount = (type) =>
+      sources.reduce((sum, source) => sum + (source instanceof MockEventSource ? source.listenerTypes.get(type) ?? 0 : 0), 0);
+    mockWindow.__orfRealtimeSourceCount = () => sources.length;
+    mockWindow.__orfEmitRealtime = (event) => {
+      for (const source of sources) {
+        if (source.readyState !== MockEventSource.OPEN) continue;
+        if (source instanceof MockEventSource) source.emitRealtimeEvent(event);
+      }
+    };
+    mockWindow.EventSource = MockEventSource as unknown as typeof EventSource;
+  });
+}
+
+async function emitObjectiveApplicationInvalidation(page: Page, objectiveId: string, label: string) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const mockWindow = window as Window & typeof globalThis & { __orfRealtimeListenerCount?: (type: string) => number };
+        return mockWindow.__orfRealtimeListenerCount?.("orf.read-model.invalidated") ?? 0;
+      }),
+    )
+    .toBeGreaterThan(0);
+
+  await page.evaluate(
+    ({ label: eventLabel, targetId }) => {
+      const mockWindow = window as Window & typeof globalThis & { __orfEmitRealtime?: (event: { kind: string }) => void };
+      mockWindow.__orfEmitRealtime?.({
+        id: `evt-ui-application-${eventLabel}`,
+        kind: "orf.read-model.invalidated",
+        createdAt: "2026-05-18T10:00:00.000Z",
+        invalidation: {
+          id: `inv-ui-application-${eventLabel}`,
+          models: ["taskManagement", "bountyHall"],
+          reason: "objective.challenge.application.changed",
+          target: { type: "objective", id: targetId },
+          actorUserId: null,
+          createdAt: "2026-05-18T10:00:00.000Z",
+        },
+      });
+    },
+    { label, targetId: objectiveId },
+  );
+}
+
+const localSettlementPublicKey = {
+  algorithm: "RSA-OAEP-256",
+  keyId: "e2e-local-settlement",
+  publicKeyJwk: {
+    alg: "RSA-OAEP-256",
+    e: "AQAB",
+    ext: true,
+    key_ops: ["encrypt"],
+    kty: "RSA",
+    n: "i45jM-b7LfXjm6EZpgZngqOTFzCgIrev-C6mdxC1RgjW44yxTCFPPVYojRRQ-bI73pxUzIzUAuKouXlPp7OHQDlIVk_2pHED5QEs6XVkcVBbXhnC3tVLcHJUgoPiHaKnblFIIbNe2uE-myibBIFRHuvSGOLfXsHBUhZVb12NTZKgAy1pJo22YyOZr_M67SbsY1r68GEt6SXGh2EbW8QERp0l1F7V_x8_qKcEQz6u4Aw-9K_s5CfHBy9TZ66893MV1um07sHdSblSahHQMbgbUbqCcIx6RNGNR_JY6viG2xHd_wFQd_SbGSZC50RACQwPpwf8sqmCJokXOYQI3oAf_w",
+  },
+};
+
+function localContributionSummaryFixture(objectiveId: string, ratios: LocalSettlementSummary["ratios"]): LocalSettlementSummary {
+  return {
+    contributionResolution: { ratios, reason: "本地匿名互评结算汇总" },
+    missingReviewers: [],
+    objectiveId,
+    ratios,
+    reviewers: ratios.map((item) => item.member),
+    status: "ready",
+  };
+}
+
+function localContributionSummaryFromRoute(route: Route): LocalSettlementSummary {
+  const body = route.request().postDataJSON() as { challengers?: string[] };
+  const challengers = Array.isArray(body.challengers) ? body.challengers : [];
+  const ratio = challengers.length > 0 ? Number((1 / challengers.length).toFixed(6)) : 0;
+  const objectiveId = decodeURIComponent(new URL(route.request().url()).pathname.split("/")[2] ?? "");
+  return localContributionSummaryFixture(
+    objectiveId,
+    challengers.map((member) => ({ member, ratio })),
+  );
+}
+
 async function mockOrfApp(
   page: Page,
   user: OrfUser,
@@ -2647,6 +2880,7 @@ async function mockOrfApp(
     onReviewLoot?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onSubmitContributionReview?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
     onSubmitLoot?: (payload: unknown) => Promise<void | MockMutationResult> | void | MockMutationResult;
+    localContributionSummary?: MockRouteSource<LocalSettlementSummary>;
     tasks?: () => MockRouteResponse<TaskManagementData> | Promise<MockRouteResponse<TaskManagementData>>;
   } = {},
 ) {
@@ -2755,13 +2989,24 @@ async function mockOrfApp(
 
     await fulfillMutation(route, options.onSubmitLoot?.(route.request().postDataJSON()));
   });
-  await page.route("**/api/objectives/*/contribution-reviews", async (route) => {
+  await page.route("http://127.0.0.1:8799/public-key", async (route) => {
+    await route.fulfill({ json: localSettlementPublicKey });
+  });
+  await page.route("http://127.0.0.1:8799/reviews", async (route) => {
     if (route.request().method() !== "POST") {
       await route.fallback();
       return;
     }
 
     await fulfillMutation(route, options.onSubmitContributionReview?.(route.request().postDataJSON()));
+  });
+  await page.route("http://127.0.0.1:8799/objectives/*/summary", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+
+    await fulfillData(route, resolveRouteSource(options.localContributionSummary) ?? localContributionSummaryFromRoute(route));
   });
   await page.route("**/api/objectives/*/review", async (route) => {
     if (route.request().method() !== "POST") {
@@ -2779,7 +3024,6 @@ type MockRouteSource<T> = MockRouteResponse<T> | (() => MockRouteResponse<T> | P
 type ResultCreatePayload = { definer?: string; metricName?: string; objectiveId?: string; source?: string; title?: string };
 type TaskCreatePayload = { assignee?: string; linkedObjectiveId?: string; priority?: Task["priority"]; title?: string };
 type LootSubmitPayload = { body?: string; resultClaims?: ObjectiveLoot["resultClaims"]; selfTestReportBody?: string | null };
-type ContributionReviewPayload = { allocations?: ContributionAllocation[] };
 
 async function fulfillMutation(route: Route, result: Promise<void | MockMutationResult> | void | MockMutationResult) {
   const resolved = await result;
@@ -2821,7 +3065,6 @@ function taskManagementData(input: {
   tasks?: Task[];
   comments?: CommentThread[];
   objectiveLoot?: ObjectiveLoot[];
-  objectiveContributionReviews?: ObjectiveContributionReview[];
   pointLedger?: PointLedgerEntry[];
 }): TaskManagementData {
   return {
@@ -2832,7 +3075,6 @@ function taskManagementData(input: {
     feedback: [],
     comments: input.comments ?? [],
     objectiveLoot: input.objectiveLoot ?? [],
-    objectiveContributionReviews: input.objectiveContributionReviews ?? [],
     pointLedger: input.pointLedger ?? [],
     permissionRules: initialOrfState.permissionRules,
   };
@@ -2913,19 +3155,6 @@ function objectiveLootFixture(overrides: Partial<ObjectiveLoot> & Pick<Objective
   };
 }
 
-function contributionReviewFixture(
-  overrides: Partial<ObjectiveContributionReview> & Pick<ObjectiveContributionReview, "id" | "objectiveId" | "reviewer" | "allocations">,
-): ObjectiveContributionReview {
-  return {
-    id: overrides.id,
-    objectiveId: overrides.objectiveId,
-    reviewer: overrides.reviewer,
-    allocations: overrides.allocations,
-    submittedAt: "2026-05-18T11:30:00.000Z",
-    ...overrides,
-  };
-}
-
 function pointLedgerFixture(overrides: Partial<PointLedgerEntry> & Pick<PointLedgerEntry, "id" | "objectiveId" | "memberName" | "points" | "reason">): PointLedgerEntry {
   return {
     id: overrides.id,
@@ -2956,6 +3185,7 @@ function toastByText(page: Page, text: string) {
 function bountyHallData(availableItems: BountyHallItem[], recruitmentItems: BountyHallItem[] = []): BountyHallData {
   return {
     availableItems,
+    publicItems: [],
     recruitmentItems,
     objectiveOptions: [...recruitmentItems, ...availableItems].map((item) => item.objective),
     contribution: { points: 0 },
@@ -2963,14 +3193,20 @@ function bountyHallData(availableItems: BountyHallItem[], recruitmentItems: Boun
 }
 
 function bountyHallItem(objective: Objective, results: Result[], overrides: Partial<BountyHallItem> = {}): BountyHallItem {
+  const applications = objective.challengeApplications;
   return {
+    applications,
+    approvedApplicants: applications.filter((application) => application.status === "approved").map((application) => application.applicant),
+    challengers: objective.challengers,
     uncertaintyPoints: results.reduce((sum, result) => sum + result.uncertaintyScore, 0),
     deadline: objective.finalDueAt,
     definer: results[0]?.definer ?? "",
     difficultyRank: 2,
     hasCurrentApplication: false,
+    isCurrentChallenger: false,
     isRecruitment: false,
     objective,
+    pendingApplications: applications.filter((application) => application.status === "pending"),
     result: results[0] ?? null,
     results,
     source: results[0]?.source ?? "managerDefined",

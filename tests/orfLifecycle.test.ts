@@ -195,7 +195,7 @@ const lifecycleExpectations: Record<
     submitLoot: false,
     submitContributionReview: false,
     reviewLoot: false,
-    discoverable: false,
+    discoverable: true,
     accepted: true,
     entryClosed: false,
     resultLocked: false,

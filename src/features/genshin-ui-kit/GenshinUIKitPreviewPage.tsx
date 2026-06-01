@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Check,
   Clock,
-  ExternalLink,
   Filter,
   Search,
   Send,

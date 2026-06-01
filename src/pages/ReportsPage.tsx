@@ -1,10 +1,9 @@
 import { CalendarDays } from "lucide-react";
 import { useMemo, useState } from "react";
 import brandLogo from "../assets/brand/orf-logo.png";
+import { UserAvatar } from "../components/UserAvatar";
 import { buildLeaderboardRows, type LeaderboardRow, type TimeRange } from "../features/reports/model/leaderboard";
 import { useOrf } from "../state/OrfProvider";
-import { avatarStyleForName } from "../utils/avatar";
-import { initials } from "../utils/format";
 
 const timeRangeOptions: { label: string; value: TimeRange }[] = [
   { label: "按季度", value: "quarter" },
@@ -17,6 +16,7 @@ export function ReportsPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>("quarter");
 
   const rows = useMemo<LeaderboardRow[]>(() => buildLeaderboardRows(state, timeRange), [state, timeRange]);
+  const usersByName = useMemo(() => new Map(state.users.map((user) => [user.name, user])), [state.users]);
 
   const maxPoints = Math.max(1, ...rows.map((row) => row.points));
 
@@ -80,7 +80,7 @@ export function ReportsPage() {
           </div>
           <div className="reports-leaderboard-body">
             {rows.map((row) => (
-              <LeaderboardRowItem key={row.memberName} maxPoints={maxPoints} row={row} />
+              <LeaderboardRowItem avatarUrl={usersByName.get(row.memberName)?.avatarUrl} key={row.memberName} maxPoints={maxPoints} row={row} />
             ))}
             {rows.length === 0 && <div className="reports-leaderboard-empty" role="row"><div role="cell">暂无积分记录</div></div>}
           </div>
@@ -90,7 +90,7 @@ export function ReportsPage() {
   );
 }
 
-function LeaderboardRowItem({ maxPoints, row }: { maxPoints: number; row: LeaderboardRow }) {
+function LeaderboardRowItem({ avatarUrl, maxPoints, row }: { avatarUrl?: string | null; maxPoints: number; row: LeaderboardRow }) {
   const percentage = Math.max(0, Math.min(100, (row.points / maxPoints) * 100));
   const isUp = row.rankChange > 0;
   const isDown = row.rankChange < 0;
@@ -115,9 +115,7 @@ function LeaderboardRowItem({ maxPoints, row }: { maxPoints: number; row: Leader
         </span>
       </div>
       <div className="reports-member-cell" role="cell">
-        <div className="reports-member-avatar" style={avatarStyleForName(row.memberName)} title={row.memberName} aria-label={row.memberName}>
-          {initials(row.memberName)}
-        </div>
+        <UserAvatar avatarUrl={avatarUrl} className="reports-member-avatar" frame={false} name={row.memberName} />
         <span className="reports-member-name">{row.memberName}</span>
       </div>
       <div className="reports-bar-cell" role="cell">

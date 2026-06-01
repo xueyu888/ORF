@@ -13,6 +13,7 @@ import {
   type VisualBackgroundSwitchOrder,
   type VisualBackgroundSwitchTrigger,
 } from "../state/apiClient";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
 import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 
@@ -72,7 +73,7 @@ function BackgroundSettingSection({
   title: string;
   description: string;
 }) {
-  const { notify } = useOrf();
+  const { notify, readModelInvalidations } = useOrf();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [backgroundList, setBackgroundList] = useState<VisualBackgroundImage[]>([]);
   const [backgroundConfig, setBackgroundConfig] = useState<VisualBackgroundConfig>(defaultVisualBackgroundConfig);
@@ -94,6 +95,7 @@ function BackgroundSettingSection({
   const isSetDefaultButtonDisabled =
     backgroundConfig.mode !== "fixed" || !selectedBackgroundId || selectedBackgroundId === fixedBackgroundId || setDefaultStatus === "loading" || isConfigSaving;
   const isUploading = uploadStatus === "loading";
+  const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
 
   useEffect(() => {
     if (!configErrorMessage) {
@@ -138,7 +140,7 @@ function BackgroundSettingSection({
     return () => {
       cancelled = true;
     };
-  }, [scene]);
+  }, [scene, settingsInvalidationKey]);
 
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;

@@ -237,12 +237,6 @@ export function sanitizeSignature(signature: string | null) {
     .replace(/\d+/g, "0") ?? null;
 }
 
-function targetFamilySignature(signature: string | null) {
-  return sanitizeSignature(signature)
-    ?.replace(/rect:[^|]+/g, "rect:*")
-    .replace(/index:[^|]+/g, "index:*") ?? null;
-}
-
 function repeatableRegionAnalysis(snapshot: StateDomSnapshot, routePattern: string) {
   return analyzeRepeatableRegions(snapshot.domTree ?? null, routePattern);
 }

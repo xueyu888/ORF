@@ -4,7 +4,7 @@ import { executeEvent } from "./eventExecutor";
 import { generateCandidateEvents } from "./eventGenerator";
 import { CoverageGuidedRandomStrategy } from "./randomStrategy";
 import { SeededRandom } from "./seededRandom";
-import { isInAllowedScope, shouldRunEvent } from "./safety";
+import { shouldRunEvent } from "./safety";
 import { normalizeState } from "./stateNormalizer";
 import { collectTargets } from "./targetCollector";
 import { attachDiagnostics, resetToTarget, shellQuote } from "./runnerSupport";

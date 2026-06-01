@@ -27,12 +27,11 @@ test("load starts from empty business data instead of bundled seed records", () 
   assert.deepEqual(state.feedback, []);
   assert.deepEqual(state.comments, []);
   assert.deepEqual(state.objectiveLoot, []);
-  assert.deepEqual(state.objectiveContributionReviews, []);
   assert.deepEqual(state.pointLedger, []);
   assert.ok(state.users.length > 0);
 });
 
-test("normalizeState migrates legacy challenge fields and result defaults", () => {
+test("normalizeState migrates legacy challenge fields while ignoring result deadlines", () => {
   const legacyObjective = {
     ...objective({ id: "obj-legacy", resultIds: ["res-legacy"], taskIds: ["task-legacy"] }),
     flowStatus: undefined,
@@ -67,10 +66,11 @@ test("normalizeState migrates legacy challenge fields and result defaults", () =
 
   assert.equal(normalized.objectives[0]?.stage, "orfReestimate");
   assert.equal(normalized.objectives[0]?.flowStatus, "reestimating");
-  assert.equal(normalized.objectives[0]?.finalDueAt, "2026-06-10");
+  assert.equal(normalized.objectives[0]?.finalDueAt, "2026-06-20");
   assert.deepEqual(normalized.objectives[0]?.challengers, ["Kai Wang"]);
   assert.deepEqual(normalized.objectives[0]?.assignedChallengers, []);
   assert.equal(normalized.objectives[0]?.challengeApplications[0]?.applicant, "Nora Li");
+  assert.equal("finalDueAt" in normalized.results[0]!, false);
   assert.equal(normalized.results[0]?.source, "managerDefined");
   assert.equal(normalized.results[0]?.uncertaintyScore, 810);
   assert.equal(normalized.results[0]?.acceptedResult, "unreviewed");
@@ -167,7 +167,6 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
     scenarios: [scenario({ id: "scenario-delete", linkedObjectiveId: "obj-delete" })],
     failureSamples: [failureSample({ id: "sample-delete", linkedResultId: "res-delete" })],
     objectiveLoot: [{ id: "loot-delete", objectiveId: "obj-delete", submittedBy: "Kai Wang", body: "done", resultClaims: [], submittedAt: date }],
-    objectiveContributionReviews: [{ id: "review-delete", objectiveId: "obj-delete", reviewer: "Kai Wang", allocations: [{ member: "Kai Wang", ratio: 1 }], submittedAt: date }],
     pointLedger: [{ id: "points-delete", objectiveId: "obj-delete", memberName: "Kai Wang", points: 10, reason: "settlement", createdAt: date }],
     comments: [
       comment("comment-objective", "objective", "obj-delete"),
@@ -190,7 +189,6 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
   assert.deepEqual(next.scenarios, []);
   assert.deepEqual(next.failureSamples, []);
   assert.deepEqual(next.objectiveLoot, []);
-  assert.deepEqual(next.objectiveContributionReviews, []);
   assert.deepEqual(next.pointLedger, []);
   assert.deepEqual(next.comments.map((item) => item.id), ["comment-keep"]);
 });
@@ -339,7 +337,7 @@ test("applyForBounty refuses objectives outside bounty application statuses", ()
       ],
     });
 
-    const next = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang");
+    const next = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang", "I can take ownership of this objective.");
 
     assert.equal(next, current, `expected ${flowStatus} objective to reject challenge applications`);
   }
@@ -348,33 +346,13 @@ test("applyForBounty refuses objectives outside bounty application statuses", ()
     const current = state({
       objectives: [objective({ id: `obj-${flowStatus}`, flowStatus, stage: "resultClaiming" })],
     });
-    const applied = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang");
+    const applied = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang", "I can take ownership of this objective.");
 
     assert.notEqual(applied, current, `expected ${flowStatus} objective to accept challenge applications`);
+    assert.equal(applied.objectives[0]?.flowStatus, flowStatus === "recruiting" ? "recruiting" : "applying");
     assert.equal(applied.objectives[0]?.challengeApplications[0]?.status, "pending");
+    assert.equal(applied.objectives[0]?.challengeApplications[0]?.reason, "I can take ownership of this objective.");
   }
-});
-
-test("updateObjectiveStage refuses stages that contradict lifecycle status", () => {
-  const current = state({
-    objectives: [
-      objective({ id: "obj-reestimating", flowStatus: "reestimating", stage: "orfReestimate" }),
-      objective({ id: "obj-frozen", flowStatus: "frozen", stage: "goalFrozen" }),
-    ],
-  });
-
-  const invalidReestimating = store.updateObjectiveStage(current, "obj-reestimating", "goalFrozen");
-  assert.equal(invalidReestimating.objectives.find((item) => item.id === "obj-reestimating")?.stage, "orfReestimate");
-
-  const invalidFrozen = store.updateObjectiveStage(current, "obj-frozen", "orfReestimate");
-  assert.equal(invalidFrozen.objectives.find((item) => item.id === "obj-frozen")?.stage, "goalFrozen");
-
-  const compatibleOpenStage = store.updateObjectiveStage(
-    state({ objectives: [objective({ id: "obj-open", flowStatus: "open", stage: "resultClaiming" })] }),
-    "obj-open",
-    "orfReestimate",
-  );
-  assert.equal(compatibleOpenStage.objectives[0]?.stage, "orfReestimate");
 });
 
 function state(overrides: Partial<OrfState> = {}): OrfState {
@@ -393,7 +371,6 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     failureSamples: [],
     comments: [],
     objectiveLoot: [],
-    objectiveContributionReviews: [],
     pointLedger: [],
     causeCategories: [],
     rules: {

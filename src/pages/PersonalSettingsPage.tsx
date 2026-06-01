@@ -1,7 +1,9 @@
 import { clsx } from "clsx";
-import { Check, Image, Loader2, Trash2, Upload, User } from "lucide-react";
+import { Check, Image, Loader2, Trash2, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
+import { UserAvatar } from "../components/UserAvatar";
 import { Button, Card, Field } from "../components/ui";
 import {
   deletePersonalBackground,
@@ -12,6 +14,7 @@ import {
   type UserPreferences,
   type VisualBackgroundConfig,
 } from "../state/apiClient";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
 import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 import { dispatchPersonalPreferencesChanged } from "../utils/personalPreferences";
@@ -35,7 +38,8 @@ const landingOptions = [
 ];
 
 export function PersonalSettingsPage() {
-  const { currentUser, notify, theme, toggleTheme } = useOrf();
+  const { currentUser, deleteCurrentUserAvatar, notify, readModelInvalidations, theme, toggleTheme, uploadCurrentUserAvatar } = useOrf();
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [backgrounds, setBackgrounds] = useState<PersonalBackgroundsData | null>(null);
@@ -43,7 +47,13 @@ export function PersonalSettingsPage() {
   const [loadStatus, setLoadStatus] = useState<RequestStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
   const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
+  const [avatarStatus, setAvatarStatus] = useState<RequestStatus>("idle");
+  const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
+  const avatarPreview = currentUser?.avatarUrl
+    ? { alt: `${currentUser.name} 头像`, label: `${currentUser.name} 头像`, src: currentUser.avatarUrl }
+    : null;
 
   const loadSettings = async () => {
     setLoadStatus("loading");
@@ -63,7 +73,13 @@ export function PersonalSettingsPage() {
 
   useEffect(() => {
     void loadSettings();
-  }, []);
+  }, [settingsInvalidationKey]);
+
+  useEffect(() => {
+    if (!currentUser?.avatarUrl) {
+      setAvatarPreviewOpen(false);
+    }
+  }, [currentUser?.avatarUrl]);
 
   const savePreferencePatch = async (patch: Parameters<typeof saveUserPreferences>[0], message = "个人设置已保存") => {
     setSaveStatus("loading");
@@ -129,6 +145,45 @@ export function PersonalSettingsPage() {
     }
   };
 
+  const handleAvatarSelected = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!file || avatarStatus === "loading") {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      const message = "仅支持上传图片文件";
+      setErrorMessage(message);
+      notify(message);
+      return;
+    }
+
+    setAvatarStatus("loading");
+    setErrorMessage(null);
+    const ok = await uploadCurrentUserAvatar(file);
+    setAvatarStatus(ok ? "success" : "error");
+    if (!ok) {
+      setErrorMessage("头像上传失败");
+    }
+  };
+
+  const handleDeleteAvatar = async () => {
+    if (!currentUser?.avatarUrl || avatarStatus === "loading") {
+      return;
+    }
+
+    setAvatarStatus("loading");
+    setErrorMessage(null);
+    const ok = await deleteCurrentUserAvatar();
+    setAvatarStatus(ok ? "success" : "error");
+    if (ok) {
+      setAvatarPreviewOpen(false);
+    }
+    if (!ok) {
+      setErrorMessage("头像删除失败");
+    }
+  };
+
   const handleUseSelectedBackground = async () => {
     if (!selectedBackgroundId) {
       return;
@@ -182,18 +237,41 @@ export function PersonalSettingsPage() {
         : "expanded";
   const selectedBackground = backgrounds?.list.find((background) => background.id === selectedBackgroundId) ?? null;
   const canUseSelected = Boolean(selectedBackgroundId && selectedBackgroundId !== preferences?.appBackground?.fixedBackgroundId);
-  const busy = saveStatus === "loading" || uploadStatus === "loading";
+  const busy = saveStatus === "loading" || uploadStatus === "loading" || avatarStatus === "loading";
 
   return (
     <PageScaffold title="个人设置" subtitle="管理当前登录用户的偏好。">
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)]">
         <div className="grid content-start gap-4">
           <Card className="orf-card-padding">
-            <div className="flex items-center gap-3">
-              <User className="h-5 w-5 orf-text-muted" />
-              <div className="min-w-0">
+            <div className="flex items-start gap-4">
+              {avatarPreview ? (
+                <button
+                  type="button"
+                  className="orf-avatar-preview-trigger"
+                  aria-label="查看头像原图"
+                  title="查看头像"
+                  onClick={() => setAvatarPreviewOpen(true)}
+                >
+                  <UserAvatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} size="xl" />
+                </button>
+              ) : (
+                <UserAvatar avatarUrl={currentUser?.avatarUrl} name={currentUser?.name ?? "User"} size="xl" />
+              )}
+              <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold orf-text-primary">{currentUser?.name ?? "User"}</div>
                 <div className="truncate text-sm orf-text-secondary">{currentUser?.email ?? "未绑定邮箱"}</div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <input ref={avatarInputRef} type="file" accept="image/gif,image/jpeg,image/png,image/webp" hidden onChange={(event) => void handleAvatarSelected(event)} />
+                  <Button type="button" variant="secondary" disabled={avatarStatus === "loading"} onClick={() => avatarInputRef.current?.click()}>
+                    {avatarStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    上传头像
+                  </Button>
+                  <Button type="button" variant="ghost" disabled={!currentUser?.avatarUrl || avatarStatus === "loading"} onClick={() => void handleDeleteAvatar()}>
+                    <Trash2 className="h-4 w-4" />
+                    删除
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -321,6 +399,7 @@ export function PersonalSettingsPage() {
           )}
         </Card>
       </div>
+      {avatarPreviewOpen && avatarPreview && <ImagePreviewDialog preview={avatarPreview} onClose={() => setAvatarPreviewOpen(false)} />}
     </PageScaffold>
   );
 }

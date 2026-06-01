@@ -11,8 +11,10 @@ const difficultyRanks = {
   渡劫: 4,
   飞升: 5,
 };
+const bountyHallUser = initialOrfState.users.find((user) => user.role === "member") ?? initialOrfState.users[0]!;
+const bountyHallCommander = initialOrfState.users.find((user) => user.role === "admin") ?? initialOrfState.users[0]!;
 
-function bountyHallItem(objectiveId: string, isRecruitment = false): BountyHallItem {
+function bountyHallItem(objectiveId: string, isRecruitment = false, viewerName = bountyHallUser.name): BountyHallItem {
   const objective = initialOrfState.objectives.find((item) => item.id === objectiveId);
   const results = initialOrfState.results.filter((item) => item.objectiveId === objectiveId);
   const result = results[0];
@@ -20,27 +22,41 @@ function bountyHallItem(objectiveId: string, isRecruitment = false): BountyHallI
   if (!objective || !result) {
     throw new Error(`Missing bounty fixture for ${objectiveId}`);
   }
+  const applications = objective.challengeApplications ?? [];
+  const pendingApplications = applications.filter((application) => application.status === "pending");
+  const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
+  const challengers = objective.challengers ?? [];
 
   return {
+    applications,
+    approvedApplicants,
+    challengers,
     uncertaintyPoints: results.reduce((sum, item) => sum + item.uncertaintyScore, 0),
     deadline: objective.finalDueAt,
     definer: result.definer ?? "",
     difficultyRank: Math.max(...results.map((item) => difficultyRanks[item.uncertaintyLevel ?? "进阶"])),
-    hasCurrentApplication: false,
+    hasCurrentApplication: pendingApplications.some((application) => application.applicant === viewerName),
+    isCurrentChallenger: challengers.includes(viewerName),
     isRecruitment,
     objective,
+    pendingApplications,
     result,
     results,
     source: result.source ?? "managerDefined",
   };
 }
 
+const recruitmentBounty = bountyHallItem("obj-bounty-agent-retry", true);
+const availableBounty = bountyHallItem("obj-bounty-cost-routing");
+const startedCurrentUserBounty = bountyHallItem("obj-demo-submitted-peer-review");
 const bountyHallData: BountyHallData = {
-  recruitmentItems: [bountyHallItem("obj-bounty-agent-retry", true)],
-  availableItems: [bountyHallItem("obj-bounty-cost-routing")],
+  publicItems: [recruitmentBounty, availableBounty, startedCurrentUserBounty],
+  recruitmentItems: [recruitmentBounty],
+  availableItems: [availableBounty],
   objectiveOptions: [
     initialOrfState.objectives.find((item) => item.id === "obj-bounty-agent-retry"),
     initialOrfState.objectives.find((item) => item.id === "obj-bounty-cost-routing"),
+    initialOrfState.objectives.find((item) => item.id === "obj-demo-submitted-peer-review"),
   ].filter((item): item is NonNullable<typeof item> => Boolean(item)),
   contribution: { points: 0 },
 };
@@ -52,13 +68,9 @@ const taskPageData: TaskManagementData = {
   feedback: initialOrfState.feedback,
   comments: initialOrfState.comments,
   objectiveLoot: initialOrfState.objectiveLoot,
-  objectiveContributionReviews: initialOrfState.objectiveContributionReviews,
   pointLedger: initialOrfState.pointLedger,
   permissionRules: initialOrfState.permissionRules,
 };
-const bountyHallUser = initialOrfState.users.find((user) => user.role === "member") ?? initialOrfState.users[0]!;
-const bountyHallCommander = initialOrfState.users.find((user) => user.role === "admin") ?? initialOrfState.users[0]!;
-
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.clear());
   await routeVisualBackgroundMocks(page);
@@ -180,6 +192,22 @@ test("commander focuses a bounty row on click and opens the matching challenge w
   await expect(challengeTargetRow).toContainText(objectiveTitle);
 });
 
+test("highlights the current challenger identity and uses the action column as a work entry", async ({ page }) => {
+  const objectiveId = "obj-demo-submitted-peer-review";
+  const objectiveTitle = "验收引用质量回归包";
+
+  await page.goto("/bounties");
+  await page.getByRole("tab", { name: /已开始/ }).click();
+
+  const startedRow = page.locator(".bounty-list-row").filter({ hasText: objectiveTitle });
+  await expect(startedRow).toBeVisible();
+  await expect(startedRow.locator(".bounty-row-reward")).not.toContainText("重估中");
+  await expect(startedRow.locator(".bounty-avatar[data-current-user='true']")).toHaveAttribute("title", `你 · ${bountyHallUser.name}`);
+
+  await startedRow.getByRole("button", { name: "进入目标" }).click();
+  await expect(page).toHaveURL(new RegExp(`/tasks#objective:${objectiveId}$`));
+});
+
 test("refreshes the bounty hall when a recruitment notification is received", async ({ page }) => {
   const recruitmentObjective = initialOrfState.objectives.find((item) => item.id === "obj-bounty-agent-retry");
   if (!recruitmentObjective) {
@@ -210,7 +238,11 @@ test("refreshes the bounty hall when a recruitment notification is received", as
     bountyRequests += 1;
     await route.fulfill({
       json: bountyRequests === 1
-        ? { ...bountyHallData, recruitmentItems: [] }
+        ? {
+            ...bountyHallData,
+            publicItems: bountyHallData.publicItems.filter((item) => !item.isRecruitment),
+            recruitmentItems: [],
+          }
         : bountyHallData,
     });
   });

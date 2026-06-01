@@ -87,10 +87,7 @@ export async function deletePeerReviewLoot(body: string, loot?: PeerReviewLoot |
   await db.delete(objectiveLoot).where(eq(objectiveLoot.body, body));
 }
 
-export async function deletePeerReview(target: PeerReviewTarget | null, reviewer: string, review?: SubmittedPeerReview | null) {
-  if (review?.id) {
-    await db.delete(objectiveContributionReviews).where(eq(objectiveContributionReviews.id, review.id));
-  }
+export async function deletePeerReview(target: PeerReviewTarget | null, reviewer: string, _review?: SubmittedPeerReview | null) {
   if (target) {
     await db
       .delete(objectiveContributionReviews)
@@ -122,46 +119,9 @@ export async function peerReviewAbsent(target: PeerReviewTarget | null, reviewer
   return (await readPeerReview(target.objective.id, reviewer)) === null;
 }
 
-export async function peerReviewPresent(target: PeerReviewTarget, reviewer: string) {
-  return (await readPeerReview(target.objective.id, reviewer)) !== null;
-}
-
-export async function peerReviewAllocationPresent(target: PeerReviewTarget, reviewer: string, memberName: string, ratio: number) {
-  const row = await readPeerReview(target.objective.id, reviewer);
-  return !!row && row.allocations.some((allocation) => allocation.member === memberName && allocation.ratio === ratio);
-}
-
 export async function targetLootPresent(target: PeerReviewTarget, loot: PeerReviewLoot) {
   const row = await readLootByBody(loot.body);
   return !!row && row.id === loot.id && row.objectiveId === target.objective.id;
-}
-
-export function peerReviewFromResponse(body: unknown): SubmittedPeerReview {
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    typeof (body as { review?: unknown }).review !== "object" ||
-    (body as { review?: unknown }).review === null
-  ) {
-    throw new Error("提交匿名互评接口响应缺少 review");
-  }
-
-  const review = (body as { review: Record<string, unknown> }).review;
-  if (
-    typeof review.id !== "string" ||
-    typeof review.objectiveId !== "string" ||
-    typeof review.reviewer !== "string" ||
-    !Array.isArray(review.allocations)
-  ) {
-    throw new Error("提交匿名互评接口响应 review 结构不完整");
-  }
-
-  return {
-    id: review.id,
-    objectiveId: review.objectiveId,
-    reviewer: review.reviewer,
-    allocations: review.allocations as SubmittedPeerReview["allocations"],
-  };
 }
 
 export function lootPagePath(target: PeerReviewTarget) {

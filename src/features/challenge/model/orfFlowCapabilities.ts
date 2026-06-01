@@ -1,4 +1,6 @@
 import { hasPermission } from "../../../config/permissions";
+import { canReviewObjectiveTrialReview, latestObjectiveTrialReview } from "../../../domain/orfTrialReview";
+import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import {
   canFreezeObjectiveByFlow,
   canMutateObjectiveWorkItemsByFlow,
@@ -12,7 +14,7 @@ import {
 } from "../../../domain/orfLifecycle";
 import type {
   Objective,
-  ObjectiveContributionReview,
+  ObjectiveTrialReview,
   OrfUser,
   PermissionRule,
   Result,
@@ -24,7 +26,7 @@ type MetricCreationAction = {
 };
 
 type WorkbenchAction = {
-  kind: "submitLoot" | "submitPeerReview" | "reviewLoot";
+  kind: "submitLoot" | "submitPeerReview" | "reviewLoot" | "reviewTrial";
   label: string;
   to: string;
 };
@@ -66,12 +68,13 @@ export function canMutateObjectiveWorkItems(objective: Objective | undefined): b
 
 export function canFreezeObjectiveAfterReestimate(
   objective: Objective | undefined,
-  results: readonly Pick<Result, "objectiveId">[],
+  results: readonly Pick<Result, "objectiveId" | "uncertaintyLevel" | "uncertaintyScore">[],
 ): boolean {
   return Boolean(
     objective &&
       canFreezeObjectiveByFlow(objective) &&
-      results.some((result) => result.objectiveId === objective.id),
+      results.some((result) => result.objectiveId === objective.id) &&
+      !hasUncalibratedResultPoints(results.filter((result) => result.objectiveId === objective.id)),
   );
 }
 
@@ -141,25 +144,6 @@ export function canSubmitObjectivePeerReview(
   );
 }
 
-export function hasSubmittedObjectivePeerReview({
-  objectiveId,
-  currentUser,
-  contributionReviews,
-}: {
-  objectiveId: string;
-  currentUser: OrfUser | null;
-  contributionReviews: ObjectiveContributionReview[];
-}): boolean {
-  return Boolean(
-    currentUser &&
-      contributionReviews.some(
-        (review) =>
-          review.objectiveId === objectiveId &&
-          review.reviewer === currentUser.name,
-      ),
-  );
-}
-
 export function canReviewObjectiveLoot(
   objective: Objective | undefined,
   currentUser: OrfUser | null,
@@ -172,12 +156,21 @@ export function canReviewObjectiveLoot(
 export function workbenchActionForObjective({
   objective,
   currentUser,
-  contributionReviews,
+  trialReviews = [],
 }: {
   objective: Objective;
   currentUser: OrfUser | null;
-  contributionReviews: ObjectiveContributionReview[];
+  trialReviews?: ObjectiveTrialReview[];
 }): WorkbenchAction | null {
+  const trialReview = latestObjectiveTrialReview(objective.id, trialReviews);
+  if (canReviewObjectiveTrialReview(objective, currentUser, trialReview)) {
+    return {
+      kind: "reviewTrial",
+      label: "处理试验收",
+      to: `/objectives/${objective.id}/loot`,
+    };
+  }
+
   if (canReviewObjectiveLoot(objective, currentUser)) {
     return {
       kind: "reviewLoot",
@@ -197,13 +190,7 @@ export function workbenchActionForObjective({
   if (canSubmitObjectivePeerReview(objective, currentUser)) {
     return {
       kind: "submitPeerReview",
-      label: hasSubmittedObjectivePeerReview({
-        objectiveId: objective.id,
-        currentUser,
-        contributionReviews,
-      })
-        ? "更新匿名互评"
-        : "提交匿名互评",
+      label: "提交匿名互评",
       to: `/objectives/${objective.id}/loot`,
     };
   }
@@ -226,11 +213,13 @@ export function resultDetailCapabilities({
       currentUser &&
       objective.challengers.includes(currentUser.name),
   );
+  const canEditAsReestimateChallenger = Boolean(objective && isAssignedChallenger && isObjectiveReestimateWindowOpen(objective));
 
   return {
     canSubmitLoot: canSubmitObjectiveLoot(objective, currentUser),
     canCreateTask: canMutateObjectiveWorkItems(objective) && (canEditResult || isAssignedChallenger),
     canProposeUpdate: canEditResult && !isObjectiveResultLocked(objective),
     canEditConfidence: canEditResult && !isObjectiveResultLocked(objective),
+    canEditMetricCalibration: (canEditResult || canEditAsReestimateChallenger) && !isObjectiveResultLocked(objective),
   };
 }

@@ -10,7 +10,9 @@ export type UncertaintyLevel = "入门" | "进阶" | "破局" | "渡劫" | "飞�
 export type BountySource = "managerDefined" | "memberProposed";
 export type ChallengeApplicationStatus = "pending" | "approved" | "declined";
 export type NotificationKind =
+  | "objective.published"
   | "challenge.application.created"
+  | "challenge.application.approved"
   | "objective.recruitment.created"
   | "objective.challenge.accepted"
   | "objective.loot.submitted"
@@ -25,6 +27,7 @@ export type UserStatus = "pending" | "active" | "rejected" | "disabled";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
 export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "settled" | "closed";
 export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
+export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
 
 export interface OrfUser {
   id: string;
@@ -34,6 +37,7 @@ export interface OrfUser {
   status: UserStatus;
   authLinked?: boolean;
   lastOnlineAt?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface PermissionRule {
@@ -49,6 +53,7 @@ export interface TrendPoint {
 export interface ChallengeApplication {
   id: string;
   applicant: string;
+  reason?: string;
   status: ChallengeApplicationStatus;
   createdAt: string;
   decidedAt?: string | null;
@@ -106,6 +111,7 @@ export interface Objective {
   completionMultiplier?: number | null;
   objectiveBasePoints: number;
   objectiveSettlementPoints?: number | null;
+  publishedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -125,6 +131,20 @@ export interface ObjectiveLoot {
   selfTestReportUrl?: string | null;
   selfTestReportBody?: string | null;
   submittedAt: string;
+}
+
+export interface ObjectiveTrialReview {
+  id: string;
+  objectiveId: string;
+  requestedBy: string;
+  body: string;
+  resultClaims: LootResultClaim[];
+  selfTestReportBody?: string | null;
+  status: ObjectiveTrialReviewStatus;
+  commanderFeedback?: string | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  requestedAt: string;
 }
 
 export interface PointLedgerEntry {
@@ -304,6 +324,8 @@ export interface CommentAttachment {
 export interface CommentMessage {
   id: string;
   author: string;
+  authorUserId?: string | null;
+  authorAvatarUrl?: string | null;
   body: string;
   attachments: CommentAttachment[];
   createdAt: string;
@@ -339,7 +361,7 @@ export interface OrfState {
   failureSamples: FailureSample[];
   comments: CommentThread[];
   objectiveLoot: ObjectiveLoot[];
-  objectiveContributionReviews: ObjectiveContributionReview[];
+  objectiveTrialReviews: ObjectiveTrialReview[];
   pointLedger: PointLedgerEntry[];
   causeCategories: string[];
   rules: OrfRules;

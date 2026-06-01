@@ -1,13 +1,6 @@
-import type { ChallengeApplication, Objective, OrfState, Result, UncertaintyLevel } from "../types/orf";
+import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
+import type { ChallengeApplication, Objective, OrfState, Result } from "../types/orf";
 import { addCalendarDays } from "../utils/date";
-
-const uncertaintyScores: Record<UncertaintyLevel, number> = {
-  入门: 10,
-  进阶: 30,
-  破局: 90,
-  渡劫: 270,
-  飞升: 810,
-};
 
 type ObjectiveChallengeFields = Pick<
   Objective,
@@ -60,9 +53,7 @@ function uniqueMembers(values: Array<string | undefined | null>) {
   return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
 }
 
-function uncertaintyScore(level: UncertaintyLevel | undefined) {
-  return level ? uncertaintyScores[level] : uncertaintyScores["进阶"];
-}
+const uncertaintyScore = uncertaintyScoreFor;
 
 function inferFlowStatus(objective: LegacyObjective, challengers: string[], assignedChallengers: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
@@ -103,7 +94,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     const challengers = uniqueMembers(objective.challengers ?? objectiveResults.map((result) => result.owner));
     const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger));
     const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
-    const finalDueAt = objective.finalDueAt || latestDate(objectiveResults.map((result) => result.finalDueAt)) || addDays(objective.updatedAt, 14);
+    const finalDueAt = objective.finalDueAt || addDays(objective.updatedAt, 14);
     const acceptedResults = results.filter(
       (result) => result.objectiveId === objective.id && (result.acceptedResult === "completed" || result.acceptedResult === "falsified"),
     );
@@ -121,7 +112,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
       lootSubmittedAt: objective.lootSubmittedAt ?? null,
       acceptedResult: objective.acceptedResult ?? null,
       completionMultiplier: objective.completionMultiplier ?? null,
-      objectiveBasePoints: objective.objectiveBasePoints ?? acceptedResults.reduce((sum, result) => sum + result.uncertaintyScore, 0),
+      objectiveBasePoints: objective.objectiveBasePoints ?? objectiveBasePointsForResults(acceptedResults),
       objectiveSettlementPoints: objective.objectiveSettlementPoints ?? null,
     };
   });
@@ -132,7 +123,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     objectives,
     results,
     objectiveLoot: state.objectiveLoot ?? [],
-    objectiveContributionReviews: state.objectiveContributionReviews ?? [],
+    objectiveTrialReviews: state.objectiveTrialReviews ?? [],
     pointLedger: state.pointLedger ?? [],
   };
 }
@@ -413,7 +404,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
-      finalDueAt: "2026-06-30",
       assignedChallenger: "Alex Chen",
       evidenceIds: ["ev-eval-coverage", "ev-regression-gap"],
       feedbackIds: [],
@@ -680,7 +670,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "memberProposed",
       definer: "Alex Chen",
-      finalDueAt: "2026-06-21",
       priorityChallengeExpiresAt: "2026-06-01T10:00:00.000Z",
       evidenceIds: [],
       feedbackIds: [],
@@ -703,7 +692,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       owner: "",
       source: "managerDefined",
       definer: "Alex Chen",
-      finalDueAt: "2026-06-07",
       evidenceIds: [],
       feedbackIds: ["fb-cost-latency"],
       trend: confidenceTrend,
@@ -1566,28 +1554,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       submittedAt: "2026-05-17T15:20:00.000Z",
     },
   ],
-  objectiveContributionReviews: [
-    {
-      id: "contribution-review-demo-mia",
-      objectiveId: "obj-demo-submitted-peer-review",
-      reviewer: "Mia Zhang",
-      allocations: [
-        { member: "Mia Zhang", ratio: 0.55 },
-        { member: "Ethan Liu", ratio: 0.45 },
-      ],
-      submittedAt: "2026-05-17T16:00:00.000Z",
-    },
-    {
-      id: "contribution-review-demo-ethan",
-      objectiveId: "obj-demo-submitted-peer-review",
-      reviewer: "Ethan Liu",
-      allocations: [
-        { member: "Mia Zhang", ratio: 0.52 },
-        { member: "Ethan Liu", ratio: 0.48 },
-      ],
-      submittedAt: "2026-05-17T16:10:00.000Z",
-    },
-  ],
+  objectiveTrialReviews: [],
   pointLedger: [
     {
       id: "ledger-demo-routing-kai",

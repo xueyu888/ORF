@@ -33,6 +33,7 @@ docs/
 | [ORF 任务管理页面 - 后端.md](./backend/ORF%20任务管理页面%20-%20后端.md) | 我的挑战后端集合、目标挑战关系、字段契约和交互业务约束 |
 | [ORF 后端流程测试.md](./backend/ORF%20后端流程测试.md) | ORF 后端 repository + 数据库流程测试思路和流程图 |
 | [ORF 提交战利品 - 后端.md](./backend/ORF%20提交战利品%20-%20后端.md) | 目标战利品提交契约 |
+| [ORF 本地匿名互评结算服务 - 后端.md](./backend/ORF%20本地匿名互评结算服务%20-%20后端.md) | 本地匿名互评收集、解密和贡献比例汇总 |
 | [评论组件 - 后端.md](./backend/评论组件%20-%20后端.md) | 评论持久化、返回集合和权限边界 |
 | [目标进度条计算规则.md](./backend/目标进度条计算规则.md) | 目标进度后端字段规则 |
 | [前端页面说明模板 v1.md](./frontend/前端页面说明模板%20v1.md) | 前端页面说明模板 |
@@ -57,3 +58,4 @@ docs/
 | [environment.md](./project/environment.md) | uv 和 npm 环境说明 |
 | [public-ip-infra.md](./project/public-ip-infra.md) | 无域名公网 IP 共享 PG/Ory/MinIO 的部署约定 |
 | [code-standards.md](./project/code-standards.md) | 代码原则 |
+| [testing/README.md](./testing/README.md) | Playwright 测试脚本、配置入口和 UI 随机探索启动方式 |

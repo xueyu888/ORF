@@ -9,7 +9,13 @@ export type ContributionReviewSummary = {
   reviewers: string[];
 };
 
-const REVIEW_TOLERANCE = 0.1;
+export const CONTRIBUTION_RATIO_TOTAL = 1;
+export const CONTRIBUTION_RATIO_TOLERANCE = 0.0001;
+export const CONTRIBUTION_REVIEW_SPREAD_TOLERANCE = 0.1;
+
+export type ContributionAllocationValidation =
+  | { status: "ok"; allocations: ContributionAllocation[] }
+  | { status: "invalid"; reason: "memberCoverage" | "ratioRange" | "ratioTotal" };
 
 export function summarizeContributionReviews(
   challengers: string[],
@@ -32,40 +38,42 @@ export function summarizeContributionReviews(
     return { status: "missing", ratios: equalRatios(members), missingReviewers, reviewers };
   }
 
-  const normalizedReviews = [...latestReviews.values()].map((review) => normalizeAllocations(review.allocations, members));
-  if (normalizedReviews.some((allocations) => allocations.length === 0)) {
-    return { status: "conflict", ratios: equalRatios(members), missingReviewers: [], reviewers };
+  const reviewEntries: Array<{ reviewer: string; allocations: ContributionAllocation[] }> = [];
+  for (const review of latestReviews.values()) {
+    const result = validateContributionAllocationInput(review.allocations, members);
+    if (result.status === "invalid") {
+      return { status: "conflict", ratios: equalRatios(members), missingReviewers: [], reviewers };
+    }
+    reviewEntries.push({ reviewer: review.reviewer, allocations: result.allocations });
   }
 
-  const rawRatios = members.map((member) => {
-    const received = normalizedReviews
-      .map((allocations) => allocations.find((allocation) => allocation.member === member)?.ratio ?? 0)
-      .reduce((sum, ratio) => sum + ratio, 0);
-    return { member, ratio: received / normalizedReviews.length };
+  const peerValuesByMember = members.map((member) => ({
+    member,
+    values: reviewEntries
+      .filter((review) => review.reviewer !== member)
+      .map((review) => review.allocations.find((allocation) => allocation.member === member)?.ratio ?? 0),
+  }));
+  const rawRatios = peerValuesByMember.map(({ member, values }) => {
+    const received = values.reduce((sum, ratio) => sum + ratio, 0);
+    return { member, ratio: received / values.length };
   });
   const total = rawRatios.reduce((sum, item) => sum + item.ratio, 0);
+  if (members.length === 2 && Math.abs(total - CONTRIBUTION_RATIO_TOTAL) > CONTRIBUTION_REVIEW_SPREAD_TOLERANCE + CONTRIBUTION_RATIO_TOLERANCE) {
+    return { status: "conflict", ratios: equalRatios(members), missingReviewers: [], reviewers };
+  }
   if (total <= 0) {
     return { status: "conflict", ratios: equalRatios(members), missingReviewers: [], reviewers };
   }
 
   const ratios = rawRatios.map((item) => ({ member: item.member, ratio: item.ratio / total }));
-  const maxSpread = Math.max(
-    ...members.map((member) => {
-      const values = normalizedReviews.map((allocations) => allocations.find((allocation) => allocation.member === member)?.ratio ?? 0);
-      return Math.max(...values) - Math.min(...values);
-    }),
-  );
+  const maxSpread = Math.max(...peerValuesByMember.map(({ values }) => Math.max(...values) - Math.min(...values)));
 
   return {
-    status: maxSpread <= REVIEW_TOLERANCE ? "ready" : "conflict",
+    status: maxSpread <= CONTRIBUTION_REVIEW_SPREAD_TOLERANCE + CONTRIBUTION_RATIO_TOLERANCE ? "ready" : "conflict",
     ratios,
     missingReviewers: [],
     reviewers,
   };
-}
-
-export function normalizeContributionAllocations(allocations: ContributionAllocation[], challengers: string[]) {
-  return normalizeAllocations(allocations, uniqueMembers(challengers));
 }
 
 export function equalRatios(challengers: string[]): ContributionAllocation[] {
@@ -87,19 +95,36 @@ function latestReviewByReviewer(reviews: ObjectiveContributionReview[], memberSe
   return latest;
 }
 
-function normalizeAllocations(allocations: ContributionAllocation[], members: string[]) {
+export function validateContributionAllocationInput(
+  allocations: ContributionAllocation[],
+  challengers: string[],
+): ContributionAllocationValidation {
+  const members = uniqueMembers(challengers);
   const memberSet = new Set(members);
   const ratioByMember = new Map<string, number>();
   for (const allocation of allocations) {
     const member = allocation.member.trim();
     const ratio = Number(allocation.ratio);
-    if (!memberSet.has(member) || !Number.isFinite(ratio) || ratio < 0) continue;
-    ratioByMember.set(member, (ratioByMember.get(member) ?? 0) + ratio);
+    if (!memberSet.has(member) || ratioByMember.has(member)) {
+      return { status: "invalid", reason: "memberCoverage" };
+    }
+    if (!Number.isFinite(ratio) || ratio < 0 || ratio > CONTRIBUTION_RATIO_TOTAL) {
+      return { status: "invalid", reason: "ratioRange" };
+    }
+    ratioByMember.set(member, ratio);
   }
 
-  const total = [...ratioByMember.values()].reduce((sum, ratio) => sum + ratio, 0);
-  if (total <= 0) return [];
-  return members.map((member) => ({ member, ratio: (ratioByMember.get(member) ?? 0) / total }));
+  if (ratioByMember.size !== members.length) {
+    return { status: "invalid", reason: "memberCoverage" };
+  }
+
+  const normalized = members.map((member) => ({ member, ratio: ratioByMember.get(member) ?? 0 }));
+  const total = normalized.reduce((sum, item) => sum + item.ratio, 0);
+  if (Math.abs(total - CONTRIBUTION_RATIO_TOTAL) > CONTRIBUTION_RATIO_TOLERANCE) {
+    return { status: "invalid", reason: "ratioTotal" };
+  }
+
+  return { status: "ok", allocations: normalized };
 }
 
 function uniqueMembers(values: string[]) {

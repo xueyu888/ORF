@@ -8,10 +8,12 @@ import { buildServer } from "../server/app";
 import { loginWithPassword } from "../server/auth/ory";
 import { closeDb, db } from "../server/db/client";
 import { objectives, results as resultRows, taskChecklistItems, tasks as taskRows, teams, teamMembers, users } from "../server/db/schema";
+import { subscribeRealtimeEvents } from "../server/realtime/realtimeEventBus";
 import type { ObjectiveAcceptedResult, Result, Task, UncertaintyLevel } from "../src/types/orf";
+import type { RealtimeEvent } from "../src/types/realtime";
 import {
   acceptObjectiveChallenge,
-  applyForObjectiveChallenge,
+  applyForObjectiveChallenge as applyForObjectiveChallengeRepository,
   approveObjectiveChallengeApplication,
   canEditObjectiveResultsDuringReestimate,
   createChecklistItem,
@@ -28,11 +30,13 @@ import {
   proposeResultUpdate,
   recruitObjectiveChallengers,
   rejectObjectiveChallengeApplication,
-  reopenObjectiveReestimate,
   reviewObjectiveLoot,
-  submitObjectiveContributionReview,
   submitObjectiveLoot,
+  reviewObjectiveTrialReview,
+  submitObjectiveTrialReview,
+  updateObjectiveDetails,
   updateResultConfidence,
+  updateResultUncertaintyLevel,
   updateResultTitle,
 } from "../server/repositories/orfRepository";
 import { listNotificationsForUser } from "../server/repositories/notificationRepository";
@@ -70,13 +74,46 @@ test("published objective without concrete results is visible in the bounty hall
   );
   assert.ok(objective);
 
+  const challengerRealtimeEvents: RealtimeEvent[] = [];
+  const unsubscribeChallenger = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.challenger.id,
+    send: (event) => challengerRealtimeEvents.push(event),
+  });
+  const commanderRealtimeEvents: RealtimeEvent[] = [];
+  const unsubscribeCommander = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.commander.id,
+    send: (event) => commanderRealtimeEvents.push(event),
+  });
   const published = await publishObjective(objective.id, fixture.commander.id);
+  unsubscribeChallenger();
+  unsubscribeCommander();
   assert.equal(published.status, "ok");
   assert.equal(published.objective.flowStatus, "open");
+  assert.ok(published.objective.publishedAt, "publishing should stamp the bounty-hall publication date");
+  const challengerNotificationEvent = challengerRealtimeEvents.filter((event) => event.kind === "notification.created")[0];
+  const challengerBroadcastEvent = challengerRealtimeEvents.filter((event) => event.kind === "system.broadcast")[0];
+  const commanderBroadcastEvent = commanderRealtimeEvents.filter((event) => event.kind === "system.broadcast")[0];
+  assert.equal(challengerNotificationEvent?.notification.kind, "objective.published");
+  assert.equal(challengerNotificationEvent?.notification.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+  assert.equal(challengerBroadcastEvent?.broadcast.notificationKind, "objective.published");
+  assert.equal(challengerBroadcastEvent?.broadcast.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+  assert.equal(commanderBroadcastEvent?.broadcast.notificationKind, "objective.published");
+  assert.equal(commanderBroadcastEvent?.broadcast.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+  assert.equal(commanderRealtimeEvents.some((event) => event.kind === "notification.created"), false);
+
+  const challengerNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
+  assert.equal(challengerNotifications[0]?.kind, "objective.published");
+  assert.equal(challengerNotifications[0]?.targetId, objective.id);
+  assert.equal(challengerNotifications[0]?.readAt, null);
+  const commanderNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
+  assert.equal(commanderNotifications.some((notification) => notification.kind === "objective.published"), false);
 
   const hall = await getBountyHallData(fixture.challenger.name);
   const item = hall.availableItems.find((item) => item.objective.id === objective.id);
   assert.ok(item, "a published Objective should not require a commander-defined Result to be visible");
+  assert.equal(item.objective.publishedAt, published.objective.publishedAt);
   assert.equal(item.result, null);
   assert.deepEqual(item.results, []);
   assert.equal(item.uncertaintyPoints, 0);
@@ -194,12 +231,37 @@ test("commander and challenger can complete the application-to-settlement ORF ba
   assert.ok(availableItem, "challenger should see the published objective in the bounty hall");
   assert.equal(availableItem.hasCurrentApplication, false);
 
-  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id);
+  const commanderApplicationEvents: RealtimeEvent[] = [];
+  const unsubscribeCommanderApplication = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.commander.id,
+    send: (event) => commanderApplicationEvents.push(event),
+  });
+  const challengerApplicationEvents: RealtimeEvent[] = [];
+  const unsubscribeChallengerApplication = subscribeRealtimeEvents({
+    teamId: fixture.teamId,
+    userId: fixture.challenger.id,
+    send: (event) => challengerApplicationEvents.push(event),
+  });
+  const applied = await applyForObjectiveChallenge(objective.id, fixture.challenger.name, fixture.challenger.id, "我来承接这个测试目标。");
+  unsubscribeCommanderApplication();
+  unsubscribeChallengerApplication();
   assert.equal(applied.status, "applied");
   assert.equal(applied.objective.flowStatus, "applying");
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), false);
   const applicationId = applied.objective.challengeApplications.find((application) => application.applicant === fixture.challenger.name)?.id;
   assert.ok(applicationId);
+  const commanderApplicationInvalidation = commanderApplicationEvents.find(
+    (event) => event.kind === "orf.read-model.invalidated" && event.invalidation.reason === "objective.challenge.application.changed",
+  );
+  assert.equal(commanderApplicationInvalidation?.invalidation.reason, "objective.challenge.application.changed");
+  assert.deepEqual(commanderApplicationInvalidation?.invalidation.models, ["taskManagement", "bountyHall"]);
+  assert.equal(commanderApplicationInvalidation?.invalidation.target?.type, "objective");
+  assert.equal(commanderApplicationInvalidation?.invalidation.target?.id, objective.id);
+  const challengerApplicationInvalidation = challengerApplicationEvents.find(
+    (event) => event.kind === "orf.read-model.invalidated" && event.invalidation.reason === "objective.challenge.application.changed",
+  );
+  assert.equal(challengerApplicationInvalidation?.invalidation.reason, "objective.challenge.application.changed");
   const applicationNotifications = await listNotificationsForUser(fixture.commander.id, fixture.scope);
   assert.equal(applicationNotifications[0]?.kind, "challenge.application.created");
   assert.equal(applicationNotifications[0]?.targetId, objective.id);
@@ -222,6 +284,18 @@ test("commander and challenger can complete the application-to-settlement ORF ba
     "approved",
   );
   assert.equal(await canEditObjectiveResultsDuringReestimate(objective.id, fixture.challenger.name), true);
+  const approvalNotifications = (await listNotificationsForUser(fixture.challenger.id, fixture.scope)).filter(
+    (notification) => notification.kind === "challenge.application.approved",
+  );
+  assert.equal(approvalNotifications[0]?.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
+
+  const hallAfterApproval = await getBountyHallData(fixture.challenger.name, { scope: fixture.scope });
+  const publicApprovalItem = hallAfterApproval.publicItems.find((item) => item.objective.id === objective.id);
+  assert.ok(publicApprovalItem, "approved objectives remain visible in the public bounty hall");
+  assert.equal(publicApprovalItem.isCurrentChallenger, true);
+  assert.deepEqual(publicApprovalItem.challengers, [fixture.challenger.name]);
+  assert.equal(publicApprovalItem.applications.find((application) => application.id === applicationId)?.status, "approved");
+  assert.equal(hallAfterApproval.availableItems.some((item) => item.objective.id === objective.id), false);
 
   const challengerResult = await createResult({
     objectiveId: objective.id,
@@ -326,7 +400,9 @@ test("notification API scopes messages to the current recipient and supports rea
   await withApiServer(fixture, async (app) => {
     const challengerList = await apiInject(app, fixture.challenger, "GET", "/api/notifications");
     assert.equal(challengerList.statusCode, 200);
-    assert.deepEqual(challengerList.json().notifications, []);
+    const challengerPayload = challengerList.json() as { notifications: Array<{ id: string; kind: string; readAt: string | null }>; unreadCount: number };
+    assert.equal(challengerPayload.unreadCount, 1);
+    assert.equal(challengerPayload.notifications[0]?.kind, "objective.published");
 
     const commanderList = await apiInject(app, fixture.commander, "GET", "/api/notifications");
     assert.equal(commanderList.statusCode, 200);
@@ -380,8 +456,9 @@ test("commander recruitment appears as a recruitment item and the recruited chal
   assert.equal(recruited.status, "ok");
   assert.equal(recruited.objective.flowStatus, "recruiting");
   assert.deepEqual(recruited.objective.assignedChallengers, [fixture.challenger.name]);
-  const recruitmentNotifications = await listNotificationsForUser(fixture.challenger.id, fixture.scope);
-  assert.equal(recruitmentNotifications[0]?.kind, "objective.recruitment.created");
+  const recruitmentNotifications = (await listNotificationsForUser(fixture.challenger.id, fixture.scope)).filter(
+    (notification) => notification.kind === "objective.recruitment.created",
+  );
   assert.equal(recruitmentNotifications[0]?.targetId, objective.id);
   assert.equal(recruitmentNotifications[0]?.targetHref, `/bounties#objective:${encodeURIComponent(objective.id)}`);
 
@@ -762,6 +839,12 @@ test("rejecting remaining pending applications keeps an accepted objective in re
   assert.equal(approved.status, "ok");
   assert.equal(approved.objective.flowStatus, "reestimating");
 
+  const observerHall = await getBountyHallData(fixture.observer.name, { scope: fixture.scope });
+  const publicItem = observerHall.publicItems.find((item) => item.objective.id === objective.id);
+  assert.ok(publicItem, "accepted objectives stay visible with both approved challengers and pending applicants");
+  assert.deepEqual(publicItem.challengers, [fixture.challenger.name]);
+  assert.deepEqual(publicItem.pendingApplications.map((application) => application.applicant), [fixture.observer.name]);
+
   const rejected = await rejectObjectiveChallengeApplication(objective.id, observerApplicationId, fixture.commander.id);
   assert.equal(rejected.status, "ok");
   assert.equal(rejected.objective.flowStatus, "reestimating");
@@ -895,6 +978,34 @@ test("freezing after reestimate requires at least one concrete result", async ()
   assert.equal(data.objectives.find((item) => item.id === objective.id)?.flowStatus, "reestimating");
 });
 
+test("freezing after reestimate requires calibrated points on every result", async () => {
+  const fixture = await createFixture("freeze-uncalibrated-result");
+  const objective = await createPublishedObjective(fixture, "uncalibrated result freeze guard");
+  const application = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
+  assert.equal(application.status, "applied");
+  const applicationId = application.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name)?.id;
+  assert.ok(applicationId);
+  const approved = await approveObjectiveChallengeApplication(objective.id, applicationId, fixture.commander.id);
+  assert.equal(approved.status, "ok");
+
+  const result = await createResult({
+    objectiveId: objective.id,
+    title: `${fixture.prefix} uncalibrated result`,
+    metricName: "Uncalibrated metric",
+    source: "managerDefined",
+    definer: fixture.commander.name,
+  });
+  assert.ok(result);
+  assert.equal(result.uncertaintyLevel, undefined);
+  assert.equal(result.uncertaintyScore, 0);
+
+  assert.equal((await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id)).status, "invalid");
+  assert.equal(await updateResultUncertaintyLevel(result.id, "进阶", fixture.commander.id), true);
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  assert.equal(frozen.objective.objectiveBasePoints, 30);
+});
+
 test("challenge application duplicate and closed-state guards are enforced", async () => {
   const fixture = await createFixture("application-guards");
   const { objective, applicationId } = await createApprovedObjectiveWithResult(fixture);
@@ -959,22 +1070,19 @@ test("challenge acceptance guards duplicate, due-date, unauthorized, and closed 
   assert.equal(closed.status, "closed");
 });
 
-test("freeze rejects invalid source states and reopen requests stay disabled", async () => {
-  const fixture = await createFixture("freeze-reopen-disabled-guards");
+test("freeze rejects invalid source states and stays closed after freezing", async () => {
+  const fixture = await createFixture("freeze-source-state-guards");
   const candidate = await createTestObjective(fixture, "candidate freeze guard");
   assert.equal((await freezeObjectiveAfterReestimate(candidate.id, fixture.commander.id)).status, "invalid");
-  assert.equal((await reopenObjectiveReestimate(candidate.id, fixture.commander.id)).status, "invalid");
 
   const applying = await createPublishedObjective(fixture, "applying freeze guard");
   assert.equal((await applyForObjectiveChallenge(applying.id, fixture.challenger.name)).status, "applied");
   assert.equal((await freezeObjectiveAfterReestimate(applying.id, fixture.commander.id)).status, "invalid");
 
   const { objective: approved } = await createApprovedObjectiveWithResult(fixture, "approved freeze guard");
-  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "invalid");
   const frozen = await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id);
   assert.equal(frozen.status, "ok");
   assert.equal((await freezeObjectiveAfterReestimate(approved.id, fixture.commander.id)).status, "invalid");
-  assert.equal((await reopenObjectiveReestimate(approved.id, fixture.commander.id)).status, "invalid");
 });
 
 test("loot submission rejects incomplete or out-of-state payloads", async () => {
@@ -1060,7 +1168,7 @@ test("review rejects invalid state and missing loot", async () => {
   assert.equal(missingLoot.status, "notFound");
 });
 
-test("settlement normalizes multi-challenger contribution ratios and supports overdelivery", async () => {
+test("settlement uses multi-challenger standard contribution ratios and supports overdelivery", async () => {
   const fixture = await createFixture("settlement-ratios");
   const objective = await createPublishedObjective(fixture, "multi challenger settlement");
   const resultA = await createTestResult(objective.id, fixture.commander.name, "ratio result a", "入门");
@@ -1091,29 +1199,6 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   );
   assert.equal(loot.status, "ok");
 
-  const challengerReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 2 },
-        { member: fixture.observer.name, ratio: 1 },
-      ],
-    },
-    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
-  );
-  assert.equal(challengerReview.status, "ok");
-  const observerReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 2 },
-        { member: fixture.observer.name, ratio: 1 },
-      ],
-    },
-    { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
-  );
-  assert.equal(observerReview.status, "ok");
-
   const reviewed = await reviewObjectiveLoot(
     objective.id,
     {
@@ -1122,6 +1207,13 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
         { resultId: resultA.id, acceptedResult: "completed" },
         { resultId: resultB.id, acceptedResult: "completed" },
       ],
+      contributionResolution: {
+        ratios: [
+          { member: fixture.challenger.name, ratio: 2 / 3 },
+          { member: fixture.observer.name, ratio: 1 / 3 },
+        ],
+        reason: "Resolved by local anonymous settlement service.",
+      },
     },
     fixture.commander.id,
   );
@@ -1130,19 +1222,28 @@ test("settlement normalizes multi-challenger contribution ratios and supports ov
   assert.equal(reviewed.objective.completionMultiplier, 1.5);
   assert.equal(reviewed.objective.objectiveSettlementPoints, 60);
 
-  const data = await getTaskManagementData();
-  assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 2);
+  const data = await getTaskManagementData({ scope: fixture.scope });
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
   assert.equal(ledger.length, 2);
   assert.equal(ledger[0]?.memberName, fixture.challenger.name);
   assert.equal(ledger[0]?.points, 40);
   assert.equal(ledger[1]?.memberName, fixture.observer.name);
   assert.equal(ledger[1]?.points, 20);
+
+  const challengerReadModel = await getMyChallengesData(fixture.challenger.name, false, { scope: fixture.scope });
+  const challengerLedger = challengerReadModel.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
+  assert.deepEqual(challengerLedger.map((entry) => entry.memberName), [fixture.challenger.name, fixture.observer.name]);
+  assert.deepEqual(challengerLedger.map((entry) => entry.points), [40, 20]);
+
+  const observerReadModel = await getMyChallengesData(fixture.observer.name, false, { scope: fixture.scope });
+  const observerLedger = observerReadModel.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => right.points - left.points);
+  assert.deepEqual(observerLedger.map((entry) => entry.memberName), [fixture.challenger.name, fixture.observer.name]);
+  assert.deepEqual(observerLedger.map((entry) => entry.points), [40, 20]);
 });
 
-test("repeated contribution reviews keep history but settlement uses each reviewer latest record", async () => {
-  const fixture = await createFixture("peer-review-latest-record");
-  const objective = await createPublishedObjective(fixture, "latest peer review settlement");
+test("multi-challenger settlement requires final contribution resolution without raw backend reviews", async () => {
+  const fixture = await createFixture("peer-review-local-resolution");
+  const objective = await createPublishedObjective(fixture, "local peer review settlement");
   const result = await createTestResult(objective.id, fixture.commander.name, "latest peer review result", "进阶");
 
   const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
@@ -1160,58 +1261,41 @@ test("repeated contribution reviews keep history but settlement uses each review
   const loot = await submitObjectiveLoot(
     objective.id,
     {
-      body: "Repeated peer review target loot.",
+      body: "Local peer review target loot.",
       resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }],
     },
     { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
   );
   assert.equal(loot.status, "ok");
 
-  const firstReview = await submitObjectiveContributionReview(
+  const missingResolution = await reviewObjectiveLoot(
     objective.id,
     {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 9 },
-        { member: fixture.observer.name, ratio: 1 },
-      ],
+      lootId: loot.loot.id,
+      resultReviews: [{ resultId: result.id, acceptedResult: "completed" }],
     },
-    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
+    fixture.commander.id,
   );
-  assert.equal(firstReview.status, "ok");
-
-  const latestReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 1 },
-        { member: fixture.observer.name, ratio: 1 },
-      ],
-    },
-    { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
-  );
-  assert.equal(latestReview.status, "ok");
-
-  const observerReview = await submitObjectiveContributionReview(
-    objective.id,
-    {
-      allocations: [
-        { member: fixture.challenger.name, ratio: 1 },
-        { member: fixture.observer.name, ratio: 1 },
-      ],
-    },
-    { id: fixture.observer.id, name: fixture.observer.name, role: "member" },
-  );
-  assert.equal(observerReview.status, "ok");
+  assert.equal(missingResolution.status, "invalid");
 
   const reviewed = await reviewObjectiveLoot(
     objective.id,
-    { lootId: loot.loot.id, resultReviews: [{ resultId: result.id, acceptedResult: "completed" }] },
+    {
+      lootId: loot.loot.id,
+      resultReviews: [{ resultId: result.id, acceptedResult: "completed" }],
+      contributionResolution: {
+        ratios: [
+          { member: fixture.challenger.name, ratio: 0.5 },
+          { member: fixture.observer.name, ratio: 0.5 },
+        ],
+        reason: "Resolved by local anonymous settlement service.",
+      },
+    },
     fixture.commander.id,
   );
   assert.equal(reviewed.status, "ok");
 
   const data = await getTaskManagementData({ scope: fixture.scope });
-  assert.equal(data.objectiveContributionReviews.filter((entry) => entry.objectiveId === objective.id).length, 3);
   const ledger = data.pointLedger.filter((entry) => entry.objectiveId === objective.id).sort((left, right) => left.memberName.localeCompare(right.memberName));
   assert.equal(ledger.length, 2);
   assert.equal(ledger[0]?.points, 15);
@@ -1248,9 +1332,9 @@ test("settlement resolves point ledger user ids within the objective runtime sco
   assert.notEqual(ledger.userId, intruder.challenger.id);
 });
 
-test("settlement resolution collapses duplicate member ratios before writing point ledger", async () => {
-  const fixture = await createFixture("settlement-resolution-duplicates");
-  const objective = await createPublishedObjective(fixture, "duplicate resolution ratios");
+test("settlement resolution uses standard contribution ratios before writing point ledger", async () => {
+  const fixture = await createFixture("settlement-resolution-standard-ratios");
+  const objective = await createPublishedObjective(fixture, "standard resolution ratios");
   const result = await createTestResult(objective.id, fixture.commander.name, "duplicate ratio result", "进阶");
 
   const challengerApplication = await applyForObjectiveChallenge(objective.id, fixture.challenger.name);
@@ -1268,7 +1352,7 @@ test("settlement resolution collapses duplicate member ratios before writing poi
   const loot = await submitObjectiveLoot(
     objective.id,
     {
-      body: "Duplicate resolution ratios should still produce one ledger row per challenger.",
+      body: "Standard resolution ratios should produce one ledger row per challenger.",
       resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "done" }],
     },
     { id: fixture.challenger.id, name: fixture.challenger.name, role: "member" },
@@ -1280,11 +1364,10 @@ test("settlement resolution collapses duplicate member ratios before writing poi
     {
       contributionResolution: {
         ratios: [
-          { member: fixture.challenger.name, ratio: 1 },
-          { member: fixture.challenger.name, ratio: 3 },
-          { member: fixture.observer.name, ratio: 1 },
+          { member: fixture.challenger.name, ratio: 0.8 },
+          { member: fixture.observer.name, ratio: 0.2 },
         ],
-        reason: "Resolve duplicate contribution input.",
+        reason: "Resolve contribution input.",
       },
     },
     fixture.commander.id,
@@ -1307,6 +1390,7 @@ test("API flow commands enforce commander-only permissions and challenge list sc
   const objective = await createPublishedObjective(fixture, "api flow permission");
   assert.equal((await recruitObjectiveChallengers(objective.id, [fixture.challenger.name], fixture.commander.id)).status, "ok");
   const reviewObjective = await createPublishedObjective(fixture, "api review permission");
+  const apiApplicationObjective = await createPublishedObjective(fixture, "api application reason permission");
 
   await withApiServer(fixture, async (app) => {
     const memberPublish = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}/publish`);
@@ -1315,10 +1399,36 @@ test("API flow commands enforce commander-only permissions and challenge list sc
     const missingPublish = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(`${fixture.prefix}-missing`)}/publish`);
     assert.equal(missingPublish.statusCode, 404);
 
+    const memberDeadlineUpdate = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}`, {
+      finalDueAt: "2999-11-30",
+    });
+    assert.equal(memberDeadlineUpdate.statusCode, 403);
+    const commanderDeadlineUpdate = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(candidate.id)}`, {
+      finalDueAt: "2999-11-30",
+    });
+    assert.equal(commanderDeadlineUpdate.statusCode, 200);
+
     const memberRecruit = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/recruitments`, {
       members: [fixture.observer.name],
     });
     assert.equal(memberRecruit.statusCode, 403);
+
+    const missingReasonApplication = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/challenge-applications`, {});
+    assert.equal(missingReasonApplication.statusCode, 400);
+
+    const rawContributionReview = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/contribution-reviews`, {
+      allocations: [{ member: fixture.challenger.name, ratio: 1 }],
+    });
+    assert.equal(rawContributionReview.statusCode, 410);
+
+    const memberApplication = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(apiApplicationObjective.id)}/challenge-applications`, {
+      reason: "I have the right context and can own this challenge.",
+    });
+    assert.equal(memberApplication.statusCode, 200);
+    const memberApplicationPayload = memberApplication.json() as { objective: { challengeApplications: Array<{ applicant: string; reason?: string; status: string }> } };
+    const storedApplication = memberApplicationPayload.objective.challengeApplications.find((item) => item.applicant === fixture.challenger.name);
+    assert.equal(storedApplication?.status, "pending");
+    assert.equal(storedApplication?.reason, "I have the right context and can own this challenge.");
 
     const application = await applyForObjectiveChallenge(reviewObjective.id, fixture.challenger.name);
     assert.equal(application.status, "applied");
@@ -1341,10 +1451,6 @@ test("API flow commands enforce commander-only permissions and challenge list sc
 
     const memberFreeze = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/freeze`);
     assert.equal(memberFreeze.statusCode, 403);
-    const memberReopen = await apiInject(app, fixture.challenger, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/reopen-reestimate`);
-    assert.equal(memberReopen.statusCode, 403);
-    const commanderReopen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/reopen-reestimate`);
-    assert.equal(commanderReopen.statusCode, 409);
     const memberReview = await apiInject(app, fixture.challenger, "POST", `/api/objectives/${encodeURIComponent(objective.id)}/review`, {
       acceptedResult: "completed",
     });
@@ -1373,6 +1479,75 @@ test("API objective creation rejects malformed final due dates", async () => {
       assert.equal(response.statusCode, 400);
     }
   });
+});
+
+test("objective final due date updates follow commander and lifecycle rules", async () => {
+  const fixture = await createFixture("objective-deadline-lifecycle");
+  const candidate = await createTestObjective(fixture, "deadline candidate");
+  const candidateUpdate = await updateObjectiveDetails(candidate.id, { finalDueAt: "2999-11-30" }, fixture.commander.id);
+  assert.equal(candidateUpdate.status, "ok");
+  assert.equal(candidateUpdate.status === "ok" ? candidateUpdate.objective.finalDueAt : null, "2999-11-30");
+
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "deadline frozen objective");
+  const reestimateUpdate = await updateObjectiveDetails(objective.id, { finalDueAt: "2999-01-31" }, fixture.commander.id);
+  assert.equal(reestimateUpdate.status, "ok");
+
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+  assert.equal((await updateObjectiveDetails(objective.id, { finalDueAt: "2999-01-30" }, fixture.commander.id)).status, "locked");
+  const extended = await updateObjectiveDetails(objective.id, { finalDueAt: "2999-02-01" }, fixture.commander.id);
+  assert.equal(extended.status, "ok");
+  assert.equal(extended.status === "ok" ? extended.objective.finalDueAt : null, "2999-02-01");
+
+  const submitted = await submitObjectiveLoot(
+    objective.id,
+    {
+      body: "Completed deadline lifecycle objective.",
+      resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "Evidence" }],
+    },
+    { ...fixture.challenger, role: "member" },
+  );
+  assert.equal(submitted.status, "ok");
+  assert.equal((await updateObjectiveDetails(objective.id, { finalDueAt: "2999-02-02" }, fixture.commander.id)).status, "locked");
+});
+
+test("objective trial review is a one-time frozen-stage feedback loop without submitting loot", async () => {
+  const fixture = await createFixture("objective-trial-review");
+  const { objective, result } = await createApprovedObjectiveWithResult(fixture, "trial review objective");
+  const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
+  assert.equal(frozen.status, "ok");
+
+  const trialReview = await submitObjectiveTrialReview(
+    objective.id,
+    {
+      body: "Please check this once before formal submission.",
+      resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "Trial evidence" }],
+      selfTestReportBody: "Self test passed.",
+    },
+    { ...fixture.challenger, role: "member" },
+  );
+  assert.equal(trialReview.status, "ok");
+  assert.equal(trialReview.status === "ok" ? trialReview.trialReview.status : null, "requested");
+  assert.equal((await submitObjectiveTrialReview(objective.id, { body: "Second request", resultClaims: [{ resultId: result.id, claim: "completed", evidenceText: "Evidence" }] }, { ...fixture.challenger, role: "member" })).status, "duplicate");
+
+  const dataAfterRequest = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(dataAfterRequest.objectives.find((item) => item.id === objective.id)?.flowStatus, "frozen");
+
+  assert.equal(
+    (
+      await reviewObjectiveTrialReview(
+        objective.id,
+        trialReview.status === "ok" ? trialReview.trialReview.id : "",
+        { status: "needsWork", commanderFeedback: "Add one more verification note." },
+        fixture.commander.id,
+      )
+    ).status,
+    "ok",
+  );
+
+  const dataAfterReview = await getTaskManagementData({ scope: fixture.scope });
+  assert.equal(dataAfterReview.objectives.find((item) => item.id === objective.id)?.flowStatus, "frozen");
+  assert.equal(dataAfterReview.objectiveTrialReviews.find((item) => item.objectiveId === objective.id)?.status, "needsWork");
 });
 
 test("API task creation is owned by the objective and does not require a result", async () => {
@@ -1598,37 +1773,6 @@ test("concurrent result, task, and checklist creation reserve stable sort orders
   assert.deepEqual(storedChecklist.map((row) => row.sortOrder).sort((left, right) => left - right), expectedSortOrders);
 });
 
-test("API objective stage updates cannot violate lifecycle compatibility", async () => {
-  const fixture = await createFixture("api-stage-compatibility");
-  const { objective } = await createApprovedObjectiveWithResult(fixture, "stage compatibility objective");
-
-  await withApiServer(fixture, async (app) => {
-    const frozenStageOnReestimating = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
-      stage: "goalFrozen",
-    });
-    assert.equal(frozenStageOnReestimating.statusCode, 409);
-
-    let data = await getTaskManagementData({ scope: fixture.scope });
-    assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "orfReestimate");
-
-    const frozen = await freezeObjectiveAfterReestimate(objective.id, fixture.commander.id);
-    assert.equal(frozen.status, "ok");
-
-    const reestimateStageOnFrozen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
-      stage: "orfReestimate",
-    });
-    assert.equal(reestimateStageOnFrozen.statusCode, 409);
-
-    const currentStageOnFrozen = await apiInject(app, fixture.commander, "PATCH", `/api/objectives/${encodeURIComponent(objective.id)}/stage`, {
-      stage: "goalFrozen",
-    });
-    assert.equal(currentStageOnFrozen.statusCode, 200);
-
-    data = await getTaskManagementData({ scope: fixture.scope });
-    assert.equal(data.objectives.find((item) => item.id === objective.id)?.stage, "goalFrozen");
-  });
-});
-
 test("API user deletion reports missing members instead of a successful no-op", async () => {
   const fixture = await createFixture("api-user-delete-missing");
 
@@ -1737,6 +1881,79 @@ test("recent online activity endpoint updates the current user with server time 
     const duplicatePayload = afterDuplicate.json() as { users: Array<Record<string, unknown>> };
     const challengerAfterDuplicate = duplicatePayload.users.find((user) => user.id === fixture.challenger.id);
     assert.equal(challengerAfterDuplicate?.lastOnlineAt, firstOnlineAt);
+  });
+});
+
+test("user avatar upload is self-scoped and projected into users and comments", async () => {
+  const fixture = await createFixture("api-user-avatar");
+  const { objective } = await createApprovedObjectiveWithResult(fixture, "avatar comment projection objective");
+
+  await withApiServer(fixture, async (app) => {
+    const upload = await apiMultipartInject(app, fixture.challenger, "/api/users/me/avatar", {
+      fields: {},
+      file: {
+        fieldName: "file",
+        fileName: "avatar.png",
+        mimeType: "image/png",
+        content: tinyPng,
+      },
+    });
+    assert.equal(upload.statusCode, 200);
+    const uploadPayload = upload.json() as { user: { avatarUrl?: string | null; id: string } };
+    assert.equal(uploadPayload.user.id, fixture.challenger.id);
+    assert.ok(uploadPayload.user.avatarUrl);
+    assert.equal(uploadPayload.user.avatarUrl.includes("127.0.0.1:9000"), false);
+    assert.equal(uploadPayload.user.avatarUrl.includes("orf-comment-attachments"), false);
+    assert.equal(uploadPayload.user.avatarUrl.includes(`/api/users/${encodeURIComponent(fixture.challenger.id)}/avatar`), true);
+
+    const usersResponse = await apiInject(app, fixture.commander, "GET", "/api/users");
+    assert.equal(usersResponse.statusCode, 200);
+    const usersPayload = usersResponse.json() as { users: Array<{ avatarUrl?: string | null; id: string }> };
+    assert.equal(usersPayload.users.find((user) => user.id === fixture.challenger.id)?.avatarUrl, uploadPayload.user.avatarUrl);
+
+    const avatarContent = await apiInject(app, fixture.commander, "GET", attachmentContentPath(uploadPayload.user.avatarUrl));
+    assert.equal(avatarContent.statusCode, 200);
+    assert.equal(avatarContent.headers["content-type"], "image/png");
+    assert.equal(Buffer.from(avatarContent.rawPayload).subarray(0, 8).equals(tinyPng.subarray(0, 8)), true);
+
+    const body = `${fixture.prefix} avatar projection ${Date.now()}`;
+    const comment = await apiInject(app, fixture.challenger, "POST", "/api/comments", {
+      targetType: "objective",
+      targetId: objective.id,
+      targetTitle: objective.title,
+      body,
+    });
+    assert.equal(comment.statusCode, 200);
+    const commentPayload = comment.json() as {
+      commentThread: { messages: Array<{ authorAvatarUrl?: string | null; authorUserId?: string | null; body: string }> };
+    };
+    const message = commentPayload.commentThread.messages.find((item) => item.body === body);
+    assert.equal(message?.authorUserId, fixture.challenger.id);
+    assert.equal(message?.authorAvatarUrl, uploadPayload.user.avatarUrl);
+
+    const deleted = await apiInject(app, fixture.challenger, "DELETE", "/api/users/me/avatar");
+    assert.equal(deleted.statusCode, 200);
+    assert.equal((deleted.json() as { user: { avatarUrl?: string | null } }).user.avatarUrl, null);
+    const deletedContent = await apiInject(app, fixture.commander, "GET", attachmentContentPath(uploadPayload.user.avatarUrl));
+    assert.equal(deletedContent.statusCode, 404);
+  });
+});
+
+test("user avatar upload rejects spoofed image payloads", async () => {
+  const fixture = await createFixture("api-user-avatar-reject");
+
+  await withApiServer(fixture, async (app) => {
+    const upload = await apiMultipartInject(app, fixture.challenger, "/api/users/me/avatar", {
+      fields: {},
+      file: {
+        fieldName: "file",
+        fileName: "avatar.png",
+        mimeType: "image/png",
+        content: Buffer.from("not a png", "utf8"),
+      },
+    });
+    assert.equal(upload.statusCode, 415);
+    assert.equal((upload.json() as { error: string }).error, "Unsupported image type");
   });
 });
 
@@ -1984,7 +2201,7 @@ test("API user creation rejects names already reserved by ORF records", async ()
   });
 });
 
-test("task-page and state snapshot APIs do not leak full data to ordinary members", async () => {
+test("task-page and state snapshot APIs scope private records but expose public point ledger to ordinary members", async () => {
   const fixture = await createFixture("api-read-boundary");
   const { objective } = await createSettledObjective(fixture, "scoped settled objective");
 
@@ -2000,7 +2217,11 @@ test("task-page and state snapshot APIs do not leak full data to ordinary member
     assert.equal(observerData.objectives.some((item) => item.id === objective.id), false);
     assert.equal(observerData.results.some((item) => item.objectiveId === objective.id), false);
     assert.equal(observerData.objectiveLoot.some((item) => item.objectiveId === objective.id), false);
-    assert.equal(observerData.pointLedger.some((item) => item.objectiveId === objective.id), false);
+    assert.equal(observerData.pointLedger.some((item) => item.objectiveId === objective.id), true);
+
+    const observerMyChallenges = await apiInject(app, fixture.observer, "GET", "/api/my-challenges?scope=mine");
+    assert.equal(observerMyChallenges.statusCode, 200);
+    assert.equal((observerMyChallenges.json() as { pointLedger: Array<{ objectiveId: string }> }).pointLedger.some((item) => item.objectiveId === objective.id), true);
 
     const challengerTasks = await apiInject(app, fixture.challenger, "GET", "/api/tasks-page");
     assert.equal(challengerTasks.statusCode, 200);
@@ -3126,6 +3347,10 @@ async function createFixture(label: string) {
 
 type Fixture = Awaited<ReturnType<typeof createFixture>>;
 type FixtureUser = Fixture["commander"];
+
+function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId?: string | null, reason = `${applicant} wants to challenge this objective.`) {
+  return applyForObjectiveChallengeRepository(objectiveId, applicant, actorUserId, reason);
+}
 
 async function createTestObjective(fixture: Fixture, title: string, finalDueAt = farFutureDueDate) {
   const objective = await createObjective(

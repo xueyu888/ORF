@@ -332,6 +332,7 @@ test("freeze action requires reestimating objectives with concrete metrics", () 
   const frozen = objective({ flowStatus: "frozen" });
 
   assert.equal(canFreezeObjectiveAfterReestimate(reestimating, []), false);
+  assert.equal(canFreezeObjectiveAfterReestimate(reestimating, [result({ objectiveId: reestimating.id, uncertaintyLevel: undefined, uncertaintyScore: 0 })]), false);
   assert.equal(canFreezeObjectiveAfterReestimate(reestimating, [result({ objectiveId: reestimating.id })]), true);
   assert.equal(canFreezeObjectiveAfterReestimate(frozen, [result({ objectiveId: frozen.id })]), false);
   assert.equal(canFreezeObjectiveAfterReestimate(undefined, [result()]), false);
@@ -390,11 +391,33 @@ test("loot workbench actions keep commander review separate from member challeng
   assert.equal(canSubmitObjectiveLoot(pollutedFrozen, challenger), true);
   assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, admin), false);
   assert.equal(canSubmitObjectivePeerReview(pollutedSubmitted, challenger), true);
-  assert.deepEqual(workbenchActionForObjective({ objective: pollutedSubmitted, currentUser: admin, contributionReviews: [] }), {
+  assert.deepEqual(workbenchActionForObjective({ objective: pollutedSubmitted, currentUser: admin }), {
     kind: "reviewLoot",
     label: "验收战利品",
     to: `/objectives/${pollutedSubmitted.id}/loot`,
   });
+  assert.deepEqual(
+    workbenchActionForObjective({
+      objective: pollutedFrozen,
+      currentUser: admin,
+      trialReviews: [
+        {
+          id: "trial-review-a",
+          objectiveId: pollutedFrozen.id,
+          requestedBy: challenger.name,
+          body: "Ready for a trial review.",
+          resultClaims: [],
+          status: "requested",
+          requestedAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+    }),
+    {
+      kind: "reviewTrial",
+      label: "处理试验收",
+      to: `/objectives/${pollutedFrozen.id}/loot`,
+    },
+  );
 });
 
 test("challenge permission helpers map target resources to configured permissions", () => {
@@ -425,7 +448,7 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
     failureSamples: [],
     comments: [],
     objectiveLoot: [],
-    objectiveContributionReviews: [],
+    objectiveTrialReviews: [],
     pointLedger: [],
     causeCategories: [],
     rules: {

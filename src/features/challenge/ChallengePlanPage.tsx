@@ -8,13 +8,24 @@ import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
+import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
 import { localDateString } from "../../utils/date";
+import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
+import { readModelInvalidationKey } from "../realtime/readModelInvalidations";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
-import { challengeCycleOptions, filterChallengeGroups, sortChallengeGroups, type ChallengeCycleFilter, type ChallengeStatusFilter } from "./model/challengeFilters";
+import {
+  challengeCycleOptions,
+  challengeMemberOptions,
+  filterChallengeGroups,
+  sortChallengeGroups,
+  type ChallengeCycleFilter,
+  type ChallengeMemberFilter,
+  type ChallengeStatusFilter,
+} from "./model/challengeFilters";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
 import {
@@ -199,6 +210,7 @@ export function ChallengePlanPage() {
     notify,
     openModal,
     publishObjective,
+    readModelInvalidations,
     freezeObjective,
     createObjective,
     createResult,
@@ -208,6 +220,7 @@ export function ChallengePlanPage() {
     setTaskCompletion,
     state,
     updateCommentMessage,
+    updateObjectiveFinalDueAt,
     updateObjectiveTitle,
     updateResultTitle,
     updateTaskChecklistItem,
@@ -225,6 +238,7 @@ export function ChallengePlanPage() {
   const linkedChallengeTarget = useMemo(() => parseChallengeTargetHash(location.hash), [location.hash]);
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
+  const [memberFilter, setMemberFilter] = useState<ChallengeMemberFilter>("all");
   const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
@@ -239,6 +253,7 @@ export function ChallengePlanPage() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
+  const [objectiveInteractionAnchor, setObjectiveInteractionAnchor] = useState<ListItemAnchor | null>(null);
   const temporaryChildRowRef = useRef<TemporaryChildRow | null>(null);
   const completionOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
@@ -278,10 +293,14 @@ export function ChallengePlanPage() {
   const loadChallengeData = useCallback(async () => {
     setChallengeData(await getMyChallengesData(showAll ? "all" : "mine"));
   }, [showAll]);
+  const taskManagementInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),
+    [readModelInvalidations],
+  );
 
   useEffect(() => {
     void loadChallengeData().catch(() => setChallengeData(null));
-  }, [loadChallengeData, state.comments, state.objectives, state.results, state.tasks]);
+  }, [loadChallengeData, state.comments, state.objectiveTrialReviews, state.objectives, state.results, state.tasks, taskManagementInvalidationKey]);
 
   const sourceData = challengeData ?? state;
   const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
@@ -319,6 +338,8 @@ export function ChallengePlanPage() {
   const draftIsEditing = objectiveCreationIsDraftEditing(objectiveCreationSession);
   const draftIsSubmitting = objectiveCreationIsSubmitting(objectiveCreationSession);
   const effectiveEditingTarget = draftIsEditing ? ({ type: "objective", id: draftObjectiveId, title: draftTitle ?? "" } satisfies ChallengeTarget) : editingTarget;
+  const canFilterByMember = canShowAllChallenges && scope === "all";
+  const effectiveMemberFilter = canFilterByMember ? memberFilter : "all";
   const visibleObjectiveIds = useMemo(() => {
     if (showAll) return undefined;
     return new Set(challengeState.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id));
@@ -345,17 +366,22 @@ export function ChallengePlanPage() {
   }, [groups, submittedObjective]);
   const displaySourceGroups = useMemo(() => (optimisticGroup ? [optimisticGroup, ...groups] : groups), [groups, optimisticGroup]);
   const cycleOptions = useMemo(() => challengeCycleOptions(displaySourceGroups), [displaySourceGroups]);
+  const memberOptions = useMemo(() => challengeMemberOptions(displaySourceGroups), [displaySourceGroups]);
   const filteredGroups = useMemo(
-    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, status: statusFilter })),
-    [cycleFilter, displaySourceGroups, statusFilter],
+    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, member: effectiveMemberFilter, status: statusFilter })),
+    [cycleFilter, displaySourceGroups, effectiveMemberFilter, statusFilter],
   );
   const sortedDisplayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
-  const displayedGroups = useMemo(
+  const creationAnchoredGroups = useMemo(
     () => (draftGroup ? sortedDisplayedGroups : applyObjectiveOrderAnchor(sortedDisplayedGroups, submittedOrderAnchor)),
     [draftGroup, submittedOrderAnchor, sortedDisplayedGroups],
   );
+  const displayedGroups = useMemo(
+    () => applyListItemAnchor(creationAnchoredGroups, objectiveInteractionAnchor, objectiveGroupId),
+    [creationAnchoredGroups, objectiveInteractionAnchor],
+  );
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
-  const hasActiveFilters = cycleFilter !== "all" || statusFilter !== "all";
+  const hasActiveFilters = cycleFilter !== "all" || effectiveMemberFilter !== "all" || statusFilter !== "all";
   const emptyText = hasActiveFilters
     ? "没有符合筛选条件的挑战目标。"
     : showAll
@@ -367,6 +393,16 @@ export function ChallengePlanPage() {
       setCycleFilter("all");
     }
   }, [cycleFilter, cycleOptions]);
+  useEffect(() => {
+    if (memberFilter !== "all" && (!canFilterByMember || !memberOptions.includes(memberFilter))) {
+      setMemberFilter("all");
+    }
+  }, [canFilterByMember, memberFilter, memberOptions]);
+  useEffect(() => {
+    if (!listContainsAnchoredItem(creationAnchoredGroups, objectiveInteractionAnchor, objectiveGroupId)) {
+      setObjectiveInteractionAnchor(null);
+    }
+  }, [creationAnchoredGroups, objectiveInteractionAnchor]);
   useEffect(() => {
     temporaryChildRowRef.current = temporaryChildRow;
   }, [temporaryChildRow]);
@@ -393,6 +429,12 @@ export function ChallengePlanPage() {
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
+  const objectiveDeadlineEditState = (objective: ObjectiveNode["objective"]) => resolveObjectiveDeadlineEditState(objective, currentUser?.role);
+  const notifyUnavailableObjectiveDeadline = (objective: ObjectiveNode["objective"]) => {
+    const editState = objectiveDeadlineEditState(objective);
+    if (editState.status === "editable") return;
+    notify(objectiveDeadlineUnavailableMessage(editState));
+  };
 
   useEffect(() => {
     if (!linkedChallengeTarget) {
@@ -405,16 +447,18 @@ export function ChallengePlanPage() {
     const objectiveId = objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, challengeState) ?? objectiveIdForLinkedChallengeTarget(linkedChallengeTarget, state);
     if (!objectiveId) return;
     appliedLinkedTargetRef.current = linkedTargetKey;
+    setObjectiveInteractionAnchor(null);
 
     if (canShowAllChallenges && scope !== "all") setScope("all");
     if (cycleFilter !== "all") setCycleFilter("all");
+    if (memberFilter !== "all") setMemberFilter("all");
     if (statusFilter !== "all") setStatusFilter("all");
 
     const parentActionId = parentActionIdForLinkedSubAction(linkedChallengeTarget, challengeState) ?? parentActionIdForLinkedSubAction(linkedChallengeTarget, state);
     if (parentActionId) {
       setCollapsedActionIds((items) => (items.has(parentActionId) ? withoutItem(items, parentActionId) : items));
     }
-  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, scope, state, statusFilter]);
+  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, memberFilter, scope, state, statusFilter]);
 
   useEffect(() => {
     if (!linkedChallengeTarget) return undefined;
@@ -474,14 +518,27 @@ export function ChallengePlanPage() {
       return;
     }
 
-    setObjectiveCreationSession((current) => beginObjectiveCreationSession(current, { cycle: cycleFilter, scope, status: statusFilter }));
+    setObjectiveCreationSession((current) => beginObjectiveCreationSession(current, { cycle: cycleFilter, member: memberFilter, scope, status: statusFilter }));
     setEditingTarget(null);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
     if (canShowAllChallenges) setScope("all");
     setCycleFilter("all");
+    setMemberFilter("all");
     setStatusFilter("unassigned");
-  }, [canCreateObjective, canShowAllChallenges, cycleFilter, hasObjectiveCreationEntry, notify, objectiveCreationSession.status, scope, searchParams, setSearchParams, statusFilter]);
+  }, [
+    canCreateObjective,
+    canShowAllChallenges,
+    cycleFilter,
+    hasObjectiveCreationEntry,
+    memberFilter,
+    notify,
+    objectiveCreationSession.status,
+    scope,
+    searchParams,
+    setSearchParams,
+    statusFilter,
+  ]);
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
@@ -669,6 +726,7 @@ export function ChallengePlanPage() {
     if (!returnContext) return;
     setScope(returnContext.scope);
     setCycleFilter(returnContext.cycle);
+    setMemberFilter(returnContext.member);
     setStatusFilter(returnContext.status);
   }, []);
 
@@ -692,6 +750,7 @@ export function ChallengePlanPage() {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
     setScope(next);
   };
 
@@ -699,13 +758,23 @@ export function ChallengePlanPage() {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
     setCycleFilter(next);
+  };
+
+  const updateMemberFilter = (next: ChallengeMemberFilter) => {
+    setObjectiveCreationSession(clearSubmittedObjectiveCreation);
+    clearTemporaryChildRow();
+    setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
+    setMemberFilter(next);
   };
 
   const updateStatusFilter = (next: ChallengeStatusFilter) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     clearTemporaryChildRow();
     setCreatedChildOverlay(null);
+    setObjectiveInteractionAnchor(null);
     setStatusFilter(next);
   };
 
@@ -882,6 +951,38 @@ export function ChallengePlanPage() {
     });
   };
 
+  const approveAnchoredChallengeApplication = async (objectiveId: string, applicationId: string) => {
+    const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
+    if (anchor) setObjectiveInteractionAnchor(anchor);
+    const ok = await approveChallengeApplication(objectiveId, applicationId);
+    if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
+    return ok;
+  };
+
+  const rejectAnchoredChallengeApplication = async (objectiveId: string, applicationId: string) => {
+    const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
+    if (anchor) setObjectiveInteractionAnchor(anchor);
+    const ok = await rejectChallengeApplication(objectiveId, applicationId);
+    if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
+    return ok;
+  };
+
+  const saveObjectiveDeadline = async (objectiveId: string, finalDueAt: string) => {
+    const anchor = createListItemAnchor(displayedGroups, objectiveId, objectiveGroupId);
+    if (anchor) setObjectiveInteractionAnchor(anchor);
+    const ok = await updateObjectiveFinalDueAt(objectiveId, finalDueAt);
+    if (!ok && anchor) setObjectiveInteractionAnchor((current) => (current?.itemId === objectiveId ? null : current));
+    return ok;
+  };
+
+  const releaseObjectiveInteractionAnchorOutside = (target: EventTarget | null) => {
+    if (!objectiveInteractionAnchor || !(target instanceof Element)) return;
+    const panel = target.closest<HTMLElement>("[data-objective-panel-id]");
+    if (panel?.dataset.objectivePanelId !== objectiveInteractionAnchor.itemId) {
+      setObjectiveInteractionAnchor(null);
+    }
+  };
+
   const dragDrop = {
     dragItem,
     dropTarget,
@@ -946,8 +1047,10 @@ export function ChallengePlanPage() {
 
   return (
     <div
-      className="grid gap-4"
+      className="orf-challenge-workbench grid gap-4"
+      onFocusCapture={(event) => releaseObjectiveInteractionAnchorOutside(event.target)}
       onPointerDown={(event) => {
+        releaseObjectiveInteractionAnchorOutside(event.target);
         if (!openActionId) return;
         if (event.target instanceof Element && event.target.closest("[data-challenge-row-actions], [data-challenge-disclosure-action]")) return;
         setOpenActionId(null);
@@ -958,9 +1061,13 @@ export function ChallengePlanPage() {
         canShowAll={canShowAllChallenges}
         cycle={cycleFilter}
         cycleOptions={cycleOptions}
+        member={memberFilter}
+        memberOptions={memberOptions}
         onCycleChange={updateCycleFilter}
+        onMemberChange={updateMemberFilter}
         onScopeChange={updateScope}
         onStatusChange={updateStatusFilter}
+        showMemberFilter={canFilterByMember}
         scope={scope}
         status={statusFilter}
       />
@@ -975,7 +1082,7 @@ export function ChallengePlanPage() {
           temporaryChildRow,
           dragDrop,
           editingTarget: effectiveEditingTarget,
-          contributionReviews: challengeState.objectiveContributionReviews,
+          trialReviews: challengeState.objectiveTrialReviews,
           currentUser,
           draftObjectiveId,
           metricActionLabel: (objective) =>
@@ -993,13 +1100,14 @@ export function ChallengePlanPage() {
             }),
           canMutateMetrics: canMutateMetricForObjective,
           canMutateWorkItems: canMutateWorkItemsForObjective,
+          objectiveDeadlineEditState,
           onActionDoneChange: setActionDone,
           onActionRowAction: handleRowAction,
           onActiveActionChange: activateRowAction,
           onAddAction: addAction,
           onAddBounty: addBounty,
           onAddSubAction: addSubAction,
-          onApproveApplication: approveChallengeApplication,
+          onApproveApplication: approveAnchoredChallengeApplication,
           onCancelEdit: cancelEdit,
           onTemporaryChildTitleChange: (title) =>
             setTemporaryChildRow((current) => {
@@ -1013,7 +1121,9 @@ export function ChallengePlanPage() {
           onOpenActionChange: setOpenActionId,
           onPublishObjective: publishObjective,
           onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
-          onRejectApplication: rejectChallengeApplication,
+          onRejectApplication: rejectAnchoredChallengeApplication,
+          onSaveObjectiveDeadline: saveObjectiveDeadline,
+          onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),
@@ -1030,6 +1140,7 @@ export function ChallengePlanPage() {
           key={`${commentTarget.type}:${commentTarget.id}`}
           canManageAllComments={hasPermission(currentUser, state.permissionRules, "comment.manage")}
           currentMember={currentMember}
+          currentUserAvatarUrl={currentUser?.avatarUrl}
           currentUserId={currentUser?.id ?? ""}
           onLoadMentionableUsers={loadCommentMentionableUsers}
           targetId={commentTarget.id}
@@ -1089,6 +1200,12 @@ function rowActionIdForLinkedChallengeTarget(target: ChallengeUrlTarget, state: 
   return parentActionId ? `subAction:${parentActionId}:${target.id}` : null;
 }
 
+function objectiveDeadlineUnavailableMessage(editState: Extract<ObjectiveDeadlineEditState, { status: "blocked" }>) {
+  if (editState.reason === "noPermission") return "只有指挥官可以修改截止日期";
+  if (editState.reason === "lifecycleLocked") return "当前状态不允许修改截止日期";
+  return "目标不可用，不能修改截止日期";
+}
+
 function useMinuteNow() {
   const [now, setNow] = useState(() => new Date());
 
@@ -1111,4 +1228,8 @@ function withoutItem<T>(items: Set<T>, item: T) {
   const next = new Set(items);
   next.delete(item);
   return next;
+}
+
+function objectiveGroupId(group: ObjectiveNode) {
+  return group.objective.id;
 }

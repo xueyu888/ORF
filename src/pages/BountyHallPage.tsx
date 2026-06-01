@@ -1,59 +1,35 @@
-import {
-  CalendarCheck,
-  Check,
-  ClipboardList,
-  Loader2,
-  Send,
-  ShieldAlert,
-  type LucideIcon,
-} from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { canShowFrontend } from "../config/frontendVisibility";
-import { remainingTime } from "../features/challenge/model/challengeDates";
-import { challengePathForTarget, parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
 import { canApplyForObjectiveChallenge } from "../domain/orfLifecycle";
+import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
+import { BountyHallTabs } from "../features/bounty-hall/components/BountyHallTabs";
+import { BountyObjectiveList } from "../features/bounty-hall/components/BountyObjectiveList";
+import { BountyOverview } from "../features/bounty-hall/components/BountyOverview";
+import { BountyToolbar } from "../features/bounty-hall/components/BountyToolbar";
+import { ChallengeConfirmModal } from "../features/bounty-hall/components/ChallengeConfirmModal";
+import { useMinuteNow } from "../features/bounty-hall/hooks/useMinuteNow";
 import {
-  BountyBadge,
-  BountyButton,
-  BountyCardSurface,
-  BountyDialog,
-  BountyEmptyState,
-  BountySelect,
-  BountyTextInput,
-} from "../features/bounty-hall/BountyHallSkin";
+  bountyTargetElement,
+  buildHallItems,
+  compareByUrgency,
+  compareHallItems,
+  isStartedBounty,
+  searchableBountyText,
+} from "../features/bounty-hall/model/bountyHallItems";
 import { bountyCycleLabel } from "../features/bounty-hall/model/bountyHallSummary";
+import type { BountyItem, ChallengeConfirmTarget, DifficultyFilter, HallTab, SortKey } from "../features/bounty-hall/model/bountyHallTypes";
+import { challengePathForTarget, parseChallengeTargetHash } from "../features/challenge/model/challengeLinks";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { getBountyHallData, type BountyHallData } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import { getBountyHallData, type BountyHallData, type BountyHallItem } from "../state/apiClient";
-import type { UncertaintyLevel } from "../types/orf";
-
-type DifficultyFilter = "all" | UncertaintyLevel;
-type SortKey = "deadline" | "points" | "difficulty" | "created";
-
-type BountyItem = BountyHallItem;
-
-type ChallengeAction = "apply" | "accept";
-type ChallengeConfirmTarget = {
-  action: ChallengeAction;
-  blocked: boolean;
-  item: BountyItem;
-};
-
-const difficultyOptions: DifficultyFilter[] = ["all", "入门", "进阶", "破局", "渡劫", "飞升"];
-const difficultyLabelsByRank: Record<number, UncertaintyLevel> = {
-  1: "入门",
-  2: "进阶",
-  3: "破局",
-  4: "渡劫",
-  5: "飞升",
-};
 
 export function BountyHallPage() {
   const {
     acceptBountyChallenge,
     applyForBounty,
     currentUser,
-    notifications,
+    readModelInvalidations,
   } = useOrf();
   const location = useLocation();
   const navigate = useNavigate();
@@ -63,6 +39,7 @@ export function BountyHallPage() {
   const [query, setQuery] = useState("");
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>("all");
   const [sortKey, setSortKey] = useState<SortKey>("deadline");
+  const [activeTab, setActiveTab] = useState<HallTab>("recruiting");
   const [confirmTarget, setConfirmTarget] = useState<ChallengeConfirmTarget | null>(null);
   const [processingBountyId, setProcessingBountyId] = useState<string | null>(null);
   const now = useMinuteNow();
@@ -97,48 +74,46 @@ export function BountyHallPage() {
     void loadBountyData();
   }, [loadBountyData]);
 
-  const recruitmentNotificationKey = useMemo(() => {
-    return notifications
-      .filter((notification) => notification.kind === "objective.recruitment.created")
-      .map((notification) => `${notification.id}:${notification.targetId}:${notification.createdAt}`)
-      .join("|");
-  }, [notifications]);
+  const bountyInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "bountyHall"),
+    [readModelInvalidations],
+  );
 
   useEffect(() => {
-    if (!recruitmentNotificationKey) return;
+    if (!bountyInvalidationKey) return;
     void loadBountyData();
-  }, [loadBountyData, recruitmentNotificationKey]);
+  }, [bountyInvalidationKey, loadBountyData]);
 
   const recruitmentItems = useMemo(
     () => [...(bountyData?.recruitmentItems ?? [])].sort(compareByUrgency),
     [bountyData],
   );
 
+  const publicBounties = bountyData?.publicItems ?? [];
   const availableBounties = bountyData?.availableItems ?? [];
   const objectiveOptions = bountyData?.objectiveOptions ?? [];
-  const hallItems = useMemo(() => {
-    const seen = new Set<string>();
-    return [...recruitmentItems, ...availableBounties].filter((item) => {
-      if (seen.has(item.objective.id)) return false;
-      seen.add(item.objective.id);
-      return item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
-    });
-  }, [availableBounties, recruitmentItems]);
+  const hallItems = useMemo(
+    () => buildHallItems({ availableBounties, publicBounties, recruitmentItems }),
+    [availableBounties, publicBounties, recruitmentItems],
+  );
   const pageObjectives = useMemo(() => {
     const objectives = hallItems.map((item) => item.objective);
     return objectives.length > 0 ? objectives : objectiveOptions;
   }, [hallItems, objectiveOptions]);
+  const recruitingHallItems = useMemo(() => hallItems.filter((item) => !isStartedBounty(item)), [hallItems]);
+  const startedHallItems = useMemo(() => hallItems.filter(isStartedBounty), [hallItems]);
+  const tabbedHallItems = activeTab === "all" ? hallItems : activeTab === "started" ? startedHallItems : recruitingHallItems;
 
   const filteredHallItems = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    const filtered = hallItems.filter((item) => {
+    const filtered = tabbedHallItems.filter((item) => {
       const queryMatch = !normalizedQuery || searchableBountyText(item).includes(normalizedQuery);
       const difficultyMatch = difficultyFilter === "all" || item.results.some((result) => result.uncertaintyLevel === difficultyFilter);
       return queryMatch && difficultyMatch;
     });
 
     return [...filtered].sort((left, right) => compareHallItems(left, right, sortKey));
-  }, [difficultyFilter, hallItems, query, sortKey]);
+  }, [difficultyFilter, query, sortKey, tabbedHallItems]);
 
   const hasFilters = query.trim() || difficultyFilter !== "all";
 
@@ -147,6 +122,14 @@ export function BountyHallPage() {
     setQuery("");
     setDifficultyFilter("all");
   }, [linkedBountyObjectiveId]);
+
+  useEffect(() => {
+    if (!linkedBountyObjectiveId) return;
+    const linkedItem = hallItems.find((item) => item.objective.id === linkedBountyObjectiveId);
+    if (linkedItem && isStartedBounty(linkedItem)) {
+      setActiveTab("started");
+    }
+  }, [hallItems, linkedBountyObjectiveId]);
 
   useEffect(() => {
     if (!linkedBountyObjectiveId) return undefined;
@@ -167,7 +150,7 @@ export function BountyHallPage() {
     setDifficultyFilter("all");
   };
 
-  const applyChallenge = async (item: BountyItem) => {
+  const applyChallenge = async (item: BountyItem, reason: string) => {
     if (!canApplyForObjectiveChallenge(item.objective)) {
       await loadBountyData();
       setConfirmTarget(null);
@@ -175,7 +158,7 @@ export function BountyHallPage() {
     }
 
     setProcessingBountyId(item.objective.id);
-    const ok = await applyForBounty(item.objective.id);
+    const ok = await applyForBounty(item.objective.id, reason);
     setProcessingBountyId(null);
     if (ok) {
       await loadBountyData();
@@ -202,13 +185,15 @@ export function BountyHallPage() {
     <div className="bounty-hall-page grid gap-5">
       <BountyOverview
         availableCount={availableBounties.length}
+        publicCount={hallItems.length}
         cycle={bountyCycleLabel(pageObjectives)}
+        challengerCount={hallItems.reduce((sum, item) => sum + item.challengers.length, 0)}
         recruitmentCount={recruitmentItems.length}
       />
 
       <section className="grid gap-4" aria-label="悬赏目标列表">
         <div className="bounty-toolbar-panel">
-          <Toolbar
+          <BountyToolbar
             difficultyFilter={difficultyFilter}
             query={query}
             sortKey={sortKey}
@@ -217,6 +202,16 @@ export function BountyHallPage() {
             onSortChange={setSortKey}
           />
         </div>
+
+        <BountyHallTabs
+          activeTab={activeTab}
+          counts={{
+            all: hallItems.length,
+            recruiting: recruitingHallItems.length,
+            started: startedHallItems.length,
+          }}
+          onChange={setActiveTab}
+        />
 
         <div className="bounty-list-summary">
           <div className="bounty-list-count">
@@ -232,16 +227,18 @@ export function BountyHallPage() {
         {filteredHallItems.length > 0 ? (
           <BountyObjectiveList
             activeObjectiveId={linkedBountyObjectiveId}
+            currentUserName={currentUser?.name ?? ""}
             items={filteredHallItems}
             now={now}
+            onOpenChallengeWork={openChallengeTarget}
             onOpenObjective={canOpenChallengeTarget ? openChallengeTarget : undefined}
             processingBountyId={processingBountyId}
             onAction={(item, action) => setConfirmTarget({ action, blocked: challengeActionsBlocked, item })}
           />
         ) : (
           <BountyEmptyState
-            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的悬赏目标" : "当前没有可申请或待接受的悬赏目标"}
-            description={loadingBounties ? "正在读取悬赏大厅专用接口。" : hasFilters ? "调整搜索或筛选条件后再查看。" : "新的未分配悬赏发布后会出现在这里；征召目标会自动置顶。"}
+            title={loadingBounties ? "正在加载悬赏大厅" : hasFilters ? "没有符合条件的悬赏目标" : "当前没有公开悬赏目标"}
+            description={loadingBounties ? "正在读取悬赏大厅专用接口。" : hasFilters ? "调整搜索或筛选条件后再查看。" : "新的公开悬赏、申请进展和挑战者状态会出现在这里；你的征召目标会自动置顶。"}
           />
         )}
       </section>
@@ -251,403 +248,15 @@ export function BountyHallPage() {
           item={confirmTarget}
           processing={processingBountyId === confirmTarget.item.objective.id}
           onCancel={() => setConfirmTarget(null)}
-          onConfirm={() =>
+          onConfirm={(reason) =>
             void (
               confirmTarget.action === "accept"
                 ? acceptChallenge(confirmTarget.item)
-                : applyChallenge(confirmTarget.item)
+                : applyChallenge(confirmTarget.item, reason ?? "")
             )
           }
         />
       )}
     </div>
   );
-}
-
-function BountyOverview({
-  availableCount,
-  cycle,
-  recruitmentCount,
-}: {
-  availableCount: number;
-  cycle: string;
-  recruitmentCount: number;
-}) {
-  return (
-    <section className="bounty-overview-band" aria-label="悬赏大厅概览">
-      <div className="bounty-cycle-pill">
-        <CalendarCheck className="h-5 w-5" />
-        <span>当前周期 · {cycle}</span>
-      </div>
-      <div className="bounty-stat-grid">
-        <BountyStatCard icon={ClipboardList} label="可申请" tone="blue" value={availableCount} />
-        <BountyStatCard icon={ShieldAlert} label="征召" tone="gold" value={recruitmentCount} />
-      </div>
-    </section>
-  );
-}
-
-function BountyStatCard({
-  icon: Icon,
-  label,
-  tone,
-  value,
-}: {
-  icon: LucideIcon;
-  label: string;
-  tone: "blue" | "gold" | "cyan" | "orange";
-  value: number | string;
-}) {
-  return (
-    <div className={`bounty-stat-card bounty-stat-card-${tone}`}>
-      <div className="bounty-stat-icon">
-        <Icon aria-hidden="true" />
-      </div>
-      <div className="bounty-stat-copy">
-        <span>{label}</span>
-        <strong>{value}</strong>
-      </div>
-    </div>
-  );
-}
-
-function Toolbar({
-  difficultyFilter,
-  query,
-  sortKey,
-  onDifficultyChange,
-  onQueryChange,
-  onSortChange,
-}: {
-  difficultyFilter: DifficultyFilter;
-  query: string;
-  sortKey: SortKey;
-  onDifficultyChange: (value: DifficultyFilter) => void;
-  onQueryChange: (value: string) => void;
-  onSortChange: (value: SortKey) => void;
-}) {
-  return (
-    <div className="bounty-toolbar">
-      <BountyTextInput
-        ariaLabel="搜索悬赏目标"
-        value={query}
-        onValueChange={onQueryChange}
-        placeholder="搜索悬赏目标或指标..."
-      />
-
-      <div className="bounty-toolbar-controls">
-        <BountySelect label="难度" value={difficultyFilter} onChange={(value) => onDifficultyChange(value as DifficultyFilter)}>
-          {difficultyOptions.map((item) => (
-            <option key={item} value={item}>
-              {item === "all" ? "全部难度" : item}
-            </option>
-          ))}
-        </BountySelect>
-        <BountySelect label="排序" value={sortKey} onChange={(value) => onSortChange(value as SortKey)}>
-          <option value="deadline">截止时间</option>
-          <option value="points">不确定性分</option>
-          <option value="difficulty">难度</option>
-          <option value="created">发布时间</option>
-        </BountySelect>
-      </div>
-    </div>
-  );
-}
-
-function BountyObjectiveList({
-  activeObjectiveId,
-  items,
-  now,
-  onOpenObjective,
-  processingBountyId,
-  onAction,
-}: {
-  activeObjectiveId: string | null;
-  items: BountyItem[];
-  now: Date;
-  onOpenObjective?: (objectiveId: string) => void;
-  processingBountyId: string | null;
-  onAction: (item: BountyItem, action: ChallengeAction) => void;
-}) {
-  return (
-    <div className="bounty-list-table" role="table" aria-label="悬赏目标">
-      <div className="bounty-list-head" role="row">
-        <span>奖励</span>
-        <span>悬赏目标</span>
-        <span>指标</span>
-        <span>剩余时间</span>
-        <span>操作</span>
-      </div>
-      {items.map((item) => (
-        <BountyListRow
-          key={item.objective.id}
-          active={item.objective.id === activeObjectiveId}
-          item={item}
-          now={now}
-          onOpenObjective={onOpenObjective}
-          processing={processingBountyId === item.objective.id}
-          onAction={(action) => onAction(item, action)}
-        />
-      ))}
-    </div>
-  );
-}
-
-function BountyListRow({
-  item,
-  now,
-  onOpenObjective,
-  processing,
-  onAction,
-  active,
-}: {
-  active: boolean;
-  item: BountyItem;
-  now: Date;
-  onOpenObjective?: (objectiveId: string) => void;
-  processing: boolean;
-  onAction: (action: ChallengeAction) => void;
-}) {
-  const actionLabel = item.isRecruitment ? "接受挑战" : item.hasCurrentApplication ? "已申请" : "申请挑战";
-  const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
-  const actionDisabled = processing || !canApply || (!item.isRecruitment && item.hasCurrentApplication);
-  const openable = Boolean(onOpenObjective);
-  const openObjective = () => onOpenObjective?.(item.objective.id);
-  const handleRowClick = (event: ReactMouseEvent<HTMLElement>) => {
-    event.currentTarget.focus();
-  };
-  const handleRowDoubleClick = () => {
-    if (!openable) return;
-    openObjective();
-  };
-  const handleRowKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (!openable || (event.key !== "Enter" && event.key !== " ")) return;
-
-    event.preventDefault();
-    openObjective();
-  };
-
-  return (
-    <article
-      className={`bounty-list-row${item.isRecruitment ? " bounty-list-row-priority" : ""}`}
-      data-bounty-objective-id={item.objective.id}
-      data-linked-target={active ? "true" : undefined}
-      data-open-target={openable ? "true" : undefined}
-      tabIndex={0}
-      aria-label={`${item.objective.title}，${openable ? "双击打开挑战页目标；" : ""}单击、移入或聚焦后显示完整信息`}
-      onClick={handleRowClick}
-      onDoubleClick={handleRowDoubleClick}
-      onKeyDown={handleRowKeyDown}
-    >
-      <div className="bounty-row-reward" data-label="奖励">
-        {item.isRecruitment && (
-          <Chip tone="warning">
-            <ShieldAlert className="h-3.5 w-3.5" />
-            征召令
-          </Chip>
-        )}
-        <Chip tone={item.isRecruitment ? "accent" : "neutral"}>{highestDifficultyLabel(item)}</Chip>
-        <Chip tone="gold">{item.uncertaintyPoints} 分</Chip>
-      </div>
-      <div className="bounty-row-main" data-label="悬赏目标">
-        <div className="bounty-row-title">
-          <h3>{item.objective.title}</h3>
-          <div className="bounty-row-revealed">
-            <p>{item.objective.description}</p>
-            {item.source === "memberProposed" && item.definer && <span className="bounty-row-definer">提出人：{item.definer}</span>}
-          </div>
-        </div>
-      </div>
-      <div className="bounty-row-results" data-label="指标">
-        <ResultPreview item={item} />
-      </div>
-      <div className="bounty-row-time" data-label="剩余时间">
-        {item.deadline ? remainingTime(item.deadline, now) : "未设置截止时间"}
-      </div>
-      <div
-        className="bounty-row-actions"
-        data-label="操作"
-        onClick={(event) => event.stopPropagation()}
-        onDoubleClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-      >
-        {item.isRecruitment ? (
-          <BountyButton onClick={() => onAction("accept")} disabled={actionDisabled}>
-            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {actionLabel}
-          </BountyButton>
-        ) : (
-          <BountyButton variant={item.hasCurrentApplication ? "secondary" : "primary"} onClick={() => onAction("apply")} disabled={actionDisabled}>
-            {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {actionLabel}
-          </BountyButton>
-        )}
-      </div>
-    </article>
-  );
-}
-
-function ResultPreview({ item }: { item: BountyItem }) {
-  return (
-    <>
-      <span className="bounty-result-summary">{resultCountLabel(item)}</span>
-      <div className="bounty-result-preview" aria-label="指标预览">
-        {item.results.length > 0 ? (
-          item.results.map((result) => (
-            <div key={result.id} className="bounty-result-preview-item">
-              {result.metricRequirement ?? result.title}
-            </div>
-          ))
-        ) : (
-          <div className="bounty-result-preview-item">待定义指标</div>
-        )}
-      </div>
-    </>
-  );
-}
-
-function ChallengeConfirmModal({
-  item,
-  processing,
-  onCancel,
-  onConfirm,
-}: {
-  item: ChallengeConfirmTarget;
-  processing: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  useEscape(onCancel);
-  const actionLabel = item.action === "accept" ? "接受挑战" : "申请挑战";
-  const title = item.blocked
-    ? item.action === "accept"
-      ? "指挥官不应该接受挑战"
-      : "指挥官不应该申请挑战"
-    : item.action === "accept"
-      ? "接受后会进入你的挑战页"
-      : "提交后等待指挥官确认";
-  const description =
-    item.blocked
-      ? "指挥官可以完整查看悬赏大厅和操作区，但不能成为挑战者。这个动作不会提交，也不会改变申请、征召或挑战者关系。"
-      : item.action === "accept"
-      ? "接受挑战后会成为当前挑战者；目标进入重估，重估完成后由指挥官冻结。"
-      : "申请挑战只表达负责意愿，不会直接成为挑战者；指挥官确认后，目标进入重估。";
-
-  return (
-    <BountyDialog
-      onClose={onCancel}
-      title={title}
-      subtitle={actionLabel}
-      variant="confirm"
-      footer={
-        item.blocked ? (
-          <BountyButton onClick={onCancel}>我知道了</BountyButton>
-        ) : (
-          <>
-            <BountyButton variant="secondary" onClick={onCancel} disabled={processing}>
-              取消
-            </BountyButton>
-            <BountyButton onClick={onConfirm} disabled={processing}>
-              {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : item.action === "accept" ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-              {actionLabel}
-            </BountyButton>
-          </>
-        )
-      }
-    >
-      <BountyCardSurface>
-        <div className="p-4">
-          <h3 className="line-clamp-2">{item.item.objective.title}</h3>
-          <p className="mt-2 truncate text-sm">{resultCountLabel(item.item)}</p>
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <Chip>{highestDifficultyLabel(item.item)}</Chip>
-            <Chip tone="gold">{item.item.uncertaintyPoints} 分</Chip>
-          </div>
-        </div>
-      </BountyCardSurface>
-      <p className="text-sm leading-6">{description}</p>
-    </BountyDialog>
-  );
-}
-
-function Chip({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "accent" | "gold" | "warning" }) {
-  return <BountyBadge tone={tone}>{children}</BountyBadge>;
-}
-
-function compareHallItems(left: BountyItem, right: BountyItem, sortKey: SortKey) {
-  if (left.isRecruitment !== right.isRecruitment) return left.isRecruitment ? -1 : 1;
-  return compareBounties(left, right, sortKey);
-}
-
-function searchableBountyText(item: BountyItem) {
-  return [
-    item.objective.title,
-    item.objective.description,
-    item.objective.successDefinition,
-    item.definer,
-    ...item.results.flatMap((result) => [result.title, result.description, result.metricRequirement]),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-}
-
-function compareBounties(left: BountyItem, right: BountyItem, sortKey: SortKey) {
-  if (sortKey === "points") return right.uncertaintyPoints - left.uncertaintyPoints || compareByUrgency(left, right);
-  if (sortKey === "difficulty") return right.difficultyRank - left.difficultyRank || compareByUrgency(left, right);
-  if (sortKey === "created") return right.objective.updatedAt.localeCompare(left.objective.updatedAt) || bountySortTitle(left).localeCompare(bountySortTitle(right));
-  return compareByUrgency(left, right);
-}
-
-function compareByUrgency(left: BountyItem, right: BountyItem) {
-  const leftDeadline = left.deadline || "9999-12-31";
-  const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
-}
-
-function difficultyLabel(result: BountyItem["result"]) {
-  return result?.uncertaintyLevel ?? "待校准";
-}
-
-function highestDifficultyLabel(item: BountyItem) {
-  return difficultyLabelsByRank[item.difficultyRank] ?? difficultyLabel(item.result);
-}
-
-function resultCountLabel(item: BountyItem) {
-  return item.results.length > 0 ? `${item.results.length} 个指标` : "待定义指标";
-}
-
-function bountySortTitle(item: BountyItem) {
-  return item.result?.title ?? item.objective.title;
-}
-
-function bountyTargetElement(objectiveId: string) {
-  return (
-    Array.from(document.querySelectorAll<HTMLElement>("[data-bounty-objective-id]")).find((element) => element.dataset.bountyObjectiveId === objectiveId) ??
-    null
-  );
-}
-
-function useMinuteNow() {
-  const [now, setNow] = useState(() => new Date());
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  return now;
-}
-
-function useEscape(onEscape: () => void) {
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onEscape();
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onEscape]);
 }

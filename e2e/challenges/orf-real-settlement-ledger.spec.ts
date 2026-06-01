@@ -6,7 +6,7 @@ test.describe("ORF real settlement ledger", () => {
   test.skip(!realSystemEnabled, "Set ORF_REAL_E2E=1 to run against the real Fastify API and database.");
   test.describe.configure({ mode: "serial", timeout: 180_000 });
 
-  test("three challengers resolve anonymous peer review into consistent ledger and reports", async ({ browser, real }, testInfo) => {
+  test("three challengers resolve local settlement override into consistent ledger and reports", async ({ browser, real }, testInfo) => {
     const dsl = new RealScenarioDsl(real);
     const commander = await real.newLoggedInPage(browser, real.fixture.commander);
     const title = `${real.fixture.runLabel} 三人互评结算目标`;
@@ -29,21 +29,10 @@ test.describe("ORF real settlement ledger", () => {
     await dsl.freezeViaApi(real.fixture.commander, objectiveId);
     expect((await dsl.submitLootViaApi(real.fixture.challengerA, objectiveId, `${title} 战利品`)).status).toBe(200);
 
-    expect((await dsl.submitPeerReviewViaApi(real.fixture.challengerA, objectiveId, [
-      { member: real.fixture.challengerA.name, ratio: 50 },
-      { member: real.fixture.challengerB.name, ratio: 30 },
-      { member: real.fixture.challengerC.name, ratio: 20 },
-    ])).status).toBe(200);
-    expect((await dsl.submitPeerReviewViaApi(real.fixture.challengerB, objectiveId, [
-      { member: real.fixture.challengerA.name, ratio: 40 },
-      { member: real.fixture.challengerB.name, ratio: 40 },
-      { member: real.fixture.challengerC.name, ratio: 20 },
-    ])).status).toBe(200);
-
     try {
       await commander.page.goto(`/objectives/${objectiveId}/loot`);
       await expect(commander.page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
-      await expect(commander.page.getByText("等待匿名互评")).toBeVisible();
+      await expect(commander.page.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
       await real.attachScreenshot(commander.page, testInfo, "settlement-peer-review-resolution");
       await dsl.reviewAndSettle(commander.page, objectiveId, `${title} 按指挥官分歧处理结算`, [
         { member: real.fixture.challengerA.name, ratio: 5 },

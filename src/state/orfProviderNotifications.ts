@@ -20,6 +20,18 @@ export function useNotificationState(failureMessage: (error: unknown, fallback: 
     applyNotifications(await getNotifications());
   }, [applyNotifications]);
 
+  const receiveNotification = useCallback((notification: AppNotification) => {
+    setNotifications((items) => {
+      if (items.some((item) => item.id === notification.id)) {
+        return items;
+      }
+
+      const nextItems = [notification, ...items].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+      setUnreadNotificationCount(nextItems.filter((item) => !item.readAt).length);
+      return nextItems;
+    });
+  }, []);
+
   const clearNotifications = useCallback(() => {
     setNotifications([]);
     setUnreadNotificationCount(0);
@@ -59,6 +71,7 @@ export function useNotificationState(failureMessage: (error: unknown, fallback: 
     markAllNotificationsRead,
     markNotificationRead,
     notifications,
+    receiveNotification,
     refreshNotifications,
     unreadNotificationCount,
   };

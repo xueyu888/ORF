@@ -6,6 +6,8 @@ import {
   permissionKeys,
   replaceRolePermissionRules,
 } from "../repositories/permissionRepository";
+import { runtimeScopeStorageId } from "../repositories/runtimeScope";
+import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 
 const userRoleSchema = z.enum(["admin", "member"]);
 const editablePermissionRoleSchema = z.enum(["member"]);
@@ -41,8 +43,14 @@ export function registerPermissionRoutes(app: FastifyInstance) {
     }
 
     const body = updateRolePermissionsBodySchema.parse(request.body);
+    const permissionRules = await replaceRolePermissionRules(scope, params.role, body.permissionRules);
+    publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
+      models: ["permissions", "taskManagement"],
+      reason: "permission.changed",
+      target: { id: params.role, type: "permission" },
+    });
     return {
-      permissionRules: await replaceRolePermissionRules(scope, params.role, body.permissionRules),
+      permissionRules,
     };
   });
 }

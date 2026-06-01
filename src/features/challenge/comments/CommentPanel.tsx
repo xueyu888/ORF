@@ -2,10 +2,10 @@ import { ArrowLeft, ChevronRight, ImagePlus, Pencil, Reply, Send, Trash2, X } fr
 import type { ClipboardEvent, FormEvent, ReactNode } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
+import { ImagePreviewDialog, type ImagePreview } from "../../../components/ImagePreviewDialog";
+import { UserAvatar } from "../../../components/UserAvatar";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
-import { avatarStyleForName } from "../../../utils/avatar";
-import { initials } from "../../../utils/format";
 import { commentTimeDisplay } from "./commentTime";
 import { parseCommentBodyLinks } from "./commentText";
 
@@ -15,13 +15,7 @@ type CommentEntry = {
   threadId: string;
 };
 
-type CommentImagePreview = {
-  alt: string;
-  fileName: string;
-  src: string;
-};
-
-type CommentMentionUser = Pick<OrfUser, "email" | "id" | "name" | "role" | "status">;
+type CommentMentionUser = Pick<OrfUser, "avatarUrl" | "email" | "id" | "name" | "role" | "status">;
 
 type CommentDraftMention = {
   end: number;
@@ -52,6 +46,7 @@ const commentMentionTokenPattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 export function CommentPanel({
   canManageAllComments = false,
   currentMember,
+  currentUserAvatarUrl,
   currentUserId,
   onAddComment,
   onClose,
@@ -66,6 +61,7 @@ export function CommentPanel({
 }: {
   canManageAllComments?: boolean;
   currentMember: string;
+  currentUserAvatarUrl?: string | null;
   currentUserId: string;
   onAddComment: (body: string, replyInput?: CommentReplyInput) => void;
   onClose: () => void;
@@ -81,7 +77,7 @@ export function CommentPanel({
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
   const [activeRootMessageId, setActiveRootMessageId] = useState<string | null>(null);
-  const [imagePreview, setImagePreview] = useState<CommentImagePreview | null>(null);
+  const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null);
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const panelDrag = useDraggableFloating<HTMLElement>({ resetKey: targetTitle });
@@ -144,19 +140,6 @@ export function CommentPanel({
   useEffect(() => {
     setImagePreview(null);
   }, [targetId, targetType]);
-
-  useEffect(() => {
-    if (!imagePreview) return undefined;
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setImagePreview(null);
-      }
-    };
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [imagePreview]);
 
   const resetDraft = () => {
     setDraftMode({ type: "default" });
@@ -305,6 +288,7 @@ export function CommentPanel({
           </div>
           <CommentComposer
             currentMember={currentMember}
+            currentUserAvatarUrl={currentUserAvatarUrl}
             currentUserId={currentUserId}
             defaultReplyAuthor={activeRootEntry?.message.author}
             draft={draft}
@@ -317,7 +301,7 @@ export function CommentPanel({
           />
         </div>
       </aside>
-      {imagePreview && <CommentImagePreviewDialog preview={imagePreview} onClose={() => setImagePreview(null)} />}
+      {imagePreview && <ImagePreviewDialog preview={imagePreview} onClose={() => setImagePreview(null)} />}
     </>
   );
 }
@@ -343,7 +327,7 @@ function CommentMessageRow({
   onDelete: (threadId: string, messageId: string) => void;
   onEdit: (threadId: string, message: CommentMessage) => void;
   onEnterReplies?: () => void;
-  onOpenImage: (preview: CommentImagePreview) => void;
+  onOpenImage: (preview: ImagePreview) => void;
   onReply: (message: CommentMessage) => void;
   onSelect: (messageId: string) => void;
   selected: boolean;
@@ -360,7 +344,7 @@ function CommentMessageRow({
 
   return (
     <article className={clsx("orf-comment-message-row", selected && "orf-comment-message-row-selected")} onClick={() => onSelect(message.id)}>
-      <PersonAvatar name={message.author} />
+      <PersonAvatar avatarUrl={message.authorAvatarUrl} name={message.author} />
       <div className="orf-comment-message-main">
         <div className="orf-comment-message-header">
           <span className="orf-comment-author-name">{message.author}</span>
@@ -393,25 +377,6 @@ function CommentMessageRow({
         )}
       </div>
     </article>
-  );
-}
-
-function CommentImagePreviewDialog({ onClose, preview }: { onClose: () => void; preview: CommentImagePreview }) {
-  return (
-    <div className="orf-comment-image-preview-backdrop" role="presentation" onMouseDown={onClose}>
-      <div
-        className="orf-comment-image-preview-dialog"
-        role="dialog"
-        aria-label={preview.fileName}
-        aria-modal="true"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <button type="button" className="orf-comment-image-preview-close" aria-label="关闭图片预览" title="关闭" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </button>
-        <img className="orf-comment-image-preview" src={preview.src} alt={preview.alt} />
-      </div>
-    </div>
   );
 }
 
@@ -485,7 +450,7 @@ function CommentBodyText({
   attachments: CommentAttachment[];
   body: string;
   mentionUsersById: Map<string, CommentMentionUser>;
-  onOpenImage: (preview: CommentImagePreview) => void;
+  onOpenImage: (preview: ImagePreview) => void;
 }) {
   const attachmentsById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
   const nodes: ReactNode[] = [];
@@ -511,7 +476,7 @@ function CommentBodyText({
             title="查看图片"
             onClick={(event) => {
               event.stopPropagation();
-              onOpenImage({ alt, fileName: attachment.fileName || alt, src: attachment.contentUrl });
+              onOpenImage({ alt, label: attachment.fileName || alt, src: attachment.contentUrl });
             }}
             onDoubleClick={(event) => event.stopPropagation()}
           >
@@ -677,6 +642,7 @@ function replaceCommentDraftText(
 
 function CommentComposer({
   currentMember,
+  currentUserAvatarUrl,
   currentUserId,
   defaultReplyAuthor,
   draft,
@@ -688,6 +654,7 @@ function CommentComposer({
   onUploadAttachment,
 }: {
   currentMember: string;
+  currentUserAvatarUrl?: string | null;
   currentUserId: string;
   defaultReplyAuthor?: string;
   draft: CommentDraft;
@@ -804,7 +771,7 @@ function CommentComposer({
 
   return (
     <form className="orf-comment-composer" onSubmit={onSubmit}>
-      <PersonAvatar name={currentMember} />
+      <PersonAvatar avatarUrl={currentUserAvatarUrl} name={currentMember} />
       <div className="orf-comment-composer-main">
         <span className="orf-comment-author-name">{currentMember}</span>
         {mode.type !== "default" && (
@@ -867,7 +834,7 @@ function CommentComposer({
                   insertMention(user);
                 }}
               >
-                <PersonAvatar name={user.name} />
+                <PersonAvatar avatarUrl={user.avatarUrl} name={user.name} />
                 <span>
                   <span className="orf-comment-mention-name">{user.name}</span>
                   <span className="orf-comment-mention-email">{user.email}</span>
@@ -912,10 +879,6 @@ function CommentComposer({
   );
 }
 
-function PersonAvatar({ name }: { name: string }) {
-  return (
-    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white shadow-sm" style={avatarStyleForName(name)} title={name}>
-      {initials(name)}
-    </div>
-  );
+function PersonAvatar({ avatarUrl, name }: { avatarUrl?: string | null; name: string }) {
+  return <UserAvatar avatarUrl={avatarUrl} className="h-7 w-7 text-[10px] shadow-sm" frame={false} name={name} />;
 }

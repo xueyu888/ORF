@@ -64,8 +64,10 @@ export class RealScenarioDsl {
     const row = bountyRow(page, title);
     await expect(row).toBeVisible();
     await row.getByRole("button", { name: "申请挑战" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "申请挑战" }).click();
-    await expect(row.getByRole("button", { name: "已申请" })).toBeDisabled();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("textbox", { name: "申请理由" }).fill(`${title} 申请挑战`);
+    await dialog.getByRole("button", { name: "申请挑战" }).click();
+    await expect(row.getByText("申请中", { exact: true })).toBeVisible();
   }
 
   async approveApplication(page: Page, title: string, count = 1) {
@@ -182,8 +184,9 @@ export class RealScenarioDsl {
     await page.goto(`/objectives/${objectiveId}/loot`);
     await expect(page.getByRole("heading", { name: "提交匿名互评" })).toBeVisible();
     const nextAllocations = allocations ?? objective.challengers.map((member) => ({ member, ratio: 1 }));
+    const total = nextAllocations.reduce((sum, allocation) => sum + allocation.ratio, 0);
     for (const allocation of nextAllocations) {
-      await page.getByLabel(`${allocation.member} 贡献比例`).fill(String(allocation.ratio));
+      await page.getByLabel(contributionPercentLabel(allocation.member)).fill(String(allocationInputPercent(allocation.ratio, total)));
     }
     await page.getByRole("button", { name: "提交匿名互评" }).click();
     await expect(page).toHaveURL(/\/tasks$/);
@@ -193,8 +196,9 @@ export class RealScenarioDsl {
     await page.goto(`/objectives/${objectiveId}/loot`);
     await expect(page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
     if (resolution) {
+      const total = resolution.reduce((sum, allocation) => sum + allocation.ratio, 0);
       for (const allocation of resolution) {
-        await page.getByLabel(`${allocation.member} 处理后贡献比例`).fill(String(allocation.ratio));
+        await page.getByLabel(contributionPercentLabel(allocation.member, "处理后")).fill(String(allocationInputPercent(allocation.ratio, total)));
       }
       await page.getByLabel("分歧处理说明").fill("真实联调处理匿名互评分歧。");
     }
@@ -318,13 +322,6 @@ export class RealScenarioDsl {
     });
   }
 
-  async submitPeerReviewViaApi(user: RealUser, objectiveId: string, allocations: ContributionAllocation[]) {
-    return this.real.apiAs(user, `/api/objectives/${encodeURIComponent(objectiveId)}/contribution-reviews`, {
-      body: JSON.stringify({ allocations }),
-      method: "POST",
-    });
-  }
-
   async objective(objectiveId: string) {
     const data = await this.real.taskData();
     const objective = data.objectives.find((item) => item.id === objectiveId);
@@ -342,4 +339,19 @@ export class RealScenarioDsl {
   async closePages(...pages: LoggedInPage[]) {
     await Promise.all(pages.map((item) => item.context.close()));
   }
+}
+
+function allocationInputPercent(value: number, total: number) {
+  if (total > 0 && Math.abs(total - 100) > 0.01) {
+    return Number(((value / total) * 100).toFixed(2));
+  }
+  return value;
+}
+
+function contributionPercentLabel(member: string, prefix = "") {
+  return new RegExp(`${escapeRegExp(member)}(?:（你）)? ${prefix}贡献百分比`);
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

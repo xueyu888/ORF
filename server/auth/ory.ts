@@ -3,6 +3,7 @@ import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
 import { getDefaultRuntimeScope, runtimeScopeStorageId } from "../repositories/runtimeScope";
+import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 
 export type AuthenticatedOrfUser = {
   id: string;
@@ -11,6 +12,7 @@ export type AuthenticatedOrfUser = {
   role: "admin" | "member";
   status: "pending" | "active" | "rejected" | "disabled";
   lastOnlineAt: string | null;
+  avatarUrl?: string | null;
 };
 
 type OryIdentity = {
@@ -227,6 +229,7 @@ async function upsertOrfUser(
       role,
       status: existing.status ?? "active",
       lastOnlineAt: lastOnlineAt ?? existing.lastOnlineAt,
+      avatarUrl: avatarUrlForUser(existing),
     };
   }
 
@@ -243,7 +246,7 @@ async function upsertOrfUser(
   });
 
   const role = await createDefaultScopeMembership(id);
-  return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastOnlineAt: createdLastOnlineAt };
+  return { id, name: identityDisplayName, email, role, status: options.newUserStatus ?? "pending", lastOnlineAt: createdLastOnlineAt, avatarUrl: null };
 }
 
 export async function getAuthenticatedOrfUser(cookie: string | undefined): Promise<AuthenticatedOrfUser | null> {

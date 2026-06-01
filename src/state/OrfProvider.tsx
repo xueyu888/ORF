@@ -13,7 +13,12 @@ import {
 } from "./orfProviderMutationMessages";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
+import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
+import { fetchLocalSettlementSummary, submitLocalEncryptedContributionReview } from "../services/localSettlementClient";
+import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
+import type { OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
   CommentStatus,
   CommentTargetType,
@@ -21,6 +26,7 @@ import type {
   Objective,
   FeedbackStatus,
   LootResultClaim,
+  ObjectiveTrialReviewStatus,
   OrfState,
   OrfUser,
   Result,
@@ -31,6 +37,7 @@ import type {
   BountySource,
   ContributionAllocation,
   AppNotification,
+  UncertaintyLevel,
   UserRole,
 } from "../types/orf";
 
@@ -53,6 +60,10 @@ type ReviewObjectiveLootInput = {
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   reason?: string;
+};
+type ReviewObjectiveTrialReviewInput = {
+  status: Exclude<ObjectiveTrialReviewStatus, "requested">;
+  commanderFeedback: string;
 };
 
 interface ModalState {
@@ -79,6 +90,8 @@ interface OrfContextValue {
   modal: ModalState;
   toasts: ToastMessage[];
   notifications: AppNotification[];
+  readModelInvalidations: OrfReadModelInvalidation[];
+  systemBroadcasts: SystemBroadcast[];
   unreadNotificationCount: number;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
@@ -87,6 +100,7 @@ interface OrfContextValue {
   closeModal: () => void;
   notify: (message: string) => void;
   removeToast: (id: string) => void;
+  dismissSystemBroadcast: (id: string) => void;
   resetState: () => void;
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (notificationId: string) => Promise<boolean>;
@@ -97,7 +111,7 @@ interface OrfContextValue {
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   rejectChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
-  applyForBounty: (objectiveId: string) => Promise<boolean>;
+  applyForBounty: (objectiveId: string, reason: string) => Promise<boolean>;
   acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
@@ -108,8 +122,9 @@ interface OrfContextValue {
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
   updateObjectiveTitle: (objectiveId: string, title: string) => void;
-  updateObjectiveStage: (objectiveId: string, stage: OrfState["objectives"][number]["stage"]) => void;
+  updateObjectiveFinalDueAt: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   updateResultTitle: (resultId: string, title: string) => void;
+  updateResultUncertaintyLevel: (resultId: string, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   updateTaskTitle: (taskId: string, title: string) => void;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => void;
   createTaskChecklistItem: (taskId: string, input?: { afterItemId?: string; label?: string }) => Promise<TaskChecklistItem | null>;
@@ -117,6 +132,8 @@ interface OrfContextValue {
   moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   moveTaskChecklistItem: OrfFlowStore["moveTaskChecklistItem"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
   submitLoot: (input: SubmitLootInput) => Promise<boolean>;
+  submitObjectiveTrialReview: (input: SubmitLootInput) => Promise<boolean>;
+  reviewObjectiveTrialReview: (objectiveId: string, trialReviewId: string, input: ReviewObjectiveTrialReviewInput) => Promise<boolean>;
   deleteObjective: (objectiveId: string) => void;
   deleteResult: (resultId: string) => void;
   deleteTask: (taskId: string) => void;
@@ -126,6 +143,8 @@ interface OrfContextValue {
   createUser: (input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   loginWithPassword: (email: string, password: string) => Promise<AuthResult>;
   registerWithPassword: (input: { name: string; email: string; password: string }) => Promise<AuthResult>;
+  uploadCurrentUserAvatar: (file: File) => Promise<boolean>;
+  deleteCurrentUserAvatar: () => Promise<boolean>;
   logout: () => void;
   updateUser: (userId: string, input: { name: string; email: string; role: UserRole }) => Promise<boolean>;
   deleteUser: (userId: string) => Promise<boolean>;
@@ -155,7 +174,6 @@ const OrfContext = createContext<OrfContextValue | null>(null);
 
 const store = new OrfFlowStore();
 const THEME_STORAGE_KEY = "orf-flow-theme";
-const NOTIFICATION_POLL_MS = 30_000;
 
 function loadInitialState() {
   return store.load();
@@ -179,6 +197,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [readModelInvalidations, setReadModelInvalidations] = useState<OrfReadModelInvalidation[]>([]);
+  const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
       return;
@@ -197,6 +217,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     markAllNotificationsRead,
     markNotificationRead,
     notifications,
+    receiveNotification,
     refreshNotifications,
     unreadNotificationCount,
   } = useNotificationState(businessMutationFailureMessage, notify);
@@ -249,21 +270,74 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     };
   }, [authReady, isApproved, isAuthenticated]);
 
+  const dismissSystemBroadcast = useCallback((id: string) => {
+    setSystemBroadcasts((items) => items.filter((item) => item.id !== id));
+  }, []);
+
+  const receiveRealtimeNotification = useCallback(
+    (notification: AppNotification) => {
+      receiveNotification(notification);
+    },
+    [receiveNotification],
+  );
+  const receiveRealtimeBroadcast = useCallback((broadcast: SystemBroadcast) => {
+    setSystemBroadcasts((items) => enqueueSystemBroadcast(items, broadcast));
+  }, []);
+  const receiveReadModelInvalidation = useCallback((invalidation: OrfReadModelInvalidation) => {
+    setReadModelInvalidations((items) => [invalidation, ...items.filter((item) => item.id !== invalidation.id)].slice(0, 64));
+  }, []);
+
+  useRealtimeEvents({
+    enabled: authReady && isAuthenticated && isApproved,
+    onBroadcast: receiveRealtimeBroadcast,
+    onNotification: receiveRealtimeNotification,
+    onReadModelInvalidation: receiveReadModelInvalidation,
+  });
+
+  useEffect(() => {
+    if (!isAuthenticated || !isApproved) {
+      setReadModelInvalidations([]);
+      setSystemBroadcasts([]);
+    }
+  }, [isApproved, isAuthenticated]);
+
   useEffect(() => {
     void refreshAuthSession();
   }, [refreshAuthSession]);
 
+  const taskManagementInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),
+    [readModelInvalidations],
+  );
+  const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
+  const permissionsInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "permissions"),
+    [readModelInvalidations],
+  );
+  const notificationsInvalidationKey = useMemo(
+    () => readModelInvalidationKey(readModelInvalidations, "notifications"),
+    [readModelInvalidations],
+  );
+
   useEffect(() => {
-    if (!authReady || !isAuthenticated || !isApproved) {
-      return undefined;
-    }
+    if (!taskManagementInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
+    void refreshTaskManagementData().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, refreshTaskManagementData, taskManagementInvalidationKey]);
 
-    const intervalId = window.setInterval(() => {
-      void refreshNotifications().catch(() => undefined);
-    }, NOTIFICATION_POLL_MS);
+  useEffect(() => {
+    if (!usersInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
+    void refreshUsers().catch(() => undefined);
+  }, [authReady, isAdmin, isApproved, isAuthenticated, refreshUsers, usersInvalidationKey]);
 
-    return () => window.clearInterval(intervalId);
-  }, [authReady, isAuthenticated, isApproved, refreshNotifications]);
+  useEffect(() => {
+    if (!permissionsInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
+    void refreshPermissionRules().catch(() => undefined);
+  }, [authReady, isAdmin, isApproved, isAuthenticated, permissionsInvalidationKey, refreshPermissionRules]);
+
+  useEffect(() => {
+    if (!notificationsInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
+    void refreshNotifications().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, notificationsInvalidationKey, refreshNotifications]);
 
   const userActions = useOrfProviderUserActions({
     authenticateWithPassword,
@@ -293,6 +367,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       modal,
       toasts,
       notifications,
+      readModelInvalidations,
+      systemBroadcasts,
       unreadNotificationCount,
       theme,
       setTheme: setThemeState,
@@ -300,6 +376,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       openModal: setModal,
       closeModal: () => setModal({ type: null }),
       notify,
+      dismissSystemBroadcast,
       removeToast: (id: string) => setToasts((items) => items.filter((item) => item.id !== id)),
       resetState: () => {
         void refreshTaskManagementData()
@@ -416,15 +493,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
-      applyForBounty: async (objectiveId) => {
+      applyForBounty: async (objectiveId, reason) => {
         if (currentUser?.role !== "member") {
           notify("只有普通成员可以申请挑战");
           return false;
         }
         const applicant = currentUser?.name ?? "";
+        const applicationReason = reason.trim();
+        if (!applicationReason) {
+          notify("请先填写申请理由");
+          return false;
+        }
         const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
         if (hasScopedObjective) {
-          const next = store.applyForBounty(state, objectiveId, applicant);
+          const next = store.applyForBounty(state, objectiveId, applicant, applicationReason);
           if (next === state) {
             notify("这个目标暂时不能申请挑战");
             return false;
@@ -432,7 +514,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications`, { method: "POST" });
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications`, {
+            method: "POST",
+            body: JSON.stringify({ reason: applicationReason }),
+          });
           await refreshTaskManagementData();
           notify("挑战申请已提交，等待指挥官确认");
           return true;
@@ -482,9 +567,17 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       reviewObjectiveLoot: async (objectiveId, input) => {
         try {
+          const objective = state.objectives.find((item) => item.id === objectiveId);
+          const localSummary = objective && objective.challengers.length > 1
+            ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
+            : null;
+          const settlementInput =
+            localSummary?.status === "ready" && localSummary.contributionResolution
+              ? { ...input, contributionResolution: localSummary.contributionResolution }
+              : input;
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
             method: "POST",
-            body: JSON.stringify(input),
+            body: JSON.stringify(settlementInput),
           });
           await refreshTaskManagementData();
           notify("战利品已验收结算");
@@ -497,16 +590,22 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       submitContributionReview: async (objectiveId, allocations) => {
         try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/contribution-reviews`, {
-            method: "POST",
-            body: JSON.stringify({ allocations }),
+          const objective = state.objectives.find((item) => item.id === objectiveId);
+          if (!objective || !currentUser) {
+            notify("匿名互评提交失败：目标或当前用户不可用");
+            return false;
+          }
+          await submitLocalEncryptedContributionReview({
+            allocations,
+            challengers: objective.challengers,
+            objectiveId,
+            objectiveTitle: objective.title,
+            reviewer: currentUser.name,
           });
-          await refreshTaskManagementData();
-          notify("匿名互评已提交");
+          notify("匿名互评已提交到本地结算服务");
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "匿名互评提交失败"));
-          void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
       },
@@ -602,17 +701,20 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             void refreshTaskManagementData().catch(() => undefined);
           });
       },
-      updateObjectiveStage: (objectiveId, stage) => {
-        void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/stage`, {
-          method: "PATCH",
-          body: JSON.stringify({ stage }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("目标状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "目标状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
+      updateObjectiveFinalDueAt: async (objectiveId, finalDueAt) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ finalDueAt }),
           });
+          await refreshTaskManagementData();
+          notify("截止日期已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "截止日期更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       updateResultTitle: (resultId, title) => {
         void apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
@@ -625,6 +727,21 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             notify(businessMutationFailureMessage(error, "指标更新失败"));
             void refreshTaskManagementData().catch(() => undefined);
           });
+      },
+      updateResultUncertaintyLevel: async (resultId, uncertaintyLevel) => {
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/uncertainty`, {
+            method: "PATCH",
+            body: JSON.stringify({ uncertaintyLevel }),
+          });
+          await refreshTaskManagementData();
+          notify("指标积分已校准");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标积分校准失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
       },
       updateTaskTitle: (taskId, title) => {
         void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, {
@@ -781,6 +898,41 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           return false;
         }
       },
+      submitObjectiveTrialReview: async (input) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(input.objectiveId)}/trial-reviews`, {
+            method: "POST",
+            body: JSON.stringify({
+              body: input.body,
+              resultClaims: input.resultClaims,
+              selfTestReportUrl: input.selfTestReportUrl,
+              selfTestReportBody: input.selfTestReportBody,
+            }),
+          });
+          await refreshTaskManagementData();
+          notify("试验收已提交");
+          return true;
+        } catch (error) {
+          notify(commentMutationFailureMessage(error, "试验收提交失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      reviewObjectiveTrialReview: async (objectiveId, trialReviewId, input) => {
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/trial-reviews/${encodeURIComponent(trialReviewId)}`, {
+            method: "PATCH",
+            body: JSON.stringify(input),
+          });
+          await refreshTaskManagementData();
+          notify("试验收反馈已提交");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "试验收反馈提交失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
       ...userActions,
       ...commentActions,
       proposeResultUpdate: async (resultId, title, reason, feedbackId) => {
@@ -803,6 +955,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       authReady,
       commentActions,
       currentUser,
+      dismissSystemBroadcast,
       isAdmin,
       isApproved,
       isAuthenticated,
@@ -811,9 +964,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       markNotificationRead,
       notify,
       notifications,
+      readModelInvalidations,
       refreshNotifications,
       refreshTaskManagementData,
       state,
+      systemBroadcasts,
       theme,
       toasts,
       unreadNotificationCount,

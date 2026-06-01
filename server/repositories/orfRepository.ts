@@ -18,8 +18,8 @@ import type {
   Objective,
   ObjectiveAcceptedResult,
   ObjectiveLoot,
-  ObjectiveContributionReview,
-  OrfStage,
+  ObjectiveTrialReview,
+  ObjectiveTrialReviewStatus,
   OrfState,
   PointLedgerEntry,
   Priority,
@@ -32,9 +32,8 @@ import type {
   UserRole,
 } from "../../src/types/orf";
 import {
-  normalizeContributionAllocations,
-} from "../../src/features/challenge/model/contributionReview";
-import {
+  hasUncalibratedResultPoints,
+  objectiveBasePointsForResults,
   planObjectiveSettlement,
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
@@ -50,18 +49,17 @@ import {
   canRecruitObjectiveChallengersByFlow,
   canReviewObjectiveChallengeApplications,
   canReviewObjectiveLootByFlow,
-  canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
-  isObjectiveChallengeAcceptedByFlow,
+  isObjectiveChallengeDiscoverableByFlow,
   isObjectiveChallengeEntryClosedByFlow,
   isObjectiveReestimateWindowOpen,
-  isObjectiveStageCompatibleWithFlowStatus,
   objectiveFlowStatusAfterChallengeApplication,
   objectiveFlowStatusAfterChallengeApplicationReview,
   objectiveFlowStatusAfterRecruitment,
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../../src/domain/orfLifecycle";
+import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -72,7 +70,7 @@ import {
   feedbackCauseCategories,
   objectives,
   objectiveLoot,
-  objectiveContributionReviews,
+  objectiveTrialReviews,
   pointLedger,
   results,
   resultTrendPoints,
@@ -88,18 +86,21 @@ import {
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
   getActiveMemberNotificationRecipientsByNames,
+  getActiveTeamNotificationRecipients,
   getUserNameById,
 } from "./notificationRepository";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
+import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
+import { publishRealtimeReadModelInvalidation, publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
 import { objectStorage } from "../storage/objectStorage";
 import { validateImageUpload } from "../storage/images";
 
 export type TaskManagementData = Pick<
   OrfState,
-  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveContributionReviews" | "pointLedger" | "permissionRules"
+  "objectives" | "results" | "tasks" | "evidence" | "feedback" | "comments" | "objectiveLoot" | "objectiveTrialReviews" | "pointLedger" | "permissionRules"
 >;
 
 export type TaskManagementDataScope = {
@@ -366,25 +367,131 @@ function challengeCommentTargetHref(targetType: CommentTargetType, targetId: str
   return `/tasks#${challengeTargetTypeByCommentTarget[targetType]}:${encodeURIComponent(targetId)}`;
 }
 
+function publishOrfDataInvalidation(input: {
+  actorUserId?: string | null;
+  models?: Array<"taskManagement" | "bountyHall">;
+  reason:
+    | "objective.created"
+    | "objective.changed"
+    | "objective.lifecycle.changed"
+    | "objective.challenge.application.changed"
+    | "objective.challenge.recruitment.changed"
+    | "objective.loot.changed"
+    | "objective.trialReview.changed"
+    | "result.changed"
+    | "task.changed"
+    | "feedback.changed"
+    | "comment.changed";
+  target?: { id: string; type: "objective" | "result" | "task" | "subtask" | "feedback" | "comment" };
+  teamId: string;
+}) {
+  publishRealtimeReadModelInvalidation(input.teamId, {
+    actorUserId: input.actorUserId,
+    models: input.models ?? ["taskManagement"],
+    reason: input.reason,
+    target: input.target,
+  });
+}
+
+function publishObjectiveInvalidation(input: {
+  actorUserId?: string | null;
+  reason:
+    | "objective.created"
+    | "objective.changed"
+    | "objective.lifecycle.changed"
+    | "objective.challenge.application.changed"
+    | "objective.challenge.recruitment.changed"
+    | "objective.loot.changed"
+    | "objective.trialReview.changed";
+  objectiveId: string;
+  teamId: string;
+}) {
+  publishOrfDataInvalidation({
+    actorUserId: input.actorUserId,
+    models: ["taskManagement", "bountyHall"],
+    reason: input.reason,
+    target: { id: input.objectiveId, type: "objective" },
+    teamId: input.teamId,
+  });
+}
+
 async function notifyAdminsOfChallengeApplication(input: {
   actorUserId?: string | null;
   applicant: string;
   objectiveId: string;
   objectiveTitle: string;
+  reason: string;
   teamId: string;
 }) {
   await createNotifications({
     actorName: input.applicant,
     actorUserId: input.actorUserId,
-    body: `${input.applicant} 申请挑战「${input.objectiveTitle}」，需要指挥官确认。`,
+    body: `${input.applicant} 申请挑战「${input.objectiveTitle}」：${input.reason}`,
     kind: "challenge.application.created",
-    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
+    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle, reason: input.reason },
     recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
     targetHref: challengeObjectiveHref("/tasks", input.objectiveId),
     targetId: input.objectiveId,
     targetType: "objective",
     teamId: input.teamId,
     title: "新的挑战申请",
+  });
+}
+
+async function notifyTeamOfObjectivePublication(input: {
+  actorUserId: string;
+  objectiveId: string;
+  objectivePublishedAt: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  const targetHref = challengeObjectiveHref("/bounties", input.objectiveId);
+  const body = `新的悬赏目标「${input.objectiveTitle}」已发布到悬赏大厅。`;
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body,
+    kind: "objective.published",
+    metadata: { objectivePublishedAt: input.objectivePublishedAt, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveTeamNotificationRecipients(input.teamId),
+    targetHref,
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "新悬赏发布",
+  });
+  publishRealtimeSystemBroadcast(input.teamId, {
+    id: `objective-published:${input.objectiveId}`,
+    body,
+    createdAt: nowIso(),
+    notificationKind: "objective.published",
+    targetHref,
+    title: "新悬赏发布",
+    tone: "bounty",
+  });
+}
+
+async function notifyMemberOfChallengeApplicationApproval(input: {
+  actorUserId: string;
+  applicant: string;
+  objectiveId: string;
+  objectiveTitle: string;
+  teamId: string;
+}) {
+  const actorName = await getUserNameById(input.actorUserId);
+  await createNotifications({
+    actorName: actorName || "指挥官",
+    actorUserId: input.actorUserId,
+    body: `你申请挑战「${input.objectiveTitle}」已通过，头像已挂到悬赏大厅目标上。`,
+    kind: "challenge.application.approved",
+    metadata: { applicant: input.applicant, objectiveTitle: input.objectiveTitle },
+    recipientUserIds: await getActiveMemberNotificationRecipientsByNames(input.teamId, [input.applicant]),
+    targetHref: challengeObjectiveHref("/bounties", input.objectiveId),
+    targetId: input.objectiveId,
+    targetType: "objective",
+    teamId: input.teamId,
+    title: "挑战申请已通过",
   });
 }
 
@@ -542,9 +649,9 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
   const feedbackRows = storageScopeId ? await db.select().from(feedback).where(eq(feedback.teamId, storageScopeId)) : await db.select().from(feedback);
   const objectiveLootRows = storageScopeId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId)) : await db.select().from(objectiveLoot);
-  const objectiveContributionReviewRows = storageScopeId
-    ? await db.select().from(objectiveContributionReviews).where(eq(objectiveContributionReviews.teamId, storageScopeId))
-    : await db.select().from(objectiveContributionReviews);
+  const objectiveTrialReviewRows = storageScopeId
+    ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
+    : await db.select().from(objectiveTrialReviews);
   const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
   const scopeRows = storageScopeId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)) : await db.select({ id: teams.id }).from(teams);
   const resultIds = resultRows.map((result) => result.id);
@@ -554,6 +661,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
+  const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
 
   const checklistByTask = new Map<string, Task["checklist"]>();
@@ -588,6 +696,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     messages.push({
       id: message.id,
       author: message.author,
+      authorUserId: optional(message.authorUserId),
+      authorAvatarUrl: message.authorUserId ? commentAuthorAvatarUrls.get(message.authorUserId) ?? null : null,
       body: message.body,
       attachments: attachmentsByMessage.get(message.id) ?? [],
       createdAt: message.createdAt,
@@ -678,7 +788,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
 
   const objectiveItems: Objective[] = objectiveRows.map((objective) => {
     const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
-    const objectiveBasePoints = objectiveResults.reduce((sum, result) => sum + result.uncertaintyScore, 0);
+    const objectiveBasePoints = objectiveBasePointsForResults(objectiveResults);
     const challengers = uniqueMembers(objective.challengers ?? []);
     const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []).filter((member) => !challengers.includes(member));
 
@@ -710,6 +820,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       completionMultiplier: objective.completionMultiplier,
       objectiveBasePoints,
       objectiveSettlementPoints: objective.objectiveSettlementPoints,
+      publishedAt: objective.publishedAt,
       createdAt: objective.createdAt,
       updatedAt: objective.updatedAt,
     };
@@ -726,14 +837,20 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       selfTestReportBody: item.selfTestReportBody,
       submittedAt: item.submittedAt,
     }));
-  const objectiveContributionReviewItems: ObjectiveContributionReview[] = objectiveContributionReviewRows
-    .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
+  const objectiveTrialReviewItems: ObjectiveTrialReview[] = objectiveTrialReviewRows
+    .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt))
     .map((item) => ({
       id: item.id,
       objectiveId: item.objectiveId,
-      reviewer: item.reviewer,
-      allocations: item.allocations,
-      submittedAt: item.submittedAt,
+      requestedBy: item.requestedBy,
+      body: item.body,
+      resultClaims: item.resultClaims,
+      selfTestReportBody: item.selfTestReportBody,
+      status: item.status,
+      commanderFeedback: item.commanderFeedback,
+      reviewedBy: item.reviewedBy,
+      reviewedAt: item.reviewedAt,
+      requestedAt: item.requestedAt,
     }));
   const pointLedgerItems: PointLedgerEntry[] = pointLedgerRows
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
@@ -768,7 +885,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     feedback: feedbackItems,
     comments: commentItems,
     objectiveLoot: objectiveLootItems,
-    objectiveContributionReviews: objectiveContributionReviewItems,
+    objectiveTrialReviews: objectiveTrialReviewItems,
     pointLedger: pointLedgerItems,
     permissionRules,
   };
@@ -802,19 +919,25 @@ export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): 
 }
 
 export type BountyHallItem = {
+  applications: ChallengeApplication[];
+  approvedApplicants: string[];
+  challengers: string[];
   uncertaintyPoints: number;
   deadline: string;
   definer: string;
   difficultyRank: number;
   hasCurrentApplication: boolean;
+  isCurrentChallenger: boolean;
   isRecruitment: boolean;
   objective: Objective;
+  pendingApplications: ChallengeApplication[];
   result: Result | null;
   results: Result[];
   source: BountySource;
 };
 
 export type BountyHallData = {
+  publicItems: BountyHallItem[];
   recruitmentItems: BountyHallItem[];
   availableItems: BountyHallItem[];
   objectiveOptions: Objective[];
@@ -822,7 +945,7 @@ export type BountyHallData = {
 };
 
 function resultDifficultyRank(result: Result) {
-  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : difficultyRanks["进阶"];
+  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : 0;
 }
 
 function bountySortTitle(item: BountyHallItem) {
@@ -830,17 +953,18 @@ function bountySortTitle(item: BountyHallItem) {
 }
 
 function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
+  if (left.isRecruitment !== right.isRecruitment) return left.isRecruitment ? -1 : 1;
   const leftDeadline = left.deadline || "9999-12-31";
   const rightDeadline = right.deadline || "9999-12-31";
   return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
 }
 
-function objectiveClosedForBountyHall(objective: Objective) {
-  return !canApplyForObjectiveChallenge(objective) || objectiveClosedForChallengeEntry(objective);
+function objectiveVisibleInBountyHall(objective: Objective) {
+  return isObjectiveChallengeDiscoverableByFlow(objective) && !objectiveClosedForChallengeEntry(objective);
 }
 
-function objectiveAcceptedForBountyHall(objective: Objective) {
-  return objective.challengers.length > 0 || isObjectiveChallengeAcceptedByFlow(objective);
+function objectiveAvailableForBountyApplication(objective: Objective) {
+  return canApplyForObjectiveChallenge(objective) && !objectiveClosedForChallengeEntry(objective);
 }
 
 function contributionSummaryFor(data: TaskManagementData, member: string) {
@@ -866,28 +990,36 @@ export async function getBountyHallData(viewerName: string, scope: TaskManagemen
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
     const isRecruitment = canUseChallengeActions && objective.assignedChallengers.includes(viewerName) && canAcceptObjectiveChallengeByFlow(objective);
-    if (objectiveClosedForBountyHall(objective) && !isRecruitment) return [];
-    if (objectiveAcceptedForBountyHall(objective) && !isRecruitment) return [];
+    if (!objectiveVisibleInBountyHall(objective) && !isRecruitment) return [];
 
-    const pendingApplications = (objective.challengeApplications ?? []).filter((application) => application.status === "pending");
+    const applications = objective.challengeApplications ?? [];
+    const pendingApplications = applications.filter((application) => application.status === "pending");
+    const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
+    const challengers = uniqueMembers(objective.challengers ?? []);
     return [{
-      uncertaintyPoints: objectiveResults.reduce((sum, item) => sum + item.uncertaintyScore, 0),
+      applications,
+      approvedApplicants,
+      challengers,
+      uncertaintyPoints: objectiveBasePointsForResults(objectiveResults),
       deadline: objective.finalDueAt,
       definer: result?.definer ?? "",
       difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
       hasCurrentApplication: canUseChallengeActions && pendingApplications.some((application) => application.applicant === viewerName),
+      isCurrentChallenger: canUseChallengeActions && challengers.includes(viewerName),
       isRecruitment,
       objective,
+      pendingApplications,
       result: result ?? null,
       results: objectiveResults,
       source: result?.source ?? "managerDefined",
     }];
   }).sort(compareBountyItems);
 
-  const availableItems = items.filter((item) => !item.isRecruitment);
-  const objectiveOptionIds = new Set(availableItems.map((item) => item.objective.id));
+  const availableItems = items.filter((item) => !item.isRecruitment && objectiveAvailableForBountyApplication(item.objective));
+  const objectiveOptionIds = new Set(items.map((item) => item.objective.id));
 
   return {
+    publicItems: items,
     recruitmentItems: items.filter((item) => item.isRecruitment),
     availableItems,
     objectiveOptions: data.objectives.filter((objective) => objectiveOptionIds.has(objective.id)),
@@ -930,8 +1062,8 @@ export async function getMyChallengesData(member: string, includeAll = false, sc
     feedback: data.feedback.filter((item) => objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)),
     comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
-    objectiveContributionReviews: data.objectiveContributionReviews.filter((item) => objectiveIds.has(item.objectiveId)),
-    pointLedger: data.pointLedger.filter((item) => objectiveIds.has(item.objectiveId)),
+    objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
+    pointLedger: data.pointLedger,
     permissionRules: data.permissionRules,
   };
 }
@@ -1001,10 +1133,19 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     completionMultiplier: null,
     objectiveBasePoints: 0,
     objectiveSettlementPoints: null,
+    publishedAt: null,
     createdAt: now,
     updatedAt: now,
     createdBy: context.userId,
     updatedBy: context.userId,
+  });
+
+  publishOrfDataInvalidation({
+    actorUserId: context.userId,
+    models: ["taskManagement"],
+    reason: "objective.created",
+    target: { id, type: "objective" },
+    teamId: storageScopeId,
   });
 
   const data = await getTaskManagementData({ scope: context.scope });
@@ -1070,6 +1211,13 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
   if (!created) {
     return null;
   }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: created.id, type: "result" },
+    teamId: runtimeScopeStorageId(created.scope),
+  });
 
   const data = await getTaskManagementData({ scope: created.scope });
   return data.results.find((result) => result.id === created.id) ?? null;
@@ -1155,6 +1303,12 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
   }
 
   await notifyAdminsOfChallengeAcceptance(acceptedResult.notification);
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.lifecycle.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(acceptedResult.scope),
+  });
 
   const data = await getTaskManagementData({ scope: acceptedResult.scope });
   const accepted = data.objectives.find((item) => item.id === objectiveId);
@@ -1166,13 +1320,18 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "alreadyApplied" }
   | { status: "alreadyAccepted"; challengers: string[] }
   | { status: "forbidden" }
+  | { status: "invalidReason" }
   | { status: "closed" }
   | { status: "notFound" };
 
-export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId?: string | null): Promise<ApplyObjectiveChallengeOutcome> {
+export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId: string | null | undefined, reason: string): Promise<ApplyObjectiveChallengeOutcome> {
   const nextApplicant = applicant.trim();
   if (!nextApplicant) {
     return { status: "notFound" };
+  }
+  const applicationReason = reason.trim();
+  if (!applicationReason) {
+    return { status: "invalidReason" };
   }
 
   const appliedResult = await db.transaction(async (tx) => {
@@ -1200,6 +1359,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     const application: ChallengeApplication = {
       id: makeId("challenge-application"),
       applicant: nextApplicant,
+      reason: applicationReason,
       status: "pending",
       createdAt: nowIso(),
       decidedAt: null,
@@ -1222,6 +1382,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
         applicant: nextApplicant,
         objectiveId,
         objectiveTitle: objective.title,
+        reason: applicationReason,
         teamId: objective.teamId,
       },
     };
@@ -1232,6 +1393,12 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
   }
 
   await notifyAdminsOfChallengeApplication(appliedResult.notification);
+  publishObjectiveInvalidation({
+    actorUserId,
+    reason: "objective.challenge.application.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(appliedResult.scope),
+  });
 
   const data = await getTaskManagementData({ scope: appliedResult.scope });
   const applied = data.objectives.find((item) => item.id === objectiveId);
@@ -1251,16 +1418,31 @@ async function objectiveOutcome(objectiveId: string, scope?: RuntimeScope | null
 
 export async function publishObjective(objectiveId: string, actorId: string): Promise<ObjectiveFlowMutationOutcome> {
   const transition = objectiveLifecycleTransitions.publishCandidate;
+  const publishedAt = today();
   const updated = await db
     .update(objectives)
-    .set({ flowStatus: transition.to, stage: transition.stage, status: "Draft", updatedAt: today(), updatedBy: actorId })
+    .set({ flowStatus: transition.to, stage: transition.stage, status: "Draft", publishedAt, updatedAt: publishedAt, updatedBy: actorId })
     .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, transition.from)))
-    .returning({ id: objectives.id, teamId: objectives.teamId });
+    .returning({ id: objectives.id, teamId: objectives.teamId, title: objectives.title });
   if (updated.length === 0) {
     const [existing] = await db.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
     return existing ? { status: "invalid" } : { status: "notFound" };
   }
-  return objectiveOutcome(objectiveId, storageScope(updated[0]?.teamId));
+  const published = updated[0]!;
+  await notifyTeamOfObjectivePublication({
+    actorUserId: actorId,
+    objectiveId: published.id,
+    objectivePublishedAt: publishedAt,
+    objectiveTitle: published.title,
+    teamId: published.teamId,
+  });
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.lifecycle.changed",
+    objectiveId,
+    teamId: published.teamId,
+  });
+  return objectiveOutcome(objectiveId, storageScope(published.teamId));
 }
 
 export async function approveObjectiveChallengeApplication(
@@ -1301,10 +1483,28 @@ export async function approveObjectiveChallengeApplication(
       })
       .where(eq(objectives.id, objectiveId));
 
-    return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
+    return {
+      status: "ok" as const,
+      scope: runtimeScope(objective.teamId),
+      notification: {
+        actorUserId: actorId,
+        applicant: application.applicant,
+        objectiveId,
+        objectiveTitle: objective.title,
+        teamId: objective.teamId,
+      },
+    };
   });
 
-  return approvedResult.status === "ok" ? objectiveOutcome(objectiveId, approvedResult.scope) : approvedResult;
+  if (approvedResult.status !== "ok") return approvedResult;
+  await notifyMemberOfChallengeApplicationApproval(approvedResult.notification);
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.challenge.application.changed",
+    objectiveId,
+    teamId: runtimeScopeStorageId(approvedResult.scope),
+  });
+  return objectiveOutcome(objectiveId, approvedResult.scope);
 }
 
 export async function rejectObjectiveChallengeApplication(
@@ -1340,7 +1540,17 @@ export async function rejectObjectiveChallengeApplication(
     return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return rejectedResult.status === "ok" ? objectiveOutcome(objectiveId, rejectedResult.scope) : rejectedResult;
+  if (rejectedResult.status === "ok") {
+    publishObjectiveInvalidation({
+      actorUserId: actorId,
+      reason: "objective.challenge.application.changed",
+      objectiveId,
+      teamId: runtimeScopeStorageId(rejectedResult.scope),
+    });
+    return objectiveOutcome(objectiveId, rejectedResult.scope);
+  }
+
+  return rejectedResult;
 }
 
 export async function recruitObjectiveChallengers(
@@ -1386,6 +1596,12 @@ export async function recruitObjectiveChallengers(
 
   if (recruitedResult.status === "ok") {
     await notifyMembersOfRecruitment(recruitedResult.notification);
+    publishObjectiveInvalidation({
+      actorUserId: actorId,
+      reason: "objective.challenge.recruitment.changed",
+      objectiveId,
+      teamId: runtimeScopeStorageId(recruitedResult.scope),
+    });
   }
 
   return recruitedResult.status === "ok" ? objectiveOutcome(objectiveId, recruitedResult.scope) : recruitedResult;
@@ -1397,8 +1613,12 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
     if (!objective) return { status: "notFound" as const };
     if (!canFreezeObjectiveByFlow(objective)) return { status: "invalid" as const };
 
-    const objectiveResults = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId)).limit(1);
+    const objectiveResults = await tx
+      .select({ id: results.id, uncertaintyLevel: results.uncertaintyLevel, uncertaintyScore: results.uncertaintyScore })
+      .from(results)
+      .where(eq(results.objectiveId, objectiveId));
     if (objectiveResults.length === 0) return { status: "invalid" as const };
+    if (hasUncalibratedResultPoints(objectiveResults)) return { status: "invalid" as const };
 
     const decidedAt = nowIso();
     const challengeApplications = (objective.challengeApplications ?? []).map((application) =>
@@ -1424,12 +1644,17 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
     return { status: "ok" as const, scope: runtimeScope(objective.teamId) };
   });
 
-  return frozen.status === "ok" ? objectiveOutcome(objectiveId, frozen.scope) : frozen;
-}
+  if (frozen.status === "ok") {
+    publishObjectiveInvalidation({
+      actorUserId: actorId,
+      reason: "objective.lifecycle.changed",
+      objectiveId,
+      teamId: runtimeScopeStorageId(frozen.scope),
+    });
+    return objectiveOutcome(objectiveId, frozen.scope);
+  }
 
-export async function reopenObjectiveReestimate(_objectiveId: string, _actorId: string): Promise<ObjectiveFlowMutationOutcome> {
-  // Reestimate is a bounded adjustment window. Once it expires or the objective is frozen, this flow intentionally stays closed.
-  return { status: "invalid" };
+  return frozen;
 }
 
 export async function canEditResultDuringReestimate(resultId: string, member: string): Promise<boolean> {
@@ -1605,6 +1830,14 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
     }
   });
 
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "feedback.changed",
+    target: { id, type: "feedback" },
+    teamId: result.teamId,
+  });
+
   const data = await getTaskManagementData({ scope: runtimeScope(result.teamId) });
   const item = data.feedback.find((entry) => entry.id === id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
@@ -1650,13 +1883,24 @@ export async function updateFeedbackStatus(
     .set({ status, updatedAt: today(), updatedBy: actor.id })
     .where(eq(feedback.id, feedbackId))
     .returning({ id: feedback.id });
-  return updated.length > 0 ? { status: "ok" } : { status: "notFound" };
+  if (updated.length === 0) {
+    return { status: "notFound" };
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "feedback.changed",
+    target: { id: feedbackId, type: "feedback" },
+    teamId: target.teamId,
+  });
+  return { status: "ok" };
 }
 
 export async function updateResultConfidence(resultId: string, confidence: number, actorId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
-      .select({ flowStatus: objectives.flowStatus })
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
@@ -1671,8 +1915,56 @@ export async function updateResultConfidence(resultId: string, confidence: numbe
       .set({ confidence, updatedBy: actorId })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
-    return updated.length > 0;
+    return updated.length > 0 ? { teamId: target.teamId } : null;
   });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
+}
+
+export async function updateResultUncertaintyLevel(resultId: string, uncertaintyLevel: UncertaintyLevel, actorId: string): Promise<boolean> {
+  const updatedResult = await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
+      return false;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ uncertaintyLevel, uncertaintyScore: uncertaintyScore(uncertaintyLevel), updatedBy: actorId })
+      .where(eq(results.id, resultId))
+      .returning({ id: results.id });
+    return updated.length > 0 ? { teamId: target.teamId } : null;
+  });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
 }
 
 export async function proposeResultUpdate(
@@ -1685,7 +1977,7 @@ export async function proposeResultUpdate(
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
       .select({
         id: results.id,
@@ -1708,7 +2000,7 @@ export async function proposeResultUpdate(
         .where(eq(feedback.id, input.feedbackId))
         .limit(1);
       if (!linkedFeedback || linkedFeedback.teamId !== target.teamId || linkedFeedback.linkedResultId !== target.id) {
-        return false;
+        return null;
       }
     }
 
@@ -1718,7 +2010,7 @@ export async function proposeResultUpdate(
       .where(eq(results.id, input.resultId))
       .returning({ id: results.id });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx
@@ -1760,8 +2052,21 @@ export async function proposeResultUpdate(
       sortOrder: 0,
     });
 
-    return true;
+    return { teamId: target.teamId };
   });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: input.resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
 }
 
 export interface CreateCommentInput {
@@ -1997,6 +2302,7 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
     messageIds.length > 0
       ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIds))
       : [];
+  const authorAvatarUrls = await getUserAvatarUrlMap(messages.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const attachmentsByMessage = groupCommentAttachmentsByMessage(attachmentRows);
   return {
     id: thread.id,
@@ -2012,6 +2318,8 @@ async function getCommentThread(threadId: string): Promise<CommentThread | null>
       .map((message) => ({
         id: message.id,
         author: message.author,
+        authorUserId: optional(message.authorUserId),
+        authorAvatarUrl: message.authorUserId ? authorAvatarUrls.get(message.authorUserId) ?? null : null,
         body: message.body,
         attachments: attachmentsByMessage.get(message.id) ?? [],
         createdAt: message.createdAt,
@@ -2383,6 +2691,14 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     teamId: target.storageScopeId,
   });
 
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: createdComment.threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
+
   return { status: "ok", thread: (await getCommentThread(createdComment.threadId)) ?? undefined };
 }
 
@@ -2410,6 +2726,13 @@ export async function updateCommentThreadStatus(
   }
 
   await db.update(commentThreads).set({ status, updatedAt: nowIso() }).where(eq(commentThreads.id, threadId));
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
   return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
 
@@ -2501,6 +2824,14 @@ export async function updateCommentMessage(
 
   await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
 
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
+
   return { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
 
@@ -2575,6 +2906,14 @@ export async function deleteCommentMessage(
   });
   await deleteStoredCommentAttachmentObjects(attachmentsToDelete);
 
+  publishOrfDataInvalidation({
+    actorUserId: actor.id,
+    models: ["taskManagement"],
+    reason: "comment.changed",
+    target: { id: threadId, type: "comment" },
+    teamId: target.storageScopeId,
+  });
+
   return threadRemoved ? { status: "ok" } : { status: "ok", thread: (await getCommentThread(threadId)) ?? undefined };
 }
 
@@ -2606,12 +2945,43 @@ export type ObjectiveLootMutationOutcome =
   | { status: "invalid" }
   | { status: "closed" };
 
-export type ObjectiveContributionReviewMutationOutcome =
-  | { status: "ok"; review: ObjectiveContributionReview }
+export type ObjectiveTrialReviewMutationOutcome =
+  | { status: "ok"; trialReview: ObjectiveTrialReview }
   | { status: "notFound" }
   | { status: "forbidden" }
   | { status: "invalid" }
-  | { status: "closed" };
+  | { status: "closed" }
+  | { status: "duplicate" };
+
+type ObjectiveResultClaimsValidation =
+  | { status: "ok"; resultClaims: LootResultClaim[] }
+  | { status: "invalid" };
+
+async function validateObjectiveResultClaims(objectiveId: string, resultClaims: LootResultClaim[]): Promise<ObjectiveResultClaimsValidation> {
+  const objectiveResults = await db.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
+  const resultIds = new Set(objectiveResults.map((result) => result.id));
+  const claimsByResult = new Map<string, LootResultClaim>();
+
+  for (const claim of resultClaims) {
+    if (!resultIds.has(claim.resultId)) continue;
+    const evidenceText = claim.evidenceText.trim();
+    if (claim.claim !== "notClaimed" && !evidenceText) {
+      return { status: "invalid" };
+    }
+
+    claimsByResult.set(claim.resultId, {
+      resultId: claim.resultId,
+      claim: claim.claim,
+      evidenceText,
+    });
+  }
+
+  if (claimsByResult.size !== resultIds.size) {
+    return { status: "invalid" };
+  }
+
+  return { status: "ok", resultClaims: Array.from(claimsByResult.values()) };
+}
 
 export async function submitObjectiveLoot(
   objectiveId: string,
@@ -2636,24 +3006,8 @@ export async function submitObjectiveLoot(
     return { status: "forbidden" };
   }
 
-  const objectiveResults = await db.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
-  const resultIds = new Set(objectiveResults.map((result) => result.id));
-  const claimsByResult = new Map<string, LootResultClaim>();
-  for (const claim of input.resultClaims) {
-    if (!resultIds.has(claim.resultId)) continue;
-    const evidenceText = claim.evidenceText.trim();
-    if (claim.claim !== "notClaimed" && !evidenceText) {
-      return { status: "invalid" };
-    }
-
-    claimsByResult.set(claim.resultId, {
-      resultId: claim.resultId,
-      claim: claim.claim,
-      evidenceText,
-    });
-  }
-
-  if (claimsByResult.size !== resultIds.size) {
+  const resultClaims = await validateObjectiveResultClaims(objectiveId, input.resultClaims);
+  if (resultClaims.status === "invalid") {
     return { status: "invalid" };
   }
 
@@ -2675,7 +3029,7 @@ export async function submitObjectiveLoot(
       objectiveId: objective.id,
       submittedBy: actor.name,
       body,
-      resultClaims: Array.from(claimsByResult.values()),
+      resultClaims: resultClaims.resultClaims,
       selfTestReportUrl: input.selfTestReportUrl?.trim() || null,
       selfTestReportBody: input.selfTestReportBody?.trim() || null,
       submittedAt,
@@ -2695,49 +3049,155 @@ export async function submitObjectiveLoot(
     teamId: objective.teamId,
   });
 
+  publishObjectiveInvalidation({
+    actorUserId: actor.id,
+    reason: "objective.loot.changed",
+    objectiveId: objective.id,
+    teamId: objective.teamId,
+  });
+
   const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
   const loot = data.objectiveLoot.find((item) => item.id === lootId);
   return loot ? { status: "ok", loot } : { status: "notFound" };
 }
 
-export async function submitObjectiveContributionReview(
+export async function submitObjectiveTrialReview(
   objectiveId: string,
-  input: { allocations: ContributionAllocation[] },
+  input: SubmitObjectiveLootInput,
   actor: Pick<CommentActor, "id" | "name" | "role">,
-): Promise<ObjectiveContributionReviewMutationOutcome> {
+): Promise<ObjectiveTrialReviewMutationOutcome> {
+  const body = input.body.trim();
+  if (!body) {
+    return { status: "invalid" };
+  }
+
   const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
   if (!objective) {
     return { status: "notFound" };
   }
 
-  if (!canSubmitObjectiveContributionReviewByFlow(objective)) {
+  if (!canSubmitObjectiveLootByFlow(objective)) {
     return { status: "closed" };
   }
 
-  const challengers = uniqueMembers(objective.challengers ?? []);
-  if (actor.role !== "member" || !challengers.includes(actor.name)) {
+  if (actor.role !== "member" || !uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
     return { status: "forbidden" };
   }
 
-  const allocations = normalizeContributionAllocations(input.allocations, challengers);
-  if (allocations.length !== challengers.length) {
+  const resultClaims = await validateObjectiveResultClaims(objectiveId, input.resultClaims);
+  if (resultClaims.status === "invalid") {
     return { status: "invalid" };
   }
 
-  const reviewId = makeId("contribution-review");
-  const submittedAt = nowIso();
-  await db.insert(objectiveContributionReviews).values({
-    id: reviewId,
-    teamId: objective.teamId,
-    objectiveId: objective.id,
-    reviewer: actor.name,
-    allocations,
-    submittedAt,
+  const requestedAt = nowIso();
+  const trialReviewId = makeId("trial-review");
+  const created = await db.transaction(async (tx) => {
+    const [lockedObjective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!lockedObjective) return { status: "notFound" as const };
+    if (!canSubmitObjectiveLootByFlow(lockedObjective)) return { status: "closed" as const };
+
+    const existing = await tx
+      .select({ id: objectiveTrialReviews.id })
+      .from(objectiveTrialReviews)
+      .where(eq(objectiveTrialReviews.objectiveId, objectiveId))
+      .limit(1);
+    if (existing.length > 0) return { status: "duplicate" as const };
+
+    await tx.insert(objectiveTrialReviews).values({
+      id: trialReviewId,
+      teamId: lockedObjective.teamId,
+      objectiveId: lockedObjective.id,
+      requestedBy: actor.name,
+      body,
+      resultClaims: resultClaims.resultClaims,
+      selfTestReportBody: input.selfTestReportBody?.trim() || null,
+      status: "requested",
+      commanderFeedback: null,
+      reviewedBy: null,
+      reviewedAt: null,
+      requestedAt,
+    });
+
+    await tx
+      .update(objectives)
+      .set({ updatedAt: today(), updatedBy: actor.id })
+      .where(eq(objectives.id, objectiveId));
+
+    return { status: "created" as const, teamId: lockedObjective.teamId };
   });
 
-  const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
-  const review = data.objectiveContributionReviews.find((item) => item.id === reviewId);
-  return review ? { status: "ok", review } : { status: "notFound" };
+  if (created.status === "notFound") return { status: "notFound" };
+  if (created.status === "closed") return { status: "closed" };
+  if (created.status === "duplicate") return { status: "duplicate" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actor.id,
+    reason: "objective.trialReview.changed",
+    objectiveId: objective.id,
+    teamId: created.teamId,
+  });
+
+  const data = await getTaskManagementData({ scope: runtimeScope(created.teamId) });
+  const trialReview = data.objectiveTrialReviews.find((item) => item.id === trialReviewId);
+  return trialReview ? { status: "ok", trialReview } : { status: "notFound" };
+}
+
+export async function reviewObjectiveTrialReview(
+  objectiveId: string,
+  trialReviewId: string,
+  input: { status: Exclude<ObjectiveTrialReviewStatus, "requested">; commanderFeedback: string },
+  actorId: string,
+): Promise<ObjectiveTrialReviewMutationOutcome> {
+  const commanderFeedback = input.commanderFeedback.trim();
+  if (!commanderFeedback) {
+    return { status: "invalid" };
+  }
+
+  const reviewedAt = nowIso();
+  const reviewed = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+    if (!canSubmitObjectiveLootByFlow(objective)) return { status: "closed" as const };
+
+    const [trialReview] = await tx
+      .select()
+      .from(objectiveTrialReviews)
+      .where(and(eq(objectiveTrialReviews.id, trialReviewId), eq(objectiveTrialReviews.objectiveId, objectiveId)))
+      .limit(1);
+    if (!trialReview) return { status: "notFound" as const };
+    if (trialReview.status !== "requested") return { status: "closed" as const };
+
+    await tx
+      .update(objectiveTrialReviews)
+      .set({
+        status: input.status,
+        commanderFeedback,
+        reviewedBy: actorId,
+        reviewedAt,
+      })
+      .where(eq(objectiveTrialReviews.id, trialReviewId));
+
+    await tx
+      .update(objectives)
+      .set({ updatedAt: today(), updatedBy: actorId })
+      .where(eq(objectives.id, objectiveId));
+
+    return { status: "reviewed" as const, teamId: objective.teamId };
+  });
+
+  if (reviewed.status === "notFound") return { status: "notFound" };
+  if (reviewed.status === "closed") return { status: "closed" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.trialReview.changed",
+    objectiveId,
+    teamId: reviewed.teamId,
+  });
+
+  const data = await getTaskManagementData({ scope: runtimeScope(reviewed.teamId) });
+  const trialReview = data.objectiveTrialReviews.find((item) => item.id === trialReviewId);
+  return trialReview ? { status: "ok", trialReview } : { status: "notFound" };
 }
 
 export interface ReviewObjectiveLootInput {
@@ -2768,10 +3228,6 @@ export async function reviewObjectiveLoot(
 
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
   const challengers = uniqueMembers(objective.challengers ?? []);
-  const contributionReviews = await db
-    .select()
-    .from(objectiveContributionReviews)
-    .where(eq(objectiveContributionReviews.objectiveId, objectiveId));
   const settlementPlan = planObjectiveSettlement({
     objective: { ...objective, challengers },
     results: resultRows.map((result) => ({
@@ -2782,13 +3238,6 @@ export async function reviewObjectiveLoot(
     loot,
     resultReviews: input.resultReviews,
     acceptedResult: input.acceptedResult,
-    contributionReviews: contributionReviews.map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      reviewer: item.reviewer,
-      allocations: item.allocations,
-      submittedAt: item.submittedAt,
-    })),
     contributionResolution: input.contributionResolution,
     contributionRatios: input.contributionRatios,
   });
@@ -2858,6 +3307,13 @@ export async function reviewObjectiveLoot(
   });
   if (!settled) return { status: "invalid" };
 
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.lifecycle.changed",
+    objectiveId,
+    teamId: objective.teamId,
+  });
+
   return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
 }
 
@@ -2922,12 +3378,19 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     return null;
   }
 
+  publishOrfDataInvalidation({
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: created.id, type: "task" },
+    teamId: runtimeScopeStorageId(created.scope),
+  });
+
   const data = await getTaskManagementData({ scope: created.scope });
   return data.tasks.find((task) => task.id === created.id) ?? null;
 }
 
 export async function createChecklistItem(taskId: string, input: CreateChecklistItemInput, actorId?: string | null): Promise<TaskChecklistItem | null> {
-  return db.transaction(async (tx) => {
+  const created = await db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
       return null;
@@ -2963,46 +3426,92 @@ export async function createChecklistItem(taskId: string, input: CreateChecklist
       .set({ status: task.status === "Done" ? "In Progress" : task.status, updatedAt, ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId));
 
-    return { id, label, done: false, updatedAt };
+    return { item: { id, label, done: false, updatedAt }, teamId: task.teamId };
   });
+
+  if (!created) {
+    return null;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: created.item.id, type: "subtask" },
+    teamId: created.teamId,
+  });
+  return created.item;
+}
+
+export type ObjectiveDetailsMutationOutcome =
+  | { status: "ok"; objective: Objective }
+  | { status: "notFound" }
+  | { status: "invalid" }
+  | { status: "locked" };
+
+export async function updateObjectiveDetails(
+  objectiveId: string,
+  input: { finalDueAt?: string; title?: string },
+  actorId?: string | null,
+): Promise<ObjectiveDetailsMutationOutcome> {
+  const nextTitle = input.title?.trim();
+  if (input.title !== undefined && !nextTitle) {
+    return { status: "invalid" };
+  }
+
+  const updatedObjective = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective) return { status: "notFound" as const };
+
+    const update: Partial<typeof objectives.$inferInsert> = {
+      updatedAt: today(),
+      updatedBy: actorId ?? objective.updatedBy,
+    };
+
+    if (nextTitle !== undefined) {
+      update.title = nextTitle;
+    }
+
+    if (input.finalDueAt !== undefined) {
+      const deadlineChange = validateObjectiveDeadlineChange(objective, input.finalDueAt);
+      if (deadlineChange.status === "invalidDate") return { status: "invalid" as const };
+      if (deadlineChange.status === "locked" || deadlineChange.status === "frozenMustExtend") return { status: "locked" as const };
+      update.finalDueAt = input.finalDueAt;
+    }
+
+    const updated = await tx
+      .update(objectives)
+      .set(update)
+      .where(eq(objectives.id, objectiveId))
+      .returning({ id: objectives.id, teamId: objectives.teamId });
+    if (updated.length === 0) {
+      return { status: "notFound" as const };
+    }
+
+    if (nextTitle !== undefined) {
+      await tx
+        .update(commentThreads)
+        .set({ targetTitle: nextTitle, updatedAt: nowIso() })
+        .where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
+    }
+    return { status: "updated" as const, teamId: updated[0]!.teamId };
+  });
+
+  if (updatedObjective.status === "notFound") return { status: "notFound" };
+  if (updatedObjective.status === "invalid") return { status: "invalid" };
+  if (updatedObjective.status === "locked") return { status: "locked" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.changed",
+    objectiveId,
+    teamId: updatedObjective.teamId,
+  });
+  return objectiveOutcome(objectiveId, runtimeScope(updatedObjective.teamId));
 }
 
 export async function updateObjectiveTitle(objectiveId: string, title: string): Promise<boolean> {
-  const nextTitle = title.trim();
-  if (!nextTitle) {
-    return false;
-  }
-
-  return db.transaction(async (tx) => {
-    const updated = await tx
-      .update(objectives)
-      .set({ title: nextTitle, updatedAt: today() })
-      .where(eq(objectives.id, objectiveId))
-      .returning({ id: objectives.id });
-    if (updated.length === 0) {
-      return false;
-    }
-
-    await tx
-      .update(commentThreads)
-      .set({ targetTitle: nextTitle, updatedAt: nowIso() })
-      .where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
-    return true;
-  });
-}
-
-export async function updateObjectiveStage(objectiveId: string, stage: OrfStage): Promise<boolean> {
-  const [objective] = await db
-    .select({ flowStatus: objectives.flowStatus })
-    .from(objectives)
-    .where(eq(objectives.id, objectiveId))
-    .limit(1);
-  if (!objective || !isObjectiveStageCompatibleWithFlowStatus(objective.flowStatus, stage)) {
-    return false;
-  }
-
-  const updated = await db.update(objectives).set({ stage, updatedAt: today() }).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
-  return updated.length > 0;
+  return (await updateObjectiveDetails(objectiveId, { title })).status === "ok";
 }
 
 export async function updateResultTitle(resultId: string, title: string): Promise<boolean> {
@@ -3011,29 +3520,41 @@ export async function updateResultTitle(resultId: string, title: string): Promis
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
-      .select({ flowStatus: objectives.flowStatus })
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
       .limit(1)
       .for("update");
     if (!target || !canMutateObjectiveResultsByFlow(target)) {
-      return false;
+      return null;
     }
 
     const updated = await tx.update(results).set({ title: nextTitle }).where(eq(results.id, resultId)).returning({ id: results.id });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
-    return true;
+    return { teamId: target.teamId };
   });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
 }
 
 export async function updateTaskTitle(taskId: string, title: string, actorId?: string | null): Promise<boolean> {
@@ -3042,22 +3563,35 @@ export async function updateTaskTitle(taskId: string, title: string, actorId?: s
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedTask = await db.transaction(async (tx) => {
     const updated = await tx
       .update(tasks)
       .set({ title: nextTitle, updatedAt: today(), ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId))
-      .returning({ id: tasks.id });
+      .returning({ id: tasks.id, teamId: tasks.teamId });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "task"), eq(commentThreads.targetId, taskId)));
-    return true;
+    return { teamId: updated[0]!.teamId };
   });
+
+  if (!updatedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: updatedTask.teamId,
+  });
+  return true;
 }
 
 export async function updateChecklistItemLabel(taskId: string, itemId: string, label: string, actorId?: string | null): Promise<boolean> {
@@ -3066,7 +3600,11 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
     return false;
   }
 
-  return db.transaction(async (tx) => {
+  const updatedItem = await db.transaction(async (tx) => {
+    const [task] = await tx.select({ teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
+    if (!task) {
+      return null;
+    }
     const updated = await tx
       .update(taskChecklistItems)
       .set({ label: nextLabel, updatedAt: today() })
@@ -3074,7 +3612,7 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
       .returning({ id: taskChecklistItems.id });
 
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx.update(tasks).set({ updatedAt: today(), ...taskAuditUpdate(actorId) }).where(eq(tasks.id, taskId));
@@ -3082,18 +3620,31 @@ export async function updateChecklistItemLabel(taskId: string, itemId: string, l
       .update(commentThreads)
       .set({ targetTitle: nextLabel, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "subtask"), eq(commentThreads.targetId, itemId)));
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!updatedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: updatedItem.teamId,
+  });
+  return true;
 }
 
 export async function deleteObjective(objectiveId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    const [objective] = await tx.select({ flowStatus: objectives.flowStatus, id: objectives.id }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  const deletedObjective = await db.transaction(async (tx) => {
+    const [objective] = await tx.select({ flowStatus: objectives.flowStatus, id: objectives.id, teamId: objectives.teamId }).from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
     if (!objective) {
-      return false;
+      return null;
     }
     if (!canDeleteObjectiveByFlow(objective)) {
-      return false;
+      return null;
     }
 
     const resultRows = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
@@ -3118,38 +3669,61 @@ export async function deleteObjective(objectiveId: string): Promise<boolean> {
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
 
     const deleted = await tx.delete(objectives).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
-    return deleted.length > 0;
+    return deleted.length > 0 ? { teamId: objective.teamId } : null;
   });
+
+  if (!deletedObjective) {
+    return false;
+  }
+
+  publishObjectiveInvalidation({
+    reason: "objective.changed",
+    objectiveId,
+    teamId: deletedObjective.teamId,
+  });
+  return true;
 }
 
 export async function deleteResult(resultId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const deletedResult = await db.transaction(async (tx) => {
     const [result] = await tx
-      .select({ flowStatus: objectives.flowStatus, id: results.id })
+      .select({ flowStatus: objectives.flowStatus, id: results.id, objectiveId: results.objectiveId, teamId: results.teamId })
       .from(results)
       .innerJoin(objectives, eq(objectives.id, results.objectiveId))
       .where(eq(results.id, resultId))
       .limit(1)
       .for("update");
     if (!result) {
-      return false;
+      return null;
     }
     if (!canMutateObjectiveResultsByFlow(result)) {
-      return false;
+      return null;
     }
 
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, resultId)));
 
     const deleted = await tx.delete(results).where(eq(results.id, resultId)).returning({ id: results.id });
-    return deleted.length > 0;
+    return deleted.length > 0 ? { objectiveId: result.objectiveId, teamId: result.teamId } : null;
   });
+
+  if (!deletedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: deletedResult.teamId,
+  });
+  return true;
 }
 
 export async function deleteTask(taskId: string): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    const [task] = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+  const deletedTask = await db.transaction(async (tx) => {
+    const [task] = await tx.select({ id: tasks.id, teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
     if (!task) {
-      return false;
+      return null;
     }
 
     const checklistRows = await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId));
@@ -3161,15 +3735,27 @@ export async function deleteTask(taskId: string): Promise<boolean> {
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), eq(commentThreads.targetId, taskId)));
 
     const deleted = await tx.delete(tasks).where(eq(tasks.id, taskId)).returning({ id: tasks.id });
-    return deleted.length > 0;
+    return deleted.length > 0 ? { teamId: task.teamId } : null;
   });
+
+  if (!deletedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: deletedTask.teamId,
+  });
+  return true;
 }
 
 export async function deleteChecklistItem(taskId: string, itemId: string, actorId?: string | null): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const deletedItem = await db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1).for("update");
     if (!task) {
-      return false;
+      return null;
     }
 
     const deleted = await tx
@@ -3177,7 +3763,7 @@ export async function deleteChecklistItem(taskId: string, itemId: string, actorI
       .where(and(eq(taskChecklistItems.taskId, taskId), eq(taskChecklistItems.id, itemId)))
       .returning({ id: taskChecklistItems.id });
     if (deleted.length === 0) {
-      return false;
+      return null;
     }
 
     await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), eq(commentThreads.targetId, itemId)));
@@ -3193,16 +3779,29 @@ export async function deleteChecklistItem(taskId: string, itemId: string, actorI
       .update(tasks)
       .set({ status: statusFromChecklist(rows, task.status), updatedAt: today(), ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId));
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!deletedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: deletedItem.teamId,
+  });
+  return true;
 }
 
 export async function moveResult(resultId: string, referenceResultId: string, placement: "before" | "after"): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const movedResult = await db.transaction(async (tx) => {
     const [moving] = await tx.select().from(results).where(eq(results.id, resultId)).limit(1);
     const [reference] = await tx.select().from(results).where(eq(results.id, referenceResultId)).limit(1);
     if (!moving || !reference || moving.objectiveId !== reference.objectiveId || moving.id === reference.id) {
-      return false;
+      return null;
     }
     const [objective] = await tx
       .select({ flowStatus: objectives.flowStatus, id: objectives.id })
@@ -3211,10 +3810,10 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
       .limit(1)
       .for("update");
     if (!objective) {
-      return false;
+      return null;
     }
     if (!canMutateObjectiveResultsByFlow(objective)) {
-      return false;
+      return null;
     }
 
     const rows = await tx
@@ -3227,8 +3826,20 @@ export async function moveResult(resultId: string, referenceResultId: string, pl
       await tx.update(results).set({ sortOrder: index }).where(eq(results.id, id));
     }
     await tx.update(objectives).set({ updatedAt: today() }).where(eq(objectives.id, moving.objectiveId));
-    return true;
+    return { teamId: moving.teamId };
   });
+
+  if (!movedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: movedResult.teamId,
+  });
+  return true;
 }
 
 export async function moveTask(
@@ -3236,16 +3847,16 @@ export async function moveTask(
   input: { objectiveId: string; referenceTaskId?: string; placement?: "before" | "after" },
   actorId?: string | null,
 ): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const movedTask = await db.transaction(async (tx) => {
     const [task] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
     const [objective] = await tx.select({ id: objectives.id }).from(objectives).where(eq(objectives.id, input.objectiveId)).limit(1).for("update");
     if (!task || !objective || task.linkedObjectiveId !== objective.id) {
-      return false;
+      return null;
     }
     if (input.referenceTaskId) {
       const [referenceTask] = await tx.select().from(tasks).where(eq(tasks.id, input.referenceTaskId)).limit(1);
       if (!referenceTask || referenceTask.linkedObjectiveId !== objective.id || referenceTask.id === task.id) {
-        return false;
+        return null;
       }
     }
 
@@ -3265,8 +3876,21 @@ export async function moveTask(
       await tx.update(tasks).set({ sortOrder: index }).where(eq(tasks.id, id));
     }
 
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!movedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: movedTask.teamId,
+  });
+  return true;
 }
 
 export async function moveChecklistItem(
@@ -3275,7 +3899,7 @@ export async function moveChecklistItem(
   input: { toTaskId: string; referenceItemId?: string; placement?: "before" | "after" },
   actorId?: string | null,
 ): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const movedItem = await db.transaction(async (tx) => {
     const [item] = await tx
       .select()
       .from(taskChecklistItems)
@@ -3284,7 +3908,7 @@ export async function moveChecklistItem(
     const [targetTask] = await tx.select().from(tasks).where(eq(tasks.id, input.toTaskId)).limit(1);
     const [sourceTask] = await tx.select().from(tasks).where(eq(tasks.id, taskId)).limit(1);
     if (!item || !targetTask || !sourceTask) {
-      return false;
+      return null;
     }
     const affectedTaskIds = Array.from(new Set([taskId, input.toTaskId])).sort();
     const lockedTasks = await tx
@@ -3293,12 +3917,12 @@ export async function moveChecklistItem(
       .where(inArray(tasks.id, affectedTaskIds))
       .for("update");
     if (lockedTasks.length !== affectedTaskIds.length) {
-      return false;
+      return null;
     }
     if (input.referenceItemId) {
       const [referenceItem] = await tx.select().from(taskChecklistItems).where(eq(taskChecklistItems.id, input.referenceItemId)).limit(1);
       if (!referenceItem || referenceItem.taskId !== input.toTaskId || referenceItem.id === itemId) {
-        return false;
+        return null;
       }
     }
 
@@ -3328,8 +3952,21 @@ export async function moveChecklistItem(
         .where(eq(tasks.id, currentTaskId));
     }
 
-    return true;
+    return { teamId: sourceTask.teamId };
   });
+
+  if (!movedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: movedItem.teamId,
+  });
+  return true;
 }
 
 export async function updateTaskStatus(taskId: string, status: TaskStatus, actorId?: string | null): Promise<boolean> {
@@ -3337,29 +3974,53 @@ export async function updateTaskStatus(taskId: string, status: TaskStatus, actor
     .update(tasks)
     .set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) })
     .where(eq(tasks.id, taskId))
-    .returning({ id: tasks.id });
-  return updated.length > 0;
+    .returning({ id: tasks.id, teamId: tasks.teamId });
+  if (updated.length === 0) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: updated[0]!.teamId,
+  });
+  return true;
 }
 
 export async function setTaskCompletion(taskId: string, done: boolean, actorId?: string | null): Promise<boolean> {
   const status: TaskStatus = done ? "Done" : "Todo";
-  return db.transaction(async (tx) => {
+  const updatedTask = await db.transaction(async (tx) => {
     const updated = await tx
       .update(tasks)
       .set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) })
       .where(eq(tasks.id, taskId))
-      .returning({ id: tasks.id });
+      .returning({ id: tasks.id, teamId: tasks.teamId });
     if (updated.length === 0) {
-      return false;
+      return null;
     }
 
     await tx.update(taskChecklistItems).set({ done, updatedAt: today() }).where(eq(taskChecklistItems.taskId, taskId));
-    return true;
+    return { teamId: updated[0]!.teamId };
   });
+
+  if (!updatedTask) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: taskId, type: "task" },
+    teamId: updatedTask.teamId,
+  });
+  return true;
 }
 
 export async function updateChecklistItem(taskId: string, itemId: string, done: boolean, actorId?: string | null): Promise<boolean> {
-  return db.transaction(async (tx) => {
+  const updatedItem = await db.transaction(async (tx) => {
     const updated = await tx
       .update(taskChecklistItems)
       .set({ done, updatedAt: today() })
@@ -3367,7 +4028,12 @@ export async function updateChecklistItem(taskId: string, itemId: string, done: 
       .returning({ id: taskChecklistItems.id });
 
     if (updated.length === 0) {
-      return false;
+      return null;
+    }
+
+    const [task] = await tx.select({ teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    if (!task) {
+      return null;
     }
 
     const checklist = await tx.select({ done: taskChecklistItems.done }).from(taskChecklistItems).where(eq(taskChecklistItems.taskId, taskId));
@@ -3375,6 +4041,19 @@ export async function updateChecklistItem(taskId: string, itemId: string, done: 
     const status: TaskStatus = completedCount === checklist.length ? "Done" : completedCount > 0 ? "In Progress" : "Todo";
 
     await tx.update(tasks).set({ status, updatedAt: today(), ...taskAuditUpdate(actorId) }).where(eq(tasks.id, taskId));
-    return true;
+    return { teamId: task.teamId };
   });
+
+  if (!updatedItem) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId,
+    models: ["taskManagement"],
+    reason: "task.changed",
+    target: { id: itemId, type: "subtask" },
+    teamId: updatedItem.teamId,
+  });
+  return true;
 }

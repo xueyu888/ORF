@@ -9,6 +9,7 @@ import type {
   NotificationTargetType,
   ObjectiveAcceptedResult,
   ObjectiveFlowStatus,
+  ObjectiveTrialReviewStatus,
   OrfStage,
   ResultAcceptedResult,
   UserStatus,
@@ -43,6 +44,9 @@ export const users = pgTable(
     status: text("status").$type<UserStatus>().notNull().default("active"),
     createdAt: date("created_at", { mode: "string" }).notNull(),
     lastOnlineAt: timestamp("last_online_at", { mode: "string", withTimezone: true }),
+    avatarObjectKey: text("avatar_object_key"),
+    avatarMimeType: text("avatar_mime_type"),
+    avatarUpdatedAt: timestamp("avatar_updated_at", { mode: "string", withTimezone: true }),
   },
   (table) => ({
     oryIdentityIdUnique: uniqueIndex("users_ory_identity_id_unique").on(table.oryIdentityId),
@@ -109,6 +113,7 @@ export const objectives = pgTable("objectives", {
   completionMultiplier: real("completion_multiplier"),
   objectiveBasePoints: integer("objective_base_points").notNull().default(0),
   objectiveSettlementPoints: real("objective_settlement_points"),
+  publishedAt: date("published_at", { mode: "string" }),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
   createdBy: text("created_by").references(() => users.id),
@@ -130,6 +135,31 @@ export const objectiveLoot = pgTable("objective_loot", {
   selfTestReportBody: text("self_test_report_body"),
   submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
 });
+
+export const objectiveTrialReviews = pgTable(
+  "objective_trial_reviews",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    objectiveId: text("objective_id")
+      .notNull()
+      .references(() => objectives.id, { onDelete: "cascade" }),
+    requestedBy: text("requested_by").notNull(),
+    body: text("body").notNull(),
+    resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
+    selfTestReportBody: text("self_test_report_body"),
+    status: text("status").$type<ObjectiveTrialReviewStatus>().notNull().default("requested"),
+    commanderFeedback: text("commander_feedback"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { mode: "string", withTimezone: true }),
+    requestedAt: timestamp("requested_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    objectiveOnce: uniqueIndex("objective_trial_reviews_objective_once_idx").on(table.objectiveId),
+  }),
+);
 
 export const objectiveContributionReviews = pgTable("objective_contribution_reviews", {
   id: text("id").primaryKey(),
@@ -214,7 +244,7 @@ export const results = pgTable("results", {
   confidence: integer("confidence").notNull(),
   source: text("source").$type<BountySource>().notNull().default("managerDefined"),
   definer: text("definer").notNull().default(""),
-  uncertaintyScore: integer("uncertainty_score").notNull().default(30),
+  uncertaintyScore: integer("uncertainty_score").notNull().default(0),
   acceptedResult: text("accepted_result").$type<ResultAcceptedResult>().notNull().default("unreviewed"),
   reviewCadence: text("review_cadence").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
