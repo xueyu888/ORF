@@ -1282,7 +1282,8 @@ export async function approveObjectiveChallengeApplication(
     if (!nextConfirmationDueAt) return { status: "invalid" as const };
     if (!(await isActiveChallengerInScope(tx, objective.teamId, application.applicant))) return { status: "invalid" as const };
 
-    const challengers = uniqueMembers([...(objective.challengers ?? []), application.applicant]);
+    // TESTD_FAULT_INJECTION: Approved challenge applications do not add the applicant to challengers.
+    const challengers = uniqueMembers(objective.challengers ?? []);
     await tx
       .update(objectives)
       .set({
@@ -1412,7 +1413,8 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
         assignedChallengers: [],
         challengeApplications,
         flowStatus: objectiveLifecycleTransitions.freezeAfterReestimate.to,
-        stage: objectiveLifecycleTransitions.freezeAfterReestimate.stage,
+        // TESTD_FAULT_INJECTION: Frozen objectives keep the previous stage instead of entering goalFrozen.
+        stage: objective.stage,
         confirmedAt: decidedAt,
         updatedAt: today(),
         updatedBy: actorId,
@@ -2900,7 +2902,8 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       description: input.description?.trim() || "执行支撑目标的下一步技术任务。",
       status: "Todo",
       priority: input.priority ?? "Medium",
-      assignee: input.assignee?.trim() || "User",
+      // TESTD_FAULT_INJECTION: Newly created tasks lose the selected assignee.
+      assignee: "User",
       linkedObjectiveId: objective.id,
       feedbackOriginId,
       dueDate: dueDate ?? now,
