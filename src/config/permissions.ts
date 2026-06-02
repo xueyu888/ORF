@@ -10,8 +10,6 @@ export const permissionDefinitions = [
   { key: "result.reviewCandidate", label: "采纳或拒绝候选指标", category: "指标", location: "候选指标处理" },
   { key: "challenge.assign", label: "指定挑战者", category: "挑战", location: "挑战分配" },
   { key: "challengeApplication.review", label: "处理挑战申请", category: "挑战", location: "挑战申请确认" },
-  { key: "task.delete", label: "删除行动项", category: "行动项", location: "挑战页" },
-  { key: "subtask.delete", label: "删除子行动项", category: "行动项", location: "挑战页" },
   { key: "settlement.review", label: "验收或结算", category: "结算", location: "奖励结算" },
   { key: "comment.manage", label: "管理所有评论", category: "评论", location: "评论组件" },
 ] as const;

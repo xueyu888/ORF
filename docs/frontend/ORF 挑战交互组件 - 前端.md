@@ -28,7 +28,7 @@
 
 ## 2. 权限拦截
 
-前端在执行下列操作前检查 `permissionRules`。
+前端在执行下列目标、指标和流程操作前检查 `permissionRules`。行动项和子行动项不使用独立权限 key；它们走目标级工作项维护能力，由目标生命周期以及当前用户是否为指挥官或 `Objective.challengers` 正式挑战者共同决定。
 
 | 操作 | 权限 key |
 | --- | --- |
@@ -38,8 +38,6 @@
 | 拖拽指标 | `result.edit` |
 | 删除目标 | `objective.delete` |
 | 删除指标 | `result.delete` |
-| 删除行动项 | `task.delete` |
-| 删除子行动项 | `subtask.delete` |
 
 无权限时只提示，不执行状态修改。
 

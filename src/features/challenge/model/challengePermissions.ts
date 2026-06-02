@@ -20,14 +20,6 @@ export function permissionKeyForChallengeAction(resource: ChallengePermissionRes
     if (action === "delete") return "result.delete";
   }
 
-  if (resource === "task" && action === "delete") {
-    return "task.delete";
-  }
-
-  if (resource === "subtask" && action === "delete") {
-    return "subtask.delete";
-  }
-
   return null;
 }
 

@@ -24,6 +24,7 @@ import {
   canSubmitObjectivePeerReview,
   metricCreationActionForObjective,
   metricEditAccessForObjective,
+  workItemMutationAccessForObjective,
   workbenchActionForObjective,
 } from "../src/features/challenge/model/orfFlowCapabilities";
 import {
@@ -420,12 +421,24 @@ test("metric edit access centralizes role, reestimate, and lifecycle gates", () 
   );
 });
 
-test("objective work item mutation covers candidate planning and active execution windows", () => {
-  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "candidate" })), true);
-  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "reestimating" })), true);
-  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "frozen" })), true);
-  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "submitted" })), false);
-  assert.equal(canMutateObjectiveWorkItems(undefined), false);
+test("objective work item mutation uses objective participation and lifecycle", () => {
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const observer = { id: "user-mia", name: "Mia Chen", email: "mia@example.com", role: "member" as const, status: "active" as const };
+
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "candidate" }), admin), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "reestimating", challengers: [challenger.name] }), challenger), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "frozen", challengers: [challenger.name] }), challenger), true);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "reestimating", challengers: [challenger.name] }), observer), false);
+  assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "submitted", challengers: [challenger.name] }), admin), false);
+  assert.equal(canMutateObjectiveWorkItems(undefined, admin), false);
+  assert.deepEqual(
+    workItemMutationAccessForObjective({
+      objective: objective({ flowStatus: "reestimating", challengers: [challenger.name] }),
+      currentUser: observer,
+    }),
+    { status: "blocked", reason: "forbidden" },
+  );
 });
 
 test("loot workbench actions keep commander review separate from member challenge actions", () => {
@@ -469,12 +482,13 @@ test("loot workbench actions keep commander review separate from member challeng
 
 test("challenge permission helpers map target resources to configured permissions", () => {
   const current = state({
-    permissionRules: [{ role: "member", permissions: ["result.edit", "task.delete"] }],
+    permissionRules: [{ role: "member", permissions: ["result.edit"] }],
   });
 
   assert.equal(canAccessTarget(current, "member", { type: "bounty", id: "res-a", title: "Bounty", objectiveId: "obj-a" }, "edit"), true);
   assert.equal(canAccessTarget(current, "member", { type: "bounty", id: "res-a", title: "Bounty", objectiveId: "obj-a" }, "delete"), false);
   assert.equal(canAccessTarget(current, "admin", { type: "objective", id: "obj-a", title: "Objective" }, "delete"), true);
+  assert.equal(canAccessTarget(current, "member", { type: "action", id: "task-a", title: "Task", objectiveId: "obj-a", hasSubActions: false }, "delete"), true);
   assert.equal(canAccessDragItem(current, "member", { type: "action", id: "task-a", bountyId: "res-a", objectiveId: "obj-a" }), true);
   assert.equal(permissionDeniedMessage("result.delete"), "没有删除指标权限");
 });

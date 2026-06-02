@@ -40,6 +40,7 @@ import {
   planObjectiveSettlement,
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
+import { objectiveWorkItemMutationAccess } from "../../src/domain/orfWorkItems";
 import {
   canAcceptObjectiveChallengeByFlow,
   canApplyForObjectiveChallenge,
@@ -48,7 +49,6 @@ import {
   canMutateObjectiveCommentsAsChallengerByFlow,
   canMutateObjectiveCommentsByFlow,
   canMutateObjectiveResultsByFlow,
-  canMutateObjectiveWorkItemsByFlow,
   canRecruitObjectiveChallengersByFlow,
   canReviewObjectiveChallengeApplications,
   canReviewObjectiveLootByFlow,
@@ -2515,20 +2515,8 @@ export async function canMutateObjectiveWorkItem(
     return "notFound";
   }
 
-  if (!canMutateObjectiveWorkItemsByFlow(objective)) {
-    return "forbidden";
-  }
-
-  if (actor.role === "admin") {
-    return "allowed";
-  }
-
-  // Task and subtask maintenance is shared at Objective scope. Task createdBy
-  // remains audit metadata and must not become a private ownership gate.
-  const member = actor.name.trim();
-  return member && uniqueMembers(objective.challengers ?? []).includes(member)
-    ? "allowed"
-    : "forbidden";
+  const access = objectiveWorkItemMutationAccess(objective, actor);
+  return access.status === "allowed" ? "allowed" : "forbidden";
 }
 
 async function canMutateObjectiveComment(

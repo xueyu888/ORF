@@ -3,7 +3,6 @@ import { canReviewObjectiveTrialReview, latestObjectiveTrialReview } from "../..
 import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import {
   canFreezeObjectiveByFlow,
-  canMutateObjectiveWorkItemsByFlow,
   canRecruitObjectiveChallengersByFlow,
   canReviewObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
@@ -12,6 +11,11 @@ import {
   isObjectiveResultLockedByFlow,
   isObjectiveSettledOrClosed,
 } from "../../../domain/orfLifecycle";
+import {
+  canMutateObjectiveWorkItemsForActor,
+  objectiveWorkItemMutationAccess,
+  type ObjectiveWorkItemMutationAccess,
+} from "../../../domain/orfWorkItems";
 import type {
   Objective,
   ObjectiveTrialReview,
@@ -28,6 +32,8 @@ type MetricCreationAction = {
 export type MetricEditAccess =
   | { status: "allowed" }
   | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" };
+
+export type WorkItemMutationAccess = ObjectiveWorkItemMutationAccess;
 
 type WorkbenchAction = {
   kind: "submitLoot" | "submitPeerReview" | "reviewLoot" | "reviewTrial";
@@ -66,8 +72,25 @@ export function canProposeObjectiveMetric(
   );
 }
 
-export function canMutateObjectiveWorkItems(objective: Objective | undefined): boolean {
-  return canMutateObjectiveWorkItemsByFlow(objective);
+export function workItemMutationAccessForObjective({
+  objective,
+  currentUser,
+}: {
+  objective: Objective | undefined;
+  currentUser: OrfUser | null;
+}): WorkItemMutationAccess {
+  return objectiveWorkItemMutationAccess(objective, currentUser);
+}
+
+export function canMutateObjectiveWorkItems(objective: Objective | undefined, currentUser: OrfUser | null): boolean {
+  return canMutateObjectiveWorkItemsForActor(objective, currentUser);
+}
+
+export function workItemMutationUnavailableMessage(access: WorkItemMutationAccess) {
+  if (access.status === "allowed") return "";
+  if (access.reason === "notFound") return "行动项所属目标不可用";
+  if (access.reason === "lifecycleLocked") return "目标当前阶段不能修改行动项";
+  return "只有目标正式挑战者或指挥官可以修改行动项";
 }
 
 export function metricEditAccessForObjective({

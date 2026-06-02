@@ -13,8 +13,6 @@ const expectedPermissionKeys = [
   "result.reviewCandidate",
   "challenge.assign",
   "challengeApplication.review",
-  "task.delete",
-  "subtask.delete",
   "settlement.review",
   "comment.manage",
 ];

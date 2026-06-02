@@ -89,7 +89,16 @@ import {
   type DraftReturnContext,
   type ObjectiveCreationSession,
 } from "./model/objectiveCreationSession";
-import { canMutateObjectiveWorkItems, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective, metricEditAccessForObjective, metricEditUnavailableMessage } from "./model/orfFlowCapabilities";
+import {
+  canMutateObjectiveWorkItems,
+  canRecruitObjectiveChallengers,
+  isObjectiveResultLocked,
+  metricCreationActionForObjective,
+  metricEditAccessForObjective,
+  metricEditUnavailableMessage,
+  workItemMutationAccessForObjective,
+  workItemMutationUnavailableMessage,
+} from "./model/orfFlowCapabilities";
 import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
 import type { ObjectiveNode } from "./model/types";
 
@@ -435,7 +444,17 @@ export function ChallengePlanPage() {
     if (access.status === "allowed") return;
     notify(metricEditUnavailableMessage(access));
   };
-  const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
+  const workItemMutationAccessForObjectiveId = (objectiveId: string) =>
+    workItemMutationAccessForObjective({
+      objective: objectiveById(objectiveId),
+      currentUser,
+    });
+  const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId), currentUser);
+  const notifyUnavailableWorkItemMutation = (objectiveId: string, lifecycleMessage = "目标当前阶段不能修改行动项") => {
+    const access = workItemMutationAccessForObjectiveId(objectiveId);
+    if (access.status === "allowed") return;
+    notify(access.reason === "lifecycleLocked" ? lifecycleMessage : workItemMutationUnavailableMessage(access));
+  };
   const objectiveDeadlineEditState = (objective: ObjectiveNode["objective"]) => resolveObjectiveDeadlineEditState(objective, currentUser?.role);
   const notifyUnavailableObjectiveDeadline = (objective: ObjectiveNode["objective"]) => {
     const editState = objectiveDeadlineEditState(objective);
@@ -565,8 +584,10 @@ export function ChallengePlanPage() {
       return false;
     }
 
-    if ((target.type === "action" || target.type === "subAction") && (action === "edit" || action === "delete") && !canMutateWorkItemsForObjective(target.objectiveId)) {
-      notify("目标当前阶段不能修改行动项");
+    if ((target.type === "action" || target.type === "subAction") && (action === "edit" || action === "delete")) {
+      const access = workItemMutationAccessForObjectiveId(target.objectiveId);
+      if (access.status === "allowed") return true;
+      notify(access.reason === "lifecycleLocked" ? "目标当前阶段不能修改行动项" : workItemMutationUnavailableMessage(access));
       return false;
     }
 
@@ -599,7 +620,7 @@ export function ChallengePlanPage() {
       const action = options.taskId ? challengeState.tasks.find((item) => item.id === options.taskId) : null;
       if (!action) return;
       if (!canMutateWorkItemsForObjective(action.linkedObjectiveId)) {
-        notify("目标当前阶段不能新增子行动项");
+        notifyUnavailableWorkItemMutation(action.linkedObjectiveId, "目标当前阶段不能新增子行动项");
         return;
       }
 
@@ -649,7 +670,7 @@ export function ChallengePlanPage() {
     }
 
     if (!canMutateWorkItemsForObjective(objectiveId)) {
-      notify("目标当前阶段不能新增行动项");
+      notifyUnavailableWorkItemMutation(objectiveId, "目标当前阶段不能新增行动项");
       return;
     }
 
@@ -677,7 +698,7 @@ export function ChallengePlanPage() {
     const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
     if (!canMutateWorkItemsForObjective(action.linkedObjectiveId)) {
-      notify("目标当前阶段不能新增子行动项");
+      notifyUnavailableWorkItemMutation(action.linkedObjectiveId, "目标当前阶段不能新增子行动项");
       return;
     }
     beginChildCreationDraft("subtask", action.linkedObjectiveId, { afterItemId, taskId: actionId });
@@ -960,7 +981,7 @@ export function ChallengePlanPage() {
     const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
     if (!canMutateWorkItemsForObjective(action.linkedObjectiveId)) {
-      notify("目标当前阶段不能修改行动项");
+      notifyUnavailableWorkItemMutation(action.linkedObjectiveId);
       return;
     }
     const overlayId = applyCompletionOverlay({ type: "task", taskId: actionId, done });
@@ -973,7 +994,7 @@ export function ChallengePlanPage() {
     const action = challengeState.tasks.find((item) => item.id === actionId);
     if (!action) return;
     if (!canMutateWorkItemsForObjective(action.linkedObjectiveId)) {
-      notify("目标当前阶段不能修改子行动项");
+      notifyUnavailableWorkItemMutation(action.linkedObjectiveId, "目标当前阶段不能修改子行动项");
       return;
     }
     const overlayId = applyCompletionOverlay({ type: "subtask", taskId: actionId, itemId, done });
@@ -1043,7 +1064,7 @@ export function ChallengePlanPage() {
         return;
       }
       if (dragItem.type === "action" && !canMutateWorkItemsForObjective(dragItem.objectiveId)) {
-        notify("目标当前阶段不能移动行动项");
+        notifyUnavailableWorkItemMutation(dragItem.objectiveId, "目标当前阶段不能移动行动项");
         setDragItem(null);
         setDropTarget(null);
         return;
