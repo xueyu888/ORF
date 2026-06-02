@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { uncertaintyLevelOptions, uncertaintyScores } from "../domain/orfSettlement";
 import { useOrf } from "../state/OrfProvider";
-import type { FeedbackSource, Impact, Priority, UncertaintyLevel } from "../types/orf";
+import type { FeedbackSource, Impact, UncertaintyLevel } from "../types/orf";
 import { Button, Field } from "./ui";
 
 function ModalFrame({ title, children }: { title: string; children: ReactNode }) {
@@ -39,8 +39,6 @@ export function GlobalModals() {
 
   if (modal.type === "newResult") return <NewResultModal objectiveId={modal.objectiveId} source={modal.source} />;
   if (modal.type === "newFeedback") return <NewFeedbackModal objectiveId={modal.objectiveId} resultId={modal.resultId} />;
-  if (modal.type === "newTask") return <NewTaskModal objectiveId={modal.objectiveId} resultId={modal.resultId} feedbackId={modal.feedbackId} />;
-  if (modal.type === "resultUpdate") return <ResultUpdateModal resultId={modal.resultId} feedbackId={modal.feedbackId} />;
   if (modal.type === "recruitChallengers") return <RecruitChallengersModal key={modal.objectiveId} objectiveId={modal.objectiveId} />;
   return null;
 }
@@ -216,115 +214,6 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
         </div>
         <Field label="建议调整"><textarea className="orf-input min-h-20 px-3 py-2" required value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} /></Field>
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit" disabled={submitting}>保存反馈</Button></div>
-      </form>
-    </ModalFrame>
-  );
-}
-
-function NewTaskModal({ objectiveId, resultId, feedbackId }: { objectiveId?: string; resultId?: string; feedbackId?: string }) {
-  const { state, createTask, closeModal, currentUser, notify } = useOrf();
-  const assigneeOptions = (currentUser?.role === "admin" ? state.users : currentUser ? [currentUser] : state.users)
-    .filter((user, index, users) => user.status === "active" && users.findIndex((item) => item.id === user.id) === index);
-  const defaultAssignee = assigneeOptions.find((user) => user.id === currentUser?.id)?.name ?? assigneeOptions[0]?.name ?? "";
-  const linkedFeedback = state.feedback.find((item) => item.id === feedbackId);
-  const requestedObjectiveId = objectiveId ?? (resultId ? state.results.find((result) => result.id === resultId)?.objectiveId : undefined) ?? linkedFeedback?.linkedObjectiveId;
-  const objectiveOptions = requestedObjectiveId ? state.objectives.filter((objective) => objective.id === requestedObjectiveId) : state.objectives;
-  const initialObjectiveId = requestedObjectiveId && objectiveOptions.some((objective) => objective.id === requestedObjectiveId) ? requestedObjectiveId : objectiveOptions[0]?.id ?? "";
-  const [linkedObjectiveId, setLinkedObjectiveId] = useState(initialObjectiveId);
-  const selectedObjective = objectiveOptions.find((objective) => objective.id === linkedObjectiveId) ?? state.objectives.find((objective) => objective.id === linkedObjectiveId);
-  const [title, setTitle] = useState(linkedFeedback ? `处理反馈：${linkedFeedback.causeCategories.join(" + ")}` : "");
-  const [description, setDescription] = useState(linkedFeedback?.suggestedAdjustment ?? "");
-  const [assignee, setAssignee] = useState(defaultAssignee);
-  const [priority, setPriority] = useState<Priority>("High");
-  const [submitting, setSubmitting] = useState(false);
-
-  return (
-    <ModalFrame title="新建行动项">
-      <form
-        className="grid gap-4"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (hasBlankRequiredValues([title, linkedObjectiveId, assignee])) {
-            notify("请填写所有必填字段");
-            return;
-          }
-          if (!selectedObjective) {
-            notify("请选择关联目标");
-            return;
-          }
-          if (submitting) return;
-
-          setSubmitting(true);
-          try {
-            const ok = await createTask({
-              title: title.trim(),
-              description: description.trim(),
-              assignee: assignee.trim(),
-              priority,
-              linkedObjectiveId: selectedObjective.id,
-              feedbackOriginId: feedbackId,
-            });
-            if (ok) closeModal();
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
-        <Field label="行动项标题"><input className="orf-input px-3 py-2" required value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
-        <Field label="说明"><textarea className="orf-input min-h-24 px-3 py-2" value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-        <Field label="关联目标"><select className="orf-input px-3 py-2" required value={linkedObjectiveId} onChange={(event) => setLinkedObjectiveId(event.target.value)}>{objectiveOptions.map((objective) => <option key={objective.id} value={objective.id}>{objective.title}</option>)}</select></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="执行人">
-            <select className="orf-input px-3 py-2" required value={assignee} onChange={(event) => setAssignee(event.target.value)}>
-              {assigneeOptions.map((user) => (
-                <option key={user.id} value={user.name}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="优先级"><select className="orf-input px-3 py-2" value={priority} onChange={(event) => setPriority(event.target.value as Priority)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "紧急"}</option>)}</select></Field>
-        </div>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit" disabled={submitting}>保存行动项</Button></div>
-      </form>
-    </ModalFrame>
-  );
-}
-
-function ResultUpdateModal({ resultId, feedbackId }: { resultId?: string; feedbackId?: string }) {
-  const { state, proposeResultUpdate, closeModal, notify } = useOrf();
-  const result = state.results.find((item) => item.id === resultId) ?? state.results[0];
-  const feedback = feedbackId ? state.feedback.find((item) => item.id === feedbackId) : undefined;
-  const [title, setTitle] = useState(result?.title ?? "");
-  const [reason, setReason] = useState(feedback?.suggestedAdjustment ?? "");
-  const [submitting, setSubmitting] = useState(false);
-
-  if (!result) return null;
-
-  return (
-    <ModalFrame title="提出指标更新">
-      <form
-        className="grid gap-4"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (hasBlankRequiredValues([title, reason])) {
-            notify("请填写所有必填字段");
-            return;
-          }
-          if (submitting) return;
-          setSubmitting(true);
-          try {
-            const ok = await proposeResultUpdate(result.id, title.trim(), reason.trim(), feedbackId);
-            if (ok) closeModal();
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
-        <div className="orf-surface-muted orf-text-secondary rounded-lg border orf-border p-3 text-sm">当前指标：<span className="orf-text-primary">{result.title}</span></div>
-        <Field label="更新后的指标"><textarea className="orf-input min-h-20 px-3 py-2" required value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
-        <Field label="修改原因"><textarea className="orf-input min-h-24 px-3 py-2" required value={reason} onChange={(event) => setReason(event.target.value)} /></Field>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit" disabled={submitting}>记录更新</Button></div>
       </form>
     </ModalFrame>
   );

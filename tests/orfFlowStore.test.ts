@@ -446,6 +446,8 @@ function result(overrides: Partial<Result> = {}): Result {
     feedbackIds: [],
     trend: [{ date, value: 0 }],
     reviewCadence: "Weekly",
+    createdAt: date,
+    updatedAt: date,
     ...overrides,
   };
 }

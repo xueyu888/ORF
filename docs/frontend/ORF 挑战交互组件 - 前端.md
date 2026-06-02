@@ -72,10 +72,11 @@
 
 | 来源 | 字段 |
 | --- | --- |
+| 指标自身 | `Result.updatedAt` |
 | 指标趋势 | `Result.trend[-1].date` |
 | 反馈 | `Feedback.updatedAt` |
 | 历史材料 | `Evidence.date` |
 
-前端不展示历史材料入口，但仍允许旧数据参与更新时间计算。
+`Result.updatedAt` 是指标自身标题、难度、置信度等指标字段的最后修改时间，也是新建指标没有趋势、反馈或历史材料时的基础显示值。前端不展示历史材料入口，但仍允许旧数据参与更新时间计算。
 
 任务行最近更新时间只来自 `Task.updatedAt` 和其子任务 `TaskChecklistItem.updatedAt`。任务不参与指标行更新时间聚合，避免重新形成任务从属指标的隐式关系。

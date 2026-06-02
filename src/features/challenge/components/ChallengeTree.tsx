@@ -1,13 +1,14 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
-import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
+import { uncertaintyLevelOptions } from "../../../domain/orfSettlement";
+import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem, UncertaintyLevel } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -22,10 +23,10 @@ import {
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
-import { canFreezeObjectiveAfterReestimate, workbenchActionForObjective } from "../model/orfFlowCapabilities";
+import { canFreezeObjectiveAfterReestimate, metricEditUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
-import { temporaryChildRowId, temporaryChildTarget } from "../model/types";
-import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode, TemporaryChildRow } from "../model/types";
+import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
+import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
 import { handleRowDoubleClick, InlineTitleEditor, isSameTarget } from "./InlineTitleEditor";
 
@@ -34,7 +35,7 @@ type RowHandlers = {
   collapsedActionIds: Set<string>;
   collapsedBountyIds: Set<string>;
   commentCounts: Map<string, number>;
-  temporaryChildRow: TemporaryChildRow | null;
+  temporaryChildRow: ChildCreationTemporaryRow | null;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
   trialReviews: ObjectiveTrialReview[];
@@ -45,6 +46,7 @@ type RowHandlers = {
   currentUser: OrfUser | null;
   draftObjectiveId?: string;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
+  metricEditAccess: (objectiveId: string) => MetricEditAccess;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
@@ -64,6 +66,8 @@ type RowHandlers = {
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
+  onSaveMetricDifficulty: (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
+  onUnavailableMetricEdit: (objectiveId: string) => void;
   onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -292,8 +296,8 @@ function ObjectivePanel({
 function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string | null): boolean {
   if (!openActionId) return false;
   if (isRowActionOpen(openActionId, `objective:${group.objective.id}`)) return true;
-  if (isRowActionOpen(openActionId, `temporary-metric:${temporaryChildRowId("metric", group.objective.id)}`)) return true;
-  if (isRowActionOpen(openActionId, `temporary-action:${temporaryChildRowId("action", group.objective.id)}`)) return true;
+  if (isRowActionOpen(openActionId, `temporary-metric:${childCreationDraftId("metric", group.objective.id)}`)) return true;
+  if (isRowActionOpen(openActionId, `temporary-action:${childCreationDraftId("action", group.objective.id)}`)) return true;
 
   if (group.bounties.some((bounty) => isRowActionOpen(openActionId, `bounty:${bounty.result.id}`))) {
     return true;
@@ -301,7 +305,7 @@ function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string
 
   return group.actions.some((action) => {
     if (isRowActionOpen(openActionId, `action:${action.id}`)) return true;
-    if (isRowActionOpen(openActionId, `temporary-subtask:${temporaryChildRowId("subtask", action.id)}`)) return true;
+    if (isRowActionOpen(openActionId, `temporary-subtask:${childCreationDraftId("subtask", action.id)}`)) return true;
     return action.checklist.some((item) => isRowActionOpen(openActionId, `subAction:${action.id}:${item.id}`));
   });
 }
@@ -350,15 +354,15 @@ function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?:
 
 type MetricTreeRow =
   | { bounty: BountyNode; persistence: "persisted" }
-  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+  | { persistence: "temporary"; placeholderTitle: string; temporary: ChildCreationTemporaryRow };
 
 type ActionTreeRow =
   | { action: Task; persistence: "persisted" }
-  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+  | { persistence: "temporary"; placeholderTitle: string; temporary: ChildCreationTemporaryRow };
 
 type SubActionTreeRow =
   | { item: TaskChecklistItem; itemIndex: number; persistence: "persisted" }
-  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+  | { persistence: "temporary"; placeholderTitle: string; temporary: ChildCreationTemporaryRow };
 
 function MetricRow({
   row,
@@ -375,7 +379,7 @@ function MetricRow({
   const placeholderTitle = row.persistence === "temporary" ? row.placeholderTitle : "";
   const bounty = row.persistence === "persisted" ? row.bounty : null;
   const target: ChallengeTarget = temporary
-    ? temporaryChildTarget(temporary)
+    ? childCreationTarget(temporary)
     : { type: "bounty", id: bounty!.result.id, title: bounty!.result.title, objectiveId: bounty!.result.objectiveId };
   const complete = bounty?.status === "settled";
   const anchorId = temporary ? `temporary-metric:${temporary.id}` : `bounty:${bounty!.result.id}`;
@@ -389,13 +393,7 @@ function MetricRow({
     : "";
   const disabled = temporary?.status === "submitting";
   const title = temporary ? temporary.title || placeholderTitle : bounty!.result.title;
-  const statusLabel = temporary
-    ? temporary.status === "submitting"
-      ? "保存中"
-      : temporary.status === "idle"
-        ? "待创建"
-        : "草稿"
-    : bountyStatusLabel[bounty!.status];
+  const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : bountyStatusLabel[bounty!.status];
 
   return (
     <div className="relative">
@@ -435,7 +433,7 @@ function MetricRow({
         )}
         <HierarchyCell depth={1}>
           <span
-            className="flex h-7 w-7 shrink-0 items-center justify-center"
+            className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"
             data-hierarchy-anchor={anchorId}
             data-hierarchy-branch-end-offset="0"
             data-hierarchy-branch-target={anchorId}
@@ -457,11 +455,20 @@ function MetricRow({
           )}
           {bounty && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
-        {bounty ? <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div> : <EmptySlot />}
+        {bounty ? (
+          <MetricDifficultyCell
+            access={handlers.metricEditAccess(bounty.result.objectiveId)}
+            bounty={bounty}
+            onSave={(uncertaintyLevel) => handlers.onSaveMetricDifficulty(target, uncertaintyLevel)}
+            onUnavailable={() => handlers.onUnavailableMetricEdit(bounty.result.objectiveId)}
+          />
+        ) : (
+          <EmptySlot />
+        )}
         <EmptySlot />
         <StatusChip tone={bounty ? bounty.status : "open"}>{statusLabel}</StatusChip>
         <EmptySlot />
-        <EmptySlot />
+        <TimeValue icon={Clock3} value={bounty ? bounty.updatedAt || "未设置" : "未设置"} />
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
@@ -486,7 +493,7 @@ function ActionRow({
       ? handlers.temporaryChildRow
       : null;
   const target: ChallengeTarget = temporary
-    ? temporaryChildTarget(temporary)
+    ? childCreationTarget(temporary)
     : {
         type: "action",
         id: action!.id,
@@ -508,13 +515,7 @@ function ActionRow({
     : dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "objectiveActions", objectiveId: temporary!.objectiveId }]);
   const disabled = temporary?.status === "submitting";
   const title = temporary ? temporary.title || placeholderTitle : action!.title;
-  const statusLabel = temporary
-    ? temporary.status === "submitting"
-      ? "保存中"
-      : temporary.status === "idle"
-        ? "待创建"
-        : "草稿"
-    : null;
+  const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : null;
 
   return (
     <div className="relative">
@@ -583,9 +584,9 @@ function ActionRow({
         )}
         <HierarchyCell depth={1}>
           <span
-            className="flex h-5 w-5 shrink-0 items-center justify-center"
+            className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"
             data-hierarchy-anchor={anchorId}
-            data-hierarchy-branch-end-offset="0"
+            data-hierarchy-branch-end-offset="4"
             data-hierarchy-branch-target={anchorId}
             data-hierarchy-parent={parentAnchorId}
           >
@@ -627,7 +628,7 @@ function ActionRow({
   );
 }
 
-function subActionRows(items: TaskChecklistItem[], temporarySubtask: TemporaryChildRow | null): SubActionTreeRow[] {
+function subActionRows(items: TaskChecklistItem[], temporarySubtask: ChildCreationTemporaryRow | null): SubActionTreeRow[] {
   if (!temporarySubtask) {
     return items.map((item, itemIndex) => ({ item, itemIndex, persistence: "persisted" }));
   }
@@ -662,7 +663,7 @@ function SubActionRow({
   const item = row.persistence === "persisted" ? row.item : null;
   const itemIndex = row.persistence === "persisted" ? row.itemIndex : -1;
   const target: ChallengeTarget = temporary
-    ? temporaryChildTarget(temporary)
+    ? childCreationTarget(temporary)
     : {
         type: "subAction",
         id: item!.id,
@@ -715,14 +716,14 @@ function SubActionRow({
       )}
       <HierarchyCell depth={2}>
         <span
-          className="flex h-5 w-5 shrink-0 items-center justify-center"
+          className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"
           data-hierarchy-anchor={anchorId}
-          data-hierarchy-branch-end-offset="0"
+          data-hierarchy-branch-end-offset="4"
           data-hierarchy-branch-target={anchorId}
           data-hierarchy-parent={parentAnchorId}
         >
-            {item ? <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onSubActionDoneChange(action.id, item.id, checked)} /> : <CompletionCircleIcon checked={false} />}
-          </span>
+          {item ? <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onSubActionDoneChange(action.id, item.id, checked)} /> : <CompletionCircleIcon checked={false} />}
+        </span>
         {isSameTarget(handlers.editingTarget, target) ? (
           <InlineTitleEditor
             ariaLabel="编辑子行动项标题"
@@ -739,7 +740,7 @@ function SubActionRow({
       </HierarchyCell>
       <EmptySlot />
       <EmptySlot />
-      {temporary ? <StatusChip tone="open">{temporary.status === "submitting" ? "保存中" : temporary.status === "idle" ? "待创建" : "草稿"}</StatusChip> : <EmptySlot />}
+      {temporary ? <StatusChip tone="open">{temporary.status === "submitting" ? "保存中" : "草稿"}</StatusChip> : <EmptySlot />}
       <EmptySlot />
       <TimeValue icon={Clock3} value={item?.updatedAt || action.updatedAt || "未设置"} />
       <EmptySlot />
@@ -810,6 +811,7 @@ function ObjectiveDeadlineCell({
   onSave: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   onUnavailable: (objective: ObjectiveNode["objective"]) => void;
 }) {
+  const pickerRef = useRef<HTMLInputElement | null>(null);
   const [value, setValue] = useState(objective.finalDueAt);
   const [isSaving, setIsSaving] = useState(false);
   const minimumValue = minimumObjectiveDeadlineValue(objective);
@@ -832,21 +834,52 @@ function ObjectiveDeadlineCell({
       setIsSaving(false);
     }
   };
+  const openDatePicker = () => {
+    if (isSaving) return;
+    const picker = pickerRef.current;
+    if (!picker) return;
+
+    try {
+      if (typeof picker.showPicker === "function") {
+        picker.showPicker();
+        return;
+      }
+    } catch {
+      // Fall back to focus/click when the browser refuses programmatic picker display.
+    }
+
+    picker.focus();
+    picker.click();
+  };
 
   if (canEdit) {
     return (
       <div
+        aria-disabled={isSaving ? "true" : undefined}
+        aria-label={`修改目标截止日期，当前 ${objective.finalDueAt || "未设置"}`}
         className="orf-objective-deadline-display orf-objective-deadline-display-editable"
         data-no-row-edit="true"
+        onClick={openDatePicker}
         onDoubleClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          openDatePicker();
+        }}
+        role="button"
+        tabIndex={0}
         title={objectiveDeadlineTitle(editState)}
       >
         <input
+          ref={pickerRef}
           aria-label="目标截止日期"
+          aria-hidden="true"
           className="orf-objective-deadline-picker"
           disabled={isSaving}
           min={minimumValue}
+          onClick={(event) => event.stopPropagation()}
           onChange={(event) => void saveSelectedDate(event.target.value)}
+          tabIndex={-1}
           type="date"
           value={value}
         />
@@ -869,6 +902,89 @@ function ObjectiveDeadlineCell({
       <DateStack primary={objective.finalDueAt || "未设置"} />
     </button>
   );
+}
+
+function MetricDifficultyCell({
+  access,
+  bounty,
+  onSave,
+  onUnavailable,
+}: {
+  access: MetricEditAccess;
+  bounty: BountyNode;
+  onSave: (uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
+  onUnavailable: () => void;
+}) {
+  const persistedLevel = bounty.result.uncertaintyLevel ?? "";
+  const [value, setValue] = useState<UncertaintyLevel | "">(persistedLevel);
+  const [isSaving, setIsSaving] = useState(false);
+  const canEdit = access.status === "allowed";
+  const label = bounty.difficulty;
+
+  useEffect(() => {
+    setValue(persistedLevel);
+  }, [bounty.result.id, persistedLevel]);
+
+  const saveSelectedLevel = async (nextValue: UncertaintyLevel | "") => {
+    if (!nextValue || isSaving) return;
+    setValue(nextValue);
+    if (nextValue === bounty.result.uncertaintyLevel) return;
+
+    setIsSaving(true);
+    try {
+      const saved = await onSave(nextValue);
+      if (!saved) setValue(bounty.result.uncertaintyLevel ?? "");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (canEdit) {
+    return (
+      <div className="orf-row-difficulty-cell">
+        <select
+          aria-label={`编辑指标难度，当前 ${label}`}
+          className="orf-metric-difficulty-select"
+          data-no-row-edit="true"
+          disabled={isSaving}
+          onChange={(event) => void saveSelectedLevel(event.target.value as UncertaintyLevel | "")}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          title="编辑指标难度"
+          value={value}
+        >
+          <option disabled value="">
+            待校准
+          </option>
+          {uncertaintyLevelOptions.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  return (
+    <div className="orf-row-difficulty-cell">
+      <button
+        aria-label={`指标难度 ${label}`}
+        className="orf-metric-difficulty-display"
+        data-no-row-edit="true"
+        onClick={onUnavailable}
+        onDoubleClick={(event) => event.stopPropagation()}
+        title={metricDifficultyTitle(access)}
+        type="button"
+      >
+        <Badge>{label}</Badge>
+      </button>
+    </div>
+  );
+}
+
+function metricDifficultyTitle(access: MetricEditAccess) {
+  return access.status === "allowed" ? "编辑指标难度" : metricEditUnavailableMessage(access);
 }
 
 function objectiveDeadlineTitle(editState: ObjectiveDeadlineEditState) {

@@ -22,7 +22,7 @@ type SubmitLootInput = {
   selfTestReportUrl?: string | null;
   selfTestReportBody?: string | null;
 };
-type LegacyResult = Result & {
+type LegacyResult = Omit<Result, "createdAt" | "updatedAt"> & Partial<Pick<Result, "createdAt" | "updatedAt">> & {
   owner?: string;
   finalDueAt?: string;
   assignedChallenger?: string | null;
@@ -347,6 +347,7 @@ function normalizeResult(result: LegacyResult): Result {
     challengeApplications: _challengeApplications,
     ...rest
   } = result;
+  const updatedAt = result.updatedAt ?? result.createdAt ?? currentDate();
 
   return {
     ...(rest as Result),
@@ -354,6 +355,8 @@ function normalizeResult(result: LegacyResult): Result {
     definer: result.definer ?? "",
     uncertaintyScore: typeof result.uncertaintyScore === "number" ? result.uncertaintyScore : uncertaintyScore(result.uncertaintyLevel),
     acceptedResult: result.acceptedResult ?? "unreviewed",
+    createdAt: result.createdAt ?? updatedAt,
+    updatedAt,
   };
 }
 
@@ -406,6 +409,7 @@ export class OrfFlowStore {
 
   createResult(state: OrfState, input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">): OrfState {
     const id = makeId("res");
+    const now = currentDate();
     const result: Result = {
       id,
       objectiveId: input.objectiveId,
@@ -431,8 +435,10 @@ export class OrfFlowStore {
       acceptedResult: input.acceptedResult ?? "unreviewed",
       evidenceIds: [],
       feedbackIds: [],
-      trend: [{ date: "Now", value: input.current ?? 0 }],
+      trend: [{ date: now, value: input.current ?? 0 }],
       reviewCadence: input.reviewCadence ?? "Weekly",
+      createdAt: now,
+      updatedAt: now,
     };
 
     return {
@@ -626,7 +632,7 @@ export class OrfFlowStore {
 
     return {
       ...state,
-      results: state.results.map((result) => (result.id === resultId ? { ...result, title: nextTitle } : result)),
+      results: state.results.map((result) => (result.id === resultId ? { ...result, title: nextTitle, updatedAt: currentDate() } : result)),
       comments: state.comments.map((thread) =>
         thread.targetType === "result" && thread.targetId === resultId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
       ),
@@ -942,7 +948,7 @@ export class OrfFlowStore {
   updateResultConfidence(state: OrfState, resultId: string, confidence: number): OrfState {
     return {
       ...state,
-      results: state.results.map((result) => (result.id === resultId ? { ...result, confidence } : result)),
+      results: state.results.map((result) => (result.id === resultId ? { ...result, confidence, updatedAt: currentDate() } : result)),
     };
   }
 

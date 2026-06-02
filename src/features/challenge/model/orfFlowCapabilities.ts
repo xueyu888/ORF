@@ -25,6 +25,10 @@ type MetricCreationAction = {
   source: "managerDefined" | "memberProposed";
 };
 
+export type MetricEditAccess =
+  | { status: "allowed" }
+  | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" };
+
 type WorkbenchAction = {
   kind: "submitLoot" | "submitPeerReview" | "reviewLoot" | "reviewTrial";
   label: string;
@@ -64,6 +68,31 @@ export function canProposeObjectiveMetric(
 
 export function canMutateObjectiveWorkItems(objective: Objective | undefined): boolean {
   return canMutateObjectiveWorkItemsByFlow(objective);
+}
+
+export function metricEditAccessForObjective({
+  objective,
+  currentUser,
+  permissionRules,
+  now = new Date(),
+}: {
+  objective: Objective | undefined;
+  currentUser: OrfUser | null;
+  permissionRules: PermissionRule[];
+  now?: Date;
+}): MetricEditAccess {
+  if (!objective) return { status: "blocked", reason: "notFound" };
+  if (isObjectiveResultLocked(objective)) return { status: "blocked", reason: "lifecycleLocked" };
+  if (hasPermission(currentUser, permissionRules, "result.edit")) return { status: "allowed" };
+  if (canProposeObjectiveMetric(objective, currentUser?.name, now)) return { status: "allowed" };
+  return { status: "blocked", reason: "forbidden" };
+}
+
+export function metricEditUnavailableMessage(access: MetricEditAccess) {
+  if (access.status === "allowed") return "";
+  if (access.reason === "notFound") return "指标所属目标不可用";
+  if (access.reason === "lifecycleLocked") return "指标已冻结，不能编辑";
+  return "没有编辑指标权限";
 }
 
 export function canFreezeObjectiveAfterReestimate(
@@ -196,30 +225,4 @@ export function workbenchActionForObjective({
   }
 
   return null;
-}
-
-export function resultDetailCapabilities({
-  objective,
-  currentUser,
-  permissionRules,
-}: {
-  objective: Objective | undefined;
-  currentUser: OrfUser | null;
-  permissionRules: PermissionRule[];
-}) {
-  const canEditResult = hasPermission(currentUser, permissionRules, "result.edit");
-  const isAssignedChallenger = Boolean(
-    objective &&
-      currentUser &&
-      objective.challengers.includes(currentUser.name),
-  );
-  const canEditAsReestimateChallenger = Boolean(objective && isAssignedChallenger && isObjectiveReestimateWindowOpen(objective));
-
-  return {
-    canSubmitLoot: canSubmitObjectiveLoot(objective, currentUser),
-    canCreateTask: canMutateObjectiveWorkItems(objective) && (canEditResult || isAssignedChallenger),
-    canProposeUpdate: canEditResult && !isObjectiveResultLocked(objective),
-    canEditConfidence: canEditResult && !isObjectiveResultLocked(objective),
-    canEditMetricCalibration: (canEditResult || canEditAsReestimateChallenger) && !isObjectiveResultLocked(objective),
-  };
 }

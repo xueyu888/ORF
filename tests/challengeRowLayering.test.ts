@@ -9,6 +9,7 @@ import type { BountyNode, ChallengeRowAction, ChallengeTarget, ObjectiveNode } f
 import type { Objective, Result, Task } from "../src/types/orf";
 
 const date = "2026-05-20";
+const metricUpdatedDate = "2026-05-21";
 
 test("open row menu marks only its owning objective panel as foreground", () => {
   assert.doesNotMatch(renderChallengeTree(null), /data-has-open-row-menu/);
@@ -37,16 +38,25 @@ test("open row menu foreground state is backed by the objective panel layer rule
 
 test("objective deadline uses the date itself as the edit affordance", () => {
   const html = renderChallengeTree(null, { status: "editable", mode: "edit" });
+  const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
+  const css = readFileSync("src/styles.css", "utf8");
 
+  assert.match(html, /role="button"/);
+  assert.match(html, /tabindex="0"/);
   assert.match(html, /title="点击修改目标截止日期"/);
   assert.match(html, /class="[^"]*orf-objective-deadline-picker/);
+  assert.match(html, /aria-hidden="true"/);
+  assert.match(html, /tabindex="-1"/);
+  assert.match(treeSource, /\.showPicker\(\)/);
+  assert.match(css, /\.orf-objective-deadline-picker\s*{[^}]*pointer-events:\s*none/s);
   assert.doesNotMatch(html, /orf-objective-deadline-editor/);
   assert.doesNotMatch(html, /orf-objective-deadline-input/);
   assert.doesNotMatch(html, /lucide-pencil/);
 });
 
-test("result rows do not render an independent deadline cell", () => {
+test("result rows render updated time without a deadline-like date cell", () => {
   const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
+  const html = renderChallengeTree(null);
 
   assert.doesNotMatch(
     treeSource,
@@ -55,8 +65,47 @@ test("result rows do not render an independent deadline cell", () => {
   );
   assert.match(
     treeSource,
-    /<StatusChip tone=\{bounty \? bounty\.status : "open"\}>\{statusLabel\}<\/StatusChip>\s*<EmptySlot \/>\s*<EmptySlot \/>\s*<ProgressValue/,
-    "Indicator rows should leave both objective time columns empty.",
+    /<StatusChip tone=\{bounty \? bounty\.status : "open"\}>\{statusLabel\}<\/StatusChip>\s*<EmptySlot \/>\s*<TimeValue icon=\{Clock3\} value=\{bounty \? bounty\.updatedAt \|\| "未设置" : "未设置"\} \/>\s*<ProgressValue/,
+    "Indicator rows should render their own updated time in the secondary time column.",
+  );
+  assert.match(html, new RegExp(metricUpdatedDate));
+});
+
+test("result rows use named difficulty levels and render an editable selector when allowed", () => {
+  const html = renderChallengeTree(null);
+
+  assert.match(html, /aria-label="编辑指标难度，当前 进阶"/);
+  assert.match(html, /<select[^>]*class="orf-metric-difficulty-select"/);
+  assert.match(html, />入门<\/option>/);
+  assert.match(html, />进阶<\/option>/);
+  assert.doesNotMatch(html, /\d 星/);
+});
+
+test("result row difficulty display is permission-backed when editing is blocked", () => {
+  const html = renderChallengeTree(null, { status: "blocked", reason: "noPermission" }, { status: "blocked", reason: "lifecycleLocked" });
+
+  assert.doesNotMatch(html, /class="orf-metric-difficulty-select"/);
+  assert.match(html, /title="指标已冻结，不能编辑"/);
+  assert.match(html, /指标难度 进阶/);
+});
+
+test("hierarchy icon wrappers keep vertical anchors aligned", () => {
+  const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
+  const sharedAnchorSlots = treeSource.match(/className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"/g) ?? [];
+  const innerCircleOffsets = treeSource.match(/data-hierarchy-branch-end-offset="4"/g) ?? [];
+
+  assert.equal(sharedAnchorSlots.length, 3);
+  assert.equal(innerCircleOffsets.length, 2);
+
+  assert.match(
+    treeSource,
+    /className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"[\s\S]*?data-hierarchy-branch-end-offset="0"[\s\S]*?<MetricSquareIcon/,
+    "Metric anchors should use the shared hierarchy anchor slot.",
+  );
+  assert.match(
+    treeSource,
+    /className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"[\s\S]*?data-hierarchy-branch-end-offset="4"[\s\S]*?<CompletionCircleIcon/,
+    "Action anchors should use the shared hierarchy anchor slot while ending at the inner icon center.",
   );
 });
 
@@ -76,7 +125,11 @@ test("challenge workbench owns compact row typography through scoped CSS", () =>
   );
 });
 
-function renderChallengeTree(openActionId: string | null, deadlineEditState = { status: "blocked", reason: "noPermission" } as const): string {
+function renderChallengeTree(
+  openActionId: string | null,
+  deadlineEditState = { status: "blocked", reason: "noPermission" } as const,
+  metricEditAccess = { status: "allowed" } as const,
+): string {
   return renderToStaticMarkup(
     createElement(
       MemoryRouter,
@@ -84,7 +137,7 @@ function renderChallengeTree(openActionId: string | null, deadlineEditState = { 
       createElement(ChallengeTree, {
         emptyText: "暂无目标",
         groups: challengeGroups(),
-        handlers: rowHandlers(openActionId, deadlineEditState),
+        handlers: rowHandlers(openActionId, deadlineEditState, metricEditAccess),
         now: new Date(`${date}T00:00:00.000Z`),
         scope: "all",
       }),
@@ -96,9 +149,14 @@ function objectivePanels(html: string): string[] {
   return html.match(/<section\b[\s\S]*?<\/section>/g) ?? [];
 }
 
-function rowHandlers(openActionId: string | null, deadlineEditState: { status: "editable"; mode: "edit" } | { status: "blocked"; reason: "noPermission" }) {
+function rowHandlers(
+  openActionId: string | null,
+  deadlineEditState: { status: "editable"; mode: "edit" } | { status: "blocked"; reason: "noPermission" },
+  metricEditAccess: { status: "allowed" } | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" },
+) {
   const noop = () => {};
   const noopAsync = async () => false;
+  const okAsync = async () => true;
 
   return {
     activeActionId: null,
@@ -108,6 +166,7 @@ function rowHandlers(openActionId: string | null, deadlineEditState: { status: "
     trialReviews: [],
     canManageFlow: false,
     objectiveDeadlineEditState: () => deadlineEditState,
+    metricEditAccess: () => metricEditAccess,
     canMutateMetrics: () => true,
     canMutateWorkItems: () => true,
     canRecruitObjective: () => false,
@@ -138,6 +197,8 @@ function rowHandlers(openActionId: string | null, deadlineEditState: { status: "
     onRejectApplication: noopAsync,
     onSaveObjectiveDeadline: noopAsync,
     onUnavailableObjectiveDeadline: noop,
+    onSaveMetricDifficulty: okAsync,
+    onUnavailableMetricEdit: noop,
     onSaveTitle: noop,
     onSubActionDoneChange: noop,
     onToggleAction: noop,
@@ -175,11 +236,11 @@ function group(objectiveItem: Objective, actions: Task[] = [], ...bounties: Boun
 
 function bounty(resultItem: Result): BountyNode {
   return {
-    difficulty: "3 星",
+    difficulty: resultItem.uncertaintyLevel ?? "待校准",
     progress: 25,
     result: resultItem,
     status: "active",
-    updatedAt: date,
+    updatedAt: metricUpdatedDate,
   };
 }
 
@@ -232,12 +293,15 @@ function result(overrides: Partial<Result> = {}): Result {
     direction: "increase",
     status: "On Track",
     confidence: 80,
+    uncertaintyLevel: "进阶",
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     evidenceIds: [],
     feedbackIds: [],
     trend: [],
     reviewCadence: "Weekly",
+    createdAt: date,
+    updatedAt: date,
     ...overrides,
   };
 }

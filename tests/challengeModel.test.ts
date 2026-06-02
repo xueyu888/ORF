@@ -23,6 +23,7 @@ import {
   canSubmitObjectiveLoot,
   canSubmitObjectivePeerReview,
   metricCreationActionForObjective,
+  metricEditAccessForObjective,
   workbenchActionForObjective,
 } from "../src/features/challenge/model/orfFlowCapabilities";
 import {
@@ -67,7 +68,7 @@ test("buildChallengeTree filters objectives and preserves objective result order
   assert.equal(tree.length, 1);
   assert.equal(tree[0]?.objective.id, "obj-a");
   assert.deepEqual(tree[0]?.bounties.map((item) => item.result.id), ["res-b", "res-a"]);
-  assert.equal(tree[0]?.bounties[0]?.difficulty, "5 星");
+  assert.equal(tree[0]?.bounties[0]?.difficulty, "飞升");
   assert.equal(tree[0]?.bounties[0]?.status, "active");
   assert.equal(tree[0]?.bounties[0]?.progress, 30);
   assert.equal("deadline" in tree[0]!.bounties[0]!, false);
@@ -252,6 +253,7 @@ test("date and status helpers keep challenge display boundaries stable", () => {
   assert.equal(addDays("2026-05-14", 3), "2026-05-17");
   assert.equal(remainingTime("2026-05-16", new Date("2026-05-16T23:00:00")), "剩余 59 分钟");
   assert.equal(remainingTime("2026-05-15", new Date("2026-05-16T00:30:00")), "已超时 31 分钟");
+  assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [], updatedAt: "2026-05-13" }), [], []), "2026-05-13");
   assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [{ date: "2026-05-12", value: 1 }] }), [feedbackItem], [evidenceItem]), "2026-05-18");
   assert.equal(bountyStatus(result(), objective({ flowStatus: "submitted" })), "review");
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "recruiting" })), "征召中");
@@ -370,6 +372,51 @@ test("metric creation action separates commander definition from challenger prop
       now: new Date("2026-05-22T00:00:00.000Z"),
     }),
     null,
+  );
+});
+
+test("metric edit access centralizes role, reestimate, and lifecycle gates", () => {
+  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const rules = [{ role: "member" as const, permissions: [] }];
+  const now = new Date("2026-05-22T00:00:00.000Z");
+  const dueAt = "2999-05-30T00:00:00.000Z";
+
+  assert.deepEqual(
+    metricEditAccessForObjective({
+      objective: objective({ flowStatus: "candidate", challengers: [] }),
+      currentUser: admin,
+      permissionRules: rules,
+      now,
+    }),
+    { status: "allowed" },
+  );
+  assert.deepEqual(
+    metricEditAccessForObjective({
+      objective: objective({ flowStatus: "reestimating", challengers: [challenger.name], confirmationDueAt: dueAt }),
+      currentUser: challenger,
+      permissionRules: rules,
+      now,
+    }),
+    { status: "allowed" },
+  );
+  assert.deepEqual(
+    metricEditAccessForObjective({
+      objective: objective({ flowStatus: "reestimating", challengers: [], confirmationDueAt: dueAt }),
+      currentUser: challenger,
+      permissionRules: rules,
+      now,
+    }),
+    { status: "blocked", reason: "forbidden" },
+  );
+  assert.deepEqual(
+    metricEditAccessForObjective({
+      objective: objective({ flowStatus: "frozen", challengers: [] }),
+      currentUser: admin,
+      permissionRules: rules,
+      now,
+    }),
+    { status: "blocked", reason: "lifecycleLocked" },
   );
 });
 
@@ -524,6 +571,8 @@ function result(overrides: Partial<Result> = {}): Result {
     feedbackIds: [],
     trend: [{ date, value: 0 }],
     reviewCadence: "Weekly",
+    createdAt: date,
+    updatedAt: date,
     ...overrides,
   };
 }

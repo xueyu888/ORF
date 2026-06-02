@@ -723,6 +723,8 @@ test("challenger result edits through the API close after reestimate expiry and 
     definer: fixture.commander.name,
   });
   assert.ok(result);
+  assert.ok(result.createdAt);
+  assert.ok(result.updatedAt);
   assert.equal((await publishObjective(objective.id, fixture.commander.id)).status, "ok");
 
   await withApiServer(fixture, async (app) => {
@@ -738,8 +740,11 @@ test("challenger result edits through the API close after reestimate expiry and 
     const observerAttempt = await patchResultTitle(app, fixture.observer, result.id, `${fixture.prefix} observer edit`);
     assert.equal(observerAttempt.statusCode, 403);
 
+    await db.update(resultRows).set({ updatedAt: "2998-01-01" }).where(eq(resultRows.id, result.id));
     const edited = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} edited during reestimate`);
     assert.equal(edited.statusCode, 200);
+    const editedData = await getTaskManagementData({ scope: fixture.scope });
+    assert.notEqual(editedData.results.find((item) => item.id === result.id)?.updatedAt, "2998-01-01");
 
     await expireReestimateWindow(objective.id);
     const expired = await patchResultTitle(app, fixture.challenger, result.id, `${fixture.prefix} expired edit`);
@@ -1621,6 +1626,8 @@ test("API work item creation trims labels and prevents blank persisted titles", 
     assert.equal(trimmedResultPayload.result.metricName, "trimmed metric name");
     assert.equal(trimmedResultPayload.result.description, "由 ORF Flow 规划创建的指标。");
     assert.equal(trimmedResultPayload.result.unit, "%");
+    assert.ok(trimmedResultPayload.result.createdAt);
+    assert.ok(trimmedResultPayload.result.updatedAt);
 
     const blankTaskTitle = await apiInject(app, fixture.challenger, "POST", "/api/tasks", {
       title: "   ",

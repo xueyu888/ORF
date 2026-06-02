@@ -19,8 +19,8 @@ type ObjectiveChallengeFields = Pick<
   | "objectiveSettlementPoints"
 >;
 type LegacyObjective = Omit<Objective, keyof ObjectiveChallengeFields> & Partial<ObjectiveChallengeFields>;
-type LegacyResult = Omit<Result, "uncertaintyScore" | "acceptedResult"> &
-  Partial<Pick<Result, "uncertaintyScore" | "acceptedResult">> & {
+type LegacyResult = Omit<Result, "uncertaintyScore" | "acceptedResult" | "createdAt" | "updatedAt"> &
+  Partial<Pick<Result, "uncertaintyScore" | "acceptedResult" | "createdAt" | "updatedAt">> & {
     owner?: string;
     finalDueAt?: string;
     assignedChallenger?: string | null;
@@ -68,6 +68,7 @@ function inferFlowStatus(objective: LegacyObjective, challengers: string[], assi
 }
 
 function normalizeInitialState(state: LegacyInitialState): OrfState {
+  const objectiveUpdatedAtById = new Map(state.objectives.map((objective) => [objective.id, objective.updatedAt]));
   const results: Result[] = state.results.map((item) => {
     const {
       owner: _owner,
@@ -81,11 +82,14 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
       challengeApplications: _challengeApplications,
       ...result
     } = item;
+    const updatedAt = item.updatedAt ?? objectiveUpdatedAtById.get(item.objectiveId) ?? "2026-04-24";
 
     return {
       ...result,
       uncertaintyScore: item.uncertaintyScore ?? uncertaintyScore(item.uncertaintyLevel),
       acceptedResult: item.acceptedResult ?? "unreviewed",
+      createdAt: item.createdAt ?? updatedAt,
+      updatedAt,
     };
   });
 

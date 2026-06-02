@@ -181,6 +181,8 @@ async function seed() {
         acceptedResult: result.acceptedResult,
         reviewCadence: result.reviewCadence,
         sortOrder: initialOrfState.objectives.find((objective) => objective.id === result.objectiveId)?.resultIds.indexOf(result.id) ?? 0,
+        createdAt: result.createdAt,
+        updatedAt: result.updatedAt,
         createdBy: result.definer ? userIdForName(result.definer) : bootstrapAdmin.id,
         updatedBy: result.definer ? userIdForName(result.definer) : bootstrapAdmin.id,
       })),

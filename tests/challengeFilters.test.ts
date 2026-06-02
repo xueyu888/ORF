@@ -204,6 +204,8 @@ function result(input: Partial<Result> = {}): Result {
     feedbackIds: [],
     trend: [],
     reviewCadence: "",
+    createdAt: "2999-01-01",
+    updatedAt: "2999-01-01",
     ...input,
   };
 }

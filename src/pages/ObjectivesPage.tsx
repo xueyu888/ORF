@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { PageScaffold } from "../components/PageScaffold";
 import { ObjectiveCard } from "../components/SharedCards";
 import { Button, Card, EmptyState, ProgressBar, StatusBadge } from "../components/ui";
@@ -67,7 +67,7 @@ export function ObjectivesPage() {
             <span>目标</span><span>状态</span><span>信心</span><span>进度</span><span>指标</span><span>反馈</span><span>最近更新</span>
           </div>
           {objectives.map((objective) => (
-            <Link key={objective.id} to={`/objectives/${objective.id}`} className="orf-table-row grid grid-cols-[1.6fr_110px_120px_1fr_90px_90px_120px] items-center gap-3 px-4 py-3 text-sm">
+            <div key={objective.id} className="orf-table-row grid grid-cols-[1.6fr_110px_120px_1fr_90px_90px_120px] items-center gap-3 px-4 py-3 text-sm">
               <span className="font-medium orf-text-primary">{objective.title}</span>
               <StatusBadge status={objective.status} />
               <span className="orf-text-secondary">{objective.confidence}%</span>
@@ -75,7 +75,7 @@ export function ObjectivesPage() {
               <span className="orf-text-secondary">{objective.resultIds.length}</span>
               <span className="orf-text-secondary">{objective.feedbackIds.length}</span>
               <span className="orf-text-muted">{objective.updatedAt}</span>
-            </Link>
+            </div>
           ))}
         </Card>
       )}

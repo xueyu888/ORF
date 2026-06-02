@@ -113,7 +113,7 @@ export function AppShell() {
                   onClick={() => setCommandOpen(true)}
                   className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
                 >
-                  搜索目标、指标、行动项、反馈...
+                  搜索页面、行动项...
                 </button>
               </div>
               {canCreateFeedback && <Button className="h-8 px-2.5 text-xs" variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>

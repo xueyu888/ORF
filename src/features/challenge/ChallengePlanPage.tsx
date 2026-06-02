@@ -10,7 +10,7 @@ import { getMyChallengesData, type TaskManagementData } from "../../state/apiCli
 import { useOrf } from "../../state/OrfProvider";
 import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
-import type { Objective, OrfState, Result, Task, TaskChecklistItem } from "../../types/orf";
+import type { Objective, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { readModelInvalidationKey } from "../realtime/readModelInvalidations";
@@ -35,7 +35,39 @@ import {
   type TaskCompletionOverlay,
   type TaskCompletionOverlayInput,
 } from "./model/taskCompletionOverlay";
-import { isTemporaryChildTarget, temporaryChildRowId, temporaryChildTarget } from "./model/types";
+import {
+  applyTitleEditOverlays,
+  titleEditOverlayForTarget,
+  titleEditOverlayResolved,
+  upsertTitleEditOverlay,
+  type TitleEditOverlay,
+  type TitleEditOverlayInput,
+} from "./model/titleEditOverlay";
+import {
+  applyChildCreationOverlay,
+  beginChildCreationSession,
+  cancelChildCreationSession,
+  childCreationDraft,
+  childCreationDraftId,
+  childCreationIsAwaitingSnapshot,
+  childCreationIsSubmitting,
+  childCreationOverlayMatchesTarget,
+  childCreationSubmittedOverlay,
+  childCreationTarget,
+  childCreationTemporaryRow,
+  clearChildCreationSession,
+  clearSubmittedChildCreation,
+  completeChildCreationDraft,
+  failChildCreationDraft,
+  idleChildCreationSession,
+  isChildCreationTarget,
+  materializeSubmittedChildCreation,
+  submitChildCreationDraft,
+  updateChildCreationDraftTitle,
+  type ChildCreationDraft,
+  type ChildCreationKind,
+  type ChildCreationSession,
+} from "./model/childCreationSession";
 import {
   applyObjectiveOrderAnchor,
   beginObjectiveCreationSession,
@@ -57,8 +89,8 @@ import {
   type DraftReturnContext,
   type ObjectiveCreationSession,
 } from "./model/objectiveCreationSession";
-import { canMutateObjectiveWorkItems, canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
-import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget, TemporaryChildRow, TemporaryChildRowKind } from "./model/types";
+import { canMutateObjectiveWorkItems, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective, metricEditAccessForObjective, metricEditUnavailableMessage } from "./model/orfFlowCapabilities";
+import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
 import type { ObjectiveNode } from "./model/types";
 
 function defaultFinalDueAt() {
@@ -75,72 +107,6 @@ function defaultCycleLabel() {
 
 function rowActionOwnsOpenMenu(openActionId: string, actionId: string) {
   return openActionId === actionId || openActionId === `${actionId}:add`;
-}
-
-type CreatedChildOverlay =
-  | { kind: "metric"; result: Result }
-  | { kind: "action"; task: Task }
-  | { kind: "subtask"; taskId: string; item: TaskChecklistItem; afterItemId?: string };
-
-function insertChecklistOverlay(items: TaskChecklistItem[], item: TaskChecklistItem, afterItemId?: string) {
-  if (items.some((current) => current.id === item.id)) return items;
-
-  const next = [...items];
-  const afterIndex = afterItemId ? next.findIndex((current) => current.id === afterItemId) : -1;
-  next.splice(afterIndex >= 0 ? afterIndex + 1 : next.length, 0, item);
-  return next;
-}
-
-function createdChildOverlayMaterialized(data: OrfState, overlay: CreatedChildOverlay) {
-  if (overlay.kind === "metric") {
-    return data.results.some((result) => result.id === overlay.result.id);
-  }
-
-  if (overlay.kind === "action") {
-    return data.tasks.some((task) => task.id === overlay.task.id);
-  }
-
-  return data.tasks.some((task) => task.id === overlay.taskId && task.checklist.some((item) => item.id === overlay.item.id));
-}
-
-function applyCreatedChildOverlay(data: OrfState, overlay: CreatedChildOverlay | null): OrfState {
-  if (!overlay || createdChildOverlayMaterialized(data, overlay)) return data;
-
-  if (overlay.kind === "metric") {
-    return {
-      ...data,
-      objectives: data.objectives.map((objective) =>
-        objective.id === overlay.result.objectiveId && !objective.resultIds.includes(overlay.result.id)
-          ? { ...objective, resultIds: [...objective.resultIds, overlay.result.id] }
-          : objective,
-      ),
-      results: [...data.results, overlay.result],
-    };
-  }
-
-  if (overlay.kind === "action") {
-    return {
-      ...data,
-      objectives: data.objectives.map((objective) =>
-        objective.id === overlay.task.linkedObjectiveId && !objective.taskIds.includes(overlay.task.id)
-          ? { ...objective, taskIds: [...objective.taskIds, overlay.task.id] }
-          : objective,
-      ),
-      tasks: [...data.tasks, overlay.task],
-    };
-  }
-
-  return {
-    ...data,
-    tasks: data.tasks.map((task) => (task.id === overlay.taskId ? { ...task, checklist: insertChecklistOverlay(task.checklist, overlay.item, overlay.afterItemId) } : task)),
-  };
-}
-
-function createdChildOverlayMatchesTarget(overlay: CreatedChildOverlay | null, target: ChallengeTarget) {
-  if (!overlay) return false;
-  if (overlay.kind === "metric") return target.type === "bounty" && target.id === overlay.result.id;
-  if (overlay.kind === "action") return target.type === "action" && target.id === overlay.task.id;
-  return target.type === "subAction" && target.id === overlay.item.id;
 }
 
 function draftObjective(title: string): Objective {
@@ -223,6 +189,7 @@ export function ChallengePlanPage() {
     updateObjectiveFinalDueAt,
     updateObjectiveTitle,
     updateResultTitle,
+    updateResultUncertaintyLevel,
     updateTaskChecklistItem,
     updateTaskChecklistItemLabel,
     updateTaskTitle,
@@ -245,24 +212,40 @@ export function ChallengePlanPage() {
   const [commentTarget, setCommentTarget] = useState<ChallengeCommentTarget | null>(null);
   const [editingTarget, setEditingTarget] = useState<ChallengeTarget | null>(null);
   const [objectiveCreationSession, setObjectiveCreationSession] = useState<ObjectiveCreationSession>(idleObjectiveCreationSession);
-  const [temporaryChildRow, setTemporaryChildRow] = useState<TemporaryChildRow | null>(null);
-  const [createdChildOverlay, setCreatedChildOverlay] = useState<CreatedChildOverlay | null>(null);
+  const [childCreationSession, setChildCreationSession] = useState<ChildCreationSession>(idleChildCreationSession);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
+  const [titleEditOverlays, setTitleEditOverlays] = useState<TitleEditOverlay[]>([]);
   const [objectiveInteractionAnchor, setObjectiveInteractionAnchor] = useState<ListItemAnchor | null>(null);
-  const temporaryChildRowRef = useRef<TemporaryChildRow | null>(null);
+  const childCreationSubmissionSequenceRef = useRef(0);
   const completionOverlaySequenceRef = useRef(0);
+  const titleEditOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
   const appliedLinkedTargetRef = useRef<string | null>(null);
+  const scopeDefaultedForAllAccessRef = useRef(false);
   const now = useMinuteNow();
 
   useEffect(() => {
-    if (!canShowAllChallenges && scope === "all") {
-      setScope("mine");
+    if (!canShowAllChallenges) {
+      scopeDefaultedForAllAccessRef.current = false;
+      if (scope === "all") {
+        setScope("mine");
+      }
+      return;
+    }
+
+    if (scope === "all") {
+      scopeDefaultedForAllAccessRef.current = true;
+      return;
+    }
+
+    if (!scopeDefaultedForAllAccessRef.current) {
+      scopeDefaultedForAllAccessRef.current = true;
+      setScope("all");
     }
   }, [canShowAllChallenges, scope]);
 
@@ -304,15 +287,24 @@ export function ChallengePlanPage() {
 
   const sourceData = challengeData ?? state;
   const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
+  const temporaryChildRow = childCreationTemporaryRow(childCreationSession);
+  const childOverlay = childCreationSubmittedOverlay(childCreationSession);
   const challengeState = useMemo(
-    () => applyTaskCompletionOverlays(applyCreatedChildOverlay(baseChallengeState, createdChildOverlay), completionOverlays),
-    [baseChallengeState, completionOverlays, createdChildOverlay],
+    () => applyTaskCompletionOverlays(applyTitleEditOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), titleEditOverlays), completionOverlays),
+    [baseChallengeState, childOverlay, completionOverlays, titleEditOverlays],
   );
-  const setTrackedTemporaryChildRow = (row: TemporaryChildRow | null) => {
-    temporaryChildRowRef.current = row;
-    setTemporaryChildRow(row);
+  const clearChildCreation = () => setChildCreationSession(clearChildCreationSession);
+  const applyTitleEditOverlay = (overlay: TitleEditOverlayInput) => {
+    const trackedOverlay = {
+      ...overlay,
+      id: `title-edit-${Date.now()}-${titleEditOverlaySequenceRef.current++}`,
+    } as TitleEditOverlay;
+    setTitleEditOverlays((items) => upsertTitleEditOverlay(items, trackedOverlay));
+    return trackedOverlay.id;
   };
-  const clearTemporaryChildRow = () => setTrackedTemporaryChildRow(null);
+  const removeTitleEditOverlay = (overlayId: string) => {
+    setTitleEditOverlays((items) => items.filter((item) => item.id !== overlayId));
+  };
   const applyCompletionOverlay = (overlay: TaskCompletionOverlayInput) => {
     const trackedOverlay = {
       ...overlay,
@@ -323,15 +315,6 @@ export function ChallengePlanPage() {
   };
   const removeCompletionOverlay = (overlayId: string) => {
     setCompletionOverlays((items) => items.filter((item) => item.id !== overlayId));
-  };
-  const completeTemporaryChildRow = (submittingRow: TemporaryChildRow, overlay: CreatedChildOverlay) => {
-    if (temporaryChildRowRef.current?.id !== submittingRow.id) return;
-    setCreatedChildOverlay(overlay);
-    clearTemporaryChildRow();
-  };
-  const failTemporaryChildRow = (submittingRow: TemporaryChildRow) => {
-    if (temporaryChildRowRef.current?.id !== submittingRow.id) return;
-    setTrackedTemporaryChildRow({ ...submittingRow, status: "failed" });
   };
   const draftTitle = objectiveCreationDraftTitle(objectiveCreationSession);
   const draftGroup = useMemo(() => (draftTitle === null ? null : draftObjectiveNode(draftTitle)), [draftTitle]);
@@ -404,9 +387,6 @@ export function ChallengePlanPage() {
     }
   }, [creationAnchoredGroups, objectiveInteractionAnchor]);
   useEffect(() => {
-    temporaryChildRowRef.current = temporaryChildRow;
-  }, [temporaryChildRow]);
-  useEffect(() => {
     const objective = objectiveCreationSubmittedObjective(objectiveCreationSession);
     if (!objective) return;
     if (groups.some((group) => group.objective.id === objective.id)) {
@@ -414,11 +394,15 @@ export function ChallengePlanPage() {
     }
   }, [groups, objectiveCreationSession]);
   useEffect(() => {
-    if (!createdChildOverlay) return;
-    if (createdChildOverlayMaterialized(baseChallengeState, createdChildOverlay)) {
-      setCreatedChildOverlay(null);
-    }
-  }, [baseChallengeState, createdChildOverlay]);
+    setChildCreationSession((current) => materializeSubmittedChildCreation(current, baseChallengeState));
+  }, [baseChallengeState]);
+  useEffect(() => {
+    setTitleEditOverlays((items) => {
+      if (items.length === 0) return items;
+      const pendingItems = items.filter((item) => !titleEditOverlayResolved(baseChallengeState, item));
+      return pendingItems.length === items.length ? items : pendingItems;
+    });
+  }, [baseChallengeState]);
   useEffect(() => {
     setCompletionOverlays((items) => {
       if (items.length === 0) return items;
@@ -428,6 +412,18 @@ export function ChallengePlanPage() {
   }, [baseChallengeState]);
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
+  const metricEditAccessForObjectiveId = (objectiveId: string) =>
+    metricEditAccessForObjective({
+      objective: objectiveById(objectiveId),
+      currentUser,
+      permissionRules: challengeState.permissionRules,
+      now,
+    });
+  const notifyUnavailableMetricEdit = (objectiveId: string) => {
+    const access = metricEditAccessForObjectiveId(objectiveId);
+    if (access.status === "allowed") return;
+    notify(metricEditUnavailableMessage(access));
+  };
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
   const objectiveDeadlineEditState = (objective: ObjectiveNode["objective"]) => resolveObjectiveDeadlineEditState(objective, currentUser?.role);
   const notifyUnavailableObjectiveDeadline = (objective: ObjectiveNode["objective"]) => {
@@ -480,12 +476,12 @@ export function ChallengePlanPage() {
   useEffect(() => {
     if (!temporaryChildRow) return;
     if (!challengeState.objectives.some((objective) => objective.id === temporaryChildRow.objectiveId)) {
-      clearTemporaryChildRow();
-      if (editingTarget && isTemporaryChildTarget(editingTarget)) setEditingTarget(null);
+      clearChildCreation();
+      if (editingTarget && isChildCreationTarget(editingTarget)) setEditingTarget(null);
       return;
     }
     if (temporaryChildRow.status === "failed") {
-      const target = temporaryChildTarget(temporaryChildRow);
+      const target = childCreationTarget(temporaryChildRow);
       if (!editingTarget || editingTarget.type !== target.type || editingTarget.id !== target.id) {
         setEditingTarget(target);
       }
@@ -513,6 +509,11 @@ export function ChallengePlanPage() {
       return;
     }
 
+    if (childCreationIsSubmitting(childCreationSession) || childCreationIsAwaitingSnapshot(childCreationSession)) {
+      notify("请先完成当前草稿");
+      return;
+    }
+
     if (objectiveCreationSession.status === "editingDraft" || objectiveCreationSession.status === "failedEditingDraft") {
       notify("请先完成当前目标草稿");
       return;
@@ -520,8 +521,7 @@ export function ChallengePlanPage() {
 
     setObjectiveCreationSession((current) => beginObjectiveCreationSession(current, { cycle: cycleFilter, member: memberFilter, scope, status: statusFilter }));
     setEditingTarget(null);
-    clearTemporaryChildRow();
-    setCreatedChildOverlay(null);
+    clearChildCreation();
     if (canShowAllChallenges) setScope("all");
     setCycleFilter("all");
     setMemberFilter("all");
@@ -529,6 +529,7 @@ export function ChallengePlanPage() {
   }, [
     canCreateObjective,
     canShowAllChallenges,
+    childCreationSession,
     cycleFilter,
     hasObjectiveCreationEntry,
     memberFilter,
@@ -542,14 +543,9 @@ export function ChallengePlanPage() {
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
-      const objective = challengeState.objectives.find((item) => item.id === target.objectiveId);
-      if (isObjectiveResultLocked(objective)) {
-        notify("指标已冻结，不能编辑");
-        return false;
-      }
-      if (role === "admin") return true;
-      if (objective && canProposeObjectiveMetric(objective, currentMember, now)) return true;
-      notify("没有编辑指标权限");
+      const access = metricEditAccessForObjectiveId(target.objectiveId);
+      if (access.status === "allowed") return true;
+      notify(metricEditUnavailableMessage(access));
       return false;
     }
 
@@ -569,16 +565,22 @@ export function ChallengePlanPage() {
     return false;
   };
 
-  const beginTemporaryChildRow = (kind: TemporaryChildRowKind, objectiveId: string, options: { afterItemId?: string; taskId?: string } = {}) => {
-    const rowId = kind === "subtask" && options.taskId ? temporaryChildRowId(kind, options.taskId) : temporaryChildRowId(kind, objectiveId);
-    if (temporaryChildRow?.status === "submitting") {
+  const beginChildCreationDraft = (kind: ChildCreationKind, objectiveId: string, options: { afterItemId?: string; taskId?: string } = {}) => {
+    const rowId = kind === "subtask" && options.taskId ? childCreationDraftId(kind, options.taskId) : childCreationDraftId(kind, objectiveId);
+    if (childCreationIsSubmitting(childCreationSession)) {
       notify("草稿正在创建，请稍后");
       return;
     }
 
-    if (temporaryChildRow && temporaryChildRow.id !== rowId) {
+    if (childCreationIsAwaitingSnapshot(childCreationSession)) {
+      notify("草稿正在同步，请稍后");
+      return;
+    }
+
+    const currentDraft = childCreationDraft(childCreationSession);
+    if (currentDraft && currentDraft.id !== rowId) {
       notify("请先完成当前草稿");
-      setEditingTarget(temporaryChildTarget(temporaryChildRow));
+      setEditingTarget(childCreationTarget(currentDraft));
       return;
     }
 
@@ -590,18 +592,16 @@ export function ChallengePlanPage() {
         return;
       }
 
-      const row: TemporaryChildRow = {
+      const draft: ChildCreationDraft = {
         id: rowId,
         kind,
         objectiveId: action.linkedObjectiveId,
-        persistence: "temporary",
         taskId: action.id,
         afterItemId: options.afterItemId,
-        status: "editing",
-        title: temporaryChildRow?.id === rowId ? temporaryChildRow.title : "",
+        title: currentDraft?.id === rowId ? currentDraft.title : "",
       };
-      setTrackedTemporaryChildRow(row);
-      setEditingTarget(temporaryChildTarget(row));
+      setChildCreationSession((current) => beginChildCreationSession(current, draft));
+      setEditingTarget(childCreationTarget(draft));
       setCollapsedActionIds((items) => withoutItem(items, action.id));
       setOpenActionId(null);
       setActiveActionId(null);
@@ -623,17 +623,15 @@ export function ChallengePlanPage() {
         return;
       }
 
-      const row: TemporaryChildRow = {
+      const draft: ChildCreationDraft = {
         id: rowId,
         kind,
         objectiveId,
-        persistence: "temporary",
         source: action.source,
-        status: "editing",
-        title: temporaryChildRow?.id === rowId ? temporaryChildRow.title : "",
+        title: currentDraft?.id === rowId ? currentDraft.title : "",
       };
-      setTrackedTemporaryChildRow(row);
-      setEditingTarget(temporaryChildTarget(row));
+      setChildCreationSession((current) => beginChildCreationSession(current, draft));
+      setEditingTarget(childCreationTarget(draft));
       setOpenActionId(null);
       setActiveActionId(null);
       return;
@@ -644,26 +642,24 @@ export function ChallengePlanPage() {
       return;
     }
 
-    const row: TemporaryChildRow = {
+    const draft: ChildCreationDraft = {
       id: rowId,
       kind,
       objectiveId,
-      persistence: "temporary",
-      status: "editing",
-      title: temporaryChildRow?.id === rowId ? temporaryChildRow.title : "",
+      title: currentDraft?.id === rowId ? currentDraft.title : "",
     };
-    setTrackedTemporaryChildRow(row);
-    setEditingTarget(temporaryChildTarget(row));
+    setChildCreationSession((current) => beginChildCreationSession(current, draft));
+    setEditingTarget(childCreationTarget(draft));
     setOpenActionId(null);
     setActiveActionId(null);
   };
 
   const addBounty = (objectiveId: string) => {
-    beginTemporaryChildRow("metric", objectiveId);
+    beginChildCreationDraft("metric", objectiveId);
   };
 
   const addAction = (objectiveId: string) => {
-    beginTemporaryChildRow("action", objectiveId);
+    beginChildCreationDraft("action", objectiveId);
   };
 
   const addSubAction = (actionId: string, afterItemId?: string) => {
@@ -673,17 +669,17 @@ export function ChallengePlanPage() {
       notify("目标当前阶段不能新增子行动项");
       return;
     }
-    beginTemporaryChildRow("subtask", action.linkedObjectiveId, { afterItemId, taskId: actionId });
+    beginChildCreationDraft("subtask", action.linkedObjectiveId, { afterItemId, taskId: actionId });
   };
 
   const beginEdit = (target: ChallengeTarget) => {
-    if (isTemporaryChildTarget(target)) {
+    if (isChildCreationTarget(target)) {
       if (temporaryChildRow?.id === target.id && temporaryChildRow.status !== "submitting") {
-        setEditingTarget(temporaryChildTarget(temporaryChildRow));
+        setEditingTarget(childCreationTarget(temporaryChildRow));
         setOpenActionId(null);
       } else {
         notify("请先完成当前草稿");
-        if (temporaryChildRow) setEditingTarget(temporaryChildTarget(temporaryChildRow));
+        if (temporaryChildRow) setEditingTarget(childCreationTarget(temporaryChildRow));
         setOpenActionId(null);
       }
       return;
@@ -738,8 +734,8 @@ export function ChallengePlanPage() {
       setEditingTarget(null);
       return;
     }
-    if (editingTarget && isTemporaryChildTarget(editingTarget)) {
-      clearTemporaryChildRow();
+    if (editingTarget && isChildCreationTarget(editingTarget)) {
+      setChildCreationSession(cancelChildCreationSession);
       setEditingTarget(null);
       return;
     }
@@ -748,49 +744,51 @@ export function ChallengePlanPage() {
 
   const updateScope = (next: ChallengeScope) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
-    clearTemporaryChildRow();
-    setCreatedChildOverlay(null);
+    setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setScope(next);
   };
 
   const updateCycleFilter = (next: ChallengeCycleFilter) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
-    clearTemporaryChildRow();
-    setCreatedChildOverlay(null);
+    setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setCycleFilter(next);
   };
 
   const updateMemberFilter = (next: ChallengeMemberFilter) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
-    clearTemporaryChildRow();
-    setCreatedChildOverlay(null);
+    setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setMemberFilter(next);
   };
 
   const updateStatusFilter = (next: ChallengeStatusFilter) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
-    clearTemporaryChildRow();
-    setCreatedChildOverlay(null);
+    setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setStatusFilter(next);
   };
 
-  const createTemporaryChildRow = (target: ChallengeTarget, title: string) => {
+  const createChildDraft = (target: ChallengeTarget, title: string) => {
     const row = temporaryChildRow;
     if (!row || row.id !== target.id || row.status === "submitting") return false;
+    if (row.kind === "subtask" && !row.taskId) return false;
 
     const value = title.trim();
     if (!value) {
       notify("标题不能为空");
-      setTrackedTemporaryChildRow({ ...row, title });
+      setChildCreationSession((current) => updateChildCreationDraftTitle(current, title));
       return false;
     }
 
-    const submittingRow: TemporaryChildRow = { ...row, status: "submitting", title: value };
-    setTrackedTemporaryChildRow(submittingRow);
+    const submittingSession = submitChildCreationDraft(childCreationSession, value, `child-create-${Date.now()}-${childCreationSubmissionSequenceRef.current++}`);
+    if (submittingSession.status !== "submittingDraft") return false;
+    setChildCreationSession(submittingSession);
     setEditingTarget(null);
 
     if (row.kind === "metric") {
@@ -802,21 +800,22 @@ export function ChallengePlanPage() {
         definer: currentUser?.name ?? currentMember,
       }).then((result) => {
         if (result) {
-          completeTemporaryChildRow(submittingRow, { kind: "metric", result });
+          setChildCreationSession((current) => completeChildCreationDraft(current, submittingSession, { kind: "metric", result }));
         } else {
-          failTemporaryChildRow(submittingRow);
+          setChildCreationSession((current) => failChildCreationDraft(current, submittingSession));
         }
       });
       return true;
     }
 
     if (row.kind === "subtask") {
-      if (!row.taskId) return false;
-      void createTaskChecklistItem(row.taskId, { afterItemId: row.afterItemId, label: value }).then((item) => {
+      const taskId = row.taskId;
+      if (!taskId) return false;
+      void createTaskChecklistItem(taskId, { afterItemId: row.afterItemId, label: value }).then((item) => {
         if (item) {
-          completeTemporaryChildRow(submittingRow, { kind: "subtask", taskId: row.taskId!, item, afterItemId: row.afterItemId });
+          setChildCreationSession((current) => completeChildCreationDraft(current, submittingSession, { kind: "subtask", taskId, item, afterItemId: row.afterItemId }));
         } else {
-          failTemporaryChildRow(submittingRow);
+          setChildCreationSession((current) => failChildCreationDraft(current, submittingSession));
         }
       });
       return true;
@@ -830,9 +829,9 @@ export function ChallengePlanPage() {
       linkedObjectiveId: row.objectiveId,
     }).then((task) => {
       if (task) {
-        completeTemporaryChildRow(submittingRow, { kind: "action", task });
+        setChildCreationSession((current) => completeChildCreationDraft(current, submittingSession, { kind: "action", task }));
       } else {
-        failTemporaryChildRow(submittingRow);
+        setChildCreationSession((current) => failChildCreationDraft(current, submittingSession));
       }
     });
     return true;
@@ -840,7 +839,7 @@ export function ChallengePlanPage() {
 
   const saveTitle = (target: ChallengeTarget, title: string) => {
     if (target.type === "objective" && target.id === draftObjectiveId) return createDraftObjective(title);
-    if (isTemporaryChildTarget(target)) return createTemporaryChildRow(target, title);
+    if (isChildCreationTarget(target)) return createChildDraft(target, title);
 
     const value = title.trim();
     if (!value) {
@@ -848,12 +847,35 @@ export function ChallengePlanPage() {
       return false;
     }
 
-    if (target.type === "objective") updateObjectiveTitle(target.id, value);
-    if (target.type === "bounty") updateResultTitle(target.id, value);
-    if (target.type === "action") updateTaskTitle(target.id, value);
-    if (target.type === "subAction") updateTaskChecklistItemLabel(target.actionId, target.id, value);
+    const overlayId = applyTitleEditOverlay(titleEditOverlayForTarget(target, value));
+    if (target.type === "objective") {
+      void updateObjectiveTitle(target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
+    if (target.type === "bounty") {
+      void updateResultTitle(target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
+    if (target.type === "action") {
+      void updateTaskTitle(target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
+    if (target.type === "subAction") {
+      void updateTaskChecklistItemLabel(target.actionId, target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
     setEditingTarget(null);
     return true;
+  };
+
+  const saveMetricDifficulty = async (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => {
+    if (target.type !== "bounty") return false;
+    if (!requireTargetPermission(target, "edit")) return false;
+    return updateResultUncertaintyLevel(target.id, uncertaintyLevel);
   };
 
   const deleteTarget = (target: ChallengeTarget) => {
@@ -864,8 +886,8 @@ export function ChallengePlanPage() {
       setEditingTarget(null);
       return;
     }
-    if (isTemporaryChildTarget(target)) {
-      clearTemporaryChildRow();
+    if (isChildCreationTarget(target)) {
+      setChildCreationSession(cancelChildCreationSession);
       setEditingTarget(null);
       return;
     }
@@ -873,9 +895,7 @@ export function ChallengePlanPage() {
     if (!requireTargetPermission(target, "delete")) return;
     if (!window.confirm(deleteConfirmMessage(target, challengeState))) return;
 
-    if (createdChildOverlayMatchesTarget(createdChildOverlay, target)) {
-      setCreatedChildOverlay(null);
-    }
+    if (childCreationOverlayMatchesTarget(childCreationSession, target)) setChildCreationSession(clearSubmittedChildCreation);
     if (target.type === "objective") deleteObjective(target.id);
     if (target.type === "bounty") deleteResult(target.id);
     if (target.type === "action") deleteTask(target.id);
@@ -887,7 +907,7 @@ export function ChallengePlanPage() {
       notify("请先完成目标标题");
       return;
     }
-    if (isTemporaryChildTarget(target)) {
+    if (isChildCreationTarget(target)) {
       notify("请先完成草稿标题");
       return;
     }
@@ -912,7 +932,7 @@ export function ChallengePlanPage() {
       if (action === "copyLink" || action === "comment") notify("请先完成目标标题");
       return;
     }
-    if (isTemporaryChildTarget(target)) {
+    if (isChildCreationTarget(target)) {
       if (action === "edit") beginEdit(target);
       if (action === "delete") deleteTarget(target);
       if (action === "copyLink" || action === "comment") notify("请先完成草稿标题");
@@ -1092,6 +1112,7 @@ export function ChallengePlanPage() {
               permissionRules: challengeState.permissionRules,
               now,
             })?.label ?? null,
+          metricEditAccess: metricEditAccessForObjectiveId,
           canRecruitObjective: (objective) =>
             canRecruitObjectiveChallengers({
               objective,
@@ -1109,12 +1130,7 @@ export function ChallengePlanPage() {
           onAddSubAction: addSubAction,
           onApproveApplication: approveAnchoredChallengeApplication,
           onCancelEdit: cancelEdit,
-          onTemporaryChildTitleChange: (title) =>
-            setTemporaryChildRow((current) => {
-              const next = current && current.status !== "submitting" ? { ...current, title } : current;
-              temporaryChildRowRef.current = next;
-              return next;
-            }),
+          onTemporaryChildTitleChange: (title) => setChildCreationSession((current) => updateChildCreationDraftTitle(current, title)),
           onDraftTitleChange: (title) => setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title)),
           onEditTarget: beginEdit,
           onFreezeObjective: freezeObjective,
@@ -1124,6 +1140,8 @@ export function ChallengePlanPage() {
           onRejectApplication: rejectAnchoredChallengeApplication,
           onSaveObjectiveDeadline: saveObjectiveDeadline,
           onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
+          onUnavailableMetricEdit: notifyUnavailableMetricEdit,
+          onSaveMetricDifficulty: saveMetricDifficulty,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),

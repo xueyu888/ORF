@@ -11,18 +11,15 @@ const BountyHallPage = lazyNamed(() => import("./pages/BountyHallPage"), "Bounty
 const ChallengePlanPage = lazyNamed(() => import("./pages/TasksPage"), "ChallengePlanPage");
 const DashboardPage = lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage");
 const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage");
-const FeedbackDetailPage = lazyNamed(() => import("./pages/FeedbackDetailPage"), "FeedbackDetailPage");
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
 const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
 const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
 const NotificationsPage = lazyNamed(() => import("./pages/NotificationsPage"), "NotificationsPage");
-const ObjectiveDetailPage = lazyNamed(() => import("./pages/ObjectiveDetailPage"), "ObjectiveDetailPage");
 const ObjectivesPage = lazyNamed(() => import("./pages/ObjectivesPage"), "ObjectivesPage");
 const PermissionsPage = lazyNamed(() => import("./pages/PermissionsPage"), "PermissionsPage");
 const PersonalSettingsPage = lazyNamed(() => import("./pages/PersonalSettingsPage"), "PersonalSettingsPage");
 const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage");
-const ResultDetailPage = lazyNamed(() => import("./pages/ResultDetailPage"), "ResultDetailPage");
 const StrategyMapPage = lazyNamed(() => import("./pages/StrategyMapPage"), "StrategyMapPage");
 const SystemManagementPage = lazyNamed(() => import("./pages/SystemManagementPage"), "SystemManagementPage");
 const SystemSettingsPage = lazyNamed(() => import("./pages/SettingsPage"), "SystemSettingsPage");
@@ -36,14 +33,11 @@ export function App() {
         <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="objectives" element={<LazyRoute><ObjectivesPage /></LazyRoute>} />
-        <Route path="objectives/:objectiveId" element={<LazyRoute><ObjectiveDetailPage /></LazyRoute>} />
-        <Route path="objectives/:objectiveId/results/:resultId" element={<LazyRoute><ResultDetailPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
         <Route path="objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
         <Route path="fantasy-ui" element={<LazyRoute><FantasyUiPreviewPage /></LazyRoute>} />
         <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
-        <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackDetailPage /></LazyRoute>} />
         <Route path="notifications" element={<LazyRoute><NotificationsPage /></LazyRoute>} />
         <Route path="strategy-map" element={<LazyRoute><StrategyMapPage /></LazyRoute>} />
         <Route path="ai-evaluation" element={<LazyRoute><AIEvaluationPage /></LazyRoute>} />

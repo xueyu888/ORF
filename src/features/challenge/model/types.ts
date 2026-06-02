@@ -1,4 +1,4 @@
-import type { BountySource, CommentTargetType, Objective, Result, Task, TaskChecklistItem } from "../../../types/orf";
+import type { CommentTargetType, Objective, Result, Task, TaskChecklistItem } from "../../../types/orf";
 
 export type ChallengeScope = "all" | "mine";
 export type BountyStatus = "open" | "active" | "review" | "settled";
@@ -13,47 +13,6 @@ export type ChallengeTarget =
   | { type: "subAction"; id: string; title: string; actionId: string; objectiveId: string };
 
 export type ChallengeRowPersistence = "persisted" | "temporary";
-export type TemporaryChildRowKind = "metric" | "action" | "subtask";
-export type TemporaryChildRowStatus = "idle" | "editing" | "submitting" | "failed";
-export type TemporaryChildRow = {
-  id: string;
-  kind: TemporaryChildRowKind;
-  objectiveId: string;
-  persistence: "temporary";
-  taskId?: string;
-  afterItemId?: string;
-  source?: BountySource;
-  status: TemporaryChildRowStatus;
-  title: string;
-};
-
-const temporaryChildRowIdPrefix = "__orf-temporary-child__";
-
-export function temporaryChildRowId(kind: TemporaryChildRowKind, parentId: string) {
-  return `${temporaryChildRowIdPrefix}:${kind}:${parentId}`;
-}
-
-export function parseTemporaryChildRowId(id: string): { kind: TemporaryChildRowKind; parentId: string } | null {
-  const [prefix, kind, parentId] = id.split(":");
-  if (prefix !== temporaryChildRowIdPrefix || (kind !== "metric" && kind !== "action" && kind !== "subtask") || !parentId) return null;
-  return { kind, parentId };
-}
-
-export function isTemporaryChildTarget(target: ChallengeTarget) {
-  return parseTemporaryChildRowId(target.id) !== null;
-}
-
-export function temporaryChildTarget(row: TemporaryChildRow): ChallengeTarget {
-  if (row.kind === "metric") {
-    return { type: "bounty", id: row.id, title: row.title, objectiveId: row.objectiveId };
-  }
-
-  if (row.kind === "subtask") {
-    return { type: "subAction", id: row.id, title: row.title, actionId: row.taskId ?? "", objectiveId: row.objectiveId };
-  }
-
-  return { type: "action", id: row.id, title: row.title, objectiveId: row.objectiveId, hasSubActions: false };
-}
 
 export type ChallengeCommentTarget = {
   id: string;

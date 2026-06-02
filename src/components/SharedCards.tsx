@@ -1,10 +1,6 @@
-import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, CheckCircle2, MessageSquare, Target } from "lucide-react";
 import type { ElementType } from "react";
 import { Card, ConfidenceBadge, ProgressBar, StatusBadge } from "./ui";
-import type { Feedback, Objective, Result, Task } from "../types/orf";
-import { metricValue, resultProgress } from "../utils/format";
-import { taskStatusLabel } from "../utils/labels";
+import type { Feedback, Objective, Result } from "../types/orf";
 
 export function MetricCard({ title, value, delta, icon: Icon }: { title: string; value: string; delta: string; icon: ElementType }) {
   return (
@@ -23,114 +19,46 @@ export function ObjectiveCard({ objective, results, feedback }: { objective: Obj
   const onTrack = results.filter((result) => result.status === "On Track").length;
   const atRisk = results.filter((result) => result.status === "At Risk").length;
   const latestFeedback = feedback[0];
+  const description = objective.description.trim() || "目标规划待完善";
 
   return (
-    <Link to={`/objectives/${objective.id}`}>
-      <Card interactive className="h-full orf-card-padding">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold orf-text-primary">{objective.title}</div>
-            <p className="mt-2 line-clamp-2 text-sm orf-text-secondary">{objective.description}</p>
-          </div>
-          <StatusBadge status={objective.status} />
+    <Card className="h-full orf-card-padding">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold orf-text-primary">{objective.title}</div>
+          <p className="mt-2 line-clamp-2 text-sm orf-text-secondary">{description}</p>
         </div>
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-xs orf-text-secondary">{objective.cycle}</div>
-          <ConfidenceBadge value={objective.confidence} />
-        </div>
-        <div className="mt-4">
-          <div className="mb-2 flex justify-between text-xs orf-text-muted"><span>进度</span><span>{objective.progress}%</span></div>
-          <ProgressBar value={objective.progress} />
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 text-xs orf-text-secondary">
-          <div className="rounded-md orf-surface-muted p-2">正常 {onTrack}</div>
-          <div className="rounded-md orf-surface-muted p-2">有风险 {atRisk}</div>
-        </div>
-        {latestFeedback && <div className="mt-3 rounded-md border orf-border orf-surface-muted p-2 text-xs orf-text-secondary">最新反馈：{latestFeedback.phenomenon}</div>}
-      </Card>
-    </Link>
-  );
-}
-
-export function ResultCard({ result }: { result: Result }) {
-  return (
-    <Link to={`/objectives/${result.objectiveId}/results/${result.id}`}>
-      <Card interactive className="orf-card-padding">
-        <div className="flex items-start justify-between gap-3">
-          <div className="text-sm font-semibold orf-text-primary">{result.title}</div>
-          <StatusBadge status={result.status} />
-        </div>
-        <div className="mt-3 text-xs orf-text-muted">{result.metricName}</div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-          <div><div className="orf-text-muted">基线</div><div className="mt-1 orf-text-primary">{metricValue(result.baseline, result.unit, result.direction)}</div></div>
-          <div><div className="orf-text-muted">当前</div><div className="mt-1 orf-text-primary">{metricValue(result.current, result.unit, result.direction)}</div></div>
-          <div><div className="orf-text-muted">目标</div><div className="mt-1 orf-text-primary">{metricValue(result.target, result.unit, result.direction)}</div></div>
-        </div>
-        <div className="mt-4"><ProgressBar value={resultProgress(result)} /></div>
-        <div className="mt-4 flex items-center justify-between text-xs orf-text-muted">
-          <span>{result.evidenceIds.length} 个证据</span>
-          <span>{result.feedbackIds.length} 条反馈</span>
-        </div>
-      </Card>
-    </Link>
+        <StatusBadge status={objective.status} />
+      </div>
+      <div className="mt-4 flex items-center justify-between">
+        <div className="text-xs orf-text-secondary">{objective.cycle}</div>
+        <ConfidenceBadge value={objective.confidence} />
+      </div>
+      <div className="mt-4">
+        <div className="mb-2 flex justify-between text-xs orf-text-muted"><span>进度</span><span>{objective.progress}%</span></div>
+        <ProgressBar value={objective.progress} />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-2 text-xs orf-text-secondary">
+        <div className="rounded-md orf-surface-muted p-2">正常 {onTrack}</div>
+        <div className="rounded-md orf-surface-muted p-2">有风险 {atRisk}</div>
+      </div>
+      {latestFeedback && <div className="mt-3 rounded-md border orf-border orf-surface-muted p-2 text-xs orf-text-secondary">最新反馈：{latestFeedback.phenomenon}</div>}
+    </Card>
   );
 }
 
 export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; resultTitle?: string }) {
   return (
-    <Link to={`/feedback/${feedback.id}`}>
-      <Card interactive className="orf-card-padding">
-        <div className="flex items-start justify-between gap-3">
-          <div className="text-sm font-medium orf-text-primary">{feedback.phenomenon}</div>
-          <StatusBadge status={feedback.status} />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1">
-          {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
-        </div>
-        <div className="mt-3 text-xs orf-text-muted">关联指标：<span className="orf-text-secondary">{resultTitle}</span></div>
-        <div className="mt-3 text-xs orf-text-secondary">{feedback.suggestedAdjustment}</div>
-      </Card>
-    </Link>
-  );
-}
-
-export function TaskRow({ task, objectiveTitle, onStatusChange }: { task: Task; objectiveTitle?: string; onStatusChange: (status: Task["status"]) => void }) {
-  return (
-    <div className="orf-table-row grid grid-cols-[78px_minmax(240px,1fr)_120px_88px_108px_112px] items-center gap-3 px-3 py-3 text-sm">
-      <div className="font-mono text-xs orf-text-muted">{task.id}</div>
-      <div className="min-w-0">
-        <div className="truncate font-medium orf-text-primary">{task.title}</div>
-        <div className="mt-1 truncate text-xs orf-text-muted">{objectiveTitle ? `所属目标：${objectiveTitle}` : "未关联目标"}</div>
-      </div>
-      <select className="orf-input px-2 py-1 text-xs" value={task.status} onChange={(event) => onStatusChange(event.target.value as Task["status"])}>
-        {["Backlog", "Todo", "In Progress", "In Review", "Done"].map((status) => <option key={status} value={status}>{taskStatusLabel[status as Task["status"]]}</option>)}
-      </select>
-      <StatusBadge status={task.priority} />
-      <div className="text-xs orf-text-secondary">{task.assignee}</div>
-      <div className="text-xs orf-text-muted">{task.dueDate}</div>
-    </div>
-  );
-}
-
-export function IntegrityCheck({ hasFeedback, hasTasks, resultRiskCount }: { hasFeedback: boolean; hasTasks: boolean; resultRiskCount: number }) {
-  const items = [
-    { label: "目标是挑战导向", state: "通过" },
-    { label: "指标可度量", state: resultRiskCount > 0 ? "提醒" : "通过" },
-    { label: "本周有反馈更新", state: hasFeedback ? "通过" : "未通过" },
-    { label: "目标有执行任务", state: hasTasks ? "通过" : "提醒" },
-  ];
-
-  return (
     <Card className="orf-card-padding">
-      <div className="text-sm font-semibold orf-text-primary">ORF 完整性检查</div>
-      <div className="mt-3 grid gap-2">
-        {items.map((item) => (
-          <div key={item.label} className="flex items-center justify-between rounded-md orf-surface-muted px-3 py-2 text-xs">
-            <span className="orf-text-secondary">{item.label}</span>
-            <span className={item.state === "通过" ? "orf-success-text" : item.state === "提醒" ? "orf-warning-text" : "orf-danger-text"}>{item.state}</span>
-          </div>
-        ))}
+      <div className="flex items-start justify-between gap-3">
+        <div className="text-sm font-medium orf-text-primary">{feedback.phenomenon}</div>
+        <StatusBadge status={feedback.status} />
       </div>
+      <div className="mt-3 flex flex-wrap gap-1">
+        {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
+      </div>
+      <div className="mt-3 text-xs orf-text-muted">关联指标：<span className="orf-text-secondary">{resultTitle}</span></div>
+      <div className="mt-3 text-xs orf-text-secondary">{feedback.suggestedAdjustment}</div>
     </Card>
   );
 }
@@ -152,5 +80,3 @@ export function DecisionLog({ decisions }: { decisions: { title: string; owner: 
     </Card>
   );
 }
-
-export const iconMap = { Activity, AlertTriangle, CheckCircle2, MessageSquare, Target };

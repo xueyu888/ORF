@@ -248,6 +248,8 @@ export const results = pgTable("results", {
   acceptedResult: text("accepted_result").$type<ResultAcceptedResult>().notNull().default("unreviewed"),
   reviewCadence: text("review_cadence").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: date("created_at", { mode: "string" }).notNull(),
+  updatedAt: date("updated_at", { mode: "string" }).notNull(),
   createdBy: text("created_by").references(() => users.id),
   updatedBy: text("updated_by").references(() => users.id),
 });

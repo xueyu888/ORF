@@ -1,4 +1,4 @@
-import type { Objective, Result, Task, TaskChecklistItem, TaskStatus, UncertaintyLevel } from "../../../types/orf";
+import type { Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../../../types/orf";
 import {
   isObjectiveChallengeAcceptedByFlow,
   isObjectiveSubmittedByFlow,
@@ -7,14 +7,6 @@ import {
   objectiveFlowTone,
 } from "../../../domain/orfLifecycle";
 import type { ActionVisualStatus, BountyStatus } from "./types";
-
-const difficultyRank: Record<UncertaintyLevel, number> = {
-  入门: 1,
-  进阶: 2,
-  破局: 3,
-  渡劫: 4,
-  飞升: 5,
-};
 
 export const bountyStatusLabel: Record<BountyStatus, string> = {
   open: "可申请",
@@ -32,7 +24,7 @@ export function bountyStatus(result: Result, objective?: Objective): BountyStatu
 }
 
 export function bountyDifficulty(result: Result) {
-  return result.uncertaintyLevel ? `${difficultyRank[result.uncertaintyLevel]} 星` : "待校准";
+  return result.uncertaintyLevel ?? "待校准";
 }
 
 export function objectiveComplete(objective: Objective) {

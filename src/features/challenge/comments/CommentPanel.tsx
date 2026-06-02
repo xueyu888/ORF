@@ -1,5 +1,5 @@
 import { ArrowLeft, ChevronRight, ImagePlus, Pencil, Reply, Send, Trash2, X } from "lucide-react";
-import type { ClipboardEvent, FormEvent, ReactNode } from "react";
+import type { ClipboardEvent, FormEvent, KeyboardEvent, ReactNode } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { ImagePreviewDialog, type ImagePreview } from "../../../components/ImagePreviewDialog";
@@ -768,6 +768,11 @@ function CommentComposer({
     commitDraftChange({ mentions, text: value });
     updateMentionRange(value, cursor, mentions);
   };
+  const submitDraftFromKeyboard = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    event.preventDefault();
+    if (uploadingImage) return;
+    event.currentTarget.form?.requestSubmit();
+  };
 
   return (
     <form className="orf-comment-composer" onSubmit={onSubmit}>
@@ -809,9 +814,9 @@ function CommentComposer({
             setMentionRange(null);
             return;
           }
-          if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-            event.preventDefault();
-            event.currentTarget.form?.requestSubmit();
+          if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
+            submitDraftFromKeyboard(event);
+            return;
           }
         }}
         onKeyUp={(event) => updateMentionRange(event.currentTarget.value, event.currentTarget.selectionStart)}
@@ -848,7 +853,7 @@ function CommentComposer({
       )}
       <div className="orf-comment-composer-footer">
         <span className={clsx("orf-comment-hint", uploadError && "orf-comment-upload-error")}>
-          {uploadError || (uploadingImage ? "图片上传中..." : "Ctrl / Cmd + Enter 发送")}
+          {uploadError || (uploadingImage ? "图片上传中..." : "Enter 发送，Shift + Enter 换行")}
         </span>
         <input
           ref={fileInputRef}
