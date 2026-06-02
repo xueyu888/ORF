@@ -78,6 +78,8 @@ export async function createFreezePrerequisiteResult(
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
+    createdAt: today(),
+    updatedAt: today(),
     sortOrder,
   });
 
