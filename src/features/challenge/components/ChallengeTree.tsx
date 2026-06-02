@@ -24,8 +24,8 @@ import {
 import { commentCountFor } from "../model/challengeComments";
 import { canFreezeObjectiveAfterReestimate, workbenchActionForObjective } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
-import { temporaryChildRowId, temporaryChildTarget } from "../model/types";
-import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode, TemporaryChildRow } from "../model/types";
+import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
+import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
 import { handleRowDoubleClick, InlineTitleEditor, isSameTarget } from "./InlineTitleEditor";
 
@@ -34,7 +34,7 @@ type RowHandlers = {
   collapsedActionIds: Set<string>;
   collapsedBountyIds: Set<string>;
   commentCounts: Map<string, number>;
-  temporaryChildRow: TemporaryChildRow | null;
+  temporaryChildRow: ChildCreationTemporaryRow | null;
   dragDrop: DragDropController;
   editingTarget: ChallengeTarget | null;
   trialReviews: ObjectiveTrialReview[];
@@ -292,8 +292,8 @@ function ObjectivePanel({
 function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string | null): boolean {
   if (!openActionId) return false;
   if (isRowActionOpen(openActionId, `objective:${group.objective.id}`)) return true;
-  if (isRowActionOpen(openActionId, `temporary-metric:${temporaryChildRowId("metric", group.objective.id)}`)) return true;
-  if (isRowActionOpen(openActionId, `temporary-action:${temporaryChildRowId("action", group.objective.id)}`)) return true;
+  if (isRowActionOpen(openActionId, `temporary-metric:${childCreationDraftId("metric", group.objective.id)}`)) return true;
+  if (isRowActionOpen(openActionId, `temporary-action:${childCreationDraftId("action", group.objective.id)}`)) return true;
 
   if (group.bounties.some((bounty) => isRowActionOpen(openActionId, `bounty:${bounty.result.id}`))) {
     return true;
@@ -301,7 +301,7 @@ function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string
 
   return group.actions.some((action) => {
     if (isRowActionOpen(openActionId, `action:${action.id}`)) return true;
-    if (isRowActionOpen(openActionId, `temporary-subtask:${temporaryChildRowId("subtask", action.id)}`)) return true;
+    if (isRowActionOpen(openActionId, `temporary-subtask:${childCreationDraftId("subtask", action.id)}`)) return true;
     return action.checklist.some((item) => isRowActionOpen(openActionId, `subAction:${action.id}:${item.id}`));
   });
 }
@@ -350,15 +350,15 @@ function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?:
 
 type MetricTreeRow =
   | { bounty: BountyNode; persistence: "persisted" }
-  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+  | { persistence: "temporary"; placeholderTitle: string; temporary: ChildCreationTemporaryRow };
 
 type ActionTreeRow =
   | { action: Task; persistence: "persisted" }
-  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+  | { persistence: "temporary"; placeholderTitle: string; temporary: ChildCreationTemporaryRow };
 
 type SubActionTreeRow =
   | { item: TaskChecklistItem; itemIndex: number; persistence: "persisted" }
-  | { persistence: "temporary"; placeholderTitle: string; temporary: TemporaryChildRow };
+  | { persistence: "temporary"; placeholderTitle: string; temporary: ChildCreationTemporaryRow };
 
 function MetricRow({
   row,
@@ -375,7 +375,7 @@ function MetricRow({
   const placeholderTitle = row.persistence === "temporary" ? row.placeholderTitle : "";
   const bounty = row.persistence === "persisted" ? row.bounty : null;
   const target: ChallengeTarget = temporary
-    ? temporaryChildTarget(temporary)
+    ? childCreationTarget(temporary)
     : { type: "bounty", id: bounty!.result.id, title: bounty!.result.title, objectiveId: bounty!.result.objectiveId };
   const complete = bounty?.status === "settled";
   const anchorId = temporary ? `temporary-metric:${temporary.id}` : `bounty:${bounty!.result.id}`;
@@ -389,13 +389,7 @@ function MetricRow({
     : "";
   const disabled = temporary?.status === "submitting";
   const title = temporary ? temporary.title || placeholderTitle : bounty!.result.title;
-  const statusLabel = temporary
-    ? temporary.status === "submitting"
-      ? "保存中"
-      : temporary.status === "idle"
-        ? "待创建"
-        : "草稿"
-    : bountyStatusLabel[bounty!.status];
+  const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : bountyStatusLabel[bounty!.status];
 
   return (
     <div className="relative">
@@ -486,7 +480,7 @@ function ActionRow({
       ? handlers.temporaryChildRow
       : null;
   const target: ChallengeTarget = temporary
-    ? temporaryChildTarget(temporary)
+    ? childCreationTarget(temporary)
     : {
         type: "action",
         id: action!.id,
@@ -508,13 +502,7 @@ function ActionRow({
     : dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "objectiveActions", objectiveId: temporary!.objectiveId }]);
   const disabled = temporary?.status === "submitting";
   const title = temporary ? temporary.title || placeholderTitle : action!.title;
-  const statusLabel = temporary
-    ? temporary.status === "submitting"
-      ? "保存中"
-      : temporary.status === "idle"
-        ? "待创建"
-        : "草稿"
-    : null;
+  const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : null;
 
   return (
     <div className="relative">
@@ -627,7 +615,7 @@ function ActionRow({
   );
 }
 
-function subActionRows(items: TaskChecklistItem[], temporarySubtask: TemporaryChildRow | null): SubActionTreeRow[] {
+function subActionRows(items: TaskChecklistItem[], temporarySubtask: ChildCreationTemporaryRow | null): SubActionTreeRow[] {
   if (!temporarySubtask) {
     return items.map((item, itemIndex) => ({ item, itemIndex, persistence: "persisted" }));
   }
@@ -662,7 +650,7 @@ function SubActionRow({
   const item = row.persistence === "persisted" ? row.item : null;
   const itemIndex = row.persistence === "persisted" ? row.itemIndex : -1;
   const target: ChallengeTarget = temporary
-    ? temporaryChildTarget(temporary)
+    ? childCreationTarget(temporary)
     : {
         type: "subAction",
         id: item!.id,
@@ -739,7 +727,7 @@ function SubActionRow({
       </HierarchyCell>
       <EmptySlot />
       <EmptySlot />
-      {temporary ? <StatusChip tone="open">{temporary.status === "submitting" ? "保存中" : temporary.status === "idle" ? "待创建" : "草稿"}</StatusChip> : <EmptySlot />}
+      {temporary ? <StatusChip tone="open">{temporary.status === "submitting" ? "保存中" : "草稿"}</StatusChip> : <EmptySlot />}
       <EmptySlot />
       <TimeValue icon={Clock3} value={item?.updatedAt || action.updatedAt || "未设置"} />
       <EmptySlot />

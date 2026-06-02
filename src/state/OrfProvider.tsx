@@ -352,6 +352,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     notify,
     refreshTaskManagementData,
   });
+  const refreshTaskManagementDataAfterCreate = useCallback(
+    (failureMessage: string) => {
+      void refreshTaskManagementData().catch((error) => {
+        notify(businessMutationFailureMessage(error, failureMessage));
+      });
+    },
+    [notify, refreshTaskManagementData],
+  );
 
   const value = useMemo<OrfContextValue>(
     () => ({
@@ -396,9 +404,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             body: JSON.stringify(input),
           });
           notify("目标已创建");
-          void refreshTaskManagementData().catch((error) => {
-            notify(businessMutationFailureMessage(error, "目标已创建，但数据刷新失败"));
-          });
+          refreshTaskManagementDataAfterCreate("目标已创建，但数据刷新失败");
           return data.objective;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "目标创建失败"));
@@ -431,8 +437,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             method: "POST",
             body: JSON.stringify(payload),
           });
-          await refreshTaskManagementData();
           notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建");
+          refreshTaskManagementDataAfterCreate(payload.source === "memberProposed" ? "指标已提交，但数据刷新失败" : "指标已创建，但数据刷新失败");
           return data.result;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "指标创建失败"));
@@ -636,8 +642,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             method: "POST",
             body: JSON.stringify(input),
           });
-          await refreshTaskManagementData();
           notify("行动项已创建");
+          refreshTaskManagementDataAfterCreate("行动项已创建，但数据刷新失败");
           return data.task;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "行动项创建失败"));
@@ -771,8 +777,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             method: "POST",
             body: JSON.stringify(input),
           });
-          await refreshTaskManagementData();
           notify("子行动项已添加");
+          refreshTaskManagementDataAfterCreate("子行动项已添加，但数据刷新失败");
           return data.item;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "子行动项添加失败"));
@@ -949,6 +955,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       notifications,
       readModelInvalidations,
       refreshNotifications,
+      refreshTaskManagementDataAfterCreate,
       refreshTaskManagementData,
       state,
       systemBroadcasts,
