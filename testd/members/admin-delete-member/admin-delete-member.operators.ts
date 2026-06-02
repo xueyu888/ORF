@@ -11,12 +11,26 @@ import {
   tasks,
 } from "../../../server/db/schema";
 import type { OperatorRegistry } from "../../_framework/types";
-import { readBrowserSession } from "../../_operators/common.helpers";
+import {
+  deleteTestUsers,
+  readBrowserSession,
+} from "../../_operators/common.helpers";
 import { optionalString, requiredString } from "../../_operators/params";
 import { captureUserDeleteResponse } from "../admin-edit-member/_support/admin-edit-member.helpers";
 import type { AdminDeleteMemberCaseData, TestContext } from "./_support/admin-delete-member.context";
 
 export const adminDeleteMemberOperators = {
+  "db.user": {
+    delete: async ({ data, params }) => {
+      await deleteMemberBusinessReferences(data.memberName);
+      await deleteTestUsers({
+        email: optionalString(params, "email"),
+        emails: optionalStringArray(params, "emails"),
+        userId: optionalString(params, "userId"),
+      });
+    },
+  },
+
   "page.admin_delete_member_login": {
     submit_admin: async ({ ctx, data }) => {
       await ctx.page.getByRole("button", { name: "Sign In" }).click();
@@ -146,4 +160,90 @@ async function memberBusinessReferencesAbsent(input: { teamId: string; memberNam
   ]);
 
   return [resultRef, taskRef, feedbackRef, lootRef, ledgerRef].every((rows) => rows.length === 0);
+}
+
+async function deleteMemberBusinessReferences(memberName: string) {
+  const objectiveRows = await db
+    .select({
+      id: objectives.id,
+      challengers: objectives.challengers,
+      assignedChallengers: objectives.assignedChallengers,
+      challengeApplications: objectives.challengeApplications,
+    })
+    .from(objectives);
+
+  for (const objective of objectiveRows) {
+    const challengers = removeMemberName(objective.challengers ?? [], memberName);
+    const assignedChallengers = removeMemberName(objective.assignedChallengers ?? [], memberName);
+    const challengeApplications = (objective.challengeApplications ?? []).filter(
+      (application) => application.applicant !== memberName,
+    );
+
+    if (
+      challengers.length !== (objective.challengers ?? []).length ||
+      assignedChallengers.length !== (objective.assignedChallengers ?? []).length ||
+      challengeApplications.length !== (objective.challengeApplications ?? []).length
+    ) {
+      await db
+        .update(objectives)
+        .set({
+          challengers,
+          assignedChallengers,
+          challengeApplications,
+        })
+        .where(eq(objectives.id, objective.id));
+    }
+  }
+
+  const contributionRows = await db
+    .select({
+      id: objectiveContributionReviews.id,
+      reviewer: objectiveContributionReviews.reviewer,
+      allocations: objectiveContributionReviews.allocations,
+    })
+    .from(objectiveContributionReviews);
+
+  for (const review of contributionRows) {
+    if (review.reviewer === memberName) {
+      await db.delete(objectiveContributionReviews).where(eq(objectiveContributionReviews.id, review.id));
+      continue;
+    }
+
+    const allocations = (review.allocations ?? []).filter((allocation) => allocation.member !== memberName);
+    if (allocations.length !== (review.allocations ?? []).length) {
+      await db
+        .update(objectiveContributionReviews)
+        .set({ allocations })
+        .where(eq(objectiveContributionReviews.id, review.id));
+    }
+  }
+
+  await Promise.all([
+    db.delete(results).where(eq(results.definer, memberName)),
+    db.delete(tasks).where(eq(tasks.assignee, memberName)),
+    db.delete(feedback).where(eq(feedback.owner, memberName)),
+    db.delete(objectiveLoot).where(eq(objectiveLoot.submittedBy, memberName)),
+    db.delete(pointLedger).where(eq(pointLedger.memberName, memberName)),
+  ]);
+}
+
+function removeMemberName(members: readonly string[], memberName: string) {
+  return members.filter((member) => member !== memberName);
+}
+
+function optionalStringArray(params: unknown, key: string): string[] | undefined {
+  if (typeof params !== "object" || params === null) {
+    return undefined;
+  }
+
+  const value = (params as Record<string, unknown>)[key];
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new Error(`参数 ${key} 必须是字符串数组`);
+  }
+
+  return value;
 }

@@ -31,4 +31,5 @@ export type MemberPermissionSnapshot = {
   teamId: string;
   existed: boolean;
   actions: string[];
+  lockOwner?: string;
 };

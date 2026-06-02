@@ -7,6 +7,8 @@ import { commentOperators } from "../../comment.operators";
 import { commentDeleteForbiddenCases } from "../comment-delete-forbidden.case";
 
 test.describe("评论删除反向测试用例", () => {
+  test.setTimeout(90_000);
+
   for (const testCase of commentDeleteForbiddenCases) {
     test(testCase.title, async ({ context, page }, testInfo) => {
       const ctx: TestContext = { context, page };

@@ -7,6 +7,8 @@ import { commentOperators } from "../../comment.operators";
 import { memberCreateCommentForbiddenCases } from "../member-create-comment-forbidden.case";
 
 test.describe("成员新增评论反向测试用例", () => {
+  test.setTimeout(90_000);
+
   for (const testCase of memberCreateCommentForbiddenCases) {
     test(testCase.title, async ({ context, page }, testInfo) => {
       const ctx: TestContext = { context, page };

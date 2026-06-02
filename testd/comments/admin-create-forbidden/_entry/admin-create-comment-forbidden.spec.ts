@@ -7,6 +7,8 @@ import { commentOperators } from "../../comment.operators";
 import { adminCreateCommentForbiddenCases } from "../admin-create-comment-forbidden.case";
 
 test.describe("管理员新增评论反向测试用例", () => {
+  test.setTimeout(90_000);
+
   for (const testCase of adminCreateCommentForbiddenCases) {
     test(testCase.title, async ({ context, page }, testInfo) => {
       const ctx: TestContext = { context, page };

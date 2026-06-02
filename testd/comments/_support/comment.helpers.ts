@@ -7,6 +7,10 @@ import { objectStorage } from "../../../server/storage/objectStorage";
 import { normalizePermissionKeys, type PermissionKey } from "../../../src/config/permissions";
 import { permissionStorageResource, permissionStorageStage } from "../../../server/repositories/permissionRepository";
 import {
+  acquireRolePermissionLock,
+  releaseRolePermissionLock,
+} from "../../_operators/role-permission-lock";
+import {
   deleteTestObjectives,
   deleteTestUserMemberships,
   deleteTestUsers,
@@ -32,6 +36,7 @@ export type MyChallengesScope = "mine" | "all";
 export type MemberCommentManagePermissionSnapshot = {
   actions: PermissionKey[] | null;
   teamId: string;
+  lockOwner?: string;
 };
 
 export async function prepareCommentActor(input: {
@@ -171,6 +176,20 @@ export async function setCommentObjectiveParticipant(objectiveId: string, member
 }
 
 export async function readMemberCommentManagePermissionSnapshot(teamId: string): Promise<MemberCommentManagePermissionSnapshot> {
+  const lockOwner = await acquireRolePermissionLock();
+  try {
+    return {
+      actions: await readMemberCommentManagePermissionActions(teamId),
+      teamId,
+      lockOwner,
+    };
+  } catch (error) {
+    await releaseRolePermissionLock(lockOwner);
+    throw error;
+  }
+}
+
+async function readMemberCommentManagePermissionActions(teamId: string): Promise<PermissionKey[] | null> {
   const [row] = await db
     .select({ actions: rolePermissions.actions })
     .from(rolePermissions)
@@ -184,15 +203,12 @@ export async function readMemberCommentManagePermissionSnapshot(teamId: string):
     )
     .limit(1);
 
-  return {
-    actions: row ? normalizePermissionKeys(row.actions) : null,
-    teamId,
-  };
+  return row ? normalizePermissionKeys(row.actions) : null;
 }
 
 export async function disableMemberCommentManagePermission(teamId: string) {
-  const snapshot = await readMemberCommentManagePermissionSnapshot(teamId);
-  const nextActions = normalizePermissionKeys((snapshot.actions ?? []).filter((permission) => permission !== "comment.manage"));
+  const actions = await readMemberCommentManagePermissionActions(teamId);
+  const nextActions = normalizePermissionKeys((actions ?? []).filter((permission) => permission !== "comment.manage"));
 
   await db
     .insert(rolePermissions)
@@ -214,33 +230,37 @@ export async function restoreMemberCommentManagePermissionSnapshot(snapshot: Mem
     return;
   }
 
-  if (!snapshot.actions) {
-    await db
-      .delete(rolePermissions)
-      .where(
-        and(
-          eq(rolePermissions.teamId, snapshot.teamId),
-          eq(rolePermissions.role, "member"),
-          eq(rolePermissions.stage, permissionStorageStage),
-          eq(rolePermissions.resource, permissionStorageResource),
-        ),
-      );
-    return;
-  }
+  try {
+    if (!snapshot.actions) {
+      await db
+        .delete(rolePermissions)
+        .where(
+          and(
+            eq(rolePermissions.teamId, snapshot.teamId),
+            eq(rolePermissions.role, "member"),
+            eq(rolePermissions.stage, permissionStorageStage),
+            eq(rolePermissions.resource, permissionStorageResource),
+          ),
+        );
+      return;
+    }
 
-  await db
-    .insert(rolePermissions)
-    .values({
-      teamId: snapshot.teamId,
-      role: "member",
-      stage: permissionStorageStage,
-      resource: permissionStorageResource,
-      actions: snapshot.actions,
-    })
-    .onConflictDoUpdate({
-      target: [rolePermissions.teamId, rolePermissions.role, rolePermissions.stage, rolePermissions.resource],
-      set: { actions: snapshot.actions },
-    });
+    await db
+      .insert(rolePermissions)
+      .values({
+        teamId: snapshot.teamId,
+        role: "member",
+        stage: permissionStorageStage,
+        resource: permissionStorageResource,
+        actions: snapshot.actions,
+      })
+      .onConflictDoUpdate({
+        target: [rolePermissions.teamId, rolePermissions.role, rolePermissions.stage, rolePermissions.resource],
+        set: { actions: snapshot.actions },
+      });
+  } finally {
+    await releaseRolePermissionLock(snapshot.lockOwner);
+  }
 }
 
 export async function commentTargetFromFixture(input: {
