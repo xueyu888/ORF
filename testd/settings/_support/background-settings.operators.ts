@@ -220,7 +220,8 @@ export function createBackgroundSettingsOperators<
         await selectPersonalBackgroundFromSettingsPage(ctx.page, requiredVisualBackgroundImage(params, "background"));
       },
 
-      use_selected_background: async ({ ctx }) => useSelectedPersonalBackgroundFromSettingsPage(ctx.page),
+      use_selected_background: async ({ ctx, params }) =>
+        useSelectedPersonalBackgroundFromSettingsPage(ctx.page, requiredVisualBackgroundImage(params, "background")),
     },
 
     "page.main_heading": {

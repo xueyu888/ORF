@@ -73,7 +73,7 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
         { source: { caseStepId: "Action-2", method: "playwright" }, id: "personal_background.upload_first", title: "在个人设置的登录后背景上传入口上传本用例第一个个人登录后背景图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.firstPersonalBackgroundFileName", saveAs: "firstPersonalBackground" } },
         { source: { caseStepId: "Action-3", method: "playwright" }, id: "personal_background.upload_second", title: "在个人设置的登录后背景上传入口上传本用例第二个个人登录后背景图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.secondPersonalBackgroundFileName", saveAs: "secondPersonalBackground" } },
         { source: { caseStepId: "Action-4", method: "playwright" }, id: "personal_background.select_first", title: "在登录后背景列表中选择本用例第一个个人登录后背景图片", object: "page.personal_settings", operator: "select_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "Action-5", method: "playwright" }, id: "personal_background.use_selected", title: "点击 \"设为我的背景\" 操作", object: "page.personal_settings", operator: "use_selected_background", params: { saveAs: "personalBackgroundUpdateResult" } },
+        { source: { caseStepId: "Action-5", method: "playwright" }, id: "personal_background.use_selected", title: "点击 \"设为我的背景\" 操作，将本用例第一个个人登录后背景图片设为本人登录后背景", object: "page.personal_settings", operator: "use_selected_background", params: { backgroundFrom: "runtime.firstPersonalBackground", saveAs: "personalBackgroundUpdateResult" } },
       ],
     },
 

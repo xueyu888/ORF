@@ -135,6 +135,20 @@ export async function savePersonalBackgroundConfigAsCurrentUser(
   }, config);
 }
 
+function waitForPersonalPreferenceResponse(page: Page, timeout?: number): Promise<ApiAttemptResult> {
+  return page
+    .waitForResponse(
+      (response) => {
+        return response.request().method().toUpperCase() === "PUT" && response.url().endsWith("/api/settings/personal/preferences");
+      },
+      timeout === undefined ? undefined : { timeout },
+    )
+    .then(async (response): Promise<ApiAttemptResult> => ({
+      status: response.status(),
+      body: await response.json().catch(() => null),
+    }));
+}
+
 export async function uploadPersonalBackgroundFromSettingsPage(
   page: Page,
   fileName: string,
@@ -148,9 +162,7 @@ export async function uploadPersonalBackgroundFromSettingsPage(
       body: await response.json().catch(() => null),
     }));
 
-  const preferenceResponsePromise = page.waitForResponse((response) => {
-    return response.request().method().toUpperCase() === "PUT" && response.url().endsWith("/api/settings/personal/preferences");
-  });
+  const preferenceResponsePromise = waitForPersonalPreferenceResponse(page);
 
   await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
     name: fileName,
@@ -171,21 +183,52 @@ export async function uploadPersonalBackgroundFromSettingsPage(
 }
 
 export async function selectPersonalBackgroundFromSettingsPage(page: Page, background: VisualBackgroundImage) {
-  await personalBackgroundCard(page, background).click();
+  const card = personalBackgroundCard(page, background);
+  const selectedText = page.locator(".orf-settings-selected-text").getByText(`个人上传：${background.fileName}`, { exact: true });
+  const useSelectedButton = page.getByRole("button", { name: "设为我的背景", exact: true });
+
+  await expect(card).toBeVisible();
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    await card.click();
+    try {
+      await expect(selectedText).toBeVisible({ timeout: 1_000 });
+      await expect(useSelectedButton).toBeEnabled({ timeout: 1_000 });
+      return;
+    } catch (error) {
+      if (attempt === 5) {
+        throw error;
+      }
+      await page.waitForTimeout(200);
+    }
+  }
 }
 
-export async function useSelectedPersonalBackgroundFromSettingsPage(page: Page): Promise<ApiAttemptResult> {
-  const preferenceResponsePromise = page
-    .waitForResponse((response) => {
-      return response.request().method().toUpperCase() === "PUT" && response.url().endsWith("/api/settings/personal/preferences");
-    })
-    .then(async (response): Promise<ApiAttemptResult> => ({
-      status: response.status(),
-      body: await response.json().catch(() => null),
-    }));
+export async function useSelectedPersonalBackgroundFromSettingsPage(
+  page: Page,
+  background: VisualBackgroundImage,
+): Promise<ApiAttemptResult> {
+  const useSelectedButton = page.getByRole("button", { name: "设为我的背景", exact: true });
+  let lastError: unknown = null;
 
-  await page.getByRole("button", { name: "设为我的背景", exact: true }).click();
-  return preferenceResponsePromise;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    await selectPersonalBackgroundFromSettingsPage(page, background);
+    await expect(useSelectedButton).toBeEnabled({ timeout: 1_000 });
+
+    const preferenceResponsePromise = waitForPersonalPreferenceResponse(page, 3_000);
+    try {
+      await useSelectedButton.click();
+      return await preferenceResponsePromise;
+    } catch (error) {
+      lastError = error;
+      await preferenceResponsePromise.catch(() => null);
+      if (attempt === 4) {
+        throw error;
+      }
+      await page.waitForTimeout(200);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("设置个人背景时未捕获偏好保存响应");
 }
 
 export async function uploadSystemBackgroundFromSettingsPage(
