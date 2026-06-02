@@ -15,10 +15,12 @@ export type ReviewApplicationCaseData = {
   approveApplicantPassword: string;
   approveApplicantName: string;
   approveApplicantRole: "member";
+  approveApplicationReason: string;
   rejectApplicantEmail: string;
   rejectApplicantPassword: string;
   rejectApplicantName: string;
   rejectApplicantRole: "member";
+  rejectApplicationReason: string;
   objectiveId: string;
   objectiveTitle: string;
 };

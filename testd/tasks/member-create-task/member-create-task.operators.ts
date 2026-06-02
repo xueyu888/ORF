@@ -132,9 +132,13 @@ export const memberCreateTaskOperators = {
     add_subtask: async ({ ctx, params }) => {
       const target = requiredTaskTarget(params, "target");
       const task = requiredTask(params, "task");
-      await targetTaskRow(ctx.page, target, task).hover();
-      await expect(targetSubtaskButton(ctx.page, target, task)).toBeEnabled();
-      await targetSubtaskButton(ctx.page, target, task).click();
+      await retryAfterDomRefresh(async () => {
+        await expect(targetTaskRow(ctx.page, target, task)).toBeVisible();
+        await targetTaskRow(ctx.page, target, task).hover();
+        await expect(targetSubtaskButton(ctx.page, target, task)).toBeEnabled();
+        await targetSubtaskButton(ctx.page, target, task).click();
+        await expect(ctx.page.getByLabel("编辑子行动项标题")).toBeVisible({ timeout: 2_000 });
+      });
     },
 
     task_visible: async ({ ctx, params }) => {
@@ -205,6 +209,20 @@ async function openTaskCreationMenu(ctx: TestContext, target: MemberCreateTaskTa
     await targetAddMenuButton(ctx.page, target).click();
   }
   await expect(targetTaskMenuItem(ctx.page, target)).toBeVisible();
+}
+
+async function retryAfterDomRefresh(action: () => Promise<void>) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await action();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+  throw lastError;
 }
 
 function requiredTaskTarget(params: StepParams, key: string): MemberCreateTaskTarget {

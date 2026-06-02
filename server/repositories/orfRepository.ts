@@ -1201,7 +1201,7 @@ export interface CreateResultInput {
 export interface CreateTaskInput {
   title: string;
   description?: string;
-  assignee?: string;
+  assignee: string;
   actorId?: string | null;
   priority?: Priority;
   linkedObjectiveId: string;
@@ -3716,7 +3716,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       description: input.description?.trim() || "执行支撑目标的下一步技术任务。",
       status: "Todo",
       priority: input.priority ?? "Medium",
-      assignee: input.assignee?.trim() || "User",
+      assignee: input.assignee,
       linkedObjectiveId: objective.id,
       feedbackOriginId,
       dueDate: dueDate ?? now,

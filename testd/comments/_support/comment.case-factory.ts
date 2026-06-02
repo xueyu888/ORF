@@ -356,15 +356,12 @@ function commonPageS0(pageId: string, rowId: string, titleId: string): StepSpec[
 function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
   if (definition.kind === "create") {
     return [
-      step("Action-1", "api", "api.comment_response.capture", "监听新增评论请求响应", "api", "capture_response", {
-        method: "POST",
-        saveAs: "commentResponse",
-        urlEndsWith: "/api/comments",
-      }),
-      step("Action-2", "playwright", "comment_composer.fill", "在评论输入框中输入本用例测试评论正文", "page.comment_composer", "fill", {
+      step("Action-1", "playwright", "comment_composer.fill", "在评论输入框中输入本用例测试评论正文", "page.comment_composer", "fill", {
         valueFrom: "data.commentBody",
       }),
-      step("Action-3", "playwright", "comment_composer.submit", "点击 \"发送评论\" 操作", "page.comment_composer", "submit_comment"),
+      step("Action-2", "playwright", "comment_composer.submit", "点击 \"发送评论\" 操作", "page.comment_composer", "submit_comment", {
+        saveAs: "commentResponse",
+      }),
     ];
   }
 
@@ -376,12 +373,9 @@ function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
       step("Action-2", "playwright", "comment_composer.fill_reply", "在回复评论输入框中输入本用例回复正文", "page.comment_composer", "fill_reply", {
         valueFrom: "data.replyBody",
       }),
-      step("Action-3", "api", "api.reply_response.capture", "监听新增回复请求响应", "api", "capture_response", {
-        method: "POST",
+      step("Action-3", "playwright", "comment_composer.submit_reply", "点击 \"发送回复\" 操作", "page.comment_composer", "submit_reply", {
         saveAs: "replyResponse",
-        urlEndsWith: "/api/comments",
       }),
-      step("Action-4", "playwright", "comment_composer.submit_reply", "点击 \"发送回复\" 操作", "page.comment_composer", "submit_reply"),
     ];
   }
 
@@ -393,47 +387,36 @@ function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
       step("Action-2", "playwright", "comment_composer.fill_edit", "在编辑评论输入框中输入本用例编辑后评论正文", "page.comment_composer", "fill_edit", {
         valueFrom: "data.editedCommentBody",
       }),
-      step("Action-3", "api", "api.update_response.capture", "监听更新评论请求响应", "api", "capture_response", {
-        method: "PATCH",
+      step("Action-3", "playwright", "comment_composer.submit_edit", "点击 \"保存评论\" 操作", "page.comment_composer", "submit_edit", {
         saveAs: "updateResponse",
         urlEndsWithFrom: "runtime.rootComment.messageApiPath",
       }),
-      step("Action-4", "playwright", "comment_composer.submit_edit", "点击 \"保存评论\" 操作", "page.comment_composer", "submit_edit"),
     ];
   }
 
   if (definition.kind === "delete") {
     return [
-      step("Action-1", "api", "api.delete_response.capture", "监听删除评论请求响应", "api", "capture_response", {
-        method: "DELETE",
+      step("Action-1", "playwright", "comment_message.click_delete", "点击 本用例测试评论的 \"删除评论\" 操作", "page.comment_message", "click_delete", {
+        bodyFrom: "data.commentBody",
+      }),
+      step("Action-2", "playwright", "comment_message.confirm_delete", "确认删除评论操作", "page.comment_message", "confirm_delete", {
         saveAs: "deleteResponse",
         urlEndsWithFrom: "runtime.rootComment.messageApiPath",
       }),
-      step("Action-2", "playwright", "comment_message.click_delete", "点击 本用例测试评论的 \"删除评论\" 操作", "page.comment_message", "click_delete", {
-        bodyFrom: "data.commentBody",
-      }),
-      step("Action-3", "playwright", "comment_message.confirm_delete", "确认删除评论操作", "page.comment_message", "confirm_delete"),
     ];
   }
 
   return [
-    step("Action-1", "api", "api.image_upload_response.capture", "监听上传评论图片请求响应", "api", "capture_response", {
-      method: "POST",
-      saveAs: "imageUploadResponse",
-      urlEndsWith: "/api/comments/attachments",
-    }),
-    step("Action-2", "playwright", "comment_composer.choose_image", "通过 \"添加图片\" 操作选择本用例测试图片文件", "page.comment_composer", "choose_image", {
+    step("Action-1", "playwright", "comment_composer.choose_image", "通过 \"添加图片\" 操作选择本用例测试图片文件", "page.comment_composer", "choose_image", {
       fileFrom: "runtime.imageFile",
+      saveAs: "imageUploadResponse",
     }),
-    step("Action-3", "playwright", "comment_composer.append_body", "在评论输入框中补充本用例测试评论正文", "page.comment_composer", "append", {
+    step("Action-2", "playwright", "comment_composer.append_body", "在评论输入框中补充本用例测试评论正文", "page.comment_composer", "append", {
       valueFrom: "data.commentBody",
     }),
-    step("Action-4", "api", "api.comment_response.capture", "监听新增评论请求响应", "api", "capture_response", {
-      method: "POST",
+    step("Action-3", "playwright", "comment_composer.submit", "点击 \"发送评论\" 操作", "page.comment_composer", "submit_comment", {
       saveAs: "commentResponse",
-      urlEndsWith: "/api/comments",
     }),
-    step("Action-5", "playwright", "comment_composer.submit", "点击 \"发送评论\" 操作", "page.comment_composer", "submit_comment"),
   ];
 }
 

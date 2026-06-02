@@ -66,7 +66,7 @@ export async function createReviewLootResult(
     completionStandard: null,
     sampleSet: null,
     measurementScope: null,
-    uncertaintyLevel: null,
+    uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
     target: 100,
@@ -79,6 +79,8 @@ export async function createReviewLootResult(
     uncertaintyScore: input.points,
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
+    createdAt: today(),
+    updatedAt: today(),
     sortOrder: 0,
   });
 

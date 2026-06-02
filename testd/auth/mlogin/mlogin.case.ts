@@ -347,22 +347,19 @@ export const mloginSuccessCase = {
       },
       {
         source: { caseStepId: "S1-6", method: "playwright" },
-        id: "current_user.visible",
-        title: "登录后当前用户入口 应可见",
+        id: "user_menu.visible",
+        title: "登录后用户菜单 应可见",
         object: "page",
         operator: "visible",
-        params: { label: "当前用户" },
+        params: { label: "用户菜单" },
       },
       {
         source: { caseStepId: "S1-7", method: "playwright" },
         id: "logout.visible",
-        title: "登录后的 \"退出登录\" 操作 应可见",
-        object: "page",
+        title: "登录后用户菜单中的 \"退出登录\" 操作 应可见",
+        object: "page.user_menu_item",
         operator: "visible",
-        params: {
-          role: "button",
-          name: "退出登录",
-        },
+        params: { name: "退出登录" },
       },
       {
         source: { caseStepId: "S1-8", method: "playwright" },

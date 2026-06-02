@@ -2,6 +2,10 @@ import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import { readBrowserSession, readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
+import {
+  acquireRolePermissionLock,
+  releaseRolePermissionLock,
+} from "../../_operators/role-permission-lock";
 import type { AdminPermissionCaseData, TestContext } from "./_support/admin-permission.context";
 import {
   memberPermissionKeys,
@@ -11,6 +15,8 @@ import {
 } from "./_support/admin-permission.helpers";
 import type { PermissionRule, UserRole } from "../../../src/types/orf";
 import type { PermissionKey } from "../../../src/config/permissions";
+
+const rolePermissionLockOwnerKey = "__testdRolePermissionLockOwner";
 
 export const adminPermissionOperators = {
   "page.admin_permission_login": {
@@ -34,9 +40,15 @@ export const adminPermissionOperators = {
 
   "api.permissions": {
     read: async ({ ctx }) => {
-      const result = await readPermissionRulesAsCurrentUser(ctx.page);
-      expect(result.status).toBe(200);
-      return requiredPermissionRules(result.body.permissionRules);
+      const lockOwner = await acquireRolePermissionLock();
+      try {
+        const result = await readPermissionRulesAsCurrentUser(ctx.page);
+        expect(result.status).toBe(200);
+        return attachRolePermissionLockOwner(requiredPermissionRules(result.body.permissionRules), lockOwner);
+      } catch (error) {
+        await releaseRolePermissionLock(lockOwner);
+        throw error;
+      }
     },
 
     recorded: async ({ params }) => {
@@ -59,7 +71,12 @@ export const adminPermissionOperators = {
       if (params.rules === undefined || params.rules === null) {
         return undefined;
       }
-      return updateMemberPermissionRules(ctx.page, requiredPermissionRules(params.rules));
+      const lockOwner = rolePermissionLockOwner(params.rules);
+      try {
+        return await updateMemberPermissionRules(ctx.page, requiredPermissionRules(params.rules));
+      } finally {
+        await releaseRolePermissionLock(lockOwner);
+      }
     },
 
     response_ok: async ({ params }) => {
@@ -143,6 +160,23 @@ function requiredPermissionRules(value: unknown): PermissionRule[] {
     }
     return rule as PermissionRule;
   });
+}
+
+function attachRolePermissionLockOwner(rules: PermissionRule[], lockOwner: string): PermissionRule[] {
+  Object.defineProperty(rules, rolePermissionLockOwnerKey, {
+    configurable: true,
+    enumerable: false,
+    value: lockOwner,
+  });
+  return rules;
+}
+
+function rolePermissionLockOwner(value: unknown): string | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const owner = (value as Record<string, unknown>)[rolePermissionLockOwnerKey];
+  return typeof owner === "string" ? owner : undefined;
 }
 
 function requiredRole(params: StepParams, key: string): UserRole {

@@ -144,6 +144,12 @@ export const reviewApplicationOperators = {
       await expect(challengeApplicationDialog(ctx.page)).toBeVisible();
     },
 
+    fill_reason: async ({ ctx, params }) => {
+      await challengeApplicationDialog(ctx.page)
+        .getByRole("textbox", { name: "申请理由" })
+        .fill(requiredString(params, "reason"));
+    },
+
     confirm: async ({ ctx, params }) => {
       const target = requiredReviewTarget(params, "target");
       const responsePromise = ctx.page

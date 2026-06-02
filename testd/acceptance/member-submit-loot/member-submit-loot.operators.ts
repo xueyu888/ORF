@@ -128,7 +128,7 @@ export const memberSubmitLootOperators = {
           method: response.request().method(),
           body: await readResponseBody(response),
         }));
-      await ctx.page.getByRole("button", { name: "提交" }).click();
+      await ctx.page.getByRole("button", { name: "正式提交" }).click();
     },
 
     click_self_test_report_link: async ({ ctx, params }) => {

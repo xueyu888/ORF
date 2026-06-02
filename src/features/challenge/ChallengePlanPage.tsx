@@ -1125,6 +1125,7 @@ export function ChallengePlanPage() {
               now,
             })?.label ?? null,
           metricEditAccess: metricEditAccessForObjectiveId,
+          canPublishObjective: () => canCreateObjective,
           canRecruitObjective: (objective) =>
             canRecruitObjectiveChallengers({
               objective,

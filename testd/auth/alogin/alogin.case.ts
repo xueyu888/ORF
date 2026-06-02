@@ -91,7 +91,7 @@ export const aloginSuccessCase = {
   },
 
   Setup: {
-    description: "准备管理员测试账号、清理会话并进入登录页",
+    description: "准备管理员测试账号、设置默认进入页面、清理会话并进入登录页",
     steps: [
       {
         source: { caseStepId: "Setup-1", method: "api" },
@@ -123,6 +123,17 @@ export const aloginSuccessCase = {
       },
       {
         source: { caseStepId: "Setup-3", method: "api" },
+        id: "user.preferences.default_landing_path.set",
+        title: "设置管理员默认进入页面为 悬赏大厅",
+        object: "user.preferences",
+        operator: "set_default_landing_path",
+        params: {
+          userIdFrom: "runtime.adminUser.userId",
+          path: "/bounties",
+        },
+      },
+      {
+        source: { caseStepId: "Setup-4", method: "api" },
         id: "ory.sessions.revoke",
         title: "撤销邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份可能残留的登录会话",
         object: "ory.sessions",
@@ -130,14 +141,14 @@ export const aloginSuccessCase = {
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Setup-4", method: "playwright" },
+        source: { caseStepId: "Setup-5", method: "playwright" },
         id: "browser.clear",
         title: "移除当前浏览器中的残留登录态",
         object: "browser",
         operator: "clear_state",
       },
       {
-        source: { caseStepId: "Setup-5", method: "playwright" },
+        source: { caseStepId: "Setup-6", method: "playwright" },
         id: "page.goto.auth",
         title: "打开 ORF 登录页",
         object: "page",
@@ -349,22 +360,19 @@ export const aloginSuccessCase = {
       },
       {
         source: { caseStepId: "S1-6", method: "playwright" },
-        id: "current_user.visible",
-        title: "登录后当前用户入口 应可见",
+        id: "user_menu.visible",
+        title: "登录后用户菜单 应可见",
         object: "page",
         operator: "visible",
-        params: { label: "当前用户" },
+        params: { label: "用户菜单" },
       },
       {
         source: { caseStepId: "S1-7", method: "playwright" },
         id: "logout.visible",
-        title: "登录后的 \"退出登录\" 操作 应可见",
-        object: "page",
+        title: "登录后用户菜单中的 \"退出登录\" 操作 应可见",
+        object: "page.user_menu_item",
         operator: "visible",
-        params: {
-          role: "button",
-          name: "退出登录",
-        },
+        params: { name: "退出登录" },
       },
       {
         source: { caseStepId: "S1-8", method: "playwright" },
@@ -450,7 +458,15 @@ export const aloginSuccessCase = {
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Clean-6", method: "prisma" },
+        source: { caseStepId: "Clean-6", method: "api" },
+        id: "user.preferences.default_landing_path.reset",
+        title: "恢复邮箱为 `orf-admin-login-e2e@orf.local` 的管理员默认进入页面为 系统默认",
+        object: "user.preferences",
+        operator: "reset_default_landing_path_by_email",
+        params: { emailFrom: "data.email" },
+      },
+      {
+        source: { caseStepId: "Clean-7", method: "prisma" },
         id: "db.admin.memberships.delete",
         title: "删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户的默认团队成员关系",
         object: "db.user",
@@ -458,7 +474,7 @@ export const aloginSuccessCase = {
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "Clean-7", method: "prisma" },
+        source: { caseStepId: "Clean-8", method: "prisma" },
         id: "db.admin.delete",
         title: "删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户",
         object: "db.user",

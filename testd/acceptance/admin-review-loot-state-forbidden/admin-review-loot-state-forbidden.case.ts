@@ -51,14 +51,14 @@ export const adminReviewLootStateForbiddenCase = {
         flowStatus: "settled",
         lootSubmittedAt: "present",
         acceptedResult: "completed",
-        objectiveBasePoints: 42,
-        objectiveSettlementPoints: 42,
+        objectiveBasePoints: 30,
+        objectiveSettlementPoints: 30,
       },
     },
     result: {
       title: "E2E-REVIEW-LOOT-STATE-FORBIDDEN: 已结算前置指标",
       metricName: "E2E 管理员不可验收非待验收目标指标完成率",
-      points: 42,
+      points: 30,
     },
     loot: {
       settled: {
@@ -99,7 +99,7 @@ export const adminReviewLootStateForbiddenCase = {
       { source: { caseStepId: "Setup-8", method: "prisma" }, id: "db.reestimate_review_loot_target.upsert", title: "创建标题为 `E2E-REVIEW-LOOT-STATE-FORBIDDEN: 评估阶段目标`、流转状态为 `reestimating`、阶段为 `orfReestimate` 的本用例评估阶段目标", object: "db.state_review_loot_target", operator: "upsert", params: { fixtureFrom: "data.targets.reestimate", teamIdFrom: "runtime.adminUser.teamId", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "reestimateTarget" } },
       { source: { caseStepId: "Setup-9", method: "prisma" }, id: "db.frozen_review_loot_target.upsert", title: "创建标题为 `E2E-REVIEW-LOOT-STATE-FORBIDDEN: 实施未提交战利品目标`、流转状态为 `frozen`、阶段为 `goalFrozen` 的本用例实施未提交战利品目标", object: "db.state_review_loot_target", operator: "upsert", params: { fixtureFrom: "data.targets.frozen", teamIdFrom: "runtime.adminUser.teamId", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "frozenTarget" } },
       { source: { caseStepId: "Setup-10", method: "prisma" }, id: "db.settled_review_loot_target.upsert", title: "创建标题为 `E2E-REVIEW-LOOT-STATE-FORBIDDEN: 已结算目标`、流转状态为 `settled`、阶段为 `goalFrozen` 的本用例已结算目标", object: "db.state_review_loot_target", operator: "upsert", params: { fixtureFrom: "data.targets.settled", teamIdFrom: "runtime.adminUser.teamId", createdByFrom: "runtime.adminUser.userId", updatedByFrom: "runtime.adminUser.userId", saveAs: "settledTarget" } },
-      { source: { caseStepId: "Setup-11", method: "prisma" }, id: "db.settled_review_loot_result.create", title: "为本用例已结算目标创建标题为 `E2E-REVIEW-LOOT-STATE-FORBIDDEN: 已结算前置指标`、指标积分为 `42` 的前置指标", object: "db.state_review_loot_result", operator: "create", params: { targetFrom: "runtime.settledTarget", resultFrom: "data.result", saveAs: "settledResult" } },
+      { source: { caseStepId: "Setup-11", method: "prisma" }, id: "db.settled_review_loot_result.create", title: "为本用例已结算目标创建标题为 `E2E-REVIEW-LOOT-STATE-FORBIDDEN: 已结算前置指标`、指标积分为 `30` 的前置指标", object: "db.state_review_loot_result", operator: "create", params: { targetFrom: "runtime.settledTarget", resultFrom: "data.result", saveAs: "settledResult" } },
       { source: { caseStepId: "Setup-12", method: "prisma" }, id: "db.settled_review_loot.create", title: "为本用例已结算目标创建内容为 `E2E-REVIEW-LOOT-STATE-FORBIDDEN-BODY: 已结算前置战利品` 的前置战利品", object: "db.state_review_loot", operator: "create", params: { targetFrom: "runtime.settledTarget", resultFrom: "runtime.settledResult", lootFrom: "data.loot.settled", saveAs: "settledLoot" } },
       { source: { caseStepId: "Setup-13", method: "api" }, id: "ory.admin_sessions.revoke", title: "撤销管理员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.email" } },
       { source: { caseStepId: "Setup-14", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
@@ -115,7 +115,7 @@ export const adminReviewLootStateForbiddenCase = {
     assertions: [
       { source: { caseStepId: "S0-1", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 邮箱 `orf-admin-review-loot-state-forbidden-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" } },
       { source: { caseStepId: "S0-2", method: "prisma" }, id: "state_review_loot_targets.states", title: "四个本用例非待验收目标 应为 各自预设的流转状态、阶段、战利品提交时间和挑战者列表", object: "db.state_review_loot_target", operator: "states" },
-      { source: { caseStepId: "S0-3", method: "prisma" }, id: "settled_review_loot_result.present", title: "本用例已结算目标 应存在 指标积分为 `42` 的前置指标", object: "db.state_review_loot_result", operator: "present", params: { targetFrom: "runtime.settledTarget", resultFrom: "runtime.settledResult" } },
+      { source: { caseStepId: "S0-3", method: "prisma" }, id: "settled_review_loot_result.present", title: "本用例已结算目标 应存在 指标积分为 `30` 的前置指标", object: "db.state_review_loot_result", operator: "present", params: { targetFrom: "runtime.settledTarget", resultFrom: "runtime.settledResult" } },
       { source: { caseStepId: "S0-4", method: "prisma" }, id: "settled_review_loot.present", title: "本用例已结算目标 应存在 前置战利品", object: "db.state_review_loot", operator: "present", params: { targetFrom: "runtime.settledTarget", resultFrom: "runtime.settledResult", lootFrom: "runtime.settledLoot" } },
       { source: { caseStepId: "S0-5", method: "prisma" }, id: "state_review_loot_ledger.absent", title: "reason 为 `E2E-REVIEW-LOOT-STATE-FORBIDDEN: 非待验收目标不可验收` 的测试积分流水 应不存在", object: "db.state_review_loot_ledger", operator: "absent" },
     ],

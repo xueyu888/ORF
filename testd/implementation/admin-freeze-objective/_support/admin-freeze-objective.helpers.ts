@@ -65,7 +65,7 @@ export async function createFreezePrerequisiteResult(
     completionStandard: null,
     sampleSet: null,
     measurementScope: null,
-    uncertaintyLevel: null,
+    uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
     target: 100,
@@ -78,6 +78,8 @@ export async function createFreezePrerequisiteResult(
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
+    createdAt: today(),
+    updatedAt: today(),
     sortOrder,
   });
 
@@ -102,7 +104,14 @@ export async function testResultAbsent(title: string) {
 
 export async function targetResultPresent(target: AdminFreezeObjectiveTarget, result: FreezePrerequisiteResult) {
   const row = await readTargetResult(target.objective.id, result.title);
-  return !!row && row.id === result.id && row.metricName === result.metricName;
+  return (
+    !!row &&
+    row.id === result.id &&
+    row.metricName === result.metricName &&
+    !!row.uncertaintyLevel &&
+    typeof row.uncertaintyScore === "number" &&
+    row.uncertaintyScore > 0
+  );
 }
 
 export async function targetReestimating(target: AdminFreezeObjectiveTarget) {
@@ -163,6 +172,8 @@ async function readTargetResult(objectiveId: string, title: string) {
       objectiveId: results.objectiveId,
       title: results.title,
       metricName: results.metricName,
+      uncertaintyLevel: results.uncertaintyLevel,
+      uncertaintyScore: results.uncertaintyScore,
     })
     .from(results)
     .where(and(eq(results.objectiveId, objectiveId), eq(results.title, title)))

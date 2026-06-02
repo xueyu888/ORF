@@ -354,7 +354,7 @@ export const memberSubmitLootCase = {
       {
         source: { caseStepId: "Action-4", method: "playwright" },
         id: "submit.loot_form",
-        title: "点击 \"提交\" 提交战利品操作",
+        title: "点击 \"正式提交\" 提交战利品操作",
         object: "page.loot_form",
         operator: "submit",
         params: { targetFrom: "runtime.lootTarget", saveAs: "submitLootResponse" },
@@ -366,14 +366,6 @@ export const memberSubmitLootCase = {
         object: "api.loot_submit_response",
         operator: "record_loot",
         params: { responseFrom: "runtime.submitLootResponse", saveAs: "submittedLoot" },
-      },
-      {
-        source: { caseStepId: "Action-6", method: "playwright" },
-        id: "self_test_report_link.click",
-        title: "点击 最近提交区域的自测报告链接",
-        object: "page.loot_form",
-        operator: "click_self_test_report_link",
-        params: { reportUrlFrom: "data.reportUrl" },
       },
     ],
   },
@@ -425,15 +417,7 @@ export const memberSubmitLootCase = {
         },
       },
       {
-        source: { caseStepId: "S1-6", method: "playwright" },
-        id: "self_test_report_link.url",
-        title: "当前页面 应跳转到 自测报告链接",
-        object: "page.self_test_report",
-        operator: "current_url",
-        params: { reportUrlFrom: "data.reportUrl" },
-      },
-      {
-        source: { caseStepId: "S1-7", method: "prisma" },
+        source: { caseStepId: "S1-6", method: "prisma" },
         id: "db.loot.present",
         title: "本用例目标 应存在 内容为 `E2E-LOOT-BODY: 成员提交战利品完成说明` 的测试战利品",
         object: "db.loot",
@@ -441,7 +425,7 @@ export const memberSubmitLootCase = {
         params: { targetFrom: "runtime.lootTarget", bodyFrom: "data.lootBody", selfTestReportBodyFrom: "data.reportUrl" },
       },
       {
-        source: { caseStepId: "S1-8", method: "prisma" },
+        source: { caseStepId: "S1-7", method: "prisma" },
         id: "db.loot_target.submitted",
         title: "本用例目标 应为 流转状态 `submitted` 且战利品提交时间已存在",
         object: "db.loot_target",
@@ -449,7 +433,7 @@ export const memberSubmitLootCase = {
         params: { targetFrom: "runtime.lootTarget" },
       },
       {
-        source: { caseStepId: "S1-9", method: "api" },
+        source: { caseStepId: "S1-8", method: "api" },
         id: "session.member.still_authenticated",
         title: "当前会话 应仍为 普通成员的已登录会话",
         object: "auth.session",

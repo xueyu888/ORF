@@ -66,6 +66,7 @@ type RowHandlers = {
   draftObjectiveId?: string;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
   metricEditAccess: (objectiveId: string) => MetricEditAccess;
+  canPublishObjective: (objective: ObjectiveNode["objective"]) => boolean;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
@@ -441,7 +442,7 @@ function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?:
 
   const actions: ReactNode[] = [];
 
-  if (canPublishObjectiveByFlow(objective)) {
+  if (handlers.canPublishObjective(objective) && canPublishObjectiveByFlow(objective)) {
     actions.push(
       <button className="orf-flow-action-button orf-flow-action-secondary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可发布" : "发布到悬赏大厅"} onClick={() => void handlers.onPublishObjective(objective.id)}>
         <Send className="h-3.5 w-3.5" />

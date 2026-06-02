@@ -95,7 +95,7 @@ export const adminFreezeObjectiveCase = {
   },
 
   Setup: {
-    description: "准备管理员账号、本用例独占重估目标和冻结前置指标，登录管理员并进入所有挑战视图",
+    description: "准备管理员账号、本用例独占重估目标和已校准难度点的冻结前置指标，登录管理员并进入所有挑战视图",
     steps: [
       {
         source: { caseStepId: "Setup-1", method: "prisma" },
@@ -176,7 +176,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "Setup-8", method: "prisma" },
         id: "db.freeze_result.create",
-        title: "为本用例冻结目标创建标题为 `E2E-FREEZE-RESULT: 冻结前置指标` 的冻结前置指标",
+        title: "为本用例冻结目标创建标题为 `E2E-FREEZE-RESULT: 冻结前置指标` 且已校准难度点的冻结前置指标",
         object: "db.freeze_result",
         operator: "create",
         params: {
@@ -306,7 +306,7 @@ export const adminFreezeObjectiveCase = {
       {
         source: { caseStepId: "S0-6", method: "prisma" },
         id: "db.freeze_result.present",
-        title: "本用例冻结目标 应存在 冻结前置指标",
+        title: "本用例冻结目标 应存在 已校准难度点的冻结前置指标",
         object: "db.freeze_result",
         operator: "present",
         params: { targetFrom: "runtime.freezeTarget", resultFrom: "runtime.freezeResult" },

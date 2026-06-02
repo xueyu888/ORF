@@ -138,7 +138,7 @@ export async function createReviewLootForbiddenResult(
     completionStandard: null,
     sampleSet: null,
     measurementScope: null,
-    uncertaintyLevel: null,
+    uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
     target: 100,
@@ -151,6 +151,8 @@ export async function createReviewLootForbiddenResult(
     uncertaintyScore: fixture.points,
     acceptedResult: "unreviewed",
     reviewCadence: "Weekly",
+    createdAt: today(),
+    updatedAt: today(),
     sortOrder,
   });
 

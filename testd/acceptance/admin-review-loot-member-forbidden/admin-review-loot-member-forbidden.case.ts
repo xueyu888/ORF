@@ -25,7 +25,7 @@ export const adminReviewLootMemberForbiddenCase = {
     result: {
       title: "E2E-REVIEW-LOOT-MEMBER-FORBIDDEN: 前置指标",
       metricName: "E2E 普通成员不可验收战利品指标完成率",
-      points: 42,
+      points: 30,
     },
     loot: {
       body: "E2E-REVIEW-LOOT-MEMBER-FORBIDDEN-BODY: 普通成员提交的战利品说明",
@@ -61,7 +61,7 @@ export const adminReviewLootMemberForbiddenCase = {
       { source: { caseStepId: "Setup-5", method: "api" }, id: "ory.member_identity.upsert", title: "准备普通成员认证身份，邮箱为 `orf-member-review-loot-forbidden-e2e@orf.local`，密码为固定测试密码", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.email", nameFrom: "data.name", passwordFrom: "data.password", saveAs: "memberIdentity" } },
       { source: { caseStepId: "Setup-6", method: "prisma" }, id: "db.member.upsert", title: "准备普通成员用户和默认团队成员关系，邮箱为 `orf-member-review-loot-forbidden-e2e@orf.local`、角色为 `member`、状态为 `active`", object: "db.user", operator: "upsert", params: { emailFrom: "data.email", nameFrom: "data.name", roleFrom: "data.role", status: "active", identityIdFrom: "runtime.memberIdentity.id", saveAs: "memberUser" } },
       { source: { caseStepId: "Setup-7", method: "prisma" }, id: "db.member_review_loot_target.upsert", title: "创建标题为 `E2E-REVIEW-LOOT-MEMBER-FORBIDDEN: 待验收目标`、流转状态为 `submitted`、阶段为 `goalFrozen` 的本用例待验收目标", object: "db.member_review_loot_target", operator: "upsert", params: { fixtureFrom: "data.target", teamIdFrom: "runtime.memberUser.teamId", createdByFrom: "runtime.memberUser.userId", updatedByFrom: "runtime.memberUser.userId", saveAs: "reviewLootTarget" } },
-      { source: { caseStepId: "Setup-8", method: "prisma" }, id: "db.member_review_loot_result.create", title: "为本用例待验收目标创建标题为 `E2E-REVIEW-LOOT-MEMBER-FORBIDDEN: 前置指标`、指标积分为 `42` 的前置指标", object: "db.member_review_loot_result", operator: "create", params: { targetFrom: "runtime.reviewLootTarget", resultFrom: "data.result", saveAs: "reviewLootResult" } },
+      { source: { caseStepId: "Setup-8", method: "prisma" }, id: "db.member_review_loot_result.create", title: "为本用例待验收目标创建标题为 `E2E-REVIEW-LOOT-MEMBER-FORBIDDEN: 前置指标`、指标积分为 `30` 的前置指标", object: "db.member_review_loot_result", operator: "create", params: { targetFrom: "runtime.reviewLootTarget", resultFrom: "data.result", saveAs: "reviewLootResult" } },
       { source: { caseStepId: "Setup-9", method: "prisma" }, id: "db.member_review_loot.create", title: "为本用例待验收目标创建普通成员提交的前置战利品，前置指标声明为 `completed`", object: "db.member_review_loot", operator: "create", params: { targetFrom: "runtime.reviewLootTarget", resultFrom: "runtime.reviewLootResult", lootFrom: "data.loot", saveAs: "reviewLoot" } },
       { source: { caseStepId: "Setup-10", method: "api" }, id: "ory.member_sessions.revoke", title: "撤销普通成员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.email" } },
       { source: { caseStepId: "Setup-11", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
@@ -77,7 +77,7 @@ export const adminReviewLootMemberForbiddenCase = {
     assertions: [
       { source: { caseStepId: "S0-1", method: "api" }, id: "session.member.authenticated", title: "当前会话 应为 邮箱 `orf-member-review-loot-forbidden-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.email", roleFrom: "data.role", status: "active" } },
       { source: { caseStepId: "S0-2", method: "prisma" }, id: "member_review_loot_target.submitted", title: "本用例待验收目标 应为 `submitted`，阶段为 `goalFrozen`，战利品提交时间已存在，挑战者仅包含普通成员", object: "db.member_review_loot_target", operator: "submitted", params: { fixtureFrom: "data.target" } },
-      { source: { caseStepId: "S0-3", method: "prisma" }, id: "member_review_loot_result.present", title: "本用例待验收目标 应存在 指标积分为 `42` 的前置指标", object: "db.member_review_loot_result", operator: "present", params: { targetFrom: "runtime.reviewLootTarget", resultFrom: "runtime.reviewLootResult" } },
+      { source: { caseStepId: "S0-3", method: "prisma" }, id: "member_review_loot_result.present", title: "本用例待验收目标 应存在 指标积分为 `30` 的前置指标", object: "db.member_review_loot_result", operator: "present", params: { targetFrom: "runtime.reviewLootTarget", resultFrom: "runtime.reviewLootResult" } },
       { source: { caseStepId: "S0-4", method: "prisma" }, id: "member_review_loot.present", title: "本用例待验收目标 应存在 普通成员提交的前置战利品，且前置指标声明为 `completed`", object: "db.member_review_loot", operator: "present", params: { targetFrom: "runtime.reviewLootTarget", resultFrom: "runtime.reviewLootResult", lootFrom: "runtime.reviewLoot" } },
       { source: { caseStepId: "S0-5", method: "prisma" }, id: "member_review_loot_ledger.absent", title: "reason 为 `E2E-REVIEW-LOOT-MEMBER-FORBIDDEN: 普通成员不可验收` 的测试积分流水 应不存在", object: "db.member_review_loot_ledger", operator: "absent" },
     ],
