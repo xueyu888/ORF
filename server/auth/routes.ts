@@ -5,6 +5,7 @@ import { env } from "../env";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
 import {
   ORF_SESSION_COOKIE,
+  OrfUserScopeBindingError,
   OryAuthFlowError,
   checkPasswordLoginFlowHealth,
   getAuthenticatedOrfUser,
@@ -66,6 +67,10 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
 
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
     request.log.warn(error, "Ory session check failed");
+    if (error instanceof OrfUserScopeBindingError) {
+      reply.code(403).send({ error: "账号未加入当前默认团队，请联系管理员。" });
+      return undefined;
+    }
     const unavailablePayload = authDependencyUnavailablePayload(error);
     if (unavailablePayload) {
       reply.code(503).send(unavailablePayload);
@@ -103,6 +108,10 @@ export function registerAuthRoutes(app: FastifyInstance) {
   app.get("/api/auth/session", async (request, reply) => {
     const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
       request.log.warn(error, "Ory session check failed");
+      if (error instanceof OrfUserScopeBindingError) {
+        reply.code(403).send({ error: "账号未加入当前默认团队，请联系管理员。" });
+        return undefined;
+      }
       const unavailablePayload = authDependencyUnavailablePayload(error);
       if (unavailablePayload) {
         reply.code(503).send(unavailablePayload);
@@ -130,6 +139,9 @@ export function registerAuthRoutes(app: FastifyInstance) {
       const unavailablePayload = authDependencyUnavailablePayload(error);
       if (unavailablePayload) {
         return reply.code(503).send(unavailablePayload);
+      }
+      if (error instanceof OrfUserScopeBindingError) {
+        return reply.code(403).send({ error: "账号未加入当前默认团队，请联系管理员。" });
       }
       return reply.code(401).send({ error: "Invalid email or password" });
     }

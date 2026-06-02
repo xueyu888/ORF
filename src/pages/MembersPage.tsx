@@ -166,7 +166,7 @@ export function MembersPage() {
       return;
     }
 
-    if (!window.confirm(`删除用户「${user.name}」？如果该成员已被 ORF 业务记录引用，后端会拒绝删除。`)) {
+    if (!window.confirm(`删除账号「${user.name}」？这会清理 ORF 用户、成员关系和已绑定登录身份；如果该成员已被 ORF 业务记录引用，后端会拒绝删除。`)) {
       return;
     }
 

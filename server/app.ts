@@ -412,6 +412,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
       return reply.code(statusCode).send({ error: error instanceof Error ? error.message : "Bad Request" });
     }
 
+    if (statusCode === 503) {
+      return reply.code(503).send({ error: error instanceof Error ? error.message : "Service Unavailable" });
+    }
+
     if (isDatabaseUnavailableError(error)) {
       app.log.error(error);
       return reply.code(503).send(databaseUnavailablePayload());

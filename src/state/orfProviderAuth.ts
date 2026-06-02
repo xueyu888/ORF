@@ -32,6 +32,10 @@ export function authFailureMessage(error: unknown, action: "login" | "registrati
       return "账号或密码不正确";
     }
 
+    if (error.status === 403 && action === "login") {
+      return error.message || "账号未加入当前默认团队，请联系管理员。";
+    }
+
     if (error.status === 400) {
       if (action === "registration" && error.message && error.message !== "Registration failed") {
         return error.message;

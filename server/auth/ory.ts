@@ -72,10 +72,32 @@ export class OryAuthFlowError extends Error {
   }
 }
 
+export class OrfUserScopeBindingError extends Error {
+  constructor() {
+    super("User is not in default team");
+    this.name = "OrfUserScopeBindingError";
+  }
+}
+
 const trimSlash = (value: string) => value.replace(/\/+$/, "");
 
 function oryPublicUrl(path: string) {
   return new URL(path, `${trimSlash(process.env.ORY_PUBLIC_URL ?? env.ORY_PUBLIC_URL)}/`).toString();
+}
+
+function oryAdminBaseUrl() {
+  const raw = Object.prototype.hasOwnProperty.call(process.env, "ORY_ADMIN_URL") ? process.env.ORY_ADMIN_URL : env.ORY_ADMIN_URL;
+  const value = raw?.trim();
+  return value || null;
+}
+
+function oryAdminUrl(path: string) {
+  const baseUrl = oryAdminBaseUrl();
+  if (!baseUrl) {
+    throw Object.assign(new Error("Ory admin URL is not configured"), { statusCode: 503 });
+  }
+
+  return new URL(path, `${trimSlash(baseUrl)}/`).toString();
 }
 
 async function fetchOry(input: string, init: RequestInit = {}) {
@@ -206,6 +228,11 @@ async function upsertOrfUser(
       throw new Error("Ory identity email is already bound to another ORF user");
     }
 
+    const role = await existingMembershipRole(existing.id);
+    if (!role) {
+      throw new OrfUserScopeBindingError();
+    }
+
     const update: { lastOnlineAt?: string; oryIdentityId?: string } = {};
     if (lastOnlineAt) {
       update.lastOnlineAt = lastOnlineAt;
@@ -215,11 +242,6 @@ async function upsertOrfUser(
     }
     if (Object.keys(update).length > 0) {
       await db.update(users).set(update).where(sql`${users.id} = ${existing.id}`);
-    }
-
-    const role = await existingMembershipRole(existing.id);
-    if (!role) {
-      throw new Error("ORF user is not in the default runtime scope");
     }
 
     return {
@@ -414,6 +436,28 @@ export async function loginWithPassword(identifier: string, password: string) {
 
   const user = await upsertOrfUser(auth.session.identity, { newUserStatus: "pending", recordOnline: true });
   return { sessionToken: auth.session_token, user };
+}
+
+export async function deleteOryIdentity(identityId: string | null | undefined) {
+  const id = identityId?.trim();
+  if (!id) {
+    return;
+  }
+
+  const response = await fetchOry(oryAdminUrl(`/admin/identities/${encodeURIComponent(id)}`), {
+    method: "DELETE",
+    headers: {
+      accept: "application/json",
+    },
+  });
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    throw Object.assign(new Error(`Ory identity delete failed with ${response.status}`), { statusCode: 503 });
+  }
 }
 
 export async function registerWithPassword(input: { name: string; email: string; password: string }) {

@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { rm } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { and, eq, sql } from "drizzle-orm";
 import { buildServer } from "../server/app";
 import { loginWithPassword } from "../server/auth/ory";
 import { closeDb, db } from "../server/db/client";
-import { objectives, results as resultRows, taskChecklistItems, tasks as taskRows, teams, teamMembers, users } from "../server/db/schema";
+import { commentAttachments, notifications, objectives, results as resultRows, taskChecklistItems, tasks as taskRows, teams, teamMembers, users } from "../server/db/schema";
 import { subscribeRealtimeEvents } from "../server/realtime/realtimeEventBus";
 import type { ObjectiveAcceptedResult, Result, Task, UncertaintyLevel } from "../src/types/orf";
 import type { RealtimeEvent } from "../src/types/realtime";
+import { saveUserPreferences } from "../server/settings/personalSettings";
 import {
   acceptObjectiveChallenge,
   applyForObjectiveChallenge as applyForObjectiveChallengeRepository,
@@ -1874,6 +1875,121 @@ test("API user deletion reports missing members instead of a successful no-op", 
   });
 });
 
+test("API user deletion refuses linked accounts when Ory admin is not configured", async () => {
+  const fixture = await createFixture("api-user-delete-ory-admin-missing");
+  const originalOryAdminUrl = process.env.ORY_ADMIN_URL;
+  process.env.ORY_ADMIN_URL = "";
+
+  try {
+    await db.update(users).set({ oryIdentityId: `${fixture.observer.id}-identity` }).where(eq(users.id, fixture.observer.id));
+
+    await withApiServer(fixture, async (app) => {
+      const deletion = await apiInject(app, fixture.commander, "DELETE", `/api/users/${encodeURIComponent(fixture.observer.id)}`);
+      assert.equal(deletion.statusCode, 503);
+      assert.equal((deletion.json() as { error: string }).error, "Ory admin URL is not configured");
+
+      const [storedUser] = await db.select({ id: users.id }).from(users).where(eq(users.id, fixture.observer.id)).limit(1);
+      const [storedMembership] = await db
+        .select({ userId: teamMembers.userId })
+        .from(teamMembers)
+        .where(and(eq(teamMembers.teamId, fixture.teamId), eq(teamMembers.userId, fixture.observer.id)))
+        .limit(1);
+      assert.equal(storedUser?.id, fixture.observer.id);
+      assert.equal(storedMembership?.userId, fixture.observer.id);
+    });
+  } finally {
+    if (originalOryAdminUrl === undefined) {
+      delete process.env.ORY_ADMIN_URL;
+    } else {
+      process.env.ORY_ADMIN_URL = originalOryAdminUrl;
+    }
+  }
+});
+
+test("API user deletion removes an unreferenced account chain and Ory identity", async () => {
+  const fixture = await createFixture("api-user-delete-account-chain");
+  const originalOryAdminUrl = process.env.ORY_ADMIN_URL;
+  const deletedIdentityIds: string[] = [];
+  const identityId = `${fixture.observer.id}-identity`;
+  const pendingAttachmentId = `${fixture.prefix}-pending-attachment`;
+  process.env.ORY_ADMIN_URL = "https://ory-admin.test";
+
+  try {
+    await db.update(users).set({ oryIdentityId: identityId }).where(eq(users.id, fixture.observer.id));
+    await db.insert(notifications).values({
+      id: `${fixture.prefix}-observer-notification`,
+      teamId: fixture.teamId,
+      recipientUserId: fixture.observer.id,
+      actorUserId: fixture.commander.id,
+      actorName: fixture.commander.name,
+      kind: "objective.published",
+      title: "Test notification",
+      body: "Test-only notification for user deletion cleanup.",
+      targetType: "objective",
+      targetId: `${fixture.prefix}-target`,
+      targetHref: "/tasks",
+      readAt: null,
+      createdAt: "2999-01-01T00:00:00.000Z",
+      metadata: {},
+    });
+    await db.insert(commentAttachments).values({
+      id: pendingAttachmentId,
+      teamId: fixture.teamId,
+      targetType: "task",
+      targetId: `${fixture.prefix}-pending-target`,
+      messageId: null,
+      objectKey: `tests/${pendingAttachmentId}.png`,
+      fileName: "pending.png",
+      mimeType: "image/png",
+      fileSize: 1,
+      width: 1,
+      height: 1,
+      createdBy: fixture.observer.id,
+      createdAt: "2999-01-01T00:00:00.000Z",
+      attachedAt: null,
+      expiresAt: "2999-01-02T00:00:00.000Z",
+    });
+    await saveUserPreferences(fixture.observer.id, { sidebarCollapsed: true });
+    await access(personalSettingsTestDir(fixture.observer.id));
+
+    await withApiServer(
+      fixture,
+      async (app) => {
+        const deletion = await apiInject(app, fixture.commander, "DELETE", `/api/users/${encodeURIComponent(fixture.observer.id)}`);
+        assert.equal(deletion.statusCode, 200, deletion.body);
+        assert.deepEqual(deletedIdentityIds, [identityId]);
+
+        const [storedUser] = await db.select({ id: users.id }).from(users).where(eq(users.id, fixture.observer.id)).limit(1);
+        const [storedMembership] = await db
+          .select({ userId: teamMembers.userId })
+          .from(teamMembers)
+          .where(and(eq(teamMembers.teamId, fixture.teamId), eq(teamMembers.userId, fixture.observer.id)))
+          .limit(1);
+        const [storedNotification] = await db.select({ id: notifications.id }).from(notifications).where(eq(notifications.recipientUserId, fixture.observer.id)).limit(1);
+        const [storedPendingAttachment] = await db.select({ id: commentAttachments.id }).from(commentAttachments).where(eq(commentAttachments.id, pendingAttachmentId)).limit(1);
+        assert.equal(storedUser, undefined);
+        assert.equal(storedMembership, undefined);
+        assert.equal(storedNotification, undefined);
+        assert.equal(storedPendingAttachment, undefined);
+        await assert.rejects(() => access(personalSettingsTestDir(fixture.observer.id)));
+
+        const userList = await apiInject(app, fixture.commander, "GET", "/api/users");
+        assert.equal(userList.statusCode, 200);
+        const names = (userList.json() as { users: Array<{ id: string }> }).users.map((user) => user.id);
+        assert.equal(names.includes(fixture.observer.id), false);
+      },
+      { deletedIdentityIds },
+    );
+  } finally {
+    await rm(personalSettingsTestDir(fixture.observer.id), { recursive: true, force: true });
+    if (originalOryAdminUrl === undefined) {
+      delete process.env.ORY_ADMIN_URL;
+    } else {
+      process.env.ORY_ADMIN_URL = originalOryAdminUrl;
+    }
+  }
+});
+
 test("API user management rejects duplicate display names inside the default scope", async () => {
   const fixture = await createFixture("api-user-duplicate-name");
 
@@ -2102,6 +2218,37 @@ test("auth API normalizes registration traits at the route boundary", async () =
   });
 });
 
+test("auth API distinguishes missing default-team binding from invalid credentials", async () => {
+  const fixture = await createFixture("auth-route-login-missing-membership");
+  const identity = {
+    id: `${fixture.prefix}-missing-membership-identity`,
+    traits: {
+      email: fixture.challenger.email,
+      name: fixture.challenger.name,
+    },
+  };
+  await db.delete(teamMembers).where(and(eq(teamMembers.teamId, fixture.teamId), eq(teamMembers.userId, fixture.challenger.id)));
+
+  await withMockOryPasswordFlow("login", identity, async () => {
+    const app = await buildServer({ logger: false, registerOptionalIntegrations: false });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { email: fixture.challenger.email, password: "password" },
+      });
+      assert.equal(response.statusCode, 403);
+      assert.equal((response.json() as { error?: string }).error, "账号未加入当前默认团队，请联系管理员。");
+    } finally {
+      await app.close();
+    }
+  });
+
+  const [stored] = await db.select({ lastOnlineAt: users.lastOnlineAt, oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.id, fixture.challenger.id)).limit(1);
+  assert.equal(stored?.oryIdentityId, null);
+  assert.equal(stored?.lastOnlineAt, null);
+});
+
 test("password login binds a preapproved ORF member to the Ory identity id", async () => {
   const fixture = await createFixture("auth-login-bind-preapproved");
   const identity = {
@@ -2267,6 +2414,30 @@ test("API user deletion rejects members referenced by ORF records", async () => 
 
     const myChallenges = await getMyChallengesData(fixture.challenger.name);
     assert.equal(myChallenges.objectives.some((item) => item.id === objective.id), true);
+  });
+});
+
+test("API user deletion rejects members referenced only by ORF audit ids", async () => {
+  const fixture = await createFixture("api-user-delete-audit-reference");
+  const objective = await createObjective(
+    {
+      title: `${fixture.prefix} observer-created objective`,
+      whyItMatters: "User deletion must preserve audit subjects.",
+      cycle: "2999-Q4",
+      boundary: "Test-only objective.",
+      finalDueAt: farFutureDueDate,
+    },
+    { scope: fixture.scope, userId: fixture.observer.id },
+  );
+  assert.ok(objective);
+
+  await withApiServer(fixture, async (app) => {
+    const deletion = await apiInject(app, fixture.commander, "DELETE", `/api/users/${encodeURIComponent(fixture.observer.id)}`);
+    assert.equal(deletion.statusCode, 409);
+    assert.equal((deletion.json() as { error?: string }).error, "User is referenced by ORF records");
+
+    const [storedUser] = await db.select({ id: users.id }).from(users).where(eq(users.id, fixture.observer.id)).limit(1);
+    assert.equal(storedUser?.id, fixture.observer.id);
   });
 });
 
@@ -3593,13 +3764,17 @@ async function createObjectiveWithLockedResults(
   return { objective: settled.objective, result, referenceResult };
 }
 
-async function withApiServer(fixture: Fixture, run: (app: FastifyInstance) => Promise<void>) {
-  return withApiServerForFixtures([fixture], run);
+type MockOryOptions = {
+  deletedIdentityIds?: string[];
+};
+
+async function withApiServer(fixture: Fixture, run: (app: FastifyInstance) => Promise<void>, options: MockOryOptions = {}) {
+  return withApiServerForFixtures([fixture], run, options);
 }
 
-async function withApiServerForFixtures(fixtures: Fixture[], run: (app: FastifyInstance) => Promise<void>) {
+async function withApiServerForFixtures(fixtures: Fixture[], run: (app: FastifyInstance) => Promise<void>, options: MockOryOptions = {}) {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = mockOryFetch(fixtures, originalFetch);
+  globalThis.fetch = mockOryFetch(fixtures, originalFetch, options);
   const app = await buildServer({ logger: false, registerOptionalIntegrations: false });
 
   try {
@@ -3654,7 +3829,7 @@ async function withMockOryPasswordFlow(
   }
 }
 
-function mockOryFetch(fixtures: Fixture[], fallback: typeof fetch): typeof fetch {
+function mockOryFetch(fixtures: Fixture[], fallback: typeof fetch, options: MockOryOptions = {}): typeof fetch {
   const usersByToken = new Map(
     fixtures.flatMap((fixture) => [
       [fixture.commander.id, fixture.commander] as const,
@@ -3665,6 +3840,12 @@ function mockOryFetch(fixtures: Fixture[], fallback: typeof fetch): typeof fetch
 
   return async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.includes("/admin/identities/") && init?.method === "DELETE") {
+      const rawIdentityId = url.split("/admin/identities/")[1]?.split(/[?#]/)[0] ?? "";
+      options.deletedIdentityIds?.push(decodeURIComponent(rawIdentityId));
+      return new Response(null, { status: 204 });
+    }
+
     if (!url.includes("/sessions/whoami")) {
       return fallback(input, init);
     }

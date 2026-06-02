@@ -110,6 +110,10 @@ export async function readUserPreferences(userId: string) {
   }
 }
 
+export async function deleteUserPersonalSettings(userId: string) {
+  await rm(userSettingsDir(userId), { recursive: true, force: true });
+}
+
 async function writeUserPreferences(preferences: UserPreferences) {
   const directory = userSettingsDir(preferences.userId);
   await mkdir(directory, { recursive: true });

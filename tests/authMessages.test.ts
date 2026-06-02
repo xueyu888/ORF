@@ -18,3 +18,7 @@ test("auth failure messages still hide credential failure details", () => {
   assert.equal(authFailureMessage(new ApiError(401, "/api/auth/login", "Invalid email or password"), "login"), "账号或密码不正确");
   assert.equal(authFailureMessage(new ApiError(400, "/api/auth/registration", "Registration failed"), "registration"), "注册失败，请检查邮箱和密码");
 });
+
+test("auth failure messages preserve default-team binding failures", () => {
+  assert.equal(authFailureMessage(new ApiError(403, "/api/auth/login", "账号未加入当前默认团队，请联系管理员。"), "login"), "账号未加入当前默认团队，请联系管理员。");
+});

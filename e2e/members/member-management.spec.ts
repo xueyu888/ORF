@@ -262,7 +262,7 @@ test("member page deletes unreferenced users through the user DELETE endpoint", 
   let deleteRequests = 0;
 
   page.on("dialog", async (dialog) => {
-    expect(dialog.message()).toContain("删除用户");
+    expect(dialog.message()).toContain("删除账号");
     await dialog.accept();
   });
 

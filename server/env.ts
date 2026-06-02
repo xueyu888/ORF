@@ -15,6 +15,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   ORF_APP_URL: z.string().url().default("http://127.0.0.1:5173"),
   ORY_PUBLIC_URL: z.string().url().default("http://127.0.0.1:4433"),
+  ORY_ADMIN_URL: z.string().url().optional(),
   OBJECT_STORAGE_DRIVER: z.enum(["s3"]).default("s3"),
   OBJECT_STORAGE_ENDPOINT: z.string().url().default("http://127.0.0.1:9000"),
   OBJECT_STORAGE_REGION: z.string().trim().min(1).default("us-east-1"),

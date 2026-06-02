@@ -46,6 +46,10 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
       return "用户不存在，已刷新成员列表";
     }
 
+    if (error.status === 503 && error.message === "Ory admin URL is not configured") {
+      return "删除已绑定登录账号需要先配置 Ory 管理接口";
+    }
+
     return error.message || fallback;
   }
 
