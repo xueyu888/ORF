@@ -1,5 +1,7 @@
-import { expect, type Dialog } from "@playwright/test";
+import { expect, type Dialog, type Page } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../_framework/types";
+import type { CapturedResponse } from "../_operators/common.context";
+import { readResponseBody } from "../_operators/common.helpers";
 import { requiredCapturedResponse } from "../_operators/common.operators";
 import { requiredNumber, requiredString } from "../_operators/params";
 import type { CommentCaseData, CommentTarget, FixtureComment, MockImageFile, TestContext } from "./_support/comment.context";
@@ -43,6 +45,8 @@ import {
   setCommentObjectiveParticipant,
   testCommentsAbsent,
 } from "./_support/comment.helpers";
+
+const COMMENT_RESPONSE_TIMEOUT_MS = 5_000;
 
 export const commentOperators = {
   "db.test_comments": {
@@ -600,15 +604,24 @@ export const commentOperators = {
     },
 
     submit_comment: async ({ ctx }) => {
-      await ctx.page.getByRole("button", { name: "发送评论" }).click();
+      return performWithCapturedResponse(
+        captureCommentResponse(ctx.page, "POST", "/api/comments"),
+        () => ctx.page.getByRole("button", { name: "发送评论" }).click(),
+      );
     },
 
     submit_reply: async ({ ctx }) => {
-      await ctx.page.getByRole("button", { name: "发送回复" }).click();
+      return performWithCapturedResponse(
+        captureCommentResponse(ctx.page, "POST", "/api/comments"),
+        () => ctx.page.getByRole("button", { name: "发送回复" }).click(),
+      );
     },
 
-    submit_edit: async ({ ctx }) => {
-      await ctx.page.getByRole("button", { name: "保存评论" }).click();
+    submit_edit: async ({ ctx, params }) => {
+      return performWithCapturedResponse(
+        captureCommentResponse(ctx.page, "PATCH", requiredString(params, "urlEndsWith")),
+        () => ctx.page.getByRole("button", { name: "保存评论" }).click(),
+      );
     },
 
     empty: async ({ ctx }) => {
@@ -622,11 +635,15 @@ export const commentOperators = {
     choose_image: async ({ ctx, params }) => {
       const file = requiredMockImageFile(params, "file");
       await expect(commentPanel(ctx.page).getByRole("button", { name: "添加图片" })).toBeEnabled();
-      await commentPanel(ctx.page).locator('input[type="file"]').setInputFiles({
-        buffer: file.buffer,
-        mimeType: file.mimeType,
-        name: file.fileName,
-      });
+      return performWithCapturedResponse(
+        captureCommentResponse(ctx.page, "POST", "/api/comments/attachments"),
+        () =>
+          commentPanel(ctx.page).locator('input[type="file"]').setInputFiles({
+            buffer: file.buffer,
+            mimeType: file.mimeType,
+            name: file.fileName,
+          }),
+      );
     },
 
     choose_file: async ({ ctx, params }) => {
@@ -680,13 +697,18 @@ export const commentOperators = {
       runtime.values.pendingCommentDeleteClick = clickPromise;
     },
 
-    confirm_delete: async ({ runtime }) => {
+    confirm_delete: async ({ ctx, runtime, params }) => {
       const dialog = runtime.values.pendingCommentDeleteDialog;
       if (!isDialog(dialog)) {
         throw new Error("没有待确认的删除评论弹窗");
       }
-      await dialog.accept();
-      await runtime.values.pendingCommentDeleteClick;
+      return performWithCapturedResponse(
+        captureCommentResponse(ctx.page, "DELETE", requiredString(params, "urlEndsWith")),
+        async () => {
+          await dialog.accept();
+          await runtime.values.pendingCommentDeleteClick;
+        },
+      );
     },
 
     reply_count_visible: async ({ ctx, params }) => {
@@ -698,6 +720,34 @@ export const commentOperators = {
     },
   },
 } satisfies OperatorRegistry<TestContext, CommentCaseData>;
+
+function captureCommentResponse(page: Page, method: string, urlEndsWith: string): Promise<CapturedResponse> {
+  return page
+    .waitForResponse(
+      (response) => response.request().method().toUpperCase() === method && response.url().endsWith(urlEndsWith),
+      { timeout: COMMENT_RESPONSE_TIMEOUT_MS },
+    )
+    .then(async (response) => ({
+      ok: response.ok(),
+      status: response.status(),
+      url: response.url(),
+      method: response.request().method(),
+      body: await readResponseBody(response),
+    }));
+}
+
+async function performWithCapturedResponse(
+  responsePromise: Promise<CapturedResponse>,
+  perform: () => Promise<unknown>,
+): Promise<CapturedResponse> {
+  try {
+    await perform();
+    return await responsePromise;
+  } catch (error) {
+    await responsePromise.catch(() => undefined);
+    throw error;
+  }
+}
 
 function optionalString(params: StepParams, key: string) {
   const value = params[key];
