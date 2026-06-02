@@ -7,9 +7,9 @@
 - 覆盖对象：管理员成功登录。
 - 不覆盖对象：注册、错误密码、普通成员登录、权限变更、管理员创建。
 - B 基准：前端、后端、数据库、schema、Ory/Kratos 和当前浏览器可开测；不要求存在任何具体管理员账号。
-- Setup 产物：邮箱为 "orf-admin-login-e2e@orf.local" 的管理员 Ory 身份、ORF 用户和默认团队 admin 成员关系。
+- Setup 产物：邮箱为 "orf-admin-login-e2e@orf.local" 的管理员 Ory 身份、ORF 用户、默认团队 admin 成员关系和默认进入页面为悬赏大厅的个人偏好。
 - Action 边界：只提交管理员登录表单。
-- Clean 产物：删除本用例创建或覆盖的管理员身份、用户、成员关系，并清理登录态和页面运行态。
+- Clean 产物：恢复管理员默认进入页面为系统默认，删除本用例创建或覆盖的管理员身份、用户、成员关系，并清理登录态和页面运行态。
 
 ## 2. 状态模型
 
@@ -28,9 +28,10 @@
 - Setup：构造 S0。
   - [Setup-1] [api] 准备邮箱为 `orf-admin-login-e2e@orf.local`、使用固定测试密码的管理员登录身份。
   - [Setup-2] [prisma] 准备邮箱为 `orf-admin-login-e2e@orf.local`、角色为 `admin`、状态为 `active` 的管理员用户和默认团队成员关系。
-  - [Setup-3] [api] 撤销邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份可能残留的登录会话。
-  - [Setup-4] [playwright] 移除当前浏览器中的残留登录态。
-  - [Setup-5] [playwright] 打开 ORF 登录页。
+  - [Setup-3] [api] 设置管理员默认进入页面为 悬赏大厅。
+  - [Setup-4] [api] 撤销邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份可能残留的登录会话。
+  - [Setup-5] [playwright] 移除当前浏览器中的残留登录态。
+  - [Setup-6] [playwright] 打开 ORF 登录页。
 
 - S0：Action 前状态。
   - [S0-1] [playwright] 当前页面 应为 登录页。
@@ -71,5 +72,6 @@
   - [Clean-3] [playwright] 移除当前浏览器中的残留登录态。
   - [Clean-4] [api] 撤销邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份的残留登录会话。
   - [Clean-5] [api] 删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员登录身份。
-  - [Clean-6] [prisma] 删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户的默认团队成员关系。
-  - [Clean-7] [prisma] 删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户。
+  - [Clean-6] [api] 恢复邮箱为 `orf-admin-login-e2e@orf.local` 的管理员默认进入页面为 系统默认。
+  - [Clean-7] [prisma] 删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户的默认团队成员关系。
+  - [Clean-8] [prisma] 删除邮箱为 `orf-admin-login-e2e@orf.local` 的管理员用户。
