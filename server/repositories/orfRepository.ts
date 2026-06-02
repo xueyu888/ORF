@@ -3358,8 +3358,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       description: input.description?.trim() || "执行支撑目标的下一步技术任务。",
       status: "Todo",
       priority: input.priority ?? "Medium",
-      // TESTD_FAULT_INJECTION: Newly created tasks lose the selected assignee.
-      assignee: "User",
+      assignee: input.assignee,
       linkedObjectiveId: objective.id,
       feedbackOriginId,
       dueDate: dueDate ?? now,
