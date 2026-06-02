@@ -58,7 +58,7 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
         { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.user_record.matches", title: "ORF 业务系统中 应存在 当前用户固定测试邮箱、状态为 `active` 的用户记录", object: "db.user_record", operator: "matches", params: { emailFrom: "data.email", nameFrom: "data.name", status: "active" } },
         { source: { caseStepId: "S0-6", method: "prisma" }, id: "db.membership.matches", title: "当前用户的默认团队成员关系角色 应为 当前用例参数角色", object: "db.default_team_membership", operator: "matches", params: { emailFrom: "data.email", roleFrom: "data.role" } },
         { source: { caseStepId: "S0-7", method: "playwright" }, id: "nav.visible", title: "主导航 应可见", object: "page", operator: "visible", params: { label: "主导航" } },
-        { source: { caseStepId: "S0-8", method: "playwright" }, id: "current_user.visible", title: "当前用户入口 应可见", object: "page", operator: "visible", params: { label: "当前用户" } },
+        { source: { caseStepId: "S0-8", method: "playwright" }, id: "user_menu.visible", title: "用户菜单 应可见", object: "page", operator: "visible", params: { label: "用户菜单" } },
         { source: { caseStepId: "S0-9", method: "playwright" }, id: "settings_icon.visible", title: "当前用户操作区的 \"设置\" 图标 应可见", object: "page.current_user_settings_icon", operator: "visible" },
         { source: { caseStepId: "S0-10", method: "playwright" }, id: "url.bounties", title: "当前页面 应为 悬赏大厅", object: "page.url", operator: "match", params: { pattern: "/bounties$" } },
         { source: { caseStepId: "S0-11", method: "api" }, id: "personal_backgrounds.readable", title: "当前用户读取个人背景列表和个人偏好结果 应成功", object: "api.personal_backgrounds", operator: "readable" },

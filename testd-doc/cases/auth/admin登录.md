@@ -58,7 +58,7 @@
   - [S1-3] [playwright] 当前浏览器 应存在 Ory 登录会话 cookie。
   - [S1-4] [api] 当前会话 应为 邮箱为 `orf-admin-login-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话。
   - [S1-5] [playwright] 登录后主导航 应可见。
-  - [S1-6] [playwright] 登录后当前用户入口 应可见。
+  - [S1-6] [playwright] 登录后用户菜单 应可见。
   - [S1-7] [playwright] 登录后的 "退出登录" 操作 应可见。
   - [S1-8] [playwright] 登录后的管理员入口 "成员管理" 应可见。
   - [S1-9] [playwright] 登录后的管理员入口 "权限管理" 应可见。

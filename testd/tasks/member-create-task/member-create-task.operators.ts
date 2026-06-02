@@ -132,9 +132,14 @@ export const memberCreateTaskOperators = {
     add_subtask: async ({ ctx, params }) => {
       const target = requiredTaskTarget(params, "target");
       const task = requiredTask(params, "task");
-      await targetTaskRow(ctx.page, target, task).hover();
-      await expect(targetSubtaskButton(ctx.page, target, task)).toBeEnabled();
-      await targetSubtaskButton(ctx.page, target, task).click();
+      const taskRow = targetTaskRow(ctx.page, target, task);
+      await expect(taskRow).toBeVisible();
+      await taskRow.scrollIntoViewIfNeeded();
+      await taskRow.hover();
+      const subtaskButton = targetSubtaskButton(ctx.page, target, task);
+      await expect(subtaskButton).toBeEnabled();
+      await subtaskButton.click();
+      await expect(ctx.page.getByLabel("编辑子行动项标题")).toBeVisible();
     },
 
     task_visible: async ({ ctx, params }) => {

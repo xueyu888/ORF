@@ -654,11 +654,11 @@ export const registerApprovalLoginCase = {
       },
       {
         source: { caseStepId: "S1-12", method: "playwright" },
-        id: "current_user.visible",
-        title: "当前用户入口 应可见",
+        id: "user_menu.visible",
+        title: "用户菜单 应可见",
         object: "page",
         operator: "visible",
-        params: { label: "当前用户" },
+        params: { label: "用户菜单" },
       },
       {
         source: { caseStepId: "S1-13", method: "playwright" },
