@@ -37,9 +37,17 @@ test("open row menu foreground state is backed by the objective panel layer rule
 
 test("objective deadline uses the date itself as the edit affordance", () => {
   const html = renderChallengeTree(null, { status: "editable", mode: "edit" });
+  const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
+  const css = readFileSync("src/styles.css", "utf8");
 
+  assert.match(html, /role="button"/);
+  assert.match(html, /tabindex="0"/);
   assert.match(html, /title="点击修改目标截止日期"/);
   assert.match(html, /class="[^"]*orf-objective-deadline-picker/);
+  assert.match(html, /aria-hidden="true"/);
+  assert.match(html, /tabindex="-1"/);
+  assert.match(treeSource, /\.showPicker\(\)/);
+  assert.match(css, /\.orf-objective-deadline-picker\s*{[^}]*pointer-events:\s*none/s);
   assert.doesNotMatch(html, /orf-objective-deadline-editor/);
   assert.doesNotMatch(html, /orf-objective-deadline-input/);
   assert.doesNotMatch(html, /lucide-pencil/);

@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
@@ -810,6 +810,7 @@ function ObjectiveDeadlineCell({
   onSave: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   onUnavailable: (objective: ObjectiveNode["objective"]) => void;
 }) {
+  const pickerRef = useRef<HTMLInputElement | null>(null);
   const [value, setValue] = useState(objective.finalDueAt);
   const [isSaving, setIsSaving] = useState(false);
   const minimumValue = minimumObjectiveDeadlineValue(objective);
@@ -832,21 +833,52 @@ function ObjectiveDeadlineCell({
       setIsSaving(false);
     }
   };
+  const openDatePicker = () => {
+    if (isSaving) return;
+    const picker = pickerRef.current;
+    if (!picker) return;
+
+    try {
+      if (typeof picker.showPicker === "function") {
+        picker.showPicker();
+        return;
+      }
+    } catch {
+      // Fall back to focus/click when the browser refuses programmatic picker display.
+    }
+
+    picker.focus();
+    picker.click();
+  };
 
   if (canEdit) {
     return (
       <div
+        aria-disabled={isSaving ? "true" : undefined}
+        aria-label={`修改目标截止日期，当前 ${objective.finalDueAt || "未设置"}`}
         className="orf-objective-deadline-display orf-objective-deadline-display-editable"
         data-no-row-edit="true"
+        onClick={openDatePicker}
         onDoubleClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          openDatePicker();
+        }}
+        role="button"
+        tabIndex={0}
         title={objectiveDeadlineTitle(editState)}
       >
         <input
+          ref={pickerRef}
           aria-label="目标截止日期"
+          aria-hidden="true"
           className="orf-objective-deadline-picker"
           disabled={isSaving}
           min={minimumValue}
+          onClick={(event) => event.stopPropagation()}
           onChange={(event) => void saveSelectedDate(event.target.value)}
+          tabIndex={-1}
           type="date"
           value={value}
         />
