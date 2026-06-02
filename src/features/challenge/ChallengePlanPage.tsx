@@ -226,11 +226,26 @@ export function ChallengePlanPage() {
   const titleEditOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
   const appliedLinkedTargetRef = useRef<string | null>(null);
+  const scopeDefaultedForAllAccessRef = useRef(false);
   const now = useMinuteNow();
 
   useEffect(() => {
-    if (!canShowAllChallenges && scope === "all") {
-      setScope("mine");
+    if (!canShowAllChallenges) {
+      scopeDefaultedForAllAccessRef.current = false;
+      if (scope === "all") {
+        setScope("mine");
+      }
+      return;
+    }
+
+    if (scope === "all") {
+      scopeDefaultedForAllAccessRef.current = true;
+      return;
+    }
+
+    if (!scopeDefaultedForAllAccessRef.current) {
+      scopeDefaultedForAllAccessRef.current = true;
+      setScope("all");
     }
   }, [canShowAllChallenges, scope]);
 
