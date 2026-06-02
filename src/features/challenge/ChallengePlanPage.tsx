@@ -10,7 +10,7 @@ import { getMyChallengesData, type TaskManagementData } from "../../state/apiCli
 import { useOrf } from "../../state/OrfProvider";
 import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
-import type { Objective, OrfState } from "../../types/orf";
+import type { Objective, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { readModelInvalidationKey } from "../realtime/readModelInvalidations";
@@ -35,6 +35,14 @@ import {
   type TaskCompletionOverlay,
   type TaskCompletionOverlayInput,
 } from "./model/taskCompletionOverlay";
+import {
+  applyTitleEditOverlays,
+  titleEditOverlayForTarget,
+  titleEditOverlayResolved,
+  upsertTitleEditOverlay,
+  type TitleEditOverlay,
+  type TitleEditOverlayInput,
+} from "./model/titleEditOverlay";
 import {
   applyChildCreationOverlay,
   beginChildCreationSession,
@@ -81,7 +89,7 @@ import {
   type DraftReturnContext,
   type ObjectiveCreationSession,
 } from "./model/objectiveCreationSession";
-import { canMutateObjectiveWorkItems, canProposeObjectiveMetric, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective } from "./model/orfFlowCapabilities";
+import { canMutateObjectiveWorkItems, canRecruitObjectiveChallengers, isObjectiveResultLocked, metricCreationActionForObjective, metricEditAccessForObjective, metricEditUnavailableMessage } from "./model/orfFlowCapabilities";
 import type { ChallengeCommentTarget, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragItem, DropTarget } from "./model/types";
 import type { ObjectiveNode } from "./model/types";
 
@@ -181,6 +189,7 @@ export function ChallengePlanPage() {
     updateObjectiveFinalDueAt,
     updateObjectiveTitle,
     updateResultTitle,
+    updateResultUncertaintyLevel,
     updateTaskChecklistItem,
     updateTaskChecklistItemLabel,
     updateTaskTitle,
@@ -210,9 +219,11 @@ export function ChallengePlanPage() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
+  const [titleEditOverlays, setTitleEditOverlays] = useState<TitleEditOverlay[]>([]);
   const [objectiveInteractionAnchor, setObjectiveInteractionAnchor] = useState<ListItemAnchor | null>(null);
   const childCreationSubmissionSequenceRef = useRef(0);
   const completionOverlaySequenceRef = useRef(0);
+  const titleEditOverlaySequenceRef = useRef(0);
   const handledObjectiveCreationEntryRef = useRef(false);
   const appliedLinkedTargetRef = useRef<string | null>(null);
   const now = useMinuteNow();
@@ -264,10 +275,21 @@ export function ChallengePlanPage() {
   const temporaryChildRow = childCreationTemporaryRow(childCreationSession);
   const childOverlay = childCreationSubmittedOverlay(childCreationSession);
   const challengeState = useMemo(
-    () => applyTaskCompletionOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), completionOverlays),
-    [baseChallengeState, childOverlay, completionOverlays],
+    () => applyTaskCompletionOverlays(applyTitleEditOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), titleEditOverlays), completionOverlays),
+    [baseChallengeState, childOverlay, completionOverlays, titleEditOverlays],
   );
   const clearChildCreation = () => setChildCreationSession(clearChildCreationSession);
+  const applyTitleEditOverlay = (overlay: TitleEditOverlayInput) => {
+    const trackedOverlay = {
+      ...overlay,
+      id: `title-edit-${Date.now()}-${titleEditOverlaySequenceRef.current++}`,
+    } as TitleEditOverlay;
+    setTitleEditOverlays((items) => upsertTitleEditOverlay(items, trackedOverlay));
+    return trackedOverlay.id;
+  };
+  const removeTitleEditOverlay = (overlayId: string) => {
+    setTitleEditOverlays((items) => items.filter((item) => item.id !== overlayId));
+  };
   const applyCompletionOverlay = (overlay: TaskCompletionOverlayInput) => {
     const trackedOverlay = {
       ...overlay,
@@ -360,6 +382,13 @@ export function ChallengePlanPage() {
     setChildCreationSession((current) => materializeSubmittedChildCreation(current, baseChallengeState));
   }, [baseChallengeState]);
   useEffect(() => {
+    setTitleEditOverlays((items) => {
+      if (items.length === 0) return items;
+      const pendingItems = items.filter((item) => !titleEditOverlayResolved(baseChallengeState, item));
+      return pendingItems.length === items.length ? items : pendingItems;
+    });
+  }, [baseChallengeState]);
+  useEffect(() => {
     setCompletionOverlays((items) => {
       if (items.length === 0) return items;
       const pendingItems = items.filter((item) => !taskCompletionOverlayMaterialized(baseChallengeState, item));
@@ -368,6 +397,18 @@ export function ChallengePlanPage() {
   }, [baseChallengeState]);
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
   const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
+  const metricEditAccessForObjectiveId = (objectiveId: string) =>
+    metricEditAccessForObjective({
+      objective: objectiveById(objectiveId),
+      currentUser,
+      permissionRules: challengeState.permissionRules,
+      now,
+    });
+  const notifyUnavailableMetricEdit = (objectiveId: string) => {
+    const access = metricEditAccessForObjectiveId(objectiveId);
+    if (access.status === "allowed") return;
+    notify(metricEditUnavailableMessage(access));
+  };
   const canMutateWorkItemsForObjective = (objectiveId: string) => canMutateObjectiveWorkItems(objectiveById(objectiveId));
   const objectiveDeadlineEditState = (objective: ObjectiveNode["objective"]) => resolveObjectiveDeadlineEditState(objective, currentUser?.role);
   const notifyUnavailableObjectiveDeadline = (objective: ObjectiveNode["objective"]) => {
@@ -487,14 +528,9 @@ export function ChallengePlanPage() {
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
     if (target.type === "bounty" && action === "edit") {
-      const objective = challengeState.objectives.find((item) => item.id === target.objectiveId);
-      if (isObjectiveResultLocked(objective)) {
-        notify("指标已冻结，不能编辑");
-        return false;
-      }
-      if (role === "admin") return true;
-      if (objective && canProposeObjectiveMetric(objective, currentMember, now)) return true;
-      notify("没有编辑指标权限");
+      const access = metricEditAccessForObjectiveId(target.objectiveId);
+      if (access.status === "allowed") return true;
+      notify(metricEditUnavailableMessage(access));
       return false;
     }
 
@@ -694,6 +730,7 @@ export function ChallengePlanPage() {
   const updateScope = (next: ChallengeScope) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setScope(next);
   };
@@ -701,6 +738,7 @@ export function ChallengePlanPage() {
   const updateCycleFilter = (next: ChallengeCycleFilter) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setCycleFilter(next);
   };
@@ -708,6 +746,7 @@ export function ChallengePlanPage() {
   const updateMemberFilter = (next: ChallengeMemberFilter) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setMemberFilter(next);
   };
@@ -715,6 +754,7 @@ export function ChallengePlanPage() {
   const updateStatusFilter = (next: ChallengeStatusFilter) => {
     setObjectiveCreationSession(clearSubmittedObjectiveCreation);
     setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setStatusFilter(next);
   };
@@ -792,12 +832,35 @@ export function ChallengePlanPage() {
       return false;
     }
 
-    if (target.type === "objective") updateObjectiveTitle(target.id, value);
-    if (target.type === "bounty") updateResultTitle(target.id, value);
-    if (target.type === "action") updateTaskTitle(target.id, value);
-    if (target.type === "subAction") updateTaskChecklistItemLabel(target.actionId, target.id, value);
+    const overlayId = applyTitleEditOverlay(titleEditOverlayForTarget(target, value));
+    if (target.type === "objective") {
+      void updateObjectiveTitle(target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
+    if (target.type === "bounty") {
+      void updateResultTitle(target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
+    if (target.type === "action") {
+      void updateTaskTitle(target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
+    if (target.type === "subAction") {
+      void updateTaskChecklistItemLabel(target.actionId, target.id, value).then((ok) => {
+        if (!ok) removeTitleEditOverlay(overlayId);
+      });
+    }
     setEditingTarget(null);
     return true;
+  };
+
+  const saveMetricDifficulty = async (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => {
+    if (target.type !== "bounty") return false;
+    if (!requireTargetPermission(target, "edit")) return false;
+    return updateResultUncertaintyLevel(target.id, uncertaintyLevel);
   };
 
   const deleteTarget = (target: ChallengeTarget) => {
@@ -1034,6 +1097,7 @@ export function ChallengePlanPage() {
               permissionRules: challengeState.permissionRules,
               now,
             })?.label ?? null,
+          metricEditAccess: metricEditAccessForObjectiveId,
           canRecruitObjective: (objective) =>
             canRecruitObjectiveChallengers({
               objective,
@@ -1061,6 +1125,8 @@ export function ChallengePlanPage() {
           onRejectApplication: rejectAnchoredChallengeApplication,
           onSaveObjectiveDeadline: saveObjectiveDeadline,
           onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
+          onUnavailableMetricEdit: notifyUnavailableMetricEdit,
+          onSaveMetricDifficulty: saveMetricDifficulty,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,
           onToggleAction: (actionId) => setCollapsedActionIds((items) => toggleSetItem(items, actionId)),

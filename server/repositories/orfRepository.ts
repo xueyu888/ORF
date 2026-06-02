@@ -784,6 +784,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
     trend: trendByResult.get(result.id) ?? [],
     reviewCadence: result.reviewCadence,
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt,
   }));
 
   const objectiveItems: Objective[] = objectiveRows.map((objective) => {
@@ -1072,6 +1074,7 @@ export interface CreateResultInput {
   objectiveId: string;
   title: string;
   metricName: string;
+  actorId?: string | null;
   description?: string;
   baseline?: number;
   current?: number;
@@ -1176,6 +1179,7 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     const siblingRows = await tx.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, input.objectiveId));
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("res");
+    const now = today();
 
     await tx.insert(results).values({
       id,
@@ -1203,6 +1207,10 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
       acceptedResult: "unreviewed",
       reviewCadence: "Weekly",
       sortOrder,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: input.actorId ?? null,
+      updatedBy: input.actorId ?? null,
     });
 
     return { id, scope: runtimeScope(objective.teamId) };
@@ -1910,7 +1918,7 @@ export async function updateResultConfidence(resultId: string, confidence: numbe
 
     const updated = await tx
       .update(results)
-      .set({ confidence, updatedBy: actorId })
+      .set({ confidence, updatedAt: today(), updatedBy: actorId })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
     return updated.length > 0 ? { teamId: target.teamId } : null;
@@ -1945,7 +1953,7 @@ export async function updateResultUncertaintyLevel(resultId: string, uncertainty
 
     const updated = await tx
       .update(results)
-      .set({ uncertaintyLevel, uncertaintyScore: uncertaintyScore(uncertaintyLevel), updatedBy: actorId })
+      .set({ uncertaintyLevel, uncertaintyScore: uncertaintyScore(uncertaintyLevel), updatedAt: today(), updatedBy: actorId })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
     return updated.length > 0 ? { teamId: target.teamId } : null;
@@ -2004,7 +2012,7 @@ export async function proposeResultUpdate(
 
     const updated = await tx
       .update(results)
-      .set({ title: nextTitle, updatedBy: actor.id })
+      .set({ title: nextTitle, updatedAt: today(), updatedBy: actor.id })
       .where(eq(results.id, input.resultId))
       .returning({ id: results.id });
     if (updated.length === 0) {
@@ -3511,7 +3519,7 @@ export async function updateObjectiveTitle(objectiveId: string, title: string): 
   return (await updateObjectiveDetails(objectiveId, { title })).status === "ok";
 }
 
-export async function updateResultTitle(resultId: string, title: string): Promise<boolean> {
+export async function updateResultTitle(resultId: string, title: string, actorId?: string | null): Promise<boolean> {
   const nextTitle = title.trim();
   if (!nextTitle) {
     return false;
@@ -3529,7 +3537,11 @@ export async function updateResultTitle(resultId: string, title: string): Promis
       return null;
     }
 
-    const updated = await tx.update(results).set({ title: nextTitle }).where(eq(results.id, resultId)).returning({ id: results.id });
+    const updated = await tx
+      .update(results)
+      .set({ title: nextTitle, updatedAt: today(), updatedBy: actorId ?? null })
+      .where(eq(results.id, resultId))
+      .returning({ id: results.id });
     if (updated.length === 0) {
       return null;
     }

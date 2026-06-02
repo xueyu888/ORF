@@ -5248,6 +5248,49 @@ body[data-dragging-floating="true"] {
   gap: 5px;
 }
 
+.orf-metric-difficulty-select,
+.orf-metric-difficulty-display {
+  max-width: 100%;
+  height: 26px;
+}
+
+.orf-metric-difficulty-select {
+  width: 88px;
+  border: 1px solid var(--orf-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #344054;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 8px;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.orf-metric-difficulty-select:hover,
+.orf-metric-difficulty-select:focus-visible {
+  border-color: var(--orf-border-strong);
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  outline: none;
+}
+
+.orf-metric-difficulty-select:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.orf-metric-difficulty-display {
+  border: 0;
+  background: transparent;
+  cursor: help;
+  padding: 0;
+}
+
 .orf-avatar-stack,
 .orf-status-chip,
 .orf-time-value,

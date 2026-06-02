@@ -169,6 +169,20 @@
       "when": 1779980000000,
       "tag": "0023_objective_trial_reviews",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1780060000000,
+      "tag": "0024_result_points_calibration",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1780140000000,
+      "tag": "0025_result_timestamps",
+      "breakpoints": true
     }
   ]
 }

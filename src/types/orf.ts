@@ -197,6 +197,8 @@ export interface Result {
   feedbackIds: string[];
   trend: TrendPoint[];
   reviewCadence: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Feedback {

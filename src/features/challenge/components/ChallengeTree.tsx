@@ -7,7 +7,8 @@ import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTree
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
-import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem } from "../../../types/orf";
+import { uncertaintyLevelOptions } from "../../../domain/orfSettlement";
+import type { ObjectiveTrialReview, OrfUser, Task, TaskChecklistItem, UncertaintyLevel } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import { remainingTime } from "../model/challengeDates";
@@ -22,7 +23,7 @@ import {
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
-import { canFreezeObjectiveAfterReestimate, workbenchActionForObjective } from "../model/orfFlowCapabilities";
+import { canFreezeObjectiveAfterReestimate, metricEditUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
 import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
@@ -45,6 +46,7 @@ type RowHandlers = {
   currentUser: OrfUser | null;
   draftObjectiveId?: string;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
+  metricEditAccess: (objectiveId: string) => MetricEditAccess;
   canRecruitObjective: (objective: ObjectiveNode["objective"]) => boolean;
   onActionDoneChange: (actionId: string, done: boolean) => void;
   onActionRowAction: (action: ChallengeRowAction, target: ChallengeTarget) => void;
@@ -64,6 +66,8 @@ type RowHandlers = {
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
+  onSaveMetricDifficulty: (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
+  onUnavailableMetricEdit: (objectiveId: string) => void;
   onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
@@ -429,7 +433,7 @@ function MetricRow({
         )}
         <HierarchyCell depth={1}>
           <span
-            className="flex h-7 w-7 shrink-0 items-center justify-center"
+            className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"
             data-hierarchy-anchor={anchorId}
             data-hierarchy-branch-end-offset="0"
             data-hierarchy-branch-target={anchorId}
@@ -451,11 +455,20 @@ function MetricRow({
           )}
           {bounty && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "result", bounty.result.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
-        {bounty ? <div className="orf-row-difficulty-cell"><Badge>{bounty.difficulty}</Badge></div> : <EmptySlot />}
+        {bounty ? (
+          <MetricDifficultyCell
+            access={handlers.metricEditAccess(bounty.result.objectiveId)}
+            bounty={bounty}
+            onSave={(uncertaintyLevel) => handlers.onSaveMetricDifficulty(target, uncertaintyLevel)}
+            onUnavailable={() => handlers.onUnavailableMetricEdit(bounty.result.objectiveId)}
+          />
+        ) : (
+          <EmptySlot />
+        )}
         <EmptySlot />
         <StatusChip tone={bounty ? bounty.status : "open"}>{statusLabel}</StatusChip>
         <EmptySlot />
-        <EmptySlot />
+        <TimeValue icon={Clock3} value={bounty ? bounty.updatedAt || "未设置" : "未设置"} />
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
       </div>
@@ -571,9 +584,9 @@ function ActionRow({
         )}
         <HierarchyCell depth={1}>
           <span
-            className="flex h-5 w-5 shrink-0 items-center justify-center"
+            className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"
             data-hierarchy-anchor={anchorId}
-            data-hierarchy-branch-end-offset="0"
+            data-hierarchy-branch-end-offset="4"
             data-hierarchy-branch-target={anchorId}
             data-hierarchy-parent={parentAnchorId}
           >
@@ -703,14 +716,14 @@ function SubActionRow({
       )}
       <HierarchyCell depth={2}>
         <span
-          className="flex h-5 w-5 shrink-0 items-center justify-center"
+          className="orf-hierarchy-anchor-slot flex h-7 w-7 shrink-0 items-center justify-center"
           data-hierarchy-anchor={anchorId}
-          data-hierarchy-branch-end-offset="0"
+          data-hierarchy-branch-end-offset="4"
           data-hierarchy-branch-target={anchorId}
           data-hierarchy-parent={parentAnchorId}
         >
-            {item ? <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onSubActionDoneChange(action.id, item.id, checked)} /> : <CompletionCircleIcon checked={false} />}
-          </span>
+          {item ? <CompletionCheckbox checked={complete} onChange={(checked) => handlers.onSubActionDoneChange(action.id, item.id, checked)} /> : <CompletionCircleIcon checked={false} />}
+        </span>
         {isSameTarget(handlers.editingTarget, target) ? (
           <InlineTitleEditor
             ariaLabel="编辑子行动项标题"
@@ -889,6 +902,89 @@ function ObjectiveDeadlineCell({
       <DateStack primary={objective.finalDueAt || "未设置"} />
     </button>
   );
+}
+
+function MetricDifficultyCell({
+  access,
+  bounty,
+  onSave,
+  onUnavailable,
+}: {
+  access: MetricEditAccess;
+  bounty: BountyNode;
+  onSave: (uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
+  onUnavailable: () => void;
+}) {
+  const persistedLevel = bounty.result.uncertaintyLevel ?? "";
+  const [value, setValue] = useState<UncertaintyLevel | "">(persistedLevel);
+  const [isSaving, setIsSaving] = useState(false);
+  const canEdit = access.status === "allowed";
+  const label = bounty.difficulty;
+
+  useEffect(() => {
+    setValue(persistedLevel);
+  }, [bounty.result.id, persistedLevel]);
+
+  const saveSelectedLevel = async (nextValue: UncertaintyLevel | "") => {
+    if (!nextValue || isSaving) return;
+    setValue(nextValue);
+    if (nextValue === bounty.result.uncertaintyLevel) return;
+
+    setIsSaving(true);
+    try {
+      const saved = await onSave(nextValue);
+      if (!saved) setValue(bounty.result.uncertaintyLevel ?? "");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (canEdit) {
+    return (
+      <div className="orf-row-difficulty-cell">
+        <select
+          aria-label={`编辑指标难度，当前 ${label}`}
+          className="orf-metric-difficulty-select"
+          data-no-row-edit="true"
+          disabled={isSaving}
+          onChange={(event) => void saveSelectedLevel(event.target.value as UncertaintyLevel | "")}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          title="编辑指标难度"
+          value={value}
+        >
+          <option disabled value="">
+            待校准
+          </option>
+          {uncertaintyLevelOptions.map((level) => (
+            <option key={level} value={level}>
+              {level}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  }
+
+  return (
+    <div className="orf-row-difficulty-cell">
+      <button
+        aria-label={`指标难度 ${label}`}
+        className="orf-metric-difficulty-display"
+        data-no-row-edit="true"
+        onClick={onUnavailable}
+        onDoubleClick={(event) => event.stopPropagation()}
+        title={metricDifficultyTitle(access)}
+        type="button"
+      >
+        <Badge>{label}</Badge>
+      </button>
+    </div>
+  );
+}
+
+function metricDifficultyTitle(access: MetricEditAccess) {
+  return access.status === "allowed" ? "编辑指标难度" : metricEditUnavailableMessage(access);
 }
 
 function objectiveDeadlineTitle(editState: ObjectiveDeadlineEditState) {

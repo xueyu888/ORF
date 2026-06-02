@@ -174,6 +174,8 @@ function metric(overrides: Partial<Result> = {}): Result {
     feedbackIds: [],
     trend: [],
     reviewCadence: "weekly",
+    createdAt: "2999-01-01",
+    updatedAt: "2999-01-01",
     ...overrides,
   };
 }

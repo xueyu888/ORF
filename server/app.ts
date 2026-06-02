@@ -442,6 +442,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
     const result = await createResult({
       ...body,
+      actorId: user.id,
       source,
       definer: source === "memberProposed" ? user.name : body.definer ?? user.name,
     });
@@ -658,14 +659,15 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/results/:resultId", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = titleBodySchema.parse(request.body);
-    if (!(await requireResultEditContext(request, reply, params.resultId))) {
+    const context = await requireResultEditContext(request, reply, params.resultId);
+    if (!context) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {
       return reply;
     }
 
-    const updated = await updateResultTitle(params.resultId, body.title);
+    const updated = await updateResultTitle(params.resultId, body.title, context.user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Result not found" });
