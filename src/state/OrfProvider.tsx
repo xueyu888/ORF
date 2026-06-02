@@ -447,6 +447,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         }
       },
       publishObjective: async (objectiveId) => {
+        if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
+          notify("没有新建目标权限");
+          return false;
+        }
+
         try {
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/publish`, { method: "PATCH" });
           await refreshTaskManagementData();

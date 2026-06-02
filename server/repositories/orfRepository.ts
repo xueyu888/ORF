@@ -1089,7 +1089,7 @@ export interface CreateResultInput {
 export interface CreateTaskInput {
   title: string;
   description?: string;
-  assignee?: string;
+  assignee: string;
   actorId?: string | null;
   priority?: Priority;
   linkedObjectiveId: string;
@@ -1472,8 +1472,7 @@ export async function approveObjectiveChallengeApplication(
     if (!nextConfirmationDueAt) return { status: "invalid" as const };
     if (!(await isActiveChallengerInScope(tx, objective.teamId, application.applicant))) return { status: "invalid" as const };
 
-    // TESTD_FAULT_INJECTION: Approved challenge applications do not add the applicant to challengers.
-    const challengers = uniqueMembers(objective.challengers ?? []);
+    const challengers = uniqueMembers([...(objective.challengers ?? []), application.applicant]);
     await tx
       .update(objectives)
       .set({
@@ -1641,8 +1640,7 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
         assignedChallengers: [],
         challengeApplications,
         flowStatus: objectiveLifecycleTransitions.freezeAfterReestimate.to,
-        // TESTD_FAULT_INJECTION: Frozen objectives keep the previous stage instead of entering goalFrozen.
-        stage: objective.stage,
+        stage: objectiveLifecycleTransitions.freezeAfterReestimate.stage,
         confirmedAt: decidedAt,
         updatedAt: today(),
         updatedBy: actorId,
