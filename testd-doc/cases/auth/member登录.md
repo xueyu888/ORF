@@ -59,7 +59,7 @@
   - [S1-4] [api] 当前会话 应为 邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话。
   - [S1-5] [playwright] 登录后主导航 应可见。
   - [S1-6] [playwright] 登录后用户菜单 应可见。
-  - [S1-7] [playwright] 登录后的 "退出登录" 操作 应可见。
+  - [S1-7] [playwright] 登录后用户菜单中的 "退出登录" 操作 应可见。
   - [S1-8] [playwright] 当前页面中的 "Sign In" 登录操作 应不存在。
   - [S1-9] [prisma] ORF 业务系统中 应仍存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员用户和 `member` 成员关系。
 

@@ -152,7 +152,7 @@ export async function uploadPersonalBackgroundFromSettingsPage(
     return response.request().method().toUpperCase() === "PUT" && response.url().endsWith("/api/settings/personal/preferences");
   });
 
-  await page.locator('input[type="file"]').setInputFiles({
+  await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
     name: fileName,
     mimeType: "image/png",
     buffer: testPersonalBackgroundPng,

@@ -356,13 +356,10 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "S1-7", method: "playwright" },
         id: "logout.visible",
-        title: "登录后的 \"退出登录\" 操作 应可见",
-        object: "page",
+        title: "登录后用户菜单中的 \"退出登录\" 操作 应可见",
+        object: "page.user_menu_item",
         operator: "visible",
-        params: {
-          role: "button",
-          name: "退出登录",
-        },
+        params: { name: "退出登录" },
       },
       {
         source: { caseStepId: "S1-8", method: "playwright" },

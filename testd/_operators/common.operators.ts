@@ -493,6 +493,16 @@ export function createCommonOperators<
       },
     },
 
+    "page.user_menu_item": {
+      visible: async ({ ctx, params }) => {
+        await expect(await userMenuItem(ctx.page, requiredString(params, "name"))).toBeVisible();
+      },
+
+      click: async ({ ctx, params }) => {
+        await (await userMenuItem(ctx.page, requiredString(params, "name"))).click();
+      },
+    },
+
     "page.url": {
       match: async ({ ctx, params }) => {
         await expect(ctx.page).toHaveURL(
@@ -604,6 +614,15 @@ function locatorFromParams(page: Page, params: StepParams): Locator {
   }
 
   throw new Error("页面算子缺少定位参数，需要提供 label、role 或 text");
+}
+
+async function userMenuItem(page: Page, name: string): Promise<Locator> {
+  const menuItem = page.getByRole("menuitem", { name, exact: true });
+  if (!(await menuItem.isVisible().catch(() => false))) {
+    await page.getByRole("button", { name: "用户菜单", exact: true }).click();
+  }
+  await expect(menuItem).toBeVisible();
+  return menuItem;
 }
 
 function isCapturedResponse(value: unknown): value is CapturedResponse {
