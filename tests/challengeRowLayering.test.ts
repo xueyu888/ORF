@@ -36,6 +36,15 @@ test("open row menu foreground state is backed by the objective panel layer rule
   );
 });
 
+test("fantasy select popovers escape challenge row stacking contexts", () => {
+  const componentSource = readFileSync("src/components/FantasySelectMenu.tsx", "utf8");
+  const css = readFileSync("src/styles.css", "utf8");
+
+  assert.match(componentSource, /createPortal\(/, "Select menus must render their popover at the document root.");
+  assert.match(css, /\.orf-fantasy-select-popover\s*{[^}]*\bposition:\s*fixed/s);
+  assert.match(css, /\.orf-fantasy-select-popover\s*{[^}]*\bz-index:\s*1[2-9]\d/s);
+});
+
 test("objective deadline uses the date itself as the edit affordance", () => {
   const html = renderChallengeTree(null, { status: "editable", mode: "edit" });
   const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
@@ -75,9 +84,9 @@ test("result rows use named difficulty levels and render an editable selector wh
   const html = renderChallengeTree(null);
 
   assert.match(html, /aria-label="编辑指标难度，当前 进阶"/);
-  assert.match(html, /<select[^>]*class="orf-metric-difficulty-select"/);
-  assert.match(html, />入门<\/option>/);
-  assert.match(html, />进阶<\/option>/);
+  assert.match(html, /class="[^"]*orf-fantasy-select-menu-chip[^"]*orf-metric-difficulty-select/);
+  assert.match(html, /data-no-row-edit="true"/);
+  assert.match(html, /<span class="orf-fantasy-select-value">进阶<\/span>/);
   assert.doesNotMatch(html, /\d 星/);
 });
 

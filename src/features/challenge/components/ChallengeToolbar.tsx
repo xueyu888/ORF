@@ -1,4 +1,5 @@
 import { CalendarDays, Filter, UserRound } from "lucide-react";
+import { FantasySelectMenu } from "../../../components/FantasySelectMenu";
 import type { ChallengeCycleFilter, ChallengeMemberFilter, ChallengeStatusFilter } from "../model/challengeFilters";
 import type { ChallengeScope } from "../model/types";
 
@@ -38,32 +39,45 @@ export function ChallengeToolbar({
   scope: ChallengeScope;
   status: ChallengeStatusFilter;
 }) {
+  const cycleSelectOptions = [
+    { label: "全部周期", value: "all" },
+    ...cycleOptions.map((item) => ({ label: item, value: item })),
+  ];
+  const memberSelectOptions = [
+    { label: "全部成员", value: "all" },
+    ...memberOptions.map((item) => ({ label: item, value: item })),
+  ];
+
   return (
     <div className="orf-task-toolbar">
       <ScopeTabs canShowAll={canShowAll} onChange={onScopeChange} value={scope} />
       <div className="orf-task-toolbar-actions">
-        <label className="orf-floating-control orf-filter-chip inline-flex items-center gap-2 px-3 font-semibold">
-          <CalendarDays className="h-4 w-4 text-[#667085]" />
-          <select aria-label="挑战周期" className="bg-transparent font-semibold outline-none" value={cycle} onChange={(event) => onCycleChange(event.target.value)}>
-            <option value="all">全部周期</option>
-            {cycleOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-          </select>
-        </label>
+        <FantasySelectMenu
+          ariaLabel="挑战周期"
+          className="orf-filter-chip"
+          leadingIcon={<CalendarDays className="h-4 w-4" />}
+          onChange={onCycleChange}
+          options={cycleSelectOptions}
+          value={cycle}
+        />
         {showMemberFilter && (
-          <label className="orf-floating-control orf-filter-chip inline-flex items-center gap-2 px-3 font-semibold">
-            <UserRound className="h-4 w-4 text-[#667085]" />
-            <select aria-label="挑战成员" className="bg-transparent font-semibold outline-none" value={member} onChange={(event) => onMemberChange(event.target.value)}>
-              <option value="all">全部成员</option>
-              {memberOptions.map((item) => <option key={item} value={item}>{item}</option>)}
-            </select>
-          </label>
+          <FantasySelectMenu
+            ariaLabel="挑战成员"
+            className="orf-filter-chip"
+            leadingIcon={<UserRound className="h-4 w-4" />}
+            onChange={onMemberChange}
+            options={memberSelectOptions}
+            value={member}
+          />
         )}
-        <label className="orf-floating-control orf-filter-chip inline-flex items-center gap-2 px-3 font-semibold">
-          <Filter className="h-4 w-4 text-[#667085]" />
-          <select aria-label="挑战状态" className="bg-transparent font-semibold outline-none" value={status} onChange={(event) => onStatusChange(event.target.value as ChallengeStatusFilter)}>
-            {statusOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-          </select>
-        </label>
+        <FantasySelectMenu
+          ariaLabel="挑战状态"
+          className="orf-filter-chip"
+          leadingIcon={<Filter className="h-4 w-4" />}
+          onChange={onStatusChange}
+          options={statusOptions}
+          value={status}
+        />
       </div>
     </div>
   );

@@ -23,11 +23,9 @@ async function main() {
     )
   `);
 
-  const last = await pool.query<{ created_at: string | null }>(
-    `select created_at from "__drizzle_migrations" order by created_at desc limit 1`,
-  );
-  const lastCreatedAt = last.rows[0]?.created_at ? Number(last.rows[0].created_at) : undefined;
-  const pending = migrations.filter((migration) => !lastCreatedAt || lastCreatedAt < migration.folderMillis);
+  const applied = await pool.query<{ hash: string }>(`select hash from "__drizzle_migrations"`);
+  const appliedHashes = new Set(applied.rows.map((row) => row.hash));
+  const pending = migrations.filter((migration) => !appliedHashes.has(migration.hash));
 
   for (const migration of pending) {
     await pool.query("begin");

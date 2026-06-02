@@ -3,6 +3,7 @@ import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
 import {
@@ -1040,6 +1041,10 @@ function MetricDifficultyCell({
   const [isSaving, setIsSaving] = useState(false);
   const canEdit = access.status === "allowed";
   const label = bounty.difficulty;
+  const difficultyOptions: Array<FantasySelectOption<UncertaintyLevel | "">> = [
+    { label: "待校准", value: "", disabled: true },
+    ...uncertaintyLevelOptions.map((level) => ({ label: level, value: level })),
+  ];
 
   useEffect(() => {
     setValue(persistedLevel);
@@ -1062,26 +1067,17 @@ function MetricDifficultyCell({
   if (canEdit) {
     return (
       <div className="orf-row-difficulty-cell">
-        <select
-          aria-label={`编辑指标难度，当前 ${label}`}
+        <FantasySelectMenu
+          ariaLabel={`编辑指标难度，当前 ${label}`}
           className="orf-metric-difficulty-select"
-          data-no-row-edit="true"
           disabled={isSaving}
-          onChange={(event) => void saveSelectedLevel(event.target.value as UncertaintyLevel | "")}
-          onClick={(event) => event.stopPropagation()}
-          onDoubleClick={(event) => event.stopPropagation()}
+          onChange={(nextValue) => void saveSelectedLevel(nextValue)}
+          options={difficultyOptions}
+          stopPropagation
           title="编辑指标难度"
           value={value}
-        >
-          <option disabled value="">
-            待校准
-          </option>
-          {uncertaintyLevelOptions.map((level) => (
-            <option key={level} value={level}>
-              {level}
-            </option>
-          ))}
-        </select>
+          variant="chip"
+        />
       </div>
     );
   }
@@ -1162,7 +1158,7 @@ function AvatarStack({ names }: { names: string[] }) {
 }
 
 function Badge({ children }: { children: ReactNode }) {
-  return <span className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs font-semibold text-[#475467]">{children}</span>;
+  return <span className="orf-metric-difficulty-badge">{children}</span>;
 }
 
 function EmptySlot() {

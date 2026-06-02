@@ -4904,6 +4904,245 @@ button:disabled {
   transform: translateY(-1px);
 }
 
+.orf-fantasy-select-menu {
+  position: relative;
+  display: inline-flex;
+  overflow: visible;
+  max-width: 100%;
+  align-items: center;
+  z-index: 1;
+}
+
+.orf-fantasy-select-menu-open {
+  z-index: 90;
+}
+
+.orf-fantasy-select-trigger {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  color: var(--orf-fantasy-ink);
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 0;
+  outline: none;
+  white-space: nowrap;
+}
+
+.orf-fantasy-select-menu-filter .orf-fantasy-select-trigger {
+  width: 100%;
+  min-width: 118px;
+  height: 36px;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 999px;
+  clip-path: none;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.orf-fantasy-select-menu-chip .orf-fantasy-select-trigger {
+  width: auto;
+  min-width: 46px;
+  height: 26px;
+  gap: 0;
+  padding: 0 10px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 244, 0.96), rgba(255, 239, 211, 0.84));
+  box-shadow: inset 0 0 0 1px rgba(183, 139, 72, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.84), 0 4px 10px rgba(98, 77, 48, 0.05);
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.orf-fantasy-select-menu-chip .orf-fantasy-select-trigger:hover,
+.orf-fantasy-select-menu-chip .orf-fantasy-select-trigger:focus-visible,
+.orf-fantasy-select-menu-chip.orf-fantasy-select-menu-open .orf-fantasy-select-trigger {
+  box-shadow: inset 0 0 0 1px rgba(82, 215, 246, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.92), 0 6px 14px rgba(82, 215, 246, 0.12);
+}
+
+.orf-fantasy-select-menu-disabled .orf-fantasy-select-trigger {
+  cursor: progress;
+  opacity: 0.64;
+}
+
+.orf-fantasy-select-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--orf-fantasy-blue);
+  filter: drop-shadow(0 1px 4px rgba(82, 215, 246, 0.18));
+}
+
+.orf-fantasy-select-value {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.orf-fantasy-select-menu-chip .orf-fantasy-select-value {
+  text-align: center;
+}
+
+.orf-fantasy-select-chevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: #64748b;
+  opacity: 0.52;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.orf-fantasy-select-menu-chip .orf-fantasy-select-chevron {
+  display: none;
+}
+
+.orf-fantasy-select-trigger:hover .orf-fantasy-select-chevron,
+.orf-fantasy-select-trigger:focus-visible .orf-fantasy-select-chevron,
+.orf-fantasy-select-menu-open .orf-fantasy-select-chevron {
+  opacity: 0.9;
+}
+
+.orf-fantasy-select-menu-open .orf-fantasy-select-chevron {
+  transform: rotate(180deg);
+}
+
+.orf-fantasy-select-menu-chip .orf-fantasy-select-trigger:hover .orf-fantasy-select-chevron,
+.orf-fantasy-select-menu-chip .orf-fantasy-select-trigger:focus-visible .orf-fantasy-select-chevron,
+.orf-fantasy-select-menu-chip.orf-fantasy-select-menu-open .orf-fantasy-select-chevron {
+  display: none;
+}
+
+.orf-fantasy-select-popover {
+  position: fixed;
+  z-index: 140;
+  min-width: 144px;
+  max-width: min(260px, calc(100vw - 24px));
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid rgba(183, 139, 72, 0.34);
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 246, 0.98), rgba(255, 241, 215, 0.96));
+  box-shadow: 0 18px 44px rgba(46, 38, 25, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.72) inset;
+  backdrop-filter: blur(16px);
+}
+
+.orf-fantasy-select-popover-top {
+  box-shadow: 0 -12px 38px rgba(46, 38, 25, 0.16), 0 0 0 1px rgba(255, 255, 255, 0.72) inset;
+}
+
+.orf-fantasy-select-popover-chip {
+  min-width: 108px;
+}
+
+.orf-fantasy-select-popover-filter {
+  min-width: max(144px, 100%);
+}
+
+.orf-fantasy-select-option {
+  display: flex;
+  width: 100%;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--orf-fantasy-ink);
+  cursor: pointer;
+  padding: 6px 8px;
+  text-align: left;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    transform 120ms ease;
+}
+
+.orf-fantasy-select-option:hover,
+.orf-fantasy-select-option:focus-visible {
+  background:
+    linear-gradient(90deg, rgba(82, 215, 246, 0.13), rgba(255, 238, 204, 0.42));
+  color: #0f3e66;
+  outline: none;
+  transform: translateX(1px);
+}
+
+.orf-fantasy-select-option:disabled {
+  cursor: default;
+  opacity: 0.52;
+  transform: none;
+}
+
+.orf-fantasy-select-option-rune {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(183, 139, 72, 0.58);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.92), rgba(255, 245, 210, 0.68) 45%, rgba(215, 173, 95, 0.36) 100%);
+}
+
+.orf-fantasy-select-option-selected {
+  background:
+    linear-gradient(90deg, rgba(63, 117, 173, 0.16), rgba(215, 173, 95, 0.18));
+}
+
+.orf-fantasy-select-option-selected .orf-fantasy-select-option-rune {
+  border-color: rgba(82, 215, 246, 0.92);
+  background: var(--orf-fantasy-cyan);
+  box-shadow: 0 0 10px rgba(82, 215, 246, 0.42);
+}
+
+.orf-fantasy-select-option-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 2px;
+}
+
+.orf-fantasy-select-option-label {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-fantasy-select-option-description {
+  overflow: hidden;
+  color: var(--orf-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-fantasy-select-option-check {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--orf-fantasy-blue);
+}
+
 .orf-popover {
   border: 0;
   border-radius: var(--orf-radius-card);
@@ -5255,33 +5494,7 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-metric-difficulty-select {
-  width: 88px;
-  border: 1px solid var(--orf-border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #344054;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  padding: 0 8px;
-  transition:
-    border-color 140ms ease,
-    background 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.orf-metric-difficulty-select:hover,
-.orf-metric-difficulty-select:focus-visible {
-  border-color: var(--orf-border-strong);
-  background: #fff;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
-  outline: none;
-}
-
-.orf-metric-difficulty-select:disabled {
-  cursor: progress;
-  opacity: 0.68;
+  width: auto;
 }
 
 .orf-metric-difficulty-display {
@@ -5289,6 +5502,25 @@ body[data-dragging-floating="true"] {
   background: transparent;
   cursor: help;
   padding: 0;
+}
+
+.orf-metric-difficulty-badge {
+  display: inline-flex;
+  width: auto;
+  min-width: 46px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 244, 0.96), rgba(255, 239, 211, 0.84));
+  box-shadow: inset 0 0 0 1px rgba(183, 139, 72, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.84), 0 4px 10px rgba(98, 77, 48, 0.05);
+  color: #475467;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0 10px;
+  white-space: nowrap;
 }
 
 .orf-avatar-stack,
@@ -5674,7 +5906,8 @@ body[data-dragging-floating="true"] {
   line-height: 1;
 }
 
-.orf-challenge-workbench .orf-filter-chip select {
+.orf-challenge-workbench .orf-filter-chip .orf-fantasy-select-trigger {
+  height: 34px;
   font-size: inherit;
   line-height: inherit;
 }
@@ -6211,8 +6444,7 @@ body[data-dragging-floating="true"] {
   position: relative;
   gap: 6px;
   border: 1px solid rgba(183, 139, 72, 0.28);
-  border-radius: 0;
-  clip-path: var(--orf-control-cut);
+  border-radius: 999px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74), inset 0 -1px 0 rgba(183, 139, 72, 0.16), 0 8px 18px rgba(98, 77, 48, 0.08);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.42);
 }
