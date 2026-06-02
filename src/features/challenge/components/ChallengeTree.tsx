@@ -44,6 +44,7 @@ import { commentCountFor } from "../model/challengeComments";
 import { canFreezeObjectiveAfterReestimate, metricEditUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
+import type { TitleSubmissionContext } from "../model/titleSubmission";
 import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
 import { handleRowDoubleClick, InlineTitleEditor, isSameTarget } from "./InlineTitleEditor";
@@ -90,7 +91,7 @@ type RowHandlers = {
   onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
   onSaveMetricDifficulty: (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   onUnavailableMetricEdit: (objectiveId: string) => void;
-  onSaveTitle: (target: ChallengeTarget, title: string) => boolean | void;
+  onSaveTitle: (target: ChallengeTarget, title: string, context: TitleSubmissionContext) => boolean | void;
   onSubActionDoneChange: (actionId: string, itemId: string, done: boolean) => void;
   onToggleAction: (actionId: string) => void;
   onToggleBounty: (bountyId: string) => void;
@@ -228,7 +229,7 @@ function ObjectivePanel({
               className="orf-objective-title font-bold"
               onDraftChange={isDraftObjective ? handlers.onDraftTitleChange : undefined}
               onCancel={handlers.onCancelEdit}
-              onSubmit={(title) => handlers.onSaveTitle(target, title)}
+              onSubmit={(title, context) => handlers.onSaveTitle(target, title, context)}
               value={group.objective.title}
             />
           ) : (
@@ -569,7 +570,7 @@ function MetricRow({
               className="orf-result-title font-semibold"
               onCancel={handlers.onCancelEdit}
               onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
-              onSubmit={(title) => handlers.onSaveTitle(target, title)}
+              onSubmit={(title, context) => handlers.onSaveTitle(target, title, context)}
               value={temporary ? temporary.title : bounty!.result.title}
             />
           ) : (
@@ -720,7 +721,7 @@ function ActionRow({
               className="orf-task-title font-medium"
               onCancel={handlers.onCancelEdit}
               onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
-              onSubmit={(title) => handlers.onSaveTitle(target, title)}
+              onSubmit={(title, context) => handlers.onSaveTitle(target, title, context)}
               value={temporary ? temporary.title : action!.title}
             />
           ) : (
@@ -852,7 +853,7 @@ function SubActionRow({
             className="orf-subtask-title font-medium"
             onCancel={handlers.onCancelEdit}
             onDraftChange={temporary ? handlers.onTemporaryChildTitleChange : undefined}
-            onSubmit={(title) => handlers.onSaveTitle(target, title)}
+            onSubmit={(title, context) => handlers.onSaveTitle(target, title, context)}
             value={temporary ? temporary.title : item!.label}
           />
         ) : (

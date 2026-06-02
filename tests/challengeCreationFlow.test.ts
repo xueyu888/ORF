@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   applyChildCreationOverlay,
   beginChildCreationSession,
+  cancelChildCreationSession,
   childCreationDraftId,
   childCreationOverlayMaterialized,
   childCreationSubmittedOverlay,
@@ -88,6 +89,17 @@ test("child creation session rejects stale API responses after state changes", (
     status: "submittedOverlay",
     overlay: { kind: "action", task: freshTask },
   });
+});
+
+test("child creation draft can be cancelled before submission", () => {
+  const draft = beginChildCreationSession(idleChildCreationSession, {
+    id: childCreationDraftId("action", "obj-a"),
+    kind: "action",
+    objectiveId: "obj-a",
+    title: "   ",
+  });
+
+  assert.equal(cancelChildCreationSession(draft).status, "idle");
 });
 
 function state(overrides: Partial<OrfState> = {}): OrfState {

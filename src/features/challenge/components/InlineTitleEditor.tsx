@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
 import type { MouseEvent } from "react";
 import { useEffect, useRef, useState } from "react";
+import type { TitleSubmissionContext } from "../model/titleSubmission";
 import type { ChallengeTarget } from "../model/types";
 
 export function InlineTitleEditor({
@@ -16,7 +17,7 @@ export function InlineTitleEditor({
   className: string;
   onDraftChange?: (value: string) => void;
   onCancel: () => void;
-  onSubmit: (value: string) => boolean | void;
+  onSubmit: (value: string, context: TitleSubmissionContext) => boolean | void;
   submitOnBlur?: boolean;
   value: string;
 }) {
@@ -34,10 +35,10 @@ export function InlineTitleEditor({
     inputRef.current?.select();
   }, []);
 
-  const commit = () => {
+  const commit = (context: TitleSubmissionContext) => {
     if (finishedRef.current) return;
     finishedRef.current = true;
-    const accepted = onSubmit(draft);
+    const accepted = onSubmit(draft, context);
     if (accepted === false) {
       finishedRef.current = false;
       window.requestAnimationFrame(() => inputRef.current?.focus());
@@ -50,14 +51,14 @@ export function InlineTitleEditor({
       data-no-row-edit="true"
       onSubmit={(event) => {
         event.preventDefault();
-        commit();
+        commit({ origin: "submit" });
       }}
     >
       <input
         ref={inputRef}
         aria-label={ariaLabel}
         className="orf-inline-title-input"
-        onBlur={submitOnBlur ? commit : undefined}
+        onBlur={submitOnBlur ? () => commit({ origin: "blur" }) : undefined}
         onChange={(event) => {
           const next = event.target.value;
           setDraft(next);

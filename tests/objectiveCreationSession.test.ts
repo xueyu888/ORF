@@ -59,6 +59,15 @@ test("objective creation failure returns to an editing draft with the user input
   });
 });
 
+test("objective creation draft can be cancelled before submission", () => {
+  const editing = updateObjectiveCreationDraftTitle(beginObjectiveCreationSession(idleObjectiveCreationSession, returnContext), "   ");
+
+  assert.deepEqual(cancelObjectiveCreationSession(editing), {
+    returnContext,
+    session: idleObjectiveCreationSession,
+  });
+});
+
 test("submitted objective overlay is the only creation state cleared by manual filter changes", () => {
   const editing = beginObjectiveCreationSession(idleObjectiveCreationSession, returnContext);
   const submitting = submitObjectiveCreationDraft(updateObjectiveCreationDraftTitle(editing, "目标"), "目标", null);

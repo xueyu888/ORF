@@ -43,6 +43,7 @@ import {
   type TitleEditOverlay,
   type TitleEditOverlayInput,
 } from "./model/titleEditOverlay";
+import { shouldCancelEmptyCreationDraft, type TitleSubmissionContext } from "./model/titleSubmission";
 import {
   applyChildCreationOverlay,
   beginChildCreationSession,
@@ -721,11 +722,18 @@ export function ChallengePlanPage() {
     setOpenActionId(null);
   };
 
-  const createDraftObjective = (title: string) => {
+  const createDraftObjective = (title: string, context: TitleSubmissionContext) => {
     if (draftIsSubmitting) return false;
 
     const value = title.trim();
     if (!value) {
+      if (shouldCancelEmptyCreationDraft(title, context)) {
+        const cancelled = cancelObjectiveCreationSession(objectiveCreationSession);
+        setObjectiveCreationSession(cancelled.session);
+        restoreDraftReturnContext(cancelled.returnContext);
+        setEditingTarget(null);
+        return true;
+      }
       notify("标题不能为空");
       setObjectiveCreationSession((current) => updateObjectiveCreationDraftTitle(current, title));
       return false;
@@ -806,13 +814,18 @@ export function ChallengePlanPage() {
     setStatusFilter(next);
   };
 
-  const createChildDraft = (target: ChallengeTarget, title: string) => {
+  const createChildDraft = (target: ChallengeTarget, title: string, context: TitleSubmissionContext) => {
     const row = temporaryChildRow;
     if (!row || row.id !== target.id || row.status === "submitting") return false;
     if (row.kind === "subtask" && !row.taskId) return false;
 
     const value = title.trim();
     if (!value) {
+      if (shouldCancelEmptyCreationDraft(title, context)) {
+        setChildCreationSession(cancelChildCreationSession);
+        setEditingTarget(null);
+        return true;
+      }
       notify("标题不能为空");
       setChildCreationSession((current) => updateChildCreationDraftTitle(current, title));
       return false;
@@ -869,9 +882,9 @@ export function ChallengePlanPage() {
     return true;
   };
 
-  const saveTitle = (target: ChallengeTarget, title: string) => {
-    if (target.type === "objective" && target.id === draftObjectiveId) return createDraftObjective(title);
-    if (isChildCreationTarget(target)) return createChildDraft(target, title);
+  const saveTitle = (target: ChallengeTarget, title: string, context: TitleSubmissionContext) => {
+    if (target.type === "objective" && target.id === draftObjectiveId) return createDraftObjective(title, context);
+    if (isChildCreationTarget(target)) return createChildDraft(target, title, context);
 
     const value = title.trim();
     if (!value) {
