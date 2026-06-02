@@ -44,7 +44,6 @@ import type {
 } from "../types/orf";
 
 type ModalType = "newResult" | "newFeedback" | "recruitChallengers" | null;
-export type ThemeMode = "dark" | "light";
 type CreateObjectiveResponse = { objective: Objective };
 type CreateResultResponse = { result: Result };
 type CreateTaskResponse = { task: Task };
@@ -106,9 +105,6 @@ interface OrfContextValue {
   readModelInvalidations: OrfReadModelInvalidation[];
   systemBroadcasts: SystemBroadcast[];
   unreadNotificationCount: number;
-  theme: ThemeMode;
-  setTheme: (theme: ThemeMode) => void;
-  toggleTheme: () => void;
   openModal: (modal: ModalState) => void;
   closeModal: () => void;
   notify: (message: string) => void;
@@ -187,7 +183,6 @@ interface OrfContextValue {
 const OrfContext = createContext<OrfContextValue | null>(null);
 
 const store = new OrfFlowStore();
-const THEME_STORAGE_KEY = "orf-flow-theme";
 
 function loadInitialState() {
   return store.load();
@@ -195,19 +190,9 @@ function loadInitialState() {
 
 export { authFailureMessage } from "./orfProviderAuth";
 
-function loadTheme(): ThemeMode {
-  try {
-    const raw = window.localStorage.getItem(THEME_STORAGE_KEY);
-    return raw === "dark" ? "dark" : "light";
-  } catch {
-    return "light";
-  }
-}
-
 export function OrfProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(loadInitialState);
   const { authenticateWithPassword, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
-  const [theme, setThemeState] = useState<ThemeMode>(() => loadTheme());
   const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -252,12 +237,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     refreshNotifications,
     setState,
   });
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  }, [theme]);
-
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
       setToastEnabled(true);
@@ -392,9 +371,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       readModelInvalidations,
       systemBroadcasts,
       unreadNotificationCount,
-      theme,
-      setTheme: setThemeState,
-      toggleTheme: () => setThemeState((current) => (current === "dark" ? "light" : "dark")),
       openModal: setModal,
       closeModal: () => setModal({ type: null }),
       notify,
@@ -1022,7 +998,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       refreshTaskManagementData,
       state,
       systemBroadcasts,
-      theme,
       toasts,
       unreadNotificationCount,
       userActions,

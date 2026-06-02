@@ -38,7 +38,7 @@ const landingOptions = [
 ];
 
 export function PersonalSettingsPage() {
-  const { currentUser, deleteCurrentUserAvatar, notify, readModelInvalidations, theme, toggleTheme, uploadCurrentUserAvatar } = useOrf();
+  const { currentUser, deleteCurrentUserAvatar, notify, readModelInvalidations, uploadCurrentUserAvatar } = useOrf();
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
@@ -312,13 +312,6 @@ export function PersonalSettingsPage() {
                 <option value="collapsed">折叠</option>
               </select>
             </Field>
-            <div className="flex items-center justify-between gap-4 border-t pt-4 orf-border">
-              <div>
-                <div className="font-medium orf-text-primary">界面主题</div>
-                <div className="text-sm orf-text-secondary">当前为 {theme === "dark" ? "深色" : "浅色"}。</div>
-              </div>
-              <Button variant="secondary" type="button" onClick={toggleTheme}>切换</Button>
-            </div>
             <label className="flex items-center justify-between gap-4 border-t pt-4 orf-border">
               <span>
                 <span className="block font-medium orf-text-primary">Toast 通知</span>

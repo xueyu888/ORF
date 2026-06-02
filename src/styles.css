@@ -3413,18 +3413,6 @@ button:disabled {
   background: linear-gradient(90deg, var(--orf-fantasy-cyan) 0%, var(--orf-fantasy-gold) 100%);
 }
 
-.orf-theme-option {
-  border-color: var(--orf-border);
-  background: var(--orf-bg-muted);
-  color: var(--orf-text-secondary);
-}
-
-.orf-theme-option[aria-pressed="true"] {
-  border-color: var(--orf-accent-border);
-  background: var(--orf-accent-soft);
-  color: var(--orf-accent-text);
-}
-
 .orf-control {
   border-radius: var(--orf-radius-control);
 }
