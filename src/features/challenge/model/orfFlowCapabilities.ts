@@ -197,29 +197,3 @@ export function workbenchActionForObjective({
 
   return null;
 }
-
-export function resultDetailCapabilities({
-  objective,
-  currentUser,
-  permissionRules,
-}: {
-  objective: Objective | undefined;
-  currentUser: OrfUser | null;
-  permissionRules: PermissionRule[];
-}) {
-  const canEditResult = hasPermission(currentUser, permissionRules, "result.edit");
-  const isAssignedChallenger = Boolean(
-    objective &&
-      currentUser &&
-      objective.challengers.includes(currentUser.name),
-  );
-  const canEditAsReestimateChallenger = Boolean(objective && isAssignedChallenger && isObjectiveReestimateWindowOpen(objective));
-
-  return {
-    canSubmitLoot: canSubmitObjectiveLoot(objective, currentUser),
-    canCreateTask: canMutateObjectiveWorkItems(objective) && (canEditResult || isAssignedChallenger),
-    canProposeUpdate: canEditResult && !isObjectiveResultLocked(objective),
-    canEditConfidence: canEditResult && !isObjectiveResultLocked(objective),
-    canEditMetricCalibration: (canEditResult || canEditAsReestimateChallenger) && !isObjectiveResultLocked(objective),
-  };
-}

@@ -59,7 +59,6 @@ export function buildStrategyMap(state: StrategyMapInput, nodeLimit = 5): Strate
       title: objective.title,
       status: objective.status,
       progress: objective.progress,
-      path: `/objectives/${objective.id}`,
       challenger: objective.challengers.join("、") || undefined,
     })),
   };
@@ -74,7 +73,6 @@ export function buildStrategyMap(state: StrategyMapInput, nodeLimit = 5): Strate
         status: result.status,
         progress: result.confidence,
         challenger: objective?.challengers.join("、") || undefined,
-        path: `/objectives/${result.objectiveId}/results/${result.id}`,
       };
     }),
   };

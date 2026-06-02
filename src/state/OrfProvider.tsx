@@ -41,7 +41,7 @@ import type {
   UserRole,
 } from "../types/orf";
 
-type ModalType = "newResult" | "newFeedback" | "newTask" | "resultUpdate" | "recruitChallengers" | null;
+type ModalType = "newResult" | "newFeedback" | "recruitChallengers" | null;
 export type ThemeMode = "dark" | "light";
 type CreateObjectiveResponse = { objective: Objective };
 type CreateResultResponse = { result: Result };
@@ -70,7 +70,6 @@ interface ModalState {
   type: ModalType;
   objectiveId?: string;
   resultId?: string;
-  feedbackId?: string;
   source?: BountySource;
 }
 
@@ -167,7 +166,6 @@ interface OrfContextValue {
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
-  proposeResultUpdate: (resultId: string, title: string, reason: string, feedbackId?: string) => Promise<boolean>;
 }
 
 const OrfContext = createContext<OrfContextValue | null>(null);
@@ -935,21 +933,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       ...userActions,
       ...commentActions,
-      proposeResultUpdate: async (resultId, title, reason, feedbackId) => {
-        try {
-          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/update-proposal`, {
-            method: "POST",
-            body: JSON.stringify({ title, reason, feedbackId }),
-          });
-          await refreshTaskManagementData();
-          notify("指标更新已记录");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "指标更新记录失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
     }),
     [
       authReady,

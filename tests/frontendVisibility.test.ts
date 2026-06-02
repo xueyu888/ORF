@@ -146,16 +146,10 @@ test("feedback creation page actions use visible objective participation", () =>
   for (const file of [
     path.resolve("src/components/AppShell.tsx"),
     path.resolve("src/pages/FeedbackInboxPage.tsx"),
-    path.resolve("src/pages/ObjectiveDetailPage.tsx"),
   ]) {
     assert.match(readFileSync(file, "utf8"), /canCreateFeedback(FromVisibleState|ForObjective)/, `${file} must hide feedback creation without objective participation`);
   }
 
-  assert.match(
-    readFileSync(path.resolve("src/pages/ResultDetailPage.tsx"), "utf8"),
-    /canCreateFeedbackForResult/,
-    "Result detail must hide feedback creation without objective participation",
-  );
   assert.match(
     readFileSync(path.resolve("src/pages/AIEvaluationPage.tsx"), "utf8"),
     /canCreateFeedbackForResult/,
@@ -163,17 +157,12 @@ test("feedback creation page actions use visible objective participation", () =>
   );
 });
 
-test("detail pages do not keep inert placeholder action buttons", () => {
-  assert.doesNotMatch(
-    readFileSync(path.resolve("src/pages/ObjectiveDetailPage.tsx"), "utf8"),
-    /MoreHorizontal/,
-    "Objective detail must not render a placeholder more-actions button without behavior",
-  );
-  assert.doesNotMatch(
-    readFileSync(path.resolve("src/pages/FeedbackDetailPage.tsx"), "utf8"),
-    /补充回归样本/,
-    "Feedback detail must not render recommendation buttons that do not trigger a product action",
-  );
+test("removed ORF secondary detail routes stay out of the route table", () => {
+  const appSource = readFileSync(path.resolve("src/App.tsx"), "utf8");
+  assert.doesNotMatch(appSource, /objectives\/:objectiveId"\s+element=/, "Objective detail route must stay removed");
+  assert.doesNotMatch(appSource, /objectives\/:objectiveId\/results\/:resultId/, "Result detail route must stay removed");
+  assert.doesNotMatch(appSource, /feedback\/:feedbackId/, "Feedback detail route must stay removed");
+  assert.match(appSource, /objectives\/:objectiveId\/loot/, "Loot detail route remains the objective flow deep link");
 });
 
 test("frontend visibility rules are only accessed through the shared helpers", () => {

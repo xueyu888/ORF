@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { BountyHallData } from "../../src/state/apiClient";
-import type { Evidence, Feedback, Objective, OrfState, PointLedgerEntry, Result, Task, TaskChecklistItem } from "../../src/types/orf";
+import type { Feedback, Objective, OrfState, PointLedgerEntry, Result, Task, TaskChecklistItem } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { routeVisualBackgroundMocks } from "../helpers/visualBackgroundMocks";
 
@@ -176,7 +176,7 @@ test("bounty hall keeps objective creation available for authorized users", asyn
   await expect(page.getByRole("heading", { name: "悬赏大厅" })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建目标" })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建反馈" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "搜索页面、行动项..." })).toHaveCount(0);
 
   await page.getByRole("button", { name: "新建目标" }).click();
   await expect(page).toHaveURL(/\/tasks$/);
@@ -329,7 +329,7 @@ test("command menu does not expose the auth route inside the authenticated app",
   });
 
   await page.goto("/tasks");
-  await page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." }).click();
+  await page.getByRole("button", { name: "搜索页面、行动项..." }).click();
 
   const menu = page.locator(".orf-draggable-floating");
   await expect(menu).toBeVisible();
@@ -385,9 +385,9 @@ test("command menu creates objectives as actions and lands on the workbench", as
   });
 
   await page.goto("/reports");
-  await page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." }).click();
+  await page.getByRole("button", { name: "搜索页面、行动项..." }).click();
   const menu = page.locator(".orf-draggable-floating");
-  await menu.getByPlaceholder("搜索页面、目标、指标、行动项、反馈...").fill("新建目标");
+  await menu.getByPlaceholder("搜索页面、行动项...").fill("新建目标");
   await menu.getByRole("button", { name: /新建目标/ }).click();
 
   const titleInput = page.getByLabel("编辑目标标题");
@@ -1307,46 +1307,6 @@ test("ignores stale business data in legacy localStorage", async ({ page }) => {
   await expect(page.getByText("当前没有可申请或待接受的悬赏目标")).toBeVisible();
 });
 
-test("keeps objective task status unchanged until the API write succeeds and refreshed data arrives", async ({ page }) => {
-  let tasks = structuredClone(initialOrfState.tasks);
-  let failNextStatusWrite = true;
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({ json: taskManagementData(tasks) });
-  });
-  await page.route("**/api/tasks/ORF-128/status", async (route) => {
-    if (route.request().method() !== "PATCH") {
-      await route.fallback();
-      return;
-    }
-
-    if (failNextStatusWrite) {
-      failNextStatusWrite = false;
-      await route.fulfill({ status: 500, json: { error: "forced status failure" } });
-      return;
-    }
-
-    const body = route.request().postDataJSON() as { status: Task["status"] };
-    tasks = tasks.map((task) => (task.id === "ORF-128" ? { ...task, status: body.status, updatedAt: "2026-05-14" } : task));
-    await route.fulfill({ json: { ok: true } });
-  });
-
-  await page.goto("/objectives/obj-engineering");
-  await page.getByRole("button", { name: "行动项", exact: true }).click();
-
-  const taskRow = page.locator(".orf-table-row", { hasText: "构建 RAG 召回评估脚本" });
-  await expect(taskRow).toBeVisible();
-  const statusSelect = taskRow.locator("select");
-  await expect(statusSelect).toHaveValue("In Progress");
-
-  await statusSelect.selectOption("Done");
-  await expect(statusSelect).toHaveValue("In Progress");
-  await expect(page.getByText("forced status failure")).toBeVisible();
-
-  await statusSelect.selectOption("Done");
-  await expect(statusSelect).toHaveValue("Done");
-});
-
 test("dashboard renders only API-derived state without demo offsets", async ({ page }) => {
   const user = initialOrfState.users[0]!;
   const feedback: Feedback = {
@@ -1421,188 +1381,6 @@ test("AI evaluation summary does not render hardcoded metrics without eval runs"
   await expect(page.getByText("82%")).toHaveCount(0);
   await expect(page.getByText("6.5%")).toHaveCount(0);
   await expect(page.getByText("91%")).toHaveCount(0);
-});
-
-test("objective evaluation tab does not render hardcoded metrics without eval runs", async ({ page }) => {
-  const objective: Objective = {
-    ...initialOrfState.objectives[0]!,
-    id: "objective-eval-empty",
-    title: "真实评估空态目标",
-    resultIds: ["result-eval-empty"],
-    feedbackIds: [],
-    taskIds: [],
-  };
-  const result: Result = {
-    ...initialOrfState.results[0]!,
-    id: "result-eval-empty",
-    objectiveId: objective.id,
-    current: 1,
-    target: 2,
-    trend: [],
-  };
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [objective],
-        results: [result],
-        tasks: [],
-        feedback: [],
-      }),
-    });
-  });
-
-  await page.goto(`/objectives/${objective.id}`);
-  await page.getByRole("button", { name: "评估" }).click();
-
-  await expect(page.getByText("暂无关联评估运行。")).toBeVisible();
-  await expect(page.getByText("4.2s")).toHaveCount(0);
-  await expect(page.getByText("$0.038")).toHaveCount(0);
-  await expect(page.getByText("82%")).toHaveCount(0);
-  await expect(page.getByText("6.5%")).toHaveCount(0);
-});
-
-test("objective overview shows an empty related AI systems state without linked records", async ({ page }) => {
-  const objective: Objective = {
-    ...initialOrfState.objectives[0]!,
-    id: "objective-ai-system-empty",
-    title: "真实 AI 系统空态目标",
-    resultIds: ["result-ai-system-empty"],
-    feedbackIds: [],
-    taskIds: [],
-  };
-  const result: Result = {
-    ...initialOrfState.results[0]!,
-    id: "result-ai-system-empty",
-    objectiveId: objective.id,
-    title: "真实 AI 系统空态指标",
-    evidenceIds: [],
-    feedbackIds: [],
-  };
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [objective],
-        results: [result],
-        tasks: [],
-        evidence: [],
-        feedback: [],
-      }),
-    });
-  });
-
-  await page.goto(`/objectives/${objective.id}`);
-
-  await expect(page.getByText("暂无关联 AI 系统。")).toBeVisible();
-  await expect(page.getByText("RAG 服务")).toHaveCount(0);
-  await expect(page.getByText("Agent 运行时")).toHaveCount(0);
-  await expect(page.getByText("评估流水线")).toHaveCount(0);
-  await expect(page.getByText("权限审计")).toHaveCount(0);
-});
-
-test("objective overview derives related AI systems from linked evidence", async ({ page }) => {
-  const objective: Objective = {
-    ...initialOrfState.objectives[0]!,
-    id: "objective-ai-system-live",
-    title: "真实 AI 系统关联目标",
-    resultIds: ["result-ai-system-live"],
-    feedbackIds: [],
-    taskIds: [],
-  };
-  const result: Result = {
-    ...initialOrfState.results[0]!,
-    id: "result-ai-system-live",
-    objectiveId: objective.id,
-    title: "真实 AI 系统关联指标",
-    evidenceIds: ["evidence-ai-system-live", "evidence-ai-system-log"],
-    feedbackIds: [],
-  };
-  const evidence: Evidence[] = [
-    {
-      ...initialOrfState.evidence[0]!,
-      id: "evidence-ai-system-live",
-      title: "真实评估证据",
-      linkedResultId: result.id,
-      source: "真实评估流水线",
-    },
-    {
-      ...initialOrfState.evidence[0]!,
-      id: "evidence-ai-system-log",
-      title: "真实日志证据",
-      linkedResultId: result.id,
-      source: "真实日志平台",
-    },
-    {
-      ...initialOrfState.evidence[0]!,
-      id: "evidence-ai-system-unrelated",
-      title: "无关证据",
-      linkedResultId: "result-ai-system-unrelated",
-      source: "无关演示系统",
-    },
-  ];
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [objective],
-        results: [result],
-        tasks: [],
-        evidence,
-        feedback: [],
-      }),
-    });
-  });
-
-  await page.goto(`/objectives/${objective.id}`);
-
-  await expect(page.getByText("真实评估流水线")).toBeVisible();
-  await expect(page.getByText("真实日志平台")).toBeVisible();
-  await expect(page.getByText("无关演示系统")).toHaveCount(0);
-  await expect(page.getByText("RAG 服务")).toHaveCount(0);
-  await expect(page.getByText("Agent 运行时")).toHaveCount(0);
-  await expect(page.getByText("权限审计")).toHaveCount(0);
-});
-
-test("objective detail tabs show explicit empty states for empty live records", async ({ page }) => {
-  const objective: Objective = {
-    ...initialOrfState.objectives[0]!,
-    id: "objective-detail-empty-states",
-    title: "真实详情空态目标",
-    resultIds: [],
-    feedbackIds: [],
-    taskIds: [],
-  };
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [objective],
-        results: [],
-        tasks: [],
-        evidence: [],
-        feedback: [],
-      }),
-    });
-  });
-
-  await page.goto(`/objectives/${objective.id}`);
-
-  await expect(page.getByText("暂无指标。")).toBeVisible();
-  await expect(page.getByText("暂无反馈记录。")).toBeVisible();
-  await expect(page.getByText("暂无开放风险。")).toBeVisible();
-
-  await page.getByRole("button", { name: "指标", exact: true }).click();
-  await expect(page.getByText("暂无指标。")).toBeVisible();
-
-  await page.getByRole("button", { name: "行动项", exact: true }).click();
-  await expect(page.getByText("暂无行动项。")).toBeVisible();
-
-  await page.getByRole("button", { name: "反馈", exact: true }).click();
-  await expect(page.getByText("暂无反馈。", { exact: true })).toBeVisible();
-
-  await page.getByRole("button", { name: "决策", exact: true }).click();
-  await expect(page.getByText("暂无决策记录。")).toBeVisible();
 });
 
 test("feedback inbox derives insights from API feedback instead of bundled categories", async ({ page }) => {
@@ -1797,107 +1575,6 @@ test("objectives page derives cycle filters from API objectives", async ({ page 
   await expect(page.getByText("真实 Q1 目标")).toHaveCount(0);
 });
 
-test("result detail derives feedback and quality checks from API relations", async ({ page }) => {
-  const objective: Objective = {
-    ...initialOrfState.objectives[0]!,
-    id: "objective-result-quality",
-    title: "真实质量目标",
-    resultIds: ["result-quality-live"],
-    taskIds: [],
-    feedbackIds: [],
-  };
-  const result: Result = {
-    ...initialOrfState.results[0]!,
-    id: "result-quality-live",
-    objectiveId: objective.id,
-    title: "真实质量指标",
-    metricRequirement: "",
-    statisticalObject: "",
-    completionStandard: "",
-    sampleSet: "",
-    measurementScope: "",
-    feedbackIds: [],
-  };
-  const task: Task = {
-    ...initialOrfState.tasks[0]!,
-    id: "task-quality-live",
-    title: "真实关联行动项",
-    linkedObjectiveId: objective.id,
-  };
-  const feedback: Feedback = {
-    ...initialOrfState.feedback[0]!,
-    id: "feedback-quality-live",
-    phenomenon: "真实关联反馈",
-    linkedObjectiveId: objective.id,
-    linkedResultId: result.id,
-  };
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [objective],
-        results: [result],
-        tasks: [task],
-        feedback: [feedback],
-      }),
-    });
-  });
-
-  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-
-  await expect(page.getByRole("heading", { name: "真实质量指标" })).toBeVisible();
-  await expect(page.getByText("真实关联行动项")).toHaveCount(0);
-  await expect(page.getByText("真实关联反馈")).toBeVisible();
-  const quality = page.locator(".orf-card-padding", { hasText: "ORF 质量检查" });
-  await expect(quality.locator("div.flex", { hasText: "反馈已更新" }).getByText("通过")).toBeVisible();
-  await expect(quality.locator("div.flex", { hasText: "口径清楚" }).getByText("待补")).toBeVisible();
-});
-
-test("result detail shows empty states instead of inferred criteria for sparse live records", async ({ page }) => {
-  const objective: Objective = {
-    ...initialOrfState.objectives[0]!,
-    id: "objective-result-empty-detail",
-    title: "真实空态指标目标",
-    resultIds: ["result-empty-detail"],
-    taskIds: [],
-    feedbackIds: [],
-  };
-  const result: Result = {
-    ...initialOrfState.results[0]!,
-    id: "result-empty-detail",
-    objectiveId: objective.id,
-    title: "真实空态指标",
-    metricRequirement: "",
-    statisticalObject: "",
-    completionStandard: "",
-    sampleSet: "",
-    measurementScope: "",
-    feedbackIds: [],
-    trend: [],
-  };
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [objective],
-        results: [result],
-        tasks: [],
-        feedback: [],
-      }),
-    });
-  });
-
-  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-
-  await expect(page.getByRole("heading", { name: "真实空态指标" })).toBeVisible();
-  await expect(page.getByText("暂无趋势数据。")).toBeVisible();
-  await expect(page.getByText("暂无反馈历史。")).toBeVisible();
-  await expect(page.getByText("待补充")).toHaveCount(5);
-  await expect(page.getByText("标准评估集")).toHaveCount(0);
-  await expect(page.getByText("固定测试环境")).toHaveCount(0);
-  await expect(page.getByText("目标战利品说明支持")).toHaveCount(0);
-});
-
 test("tasks page cycle and status filters are functional and API-derived", async ({ page }) => {
   const q1Objective: Objective = {
     ...initialOrfState.objectives[0]!,
@@ -2069,17 +1746,6 @@ test("creation entries start from live context without demo business defaults", 
   await expect(page.getByLabel("影响")).toHaveValue("Medium");
   await expect(page.getByText("线上回答引用了过期的权限策略文档。")).toHaveCount(0);
   await page.getByRole("button", { name: "取消" }).click();
-
-  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-  await page.getByRole("button", { name: "创建行动项" }).click();
-  await expect(page.getByLabel("行动项标题")).toHaveValue("");
-  await expect(page.getByLabel("说明")).toHaveValue("");
-  await expect(page.getByText("为 RAG 检索增加版本感知过滤")).toHaveCount(0);
-  await page.getByRole("button", { name: "取消" }).click();
-
-  await page.getByRole("button", { name: "提出指标更新" }).click();
-  await expect(page.getByLabel("修改原因")).toHaveValue("");
-  await expect(page.getByText("反馈显示当前指标需要更清晰的可验证边界。")).toHaveCount(0);
 });
 
 test("creation entries reject whitespace-only required values before API writes", async ({ page }) => {
@@ -2113,7 +1779,7 @@ test("creation entries reject whitespace-only required values before API writes"
   await page.route("**/api/my-challenges?scope=all", async (route) => {
     await route.fulfill({ json: taskData });
   });
-  for (const pattern of [/\/api\/objectives$/, /\/api\/results$/, /\/api\/feedback$/, /\/api\/tasks$/, /\/api\/results\/[^/]+\/proposals$/]) {
+  for (const pattern of [/\/api\/objectives$/, /\/api\/results$/, /\/api\/feedback$/]) {
     await page.route(pattern, async (route) => {
       writeRequests.push(route.request().url());
       await route.fulfill({ status: 500, json: { error: "write should not be called" } });
@@ -2149,18 +1815,6 @@ test("creation entries reject whitespace-only required values before API writes"
   await page.getByRole("button", { name: "保存反馈" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByRole("button", { name: "取消" }).click();
-
-  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-  await page.getByRole("button", { name: "创建行动项" }).click();
-  await page.getByLabel("行动项标题").fill("   ");
-  await page.getByRole("button", { name: "保存行动项" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await page.getByRole("button", { name: "取消" }).click();
-
-  await page.getByRole("button", { name: "提出指标更新" }).click();
-  await page.getByLabel("修改原因").fill("   ");
-  await page.getByRole("button", { name: "记录更新" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
 
   await expect.poll(() => writeRequests).toEqual([]);
 });
@@ -2204,13 +1858,6 @@ test("creation entries keep user input when API writes fail", async ({ page }) =
   await page.route(/\/api\/feedback$/, async (route) => {
     await route.fulfill({ status: 500, json: { error: "feedback rejected" } });
   });
-  await page.route(/\/api\/tasks$/, async (route) => {
-    await route.fulfill({ status: 500, json: { error: "task rejected" } });
-  });
-  await page.route(/\/api\/results\/[^/]+\/update-proposal$/, async (route) => {
-    await route.fulfill({ status: 500, json: { error: "proposal rejected" } });
-  });
-
   await page.goto("/tasks");
   await page.getByRole("button", { name: "新建目标" }).click();
   await page.getByLabel("编辑目标标题").fill("失败后仍保留的目标");
@@ -2241,22 +1888,6 @@ test("creation entries keep user input when API writes fail", async ({ page }) =
   await expect(page.getByLabel("现象")).toHaveValue("失败后仍保留的反馈");
   await expect(page.getByText("feedback rejected")).toBeVisible();
   await page.getByRole("button", { name: "取消" }).click();
-
-  await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-  await page.getByRole("button", { name: "创建行动项" }).click();
-  await page.getByLabel("行动项标题").fill("失败后仍保留的行动项");
-  await page.getByRole("button", { name: "保存行动项" }).click();
-  await expect(page.getByRole("dialog", { name: "新建行动项" })).toBeVisible();
-  await expect(page.getByLabel("行动项标题")).toHaveValue("失败后仍保留的行动项");
-  await expect(page.getByText("task rejected")).toBeVisible();
-  await page.getByRole("button", { name: "取消" }).click();
-
-  await page.getByRole("button", { name: "提出指标更新" }).click();
-  await page.getByLabel("修改原因").fill("失败后仍保留的原因");
-  await page.getByRole("button", { name: "记录更新" }).click();
-  await expect(page.getByRole("dialog", { name: "提出指标更新" })).toBeVisible();
-  await expect(page.getByLabel("修改原因")).toHaveValue("失败后仍保留的原因");
-  await expect(page.getByText("proposal rejected")).toBeVisible();
 });
 
 test("objective creation shows pending feedback and ignores repeated create clicks", async ({ page }) => {
@@ -2309,83 +1940,4 @@ test("objective creation shows pending feedback and ignores repeated create clic
   await expect(page.getByText("目标已创建").first()).toBeVisible();
   await expect(page.getByText(createdObjective.title).first()).toBeVisible();
   await expect(page.getByLabel("编辑目标标题")).toHaveCount(0);
-});
-
-test("feedback detail recommendation actions are real commands", async ({ page }) => {
-  const objective: Objective = {
-    ...initialOrfState.objectives[0]!,
-    id: "objective-feedback-actions",
-    title: "真实反馈动作目标",
-    resultIds: ["result-feedback-actions"],
-    feedbackIds: ["feedback-actions-live"],
-    taskIds: [],
-  };
-  const result: Result = {
-    ...initialOrfState.results[0]!,
-    id: "result-feedback-actions",
-    objectiveId: objective.id,
-    title: "真实反馈动作指标",
-    feedbackIds: ["feedback-actions-live"],
-  };
-  const feedback: Feedback = {
-    ...initialOrfState.feedback[0]!,
-    id: "feedback-actions-live",
-    phenomenon: "真实反馈动作",
-    linkedObjectiveId: objective.id,
-    linkedResultId: result.id,
-  };
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [objective],
-        results: [result],
-        tasks: [],
-        feedback: [feedback],
-      }),
-    });
-  });
-
-  await page.goto(`/feedback/${feedback.id}`);
-
-  await expect(page.getByRole("heading", { name: feedback.id })).toBeVisible();
-  await expect(page.getByText("补充回归样本")).toHaveCount(0);
-  await page.getByRole("button", { name: "创建执行行动项" }).click();
-  await expect(page.getByText("新建行动项")).toBeVisible();
-});
-
-test("feedback detail shows explicit empty states for sparse live records", async ({ page }) => {
-  const feedback: Feedback = {
-    ...initialOrfState.feedback[0]!,
-    id: "feedback-empty-detail",
-    phenomenon: "真实空态反馈",
-    evidenceIds: [],
-    causeCategories: [],
-    linkedObjectiveId: "objective-missing-for-feedback",
-    linkedResultId: "result-missing-for-feedback",
-    suggestedAdjustment: "",
-    activity: [],
-  };
-
-  await page.route("**/api/tasks-page", async (route) => {
-    await route.fulfill({
-      json: taskManagementDataWith({
-        objectives: [],
-        results: [],
-        tasks: [],
-        evidence: [],
-        feedback: [feedback],
-      }),
-    });
-  });
-
-  await page.goto(`/feedback/${feedback.id}`);
-
-  await expect(page.getByRole("heading", { name: feedback.id })).toBeVisible();
-  await expect(page.getByText("暂无佐证材料。")).toBeVisible();
-  await expect(page.getByText("暂无原因分类。")).toBeVisible();
-  await expect(page.getByText("暂无建议调整。")).toBeVisible();
-  await expect(page.getByText("暂无活动记录。")).toBeVisible();
-  await expect(page.getByText("未找到关联目标")).toBeVisible();
-  await expect(page.getByText("未找到关联指标")).toBeVisible();
 });

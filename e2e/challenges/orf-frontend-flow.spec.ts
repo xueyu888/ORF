@@ -797,33 +797,14 @@ test.describe("ORF high-level audit coverage", () => {
     await expect.soft(page.getByText(leaked.title)).toHaveCount(0);
     await expect.soft(objectivePanel(page, leaked.title).getByRole("link", { name: "提交战利品" })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "搜索目标、指标、行动项、反馈..." }).click();
-    await page.getByPlaceholder("搜索页面、目标、指标、行动项、反馈...").fill("泄漏");
+    await page.getByRole("button", { name: "搜索页面、行动项..." }).click();
+    await page.getByPlaceholder("搜索页面、行动项...").fill("泄漏");
     await expect.soft(page.getByText(leaked.title)).toHaveCount(0);
     await expect.soft(page.getByText("审计 他人的指标")).toHaveCount(0);
 
     await page.goto("/objectives");
-    await expect.soft(page.getByRole("link", { name: new RegExp(mine.title) }).first()).toBeVisible();
-    await expect.soft(page.getByRole("link", { name: new RegExp(leaked.title) })).toHaveCount(0);
-  });
-
-  test("result detail deep link does not expose non-challenger records", async ({ page }, testInfo) => {
-    const objective = objectiveFixture({
-      id: "obj-ui-audit-result-detail-guard",
-      title: "审计 详情页越权目标",
-      flowStatus: "open",
-      resultIds: ["res-ui-audit-result-detail-guard"],
-    });
-    const result = resultFixture({ id: "res-ui-audit-result-detail-guard", objectiveId: objective.id, title: "审计 详情页越权指标" });
-    const data = taskManagementData({ objectives: [objective], results: [result] });
-
-    await mockOrfApp(page, observerUser, data, { tasks: () => data });
-
-    await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-    await attachAuditScreenshot(page, testInfo, "audit-result-detail-non-challenger");
-    await expect(page).toHaveURL(/\/tasks$/);
-    await expect.soft(page.getByText(result.title)).toHaveCount(0);
-    await expect.soft(page.getByText(objective.title)).toHaveCount(0);
+    await expect.soft(page.getByText(mine.title).first()).toBeVisible();
+    await expect.soft(page.getByText(leaked.title)).toHaveCount(0);
   });
 
   test("mobile challenge workbench has no page-level horizontal overflow", async ({ page }, testInfo) => {
@@ -2288,28 +2269,6 @@ test.describe("ORF frontend guard coverage", () => {
 
     await page.goto("/objectives/missing-objective/loot");
     await expect(page).toHaveURL(/\/tasks$/);
-  });
-
-  test("result detail loot entry follows objective flow permissions", async ({ page }) => {
-    const objective = objectiveFixture({ id: "obj-ui-result-detail-loot", title: "前端测试 Result 详情未冻结目标", flowStatus: "open", resultIds: ["res-ui-result-detail-loot"] });
-    const result = resultFixture({ id: "res-ui-result-detail-loot", objectiveId: objective.id, title: "前端测试 Result 详情未冻结指标" });
-    const data = taskManagementData({ objectives: [objective], results: [result] });
-
-    await mockOrfApp(page, observerUser, data, { tasks: () => data });
-
-    await page.goto(`/objectives/${objective.id}/results/${result.id}`);
-    await expect(page.getByRole("link", { name: "提交目标战利品" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "新建反馈" })).toHaveCount(0);
-  });
-
-  test("objective detail metric entry follows reestimate proposal contract", async ({ page }) => {
-    const objective = objectiveFixture({ id: "obj-ui-objective-detail-proposal", title: "前端测试 Objective 详情候选指标目标", flowStatus: "reestimating", stage: "orfReestimate", challengers: [memberUser.name], confirmationDueAt: "2999-01-01T00:00:00.000Z" });
-    const data = taskManagementData({ objectives: [objective], results: [] });
-
-    await mockOrfApp(page, memberUser, data, { tasks: () => data });
-
-    await page.goto(`/objectives/${objective.id}`);
-    await expect(page.getByRole("button", { name: "提出指标" })).toBeVisible();
   });
 
   test("bounty hall renders loading and empty states", async ({ page }) => {
