@@ -166,6 +166,10 @@ export class MattermostClient {
     }
   }
 
+  async getMyChannelMember(channelId: string) {
+    return this.requestJson(`/api/v4/channels/${encodeURIComponent(channelId)}/members/me`, {}, mattermostChannelMemberSchema);
+  }
+
   async getMyChannels() {
     return this.requestJson("/api/v4/users/me/channels", {}, mattermostChannelsSchema);
   }

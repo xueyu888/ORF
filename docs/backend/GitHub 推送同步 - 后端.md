@@ -34,6 +34,16 @@
 | `GITHUB_TOKEN` | 可选。私有仓库或需要更高 GitHub API 限额时填写。 |
 | `GITHUB_WEBHOOK_SECRET` | 可选。只有启用 GitHub webhook 入站模式时才需要。 |
 
+如果 `GITHUB_SYNC_ENABLED=true`、`GITHUB_ISSUES_SYNC_ENABLED=true` 或配置了 `GITHUB_WEBHOOK_SECRET`，ORF 启动时必须能解析出 GitHub 通知专用 Mattermost bot 发送者和目标频道。通用 `MATTERMOST_LOGIN_ID` / `MATTERMOST_PASSWORD` 不作为 GitHub 通知发送者 fallback。
+
+如果启用了 GitHub push 或 issues 轮询，ORF 在启动阶段还会校验：
+
+- 发送者能登录 Mattermost。
+- `GITHUB_MATTERMOST_REQUIRE_BOT=true` 时，发送者必须是 Mattermost bot。
+- 发送者必须已经加入目标频道。
+
+任一条件不满足时，ORF 启动失败，避免后台轮询静默失败或误用个人账号发通知。
+
 ## 局域网同步流程
 
 1. ORF 后端启动后读取 `GITHUB_SYNC_STATE_FILE`。
@@ -44,6 +54,7 @@
 6. GitHub API 被限流时，自动改用本地 git remote 检查，不影响推送通知。
 7. 每次 push 的通知 key 是 `repository + ref + after_sha`，写入 `github_mattermost_push_notifications` 去重 ledger；webhook、GitHub API 轮询、本地 git fallback 或多个 ORF 实例检测到同一个 key 时，只有第一个插入成功的实例会发送 Mattermost 消息。
 8. 推送消息只包含仓库标题和提交列表；不再输出 “Detected pushed commits” 摘要行。每条提交前置加粗作者，作者来自 GitHub commit author。
+9. 如果某次发送失败，ledger 状态记录为 `failed`；下一次检测到同一个 push key 时允许重新 reserve 并重试。超过 10 分钟仍停留在 `reserved` 的记录也允许重试，避免进程中断留下永久死锁。
 
 ## Issues 同步流程
 
