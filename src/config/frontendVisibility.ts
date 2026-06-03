@@ -26,6 +26,7 @@ export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/system/members": "page.systemMembers",
   "/system/permissions": "page.systemPermissions",
   "/system/settings": "page.systemSettings",
+  "/system/mattermost-archive": "page.systemMattermostArchive",
   "/members": "page.systemMembers",
   "/permissions": "page.systemPermissions",
   "/settings/system": "page.systemSettings",

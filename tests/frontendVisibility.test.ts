@@ -45,8 +45,20 @@ test("personal settings and system management have separate visibility contracts
   assert.equal(canShowFrontendPath(memberUser, "/system/permissions"), false);
   assert.equal(canShowFrontendPath(adminUser, "/system/settings"), true);
   assert.equal(canShowFrontendPath(memberUser, "/system/settings"), false);
+  assert.equal(canShowFrontendPath(adminUser, "/system/mattermost-archive"), true);
+  assert.equal(canShowFrontendPath(memberUser, "/system/mattermost-archive"), false);
   assert.equal(canShowFrontendPath(adminUser, "/settings/system"), true);
   assert.equal(canShowFrontendPath(memberUser, "/settings/system"), false);
+});
+
+test("mattermost archive viewer is an admin-only system management page", () => {
+  assert.equal(canShowFrontend(adminUser, "page.systemMattermostArchive"), true);
+  assert.equal(canShowFrontend(memberUser, "page.systemMattermostArchive"), false);
+  assert.equal(
+    quickPages.some((item) => item.path === "/system/mattermost-archive"),
+    true,
+    "Mattermost archive viewer must be reachable from system management quick pages",
+  );
 });
 
 test("authenticated command pages do not include the auth route", () => {

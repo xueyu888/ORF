@@ -47,6 +47,10 @@
     "label": "系统设置页面访问",
     "audience": ["admin"]
   },
+  "page.systemMattermostArchive": {
+    "label": "Mattermost 聊天归档页面访问",
+    "audience": ["admin"]
+  },
   "challenge.scope.all": {
     "label": "挑战页所有挑战范围",
     "audience": ["admin"]

@@ -14,6 +14,7 @@ const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "F
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
 const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
+const MattermostArchivePage = lazyNamed(() => import("./pages/MattermostArchivePage"), "MattermostArchivePage");
 const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
 const NotificationsPage = lazyNamed(() => import("./pages/NotificationsPage"), "NotificationsPage");
 const ObjectivesPage = lazyNamed(() => import("./pages/ObjectivesPage"), "ObjectivesPage");
@@ -83,6 +84,14 @@ export function App() {
             element={
               <RequireFrontendVisibility visibilityKey="page.systemSettings">
                 <LazyRoute><SystemSettingsPage /></LazyRoute>
+              </RequireFrontendVisibility>
+            }
+          />
+          <Route
+            path="mattermost-archive"
+            element={
+              <RequireFrontendVisibility visibilityKey="page.systemMattermostArchive">
+                <LazyRoute><MattermostArchivePage /></LazyRoute>
               </RequireFrontendVisibility>
             }
           />

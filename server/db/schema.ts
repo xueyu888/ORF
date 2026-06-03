@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
@@ -29,6 +29,13 @@ export const feedbackStatusEnum = pgEnum("feedback_status", ["New", "Reviewing",
 export const teamRoleEnum = pgEnum("team_role", ["admin", "member", "readonly", "supervisor"]);
 export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask"]);
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
+export const mattermostArchiveFileStorageStatusEnum = pgEnum("mattermost_archive_file_storage_status", [
+  "metadata_only",
+  "copied",
+  "skipped_non_image",
+  "skipped_large",
+  "copy_failed",
+]);
 
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
@@ -445,3 +452,124 @@ export const commentAttachments = pgTable(
     teamTarget: index("comment_attachments_team_target_idx").on(table.teamId, table.targetType, table.targetId),
   }),
 );
+
+export const mattermostArchiveChannels = pgTable(
+  "mattermost_archive_channels",
+  {
+    id: text("id").primaryKey(),
+    mattermostTeamId: text("mattermost_team_id"),
+    name: text("name").notNull(),
+    displayName: text("display_name").notNull(),
+    type: text("type").notNull(),
+    header: text("header").notNull().default(""),
+    purpose: text("purpose").notNull().default(""),
+    deleteAt: bigint("delete_at", { mode: "number" }).notNull().default(0),
+    lastPostAt: bigint("last_post_at", { mode: "number" }).notNull().default(0),
+    totalMsgCount: integer("total_msg_count").notNull().default(0),
+    totalMsgCountRoot: integer("total_msg_count_root").notNull().default(0),
+    raw: jsonb("raw").$type<Record<string, unknown>>().notNull().default({}),
+    discoveredAt: timestamp("discovered_at", { mode: "string", withTimezone: true }).notNull(),
+    syncedAt: timestamp("synced_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    displayName: index("mattermost_archive_channels_display_name_idx").on(table.displayName),
+    type: index("mattermost_archive_channels_type_idx").on(table.type),
+  }),
+);
+
+export const mattermostArchiveUsers = pgTable(
+  "mattermost_archive_users",
+  {
+    id: text("id").primaryKey(),
+    username: text("username").notNull().default(""),
+    nickname: text("nickname").notNull().default(""),
+    firstName: text("first_name").notNull().default(""),
+    lastName: text("last_name").notNull().default(""),
+    deleteAt: bigint("delete_at", { mode: "number" }).notNull().default(0),
+    isBot: boolean("is_bot").notNull().default(false),
+    raw: jsonb("raw").$type<Record<string, unknown>>().notNull().default({}),
+    syncedAt: timestamp("synced_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    username: index("mattermost_archive_users_username_idx").on(table.username),
+  }),
+);
+
+export const mattermostArchivePosts = pgTable(
+  "mattermost_archive_posts",
+  {
+    id: text("id").primaryKey(),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => mattermostArchiveChannels.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => mattermostArchiveUsers.id, { onDelete: "set null" }),
+    rootId: text("root_id").notNull().default(""),
+    originalId: text("original_id").notNull().default(""),
+    type: text("type").notNull().default(""),
+    message: text("message").notNull().default(""),
+    hashtags: text("hashtags").notNull().default(""),
+    props: jsonb("props").$type<Record<string, unknown>>().notNull().default({}),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    fileIds: jsonb("file_ids").$type<string[]>().notNull().default([]),
+    createAt: bigint("create_at", { mode: "number" }).notNull().default(0),
+    updateAt: bigint("update_at", { mode: "number" }).notNull().default(0),
+    editAt: bigint("edit_at", { mode: "number" }).notNull().default(0),
+    deleteAt: bigint("delete_at", { mode: "number" }).notNull().default(0),
+    replyCount: integer("reply_count").notNull().default(0),
+    lastReplyAt: bigint("last_reply_at", { mode: "number" }).notNull().default(0),
+    archivedAt: timestamp("archived_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    channelCreateAt: index("mattermost_archive_posts_channel_create_at_idx").on(table.channelId, table.createAt),
+    channelUpdateAt: index("mattermost_archive_posts_channel_update_at_idx").on(table.channelId, table.updateAt),
+    root: index("mattermost_archive_posts_root_idx").on(table.rootId),
+    user: index("mattermost_archive_posts_user_idx").on(table.userId),
+  }),
+);
+
+export const mattermostArchivePostFiles = pgTable(
+  "mattermost_archive_post_files",
+  {
+    id: text("id").primaryKey(),
+    postId: text("post_id")
+      .notNull()
+      .references(() => mattermostArchivePosts.id, { onDelete: "cascade" }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => mattermostArchiveChannels.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => mattermostArchiveUsers.id, { onDelete: "set null" }),
+    name: text("name").notNull().default(""),
+    extension: text("extension").notNull().default(""),
+    mimeType: text("mime_type").notNull().default(""),
+    size: integer("size").notNull().default(0),
+    width: integer("width"),
+    height: integer("height"),
+    hasPreviewImage: boolean("has_preview_image").notNull().default(false),
+    createAt: bigint("create_at", { mode: "number" }).notNull().default(0),
+    updateAt: bigint("update_at", { mode: "number" }).notNull().default(0),
+    deleteAt: bigint("delete_at", { mode: "number" }).notNull().default(0),
+    storageStatus: mattermostArchiveFileStorageStatusEnum("storage_status").notNull().default("metadata_only"),
+    objectKey: text("object_key"),
+    copiedAt: timestamp("copied_at", { mode: "string", withTimezone: true }),
+    raw: jsonb("raw").$type<Record<string, unknown>>().notNull().default({}),
+    syncedAt: timestamp("synced_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    post: index("mattermost_archive_post_files_post_idx").on(table.postId),
+    channel: index("mattermost_archive_post_files_channel_idx").on(table.channelId),
+    storageStatus: index("mattermost_archive_post_files_storage_status_idx").on(table.storageStatus),
+  }),
+);
+
+export const mattermostArchiveSyncCursors = pgTable("mattermost_archive_sync_cursors", {
+  channelId: text("channel_id")
+    .primaryKey()
+    .references(() => mattermostArchiveChannels.id, { onDelete: "cascade" }),
+  historyBeforePostId: text("history_before_post_id"),
+  historyExhausted: boolean("history_exhausted").notNull().default(false),
+  lastSyncedUpdateAt: bigint("last_synced_update_at", { mode: "number" }).notNull().default(0),
+  syncedPostCount: integer("synced_post_count").notNull().default(0),
+  lastStartedAt: timestamp("last_started_at", { mode: "string", withTimezone: true }),
+  lastCompletedAt: timestamp("last_completed_at", { mode: "string", withTimezone: true }),
+  lastError: text("last_error"),
+});

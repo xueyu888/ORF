@@ -45,6 +45,7 @@
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:bounties": "tsx scripts/seed-bounty-hall.ts",
     "gitlab:webhooks:reconcile": "node scripts/with-public-ca.mjs tsx scripts/reconcile-gitlab-mattermost-webhooks.ts",
+    "mattermost:archive:sync": "node scripts/with-public-ca.mjs tsx scripts/sync-mattermost-archive.ts",
     "notify:email": "tsx scripts/send-email-notification.ts",
     "build": "node scripts/with-public-ca.mjs tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
