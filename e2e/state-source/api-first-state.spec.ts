@@ -59,6 +59,15 @@ async function chooseObjectiveChildCreate(panel: Locator, actionName: "新增指
   await panel.getByRole("button", { name: actionName }).click();
 }
 
+async function chooseFantasySelectOption(page: Page, label: string, optionName: string) {
+  await page.getByRole("button", { name: label }).click();
+  await page.getByRole("option", { name: optionName, exact: true }).click();
+}
+
+function fantasySelectValue(page: Page, label: string) {
+  return page.getByRole("button", { name: label }).locator(".orf-fantasy-select-value");
+}
+
 function defaultObjectiveCreationDates() {
   const today = new Date();
   const dueDate = new Date();
@@ -900,12 +909,12 @@ test("objective creation entry moves filtered workbench to the unassigned creati
   });
 
   await page.goto("/tasks");
-  await page.getByLabel("挑战状态").selectOption("settled");
+  await chooseFantasySelectOption(page, "挑战状态", "已结算");
   await expect(page.getByText(settledObjective.title)).toBeVisible();
 
   await page.getByRole("button", { name: "新建目标" }).click();
 
-  await expect(page.getByLabel("挑战状态")).toHaveValue("unassigned");
+  await expect(fantasySelectValue(page, "挑战状态")).toHaveText("未分配");
   await expect(page.getByLabel("编辑目标标题")).toBeVisible();
 });
 
@@ -1597,18 +1606,18 @@ test("tasks page cycle and status filters are functional and API-derived", async
   await expect(page.getByText("真实挑战 Q2")).toBeVisible();
   await expect(page.getByText("真实未分配挑战")).toBeVisible();
 
-  await page.getByLabel("挑战周期").selectOption("2999 Q2");
+  await chooseFantasySelectOption(page, "挑战周期", "2999 Q2");
 
   await expect(page.getByText("真实挑战 Q2")).toBeVisible();
   await expect(page.getByText("真实未分配挑战")).toBeVisible();
   await expect(page.getByText("真实挑战 Q1")).toHaveCount(0);
 
-  await page.getByLabel("挑战状态").selectOption("settled");
+  await chooseFantasySelectOption(page, "挑战状态", "已结算");
 
   await expect(page.getByText("没有符合筛选条件的挑战目标。")).toBeVisible();
   await expect(page.getByText("当前还没有挑战内容。")).toHaveCount(0);
 
-  await page.getByLabel("挑战状态").selectOption("unassigned");
+  await chooseFantasySelectOption(page, "挑战状态", "未分配");
 
   await expect(page.getByText("真实未分配挑战")).toBeVisible();
   await expect(page.getByText("真实挑战 Q2")).toHaveCount(0);
