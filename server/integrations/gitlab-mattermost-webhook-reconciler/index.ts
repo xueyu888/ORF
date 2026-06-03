@@ -23,7 +23,7 @@ const configSchema = z
     MATTERMOST_URL: z.string().url().optional(),
   })
   .transform((value, context) => {
-    if (!value.GITLAB_URL) {
+    if (value.GITLAB_MATTERMOST_WEBHOOK_RECONCILE_ENABLED && !value.GITLAB_URL) {
       context.addIssue({
         code: "custom",
         message: "GITLAB_URL is required when GitLab Mattermost webhook reconciliation is enabled",
@@ -32,7 +32,7 @@ const configSchema = z
     }
 
     const webhookUrl = value.GITLAB_MATTERMOST_WEBHOOK_URL ?? buildMattermostGitLabWebhookUrl(value.MATTERMOST_URL);
-    if (!webhookUrl) {
+    if (value.GITLAB_MATTERMOST_WEBHOOK_RECONCILE_ENABLED && !webhookUrl) {
       context.addIssue({
         code: "custom",
         message: "GITLAB_MATTERMOST_WEBHOOK_URL or MATTERMOST_URL is required when GitLab Mattermost webhook reconciliation is enabled",
