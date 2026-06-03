@@ -45,19 +45,21 @@ test("fantasy select popovers escape challenge row stacking contexts", () => {
   assert.match(css, /\.orf-fantasy-select-popover\s*{[^}]*\bz-index:\s*1[2-9]\d/s);
 });
 
-test("objective deadline uses the date itself as the edit affordance", () => {
+test("objective deadline uses a custom ORF date picker as the edit affordance", () => {
   const html = renderChallengeTree(null, { status: "editable", mode: "edit" });
   const treeSource = readFileSync("src/features/challenge/components/ChallengeTree.tsx", "utf8");
+  const pickerSource = readFileSync("src/components/FantasyDatePicker.tsx", "utf8");
   const css = readFileSync("src/styles.css", "utf8");
 
   assert.match(html, /role="button"/);
-  assert.match(html, /tabindex="0"/);
   assert.match(html, /title="点击修改目标截止日期"/);
-  assert.match(html, /class="[^"]*orf-objective-deadline-picker/);
-  assert.match(html, /aria-hidden="true"/);
-  assert.match(html, /tabindex="-1"/);
-  assert.match(treeSource, /\.showPicker\(\)/);
-  assert.match(css, /\.orf-objective-deadline-picker\s*{[^}]*pointer-events:\s*none/s);
+  assert.match(html, /class="[^"]*orf-fantasy-date-picker/);
+  assert.match(html, /aria-haspopup="dialog"/);
+  assert.match(pickerSource, /createPortal\(/, "Deadline date picker popovers must escape challenge row stacking contexts.");
+  assert.match(css, /\.orf-fantasy-date-popover\s*{[^}]*\bposition:\s*fixed/s);
+  assert.match(css, /\.orf-fantasy-date-popover\s*{[^}]*\bz-index:\s*1[2-9]\d/s);
+  assert.doesNotMatch(treeSource, /\.showPicker\(\)/);
+  assert.doesNotMatch(html, /type="date"/);
   assert.doesNotMatch(html, /orf-objective-deadline-editor/);
   assert.doesNotMatch(html, /orf-objective-deadline-input/);
   assert.doesNotMatch(html, /lucide-pencil/);
