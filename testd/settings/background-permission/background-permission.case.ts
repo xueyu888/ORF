@@ -4,7 +4,7 @@ import type { BackgroundPersonalCaseData } from "./_support/background-permissio
 function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
   return {
     id: `settings.background-personal.${data.role}`,
-    title: `设置页面修改背景-${data.role === "admin" ? "管理员" : "普通成员"}可以切换个人登录后背景`,
+    title: `设置页面修改背景-${data.role === "admin" ? "管理员" : "普通成员"}可以切换个人 AppShell 皮肤`,
     model: STATE_CASE_MODEL,
     tags: ["settings", "visual-background", "personal", data.role],
 
@@ -67,13 +67,13 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
     },
 
     Action: {
-      description: "当前用户进入个人设置，上传候选背景并切换当前个人登录后背景",
+      description: "当前用户进入个人设置，上传候选皮肤并切换当前个人 AppShell 皮肤",
       steps: [
         { source: { caseStepId: "Action-1", method: "playwright" }, id: "personal_settings_menu_item.click", title: "点击 用户菜单中的 \"个人设置\" 操作", object: "page.user_menu_item", operator: "click", params: { name: "个人设置" } },
-        { source: { caseStepId: "Action-2", method: "playwright" }, id: "personal_background.upload_first", title: "在个人设置的登录后背景上传入口上传本用例第一个个人登录后背景图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.firstPersonalBackgroundFileName", saveAs: "firstPersonalBackground" } },
-        { source: { caseStepId: "Action-3", method: "playwright" }, id: "personal_background.upload_second", title: "在个人设置的登录后背景上传入口上传本用例第二个个人登录后背景图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.secondPersonalBackgroundFileName", saveAs: "secondPersonalBackground" } },
-        { source: { caseStepId: "Action-4", method: "playwright" }, id: "personal_background.select_first", title: "在登录后背景列表中选择本用例第一个个人登录后背景图片", object: "page.personal_settings", operator: "select_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "Action-5", method: "playwright" }, id: "personal_background.use_selected", title: "点击 \"设为我的背景\" 操作，将本用例第一个个人登录后背景图片设为本人登录后背景", object: "page.personal_settings", operator: "use_selected_background", params: { backgroundFrom: "runtime.firstPersonalBackground", saveAs: "personalBackgroundUpdateResult" } },
+        { source: { caseStepId: "Action-2", method: "playwright" }, id: "personal_background.upload_first", title: "在个人设置的 AppShell 皮肤上传入口上传本用例第一个个人 AppShell 皮肤图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.firstPersonalBackgroundFileName", saveAs: "firstPersonalBackground" } },
+        { source: { caseStepId: "Action-3", method: "playwright" }, id: "personal_background.upload_second", title: "在个人设置的 AppShell 皮肤上传入口上传本用例第二个个人 AppShell 皮肤图片", object: "page.personal_settings", operator: "upload_background", params: { fileNameFrom: "data.secondPersonalBackgroundFileName", saveAs: "secondPersonalBackground" } },
+        { source: { caseStepId: "Action-4", method: "playwright" }, id: "personal_background.select_first", title: "在 AppShell 皮肤列表中选择本用例第一个个人 AppShell 皮肤图片", object: "page.personal_settings", operator: "select_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "Action-5", method: "playwright" }, id: "personal_background.use_selected", title: "点击 \"设为我的背景\" 操作，将本用例第一个个人 AppShell 皮肤图片设为本人 AppShell 皮肤", object: "page.personal_settings", operator: "use_selected_background", params: { backgroundFrom: "runtime.firstPersonalBackground", saveAs: "personalBackgroundUpdateResult" } },
       ],
     },
 
@@ -82,11 +82,11 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
       assertions: [
         { source: { caseStepId: "S1-1", method: "playwright" }, id: "url.personal_settings", title: "当前页面 应为 个人设置页面", object: "page.url", operator: "match", params: { pattern: "/settings$" } },
         { source: { caseStepId: "S1-2", method: "playwright" }, id: "personal_settings.visible", title: "当前页面 应显示 `个人设置`", object: "page.main_heading", operator: "visible", params: { name: "个人设置" } },
-        { source: { caseStepId: "S1-3", method: "playwright" }, id: "post_login_background.visible", title: "当前页面 应显示 `登录后背景`", object: "page", operator: "visible", params: { role: "heading", name: "登录后背景", exact: true } },
-        { source: { caseStepId: "S1-4", method: "api" }, id: "personal_backgrounds.contains_first", title: "当前用户个人背景列表 应包含 本用例第一个个人登录后背景图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "S1-5", method: "api" }, id: "personal_backgrounds.contains_second", title: "当前用户个人背景列表 应包含 本用例第二个个人登录后背景图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.secondPersonalBackground" } },
-        { source: { caseStepId: "S1-6", method: "api" }, id: "personal_background.preference_fixed", title: "当前用户个人背景偏好 `appBackground.fixedBackgroundId` 应为 本用例第一个个人登录后背景图片", object: "api.personal_backgrounds", operator: "preference_fixed_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
-        { source: { caseStepId: "S1-7", method: "playwright" }, id: "personal_background.current_visible", title: "登录后背景区域 应显示 本用例第一个个人登录后背景图片为 当前背景", object: "page.personal_background", operator: "current_visible", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "S1-3", method: "playwright" }, id: "post_login_background.visible", title: "当前页面 应显示 `我的 AppShell 皮肤`", object: "page", operator: "visible", params: { role: "heading", name: "我的 AppShell 皮肤", exact: true } },
+        { source: { caseStepId: "S1-4", method: "api" }, id: "personal_backgrounds.contains_first", title: "当前用户个人背景列表 应包含 本用例第一个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "S1-5", method: "api" }, id: "personal_backgrounds.contains_second", title: "当前用户个人背景列表 应包含 本用例第二个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.secondPersonalBackground" } },
+        { source: { caseStepId: "S1-6", method: "api" }, id: "personal_background.preference_fixed", title: "当前用户个人背景偏好 `appBackground.fixedBackgroundId` 应为 本用例第一个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "preference_fixed_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
+        { source: { caseStepId: "S1-7", method: "playwright" }, id: "personal_background.current_visible", title: "AppShell 皮肤区域 应显示 本用例第一个个人 AppShell 皮肤图片为 当前背景", object: "page.personal_background", operator: "current_visible", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
         { source: { caseStepId: "S1-8", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
         { source: { caseStepId: "S1-9", method: "api" }, id: "session.authenticated", title: "当前会话 应为 已登录", object: "auth.session", operator: "authenticated" },
         { source: { caseStepId: "S1-10", method: "api" }, id: "session.email", title: "当前会话用户邮箱 应为 当前用户固定测试邮箱", object: "auth.session.user_email", operator: "equals", params: { emailFrom: "data.email" } },

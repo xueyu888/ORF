@@ -303,7 +303,7 @@ function systemBackgroundSection(page: BackgroundSettingsTestContext["page"], sc
 }
 
 function sceneTitle(scene: VisualBackgroundScene) {
-  return scene === "login_background" ? "登录页面背景设置" : "应用背景设置";
+  return scene === "login_background" ? "登录页面背景设置" : "AppShell 皮肤设置";
 }
 
 function requiredBackgroundSnapshots(params: StepParams, key: string): BackgroundSnapshots {

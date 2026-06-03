@@ -1,16 +1,7 @@
 import sidebarEnergyBackground from "../assets/orf-icons/sidebar-energy-bg.png";
 import sidebarCharacterGuideBackground from "../assets/orf-icons/sidebar-character-guide-bg.png";
-import nikeExtendedShellBackground from "../assets/app-shell/nike-extended-right.png";
 
 export const orfAssetLibrary = {
-  appShell: {
-    nikeExtendedBackground: {
-      src: nikeExtendedShellBackground,
-      sourceSidebarUrl: "/settings/backgrounds/sidebar_background/default/nike.png",
-      name: "nike-extended-right",
-      description: "Wide AppShell background paired with the Nike sidebar character background.",
-    },
-  },
   sidebar: {
     energyBackground: {
       src: sidebarEnergyBackground,

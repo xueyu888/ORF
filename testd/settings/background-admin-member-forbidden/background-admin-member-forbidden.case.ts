@@ -70,11 +70,11 @@ export const backgroundAdminMemberForbiddenCase = {
   },
 
   Action: {
-    description: "普通成员直接访问系统设置页面并尝试写入系统背景配置",
+    description: "普通成员直接访问系统设置页面并提交系统背景配置写请求",
     steps: [
       { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.goto.system_settings", title: "普通成员直接打开 系统设置页面", object: "page", operator: "goto", params: { path: "/system/settings" } },
-      { source: { caseStepId: "Action-2", method: "api" }, id: "login_background_config.generate", title: "当前普通成员直接尝试修改系统 `login_background` 背景配置", object: "api.visual_background_config", operator: "submit", params: { scene: "login_background", configFrom: "runtime.backgroundSnapshot.login_background.config", saveAs: "loginBackgroundConfigResult" } },
-      { source: { caseStepId: "Action-3", method: "api" }, id: "app_background_config.generate", title: "当前普通成员直接尝试修改系统 `app_background` 背景配置", object: "api.visual_background_config", operator: "submit", params: { scene: "app_background", configFrom: "runtime.backgroundSnapshot.app_background.config", saveAs: "appBackgroundConfigResult" } },
+      { source: { caseStepId: "Action-2", method: "api" }, id: "login_background_config.generate", title: "当前普通成员直接提交系统 `login_background` 背景配置修改", object: "api.visual_background_config", operator: "submit", params: { scene: "login_background", configFrom: "runtime.backgroundSnapshot.login_background.config", saveAs: "loginBackgroundConfigResult" } },
+      { source: { caseStepId: "Action-3", method: "api" }, id: "app_background_config.generate", title: "当前普通成员直接提交系统 `app_background` AppShell 皮肤配置修改", object: "api.visual_background_config", operator: "submit", params: { scene: "app_background", configFrom: "runtime.backgroundSnapshot.app_background.config", saveAs: "appBackgroundConfigResult" } },
     ],
   },
 

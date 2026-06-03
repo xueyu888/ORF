@@ -18,10 +18,25 @@ const githubPushNotificationLedgerTableName = "github_mattermost_push_notificati
 
 let githubPushNotificationLedgerReady: Promise<void> | null = null;
 
+const optionalNonEmptyString = z
+  .string()
+  .optional()
+  .transform((value) => {
+    const trimmed = value?.trim();
+    return trimmed || undefined;
+  })
+  .pipe(z.string().min(1).optional());
+const defaultTrueBooleanEnvSchema = z.enum(["true", "false"]).default("true").transform((value) => value === "true");
+
 const configSchema = z.object({
   MATTERMOST_URL: z.string().url().optional(),
   MATTERMOST_LOGIN_ID: z.string().optional(),
   MATTERMOST_PASSWORD: z.string().optional(),
+  MATTERMOST_BOT_TOKEN: optionalNonEmptyString,
+  GITHUB_MATTERMOST_BOT_TOKEN: optionalNonEmptyString,
+  GITHUB_MATTERMOST_LOGIN_ID: optionalNonEmptyString,
+  GITHUB_MATTERMOST_PASSWORD: optionalNonEmptyString,
+  GITHUB_MATTERMOST_REQUIRE_BOT: defaultTrueBooleanEnvSchema,
   MATTERMOST_CHANNEL_ID: z.string().optional(),
   MATTERMOST_PUSH_CHANNEL_ID: z.string().optional(),
   GITHUB_MATTERMOST_CHANNEL_ID: z.string().optional(),
@@ -142,7 +157,7 @@ const syncStateSchema = z.record(
   syncStateEntrySchema,
 );
 
-type GitHubMattermostSyncConfig = z.infer<typeof configSchema>;
+export type GitHubMattermostSyncConfig = z.infer<typeof configSchema>;
 export type GitHubPushPayload = z.infer<typeof githubPushPayloadSchema>;
 export type GitHubIssue = z.infer<typeof githubApiIssueSchema>;
 type GitHubApiCommit = z.infer<typeof githubApiCommitSchema>;
@@ -177,8 +192,12 @@ class GitHubApiError extends Error {
   }
 }
 
+export function readGitHubMattermostSyncConfig(env: NodeJS.ProcessEnv = process.env) {
+  return configSchema.parse(env);
+}
+
 function readConfig() {
-  return configSchema.parse(process.env);
+  return readGitHubMattermostSyncConfig();
 }
 
 export function resolveGitHubMattermostChannelId(config: GitHubMattermostChannelConfig) {
@@ -249,10 +268,6 @@ function gitHubPolledPushNotificationContext(input: {
   };
 }
 
-function actorName(payload: GitHubPushPayload) {
-  return payload.pusher?.name || payload.sender?.login || "unknown";
-}
-
 function firstCommitLine(message: string) {
   return message.split(/\r?\n/, 1)[0]?.trim() || "No commit message";
 }
@@ -264,14 +279,14 @@ function commitAuthor(commit: GitHubPushPayload["commits"][number]) {
 function commitLine(commit: GitHubPushPayload["commits"][number]) {
   const sha = shortSha(commit.id);
   const prefix = commit.url ? `- [\`${sha}\`](${commit.url})` : `- \`${sha}\``;
-  return `${prefix} ${firstCommitLine(commit.message)} - ${commitAuthor(commit)}`;
+  return `${prefix} **${commitAuthor(commit)}**: ${firstCommitLine(commit.message)}`;
 }
 
 function githubApiCommitLine(commit: GitHubApiCommit) {
   const sha = shortSha(commit.sha);
   const prefix = commit.html_url ? `- [\`${sha}\`](${commit.html_url})` : `- \`${sha}\``;
   const author = commit.author?.login || commit.commit.author?.name || "unknown";
-  return `${prefix} ${firstCommitLine(commit.commit.message)} - ${author}`;
+  return `${prefix} **${author}**: ${firstCommitLine(commit.commit.message)}`;
 }
 
 function issueAuthor(issue: GitHubIssue) {
@@ -296,12 +311,10 @@ function issueLine(issue: GitHubIssue) {
 }
 
 export function formatGitHubPushMessage(payload: GitHubPushPayload) {
-  const branch = refName(payload.ref);
   const commits = payload.commits.length > 0 ? payload.commits : payload.head_commit ? [payload.head_commit] : [];
   const commitCount = commits.length;
   const visibleCommits = commits.slice(0, 8);
   const repo = payload.repository.html_url ? `[${payload.repository.full_name}](${payload.repository.html_url})` : payload.repository.full_name;
-  const compareLine = payload.compare ? `\nCompare: ${payload.compare}` : "";
   const commitWord = commitCount === 1 ? "commit" : "commits";
   const hiddenCommitCount = Math.max(0, commitCount - visibleCommits.length);
   const commitLines = visibleCommits.map(commitLine);
@@ -312,18 +325,15 @@ export function formatGitHubPushMessage(payload: GitHubPushPayload) {
 
   return [
     `#### GitHub push: ${repo}`,
-    `${actorName(payload)} pushed ${commitCount} ${commitWord} to \`${branch}\` (${shortSha(payload.before)}...${shortSha(payload.after)}).${compareLine}`,
     commitLines.length > 0 ? commitLines.join("\n") : "_No commits were included in this push payload._",
   ].join("\n\n");
 }
 
 export function formatGitHubCommitSyncMessage(input: { repository: string; branch: string; commits: GitHubApiCommit[] }) {
   const repoUrl = `https://github.com/${input.repository}`;
-  const commitWord = input.commits.length === 1 ? "commit" : "commits";
 
   return [
     `#### GitHub push: [${input.repository}](${repoUrl})`,
-    `Detected ${input.commits.length} pushed ${commitWord} on \`${input.branch}\`.`,
     input.commits.map(githubApiCommitLine).join("\n"),
   ].join("\n\n");
 }
@@ -408,11 +418,18 @@ function requireWebhookSignature(config: GitHubMattermostSyncConfig, request: Fa
   return true;
 }
 
-function githubMattermostChannelPostConfig(config: GitHubMattermostSyncConfig): MattermostChannelPostConfig {
+export function resolveGitHubMattermostPostConfig(config: GitHubMattermostSyncConfig): MattermostChannelPostConfig {
   return {
-    ...config,
+    MATTERMOST_URL: config.MATTERMOST_URL,
+    MATTERMOST_ACCESS_TOKEN: config.GITHUB_MATTERMOST_BOT_TOKEN ?? config.MATTERMOST_BOT_TOKEN,
+    MATTERMOST_LOGIN_ID: config.GITHUB_MATTERMOST_LOGIN_ID,
+    MATTERMOST_PASSWORD: config.GITHUB_MATTERMOST_PASSWORD,
     MATTERMOST_CHANNEL_ID: resolveGitHubMattermostChannelId(config),
   };
+}
+
+function githubMattermostChannelPostConfig(config: GitHubMattermostSyncConfig): MattermostChannelPostConfig {
+  return resolveGitHubMattermostPostConfig(config);
 }
 
 async function getDbPool() {
@@ -527,6 +544,11 @@ async function postToMattermost(
 
   const client = new MattermostClient(targetConfig);
   try {
+    const sender = await client.getCurrentUser();
+    if (config.GITHUB_MATTERMOST_REQUIRE_BOT && !sender.is_bot) {
+      throw new Error("GitHub Mattermost sync sender must be a bot user");
+    }
+
     const post = await client.createPost(channelId, message, {
       props: pushNotificationContext
         ? {

@@ -416,7 +416,7 @@ function systemBackgroundSection(page: Page, scene: VisualBackgroundScene) {
 }
 
 function sceneTitle(scene: VisualBackgroundScene) {
-  return scene === "login_background" ? "登录页面背景设置" : "应用背景设置";
+  return scene === "login_background" ? "登录页面背景设置" : "AppShell 皮肤设置";
 }
 
 async function readTextFileSnapshot(filePath: string): Promise<FileSnapshot> {

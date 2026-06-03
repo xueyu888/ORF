@@ -11,8 +11,13 @@
 | 变量 | 说明 |
 | --- | --- |
 | `MATTERMOST_URL` | Mattermost 站点地址。 |
-| `MATTERMOST_LOGIN_ID` | 用于发消息的 Mattermost 登录账号。 |
-| `MATTERMOST_PASSWORD` | Mattermost 登录密码。 |
+| `MATTERMOST_BOT_TOKEN` | 共享 Mattermost bot token。GitHub 未配置专用 bot token 时才使用它。 |
+| `GITHUB_MATTERMOST_BOT_TOKEN` | GitHub 推送同步专用 Mattermost bot token。优先级高于 `MATTERMOST_BOT_TOKEN`。 |
+| `GITHUB_MATTERMOST_LOGIN_ID` | GitHub 推送同步专用 Mattermost bot 登录账号。仅在没有 bot token 时使用。 |
+| `GITHUB_MATTERMOST_PASSWORD` | GitHub 推送同步专用 Mattermost bot 登录密码。 |
+| `GITHUB_MATTERMOST_REQUIRE_BOT` | 是否要求发送账号必须是 Mattermost bot，默认 `true`。 |
+| `MATTERMOST_LOGIN_ID` | 通用 Mattermost 登录账号。GitHub 推送同步不使用它，避免误用个人账号。 |
+| `MATTERMOST_PASSWORD` | 通用 Mattermost 登录密码。GitHub 推送同步不使用它。 |
 | `MATTERMOST_CHANNEL_ID` | 兼容旧部署的默认频道 ID。使用部署环境中的真实频道 ID，不要提交到仓库。 |
 | `MATTERMOST_PUSH_CHANNEL_ID` | 推送机器人频道 ID。GitHub 未单独配置目标频道时优先使用它。 |
 | `GITHUB_MATTERMOST_CHANNEL_ID` | GitHub 同步专用目标频道 ID。优先级高于 `MATTERMOST_PUSH_CHANNEL_ID` 和 `MATTERMOST_CHANNEL_ID`。 |
@@ -33,11 +38,12 @@
 
 1. ORF 后端启动后读取 `GITHUB_SYNC_STATE_FILE`。
 2. 每隔 `GITHUB_SYNC_INTERVAL_SECONDS` 检查所有远端分支。
-3. 如果发现任何分支有新提交，把新增提交列表发到 Mattermost 推送机器人频道。
+3. 如果发现任何分支有新提交，用 GitHub 推送同步 bot 把新增提交列表发到 Mattermost 推送机器人频道。
 4. 首次启动只初始化基准提交，不补发历史提交。
 5. 启动后新出现的分支会把最新提交作为一次推送通知发送。
 6. GitHub API 被限流时，自动改用本地 git remote 检查，不影响推送通知。
 7. 每次 push 的通知 key 是 `repository + ref + after_sha`，写入 `github_mattermost_push_notifications` 去重 ledger；webhook、GitHub API 轮询、本地 git fallback 或多个 ORF 实例检测到同一个 key 时，只有第一个插入成功的实例会发送 Mattermost 消息。
+8. 推送消息只包含仓库标题和提交列表；不再输出 “Detected pushed commits” 摘要行。每条提交前置加粗作者，作者来自 GitHub commit author。
 
 ## Issues 同步流程
 

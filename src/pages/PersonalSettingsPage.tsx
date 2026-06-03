@@ -331,8 +331,8 @@ export function PersonalSettingsPage() {
         <Card className="orf-card-padding">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold orf-text-primary">登录后背景</h2>
-              <p className="mt-1 text-sm orf-text-secondary">选择系统背景或本人上传的背景。</p>
+              <h2 className="text-lg font-semibold orf-text-primary">我的 AppShell 皮肤</h2>
+              <p className="mt-1 text-sm orf-text-secondary">选择侧边栏和顶部栏使用的系统皮肤或本人上传皮肤。</p>
             </div>
             <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={(event) => void handleFileSelected(event)} />
             <Button type="button" variant="secondary" disabled={busy} onClick={() => fileInputRef.current?.click()}>
