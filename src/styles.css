@@ -5467,7 +5467,10 @@ button:disabled {
   z-index: 140;
   min-width: 144px;
   max-width: min(260px, calc(100vw - 24px));
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
   padding: 6px;
   border: 1px solid rgba(183, 139, 72, 0.34);
   border-radius: 14px;
@@ -5487,6 +5490,48 @@ button:disabled {
 
 .orf-fantasy-select-popover-filter {
   min-width: max(144px, 100%);
+}
+
+.orf-fantasy-select-popover-searchable {
+  min-width: 188px;
+}
+
+.orf-fantasy-select-search {
+  display: flex;
+  min-width: 0;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid rgba(82, 215, 246, 0.28);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(255, 248, 232, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  color: var(--orf-fantasy-blue);
+}
+
+.orf-fantasy-select-search input {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+  color: var(--orf-fantasy-ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  outline: none;
+}
+
+.orf-fantasy-select-search input::placeholder {
+  color: rgba(71, 84, 103, 0.62);
+}
+
+.orf-fantasy-select-options {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 
 .orf-fantasy-select-option {
@@ -5576,6 +5621,14 @@ button:disabled {
   height: 14px;
   flex: 0 0 auto;
   color: var(--orf-fantasy-blue);
+}
+
+.orf-fantasy-select-empty {
+  padding: 8px 10px;
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .orf-fantasy-date-picker {

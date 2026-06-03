@@ -40,11 +40,11 @@ export function ChallengeToolbar({
   status: ChallengeStatusFilter;
 }) {
   const cycleSelectOptions = [
-    { label: "全部周期", value: "all" },
+    { label: "全部周期", value: "all", alwaysVisible: true },
     ...cycleOptions.map((item) => ({ label: item, value: item })),
   ];
   const memberSelectOptions = [
-    { label: "全部成员", value: "all" },
+    { label: "全部成员", value: "all", alwaysVisible: true },
     ...memberOptions.map((item) => ({ label: item, value: item })),
   ];
 
@@ -58,6 +58,8 @@ export function ChallengeToolbar({
           leadingIcon={<CalendarDays className="h-4 w-4" />}
           onChange={onCycleChange}
           options={cycleSelectOptions}
+          searchable
+          searchPlaceholder="搜索周期"
           value={cycle}
         />
         {showMemberFilter && (
@@ -67,6 +69,8 @@ export function ChallengeToolbar({
             leadingIcon={<UserRound className="h-4 w-4" />}
             onChange={onMemberChange}
             options={memberSelectOptions}
+            searchable
+            searchPlaceholder="搜索成员"
             value={member}
           />
         )}
