@@ -5,7 +5,7 @@
 从我的挑战的目标行进入：
 
 ```text
-/objectives/:objectiveId/loot
+/tasks/objectives/:objectiveId/loot
 ```
 
 战利品提交发生在目标层级，不发生在单个指标层级。

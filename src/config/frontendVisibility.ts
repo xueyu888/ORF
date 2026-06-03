@@ -31,7 +31,6 @@ export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/members": "page.systemMembers",
   "/permissions": "page.systemPermissions",
   "/settings/system": "page.systemSettings",
-  "/objectives": "command.objectives",
 };
 
 export function canShowFrontend(user: OrfUser | null, key: FrontendVisibilityKey) {

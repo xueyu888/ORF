@@ -303,7 +303,7 @@ function ObjectivePanel({
                     完成并冻结
                   </button>
                 ) : (
-                  <Link className="orf-objective-application-approve" to={`/objectives/${group.objective.id}/loot`}>
+                  <Link className="orf-objective-application-approve" to={`/tasks/objectives/${group.objective.id}/loot`}>
                     去验收
                   </Link>
                 )}

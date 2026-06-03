@@ -454,7 +454,7 @@ test("loot workbench actions keep commander review separate from member challeng
   assert.deepEqual(workbenchActionForObjective({ objective: pollutedSubmitted, currentUser: admin }), {
     kind: "reviewLoot",
     label: "验收战利品",
-    to: `/objectives/${pollutedSubmitted.id}/loot`,
+    to: `/tasks/objectives/${pollutedSubmitted.id}/loot`,
   });
   assert.deepEqual(
     workbenchActionForObjective({
@@ -475,7 +475,7 @@ test("loot workbench actions keep commander review separate from member challeng
     {
       kind: "reviewTrial",
       label: "处理试验收",
-      to: `/objectives/${pollutedFrozen.id}/loot`,
+      to: `/tasks/objectives/${pollutedFrozen.id}/loot`,
     },
   );
 });

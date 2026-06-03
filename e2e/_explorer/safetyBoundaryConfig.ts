@@ -15,7 +15,6 @@ export const explorerSafetyProfiles = {
       "/dashboard",
       "/bounties",
       "/tasks",
-      "/objectives",
       "/feedback",
       "/strategy-map",
       "/ai-evaluation",
