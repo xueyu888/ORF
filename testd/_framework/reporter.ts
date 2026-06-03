@@ -14,6 +14,10 @@ const STATE_CASE_ID_ANNOTATION = "state-case-id";
 const STATE_CASE_TITLE_ANNOTATION = "state-case-title";
 const STATE_CASE_STAGES = new Set(["B", "Setup", "S0", "Action", "S1", "Clean", "B after Clean"]);
 const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
+const REPORT_ROOT_DIR = "test-reports";
+const REPORT_RETENTION_DAYS_ENV = "TESTD_REPORT_RETENTION_DAYS";
+const DEFAULT_REPORT_RETENTION_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type StageStatus = "passed" | "failed";
 type CaseStatus = TestResult["status"];
@@ -113,7 +117,10 @@ export default class StateCaseReporter implements Reporter {
 
     const startedAt = result.startTime;
     const endedAt = new Date(result.startTime.getTime() + result.duration);
-    const reportDir = path.join(process.cwd(), "test-reports", formatDirectoryName(startedAt));
+    const reportRoot = path.join(process.cwd(), REPORT_ROOT_DIR);
+    await pruneOldReports(reportRoot, startedAt);
+
+    const reportDir = path.join(reportRoot, formatDirectoryName(startedAt));
     const sortedInternalCases = [...this.cases].sort((left, right) => left.id.localeCompare(right.id));
     const sortedCases: CaseReport[] = [];
 
@@ -149,6 +156,73 @@ export default class StateCaseReporter implements Reporter {
   printsToStdio() {
     return false;
   }
+}
+
+export async function pruneOldReports(reportRoot: string, now = new Date(), env = process.env) {
+  const retentionDays = reportRetentionDays(env);
+  const cutoffTime = now.getTime() - retentionDays * DAY_MS;
+
+  let entries: fs.Dirent[];
+  try {
+    entries = await fs.promises.readdir(reportRoot, { withFileTypes: true });
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map(async (entry) => {
+        const reportDir = path.join(reportRoot, entry.name);
+        if (!(await isStateCaseReportDir(reportDir))) {
+          return;
+        }
+
+        const stats = await fs.promises.stat(reportDir);
+        if (stats.mtime.getTime() < cutoffTime) {
+          await fs.promises.rm(reportDir, { force: true, recursive: true });
+        }
+      }),
+  );
+}
+
+export function reportRetentionDays(env = process.env) {
+  const value = env[REPORT_RETENTION_DAYS_ENV];
+  if (value === undefined || value.trim() === "") {
+    return DEFAULT_REPORT_RETENTION_DAYS;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return DEFAULT_REPORT_RETENTION_DAYS;
+  }
+
+  return Math.floor(parsed);
+}
+
+async function isStateCaseReportDir(reportDir: string) {
+  const summaryPath = path.join(reportDir, "summary.md");
+  const resultPath = path.join(reportDir, "result.json");
+  return (await pathExists(summaryPath)) || (await pathExists(resultPath));
+}
+
+async function pathExists(targetPath: string) {
+  try {
+    await fs.promises.access(targetPath);
+    return true;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
 }
 
 function collectStateCaseStages(steps: TestStep[]): StageReport[] {

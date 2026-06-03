@@ -17,6 +17,14 @@ const baseEnv = {
   GITLAB_MATTERMOST_WEBHOOK_RECONCILE_PUSH_EVENT_HOOKS_LIMIT: "1000",
 } satisfies NodeJS.ProcessEnv;
 
+test("GitLab Mattermost reconciler disabled config does not require GitLab settings", () => {
+  const config = readGitLabMattermostWebhookReconcilerConfig({});
+
+  assert.equal(config.enabled, false);
+  assert.equal(config.gitlabUrl, "");
+  assert.equal(config.webhookUrl, "");
+});
+
 test("GitLab Mattermost hook target requires all branches and push events", () => {
   assert.equal(
     projectHookMatchesTarget({
