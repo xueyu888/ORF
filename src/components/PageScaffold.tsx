@@ -16,35 +16,37 @@ export function PageScaffold({
 
   if (!ready) {
     return (
-      <div className="grid gap-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="grid gap-3">
+      <section className="orf-page">
+        <header className="orf-page-header">
+          <div className="orf-page-title-block">
             <SkeletonBlock className="h-8 w-64" />
             <SkeletonBlock className="h-4 w-96" />
           </div>
           <SkeletonBlock className="h-9 w-40" />
+        </header>
+        <div className="orf-page-content">
+          <div className="grid grid-cols-4 gap-4">
+            <SkeletonBlock className="h-32" />
+            <SkeletonBlock className="h-32" />
+            <SkeletonBlock className="h-32" />
+            <SkeletonBlock className="h-32" />
+          </div>
+          <SkeletonBlock className="h-[420px]" />
         </div>
-        <div className="grid grid-cols-4 gap-4">
-          <SkeletonBlock className="h-32" />
-          <SkeletonBlock className="h-32" />
-          <SkeletonBlock className="h-32" />
-          <SkeletonBlock className="h-32" />
-        </div>
-        <SkeletonBlock className="h-[420px]" />
-      </div>
+      </section>
     );
   }
 
   return (
-    <div className="grid gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="orf-text-primary text-2xl font-semibold tracking-tight">{title}</h1>
-          {subtitle && <p className="orf-text-secondary mt-2 max-w-3xl text-sm">{subtitle}</p>}
+    <section className="orf-page">
+      <header className="orf-page-header">
+        <div className="orf-page-title-block">
+          <h1 className="orf-page-title">{title}</h1>
+          {subtitle && <p className="orf-page-subtitle">{subtitle}</p>}
         </div>
-        {action}
-      </div>
-      {children}
-    </div>
+        {action && <div className="orf-page-actions">{action}</div>}
+      </header>
+      <div className="orf-page-content">{children}</div>
+    </section>
   );
 }
