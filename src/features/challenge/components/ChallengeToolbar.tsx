@@ -1,16 +1,12 @@
 import { CalendarDays, Filter, UserRound } from "lucide-react";
 import { FantasySelectMenu } from "../../../components/FantasySelectMenu";
-import type { ChallengeCycleFilter, ChallengeMemberFilter, ChallengeStatusFilter } from "../model/challengeFilters";
+import {
+  challengeStatusFilterOptions,
+  type ChallengeCycleFilter,
+  type ChallengeMemberFilter,
+  type ChallengeStatusFilter,
+} from "../model/challengeFilters";
 import type { ChallengeScope } from "../model/types";
-
-const statusOptions: Array<{ label: string; value: ChallengeStatusFilter }> = [
-  { label: "全部状态", value: "all" },
-  { label: "未分配", value: "unassigned" },
-  { label: "待认领", value: "open" },
-  { label: "执行中", value: "active" },
-  { label: "待验收", value: "review" },
-  { label: "已结算", value: "settled" },
-];
 
 export function ChallengeToolbar({
   canShowAll,
@@ -75,7 +71,7 @@ export function ChallengeToolbar({
           className="orf-filter-chip"
           leadingIcon={<Filter className="h-4 w-4" />}
           onChange={onStatusChange}
-          options={statusOptions}
+          options={challengeStatusFilterOptions}
           value={status}
         />
       </div>

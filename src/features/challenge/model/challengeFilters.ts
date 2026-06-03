@@ -1,15 +1,29 @@
-import { objectiveChallengeSortRank } from "../../../domain/orfLifecycle";
-import type { ObjectiveNode, BountyStatus } from "./types";
+import {
+  isObjectiveReestimatingByFlow,
+  isObjectiveSettledOrClosed,
+  isObjectiveSubmittedByFlow,
+  objectiveChallengeSortRank,
+} from "../../../domain/orfLifecycle";
+import type { ObjectiveNode } from "./types";
 
 export type ChallengeCycleFilter = "all" | string;
 export type ChallengeMemberFilter = "all" | string;
-export type ChallengeStatusFilter = "all" | "unassigned" | BountyStatus;
+export type ChallengeStatusFilter = "all" | "unassigned" | "pendingReestimate" | "active" | "review" | "settled";
 
 export interface ChallengeFilters {
   cycle: ChallengeCycleFilter;
   member: ChallengeMemberFilter;
   status: ChallengeStatusFilter;
 }
+
+export const challengeStatusFilterOptions: Array<{ label: string; value: ChallengeStatusFilter }> = [
+  { label: "全部状态", value: "all" },
+  { label: "未分配", value: "unassigned" },
+  { label: "待重估", value: "pendingReestimate" },
+  { label: "执行中", value: "active" },
+  { label: "待验收", value: "review" },
+  { label: "已结算", value: "settled" },
+];
 
 export function challengeCycleOptions(groups: readonly ObjectiveNode[]) {
   return Array.from(new Set(groups.map((group) => group.objective.cycle.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right));
@@ -25,24 +39,16 @@ export function filterChallengeGroups(groups: readonly ObjectiveNode[], filters:
   return groups
     .filter((group) => filters.cycle === "all" || group.objective.cycle === filters.cycle)
     .filter((group) => filters.member === "all" || group.challengers.includes(filters.member))
-    .map((group) => {
-      if (filters.status === "all") {
-        return group;
-      }
+    .filter((group) => challengeGroupMatchesStatus(group, filters.status));
+}
 
-      if (filters.status === "unassigned") {
-        return group.challengers.length === 0 ? group : null;
-      }
-
-      return {
-        ...group,
-        bounties: group.bounties.filter((bounty) => bounty.status === filters.status),
-      };
-    })
-    .filter((group): group is ObjectiveNode => {
-      if (!group) return false;
-      return filters.status === "all" || filters.status === "unassigned" || group.bounties.length > 0;
-    });
+function challengeGroupMatchesStatus(group: ObjectiveNode, status: ChallengeStatusFilter): boolean {
+  if (status === "all") return true;
+  if (status === "unassigned") return group.challengers.length === 0;
+  if (status === "pendingReestimate") return isObjectiveReestimatingByFlow(group.objective);
+  if (status === "active") return group.objective.flowStatus === "frozen";
+  if (status === "review") return isObjectiveSubmittedByFlow(group.objective);
+  return isObjectiveSettledOrClosed(group.objective);
 }
 
 export function sortChallengeGroups(groups: readonly ObjectiveNode[]): ObjectiveNode[] {

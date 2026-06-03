@@ -1142,6 +1142,76 @@ test("commander approval moves applying objective into reestimate from refreshed
   await expect(panel.getByRole("button", { name: "冻结" })).toBeVisible();
 });
 
+test("challenge status filter maps approved challenges to pending reestimate", async ({ page }) => {
+  const openObjective = objectiveFixture({
+    id: "obj-ui-status-filter-open",
+    title: "前端测试 状态筛选可申请目标",
+    flowStatus: "open",
+    stage: "resultClaiming",
+    resultIds: ["res-ui-status-filter-open"],
+  });
+  const reestimatingObjective = objectiveFixture({
+    id: "obj-ui-status-filter-reestimating",
+    title: "前端测试 状态筛选待重估目标",
+    flowStatus: "reestimating",
+    stage: "orfReestimate",
+    challengers: [memberUser.name],
+    resultIds: ["res-ui-status-filter-reestimating"],
+  });
+  const frozenObjective = objectiveFixture({
+    id: "obj-ui-status-filter-frozen",
+    title: "前端测试 状态筛选执行中目标",
+    flowStatus: "frozen",
+    stage: "goalFrozen",
+    challengers: [memberUser.name],
+    resultIds: ["res-ui-status-filter-frozen"],
+  });
+  const submittedObjective = submittedObjectiveFixture("obj-ui-status-filter-submitted", "前端测试 状态筛选待验收目标", [memberUser.name], ["res-ui-status-filter-submitted"]);
+  const settledObjective = objectiveFixture({
+    id: "obj-ui-status-filter-settled",
+    title: "前端测试 状态筛选已结算目标",
+    flowStatus: "settled",
+    stage: "goalFrozen",
+    challengers: [memberUser.name],
+    acceptedResult: "completed",
+    objectiveSettlementPoints: 100,
+    resultIds: ["res-ui-status-filter-settled"],
+  });
+  const objectives = [openObjective, reestimatingObjective, frozenObjective, submittedObjective, settledObjective];
+  const results = objectives.map((objective) =>
+    resultFixture({
+      id: objective.resultIds[0]!,
+      objectiveId: objective.id,
+      title: `${objective.title} 指标`,
+      acceptedResult: objective.flowStatus === "settled" ? "completed" : "unreviewed",
+    }),
+  );
+  const data = taskManagementData({ objectives, results });
+
+  await mockOrfApp(page, adminUser, data, {
+    allChallenges: () => data,
+    tasks: () => data,
+  });
+
+  await page.goto("/tasks");
+  await page.getByRole("button", { name: "挑战状态" }).click();
+  await expect(page.getByRole("option", { name: "待重估" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "待认领" })).toHaveCount(0);
+  await page.getByRole("option", { name: "待重估" }).click();
+
+  await expect(objectivePanel(page, reestimatingObjective.title)).toBeVisible();
+  await expect(objectivePanel(page, openObjective.title)).toHaveCount(0);
+  await expect(objectivePanel(page, frozenObjective.title)).toHaveCount(0);
+  await expect(objectivePanel(page, submittedObjective.title)).toHaveCount(0);
+  await expect(objectivePanel(page, settledObjective.title)).toHaveCount(0);
+
+  await page.getByRole("button", { name: "挑战状态" }).click();
+  await page.getByRole("option", { name: "执行中" }).click();
+
+  await expect(objectivePanel(page, frozenObjective.title)).toBeVisible();
+  await expect(objectivePanel(page, reestimatingObjective.title)).toHaveCount(0);
+});
+
 test("commander rejection clears pending application without reopening accepted challenges", async ({ page }) => {
   const acceptedApplication = { id: "app-ui-accepted", applicant: memberUser.name, status: "approved" as const, createdAt: "2026-05-18T08:00:00.000Z", decidedAt: "2026-05-18T09:00:00.000Z", decidedBy: adminUser.name };
   const pendingApplication = { id: "app-ui-pending", applicant: observerUser.name, status: "pending" as const, createdAt: "2026-05-18T09:30:00.000Z", decidedAt: null };
