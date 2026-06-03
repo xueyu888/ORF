@@ -8,18 +8,13 @@ import { GlobalModals } from "./GlobalModals";
 import { NotificationBell } from "./NotificationBell";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
-import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
+import { toCssImageUrl } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-
-function appShellBackgroundUrlFor(sidebarBackgroundUrl: string) {
-  const background = orfAssetLibrary.appShell.nikeExtendedBackground;
-  return sidebarBackgroundUrl.endsWith(background.sourceSidebarUrl) ? background.src : null;
-}
 
 export function AppShell() {
   const location = useLocation();
@@ -73,9 +68,8 @@ export function AppShell() {
   }
 
   const sidebarBackgroundUrl = sidebarBackground.url;
-  const appShellBackgroundUrl = appShellBackgroundUrlFor(sidebarBackgroundUrl);
   const shellStyle = {
-    "--orf-app-shell-bg-image": appShellBackgroundUrl ? toCssImageUrl(appShellBackgroundUrl) : "none",
+    "--orf-app-chrome-bg-image": toCssImageUrl(sidebarBackgroundUrl),
   } as CSSProperties;
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
@@ -86,7 +80,6 @@ export function AppShell() {
       className="orf-app-shell flex min-h-screen"
       data-bounty-hall={isBountyHall ? "true" : "false"}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
-      data-unified-background={appShellBackgroundUrl ? "true" : "false"}
       style={shellStyle}
     >
       <Sidebar
@@ -94,7 +87,6 @@ export function AppShell() {
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
         onCommand={() => setCommandOpen(true)}
-        unifiedBackgroundUrl={appShellBackgroundUrl}
       />
       <div className="orf-shell-body min-w-0 flex-1">
         <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2">

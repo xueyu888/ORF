@@ -24,21 +24,18 @@ export function Sidebar({
   collapsed,
   onCollapsedChange,
   onCommand,
-  unifiedBackgroundUrl,
 }: {
   backgroundUrl: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
   onCommand: () => void;
-  unifiedBackgroundUrl?: string | null;
 }) {
   const { currentUser, logout } = useOrf();
   const visibleGroups = sidebarGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
   const sidebarBackground = orfAssetLibrary.sidebar.characterGuideBackground;
-  const useUnifiedBackground = Boolean(unifiedBackgroundUrl);
-  const backgroundImageUrl = (useUnifiedBackground ? unifiedBackgroundUrl : backgroundUrl) ?? "";
+  const backgroundImageUrl = backgroundUrl;
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
@@ -87,9 +84,9 @@ export function Sidebar({
   }
 
   const sidebarStyle = {
-    "--orf-sidebar-bg-position": useUnifiedBackground ? "left top" : sidebarBackground.position,
-    "--orf-sidebar-bg-transform": useUnifiedBackground ? "none" : "scale(1.03)",
-    "--orf-sidebar-bg-filter": useUnifiedBackground ? "none" : sidebarBackground.filter,
+    "--orf-sidebar-bg-position": sidebarBackground.position,
+    "--orf-sidebar-bg-transform": "scale(1.03)",
+    "--orf-sidebar-bg-filter": sidebarBackground.filter,
     "--orf-sidebar-bg-overlay": sidebarBackground.overlay,
   } as CSSProperties;
 
@@ -100,7 +97,6 @@ export function Sidebar({
         collapsed ? "orf-sidebar-collapsed" : "orf-sidebar-expanded",
       ].join(" ")}
       style={sidebarStyle}
-      data-unified-background={useUnifiedBackground ? "true" : "false"}
       aria-label="主导航"
     >
       <img

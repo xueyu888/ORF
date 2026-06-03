@@ -56,14 +56,14 @@ export const backgroundPersonalUnauthenticatedCase = {
   Action: {
     description: "未登录用户直接提交个人背景偏好写请求",
     steps: [
-      { source: { caseStepId: "Action-1", method: "api" }, id: "personal_background_config.submit", title: "未登录用户直接尝试保存个人登录后背景偏好", object: "api.personal_background_config", operator: "submit", params: { configFrom: "runtime.backgroundSnapshot.app_background.config", saveAs: "personalBackgroundConfigResult" } },
+      { source: { caseStepId: "Action-1", method: "api" }, id: "personal_background_config.submit", title: "未登录用户直接提交个人 AppShell 皮肤偏好", object: "api.personal_background_config", operator: "submit", params: { configFrom: "runtime.backgroundSnapshot.app_background.config", saveAs: "personalBackgroundConfigResult" } },
     ],
   },
 
   S1: {
     description: "个人背景偏好写入被拒绝，系统背景配置保持不变",
     assertions: [
-      { source: { caseStepId: "S1-1", method: "api" }, id: "personal_background_config.unauthenticated", title: "保存个人登录后背景偏好结果状态码 应为 401 或等价未认证错误", object: "api.personal_background_config", operator: "unauthenticated", params: { resultFrom: "runtime.personalBackgroundConfigResult" } },
+      { source: { caseStepId: "S1-1", method: "api" }, id: "personal_background_config.unauthenticated", title: "保存个人 AppShell 皮肤偏好结果状态码 应为 401 或等价未认证错误", object: "api.personal_background_config", operator: "unauthenticated", params: { resultFrom: "runtime.personalBackgroundConfigResult" } },
       { source: { caseStepId: "S1-2", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
       { source: { caseStepId: "S1-3", method: "api" }, id: "system_backgrounds.unchanged", title: "当前系统 `login_background` 和 `app_background` 背景列表与配置 应等于 系统背景配置快照", object: "api.visual_backgrounds", operator: "unchanged", params: { snapshotFrom: "runtime.backgroundSnapshot" } },
     ],
