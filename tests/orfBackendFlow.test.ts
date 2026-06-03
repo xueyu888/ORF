@@ -419,6 +419,33 @@ test("notification API scopes messages to the current recipient and supports rea
 
     const missingForChallenger = await apiInject(app, fixture.challenger, "PATCH", `/api/notifications/${encodeURIComponent(commanderPayload.notifications[0]!.id)}/read`);
     assert.equal(missingForChallenger.statusCode, 404);
+
+    const deleteCommanderMessageAsChallenger = await apiInject(app, fixture.challenger, "POST", "/api/notifications/bulk-delete", {
+      notificationIds: [commanderPayload.notifications[0]!.id],
+    });
+    assert.equal(deleteCommanderMessageAsChallenger.statusCode, 200);
+    assert.equal(deleteCommanderMessageAsChallenger.json().deleted, 0);
+    assert.equal(deleteCommanderMessageAsChallenger.json().unreadCount, 1);
+
+    const commanderDelete = await apiInject(app, fixture.commander, "POST", "/api/notifications/bulk-delete", {
+      notificationIds: [commanderPayload.notifications[0]!.id, `${fixture.prefix}-missing-notification`],
+    });
+    assert.equal(commanderDelete.statusCode, 200);
+    assert.equal(commanderDelete.json().deleted, 1);
+    assert.equal(commanderDelete.json().unreadCount, 0);
+
+    const commanderAfterDelete = await apiInject(app, fixture.commander, "GET", "/api/notifications");
+    assert.equal(commanderAfterDelete.statusCode, 200);
+    assert.equal(commanderAfterDelete.json().notifications.length, 0);
+
+    const challengerClear = await apiInject(app, fixture.challenger, "DELETE", "/api/notifications");
+    assert.equal(challengerClear.statusCode, 200);
+    assert.equal(challengerClear.json().deleted, 1);
+    assert.equal(challengerClear.json().unreadCount, 0);
+
+    const challengerAfterClear = await apiInject(app, fixture.challenger, "GET", "/api/notifications");
+    assert.equal(challengerAfterClear.statusCode, 200);
+    assert.equal(challengerAfterClear.json().notifications.length, 0);
   });
 });
 

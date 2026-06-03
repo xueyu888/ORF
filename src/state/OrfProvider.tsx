@@ -114,6 +114,8 @@ interface OrfContextValue {
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (notificationId: string) => Promise<boolean>;
   markAllNotificationsRead: () => Promise<boolean>;
+  deleteNotifications: (notificationIds: string[]) => Promise<boolean>;
+  clearAllNotifications: () => Promise<boolean>;
   createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<Objective | null> : never;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
@@ -212,7 +214,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isApproved = currentUser?.status === "active";
   const isAdmin = currentUser?.role === "admin";
   const {
+    clearAllNotifications,
     clearNotifications,
+    deleteNotifications,
     markAllNotificationsRead,
     markNotificationRead,
     notifications,
@@ -384,6 +388,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       refreshNotifications,
       markNotificationRead,
       markAllNotificationsRead,
+      deleteNotifications,
+      clearAllNotifications,
       createObjective: async (input) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");
@@ -988,6 +994,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isApproved,
       isAuthenticated,
       modal,
+      clearAllNotifications,
+      deleteNotifications,
       markAllNotificationsRead,
       markNotificationRead,
       notify,

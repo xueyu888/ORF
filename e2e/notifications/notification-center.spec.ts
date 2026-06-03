@@ -127,14 +127,15 @@ test("topbar notification bell shows unread messages and marks the opened messag
   expect(viewport).not.toBeNull();
   expect(popoverBox!.x).toBeGreaterThanOrEqual(0);
   expect(popoverBox!.x + popoverBox!.width).toBeLessThanOrEqual(viewport!.width);
+  await expect(popover).toHaveCSS("border-radius", "8px");
   const applicationPreview = page.getByRole("button", { name: /新的挑战申请/ });
   await expect(applicationPreview).toBeVisible();
-  await expect(applicationPreview).toHaveCSS("border-radius", "8px");
+  await expect(applicationPreview).toHaveCSS("border-radius", "0px");
   await expect(applicationPreview.locator(".orf-notification-preview-title")).toHaveCSS("color", "rgb(23, 32, 51)");
   await expect(applicationPreview.locator(".orf-notification-preview-body")).toHaveCSS("color", "rgb(67, 83, 108)");
   const footerAction = page.getByRole("button", { name: /查看全部消息/ });
   await expect(footerAction).toHaveCSS("border-top-left-radius", "0px");
-  await expect(footerAction).toHaveCSS("border-bottom-left-radius", "10px");
+  await expect(footerAction).toHaveCSS("height", "42px");
   await expect(page.getByRole("button", { name: /战利品待验收/ })).toBeVisible();
 
   await page.getByRole("button", { name: /新的挑战申请/ }).click();
@@ -187,12 +188,102 @@ test("notification page lists messages and marks all current user messages read"
   await page.goto("/notifications");
 
   await expect(page.getByRole("heading", { name: "消息" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /新的挑战申请/ })).toBeVisible();
-  await expect(page.locator(".orf-status-tag", { hasText: "未读" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^新的挑战申请/ })).toBeVisible();
+  await expect(page.locator(".orf-notification-unread-pill", { hasText: "未读" })).toBeVisible();
 
   await page.getByRole("button", { name: "全部已读" }).click();
 
   await expect.poll(() => readAllRequests).toBe(1);
   await expect(page.getByRole("button", { name: "全部已读" })).toBeDisabled();
-  await expect(page.locator(".orf-status-tag", { hasText: "未读" })).toHaveCount(0);
+  await expect(page.locator(".orf-notification-unread-pill", { hasText: "未读" })).toHaveCount(0);
+});
+
+test("notification page deletes selected messages and clears the current user inbox", async ({ page }) => {
+  const now = new Date().toISOString();
+  const bulkDeleteRequests: string[][] = [];
+  let clearAllRequests = 0;
+  let notifications: AppNotification[] = [
+    {
+      id: "notification-application",
+      kind: "challenge.application.created",
+      recipientUserId: initialOrfState.users[0].id,
+      actorUserId: initialOrfState.users[1].id,
+      actorName: initialOrfState.users[1].name,
+      title: "新的挑战申请",
+      body: "Mia Zhang 申请挑战「提升任务流」，需要指挥官确认。",
+      targetType: "objective",
+      targetId: "objective-notification-1",
+      targetHref: "/tasks#objective:objective-notification-1",
+      readAt: null,
+      createdAt: now,
+      metadata: { objectiveTitle: "提升任务流" },
+    },
+    {
+      id: "notification-loot",
+      kind: "objective.loot.submitted",
+      recipientUserId: initialOrfState.users[0].id,
+      actorUserId: initialOrfState.users[2].id,
+      actorName: initialOrfState.users[2].name,
+      title: "战利品待验收",
+      body: "Ethan Liu 已提交目标战利品，需要指挥官验收。",
+      targetType: "objectiveLoot",
+      targetId: "loot-notification-1",
+      targetHref: "/objectives/objective-notification-1/loot",
+      readAt: null,
+      createdAt: now,
+      metadata: { objectiveTitle: "指标验收" },
+    },
+  ];
+
+  await page.route(/\/api\/notifications(?:\/.*)?$/, async (route: Route) => {
+    const url = new URL(route.request().url());
+
+    if (route.request().method() === "GET" && url.pathname === "/api/notifications") {
+      await route.fulfill({ json: { notifications, unreadCount: unreadCount(notifications) } });
+      return;
+    }
+
+    if (route.request().method() === "POST" && url.pathname === "/api/notifications/bulk-delete") {
+      const body = route.request().postDataJSON() as { notificationIds: string[] };
+      bulkDeleteRequests.push(body.notificationIds);
+      const ids = new Set(body.notificationIds);
+      const deleted = notifications.filter((notification) => ids.has(notification.id)).length;
+      notifications = notifications.filter((notification) => !ids.has(notification.id));
+      await route.fulfill({ json: { deleted, unreadCount: unreadCount(notifications) } });
+      return;
+    }
+
+    if (route.request().method() === "DELETE" && url.pathname === "/api/notifications") {
+      clearAllRequests += 1;
+      const deleted = notifications.length;
+      notifications = [];
+      await route.fulfill({ json: { deleted, unreadCount: 0 } });
+      return;
+    }
+
+    await route.fulfill({ status: 404, json: { error: "Notification route not modeled" } });
+  });
+
+  await page.goto("/notifications");
+
+  await expect(page.getByRole("button", { name: /^新的挑战申请/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^战利品待验收/ })).toBeVisible();
+  await page.getByRole("checkbox", { name: "选择消息：新的挑战申请" }).check();
+  await page.getByRole("button", { name: "删除所选" }).click();
+  await expect(page.getByRole("dialog", { name: "删除所选消息" })).toBeVisible();
+  await page.getByRole("button", { name: "确认删除" }).click();
+
+  await expect.poll(() => bulkDeleteRequests).toEqual([["notification-application"]]);
+  await expect(page.getByRole("button", { name: /^新的挑战申请/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^战利品待验收/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "删除所选" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /消息，1 条未读/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "清空" }).click();
+  await expect(page.getByRole("dialog", { name: "清空全部消息" })).toBeVisible();
+  await page.getByRole("button", { name: "确认删除" }).click();
+
+  await expect.poll(() => clearAllRequests).toBe(1);
+  await expect(page.getByText("暂无消息")).toBeVisible();
+  await expect(page.getByRole("button", { name: "消息" })).toBeVisible();
 });

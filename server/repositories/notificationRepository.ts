@@ -195,3 +195,40 @@ export async function markAllNotificationsRead(userId: string, scope: RuntimeSco
   }
   return rows.length;
 }
+
+export async function deleteNotificationsForUser(notificationIds: string[], userId: string, scope: RuntimeScope): Promise<number> {
+  const ids = Array.from(new Set(notificationIds.map((id) => id.trim()).filter(Boolean)));
+  if (ids.length === 0) {
+    return 0;
+  }
+
+  const rows = await db
+    .delete(notifications)
+    .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId), inArray(notifications.id, ids)))
+    .returning({ id: notifications.id });
+  if (rows.length > 0) {
+    publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
+      actorUserId: userId,
+      models: ["notifications"],
+      reason: "notification.changed",
+      target: { id: "bulk-delete", type: "notification" },
+    });
+  }
+  return rows.length;
+}
+
+export async function clearNotificationsForUser(userId: string, scope: RuntimeScope): Promise<number> {
+  const rows = await db
+    .delete(notifications)
+    .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId)))
+    .returning({ id: notifications.id });
+  if (rows.length > 0) {
+    publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
+      actorUserId: userId,
+      models: ["notifications"],
+      reason: "notification.changed",
+      target: { id: "all", type: "notification" },
+    });
+  }
+  return rows.length;
+}

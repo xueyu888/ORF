@@ -33,6 +33,10 @@ export type NotificationsReadAllResponse = {
   updated: number;
   unreadCount: number;
 };
+export type NotificationsDeleteResponse = {
+  deleted: number;
+  unreadCount: number;
+};
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type CommentAttachmentUploadResponse = {
   ok: true;
@@ -190,6 +194,17 @@ export async function markNotificationReadRequest(notificationId: string) {
 
 export async function markAllNotificationsReadRequest() {
   return apiJson<NotificationsReadAllResponse>("/api/notifications/read-all", { method: "PATCH" });
+}
+
+export async function deleteNotificationsRequest(notificationIds: string[]) {
+  return apiJson<NotificationsDeleteResponse>("/api/notifications/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ notificationIds }),
+  });
+}
+
+export async function clearAllNotificationsRequest() {
+  return apiJson<NotificationsDeleteResponse>("/api/notifications", { method: "DELETE" });
 }
 
 export async function uploadCommentAttachment(input: { file: File; targetId: string; targetType: CommentTargetType }) {

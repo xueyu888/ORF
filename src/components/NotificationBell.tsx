@@ -51,12 +51,15 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="orf-notification-popover orf-card absolute right-0 top-12 z-50 w-[360px] overflow-hidden">
-          <div className="flex items-center justify-between border-b orf-border px-4 py-3">
-            <div className="text-sm font-semibold orf-text-primary">消息</div>
+        <div className="orf-notification-popover absolute right-0 top-12 z-50 overflow-hidden">
+          <div className="orf-notification-popover-header">
+            <div>
+              <div className="orf-notification-popover-title">消息</div>
+              <div className="orf-notification-popover-summary">{unreadNotificationCount > 0 ? `${unreadNotificationCount} 条未读` : "暂无未读"}</div>
+            </div>
             <button
               type="button"
-              className="orf-text-muted orf-hover-text inline-flex items-center gap-1 text-xs"
+              className="orf-notification-mark-all"
               disabled={unreadNotificationCount === 0}
               onClick={() => void markAllNotificationsRead()}
             >
@@ -64,12 +67,12 @@ export function NotificationBell() {
               全部已读
             </button>
           </div>
-          <div className="max-h-[360px] overflow-auto p-2">
+          <div className="orf-notification-popover-list">
             {recentNotifications.map((notification) => (
               <NotificationPreview key={notification.id} notification={notification} onOpen={() => void openNotification(notification)} />
             ))}
             {recentNotifications.length === 0 && (
-              <div className="flex min-h-32 flex-col items-center justify-center gap-2 text-center text-sm orf-text-secondary">
+              <div className="orf-notification-popover-empty">
                 <Inbox className="h-5 w-5 orf-text-muted" />
                 暂无消息
               </div>
@@ -77,7 +80,7 @@ export function NotificationBell() {
           </div>
           <button
             type="button"
-            className="orf-notification-footer-action flex w-full items-center justify-center gap-2 border-t orf-border px-4 py-3 text-sm font-medium orf-text-primary orf-hover-muted"
+            className="orf-notification-footer-action"
             onClick={() => {
               setOpen(false);
               navigate("/notifications");
@@ -96,15 +99,17 @@ function NotificationPreview({ notification, onOpen }: { notification: AppNotifi
   return (
     <button
       type="button"
-      className="orf-notification-preview orf-hover-muted flex w-full gap-3 rounded-md px-3 py-2 text-left"
+      className="orf-notification-preview"
       data-read={notification.readAt ? "true" : "false"}
       onClick={onOpen}
     >
       <span className={notification.readAt ? "orf-notification-dot-read" : "orf-notification-dot-unread"} />
-      <span className="min-w-0 flex-1">
-        <span className="orf-notification-preview-title block truncate text-sm font-medium orf-text-primary">{notification.title}</span>
-        <span className="orf-notification-preview-body mt-1 block line-clamp-2 text-xs orf-text-secondary">{notification.body}</span>
-        <span className="orf-notification-preview-time mt-2 block text-[11px] orf-text-muted">{formatNotificationTime(notification.createdAt)}</span>
+      <span className="orf-notification-preview-content">
+        <span className="orf-notification-preview-line">
+          <span className="orf-notification-preview-title">{notification.title}</span>
+          <span className="orf-notification-preview-time">{formatNotificationTime(notification.createdAt)}</span>
+        </span>
+        <span className="orf-notification-preview-body">{notification.body}</span>
       </span>
     </button>
   );
