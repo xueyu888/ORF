@@ -45,6 +45,7 @@ import { commentCountFor } from "../model/challengeComments";
 import { canFreezeObjectiveAfterReestimate, metricEditUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
+import { groupChallengeGroupsByProject } from "../model/projectGroups";
 import type { TitleSubmissionContext } from "../model/titleSubmission";
 import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
 import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
@@ -112,16 +113,35 @@ export function ChallengeTree({
   now: Date;
   scope: ChallengeScope;
 }) {
+  const projectGroups = groupChallengeGroupsByProject(groups);
+
   return (
-    <div className="grid gap-3">
-      {groups.map((group) => (
-        <ObjectivePanel
-          key={group.objective.id}
-          group={group}
-          handlers={handlers}
-          now={now}
-          scope={scope}
-        />
+    <div className="grid gap-5">
+      {projectGroups.map((project) => (
+        <div key={project.id} className="orf-project-section" data-project-group-id={project.id}>
+          <div className="orf-project-header">
+            <div className="min-w-0">
+              <div className="orf-project-kicker">项目</div>
+              <h2 className="orf-project-title">{project.name}</h2>
+            </div>
+            <div className="orf-project-meta" aria-label={`${project.name} 项目概览`}>
+              <span>{project.objectiveCount} 个目标</span>
+              <span>{project.bountyCount} 个指标</span>
+              <span>{project.actionCount} 个行动项</span>
+            </div>
+          </div>
+          <div className="grid gap-3">
+            {project.objectives.map((group) => (
+              <ObjectivePanel
+                key={group.objective.id}
+                group={group}
+                handlers={handlers}
+                now={now}
+                scope={scope}
+              />
+            ))}
+          </div>
+        </div>
       ))}
       {groups.length === 0 && <div className="orf-card orf-card-padding text-center text-sm orf-text-secondary">{emptyText}</div>}
     </div>

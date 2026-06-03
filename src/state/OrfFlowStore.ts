@@ -317,6 +317,8 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
 
   return {
     ...objective,
+    projectId: objective.projectId?.trim() || null,
+    projectName: objective.projectName?.trim() || null,
     stage: objective.stage ?? "orfReestimate",
     flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
     finalDueAt:
@@ -372,7 +374,7 @@ export class OrfFlowStore {
     return normalizeState(emptyBusinessState());
   }
 
-  createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt">>): OrfState {
+  createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt" | "projectId" | "projectName">>): OrfState {
     const id = makeId("obj");
     const now = currentDate();
     const objective = {
@@ -380,6 +382,8 @@ export class OrfFlowStore {
       title: input.title,
       description: input.whyItMatters,
       whyItMatters: input.whyItMatters,
+      projectId: input.projectId?.trim() || null,
+      projectName: input.projectName?.trim() || null,
       cycle: input.cycle,
       stage: objectiveLifecycleInitialState.stage,
       flowStatus: objectiveLifecycleInitialState.flowStatus,
