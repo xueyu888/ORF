@@ -511,7 +511,7 @@
 
 .bounty-list-table {
   position: relative;
-  overflow: visible;
+  overflow: hidden;
   border: 1px solid var(--bh-glass-line);
   border-radius: 14px;
   background:
