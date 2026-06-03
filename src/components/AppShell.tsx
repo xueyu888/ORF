@@ -84,6 +84,7 @@ export function AppShell() {
   return (
     <div
       className="orf-app-shell flex min-h-screen"
+      data-bounty-hall={isBountyHall ? "true" : "false"}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       data-unified-background={appShellBackgroundUrl ? "true" : "false"}
       style={shellStyle}

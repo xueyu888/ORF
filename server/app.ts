@@ -74,7 +74,6 @@ import { registerSettingsRoutes } from "./routes/settingsRoutes";
 import { registerNotificationRoutes } from "./routes/notificationRoutes";
 import { registerOrfReadRoutes } from "./routes/orfReadRoutes";
 import { registerCommentRoutes } from "./routes/commentRoutes";
-import { registerMattermostArchiveRoutes } from "./routes/mattermostArchiveRoutes";
 import { registerUserRoutes } from "./routes/userRoutes";
 import { registerUserAvatarRoutes } from "./users/avatar/avatarRoutes";
 import { registerPermissionRoutes } from "./routes/permissionRoutes";
@@ -450,7 +449,6 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerOrfReadRoutes(app);
   registerSettingsRoutes(app);
   registerCommentRoutes(app);
-  registerMattermostArchiveRoutes(app);
   registerUserAvatarRoutes(app);
   registerUserRoutes(app);
   registerPermissionRoutes(app);

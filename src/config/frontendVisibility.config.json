@@ -21,7 +21,7 @@
   },
   "nav.systemManagement": {
     "label": "侧边栏系统管理入口",
-    "audience": ["admin"]
+    "audience": "systemManagementViewer"
   },
   "command.objectives": {
     "label": "命令菜单目标入口",
@@ -29,7 +29,7 @@
   },
   "page.systemManagement": {
     "label": "系统管理页面访问",
-    "audience": ["admin"]
+    "audience": "systemManagementViewer"
   },
   "page.systemMembers": {
     "label": "系统管理成员页面访问",
@@ -45,10 +45,6 @@
   },
   "page.systemSettings": {
     "label": "系统设置页面访问",
-    "audience": ["admin"]
-  },
-  "page.systemMattermostArchive": {
-    "label": "Mattermost 聊天归档页面访问",
     "audience": ["admin"]
   },
   "challenge.scope.all": {

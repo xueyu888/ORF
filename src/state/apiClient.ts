@@ -37,67 +37,6 @@ export type NotificationsDeleteResponse = {
   deleted: number;
   unreadCount: number;
 };
-export type MattermostArchiveChannel = {
-  id: string;
-  name: string;
-  displayName: string;
-  type: string;
-  totalMsgCount: number;
-  archivedPostCount: number;
-  lastPostAt: string | null;
-};
-export type MattermostArchiveFile = {
-  id: string;
-  postId: string;
-  name: string;
-  extension: string;
-  mimeType: string;
-  size: number;
-  width: number | null;
-  height: number | null;
-  storageStatus: "metadata_only" | "copied" | "skipped_non_image" | "skipped_large" | "copy_failed";
-  isImage: boolean;
-  contentUrl: string | null;
-};
-export type MattermostArchiveMessage = {
-  id: string;
-  channelId: string;
-  channelName: string;
-  channelDisplayName: string;
-  authorId: string | null;
-  authorName: string;
-  authorUsername: string;
-  message: string;
-  type: string;
-  rootId: string;
-  originalId: string;
-  replyCount: number;
-  createdAt: string | null;
-  updatedAt: string | null;
-  editedAt: string | null;
-  deletedAt: string | null;
-  files: MattermostArchiveFile[];
-};
-export type MattermostArchiveViewerResponse = {
-  channels: MattermostArchiveChannel[];
-  messages: MattermostArchiveMessage[];
-  query: {
-    q: string;
-    channelId: string | null;
-    includeDeleted: boolean;
-    page: number;
-    limit: number;
-  };
-  total: number;
-  hasNextPage: boolean;
-};
-export type MattermostArchiveViewerQuery = {
-  channelId?: string | null;
-  includeDeleted?: boolean;
-  limit?: number;
-  page?: number;
-  q?: string;
-};
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type CommentAttachmentUploadResponse = {
   ok: true;
@@ -266,28 +205,6 @@ export async function deleteNotificationsRequest(notificationIds: string[]) {
 
 export async function clearAllNotificationsRequest() {
   return apiJson<NotificationsDeleteResponse>("/api/notifications", { method: "DELETE" });
-}
-
-export async function getMattermostArchiveViewer(input: MattermostArchiveViewerQuery = {}) {
-  const query = new URLSearchParams();
-  if (input.q?.trim()) {
-    query.set("q", input.q.trim());
-  }
-  if (input.channelId) {
-    query.set("channelId", input.channelId);
-  }
-  if (input.includeDeleted !== undefined) {
-    query.set("includeDeleted", String(input.includeDeleted));
-  }
-  if (input.page !== undefined) {
-    query.set("page", String(input.page));
-  }
-  if (input.limit !== undefined) {
-    query.set("limit", String(input.limit));
-  }
-
-  const suffix = query.size > 0 ? `?${query.toString()}` : "";
-  return apiJson<MattermostArchiveViewerResponse>(`/api/mattermost-archive${suffix}`);
 }
 
 export async function uploadCommentAttachment(input: { file: File; targetId: string; targetType: CommentTargetType }) {

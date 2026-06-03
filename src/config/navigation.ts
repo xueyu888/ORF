@@ -1,5 +1,4 @@
 import {
-  Archive,
   BarChart3,
   Bell,
   CheckSquare,
@@ -25,7 +24,6 @@ export const systemManagementPages = [
   { label: "成员管理", path: "/system/members", icon: UsersRound },
   { label: "权限管理", path: "/system/permissions", icon: ShieldCheck },
   { label: "系统设置", path: "/system/settings", icon: Settings },
-  { label: "聊天归档", path: "/system/mattermost-archive", icon: Archive },
 ];
 
 export const quickPages = [
