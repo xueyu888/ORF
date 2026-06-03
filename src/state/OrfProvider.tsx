@@ -10,6 +10,7 @@ import {
   bountyMutationFailureMessage,
   businessMutationFailureMessage,
   commentMutationFailureMessage,
+  localSettlementMutationFailureMessage,
 } from "./orfProviderMutationMessages";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
@@ -612,7 +613,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           notify("匿名互评已提交到本地结算服务");
           return true;
         } catch (error) {
-          notify(businessMutationFailureMessage(error, "匿名互评提交失败"));
+          notify(localSettlementMutationFailureMessage(error, "匿名互评提交失败"));
           return false;
         }
       },

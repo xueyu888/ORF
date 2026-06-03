@@ -92,7 +92,7 @@ export const memberSubmitPeerReviewOperators = {
       await installLocalSettlementMock(ctx, runtime);
       runtime.values[requiredString(params, "saveAs")] = ctx.page
         .waitForResponse((response) => {
-          return response.request().method().toUpperCase() === "POST" && response.url() === "http://127.0.0.1:8799/reviews";
+          return response.request().method().toUpperCase() === "POST" && isLocalSettlementEndpoint(response.url(), "/reviews");
         })
         .then(async (response) => ({
           ok: response.ok(),
@@ -117,7 +117,7 @@ export const memberSubmitPeerReviewOperators = {
     sent_to_local_service: async ({ params }) => {
       const review = requiredSubmittedPeerReview(params, "review");
       expect(review.method).toBe("POST");
-      expect(review.url).toBe("http://127.0.0.1:8799/reviews");
+      expect(isLocalSettlementEndpoint(review.url, "/reviews")).toBe(true);
     },
 
     accepted: async ({ params }) => {
@@ -224,10 +224,13 @@ function requiredEncryptedEnvelopeField(params: StepParams, key: string): keyof 
 }
 
 async function installLocalSettlementMock(ctx: TestContext, runtime: StateCaseRuntime) {
-  await ctx.page.route("http://127.0.0.1:8799/public-key", async (route) => {
+  await ctx.page.route(/^http:\/\/[^/]+:8799\/health$/, async (route) => {
+    await route.fulfill({ json: { ok: true, keyId: localSettlementPublicKey.keyId } });
+  });
+  await ctx.page.route(/^http:\/\/[^/]+:8799\/public-key$/, async (route) => {
     await route.fulfill({ json: localSettlementPublicKey });
   });
-  await ctx.page.route("http://127.0.0.1:8799/reviews", async (route) => {
+  await ctx.page.route(/^http:\/\/[^/]+:8799\/reviews$/, async (route) => {
     if (route.request().method().toUpperCase() !== "POST") {
       await route.fallback();
       return;
@@ -246,6 +249,11 @@ async function installLocalSettlementMock(ctx: TestContext, runtime: StateCaseRu
     } satisfies SubmittedPeerReview;
     await route.fulfill({ json: response });
   });
+}
+
+function isLocalSettlementEndpoint(value: string, pathname: string) {
+  const url = new URL(value);
+  return url.protocol === "http:" && url.port === "8799" && url.pathname === pathname;
 }
 
 function requiredEncryptedEnvelope(value: unknown): SubmittedPeerReview["body"] {

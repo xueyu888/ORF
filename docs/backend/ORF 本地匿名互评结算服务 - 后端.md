@@ -4,6 +4,8 @@
 
 ## 启动
 
+单机模式适用于浏览器和本地结算服务运行在同一台机器：
+
 ```bash
 npm run settlement:local
 ```
@@ -14,7 +16,24 @@ npm run settlement:local
 ORF_LOCAL_SETTLEMENT_HOST=0.0.0.0 ORF_LOCAL_SETTLEMENT_PORT=8799 npm run settlement:local
 ```
 
-前端提交地址通过 `VITE_ORF_LOCAL_SETTLEMENT_URL` 配置，默认同为 `http://127.0.0.1:8799`。局域网模式应配置为 `http://<结算服务机器 IP>:8799`。
+也可以在 `.env` 中配置：
+
+```env
+VITE_ORF_LOCAL_SETTLEMENT_URL=http://<结算服务机器 IP>:8799
+ORF_LOCAL_SETTLEMENT_HOST=0.0.0.0
+ORF_LOCAL_SETTLEMENT_PORT=8799
+ORF_LOCAL_SETTLEMENT_CORS_ORIGIN=*
+```
+
+前端提交地址通过 `VITE_ORF_LOCAL_SETTLEMENT_URL` 配置，默认同为 `http://127.0.0.1:8799`。局域网模式应配置为 `http://<结算服务机器 IP>:8799`；修改 `VITE_` 变量后需要重启 Vite 前端服务。
+
+启动后先检查健康接口：
+
+```bash
+curl http://127.0.0.1:8799/health
+```
+
+如果前端提示“本地匿名互评结算服务不可用”，说明浏览器访问不到 `VITE_ORF_LOCAL_SETTLEMENT_URL` 指向的服务；先检查服务是否启动、端口是否监听、浏览器所在机器是否能访问该地址。
 
 ## 本地文件
 

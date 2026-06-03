@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { createHash, createPrivateKey, generateKeyPairSync, privateDecrypt, webcrypto } from "node:crypto";
 import { mkdir, readFile, writeFile, chmod } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";

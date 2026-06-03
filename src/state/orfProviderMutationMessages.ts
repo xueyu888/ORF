@@ -1,4 +1,5 @@
 import { ApiError } from "./apiClient";
+import { LocalSettlementResponseError, LocalSettlementUnavailableError } from "../services/localSettlementClient";
 
 export function userMutationFailureMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
@@ -187,4 +188,16 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
   }
 
   return fallback;
+}
+
+export function localSettlementMutationFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof LocalSettlementUnavailableError) {
+    return `本地匿名互评结算服务不可用，请先启动服务，并确认当前浏览器可以访问 ${error.baseUrl}`;
+  }
+
+  if (error instanceof LocalSettlementResponseError) {
+    return `本地匿名互评结算服务返回错误：${error.message}`;
+  }
+
+  return businessMutationFailureMessage(error, fallback);
 }

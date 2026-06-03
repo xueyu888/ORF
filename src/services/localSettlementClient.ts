@@ -23,9 +23,43 @@ export type LocalSettlementSummary = {
 };
 
 const defaultLocalSettlementUrl = "http://127.0.0.1:8799";
+const localSettlementRequestTimeoutMs = 3000;
+
+type LocalSettlementImportMeta = ImportMeta & {
+  env?: {
+    VITE_ORF_LOCAL_SETTLEMENT_URL?: string;
+  };
+};
+
+export class LocalSettlementUnavailableError extends Error {
+  readonly baseUrl: string;
+
+  constructor(baseUrl: string, cause?: unknown) {
+    super(`Local settlement service is not reachable at ${baseUrl}`, { cause });
+    this.name = "LocalSettlementUnavailableError";
+    this.baseUrl = baseUrl;
+  }
+}
+
+export class LocalSettlementResponseError extends Error {
+  readonly baseUrl: string;
+  readonly status: number;
+
+  constructor(baseUrl: string, status: number, message: string) {
+    super(message || `Local settlement service returned ${status}`);
+    this.name = "LocalSettlementResponseError";
+    this.baseUrl = baseUrl;
+    this.status = status;
+  }
+}
 
 export function localSettlementBaseUrl() {
-  return (import.meta.env.VITE_ORF_LOCAL_SETTLEMENT_URL as string | undefined)?.trim() || defaultLocalSettlementUrl;
+  const configuredUrl = (import.meta as LocalSettlementImportMeta).env?.VITE_ORF_LOCAL_SETTLEMENT_URL?.trim();
+  return (configuredUrl || defaultLocalSettlementUrl).replace(/\/+$/, "");
+}
+
+export async function assertLocalSettlementAvailable() {
+  await requestLocalSettlement("/health");
 }
 
 export async function submitLocalEncryptedContributionReview(input: {
@@ -35,6 +69,7 @@ export async function submitLocalEncryptedContributionReview(input: {
   objectiveTitle?: string;
   reviewer: string;
 }) {
+  await assertLocalSettlementAvailable();
   const key = await fetchLocalSettlementPublicKey();
   const envelope = await encryptForLocalSettlement(key, {
     allocations: input.allocations,
@@ -45,35 +80,56 @@ export async function submitLocalEncryptedContributionReview(input: {
     submittedAt: new Date().toISOString(),
     version: 1,
   });
-  const response = await fetch(`${localSettlementBaseUrl()}/reviews`, {
+  const response = await requestLocalSettlement("/reviews", {
     body: JSON.stringify(envelope),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
   return response.json() as Promise<{ ok: true; payloadHash: string; receivedAt: string }>;
 }
 
 export async function fetchLocalSettlementSummary(input: { challengers: string[]; objectiveId: string }) {
-  const response = await fetch(`${localSettlementBaseUrl()}/objectives/${encodeURIComponent(input.objectiveId)}/summary`, {
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/summary`, {
     body: JSON.stringify({ challengers: input.challengers }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
   return response.json() as Promise<LocalSettlementSummary>;
 }
 
 async function fetchLocalSettlementPublicKey() {
-  const response = await fetch(`${localSettlementBaseUrl()}/public-key`);
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
+  const response = await requestLocalSettlement("/public-key");
   return response.json() as Promise<LocalSettlementPublicKey>;
+}
+
+async function requestLocalSettlement(path: string, init?: RequestInit) {
+  const baseUrl = localSettlementBaseUrl();
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), localSettlementRequestTimeoutMs);
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, { ...init, signal: controller.signal });
+  } catch (error) {
+    throw new LocalSettlementUnavailableError(baseUrl, error);
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    throw new LocalSettlementResponseError(baseUrl, response.status, await readLocalSettlementErrorMessage(response));
+  }
+  return response;
+}
+
+async function readLocalSettlementErrorMessage(response: Response) {
+  const text = await response.text();
+  if (!text) return response.statusText;
+  try {
+    const payload = JSON.parse(text) as { error?: unknown };
+    return typeof payload.error === "string" ? payload.error : text;
+  } catch {
+    return text;
+  }
 }
 
 async function encryptForLocalSettlement(key: LocalSettlementPublicKey, payload: Record<string, unknown>): Promise<EncryptedReviewEnvelope> {
