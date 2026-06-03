@@ -33,7 +33,7 @@ docs/
 | [ORF 任务管理页面 - 后端.md](./backend/ORF%20任务管理页面%20-%20后端.md) | 我的挑战后端集合、目标挑战关系、字段契约和交互业务约束 |
 | [ORF 后端流程测试.md](./backend/ORF%20后端流程测试.md) | ORF 后端 repository + 数据库流程测试思路和流程图 |
 | [ORF 提交战利品 - 后端.md](./backend/ORF%20提交战利品%20-%20后端.md) | 目标战利品提交契约 |
-| [ORF 本地匿名互评结算服务 - 后端.md](./backend/ORF%20本地匿名互评结算服务%20-%20后端.md) | 本地匿名互评收集、解密和贡献比例汇总 |
+| [ORF 本地匿名互评结算服务 - 后端.md](./backend/ORF%20本地匿名互评结算服务%20-%20后端.md) | ORF 前端调用本机私有匿名互评服务的接口契约 |
 | [评论组件 - 后端.md](./backend/评论组件%20-%20后端.md) | 评论持久化、返回集合和权限边界 |
 | [目标进度条计算规则.md](./backend/目标进度条计算规则.md) | 目标进度后端字段规则 |
 | [前端页面说明模板 v1.md](./frontend/前端页面说明模板%20v1.md) | 前端页面说明模板 |
@@ -47,7 +47,6 @@ docs/
 | [对象存储 - 后端.md](./backend/对象存储%20-%20后端.md) | S3/MinIO 对象存储、上传文件和迁移契约 |
 | [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push/issues 转发到 Mattermost 推送机器人频道并按 push key 去重 |
 | [GitLab Mattermost 项目 Hook 自动收敛 - 后端.md](./backend/GitLab%20Mattermost%20项目%20Hook%20自动收敛%20-%20后端.md) | 自动为 GitLab develop 项目补齐 Mattermost GitLab 插件 webhook |
-| [Mattermost 聊天归档 - 后端.md](./backend/Mattermost%20聊天归档%20-%20后端.md) | Mattermost 频道消息同步、图片归档和聊天记录查看器 |
 | [Mattermost Jira 提醒 - 后端.md](./backend/Mattermost%20Jira%20提醒%20-%20后端.md) | 每日 Jira 提醒私信发送规则 |
 | [消息系统开发.md](./project/消息系统开发.md) | 系统内消息模型、投递事件、接口和前端入口 |
 | [评论图片附件迁移方案.md](./project/评论图片附件迁移方案.md) | 评论图片附件的 S3/MinIO 分阶段迁移方案 |

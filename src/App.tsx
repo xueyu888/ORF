@@ -2,7 +2,8 @@ import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
-import { canShowFrontend, type FrontendVisibilityKey } from "./config/frontendVisibility";
+import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
+import { systemManagementPages } from "./config/navigation";
 import { useOrf } from "./state/OrfProvider";
 
 const AIEvaluationPage = lazyNamed(() => import("./pages/AIEvaluationPage"), "AIEvaluationPage");
@@ -14,7 +15,6 @@ const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "F
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
 const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
-const MattermostArchivePage = lazyNamed(() => import("./pages/MattermostArchivePage"), "MattermostArchivePage");
 const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
 const NotificationsPage = lazyNamed(() => import("./pages/NotificationsPage"), "NotificationsPage");
 const ObjectivesPage = lazyNamed(() => import("./pages/ObjectivesPage"), "ObjectivesPage");
@@ -62,7 +62,7 @@ export function App() {
             </RequireFrontendVisibility>
           }
         >
-          <Route index element={<Navigate to="/system/members" replace />} />
+          <Route index element={<SystemManagementIndexRedirect />} />
           <Route
             path="members"
             element={
@@ -84,14 +84,6 @@ export function App() {
             element={
               <RequireFrontendVisibility visibilityKey="page.systemSettings">
                 <LazyRoute><SystemSettingsPage /></LazyRoute>
-              </RequireFrontendVisibility>
-            }
-          />
-          <Route
-            path="mattermost-archive"
-            element={
-              <RequireFrontendVisibility visibilityKey="page.systemMattermostArchive">
-                <LazyRoute><MattermostArchivePage /></LazyRoute>
               </RequireFrontendVisibility>
             }
           />
@@ -199,4 +191,10 @@ function approvalStateCopy(status: string) {
 function RequireFrontendVisibility({ children, visibilityKey }: { children: ReactNode; visibilityKey: FrontendVisibilityKey }) {
   const { currentUser } = useOrf();
   return canShowFrontend(currentUser, visibilityKey) ? children : <Navigate to="/bounties" replace />;
+}
+
+function SystemManagementIndexRedirect() {
+  const { currentUser } = useOrf();
+  const target = systemManagementPages.find((item) => canShowFrontendPath(currentUser, item.path))?.path ?? "/bounties";
+  return <Navigate to={target} replace />;
 }

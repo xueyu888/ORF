@@ -1,7 +1,8 @@
 import type { OrfUser, UserRole } from "../types/orf";
 import frontendVisibilityConfig from "./frontendVisibility.config.json";
 
-type VisibilityAudience = "all" | readonly UserRole[];
+type SpecialVisibilityAudience = "systemManagementViewer";
+type VisibilityAudience = "all" | SpecialVisibilityAudience | readonly UserRole[];
 
 export type FrontendVisibilityKey = keyof typeof frontendVisibilityConfig;
 
@@ -11,6 +12,7 @@ type FrontendVisibilityRule = {
 };
 
 const userRoles = new Set<UserRole>(["admin", "member"]);
+const specialAudiences = new Set<SpecialVisibilityAudience>(["systemManagementViewer"]);
 
 export const frontendVisibilityTable = validateFrontendVisibilityConfig(
   frontendVisibilityConfig as Record<FrontendVisibilityKey, FrontendVisibilityRule>,
@@ -26,7 +28,6 @@ export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/system/members": "page.systemMembers",
   "/system/permissions": "page.systemPermissions",
   "/system/settings": "page.systemSettings",
-  "/system/mattermost-archive": "page.systemMattermostArchive",
   "/members": "page.systemMembers",
   "/permissions": "page.systemPermissions",
   "/settings/system": "page.systemSettings",
@@ -41,6 +42,7 @@ export function canShowFrontend(user: OrfUser | null, key: FrontendVisibilityKey
 
   const audience = rule.audience;
   if (audience === "all") return true;
+  if (audience === "systemManagementViewer") return Boolean(user && user.role === "admin");
   return Boolean(user && audience.includes(user.role));
 }
 
@@ -56,6 +58,12 @@ function validateFrontendVisibilityConfig(config: Record<FrontendVisibilityKey, 
     }
 
     if (rule.audience === "all") continue;
+    if (typeof rule.audience === "string") {
+      if (!specialAudiences.has(rule.audience)) {
+        throw new Error(`Frontend visibility rule ${key} has unknown audience: ${rule.audience}`);
+      }
+      continue;
+    }
 
     if (!Array.isArray(rule.audience) || rule.audience.length === 0) {
       throw new Error(`Frontend visibility rule ${key} must target all or at least one role`);
