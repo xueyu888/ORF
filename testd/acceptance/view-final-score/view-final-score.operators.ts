@@ -59,9 +59,11 @@ export const viewFinalScoreOperators = {
     visible: async ({ ctx, params }) => {
       const memberName = requiredString(params, "memberName");
       const pointsText = requiredNumber(params, "points").toFixed(1);
-      const table = ctx.page.getByRole("table", { name: "成员积分排行榜" });
-      await expect(table).toBeVisible();
-      const row = table.getByRole("row").filter({ hasText: memberName }).filter({ hasText: pointsText });
+      const leaderboard = ctx.page.locator(".reports-leaderboard-card").filter({
+        has: ctx.page.getByRole("heading", { name: "成员积分排行榜" }),
+      });
+      await expect(leaderboard).toBeVisible();
+      const row = leaderboard.getByRole("row").filter({ hasText: memberName }).filter({ hasText: pointsText });
       await expect(row).toBeVisible();
     },
   },
