@@ -1,11 +1,11 @@
 import type { Page } from "@playwright/test";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { canMutateObjectiveCommentsAsChallengerByFlow, canMutateObjectiveCommentsByFlow } from "../../../src/domain/orfLifecycle";
-import { db } from "../../../server/db/client";
+import { db } from "../../_operators/testd-db-client";
 import { commentAttachments, commentMessages, commentThreads, objectives, rolePermissions, tasks, users } from "../../../server/db/schema";
 import { objectStorage } from "../../../server/storage/objectStorage";
 import { normalizePermissionKeys, type PermissionKey } from "../../../src/config/permissions";
-import { permissionStorageResource, permissionStorageStage } from "../../../server/repositories/permissionRepository";
+import { permissionStorageResource, permissionStorageStage } from "../../_operators/testd-permissions";
 import {
   acquireRolePermissionLock,
   releaseRolePermissionLock,

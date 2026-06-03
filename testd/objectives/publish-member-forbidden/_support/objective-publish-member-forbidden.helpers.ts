@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { and, asc, eq } from "drizzle-orm";
 import { normalizePermissionKeys } from "../../../../src/config/permissions";
-import { db } from "../../../../server/db/client";
+import { db } from "../../../_operators/testd-db-client";
 import { rolePermissions, teams } from "../../../../server/db/schema";
 import {
   acquireRolePermissionLock,

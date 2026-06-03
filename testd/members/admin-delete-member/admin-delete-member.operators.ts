@@ -1,6 +1,6 @@
 import { expect } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
-import { db } from "../../../server/db/client";
+import { db } from "../../_operators/testd-db-client";
 import {
   feedback,
   objectives,

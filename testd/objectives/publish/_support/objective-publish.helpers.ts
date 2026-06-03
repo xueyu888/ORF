@@ -1,8 +1,8 @@
 import type { Page } from "@playwright/test";
 import { eq } from "drizzle-orm";
-import { db } from "../../../../server/db/client";
+import { db } from "../../../_operators/testd-db-client";
 import { objectives } from "../../../../server/db/schema";
-import { deleteObjective } from "../../../../server/repositories/orfRepository";
+import { deleteTestObjective } from "../../../_operators/common.helpers";
 import type {
   BountyHallResponse,
   MyChallengesResponse,
@@ -36,7 +36,7 @@ export async function readObjectiveByTitle(title: string): Promise<ObjectivePubl
 export async function removeObjectivesByTitle(title: string) {
   const rows = await db.select({ id: objectives.id }).from(objectives).where(eq(objectives.title, title));
   for (const row of rows) {
-    const deleted = await deleteObjective(row.id);
+    const deleted = await deleteTestObjective(row.id);
     if (!deleted) {
       await db.delete(objectives).where(eq(objectives.id, row.id));
     }

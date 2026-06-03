@@ -1,5 +1,5 @@
 import { asc, eq, sql } from "drizzle-orm";
-import { db } from "../../../../server/db/client";
+import { db } from "../../../_operators/testd-db-client";
 import { teamMembers, teams, users } from "../../../../server/db/schema";
 import { saveUserPreferences } from "../../../../server/settings/personalSettings";
 import {

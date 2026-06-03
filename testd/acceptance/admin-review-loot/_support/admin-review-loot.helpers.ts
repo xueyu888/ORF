@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { db } from "../../../../server/db/client";
+import { db } from "../../../_operators/testd-db-client";
 import { objectiveLoot, objectives, pointLedger, results } from "../../../../server/db/schema";
 import type { AdminReviewLootCaseData, ReviewLoot, ReviewLootResult, ReviewLootTarget } from "./admin-review-loot.context";
 
