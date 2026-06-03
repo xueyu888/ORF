@@ -6,18 +6,25 @@ import { Readable } from "node:stream";
 import { promisify } from "node:util";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { hasMattermostChannelPostConfig, postMattermostChannelMessage } from "../mattermost";
+import { hasMattermostChannelPostConfig, MattermostClient, type MattermostChannelPostConfig } from "../mattermost";
 
 const execFileAsync = promisify(execFile);
 const gitFieldSeparator = "\x1f";
 const gitRecordSeparator = "\x1e";
 const githubWebhookMaxBodyBytes = 1024 * 1024;
+const githubPushNotificationPropsKey = "github_sync_key";
+const githubPushNotificationPropsType = "github_push";
+const githubPushNotificationLedgerTableName = "github_mattermost_push_notifications";
+
+let githubPushNotificationLedgerReady: Promise<void> | null = null;
 
 const configSchema = z.object({
   MATTERMOST_URL: z.string().url().optional(),
   MATTERMOST_LOGIN_ID: z.string().optional(),
   MATTERMOST_PASSWORD: z.string().optional(),
   MATTERMOST_CHANNEL_ID: z.string().optional(),
+  MATTERMOST_PUSH_CHANNEL_ID: z.string().optional(),
+  GITHUB_MATTERMOST_CHANNEL_ID: z.string().optional(),
   GITHUB_REPOSITORY_FULL_NAME: z.string().default("xueyu888/ORF"),
   GITHUB_WEBHOOK_SECRET: z.string().min(16).optional(),
   GITHUB_SYNC_ENABLED: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
@@ -141,6 +148,23 @@ export type GitHubIssue = z.infer<typeof githubApiIssueSchema>;
 type GitHubApiCommit = z.infer<typeof githubApiCommitSchema>;
 type GitRemoteHead = { name: string; sha: string };
 type SyncState = z.infer<typeof syncStateSchema>;
+type GitHubMattermostChannelConfig = Pick<
+  GitHubMattermostSyncConfig,
+  "GITHUB_MATTERMOST_CHANNEL_ID" | "MATTERMOST_PUSH_CHANNEL_ID" | "MATTERMOST_CHANNEL_ID"
+>;
+type GitHubPushNotificationSource = "webhook" | "api-poll" | "git-poll";
+type GitHubPushNotificationContext = {
+  syncKey: string;
+  repository: string;
+  ref: string;
+  afterSha: string;
+  source: GitHubPushNotificationSource;
+};
+type MattermostPostResult = {
+  posted: boolean;
+  duplicate: boolean;
+  channelId: string;
+};
 
 class GitHubApiError extends Error {
   constructor(
@@ -157,6 +181,10 @@ function readConfig() {
   return configSchema.parse(process.env);
 }
 
+export function resolveGitHubMattermostChannelId(config: GitHubMattermostChannelConfig) {
+  return config.GITHUB_MATTERMOST_CHANNEL_ID || config.MATTERMOST_PUSH_CHANNEL_ID || config.MATTERMOST_CHANNEL_ID;
+}
+
 function shortSha(sha: string | undefined) {
   return sha ? sha.slice(0, 7) : "unknown";
 }
@@ -171,6 +199,54 @@ function refName(ref: string) {
   }
 
   return ref;
+}
+
+function stablePushSha(sha: string | undefined) {
+  if (!sha || /^0+$/.test(sha)) {
+    return "deleted";
+  }
+
+  return sha;
+}
+
+export function gitHubPushNotificationSyncKey(input: { repository: string; ref: string; afterSha: string | undefined }) {
+  return `github-push:${input.repository}:${input.ref}:${stablePushSha(input.afterSha)}`;
+}
+
+function gitHubPushPayloadNotificationContext(payload: GitHubPushPayload): GitHubPushNotificationContext {
+  const ref = refName(payload.ref);
+  const afterSha = stablePushSha(payload.after);
+
+  return {
+    syncKey: gitHubPushNotificationSyncKey({
+      repository: payload.repository.full_name,
+      ref,
+      afterSha,
+    }),
+    repository: payload.repository.full_name,
+    ref,
+    afterSha,
+    source: "webhook",
+  };
+}
+
+function gitHubPolledPushNotificationContext(input: {
+  repository: string;
+  branch: string;
+  afterSha: string;
+  source: Exclude<GitHubPushNotificationSource, "webhook">;
+}): GitHubPushNotificationContext {
+  return {
+    syncKey: gitHubPushNotificationSyncKey({
+      repository: input.repository,
+      ref: input.branch,
+      afterSha: input.afterSha,
+    }),
+    repository: input.repository,
+    ref: input.branch,
+    afterSha: stablePushSha(input.afterSha),
+    source: input.source,
+  };
 }
 
 function actorName(payload: GitHubPushPayload) {
@@ -271,7 +347,7 @@ export function formatGitHubIssuesMessage(input: { repository: string; issues: G
 }
 
 function hasMattermostConfig(config: GitHubMattermostSyncConfig) {
-  return hasMattermostChannelPostConfig(config);
+  return hasMattermostChannelPostConfig(githubMattermostChannelPostConfig(config));
 }
 
 function webhookConfigured(config: GitHubMattermostSyncConfig) {
@@ -332,8 +408,150 @@ function requireWebhookSignature(config: GitHubMattermostSyncConfig, request: Fa
   return true;
 }
 
-async function postToMattermost(config: GitHubMattermostSyncConfig, message: string) {
-  await postMattermostChannelMessage(config, message);
+function githubMattermostChannelPostConfig(config: GitHubMattermostSyncConfig): MattermostChannelPostConfig {
+  return {
+    ...config,
+    MATTERMOST_CHANNEL_ID: resolveGitHubMattermostChannelId(config),
+  };
+}
+
+async function getDbPool() {
+  const { pool } = await import("../../db/client");
+  return pool;
+}
+
+async function ensureGitHubPushNotificationLedger() {
+  if (!githubPushNotificationLedgerReady) {
+    githubPushNotificationLedgerReady = (async () => {
+      const pool = await getDbPool();
+      await pool.query(`
+        create table if not exists ${githubPushNotificationLedgerTableName} (
+          sync_key text primary key,
+          repository text not null,
+          ref_name text not null,
+          after_sha text not null,
+          channel_id text not null,
+          source text not null,
+          status text not null default 'reserved',
+          mattermost_post_id text,
+          error text,
+          created_at timestamptz not null default now(),
+          updated_at timestamptz not null default now()
+        )
+      `);
+      await pool.query(`
+        create index if not exists github_mattermost_push_notifications_repo_ref_idx
+          on ${githubPushNotificationLedgerTableName} (repository, ref_name, created_at desc)
+      `);
+    })().catch((error) => {
+      githubPushNotificationLedgerReady = null;
+      throw error;
+    });
+  }
+
+  await githubPushNotificationLedgerReady;
+}
+
+async function reserveGitHubPushNotification(context: GitHubPushNotificationContext, channelId: string) {
+  await ensureGitHubPushNotificationLedger();
+  const pool = await getDbPool();
+  const result = await pool.query(
+    `
+      insert into ${githubPushNotificationLedgerTableName} (
+        sync_key,
+        repository,
+        ref_name,
+        after_sha,
+        channel_id,
+        source,
+        status,
+        updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, 'reserved', now())
+      on conflict (sync_key) do nothing
+      returning sync_key
+    `,
+    [context.syncKey, context.repository, context.ref, context.afterSha, channelId, context.source],
+  );
+
+  return (result.rowCount ?? 0) > 0;
+}
+
+async function markGitHubPushNotificationPosted(syncKey: string, mattermostPostId: string | undefined) {
+  const pool = await getDbPool();
+  await pool.query(
+    `
+      update ${githubPushNotificationLedgerTableName}
+      set status = 'posted',
+          mattermost_post_id = $2,
+          error = null,
+          updated_at = now()
+      where sync_key = $1
+    `,
+    [syncKey, mattermostPostId ?? null],
+  );
+}
+
+async function markGitHubPushNotificationFailed(syncKey: string, error: unknown) {
+  const pool = await getDbPool();
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  await pool.query(
+    `
+      update ${githubPushNotificationLedgerTableName}
+      set status = 'failed',
+          error = $2,
+          updated_at = now()
+      where sync_key = $1
+    `,
+    [syncKey, message.slice(0, 1000)],
+  );
+}
+
+async function postToMattermost(
+  config: GitHubMattermostSyncConfig,
+  message: string,
+  pushNotificationContext?: GitHubPushNotificationContext,
+): Promise<MattermostPostResult> {
+  const targetConfig = githubMattermostChannelPostConfig(config);
+  const channelId = targetConfig.MATTERMOST_CHANNEL_ID;
+  if (!channelId) {
+    throw new Error("GitHub Mattermost target channel is not configured");
+  }
+
+  if (pushNotificationContext) {
+    const reserved = await reserveGitHubPushNotification(pushNotificationContext, channelId);
+    if (!reserved) {
+      return { posted: false, duplicate: true, channelId };
+    }
+  }
+
+  const client = new MattermostClient(targetConfig);
+  try {
+    const post = await client.createPost(channelId, message, {
+      props: pushNotificationContext
+        ? {
+            [githubPushNotificationPropsKey]: pushNotificationContext.syncKey,
+            github_sync_type: githubPushNotificationPropsType,
+            github_repository: pushNotificationContext.repository,
+            github_ref: pushNotificationContext.ref,
+            github_after_sha: pushNotificationContext.afterSha,
+            github_source: pushNotificationContext.source,
+          }
+        : undefined,
+    });
+
+    if (pushNotificationContext) {
+      const postId = z.object({ id: z.string().optional() }).passthrough().parse(post).id;
+      await markGitHubPushNotificationPosted(pushNotificationContext.syncKey, postId);
+    }
+
+    return { posted: true, duplicate: false, channelId };
+  } catch (error) {
+    if (pushNotificationContext) {
+      await markGitHubPushNotificationFailed(pushNotificationContext.syncKey, error).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 function syncStateKey(config: GitHubMattermostSyncConfig, branch: string) {
@@ -531,15 +749,24 @@ async function syncGitHubBranchCommits(
       return true;
     }
 
-    await postToMattermost(
+    const result = await postToMattermost(
       config,
       formatGitHubCommitSyncMessage({
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
         branch,
         commits: [latestCommit],
       }),
+      gitHubPolledPushNotificationContext({
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        branch,
+        afterSha: latestCommit.sha,
+        source: "api-poll",
+      }),
     );
-    app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, branch, count: 1 }, "Synced GitHub commits to Mattermost");
+    app.log.info(
+      { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch, count: 1, duplicate: result.duplicate },
+      result.duplicate ? "Skipped duplicate GitHub commit notification" : "Synced GitHub commits to Mattermost",
+    );
     return true;
   }
 
@@ -553,17 +780,26 @@ async function syncGitHubBranchCommits(
     return false;
   }
 
-  await postToMattermost(
+  const result = await postToMattermost(
     config,
     formatGitHubCommitSyncMessage({
       repository: config.GITHUB_REPOSITORY_FULL_NAME,
       branch,
       commits: newCommits,
     }),
+    gitHubPolledPushNotificationContext({
+      repository: config.GITHUB_REPOSITORY_FULL_NAME,
+      branch,
+      afterSha: latestCommit.sha,
+      source: "api-poll",
+    }),
   );
 
   state[key] = { lastSeenSha: latestCommit.sha };
-  app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, branch, count: newCommits.length }, "Synced GitHub commits to Mattermost");
+  app.log.info(
+    { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch, count: newCommits.length, duplicate: result.duplicate },
+    result.duplicate ? "Skipped duplicate GitHub commit notification" : "Synced GitHub commits to Mattermost",
+  );
   return true;
 }
 
@@ -589,15 +825,24 @@ async function syncGitBranchCommits(
       return false;
     }
 
-    await postToMattermost(
+    const result = await postToMattermost(
       config,
       formatGitHubCommitSyncMessage({
         repository: config.GITHUB_REPOSITORY_FULL_NAME,
         branch: head.name,
         commits: [latestCommit],
       }),
+      gitHubPolledPushNotificationContext({
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        branch: head.name,
+        afterSha: head.sha,
+        source: "git-poll",
+      }),
     );
-    app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: 1 }, "Synced GitHub commits to Mattermost from git");
+    app.log.info(
+      { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: 1, duplicate: result.duplicate },
+      result.duplicate ? "Skipped duplicate GitHub commit notification from git" : "Synced GitHub commits to Mattermost from git",
+    );
     return true;
   }
 
@@ -611,17 +856,26 @@ async function syncGitBranchCommits(
     return true;
   }
 
-  await postToMattermost(
+  const result = await postToMattermost(
     config,
     formatGitHubCommitSyncMessage({
       repository: config.GITHUB_REPOSITORY_FULL_NAME,
       branch: head.name,
       commits: newCommits,
     }),
+    gitHubPolledPushNotificationContext({
+      repository: config.GITHUB_REPOSITORY_FULL_NAME,
+      branch: head.name,
+      afterSha: head.sha,
+      source: "git-poll",
+    }),
   );
 
   state[key] = { lastSeenSha: head.sha };
-  app.log.info({ repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: newCommits.length }, "Synced GitHub commits to Mattermost from git");
+  app.log.info(
+    { repository: config.GITHUB_REPOSITORY_FULL_NAME, branch: head.name, count: newCommits.length, duplicate: result.duplicate },
+    result.duplicate ? "Skipped duplicate GitHub commit notification from git" : "Synced GitHub commits to Mattermost from git",
+  );
   return true;
 }
 
@@ -871,8 +1125,8 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
       return reply.code(202).send({ ok: true, ignored: true, repository: payload.repository.full_name });
     }
 
-    await postToMattermost(config, formatGitHubPushMessage(payload));
-    return { ok: true, channelId: config.MATTERMOST_CHANNEL_ID };
+    const result = await postToMattermost(config, formatGitHubPushMessage(payload), gitHubPushPayloadNotificationContext(payload));
+    return { ok: true, channelId: result.channelId, duplicate: result.duplicate };
   });
 
   app.post("/webhooks/github/issues", async (request, reply) => {
@@ -898,7 +1152,7 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
       return { ok: true, ignored: true, action: payload.action };
     }
 
-    await postToMattermost(
+    const result = await postToMattermost(
       config,
       formatGitHubIssuesMessage({
         repository: payload.repository.full_name,
@@ -906,7 +1160,7 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
         mode: "new",
       }),
     );
-    return { ok: true, channelId: config.MATTERMOST_CHANNEL_ID };
+    return { ok: true, channelId: result.channelId };
   });
 }
 

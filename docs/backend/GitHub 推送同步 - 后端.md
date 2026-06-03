@@ -2,7 +2,7 @@
 
 ## 目标
 
-在局域网环境中，由 ORF 后端主动拉取 GitHub 上 `xueyu888/ORF` 仓库的所有分支和 open issues，把任何分支新增的提交摘要、当前或新打开的 issue 摘要转发到 Mattermost 的 `LLM / ORF` 频道。
+在局域网环境中，由 ORF 后端主动拉取 GitHub 上 `xueyu888/ORF` 仓库的所有分支和 open issues，把任何分支新增的提交摘要、当前或新打开的 issue 摘要转发到 Mattermost 的推送机器人频道。
 
 该方案不要求 ORF 后端有公网域名，也不要求 GitHub 能访问局域网机器。
 
@@ -13,7 +13,9 @@
 | `MATTERMOST_URL` | Mattermost 站点地址。 |
 | `MATTERMOST_LOGIN_ID` | 用于发消息的 Mattermost 登录账号。 |
 | `MATTERMOST_PASSWORD` | Mattermost 登录密码。 |
-| `MATTERMOST_CHANNEL_ID` | 目标频道 ID。使用部署环境中的真实频道 ID，不要提交到仓库。 |
+| `MATTERMOST_CHANNEL_ID` | 兼容旧部署的默认频道 ID。使用部署环境中的真实频道 ID，不要提交到仓库。 |
+| `MATTERMOST_PUSH_CHANNEL_ID` | 推送机器人频道 ID。GitHub 未单独配置目标频道时优先使用它。 |
+| `GITHUB_MATTERMOST_CHANNEL_ID` | GitHub 同步专用目标频道 ID。优先级高于 `MATTERMOST_PUSH_CHANNEL_ID` 和 `MATTERMOST_CHANNEL_ID`。 |
 | `GITHUB_REPOSITORY_FULL_NAME` | 允许同步的仓库全名，默认 `xueyu888/ORF`。 |
 | `GITHUB_SYNC_ENABLED` | 是否启用局域网轮询同步，当前设为 `true`。 |
 | `GITHUB_SYNC_BRANCH` | 兼容旧配置；当前同步不按分支过滤，任何分支推送都通知。 |
@@ -31,10 +33,11 @@
 
 1. ORF 后端启动后读取 `GITHUB_SYNC_STATE_FILE`。
 2. 每隔 `GITHUB_SYNC_INTERVAL_SECONDS` 检查所有远端分支。
-3. 如果发现任何分支有新提交，把新增提交列表发到 Mattermost ORF 频道。
+3. 如果发现任何分支有新提交，把新增提交列表发到 Mattermost 推送机器人频道。
 4. 首次启动只初始化基准提交，不补发历史提交。
 5. 启动后新出现的分支会把最新提交作为一次推送通知发送。
 6. GitHub API 被限流时，自动改用本地 git remote 检查，不影响推送通知。
+7. 每次 push 的通知 key 是 `repository + ref + after_sha`，写入 `github_mattermost_push_notifications` 去重 ledger；webhook、GitHub API 轮询、本地 git fallback 或多个 ORF 实例检测到同一个 key 时，只有第一个插入成功的实例会发送 Mattermost 消息。
 
 ## Issues 同步流程
 

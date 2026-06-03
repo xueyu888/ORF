@@ -51,13 +51,17 @@ export function hasMattermostChannelPostConfig(config: MattermostChannelPostConf
   return Boolean(hasMattermostLoginConfig(config) && config.MATTERMOST_CHANNEL_ID);
 }
 
-export async function postMattermostChannelMessage(config: MattermostChannelPostConfig, message: string) {
+export type MattermostPostOptions = {
+  props?: Record<string, unknown>;
+};
+
+export async function postMattermostChannelMessage(config: MattermostChannelPostConfig, message: string, options: MattermostPostOptions = {}) {
   if (!config.MATTERMOST_CHANNEL_ID) {
     throw new Error("Mattermost target channel is not configured");
   }
 
   const client = new MattermostClient(config);
-  await client.postMessage(config.MATTERMOST_CHANNEL_ID, message);
+  await client.postMessage(config.MATTERMOST_CHANNEL_ID, message, options);
 }
 
 export class MattermostClient {
@@ -126,14 +130,19 @@ export class MattermostClient {
     );
   }
 
-  async postMessage(channelId: string, message: string) {
-    await this.requestJson(
+  async postMessage(channelId: string, message: string, options: MattermostPostOptions = {}) {
+    await this.createPost(channelId, message, options);
+  }
+
+  async createPost(channelId: string, message: string, options: MattermostPostOptions = {}) {
+    return this.requestJson(
       "/api/v4/posts",
       {
         method: "POST",
         body: JSON.stringify({
           channel_id: channelId,
           message,
+          ...(options.props ? { props: options.props } : {}),
         }),
       },
       z.unknown(),

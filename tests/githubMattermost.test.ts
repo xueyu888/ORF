@@ -5,6 +5,8 @@ import {
   formatGitHubCommitSyncMessage,
   formatGitHubIssuesMessage,
   formatGitHubPushMessage,
+  gitHubPushNotificationSyncKey,
+  resolveGitHubMattermostChannelId,
   type GitHubIssue,
   type GitHubPushPayload,
 } from "../server/integrations/github-mattermost-sync";
@@ -37,6 +39,49 @@ test("formats GitHub push payload for Mattermost", () => {
   assert.match(message, /`2222222`/);
   assert.match(message, /feat: sync GitHub pushes - xueyu/);
   assert.doesNotMatch(message, /Body is omitted/);
+});
+
+test("resolves the GitHub Mattermost target channel with push bot fallback", () => {
+  assert.equal(
+    resolveGitHubMattermostChannelId({
+      GITHUB_MATTERMOST_CHANNEL_ID: "github-channel",
+      MATTERMOST_PUSH_CHANNEL_ID: "push-channel",
+      MATTERMOST_CHANNEL_ID: "orf-channel",
+    }),
+    "github-channel",
+  );
+  assert.equal(
+    resolveGitHubMattermostChannelId({
+      MATTERMOST_PUSH_CHANNEL_ID: "push-channel",
+      MATTERMOST_CHANNEL_ID: "orf-channel",
+    }),
+    "push-channel",
+  );
+  assert.equal(
+    resolveGitHubMattermostChannelId({
+      MATTERMOST_CHANNEL_ID: "orf-channel",
+    }),
+    "orf-channel",
+  );
+});
+
+test("builds one stable GitHub push notification key per repository ref and after sha", () => {
+  assert.equal(
+    gitHubPushNotificationSyncKey({
+      repository: "xueyu888/ORF",
+      ref: "xy",
+      afterSha: "2222222222222222222222222222222222222222",
+    }),
+    "github-push:xueyu888/ORF:xy:2222222222222222222222222222222222222222",
+  );
+  assert.equal(
+    gitHubPushNotificationSyncKey({
+      repository: "xueyu888/ORF",
+      ref: "xy",
+      afterSha: "0000000000000000000000000000000000000000",
+    }),
+    "github-push:xueyu888/ORF:xy:deleted",
+  );
 });
 
 test("formats polled GitHub push commits for Mattermost", () => {

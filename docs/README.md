@@ -45,7 +45,7 @@ docs/
 | [设置页面 - 前端.md](./设置页面%20-%20前端.md) | 个人设置和系统设置页面、入口和前端状态 |
 | [设置页面 - 后端.md](./设置页面%20-%20后端.md) | 个人偏好、系统背景和设置接口边界 |
 | [对象存储 - 后端.md](./backend/对象存储%20-%20后端.md) | S3/MinIO 对象存储、上传文件和迁移契约 |
-| [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push webhook 转发到 Mattermost ORF 频道 |
+| [GitHub 推送同步 - 后端.md](./backend/GitHub%20推送同步%20-%20后端.md) | GitHub push/issues 转发到 Mattermost 推送机器人频道并按 push key 去重 |
 | [GitLab Mattermost 项目 Hook 自动收敛 - 后端.md](./backend/GitLab%20Mattermost%20项目%20Hook%20自动收敛%20-%20后端.md) | 自动为 GitLab develop 项目补齐 Mattermost GitLab 插件 webhook |
 | [Mattermost Jira 提醒 - 后端.md](./backend/Mattermost%20Jira%20提醒%20-%20后端.md) | 每日 Jira 提醒私信发送规则 |
 | [消息系统开发.md](./project/消息系统开发.md) | 系统内消息模型、投递事件、接口和前端入口 |
