@@ -24,7 +24,7 @@
     "test:e2e:explorer:fast": "node scripts/with-public-ca.mjs tsx scripts/run-ui-explorer-parallel.ts",
     "test:e2e:explorer:live": "node scripts/with-public-ca.mjs tsx scripts/run-ui-explorer-live.ts",
     "verify": "npm run build && npm test && npm run test:e2e",
-    "ory:dev": "tsx scripts/prepare-ory-env.ts && sg docker -c 'docker compose -f docker-compose.ory.yml up -d kratos'",
+    "ory:dev": "tsx scripts/prepare-ory-env.ts && tsx scripts/ensure-local-settlement-service.ts && sg docker -c 'docker compose -f docker-compose.ory.yml up -d kratos'",
     "ory:down": "sg docker -c 'docker compose -f docker-compose.ory.yml down'",
     "storage:dev": "docker compose -f docker-compose.minio.yml up -d",
     "storage:down": "docker compose -f docker-compose.minio.yml down",
