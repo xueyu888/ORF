@@ -120,12 +120,6 @@ async function main() {
       }
       await runNpmScript('db:migrate', args);
       return;
-    case 'seed':
-      if (!validateDatabaseEnv()) {
-        return;
-      }
-      await runNpmScript('db:seed', args);
-      return;
     case 'logs':
       printLogs(args[0]);
       return;
@@ -157,7 +151,6 @@ Checks:
 
 Database:
   orf migrate         Run npm run db:migrate
-  orf seed            Run npm run db:seed
 `);
 }
 
