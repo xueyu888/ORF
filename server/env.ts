@@ -6,7 +6,7 @@ const postgresUrl = z.string().startsWith("postgresql://");
 const envSchema = z.object({
   DATABASE_URL: postgresUrl.optional(),
   REMOTE_DATABASE_URL: postgresUrl.optional(),
-  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(4),
   DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   DATABASE_QUERY_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
   DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(10_000),
