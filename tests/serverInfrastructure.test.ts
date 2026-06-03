@@ -12,6 +12,7 @@ import {
   databaseSchemaMismatchPayload,
   isDatabaseSchemaMismatchError,
   validateObjectiveOwnedTaskSchema,
+  validateObjectiveProjectDisplaySchema,
 } from "../server/db/schemaGuard";
 import {
   checkDatabaseHealth,
@@ -152,6 +153,27 @@ test("objective-owned task schema guard rejects stale result-owned task schema",
     error: "数据库结构未完成迁移，请先对当前运行时 DATABASE_URL 执行 npm run db:migrate。",
     details,
   });
+});
+
+test("objective project display schema guard requires nullable objective project columns", () => {
+  assert.deepEqual(
+    validateObjectiveProjectDisplaySchema({
+      columns: [
+        { columnName: "project_id", isNullable: "YES" },
+        { columnName: "project_name", isNullable: "YES" },
+      ],
+      constraints: [],
+    }),
+    [],
+  );
+
+  assert.deepEqual(
+    validateObjectiveProjectDisplaySchema({
+      columns: [{ columnName: "project_id", isNullable: "NO" }],
+      constraints: [],
+    }),
+    ["objectives.project_id must be nullable.", "objectives.project_name is missing."],
+  );
 });
 
 test("auth service unavailable errors are classified for 503 responses", () => {
