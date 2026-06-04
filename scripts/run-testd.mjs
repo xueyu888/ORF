@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import path from "node:path";
 import pg from "pg";
 import { createPgPoolConfig } from "./db-connection.mjs";
 
@@ -19,6 +21,8 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     handleTerminationSignal(signal);
   });
 }
+
+ensureTestdConfigFileExists();
 
 if (await shouldRunRecoveryPass(extraArgs)) {
   for (const suite of suites) {
@@ -88,6 +92,29 @@ function runPlaywright(suite, args, extraEnv = {}) {
       resolve(code ?? 1);
     });
   });
+}
+
+function ensureTestdConfigFileExists() {
+  const configPath = path.join(process.cwd(), "testd", "testd.config.ts");
+  const examplePath = path.join(process.cwd(), "testd", "testd.config.ts.example");
+
+  if (fs.existsSync(configPath)) {
+    return;
+  }
+
+  if (!fs.existsSync(examplePath)) {
+    throw new Error(`testd 配置不存在，且无法找到示例配置: ${examplePath}`);
+  }
+
+  try {
+    fs.copyFileSync(examplePath, configPath, fs.constants.COPYFILE_EXCL);
+    console.error("TestD 未找到 testd/testd.config.ts，已从 testd/testd.config.ts.example 初始化。");
+  } catch (error) {
+    if (error?.code === "EEXIST") {
+      return;
+    }
+    throw error;
+  }
 }
 
 function runRecoveryPass(suite, args, reason) {

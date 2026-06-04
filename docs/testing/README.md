@@ -72,6 +72,8 @@ npm run testd:settings
 
 `npm run testd` 会为三段套件复用同一个 `TESTD_RUN_ID`；单独运行某个 suite 时，Playwright 配置会为本次运行生成 `TESTD_RUN_ID`。testd 会把邮箱、ID、标题、文件名等测试资源派生为运行内独占值。默认测试连接池为后端 `DATABASE_POOL_MAX=15`、testd 直连 `TESTD_DATABASE_POOL_MAX=2`。
 
+`npm run testd` 启动 Playwright 前会检查 [testd/testd.config.ts](../../testd/testd.config.ts)；如果该文件不存在，会从 [testd/testd.config.ts.example](../../testd/testd.config.ts.example) 初始化一份本地配置，不会覆盖已经存在的本地配置。
+
 `npm run testd` 会在正式测试前执行 recovery-only pass，补清理 PostgreSQL recovery ledger 中属于当前收集用例的旧运行残留。如果 Playwright worker 因 `SIGTRAP` 等进程级异常退出，当前用例进程已经无法继续执行 `finally` 中的 Clean；此时外层 run script 会在仍持有 TestD 全局锁时追加一次 post-failure recovery-only pass，用新的 `TESTD_RUN_ID` claim 本轮失败运行的未完成记录并补跑对应 `Clean`，然后保留原始测试失败退出码。recovery-only pass 会保留路径、suite、project、worker 等收集范围参数，但不会继承 `--timeout` 或 `--global-timeout` 这类可能再次中断清理的运行限制。
 
 普通业务用例不会修改 `role_permissions`。权限管理用例单独串行运行；`npm run testd` 默认先持有 TestD 全局锁，同一套共享 PG/Ory/MinIO 环境中同一时间只允许一套 TestD 运行，因此全局锁路径不会再额外抢角色权限 advisory 读写锁。只有显式绕过全局锁的调试路径才启用角色权限 advisory 锁：真正写入 member 角色权限的用例持独占锁，其他 testd 用例持共享锁。默认单用例超时为普通业务套件 60000ms、权限/settings 串行套件 180000ms，权限锁等待超时为 `TESTD_ROLE_PERMISSION_LOCK_TIMEOUT_MS=300000`。
