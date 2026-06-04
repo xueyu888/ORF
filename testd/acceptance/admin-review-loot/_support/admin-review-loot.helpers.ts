@@ -217,7 +217,7 @@ export async function reviewLootLedgerPresent(target: ReviewLootTarget, memberNa
 }
 
 export function lootPagePath(target: ReviewLootTarget) {
-  return `/objectives/${encodeURIComponent(target.objective.id)}/loot`;
+  return `/tasks/objectives/${encodeURIComponent(target.objective.id)}/loot`;
 }
 
 async function readResultByTitle(title: string) {

@@ -31,23 +31,32 @@ test("testd run scope keeps long emails unique within the 63 character local-par
 });
 
 test("testd run scope derives ids, filenames and display text without changing roles or passwords", () => {
-  const data = scopeStateCaseData(
-    {
-      id: "obj-comment-fixture",
-      role: "member",
-      password: "OrfPassword!2026",
-      permissionKey: "comment.manage",
-      memberName: "ORF Member Recruit Member E2E",
-      objectiveTitle: "E2E objective",
-      taskDescription: "执行支撑目标的下一步技术任务。",
-      commentBodyMarker: "E2E-COMMENT-EDIT-FORBIDDEN-OBJECTIVE:",
-      rootCommentBody: "E2E-COMMENT-EDIT-FORBIDDEN-OBJECTIVE: 原始评论正文",
-      invalidFileName: "comment-upload.txt",
-    },
-    scope,
-  );
+  const source = {
+    id: "obj-comment-fixture",
+    targetUserId: "user-comment-target",
+    createdBy: "user-comment-creator",
+    identityId: "ory-identity-comment-target",
+    role: "member",
+    password: "OrfPassword!2026",
+    permissionKey: "comment.manage",
+    memberName: "ORF Member Recruit Member E2E",
+    objectiveTitle: "E2E objective",
+    taskDescription: "执行支撑目标的下一步技术任务。",
+    commentBodyMarker: "E2E-COMMENT-EDIT-FORBIDDEN-OBJECTIVE:",
+    rootCommentBody: "E2E-COMMENT-EDIT-FORBIDDEN-OBJECTIVE: 原始评论正文",
+    invalidFileName: "comment-upload.txt",
+  };
+  const data = scopeStateCaseData(source, scope);
+  const repeated = scopeStateCaseData(source, scope);
 
   assert.equal(data.id, "obj-comment-fixture-r4b24f71e5e-ca0857aea-w4");
+  assert.match(data.targetUserId, uuidPattern);
+  assert.match(data.createdBy, uuidPattern);
+  assert.equal(data.targetUserId, repeated.targetUserId);
+  assert.equal(data.createdBy, repeated.createdBy);
+  assert.notEqual(data.targetUserId, source.targetUserId);
+  assert.notEqual(data.createdBy, source.createdBy);
+  assert.equal(data.identityId, "ory-identity-comment-target");
   assert.equal(data.role, "member");
   assert.equal(data.password, "OrfPassword!2026");
   assert.equal(data.permissionKey, "comment.manage");
@@ -59,3 +68,5 @@ test("testd run scope derives ids, filenames and display text without changing r
   assert.ok(data.rootCommentBody.includes(data.commentBodyMarker));
   assert.equal(data.invalidFileName, "comment-upload-r4b24f71e5e-ca0857aea-w4.txt");
 });
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

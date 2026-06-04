@@ -5,6 +5,7 @@ import { commentThreads, objectives, results, taskChecklistItems, tasks, teamMem
 import { canDeleteObjectiveByFlow } from "../../src/domain/orfLifecycle";
 import type { UserRole, UserStatus } from "../../src/types/orf";
 import type { ChallengeApplication, ObjectiveFlowStatus, OrfStage, WorkStatus } from "../../src/types/orf";
+import { createStableUuid, isUuid } from "../_shared/ids";
 import { ORF_SESSION_COOKIE, ORY_ADMIN_URL, type BrowserAuthStorageState, type BrowserSession, type OryIdentity } from "./common.context";
 
 export type TestUserAccountRecord = {
@@ -311,11 +312,15 @@ export async function upsertTestUserRecord(input: {
   status?: UserStatus;
   identityId?: string;
 }) {
-  const [existingById] = input.userId ? await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1) : [];
+  const requestedUserId = isUuid(input.userId) ? input.userId : undefined;
+  const [existingById] = requestedUserId ? await db.select({ id: users.id }).from(users).where(eq(users.id, requestedUserId)).limit(1) : [];
   const [existingByEmail] = existingById
     ? []
     : await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${input.email.toLowerCase()}`).limit(1);
-  const userId = existingById?.id ?? existingByEmail?.id ?? input.userId ?? `user-${slug(input.email.split("@")[0] ?? "testd-user")}`;
+  const fallbackUserId = isUuid(input.identityId)
+    ? input.identityId
+    : createStableUuid("testd-user", `${input.email.toLowerCase()}:${input.identityId ?? ""}`);
+  const userId = existingById?.id ?? existingByEmail?.id ?? requestedUserId ?? fallbackUserId;
   const status = input.status ?? "active";
 
   if (existingById || existingByEmail) {
@@ -353,7 +358,7 @@ export async function upsertDefaultTeamMembership(input: {
   role: UserRole;
 }) {
   const teamId = await ensureDefaultTeam();
-  const userId = input.userId ?? (await readTestUserIds({ email: input.email }))[0];
+  const userId = isUuid(input.userId) ? input.userId : (await readTestUserIds({ email: input.email }))[0];
   if (!userId) {
     throw new Error("默认团队成员关系需要已存在的测试用户");
   }
@@ -423,7 +428,7 @@ export async function testDefaultTeamMembershipMatches(input: {
   role?: UserRole;
 }) {
   const teamId = await ensureDefaultTeam();
-  const userId = input.userId ?? (await readTestUserIds({ email: input.email }))[0];
+  const userId = isUuid(input.userId) ? input.userId : (await readTestUserIds({ email: input.email }))[0];
   if (!userId) {
     return false;
   }
@@ -725,7 +730,7 @@ async function readTestUserIds(input: { email?: string; emails?: string[]; userI
 function userPredicate(input: { email?: string; emails?: string[]; userId?: string; role?: UserRole }) {
   const emails = [...(input.email ? [input.email] : []), ...(input.emails ?? [])].map((email) => email.toLowerCase());
   const predicates = [
-    input.userId ? eq(users.id, input.userId) : undefined,
+    isUuid(input.userId) ? eq(users.id, input.userId) : undefined,
     ...emails.map((email) => sql`lower(${users.email}) = ${email}`),
   ].filter((predicate): predicate is NonNullable<typeof predicate> => Boolean(predicate));
 

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { OrfUser, UserRole } from "../../src/types/orf";
 import { deleteOryIdentity } from "../auth/ory";
@@ -47,28 +48,13 @@ function normalizeInput(input: UserInput): UserInput {
   };
 }
 
-function userIdBase(email: string) {
-  return `user-${email
-    .split("@")[0]
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "member"}`;
-}
-
-async function nextUserId(email: string) {
-  const base = userIdBase(email);
-  let candidate = base;
-  let suffix = 1;
-
+async function nextUserId() {
   while (true) {
+    const candidate = randomUUID();
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, candidate)).limit(1);
     if (!existing) {
       return candidate;
     }
-
-    suffix += 1;
-    candidate = `${base}-${suffix}`;
   }
 }
 
@@ -439,7 +425,7 @@ export async function createScopedUser(scope: RuntimeScope, actorUserId: string,
 
   await db.transaction(async (tx) => {
     const existingUser = matchedUser ?? (await tx.select().from(users).where(sql`lower(${users.email}) = ${normalized.email}`).limit(1))[0];
-    const userId = existingUser?.id ?? (await nextUserId(normalized.email));
+    const userId = existingUser?.id ?? (await nextUserId());
 
     if (existingUser) {
       await tx.update(users).set({ name: normalized.name, email: normalized.email, status: "active" }).where(eq(users.id, userId));

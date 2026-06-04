@@ -125,7 +125,7 @@ export async function targetLootPresent(target: PeerReviewTarget, loot: PeerRevi
 }
 
 export function lootPagePath(target: PeerReviewTarget) {
-  return `/objectives/${encodeURIComponent(target.objective.id)}/loot`;
+  return `/tasks/objectives/${encodeURIComponent(target.objective.id)}/loot`;
 }
 
 async function readLootByBody(body: string) {

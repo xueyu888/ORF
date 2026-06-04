@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
@@ -164,28 +165,13 @@ function identityName(identity: OryIdentity, email: string): string {
   return textTrait(identity.traits?.username) ?? email.split("@")[0] ?? "User";
 }
 
-function slug(value: string) {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "user";
-}
-
-async function nextUserId(email: string, identityId: string) {
-  const base = `user-${slug(email.split("@")[0] ?? identityId)}`;
-  let candidate = base;
-  let suffix = 1;
-
+async function nextUserId() {
   while (true) {
+    const candidate = randomUUID();
     const [existing] = await db.select({ id: users.id }).from(users).where(sql`${users.id} = ${candidate}`).limit(1);
     if (!existing) {
       return candidate;
     }
-
-    suffix += 1;
-    candidate = `${base}-${suffix}`;
   }
 }
 
@@ -255,7 +241,7 @@ async function upsertOrfUser(
     };
   }
 
-  const id = await nextUserId(email, identity.id);
+  const id = await nextUserId();
   const createdLastOnlineAt = lastOnlineAt ?? null;
   await db.insert(users).values({
     id,

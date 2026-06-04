@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { TestInfo } from "@playwright/test";
+import { createStableUuid } from "../_shared/ids";
 import type { StateCaseSpec } from "./types";
 
 export type TestdRunScope = {
@@ -110,6 +111,10 @@ function scopeValue(value: unknown, scope: TestdRunScope, keyPath: string[]): un
     return value;
   }
 
+  if (shouldScopeUserId(key, value)) {
+    return scopeUserId(value, scope);
+  }
+
   if (shouldScopeId(key, value)) {
     return `${value}-${scope.label}`;
   }
@@ -147,6 +152,30 @@ function shouldScopeId(key: string, value: string) {
     !key.toLowerCase().includes("identity") &&
     (key === "id" || key.endsWith("Id")) &&
     /^[a-z0-9][a-z0-9_-]*$/i.test(value)
+  );
+}
+
+function shouldScopeUserId(key: string, value: string) {
+  const normalizedKey = key.toLowerCase();
+  return (
+    !normalizedKey.includes("identity") &&
+    /^[a-z0-9][a-z0-9_-]*$/i.test(value) &&
+    (
+      normalizedKey === "userid" ||
+      normalizedKey.endsWith("userid") ||
+      normalizedKey === "createdby" ||
+      normalizedKey === "updatedby" ||
+      normalizedKey === "requestedby" ||
+      normalizedKey === "reviewedby" ||
+      normalizedKey === "submittedby"
+    )
+  );
+}
+
+function scopeUserId(value: string, scope: TestdRunScope) {
+  return createStableUuid(
+    "testd-run-scope-user-id",
+    `${scope.runId}:${scope.caseId}:${scope.workerIndex}:${value}`,
   );
 }
 

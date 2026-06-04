@@ -190,7 +190,7 @@ export function lootFromResponse(body: unknown): SubmittedLoot {
 }
 
 export function lootPagePath(target: LootTarget) {
-  return `/objectives/${encodeURIComponent(target.objective.id)}/loot`;
+  return `/tasks/objectives/${encodeURIComponent(target.objective.id)}/loot`;
 }
 
 export function claimEvidenceInput(page: Page) {

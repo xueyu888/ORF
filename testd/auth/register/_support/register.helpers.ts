@@ -9,6 +9,7 @@ import {
   findOryIdentityByEmail,
   oryAdminFetch,
 } from "../../../_operators/common.helpers";
+import { createStableUuid, isUuid } from "../../../_shared/ids";
 import type {
   RegisterCaseData,
   RegisteredUserRecord,
@@ -131,13 +132,12 @@ export async function upsertAdminAccount(
   identityId: string | undefined,
 ) {
   const teamId = await ensureDefaultTeam();
-  const userId = `user-${slug(data.adminEmail.split("@")[0] ?? "register-admin")}`;
   const [existing] = await db
     .select({ id: users.id })
     .from(users)
     .where(sql`lower(${users.email}) = ${data.adminEmail.toLowerCase()}`)
     .limit(1);
-  const effectiveUserId = existing?.id ?? userId;
+  const effectiveUserId = existing?.id ?? (isUuid(identityId) ? identityId : createStableUuid("testd-register-admin-user", `${data.adminEmail.toLowerCase()}:${identityId ?? ""}`));
 
   if (existing) {
     await db
@@ -273,11 +273,4 @@ async function readUserMemberships(
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function slug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 }
