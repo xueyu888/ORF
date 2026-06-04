@@ -157,6 +157,14 @@ test("feedback creation page actions use visible objective participation", () =>
   );
 });
 
+test("new feedback modal keeps feedback source internal", () => {
+  const source = readFileSync(path.resolve("src/components/GlobalModals.tsx"), "utf8");
+  assert.match(source, /const INTERNAL_FEEDBACK_SOURCE = "Team review" as const;/);
+  assert.match(source, /source: INTERNAL_FEEDBACK_SOURCE/);
+  assert.doesNotMatch(source, /<Field label="来源"/);
+  assert.doesNotMatch(source, /"User report"/);
+});
+
 test("removed ORF secondary detail routes stay out of the route table", () => {
   const appSource = readFileSync(path.resolve("src/App.tsx"), "utf8");
   assert.doesNotMatch(appSource, /objectives\/:objectiveId"\s+element=/, "Objective detail route must stay removed");

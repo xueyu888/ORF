@@ -1,34 +1,42 @@
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
+import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { uncertaintyLevelOptions, uncertaintyScores } from "../domain/orfSettlement";
 import { useOrf } from "../state/OrfProvider";
-import type { FeedbackSource, Impact, UncertaintyLevel } from "../types/orf";
+import type { Impact, UncertaintyLevel } from "../types/orf";
+import { impactLabel } from "../utils/labels";
 import { Button, Field } from "./ui";
 
-function ModalFrame({ title, children }: { title: string; children: ReactNode }) {
+const INTERNAL_FEEDBACK_SOURCE = "Team review" as const;
+const feedbackImpactOptions: Impact[] = ["Low", "Medium", "High", "Critical"];
+
+function ModalFrame({ title, children, size = "md" }: { title: string; children: ReactNode; size?: "md" | "lg" }) {
   const { closeModal } = useOrf();
   const drag = useDraggableFloating<HTMLDivElement>({ resetKey: title });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[9vh]" onMouseDown={closeModal}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-6" onMouseDown={closeModal}>
       <div
         ref={drag.ref}
         style={drag.style}
         aria-label={title}
         aria-modal="true"
-        className="orf-card orf-draggable-floating flex max-h-[82vh] w-full max-w-xl flex-col overflow-hidden rounded-xl"
+        className={clsx(
+          "orf-card orf-draggable-floating flex max-h-[88vh] w-full flex-col overflow-hidden rounded-lg",
+          size === "lg" ? "max-w-2xl" : "max-w-xl",
+        )}
         onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
       >
-        <div className="orf-drag-handle flex items-center justify-between border-b orf-border px-5 py-4" {...drag.handleProps}>
-          <div className="orf-text-primary text-sm font-semibold">{title}</div>
-          <button onClick={closeModal} className="orf-text-muted orf-hover-text">
+        <div className="orf-drag-handle flex items-center justify-between border-b orf-border px-6 py-4" {...drag.handleProps}>
+          <div className="orf-text-primary text-base font-semibold">{title}</div>
+          <button aria-label="关闭" onClick={closeModal} className="orf-control orf-ghost-action inline-flex h-8 w-8 items-center justify-center">
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="min-h-0 overflow-y-auto p-5">{children}</div>
+        <div className="min-h-0 overflow-y-auto p-6">{children}</div>
       </div>
     </div>
   );
@@ -163,15 +171,17 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
   const [phenomenon, setPhenomenon] = useState("");
   const [cause, setCause] = useState(state.causeCategories[0] ?? "");
   const [impact, setImpact] = useState<Impact>("Medium");
-  const [source, setSource] = useState<FeedbackSource>("User report");
-  const [owner, setOwner] = useState(defaultOwner);
+  const activeOwnerOptions = state.users.filter((user) => user.status === "active").map((user) => user.name);
+  const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : [defaultOwner];
+  const initialOwner = ownerOptions.includes(defaultOwner) ? defaultOwner : ownerOptions[0] ?? defaultOwner;
+  const [owner, setOwner] = useState(initialOwner);
   const [suggestedAdjustment, setSuggestedAdjustment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   return (
-    <ModalFrame title="新建反馈">
+    <ModalFrame title="新建反馈" size="lg">
       <form
-        className="grid gap-4"
+        className="grid gap-5"
         onSubmit={async (event) => {
           event.preventDefault();
           if (hasBlankRequiredValues([phenomenon, linkedResultId, cause, suggestedAdjustment, owner])) {
@@ -193,7 +203,7 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
               linkedObjectiveId: selectedResult.objectiveId,
               linkedResultId,
               suggestedAdjustment: suggestedAdjustment.trim(),
-              source,
+              source: INTERNAL_FEEDBACK_SOURCE,
               owner: owner.trim(),
             });
             if (ok) closeModal();
@@ -202,18 +212,40 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
           }
         }}
       >
-        <Field label="现象"><textarea className="orf-input min-h-24 px-3 py-2" required value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} /></Field>
-        <Field label="关联指标"><select className="orf-input px-3 py-2" required value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>{resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}</select></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="原因分类"><select className="orf-input px-3 py-2" required value={cause} onChange={(event) => setCause(event.target.value)}>{state.causeCategories.map((item) => <option key={item}>{item}</option>)}</select></Field>
-          <Field label="影响"><select className="orf-input px-3 py-2" value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "严重"}</option>)}</select></Field>
+        <Field label="标题">
+          <input className="orf-input h-10 px-3 text-sm" required value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} />
+        </Field>
+        <Field label="说明">
+          <textarea className="orf-input min-h-32 resize-y px-3 py-2.5 text-sm leading-6" required value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} />
+        </Field>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="关联指标">
+            <select className="orf-input h-10 px-3 text-sm" required value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>
+              {resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}
+            </select>
+          </Field>
+          <Field label="原因分类">
+            <select className="orf-input h-10 px-3 text-sm" required value={cause} onChange={(event) => setCause(event.target.value)}>
+              {state.causeCategories.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="来源"><select className="orf-input px-3 py-2" value={source} onChange={(event) => setSource(event.target.value as FeedbackSource)}>{["User report", "Eval run", "Log", "Incident", "Team review"].map((item) => <option key={item} value={item}>{item === "User report" ? "用户反馈" : item === "Eval run" ? "评估运行" : item === "Log" ? "日志" : item === "Incident" ? "事故" : "内部复盘"}</option>)}</select></Field>
-          <Field label="处理人"><input className="orf-input px-3 py-2" required value={owner} onChange={(event) => setOwner(event.target.value)} /></Field>
+        <div className="grid gap-3 md:grid-cols-2">
+          <Field label="影响">
+            <select className="orf-input h-10 px-3 text-sm" value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>
+              {feedbackImpactOptions.map((item) => <option key={item} value={item}>{impactLabel[item]}</option>)}
+            </select>
+          </Field>
+          <Field label="处理人">
+            <select className="orf-input h-10 px-3 text-sm" required value={owner} onChange={(event) => setOwner(event.target.value)}>
+              {ownerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </Field>
         </div>
-        <Field label="建议调整"><textarea className="orf-input min-h-20 px-3 py-2" required value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} /></Field>
-        <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit" disabled={submitting}>保存反馈</Button></div>
+        <div className="grid grid-cols-2 gap-2 border-t orf-border pt-4 sm:flex sm:justify-end">
+          <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={closeModal}>取消</Button>
+          <Button className="w-full sm:w-auto" type="submit" disabled={submitting}><Check className="h-4 w-4" />保存反馈</Button>
+        </div>
       </form>
     </ModalFrame>
   );
