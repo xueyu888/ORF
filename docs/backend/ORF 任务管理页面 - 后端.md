@@ -18,7 +18,7 @@
 | `PATCH`  | `/api/objectives/:objectiveId`                                               | 指挥官更新目标标题或截止日期                                                                                                                       |
 | `PATCH`  | `/api/objectives/:objectiveId/publish`                                       | 指挥官发布目标，进入 `open`                                                                                                                        |
 | `POST`   | `/api/objectives/:objectiveId/recruitments`                                  | 指挥官征召 active 普通成员，进入 `recruiting`                                                                                                      |
-| `POST`   | `/api/objectives/:objectiveId/challenge-applications`                        | active 普通成员填写 `reason` 申请挑战，进入 `applying`                                                                                             |
+| `POST`   | `/api/objectives/:objectiveId/challenge-applications`                        | active 普通成员填写 `reason` 申请挑战；`open/applying` 进入 `applying`，`recruiting/reestimating` 保持原流转状态                                  |
 | `PATCH`  | `/api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，写入挑战者并进入 `reestimating`                                                                                                    |
 | `PATCH`  | `/api/objectives/:objectiveId/challenge-applications/:applicationId/reject`  | 指挥官拒绝申请                                                                                                                                     |
 | `PATCH`  | `/api/objectives/:objectiveId/challenge`                                     | 被征召成员接受，写入挑战者并进入 `reestimating`                                                                                                    |
@@ -90,7 +90,7 @@ ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只�
 
 `GET /api/bounties` 对所有已通过用户返回 `publicItems`，包含 `flowStatus in (open, applying, recruiting, reestimating)` 的公开大厅目标。`publicItems` 是大厅主列表，必须带上 `applications`、`pendingApplications`、`approvedApplicants`、`challengers`、`isCurrentChallenger`、`hasCurrentApplication` 和目标的 `publishedAt`，用于公开展示申请理由、申请人、已通过挑战者头像和发布到大厅时间。`availableItems` 只表示当前仍可发起申请的目标；`recruitmentItems` 表示当前 active 普通成员自己待接受的征召。指挥官/管理员读取同一接口时仍能看到大厅目标；前端可以完整显示申请 / 接受操作入口，但所有申请 / 接受动作接口必须返回 403 或等价 forbidden，不能把管理员写入 `challengerUserIds`、`assignedChallengerUserIds` 或申请记录。
 
-申请挑战只接受 active 普通成员在 `open/applying/recruiting` 发起，且 body 必须包含 trim 后非空的 `reason`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
+申请挑战只接受 active 普通成员在 `open/applying/recruiting/reestimating` 发起，且 body 必须包含 trim 后非空的 `reason`；`reestimating` 目标收到新申请后仍保持 `reestimating`，不能回退到 `applying`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
 
 ## 状态字段
 
