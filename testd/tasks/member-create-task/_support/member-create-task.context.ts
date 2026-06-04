@@ -15,6 +15,7 @@ export type MemberCreateTaskCaseData = {
   memberPassword: string;
   memberName: string;
   memberRole: "member";
+  cleanupEmails: string[];
   objectiveId: string;
   objectiveTitle: string;
   adminTaskTitle: string;
