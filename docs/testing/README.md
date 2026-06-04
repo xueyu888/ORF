@@ -70,7 +70,7 @@ npm run testd:permissions
 npm run testd:settings
 ```
 
-`npm run testd` 会为三段套件复用同一个 `TESTD_RUN_ID`；单独运行某个 suite 时，Playwright 配置会为本次运行生成 `TESTD_RUN_ID`。testd 会把邮箱、ID、标题、文件名等测试资源派生为运行内独占值。默认测试连接池为后端 `DATABASE_POOL_MAX=15`、testd 直连 `TESTD_DATABASE_POOL_MAX=2`。
+`npm run testd` 会为三段套件复用同一个 `TESTD_RUN_ID`；单独运行某个 suite 时，Playwright 配置会为本次运行生成 `TESTD_RUN_ID`。testd 会把邮箱、ID、标题、文件名等测试资源派生为运行内独占值。[.env.example](../../.env.example) 建议测试环境使用后端 `DATABASE_POOL_MAX=30`、testd 直连 `TESTD_DATABASE_POOL_MAX=5`，并将数据库连接和查询超时设为 30000ms；实际运行以当前 `.env` 或进程环境变量为准。
 
 `npm run testd` 启动 Playwright 前会检查 [testd/testd.config.ts](../../testd/testd.config.ts)；如果该文件不存在，会从 [testd/testd.config.ts.example](../../testd/testd.config.ts.example) 初始化一份本地配置，不会覆盖已经存在的本地配置。
 
