@@ -152,18 +152,19 @@ test("feedback creation page actions use team-level feedback capability", () => 
 
   assert.match(
     readFileSync(path.resolve("src/pages/AIEvaluationPage.tsx"), "utf8"),
-    /canCreateFeedbackForResult/,
+    /canCreateTeamFeedback/,
     "AI evaluation failure samples must reuse the feedback capability helper",
   );
 });
 
-test("new feedback modal keeps feedback source internal", () => {
+test("new feedback modal does not expose obsolete source or metric bindings", () => {
   const source = readFileSync(path.resolve("src/components/GlobalModals.tsx"), "utf8");
-  assert.match(source, /const INTERNAL_FEEDBACK_SOURCE = "Team review" as const;/);
-  assert.match(source, /source: INTERNAL_FEEDBACK_SOURCE/);
+  assert.doesNotMatch(source, /INTERNAL_FEEDBACK_SOURCE/);
+  assert.doesNotMatch(source, /source:\s*"Team review"/);
   assert.doesNotMatch(source, /<Field label="来源"/);
   assert.doesNotMatch(source, /关联指标/);
   assert.doesNotMatch(source, /linkedResultId/);
+  assert.doesNotMatch(source, /linkedObjectiveId/);
   assert.doesNotMatch(source, /"User report"/);
 });
 

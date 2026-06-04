@@ -135,7 +135,6 @@ const insertTaskByReference = (tasks: Task[], movingTask: Task, referenceTaskId?
 const removeCommentsForTargets = (
   comments: OrfState["comments"],
   targets: {
-    feedbackIds?: Set<string>;
     objectiveIds?: Set<string>;
     resultIds?: Set<string>;
     taskIds?: Set<string>;
@@ -155,10 +154,6 @@ const removeCommentsForTargets = (
       return !targets.taskIds?.has(thread.targetId);
     }
 
-    if (thread.targetType === "feedback") {
-      return !targets.feedbackIds?.has(thread.targetId);
-    }
-
     return !targets.subtaskIds?.has(thread.targetId);
   });
 
@@ -167,18 +162,16 @@ type CascadeTargets = {
   resultIds: Set<string>;
   taskIds: Set<string>;
   subtaskIds: Set<string>;
-  feedbackIds: Set<string>;
   evidenceIds: Set<string>;
 };
 
 const collectCascadeTargets = (
   state: OrfState,
-  input: { objectiveIds?: Iterable<string>; resultIds?: Iterable<string>; taskIds?: Iterable<string>; feedbackIds?: Iterable<string> },
+  input: { objectiveIds?: Iterable<string>; resultIds?: Iterable<string>; taskIds?: Iterable<string> },
 ): CascadeTargets => {
   const objectiveIds = new Set(input.objectiveIds ?? []);
   const resultIds = new Set(input.resultIds ?? []);
   const taskIds = new Set(input.taskIds ?? []);
-  const feedbackIds = new Set(input.feedbackIds ?? []);
   const evidenceIds = new Set<string>();
 
   for (const result of state.results) {
@@ -193,17 +186,8 @@ const collectCascadeTargets = (
     }
   }
 
-  for (const item of state.feedback) {
-    if (
-      (item.linkedObjectiveId && objectiveIds.has(item.linkedObjectiveId)) ||
-      (item.linkedResultId && resultIds.has(item.linkedResultId))
-    ) {
-      feedbackIds.add(item.id);
-    }
-  }
-
   for (const item of state.evidence) {
-    if (resultIds.has(item.linkedResultId) || (item.linkedFeedbackId && feedbackIds.has(item.linkedFeedbackId))) {
+    if (resultIds.has(item.linkedResultId)) {
       evidenceIds.add(item.id);
     }
   }
@@ -214,7 +198,7 @@ const collectCascadeTargets = (
       .flatMap((task) => task.checklist.map((item) => item.id)),
   );
 
-  return { objectiveIds, resultIds, taskIds, subtaskIds, feedbackIds, evidenceIds };
+  return { objectiveIds, resultIds, taskIds, subtaskIds, evidenceIds };
 };
 
 const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState => ({
@@ -225,23 +209,20 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
       ...objective,
       resultIds: objective.resultIds.filter((id) => !targets.resultIds.has(id)),
       taskIds: objective.taskIds.filter((id) => !targets.taskIds.has(id)),
-      feedbackIds: objective.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
     })),
   results: state.results
     .filter((result) => !targets.resultIds.has(result.id))
     .map((result) => ({
       ...result,
-      feedbackIds: result.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
       evidenceIds: result.evidenceIds.filter((id) => !targets.evidenceIds.has(id)),
-    })),
+  })),
   tasks: state.tasks.filter((task) => !targets.taskIds.has(task.id)),
-  feedback: state.feedback.filter((item) => !targets.feedbackIds.has(item.id)),
+  feedback: state.feedback,
   evidence: state.evidence.filter((item) => !targets.evidenceIds.has(item.id)),
   decisions: state.decisions.filter(
     (item) =>
       !(item.linkedObjectiveId && targets.objectiveIds.has(item.linkedObjectiveId)) &&
-      !(item.linkedResultId && targets.resultIds.has(item.linkedResultId)) &&
-      !(item.linkedFeedbackId && targets.feedbackIds.has(item.linkedFeedbackId)),
+      !(item.linkedResultId && targets.resultIds.has(item.linkedResultId)),
   ),
   evalRuns: state.evalRuns.filter((item) => !targets.resultIds.has(item.linkedResultId)),
   scenarios: state.scenarios.filter((item) => !targets.objectiveIds.has(item.linkedObjectiveId)),
@@ -254,7 +235,6 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
     resultIds: targets.resultIds,
     taskIds: targets.taskIds,
     subtaskIds: targets.subtaskIds,
-    feedbackIds: targets.feedbackIds,
   }),
   objectiveAlignmentRequests: state.objectiveAlignmentRequests.filter((request) => !targets.objectiveIds.has(request.objectiveId)),
 });
@@ -421,7 +401,6 @@ export class OrfFlowStore {
       boundary: input.boundary,
       successDefinition: "Success definition will be refined during result planning.",
       resultIds: [],
-      feedbackIds: [],
       taskIds: [],
       finalDueAt: input.finalDueAt ?? addDays(now, 14),
       challengers: [],
@@ -472,7 +451,6 @@ export class OrfFlowStore {
       uncertaintyScore: input.uncertaintyScore ?? uncertaintyScore(input.uncertaintyLevel),
       acceptedResult: input.acceptedResult ?? "unreviewed",
       evidenceIds: [],
-      feedbackIds: [],
       trend: [{ date: now, value: input.current ?? 0 }],
       reviewCadence: input.reviewCadence ?? "Weekly",
       createdAt: now,
@@ -490,21 +468,7 @@ export class OrfFlowStore {
     };
   }
 
-  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "source" | "owner"> & Partial<Pick<Feedback, "linkedObjectiveId" | "linkedResultId">>): OrfState {
-    const linkedResult = input.linkedResultId ? state.results.find((item) => item.id === input.linkedResultId) : undefined;
-    if (input.linkedResultId && !linkedResult) {
-      return state;
-    }
-
-    const linkedObjective = linkedResult
-      ? state.objectives.find((item) => item.id === linkedResult.objectiveId)
-      : input.linkedObjectiveId
-        ? state.objectives.find((item) => item.id === input.linkedObjectiveId)
-        : undefined;
-    if (input.linkedObjectiveId && !linkedObjective) {
-      return state;
-    }
-
+  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner">): OrfState {
     const id = makeId("fb");
     const now = currentDate();
     const owner = input.owner || currentUserName(state);
@@ -512,14 +476,10 @@ export class OrfFlowStore {
     const feedback: Feedback = {
       id,
       phenomenon: input.phenomenon,
-      evidenceIds: [],
       causeCategories: input.causeCategories,
       impact: input.impact,
-      linkedObjectiveId: linkedObjective?.id ?? null,
-      linkedResultId: linkedResult?.id ?? null,
       suggestedAdjustment: input.suggestedAdjustment,
-      source: input.source,
-      status: "New",
+      status: "Open",
       owner,
       ownerUserId,
       createdAt: now,
@@ -530,12 +490,6 @@ export class OrfFlowStore {
     return {
       ...state,
       feedback: [feedback, ...state.feedback],
-      objectives: state.objectives.map((objective) =>
-        feedback.linkedObjectiveId && objective.id === feedback.linkedObjectiveId ? { ...objective, feedbackIds: [feedback.id, ...objective.feedbackIds] } : objective,
-      ),
-      results: state.results.map((result) =>
-        feedback.linkedResultId && result.id === feedback.linkedResultId ? { ...result, feedbackIds: [feedback.id, ...result.feedbackIds] } : result,
-      ),
     };
   }
 
@@ -555,7 +509,6 @@ export class OrfFlowStore {
       assignee: input.assignee || currentUserName(state),
       assigneeUserId: input.assigneeUserId ?? userIdForName(state, input.assignee || currentUserName(state)),
       linkedObjectiveId: objective.id,
-      feedbackOriginId: input.feedbackOriginId,
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
       checklist: (input.checklist ?? []).map((item) => ({ ...item, updatedAt: item.updatedAt ?? now })),
@@ -1174,7 +1127,7 @@ export class OrfFlowStore {
     };
   }
 
-  proposeResultUpdate(state: OrfState, resultId: string, title: string, reason: string, feedbackId?: string): OrfState {
+  proposeResultUpdate(state: OrfState, resultId: string, title: string, reason: string): OrfState {
     const result = state.results.find((item) => item.id === resultId);
     if (!result) {
       return state;
@@ -1189,18 +1142,14 @@ export class OrfFlowStore {
           id: makeId("dec"),
           title: `更新指标：${title}`,
           reason,
-          evidence: feedbackId ? `关联反馈 ${feedbackId}` : "手动 ORF 复盘",
+          evidence: "手动 ORF 复盘",
           owner: currentUserName(state),
           date: now,
           linkedObjectiveId: result.objectiveId,
           linkedResultId: resultId,
-          linkedFeedbackId: feedbackId,
         },
         ...state.decisions,
       ],
-      feedback: feedbackId
-        ? state.feedback.map((item) => (item.id === feedbackId ? { ...item, status: "Result Updated", updatedAt: now } : item))
-        : state.feedback,
     };
   }
 }

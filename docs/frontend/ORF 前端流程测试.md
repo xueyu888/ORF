@@ -358,7 +358,7 @@ flowchart TD
 | 目标创建过滤器 | 用户在已结算、待验收等非创建筛选视图中点击 `新建目标`，工作台必须切到未分配创建区，再显示 temporary 目标；不能把 temporary 目标硬插进当前不相干筛选结果 |
 | 项目一级展示 | `/tasks` 先按范围、周期、成员和状态筛选出可见目标，再按 `Objective.projectId` / `Objective.projectName` 聚合显示项目分段；无项目目标进入“默认项目”。项目分段不能改变权限、目标排序锚点、生命周期或战利品深链 |
 | 多人挑战 | 多挑战者共享目标级战利品，匿名互评只包含目标挑战者，结算按贡献比例写入排行榜 |
-| 深链入口 | `/tasks/objectives/:id/loot` 的入口必须和 `/tasks` 规则一致；目标、指标、反馈不提供二级详情路由 |
+| 深链入口 | `/tasks/objectives/:id/loot` 的入口必须和 `/tasks` 规则一致；反馈详情使用 `/feedback/:feedbackId` issue 路由；目标和指标不提供二级详情路由 |
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss、目标行评论数量入口贴近标题文本、切换评论对象后清空旧回复状态都要有可见断言 |
 | 系统消息 | `e2e/notifications/notification-center.spec.ts` 验证顶部栏消息铃铛、未读数、消息浮层、完整消息页、已读动作和对象锚点跳转；消息不进入侧边栏主导航 |
 | 最近在线 | 成员管理展示 `最近在线`；在线上报只由用户交互、窗口 focus 或页面可见性变化触发，不使用轮询，也不提交客户端时间 |

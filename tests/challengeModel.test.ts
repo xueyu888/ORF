@@ -36,9 +36,8 @@ import {
   visibleObjectivesForUser,
 } from "../src/features/challenge/model/objectiveVisibility";
 import {
-  canCreateFeedbackForObjective,
-  canCreateFeedbackFromResults,
   canCreateFeedbackFromVisibleState,
+  canCreateTeamFeedback,
   canManageFeedbackStatus,
 } from "../src/features/feedback/model/feedbackCapabilities";
 import {
@@ -84,7 +83,6 @@ test("buildChallengeTree filters objectives and preserves objective result order
         task({ id: "task-a", linkedObjectiveId: "obj-a" }),
         task({ id: "task-b", linkedObjectiveId: "obj-a" }),
       ],
-      feedback: [],
       evidence: [],
     },
     new Set(["obj-a"]),
@@ -114,7 +112,6 @@ test("buildChallengeTree keeps resultless ORF objectives visible", () => {
     objectives: [candidate, reestimating],
     results: [],
     tasks: [],
-    feedback: [],
     evidence: [],
   });
 
@@ -137,7 +134,6 @@ test("summarizeDashboard counts settled, review, unassigned, and average objecti
       result({ id: "res-open", objectiveId: "obj-open" }),
     ],
     tasks: [],
-    feedback: [],
     evidence: [],
   });
 
@@ -169,10 +165,9 @@ test("feedback creation entry is available to active team members without visibl
   const activeMember = { id: "00000000-0000-4000-8000-000000000305", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
   const pendingMember = { ...activeMember, status: "pending" as const };
 
-  assert.equal(canCreateFeedbackFromResults([], activeMember), true);
-  assert.equal(canCreateFeedbackFromResults([result({ id: "res-visible" })], activeMember), true);
-  assert.equal(canCreateFeedbackFromResults([], pendingMember), false);
-  assert.equal(canCreateFeedbackFromResults([], null), false);
+  assert.equal(canCreateTeamFeedback(activeMember), true);
+  assert.equal(canCreateTeamFeedback(pendingMember), false);
+  assert.equal(canCreateTeamFeedback(null), false);
 });
 
 test("feedback creation entry does not depend on objective participation", () => {
@@ -183,10 +178,9 @@ test("feedback creation entry does not depend on objective participation", () =>
   const observer = { id: "00000000-0000-4000-8000-000000000305", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
   const disabled = { ...observer, status: "disabled" as const };
 
-  assert.equal(canCreateFeedbackForObjective(objectiveItem, admin, [resultItem]), true);
-  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, [resultItem]), true);
-  assert.equal(canCreateFeedbackForObjective(objectiveItem, observer, [resultItem]), true);
-  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, []), true);
+  assert.equal(canCreateTeamFeedback(admin), true);
+  assert.equal(canCreateTeamFeedback(challenger), true);
+  assert.equal(canCreateTeamFeedback(observer), true);
   assert.equal(canCreateFeedbackFromVisibleState({ objectives: [], results: [] }, observer), true);
   assert.equal(canCreateFeedbackFromVisibleState({ objectives: [objectiveItem], results: [resultItem] }, disabled), false);
 });
@@ -203,7 +197,7 @@ test("objective visibility keeps objectives scoped while feedback stays team-vis
   assert.equal(canViewObjectiveRecord(undefined, admin), true);
   assert.deepEqual(visibleObjectivesForUser([mine, other], challenger).map((item) => item.id), ["obj-mine"]);
   assert.deepEqual([...visibleObjectiveIdsForUser([mine, other], admin)].sort(), ["obj-mine", "obj-other"]);
-  assert.deepEqual(filterFeedbackForVisibleObjectives([feedback({ id: "fb-orphan", linkedObjectiveId: "obj-missing" })], memberVisibleIds, admin).map((item) => item.id), ["fb-orphan"]);
+  assert.deepEqual(filterFeedbackForVisibleObjectives([feedback({ id: "fb-orphan" })], memberVisibleIds, admin).map((item) => item.id), ["fb-orphan"]);
   assert.deepEqual(
     filterResultsForVisibleObjectives([result({ id: "res-mine", objectiveId: "obj-mine" }), result({ id: "res-other", objectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
     ["res-mine"],
@@ -213,7 +207,7 @@ test("objective visibility keeps objectives scoped while feedback stays team-vis
     ["task-mine"],
   );
   assert.deepEqual(
-    filterFeedbackForVisibleObjectives([feedback({ id: "fb-mine", linkedObjectiveId: "obj-mine" }), feedback({ id: "fb-team", linkedObjectiveId: null, linkedResultId: null }), feedback({ id: "fb-other", linkedObjectiveId: "obj-other" })], memberVisibleIds, challenger).map((item) => item.id),
+    filterFeedbackForVisibleObjectives([feedback({ id: "fb-mine" }), feedback({ id: "fb-team" }), feedback({ id: "fb-other" })], memberVisibleIds, challenger).map((item) => item.id),
     ["fb-mine", "fb-team", "fb-other"],
   );
 });
@@ -274,7 +268,7 @@ test("comment helpers map challenge targets, count only messages, and detect obj
 });
 
 test("feedback issue helpers keep issue state and comments independent from metrics", () => {
-  const openFeedback = feedback({ id: "fb-123456789", status: "New" });
+  const openFeedback = feedback({ id: "fb-123456789", status: "Open" });
   const closedFeedback = feedback({ id: "fb-closed", status: "Closed" });
   const comments = [
     comment("feedback-thread", "feedback", openFeedback.id, ["one", "two"]),
@@ -286,7 +280,7 @@ test("feedback issue helpers keep issue state and comments independent from metr
   assert.equal(feedbackIssueStateLabel(openFeedback), "Open");
   assert.equal(feedbackIssueStateLabel(closedFeedback), "Closed");
   assert.equal(nextFeedbackIssueStatus(openFeedback), "Closed");
-  assert.equal(nextFeedbackIssueStatus(closedFeedback), "New");
+  assert.equal(nextFeedbackIssueStatus(closedFeedback), "Open");
   assert.equal(feedbackIssueCommentCount(comments, openFeedback.id), 2);
   assert.equal(feedbackIssueDisplayId(openFeedback.id), "12345678");
 });
@@ -299,14 +293,13 @@ test("date and status helpers keep challenge display boundaries stable", () => {
       { id: "ck-b", label: "next", done: false, updatedAt: "2026-05-16" },
     ],
   });
-  const feedbackItem = feedback({ linkedResultId: "res-a", updatedAt: "2026-05-17" });
   const evidenceItem = evidence({ linkedResultId: "res-a", date: "2026-05-18" });
 
   assert.equal(addDays("2026-05-14", 3), "2026-05-17");
   assert.equal(remainingTime("2026-05-16", new Date("2026-05-16T23:00:00")), "剩余 59 分钟");
   assert.equal(remainingTime("2026-05-15", new Date("2026-05-16T00:30:00")), "已超时 31 分钟");
-  assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [], updatedAt: "2026-05-13" }), [], []), "2026-05-13");
-  assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [{ date: "2026-05-12", value: 1 }] }), [feedbackItem], [evidenceItem]), "2026-05-18");
+  assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [], updatedAt: "2026-05-13" }), []), "2026-05-13");
+  assert.equal(bountyUpdatedAt(result({ id: "res-a", trend: [{ date: "2026-05-12", value: 1 }] }), [evidenceItem]), "2026-05-18");
   assert.equal(bountyStatus(result(), objective({ flowStatus: "submitted" })), "review");
   assert.equal(objectiveStatusLabel(objective({ flowStatus: "recruiting" })), "征召中");
   assert.equal(objectiveStatusTone(objective({ flowStatus: "frozen" })), "active");
@@ -589,7 +582,6 @@ function objective(overrides: Partial<Objective> = {}): Objective {
     boundary: "Boundary",
     successDefinition: "Success",
     resultIds: [],
-    feedbackIds: [],
     taskIds: [],
     finalDueAt: "2026-06-30",
     challengers: [],
@@ -643,7 +635,6 @@ function result(overrides: Partial<Result> = {}): Result {
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     evidenceIds: [],
-    feedbackIds: [],
     trend: [{ date, value: 0 }],
     reviewCadence: "Weekly",
     createdAt: date,
@@ -682,14 +673,10 @@ function feedback(overrides: Partial<Feedback> = {}): Feedback {
   const item = {
     id: "fb-a",
     phenomenon: "Unexpected output",
-    evidenceIds: [],
     causeCategories: ["Quality"],
     impact: "High",
-    linkedObjectiveId: "obj-a",
-    linkedResultId: "res-a",
     suggestedAdjustment: "Adjust metric",
-    source: "Team review",
-    status: "New",
+    status: "Open",
     owner: "Kai Wang",
     createdAt: date,
     updatedAt: date,

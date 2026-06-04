@@ -82,7 +82,6 @@ function objective(overrides: Partial<Objective>): Objective {
     boundary: "Boundary",
     successDefinition: "Success",
     resultIds: [],
-    feedbackIds: [],
     taskIds: [],
     finalDueAt: "2999-12-31",
     challengers: ["Ava"],

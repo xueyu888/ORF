@@ -128,8 +128,8 @@ interface OrfContextValue {
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
-  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
-  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Omit<Task, "linkedObjectiveId">>) => Promise<Task | null>;
+  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner">) => Promise<boolean>;
+  createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
   updateTaskChecklistItem: (taskId: string, itemId: string, done: boolean) => Promise<boolean>;
@@ -632,7 +632,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
               causeCategories: input.causeCategories,
               impact: input.impact,
               suggestedAdjustment: input.suggestedAdjustment,
-              source: input.source,
               owner: input.owner,
             }),
           });

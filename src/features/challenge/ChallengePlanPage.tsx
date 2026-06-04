@@ -136,7 +136,6 @@ function draftObjective(title: string): Objective {
     boundary: "",
     successDefinition: "",
     resultIds: [],
-    feedbackIds: [],
     taskIds: [],
     finalDueAt,
     challengers: [],
@@ -355,14 +354,13 @@ export function ChallengePlanPage() {
       buildChallengeTree(
         {
           evidence: challengeState.evidence,
-          feedback: challengeState.feedback,
           objectives: challengeState.objectives,
           results: challengeState.results,
           tasks: challengeState.tasks,
         },
         visibleObjectiveIds,
       ),
-    [challengeState.evidence, challengeState.feedback, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
+    [challengeState.evidence, challengeState.objectives, challengeState.results, challengeState.tasks, visibleObjectiveIds],
   );
   const submittedObjective = objectiveCreationSubmittedObjective(objectiveCreationSession);
   const submittedOrderAnchor = objectiveCreationSubmittedOrderAnchor(objectiveCreationSession);

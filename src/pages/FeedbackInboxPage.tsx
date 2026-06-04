@@ -35,7 +35,6 @@ export function FeedbackInboxPage() {
           item.phenomenon,
           item.suggestedAdjustment,
           item.owner,
-          item.source,
           feedbackIssueStateLabel(item),
           impactLabel[item.impact],
           ...item.causeCategories,

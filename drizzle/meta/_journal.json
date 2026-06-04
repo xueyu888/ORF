@@ -225,6 +225,13 @@
       "when": 1780620000000,
       "tag": "0031_feedback_comment_target",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780700000000,
+      "tag": "0032_feedback_issue_cleanup",
+      "breakpoints": true
     }
   ]
 }

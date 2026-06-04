@@ -85,8 +85,7 @@ const impactSchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
 const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "飞升"]);
 const bountySourceSchema = z.enum(["managerDefined", "memberProposed"]);
-const feedbackSourceSchema = z.enum(["User report", "Eval run", "Log", "Incident", "Team review"]);
-const feedbackStatusSchema = z.enum(["New", "Reviewing", "Action Created", "Result Updated", "Closed"]);
+const feedbackStatusSchema = z.enum(["Open", "Closed"]);
 const lootResultClaimStatusSchema = z.enum(["completed", "falsified", "notClaimed"]);
 const objectiveAcceptedResultSchema = z.enum(["completed", "falsified", "overturned", "abandoned", "overdelivered"]);
 const resultAcceptedResultSchema = z.enum(["unreviewed", "completed", "falsified", "failed"]);
@@ -143,7 +142,6 @@ const createFeedbackBodySchema = z.object({
   causeCategories: z.array(z.string().trim().min(1)).min(1),
   impact: impactSchema,
   suggestedAdjustment: z.string().trim().min(1),
-  source: feedbackSourceSchema,
   owner: z.string().trim().min(1),
 });
 const updateFeedbackStatusBodySchema = z.object({ status: feedbackStatusSchema });
@@ -152,7 +150,6 @@ const updateResultUncertaintyBodySchema = z.object({ uncertaintyLevel: uncertain
 const resultUpdateProposalBodySchema = z.object({
   title: z.string().trim().min(1),
   reason: z.string().trim().min(1),
-  feedbackId: z.string().min(1).optional(),
 });
 const createTaskBodySchema = z.object({
   title: requiredTextSchema,
@@ -161,7 +158,6 @@ const createTaskBodySchema = z.object({
   priority: prioritySchema.optional(),
   linkedObjectiveId: requiredTextSchema,
   dueDate: optionalDateOnlySchema,
-  feedbackOriginId: optionalTextSchema,
 });
 const createChecklistItemBodySchema = z.object({
   label: optionalTextSchema,
@@ -516,7 +512,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const outcome = await createFeedback(body, { ...user, scope });
 
     if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Feedback target not found" });
+      return reply.code(404).send({ error: "Runtime scope not found" });
     }
     if (outcome.status === "invalidOwner") {
       return reply.code(409).send({ error: "Feedback owner must be an active member" });
@@ -575,7 +571,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const task = await createTask({ ...body, assignee, actorId: user.id });
 
     if (!task) {
-      return reply.code(404).send({ error: "Objective, result, or feedback not found" });
+      return reply.code(404).send({ error: "Objective not found" });
     }
 
     return { task };
@@ -808,12 +804,12 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     }
 
     const updated = await proposeResultUpdate(
-      { resultId: params.resultId, title: body.title, reason: body.reason, feedbackId: body.feedbackId },
+      { resultId: params.resultId, title: body.title, reason: body.reason },
       { id: context.user.id, name: context.user.name },
     );
 
     if (!updated) {
-      return reply.code(404).send({ error: "Result or feedback not found" });
+      return reply.code(404).send({ error: "Result not found" });
     }
 
     return { ok: true };

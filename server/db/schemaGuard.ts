@@ -46,6 +46,7 @@ export function validateObjectiveOwnedTaskSchema(snapshot: RuntimeSchemaSnapshot
   const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
   const linkedObjectiveId = columnByName.get("linked_objective_id");
   const linkedResultId = columnByName.get("linked_result_id");
+  const feedbackOriginId = columnByName.get("feedback_origin_id");
 
   if (!linkedObjectiveId) {
     errors.push("tasks.linked_objective_id is missing.");
@@ -55,6 +56,10 @@ export function validateObjectiveOwnedTaskSchema(snapshot: RuntimeSchemaSnapshot
 
   if (linkedResultId) {
     errors.push("tasks.linked_result_id must be dropped; tasks are owned by objectives only.");
+  }
+
+  if (feedbackOriginId) {
+    errors.push("tasks.feedback_origin_id must be dropped; feedback no longer creates task origins.");
   }
 
   const linkedResultForeignKey = snapshot.constraints.find((constraint) =>
@@ -87,16 +92,27 @@ export function validateTeamFeedbackSchema(snapshot: RuntimeSchemaSnapshot) {
   const errors: string[] = [];
   const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
 
-  for (const columnName of ["linked_objective_id", "linked_result_id"]) {
-    const column = columnByName.get(columnName);
-    if (!column) {
-      errors.push(`feedback.${columnName} is missing.`);
-    } else if (column.isNullable !== "YES") {
-      errors.push(`feedback.${columnName} must be nullable.`);
+  for (const columnName of ["linked_objective_id", "linked_result_id", "source"]) {
+    if (columnByName.has(columnName)) {
+      errors.push(`feedback.${columnName} must be dropped; feedback is a team issue, not a metric-bound signal.`);
     }
   }
 
   return errors;
+}
+
+export function validateTeamFeedbackEvidenceSchema(snapshot: RuntimeSchemaSnapshot) {
+  const errors: string[] = [];
+  const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  if (columnByName.has("linked_feedback_id")) {
+    errors.push("evidence.linked_feedback_id must be dropped; evidence belongs to results only.");
+  }
+  return errors;
+}
+
+export function validateFeedbackStatusEnum(snapshot: RuntimeEnumSnapshot) {
+  const labels = snapshot.labels.join(",");
+  return labels === "Open,Closed" ? [] : [`feedback_status enum must be exactly Open,Closed; got ${labels}.`];
 }
 
 export function validateFeedbackCommentTargetSchema(snapshot: RuntimeEnumSnapshot) {
@@ -105,7 +121,14 @@ export function validateFeedbackCommentTargetSchema(snapshot: RuntimeEnumSnapsho
 
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
-  const [taskColumnsResult, taskConstraintsResult, objectiveColumnsResult, feedbackColumnsResult] = await Promise.all([
+  const [
+    taskColumnsResult,
+    taskConstraintsResult,
+    objectiveColumnsResult,
+    feedbackColumnsResult,
+    evidenceColumnsResult,
+    feedbackStatusResult,
+  ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
         select
@@ -114,7 +137,7 @@ export async function assertRuntimeDatabaseSchema() {
         from information_schema.columns
         where table_schema = current_schema()
           and table_name = 'tasks'
-          and column_name in ('linked_objective_id', 'linked_result_id')
+          and column_name in ('linked_objective_id', 'linked_result_id', 'feedback_origin_id')
       `,
     ),
     pool.query<RuntimeSchemaConstraint>(
@@ -149,7 +172,29 @@ export async function assertRuntimeDatabaseSchema() {
         from information_schema.columns
         where table_schema = current_schema()
           and table_name = 'feedback'
-          and column_name in ('linked_objective_id', 'linked_result_id')
+          and column_name in ('linked_objective_id', 'linked_result_id', 'source')
+      `,
+    ),
+    pool.query<RuntimeSchemaColumn>(
+      `
+        select
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'evidence'
+          and column_name = 'linked_feedback_id'
+      `,
+    ),
+    pool.query<{ label: string }>(
+      `
+        select e.enumlabel as "label"
+        from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        join pg_namespace nsp on nsp.oid = t.typnamespace
+        where nsp.nspname = current_schema()
+          and t.typname = 'feedback_status'
+        order by e.enumsortorder
       `,
     ),
   ]);
@@ -175,6 +220,13 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateTeamFeedbackSchema({
       columns: feedbackColumnsResult.rows,
       constraints: [],
+    }),
+    ...validateTeamFeedbackEvidenceSchema({
+      columns: evidenceColumnsResult.rows,
+      constraints: [],
+    }),
+    ...validateFeedbackStatusEnum({
+      labels: feedbackStatusResult.rows.map((row) => row.label),
     }),
     ...validateFeedbackCommentTargetSchema({
       labels: commentTargetTypeResult.rows.map((row) => row.label),

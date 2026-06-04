@@ -15,7 +15,7 @@ export function feedbackIssueStateLabel(feedback: Pick<Feedback, "status">) {
 }
 
 export function nextFeedbackIssueStatus(feedback: Pick<Feedback, "status">): FeedbackStatus {
-  return isFeedbackIssueOpen(feedback) ? "Closed" : "New";
+  return isFeedbackIssueOpen(feedback) ? "Closed" : "Open";
 }
 
 export function feedbackIssueThreads(comments: readonly CommentThread[], feedbackId: string) {

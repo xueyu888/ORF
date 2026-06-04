@@ -8,10 +8,7 @@ export const workStatusLabel: Record<WorkStatus, string> = {
 };
 
 export const feedbackStatusLabel: Record<FeedbackStatus, string> = {
-  New: "新反馈",
-  Reviewing: "评审中",
-  "Action Created": "已建动作",
-  "Result Updated": "已更新指标",
+  Open: "打开",
   Closed: "已关闭",
 };
 

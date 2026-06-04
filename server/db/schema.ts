@@ -24,8 +24,7 @@ export const impactEnum = pgEnum("impact", ["Low", "Medium", "High", "Critical"]
 export const metricDirectionEnum = pgEnum("metric_direction", ["increase", "decrease"]);
 export const uncertaintyLevelEnum = pgEnum("uncertainty_level", ["入门", "进阶", "破局", "渡劫", "飞升"]);
 export const evidenceTypeEnum = pgEnum("evidence_type", ["Eval run", "Log sample", "User report", "Dashboard snapshot", "Incident report"]);
-export const feedbackSourceEnum = pgEnum("feedback_source", ["User report", "Eval run", "Log", "Incident", "Team review"]);
-export const feedbackStatusEnum = pgEnum("feedback_status", ["New", "Reviewing", "Action Created", "Result Updated", "Closed"]);
+export const feedbackStatusEnum = pgEnum("feedback_status", ["Open", "Closed"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "member", "readonly", "supervisor"]);
 export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask", "feedback"]);
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
@@ -317,7 +316,6 @@ export const tasks = pgTable("tasks", {
   linkedObjectiveId: text("linked_objective_id")
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
-  feedbackOriginId: text("feedback_origin_id"),
   dueDate: date("due_date", { mode: "string" }).notNull(),
   tags: jsonb("tags").$type<string[]>().notNull(),
   createdAt: date("created_at", { mode: "string" }).notNull(),
@@ -345,12 +343,7 @@ export const feedback = pgTable("feedback", {
     .references(() => teams.id, { onDelete: "cascade" }),
   phenomenon: text("phenomenon").notNull(),
   impact: impactEnum("impact").notNull(),
-  linkedObjectiveId: text("linked_objective_id")
-    .references(() => objectives.id, { onDelete: "cascade" }),
-  linkedResultId: text("linked_result_id")
-    .references(() => results.id, { onDelete: "cascade" }),
   suggestedAdjustment: text("suggested_adjustment").notNull(),
-  source: feedbackSourceEnum("source").notNull(),
   status: feedbackStatusEnum("status").notNull(),
   owner: text("owner").notNull(),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
@@ -389,7 +382,6 @@ export const evidence = pgTable("evidence", {
   linkedResultId: text("linked_result_id")
     .notNull()
     .references(() => results.id, { onDelete: "cascade" }),
-  linkedFeedbackId: text("linked_feedback_id").references(() => feedback.id),
   createdBy: uuid("created_by").references(() => users.id),
   updatedBy: uuid("updated_by").references(() => users.id),
 });

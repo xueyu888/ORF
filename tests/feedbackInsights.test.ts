@@ -35,7 +35,7 @@ test("summarizeFeedbackInsights derives counts and charts from feedback", () => 
   ]);
 });
 
-test("summarizeFeedbackInsights returns empty values when no feedback supports a metric", () => {
+test("summarizeFeedbackInsights returns empty values when feedback has no measurable signal", () => {
   const insights = summarizeFeedbackInsights([
     feedback({
       causeCategories: [" "],
@@ -63,14 +63,10 @@ function feedback(input: Partial<Feedback> = {}): Feedback {
   return {
     id: "feedback",
     phenomenon: "",
-    evidenceIds: [],
     causeCategories: [],
     impact: "Medium",
-    linkedObjectiveId: "objective",
-    linkedResultId: "result",
     suggestedAdjustment: "",
-    source: "Team review",
-    status: "New",
+    status: "Open",
     owner: "Kai Wang",
     createdAt: "2999-01-01T00:00:00.000Z",
     updatedAt: "2999-01-01T00:00:00.000Z",

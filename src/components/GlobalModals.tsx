@@ -11,7 +11,6 @@ import type { Impact, UncertaintyLevel } from "../types/orf";
 import { impactLabel } from "../utils/labels";
 import { Button, Field } from "./ui";
 
-const INTERNAL_FEEDBACK_SOURCE = "Team review" as const;
 const feedbackImpactOptions: Impact[] = ["Low", "Medium", "High", "Critical"];
 
 function ModalFrame({ title, children, size = "md" }: { title: string; children: ReactNode; size?: "md" | "lg" }) {
@@ -211,7 +210,6 @@ function NewFeedbackModal() {
               causeCategories: [cause],
               impact,
               suggestedAdjustment: suggestedAdjustment.trim(),
-              source: INTERNAL_FEEDBACK_SOURCE,
               owner: owner.trim(),
             });
             if (ok) closeModal();

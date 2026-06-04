@@ -1,4 +1,4 @@
-import type { Feedback, Objective, OrfState, OrfUser, Result } from "../../../types/orf";
+import type { Feedback, OrfState, OrfUser } from "../../../types/orf";
 
 export function canManageFeedbackStatus(feedback: Feedback, currentUser: OrfUser | null) {
   if (!currentUser) {
@@ -10,18 +10,6 @@ export function canManageFeedbackStatus(feedback: Feedback, currentUser: OrfUser
 
 export function canCreateTeamFeedback(currentUser: OrfUser | null | undefined) {
   return currentUser?.status === "active";
-}
-
-export function canCreateFeedbackFromResults(_results: readonly Result[], currentUser?: OrfUser | null) {
-  return canCreateTeamFeedback(currentUser);
-}
-
-export function canCreateFeedbackForObjective(_objective: Objective | undefined, currentUser: OrfUser | null, _results: readonly Result[]) {
-  return canCreateTeamFeedback(currentUser);
-}
-
-export function canCreateFeedbackForResult(_objective: Objective | undefined, currentUser: OrfUser | null, _result: Result | undefined) {
-  return canCreateTeamFeedback(currentUser);
 }
 
 export function canCreateFeedbackFromVisibleState(_state: Pick<OrfState, "objectives" | "results">, currentUser: OrfUser | null) {

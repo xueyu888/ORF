@@ -846,9 +846,9 @@ async function getChecklistRows(taskIds: string[]) {
   return db.select().from(taskChecklistItems).where(inArray(taskChecklistItems.taskId, taskIds));
 }
 
-async function getFeedbackCauseRows(feedbackIds: string[]) {
-  if (feedbackIds.length === 0) return [];
-  return db.select().from(feedbackCauseCategories).where(inArray(feedbackCauseCategories.feedbackId, feedbackIds));
+async function getFeedbackCauseRows(feedbackIssueIds: string[]) {
+  if (feedbackIssueIds.length === 0) return [];
+  return db.select().from(feedbackCauseCategories).where(inArray(feedbackCauseCategories.feedbackId, feedbackIssueIds));
 }
 
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
@@ -871,10 +871,10 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const scopeRows = storageScopeId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)) : await db.select({ id: teams.id }).from(teams);
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
-  const feedbackIds = feedbackRows.map((item) => item.id);
+  const feedbackIssueIds = feedbackRows.map((item) => item.id);
   const trendRows = await getResultTrendRows(resultIds);
   const checklistRows = await getChecklistRows(taskIds);
-  const causeRows = await getFeedbackCauseRows(feedbackIds);
+  const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
   const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
@@ -933,7 +933,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     assignee: nameForUserId(userNameById, task.assigneeUserId, task.assignee),
     assigneeUserId: optional(task.assigneeUserId),
     linkedObjectiveId: task.linkedObjectiveId,
-    feedbackOriginId: optional(task.feedbackOriginId),
     dueDate: task.dueDate,
     tags: task.tags,
     checklist: checklistByTask.get(task.id) ?? [],
@@ -953,19 +952,14 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     owner: nameForUserId(userNameById, item.ownerUserId, item.owner),
     ownerUserId: optional(item.ownerUserId),
     linkedResultId: item.linkedResultId,
-    linkedFeedbackId: optional(item.linkedFeedbackId),
   }));
 
   const feedbackItems: Feedback[] = feedbackRows.map((item) => ({
     id: item.id,
     phenomenon: item.phenomenon,
-    evidenceIds: evidenceItems.filter((evidenceItem) => evidenceItem.linkedFeedbackId === item.id).map((evidenceItem) => evidenceItem.id),
     causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
     impact: item.impact,
-    linkedObjectiveId: item.linkedObjectiveId,
-    linkedResultId: item.linkedResultId,
     suggestedAdjustment: item.suggestedAdjustment,
-    source: item.source,
     status: item.status,
     owner: nameForUserId(userNameById, item.ownerUserId, item.owner),
     ownerUserId: optional(item.ownerUserId),
@@ -1001,7 +995,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     uncertaintyScore: result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel),
     acceptedResult: result.acceptedResult ?? "unreviewed",
     evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
-    feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
     trend: trendByResult.get(result.id) ?? [],
     reviewCadence: result.reviewCadence,
     createdAt: result.createdAt,
@@ -1042,7 +1035,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       boundary: objective.boundary,
       successDefinition: objective.successDefinition,
       resultIds: objectiveResults.map((result) => result.id),
-      feedbackIds: feedbackItems.filter((item) => item.linkedObjectiveId === objective.id).map((item) => item.id),
       taskIds: taskItems.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id),
       finalDueAt: objective.finalDueAt || addDays(objective.updatedAt, 14),
       challengers,
@@ -1288,7 +1280,7 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
 }
 
 function filterComments(data: TaskManagementData, ids: {
-  feedbackIds: Set<string>;
+  feedbackIssueIds: Set<string>;
   objectiveIds: Set<string>;
   resultIds: Set<string>;
   taskIds: Set<string>;
@@ -1299,7 +1291,7 @@ function filterComments(data: TaskManagementData, ids: {
     if (thread.targetType === "result") return ids.resultIds.has(thread.targetId);
     if (thread.targetType === "task") return ids.taskIds.has(thread.targetId);
     if (thread.targetType === "subtask") return ids.checklistItemIds.has(thread.targetId);
-    if (thread.targetType === "feedback") return ids.feedbackIds.has(thread.targetId);
+    if (thread.targetType === "feedback") return ids.feedbackIssueIds.has(thread.targetId);
     return false;
   });
 }
@@ -1315,7 +1307,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
   const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId));
   const taskIds = new Set(tasksForMember.map((task) => task.id));
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
-  const feedbackIds = new Set(data.feedback.map((item) => item.id));
+  const feedbackIssueIds = new Set(data.feedback.map((item) => item.id));
 
   return {
     objectives: objectivesForMember,
@@ -1323,7 +1315,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     tasks: tasksForMember,
     evidence: data.evidence.filter((item) => resultIds.has(item.linkedResultId)),
     feedback: data.feedback,
-    comments: filterComments(data, { feedbackIds, objectiveIds, resultIds, taskIds, checklistItemIds }),
+    comments: filterComments(data, { feedbackIssueIds, objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
@@ -1357,7 +1349,6 @@ export interface CreateTaskInput {
   priority?: Priority;
   linkedObjectiveId: string;
   dueDate?: string;
-  feedbackOriginId?: string;
 }
 
 export interface CreateObjectiveInput {
@@ -2304,60 +2295,15 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
 
 export type CreateFeedbackInput = Pick<
   Feedback,
-  "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "source" | "owner"
-> & Partial<Pick<Feedback, "linkedObjectiveId" | "linkedResultId">>;
+  "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner"
+>;
 export type CreateFeedbackOutcome =
   | { status: "ok"; feedback: Feedback }
   | { status: "notFound" }
   | { status: "invalidOwner" };
 
-export async function canCreateFeedbackForResult(
-  resultId: string,
-  actor: Pick<CommentActor, "id" | "role" | "scope">,
-): Promise<ObjectiveWorkItemMutationOutcome> {
-  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
-  const [target] = await db
-    .select({ objectiveId: results.objectiveId, challengerUserIds: objectives.challengerUserIds, teamId: results.teamId })
-    .from(results)
-    .innerJoin(objectives, eq(objectives.id, results.objectiveId))
-    .where(eq(results.id, resultId))
-    .limit(1);
-  if (!target) {
-    return "notFound";
-  }
-
-  if (storageScopeId && target.teamId !== storageScopeId) {
-    return "notFound";
-  }
-
-  return "allowed";
-}
-
 export async function createFeedback(input: CreateFeedbackInput, actor: Pick<CommentActor, "id" | "scope">): Promise<CreateFeedbackOutcome> {
-  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
-  const linkedResultId = input.linkedResultId?.trim() || null;
-  const linkedObjectiveIdInput = input.linkedObjectiveId?.trim() || null;
-  let teamId = storageScopeId;
-  let linkedObjectiveId: string | null = null;
-  let linkedResultIdForInsert: string | null = null;
-
-  if (linkedResultId) {
-    const [result] = await db.select().from(results).where(eq(results.id, linkedResultId)).limit(1);
-    if (!result || (storageScopeId && result.teamId !== storageScopeId)) {
-      return { status: "notFound" };
-    }
-    teamId = result.teamId;
-    linkedObjectiveId = result.objectiveId;
-    linkedResultIdForInsert = result.id;
-  } else if (linkedObjectiveIdInput) {
-    const [objective] = await db.select().from(objectives).where(eq(objectives.id, linkedObjectiveIdInput)).limit(1);
-    if (!objective || (storageScopeId && objective.teamId !== storageScopeId)) {
-      return { status: "notFound" };
-    }
-    teamId = objective.teamId;
-    linkedObjectiveId = objective.id;
-  }
-
+  const teamId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
   if (!teamId) {
     return { status: "notFound" };
   }
@@ -2376,11 +2322,8 @@ export async function createFeedback(input: CreateFeedbackInput, actor: Pick<Com
       teamId,
       phenomenon: input.phenomenon,
       impact: input.impact,
-      linkedObjectiveId,
-      linkedResultId: linkedResultIdForInsert,
       suggestedAdjustment: input.suggestedAdjustment,
-      source: input.source,
-      status: "New",
+      status: "Open",
       owner: ownerUser.name,
       ownerUserId: ownerUser.id,
       createdAt: now,
@@ -2533,7 +2476,7 @@ export async function updateResultUncertaintyLevel(resultId: string, uncertainty
 }
 
 export async function proposeResultUpdate(
-  input: { resultId: string; title: string; reason: string; feedbackId?: string },
+  input: { resultId: string; title: string; reason: string },
   actor: { id: string; name: string },
 ): Promise<boolean> {
   const nextTitle = input.title.trim();
@@ -2558,17 +2501,6 @@ export async function proposeResultUpdate(
       return false;
     }
 
-    if (input.feedbackId) {
-      const [linkedFeedback] = await tx
-        .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
-        .from(feedback)
-        .where(eq(feedback.id, input.feedbackId))
-        .limit(1);
-      if (!linkedFeedback || linkedFeedback.teamId !== target.teamId || linkedFeedback.linkedResultId !== target.id) {
-        return null;
-      }
-    }
-
     const updated = await tx
       .update(results)
       .set({ title: nextTitle, updatedAt: today(), updatedBy: actor.id })
@@ -2582,13 +2514,6 @@ export async function proposeResultUpdate(
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, input.resultId)));
-
-    if (input.feedbackId) {
-      await tx
-        .update(feedback)
-        .set({ status: "Result Updated", updatedAt: today(), updatedBy: actor.id })
-        .where(eq(feedback.id, input.feedbackId));
-    }
 
     const threadId = makeId("cthread");
     const messageId = makeId("cmsg");
@@ -3957,18 +3882,6 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       return null;
     }
 
-    const feedbackOriginId = input.feedbackOriginId?.trim() || null;
-    if (feedbackOriginId) {
-      const [originFeedback] = await tx
-        .select({ id: feedback.id, teamId: feedback.teamId, linkedObjectiveId: feedback.linkedObjectiveId })
-        .from(feedback)
-        .where(eq(feedback.id, feedbackOriginId))
-        .limit(1);
-      if (!originFeedback || originFeedback.teamId !== objective.teamId || originFeedback.linkedObjectiveId !== objective.id) {
-        return null;
-      }
-    }
-
     const siblingRows = await tx.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedObjectiveId, objective.id));
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("ORF");
@@ -3989,7 +3902,6 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       assignee: assigneeUser?.name ?? "",
       assigneeUserId: assigneeUser?.id ?? null,
       linkedObjectiveId: objective.id,
-      feedbackOriginId,
       dueDate: dueDate ?? now,
       tags: ["ORF"],
       createdAt: now,

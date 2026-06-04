@@ -116,10 +116,7 @@ test("local store generated ids stay unique within one millisecond", () => {
       phenomenon: "Signal",
       causeCategories: ["Quality"],
       impact: "High" as const,
-      linkedObjectiveId: "obj-base",
-      linkedResultId: "res-base",
       suggestedAdjustment: "Adjust",
-      source: "Team review" as const,
       owner: "Kai Wang",
     };
     const withFeedback = store.createFeedback(store.createFeedback(current, feedbackInput), feedbackInput);
@@ -144,8 +141,8 @@ test("local store generated ids stay unique within one millisecond", () => {
 
 test("local store creates team-level feedback without mutating objective or result links", () => {
   const current = state({
-    objectives: [objective({ id: "obj-base", resultIds: ["res-base"], feedbackIds: [] })],
-    results: [result({ id: "res-base", objectiveId: "obj-base", feedbackIds: [] })],
+    objectives: [objective({ id: "obj-base", resultIds: ["res-base"] })],
+    results: [result({ id: "res-base", objectiveId: "obj-base" })],
   });
 
   const next = store.createFeedback(current, {
@@ -153,24 +150,22 @@ test("local store creates team-level feedback without mutating objective or resu
     causeCategories: ["管理问题"],
     impact: "Medium",
     suggestedAdjustment: "Clarify the team process",
-    source: "Team review",
     owner: "Kai Wang",
   });
 
-  assert.equal(next.feedback[0]?.linkedObjectiveId, null);
-  assert.equal(next.feedback[0]?.linkedResultId, null);
-  assert.deepEqual(next.objectives[0]?.feedbackIds, []);
-  assert.deepEqual(next.results[0]?.feedbackIds, []);
+  assert.equal(next.feedback[0]?.status, "Open");
+  assert.deepEqual(next.objectives[0]?.resultIds, ["res-base"]);
+  assert.deepEqual(next.results[0]?.evidenceIds, []);
 });
 
 test("deleteObjective cascades all linked records and keeps unrelated records", () => {
   const current = state({
     objectives: [
-      objective({ id: "obj-delete", resultIds: ["res-delete"], taskIds: ["task-delete"], feedbackIds: ["fb-delete"] }),
-      objective({ id: "obj-keep", resultIds: ["res-keep"], taskIds: ["task-keep"], feedbackIds: [] }),
+      objective({ id: "obj-delete", resultIds: ["res-delete"], taskIds: ["task-delete"] }),
+      objective({ id: "obj-keep", resultIds: ["res-keep"], taskIds: ["task-keep"] }),
     ],
     results: [
-      result({ id: "res-delete", objectiveId: "obj-delete", feedbackIds: ["fb-delete"], evidenceIds: ["ev-delete"] }),
+      result({ id: "res-delete", objectiveId: "obj-delete", evidenceIds: ["ev-delete"] }),
       result({ id: "res-keep", objectiveId: "obj-keep" }),
     ],
     tasks: [
@@ -181,9 +176,9 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
       }),
       task({ id: "task-keep", linkedObjectiveId: "obj-keep" }),
     ],
-    feedback: [feedback({ id: "fb-delete", linkedObjectiveId: "obj-delete", linkedResultId: "res-delete" })],
-    evidence: [evidence({ id: "ev-delete", linkedResultId: "res-delete", linkedFeedbackId: "fb-delete" })],
-    decisions: [decision({ id: "dec-delete", linkedObjectiveId: "obj-delete", linkedResultId: "res-delete", linkedFeedbackId: "fb-delete" })],
+    feedback: [feedback({ id: "fb-delete" })],
+    evidence: [evidence({ id: "ev-delete", linkedResultId: "res-delete" })],
+    decisions: [decision({ id: "dec-delete", linkedObjectiveId: "obj-delete", linkedResultId: "res-delete" })],
     evalRuns: [evalRun({ id: "eval-delete", linkedResultId: "res-delete" })],
     scenarios: [scenario({ id: "scenario-delete", linkedObjectiveId: "obj-delete" })],
     failureSamples: [failureSample({ id: "sample-delete", linkedResultId: "res-delete" })],
@@ -204,7 +199,7 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
   assert.deepEqual(next.objectives.map((item) => item.id), ["obj-keep"]);
   assert.deepEqual(next.results.map((item) => item.id), ["res-keep"]);
   assert.deepEqual(next.tasks.map((item) => item.id), ["task-keep"]);
-  assert.deepEqual(next.feedback, []);
+  assert.deepEqual(next.feedback.map((item) => item.id), ["fb-delete"]);
   assert.deepEqual(next.evidence, []);
   assert.deepEqual(next.decisions, []);
   assert.deepEqual(next.evalRuns, []);
@@ -212,7 +207,7 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
   assert.deepEqual(next.failureSamples, []);
   assert.deepEqual(next.objectiveLoot, []);
   assert.deepEqual(next.pointLedger, []);
-  assert.deepEqual(next.comments.map((item) => item.id), ["comment-keep"]);
+  assert.deepEqual(next.comments.map((item) => item.id), ["comment-feedback", "comment-keep"]);
 });
 
 test("moveTask reorders tasks inside the same objective without changing result ownership", () => {
@@ -422,7 +417,6 @@ function objective(overrides: Partial<Objective> = {}): Objective {
     boundary: "Boundary",
     successDefinition: "Success",
     resultIds: [],
-    feedbackIds: [],
     taskIds: [],
     finalDueAt: "2026-06-30",
     challengers: [],
@@ -467,7 +461,6 @@ function result(overrides: Partial<Result> = {}): Result {
     uncertaintyScore: 30,
     acceptedResult: "unreviewed",
     evidenceIds: [],
-    feedbackIds: [],
     trend: [{ date, value: 0 }],
     reviewCadence: "Weekly",
     createdAt: date,
@@ -498,14 +491,10 @@ function feedback(overrides: Partial<Feedback> = {}): Feedback {
   return {
     id: "fb-a",
     phenomenon: "Unexpected output",
-    evidenceIds: [],
     causeCategories: ["Quality"],
     impact: "High",
-    linkedObjectiveId: "obj-a",
-    linkedResultId: "res-a",
     suggestedAdjustment: "Adjust metric",
-    source: "Team review",
-    status: "New",
+    status: "Open",
     owner: "Kai Wang",
     createdAt: date,
     updatedAt: date,

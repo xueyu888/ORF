@@ -15,10 +15,9 @@ export function MetricCard({ title, value, delta, icon: Icon }: { title: string;
   );
 }
 
-export function ObjectiveCard({ objective, results, feedback }: { objective: Objective; results: Result[]; feedback: Feedback[] }) {
+export function ObjectiveCard({ objective, results }: { objective: Objective; results: Result[] }) {
   const onTrack = results.filter((result) => result.status === "On Track").length;
   const atRisk = results.filter((result) => result.status === "At Risk").length;
-  const latestFeedback = feedback[0];
   const description = objective.description.trim() || "目标规划待完善";
 
   return (
@@ -42,7 +41,6 @@ export function ObjectiveCard({ objective, results, feedback }: { objective: Obj
         <div className="rounded-md orf-surface-muted p-2">正常 {onTrack}</div>
         <div className="rounded-md orf-surface-muted p-2">有风险 {atRisk}</div>
       </div>
-      {latestFeedback && <div className="mt-3 rounded-md border orf-border orf-surface-muted p-2 text-xs orf-text-secondary">最新反馈：{latestFeedback.phenomenon}</div>}
     </Card>
   );
 }

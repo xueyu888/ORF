@@ -32,7 +32,6 @@ function objective(input: Partial<Objective> = {}): Objective {
     boundary: "",
     successDefinition: "",
     resultIds: [],
-    feedbackIds: [],
     taskIds: [],
     finalDueAt: "2999-03-31T00:00:00.000Z",
     challengers: [],

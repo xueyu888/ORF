@@ -1,7 +1,7 @@
 import type { PermissionKey } from "../config/permissions";
 
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
-export type FeedbackStatus = "New" | "Reviewing" | "Action Created" | "Result Updated" | "Closed";
+export type FeedbackStatus = "Open" | "Closed";
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
 export type Priority = "Low" | "Medium" | "High" | "Critical";
 export type Impact = "Low" | "Medium" | "High" | "Critical";
@@ -23,7 +23,6 @@ export type NotificationTargetType = "objective" | "objectiveLoot" | "comment";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
-export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
 export type UserStatus = "pending" | "active" | "rejected" | "disabled";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
@@ -104,7 +103,6 @@ export interface Objective {
   boundary: string;
   successDefinition: string;
   resultIds: string[];
-  feedbackIds: string[];
   taskIds: string[];
   finalDueAt: string;
   challengers: string[];
@@ -226,7 +224,6 @@ export interface Result {
   uncertaintyScore: number;
   acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
-  feedbackIds: string[];
   trend: TrendPoint[];
   reviewCadence: string;
   createdAt: string;
@@ -236,13 +233,9 @@ export interface Result {
 export interface Feedback {
   id: string;
   phenomenon: string;
-  evidenceIds: string[];
   causeCategories: string[];
   impact: Impact;
-  linkedObjectiveId: string | null;
-  linkedResultId: string | null;
   suggestedAdjustment: string;
-  source: FeedbackSource;
   status: FeedbackStatus;
   owner: string;
   ownerUserId?: string | null;
@@ -269,7 +262,6 @@ export interface Task {
   assignee: string;
   assigneeUserId?: string | null;
   linkedObjectiveId: string;
-  feedbackOriginId?: string;
   dueDate: string;
   tags: string[];
   checklist: TaskChecklistItem[];
@@ -289,7 +281,6 @@ export interface Evidence {
   owner: string;
   ownerUserId?: string | null;
   linkedResultId: string;
-  linkedFeedbackId?: string;
 }
 
 export interface Decision {
@@ -301,7 +292,6 @@ export interface Decision {
   date: string;
   linkedObjectiveId: string;
   linkedResultId?: string;
-  linkedFeedbackId?: string;
 }
 
 export interface EvalRun {

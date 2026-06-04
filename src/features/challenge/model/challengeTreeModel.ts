@@ -1,4 +1,4 @@
-import type { Evidence, Feedback, Objective, Result, Task } from "../../../types/orf";
+import type { Evidence, Objective, Result, Task } from "../../../types/orf";
 import { orderObjectiveTasks } from "../../../domain/orfWorkItems";
 import { resultProgress } from "../../../utils/format";
 import { addDays, bountyUpdatedAt, latestDate } from "./challengeDates";
@@ -8,7 +8,6 @@ import type { BountyNode, ObjectiveNode } from "./types";
 export function buildChallengeTree(
   input: {
     evidence: Evidence[];
-    feedback: Feedback[];
     objectives: Objective[];
     results: Result[];
     tasks: Task[];
@@ -24,7 +23,7 @@ export function buildChallengeTree(
       const bounties = orderedResults.map((result) => ({
         result,
         status: bountyStatus(result, objective),
-        updatedAt: bountyUpdatedAt(result, input.feedback, input.evidence),
+        updatedAt: bountyUpdatedAt(result, input.evidence),
         progress: resultProgress(result),
         difficulty: bountyDifficulty(result),
       }) satisfies BountyNode);
