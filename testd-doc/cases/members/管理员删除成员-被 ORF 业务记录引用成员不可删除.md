@@ -9,7 +9,7 @@
 - 覆盖对象：管理员不可删除被 ORF 业务记录引用的成员。
 - 不覆盖对象：管理员删除未被引用成员、普通成员不可删除成员、编辑成员、停用成员、删除当前管理员自己。
 - B 基准：前端、后端、数据库、schema、Ory/Kratos 和当前浏览器可开测；不要求存在任何具体管理员账号、被引用成员或业务目标。
-- Setup 产物：邮箱为 `orf-admin-delete-referenced-member-e2e@orf.local` 的管理员认证身份、用户和 admin 成员关系；邮箱为 `orf-member-delete-referenced-target-e2e@orf.local` 的被引用成员；标题为 `E2E-DELETE-REFERENCED-MEMBER-FORBIDDEN: 引用成员的目标` 且挑战成员包含被引用成员的目标。
+- Setup 产物：邮箱为 `orf-admin-delete-referenced-member-e2e@orf.local` 的管理员认证身份、用户和 admin 成员关系；邮箱为 `orf-member-delete-referenced-target-e2e@orf.local` 的被引用成员；标题为 `E2E-DELETE-REFERENCED-MEMBER-FORBIDDEN: 引用成员的目标` 且挑战成员包含本次运行独占被引用成员姓名的目标。
 - Action 产物：管理员对被引用成员执行删除操作后的删除提交结果。
 - Clean 产物：删除本用例创建或覆盖的目标、管理员认证身份、管理员用户、成员关系和被引用成员。
 - 原状态恢复：管理员账号、被引用成员和引用目标均为当前用例独占资源，Clean 直接删除，不恢复任何共享成员状态。

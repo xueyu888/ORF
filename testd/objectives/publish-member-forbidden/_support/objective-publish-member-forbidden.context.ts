@@ -26,10 +26,3 @@ export type BountyHallResponse = {
   status: number;
   body: Partial<BountyHallData>;
 };
-
-export type MemberPermissionSnapshot = {
-  teamId: string;
-  existed: boolean;
-  actions: string[];
-  lockOwner?: string;
-};
