@@ -6,7 +6,6 @@ import { ChallengeTree } from "./components/ChallengeTree";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
-import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
 import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
@@ -14,7 +13,7 @@ import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
-import { readModelInvalidationKey } from "../realtime/readModelInvalidations";
+import { useChallengeReadModelData } from "./hooks/useChallengeReadModelData";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
@@ -233,7 +232,6 @@ export function ChallengePlanPage() {
   const [openActionId, setOpenActionId] = useState<string | null>(null);
   const [dragItem, setDragItem] = useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
-  const [challengeData, setChallengeData] = useState<TaskManagementData | null>(null);
   const [completionOverlays, setCompletionOverlays] = useState<TaskCompletionOverlay[]>([]);
   const [titleEditOverlays, setTitleEditOverlays] = useState<TitleEditOverlay[]>([]);
   const [objectiveInteractionAnchor, setObjectiveInteractionAnchor] = useState<ListItemAnchor | null>(null);
@@ -289,29 +287,7 @@ export function ChallengePlanPage() {
   };
 
   const showAll = canShowAllChallenges && scope === "all";
-  const loadChallengeData = useCallback(async () => {
-    setChallengeData(await getMyChallengesData(showAll ? "all" : "mine"));
-  }, [showAll]);
-  const taskManagementInvalidationKey = useMemo(
-    () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),
-    [readModelInvalidations],
-  );
-
-  useEffect(() => {
-    void loadChallengeData().catch(() => setChallengeData(null));
-  }, [
-    loadChallengeData,
-    state.comments,
-    state.objectiveAlignmentRequests,
-    state.objectiveTrialReviews,
-    state.objectives,
-    state.results,
-    state.tasks,
-    taskManagementInvalidationKey,
-  ]);
-
-  const sourceData = challengeData ?? state;
-  const baseChallengeState = useMemo<OrfState>(() => ({ ...state, ...sourceData }), [sourceData, state]);
+  const baseChallengeState = useChallengeReadModelData({ readModelInvalidations, showAll, state });
   const temporaryChildRow = childCreationTemporaryRow(childCreationSession);
   const childOverlay = childCreationSubmittedOverlay(childCreationSession);
   const challengeState = useMemo(

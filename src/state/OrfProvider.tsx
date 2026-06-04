@@ -1,27 +1,26 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { hasPermission } from "../config/permissions";
-import { apiJson, apiRequest, getUserPreferences } from "./apiClient";
-import { OrfFlowStore } from "./OrfFlowStore";
+import { getUserPreferences } from "./apiClient";
+import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
 import { useOrfProviderCommentActions } from "./orfProviderCommentActions";
+import { useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
 import { useNotificationState } from "./orfProviderNotifications";
+import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import {
-  bountyMutationFailureMessage,
-  businessMutationFailureMessage,
-  commentMutationFailureMessage,
-  localSettlementMutationFailureMessage,
-} from "./orfProviderMutationMessages";
+  type CreateObjectiveInput,
+  type RequestObjectiveAlignmentInput,
+  type ReviewObjectiveAlignmentInput,
+  type ReviewObjectiveLootInput,
+  type ReviewObjectiveTrialReviewInput,
+  type SubmitLootInput,
+  useOrfProviderObjectiveActions,
+} from "./orfProviderObjectiveActions";
+import { type MoveResultInput, useOrfProviderResultActions } from "./orfProviderResultActions";
+import { type MoveSubtaskInput, type MoveTaskInput, useOrfProviderTaskActions } from "./orfProviderTaskActions";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
-import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
-import {
-  isObjectiveChallenger,
-  objectiveChallengerCount,
-  objectiveChallengerTargets,
-} from "../domain/orfObjectiveParticipants";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
-import { fetchLocalSettlementSummary, submitLocalEncryptedContributionReview } from "../services/localSettlementClient";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
@@ -29,16 +28,11 @@ import type {
   CommentStatus,
   CommentTargetType,
   Feedback,
-  Objective,
-  ObjectiveAlignmentRequestKind,
-  ObjectiveAlignmentRequestStatus,
   FeedbackStatus,
-  LootResultClaim,
-  ObjectiveTrialReviewStatus,
+  Objective,
   OrfState,
   OrfUser,
   Result,
-  ResultAcceptedResult,
   Task,
   TaskChecklistItem,
   TaskStatus,
@@ -50,40 +44,6 @@ import type {
 } from "../types/orf";
 
 type ModalType = "newResult" | "newFeedback" | "recruitChallengers" | null;
-type CreateObjectiveResponse = { objective: Objective };
-type CreateResultResponse = { result: Result };
-type CreateTaskResponse = { task: Task };
-type CreateChecklistItemResponse = { item: TaskChecklistItem };
-type SubmitLootInput = {
-  objectiveId: string;
-  body: string;
-  resultClaims: LootResultClaim[];
-  selfTestReportUrl?: string | null;
-  selfTestReportBody?: string | null;
-  author?: string;
-};
-type ReviewObjectiveLootInput = {
-  lootId?: string;
-  resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
-  contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
-  reason?: string;
-};
-type ReviewObjectiveTrialReviewInput = {
-  status: Exclude<ObjectiveTrialReviewStatus, "requested">;
-  commanderFeedback: string;
-};
-type RequestObjectiveAlignmentInput = {
-  kind: ObjectiveAlignmentRequestKind;
-  scheduledAt?: string | null;
-  meetingRoom?: string | null;
-  note?: string | null;
-};
-type ReviewObjectiveAlignmentInput = {
-  status: Extract<ObjectiveAlignmentRequestStatus, "scheduled" | "completed" | "needsWork" | "cancelled">;
-  scheduledAt?: string | null;
-  meetingRoom?: string | null;
-  commanderFeedback?: string | null;
-};
 
 interface ModalState {
   type: ModalType;
@@ -121,7 +81,7 @@ interface OrfContextValue {
   markAllNotificationsRead: () => Promise<boolean>;
   deleteNotifications: (notificationIds: string[]) => Promise<boolean>;
   clearAllNotifications: () => Promise<boolean>;
-  createObjective: Parameters<OrfFlowStore["createObjective"]>[1] extends infer T ? (input: T) => Promise<Objective | null> : never;
+  createObjective: (input: CreateObjectiveInput) => Promise<Objective | null>;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
@@ -144,9 +104,9 @@ interface OrfContextValue {
   updateTaskTitle: (taskId: string, title: string) => Promise<boolean>;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => Promise<boolean>;
   createTaskChecklistItem: (taskId: string, input?: { afterItemId?: string; label?: string }) => Promise<TaskChecklistItem | null>;
-  moveResult: OrfFlowStore["moveResult"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
-  moveTask: OrfFlowStore["moveTask"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
-  moveTaskChecklistItem: OrfFlowStore["moveTaskChecklistItem"] extends (state: OrfState, input: infer T) => OrfState ? (input: T) => void : never;
+  moveResult: (input: MoveResultInput) => void;
+  moveTask: (input: MoveTaskInput) => void;
+  moveTaskChecklistItem: (input: MoveSubtaskInput) => void;
   submitLoot: (input: SubmitLootInput) => Promise<boolean>;
   submitObjectiveTrialReview: (input: SubmitLootInput) => Promise<boolean>;
   reviewObjectiveTrialReview: (objectiveId: string, trialReviewId: string, input: ReviewObjectiveTrialReviewInput) => Promise<boolean>;
@@ -189,10 +149,8 @@ interface OrfContextValue {
 
 const OrfContext = createContext<OrfContextValue | null>(null);
 
-const store = new OrfFlowStore();
-
 function loadInitialState() {
-  return store.load();
+  return loadEmptyOrfStateSnapshot();
 }
 
 export { authFailureMessage } from "./orfProviderAuth";
@@ -364,6 +322,29 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     },
     [notify, refreshTaskManagementData],
   );
+  const objectiveActions = useOrfProviderObjectiveActions({
+    currentUser,
+    notify,
+    refreshTaskManagementData,
+    refreshTaskManagementDataAfterCreate,
+    state,
+  });
+  const resultActions = useOrfProviderResultActions({
+    currentUser,
+    notify,
+    refreshTaskManagementData,
+    refreshTaskManagementDataAfterCreate,
+    state,
+  });
+  const taskActions = useOrfProviderTaskActions({
+    notify,
+    refreshTaskManagementData,
+    refreshTaskManagementDataAfterCreate,
+  });
+  const feedbackActions = useOrfProviderFeedbackActions({
+    notify,
+    refreshTaskManagementData,
+  });
 
   const value = useMemo<OrfContextValue>(
     () => ({
@@ -395,602 +376,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       markAllNotificationsRead,
       deleteNotifications,
       clearAllNotifications,
-      createObjective: async (input) => {
-        if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
-          notify("没有新建目标权限");
-          return null;
-        }
-
-        try {
-          const data = await apiJson<CreateObjectiveResponse>("/api/objectives", {
-            method: "POST",
-            body: JSON.stringify(input),
-          });
-          notify("目标已创建");
-          refreshTaskManagementDataAfterCreate("目标已创建，但数据刷新失败");
-          return data.objective;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "目标创建失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return null;
-        }
-      },
-      createResult: async (input) => {
-        const payload = {
-          ...input,
-          source: input.source ?? "managerDefined",
-          definer: input.definer ?? currentUser?.name ?? "",
-        };
-        const objective = state.objectives.find((item) => item.id === payload.objectiveId);
-        const canAdjustDuringReestimate = Boolean(
-            objective &&
-            isObjectiveReestimateWindowOpen(objective) &&
-            currentUser?.id &&
-            isObjectiveChallenger(objective, currentUser.id),
-        );
-        const canCreateManagerDefined = payload.source !== "memberProposed" && hasPermission(currentUser, state.permissionRules, "result.create");
-        const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;
-        if (!canCreateManagerDefined && !canCreateMemberProposed) {
-          notify("没有新增指标权限");
-          return null;
-        }
-
-        try {
-          const data = await apiJson<CreateResultResponse>("/api/results", {
-            method: "POST",
-            body: JSON.stringify(payload),
-          });
-          notify(payload.source === "memberProposed" ? "指标已提交" : "指标已创建");
-          refreshTaskManagementDataAfterCreate(payload.source === "memberProposed" ? "指标已提交，但数据刷新失败" : "指标已创建，但数据刷新失败");
-          return data.result;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "指标创建失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return null;
-        }
-      },
-      publishObjective: async (objectiveId) => {
-        if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
-          notify("没有新建目标权限");
-          return false;
-        }
-
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/publish`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("目标已发布到悬赏大厅");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "目标发布失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      recruitObjectiveChallengers: async (objectiveId, members) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/recruitments`, {
-            method: "POST",
-            body: JSON.stringify({ members }),
-          });
-          await refreshTaskManagementData();
-          notify("挑战者已征召");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "征召失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      approveChallengeApplication: async (objectiveId, applicationId) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications/${encodeURIComponent(applicationId)}/approve`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("挑战申请已确认，目标进入重估");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "确认挑战申请失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      rejectChallengeApplication: async (objectiveId, applicationId) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications/${encodeURIComponent(applicationId)}/reject`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("挑战申请已拒绝");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "拒绝挑战申请失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      applyForBounty: async (objectiveId, reason) => {
-        if (currentUser?.role !== "member") {
-          notify("只有普通成员可以申请挑战");
-          return false;
-        }
-        const applicant = currentUser?.name ?? "";
-        const applicationReason = reason.trim();
-        if (!applicationReason) {
-          notify("请先填写申请理由");
-          return false;
-        }
-        const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
-        if (hasScopedObjective) {
-          const next = store.applyForBounty(state, objectiveId, applicant, applicationReason);
-          if (next === state) {
-            notify("这个目标暂时不能申请挑战");
-            return false;
-          }
-        }
-
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge-applications`, {
-            method: "POST",
-            body: JSON.stringify({ reason: applicationReason }),
-          });
-          await refreshTaskManagementData();
-          notify("挑战申请已提交，等待指挥官确认");
-          return true;
-        } catch (error) {
-          notify(bountyMutationFailureMessage(error, "申请挑战失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      acceptBountyChallenge: async (objectiveId) => {
-        if (currentUser?.role !== "member") {
-          notify("只有普通成员可以接受挑战");
-          return false;
-        }
-        const challenger = currentUser?.name ?? "";
-        const hasScopedObjective = state.objectives.some((objective) => objective.id === objectiveId);
-        if (hasScopedObjective) {
-          const next = store.acceptBountyChallenge(state, objectiveId, challenger);
-          if (next === state) {
-            notify("这个目标暂时不能接受挑战");
-            return false;
-          }
-        }
-
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("已接受挑战");
-          return true;
-        } catch (error) {
-          notify(bountyMutationFailureMessage(error, "接受挑战失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      freezeObjective: async (objectiveId) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/freeze`, { method: "PATCH" });
-          await refreshTaskManagementData();
-          notify("目标已冻结");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "冻结目标失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      reviewObjectiveLoot: async (objectiveId, input) => {
-        try {
-          const objective = state.objectives.find((item) => item.id === objectiveId);
-          const localSummary = objective && objectiveChallengerCount(objective) > 1
-            ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
-            : null;
-          const settlementInput =
-            objective && localSummary?.status === "ready" && localSummary.contributionResolution
-              ? {
-                  ...input,
-                  contributionResolution: {
-                    ...localSummary.contributionResolution,
-                    ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios, objective),
-                  },
-                }
-              : input;
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
-            method: "POST",
-            body: JSON.stringify(settlementInput),
-          });
-          await refreshTaskManagementData();
-          notify("战利品已验收结算");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "战利品验收失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      submitContributionReview: async (objectiveId, allocations) => {
-        try {
-          const objective = state.objectives.find((item) => item.id === objectiveId);
-          if (!objective || !currentUser) {
-            notify("匿名互评提交失败：目标或当前用户不可用");
-            return false;
-          }
-          await submitLocalEncryptedContributionReview({
-            allocations,
-            challengers: objective.challengers,
-            objectiveId,
-            objectiveTitle: objective.title,
-            reviewer: currentUser.name,
-          });
-          notify("匿名互评已提交到本地结算服务");
-          return true;
-        } catch (error) {
-          notify(localSettlementMutationFailureMessage(error, "匿名互评提交失败"));
-          return false;
-        }
-      },
-      createFeedback: async (input) => {
-        try {
-          await apiRequest("/api/feedback", {
-            method: "POST",
-            body: JSON.stringify({
-              phenomenon: input.phenomenon,
-              causeCategories: input.causeCategories,
-              impact: input.impact,
-              suggestedAdjustment: input.suggestedAdjustment,
-              owner: input.owner,
-            }),
-          });
-          await refreshTaskManagementData();
-          notify("反馈已捕获");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "反馈保存失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      createTask: async (input) => {
-        try {
-          const data = await apiJson<CreateTaskResponse>("/api/tasks", {
-            method: "POST",
-            body: JSON.stringify(input),
-          });
-          notify("行动项已创建");
-          refreshTaskManagementDataAfterCreate("行动项已创建，但数据刷新失败");
-          return data.task;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "行动项创建失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return null;
-        }
-      },
-      updateTaskStatus: (taskId, status) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/status`, {
-          method: "PATCH",
-          body: JSON.stringify({ status }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("行动项状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "行动项状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      setTaskCompletion: async (taskId, done) => {
-        try {
-          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/completion`, {
-            method: "PATCH",
-            body: JSON.stringify({ done }),
-          });
-          await refreshTaskManagementData();
-          notify("行动项完成状态已更新");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "行动项完成状态更新失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      updateTaskChecklistItem: async (taskId, itemId, done) => {
-        try {
-          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ done }),
-          });
-          await refreshTaskManagementData();
-          notify("子行动项完成状态已更新");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "子行动项完成状态更新失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      updateObjectiveTitle: async (objectiveId, title) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ title }),
-          });
-          await refreshTaskManagementData();
-          notify("目标已更新");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "目标更新失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      updateObjectiveFinalDueAt: async (objectiveId, finalDueAt) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ finalDueAt }),
-          });
-          await refreshTaskManagementData();
-          notify("截止日期已更新");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "截止日期更新失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      updateResultTitle: async (resultId, title) => {
-        try {
-          await apiRequest(`/api/results/${encodeURIComponent(resultId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ title }),
-          });
-          await refreshTaskManagementData();
-          notify("指标已更新");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "指标更新失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      updateResultUncertaintyLevel: async (resultId, uncertaintyLevel) => {
-        try {
-          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/uncertainty`, {
-            method: "PATCH",
-            body: JSON.stringify({ uncertaintyLevel }),
-          });
-          await refreshTaskManagementData();
-          notify("指标积分已校准");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "指标积分校准失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      updateTaskTitle: async (taskId, title) => {
-        try {
-          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ title }),
-          });
-          await refreshTaskManagementData();
-          notify("行动项已更新");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "行动项更新失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      updateTaskChecklistItemLabel: async (taskId, itemId, label) => {
-        try {
-          await apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}/label`, {
-            method: "PATCH",
-            body: JSON.stringify({ label }),
-          });
-          await refreshTaskManagementData();
-          notify("子行动项已更新");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "子行动项更新失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      createTaskChecklistItem: async (taskId, input = {}) => {
-        try {
-          const data = await apiJson<CreateChecklistItemResponse>(`/api/tasks/${encodeURIComponent(taskId)}/checklist`, {
-            method: "POST",
-            body: JSON.stringify(input),
-          });
-          notify("子行动项已添加");
-          refreshTaskManagementDataAfterCreate("子行动项已添加，但数据刷新失败");
-          return data.item;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "子行动项添加失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return null;
-        }
-      },
-      moveResult: (input) => {
-        void apiRequest(`/api/results/${encodeURIComponent(input.resultId)}/order`, {
-          method: "PATCH",
-          body: JSON.stringify({ referenceResultId: input.referenceResultId, placement: input.placement }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("指标位置已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "指标位置更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      moveTask: (input) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(input.taskId)}/move`, {
-          method: "PATCH",
-          body: JSON.stringify({ objectiveId: input.objectiveId, referenceTaskId: input.referenceTaskId, placement: input.placement }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("行动项位置已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "行动项位置更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      moveTaskChecklistItem: (input) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(input.fromTaskId)}/checklist/${encodeURIComponent(input.itemId)}/move`, {
-          method: "PATCH",
-          body: JSON.stringify({ toTaskId: input.toTaskId, referenceItemId: input.referenceItemId, placement: input.placement }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("子行动项位置已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "子行动项位置更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      deleteObjective: (objectiveId) => {
-        void apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}`, { method: "DELETE" })
-          .then(refreshTaskManagementData)
-          .then(() => notify("目标已删除"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "目标删除失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      deleteResult: (resultId) => {
-        void apiRequest(`/api/results/${encodeURIComponent(resultId)}`, { method: "DELETE" })
-          .then(refreshTaskManagementData)
-          .then(() => notify("指标已删除"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "指标删除失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      deleteTask: (taskId) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" })
-          .then(refreshTaskManagementData)
-          .then(() => notify("行动项已删除"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "行动项删除失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      deleteTaskChecklistItem: (taskId, itemId) => {
-        void apiRequest(`/api/tasks/${encodeURIComponent(taskId)}/checklist/${encodeURIComponent(itemId)}`, { method: "DELETE" })
-          .then(refreshTaskManagementData)
-          .then(() => notify("子行动项已删除"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "子行动项删除失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      updateFeedbackStatus: (feedbackId, status) => {
-        void apiRequest(`/api/feedback/${encodeURIComponent(feedbackId)}/status`, {
-          method: "PATCH",
-          body: JSON.stringify({ status }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("反馈状态已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "反馈状态更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      updateResultConfidence: (resultId, confidence) => {
-        void apiRequest(`/api/results/${encodeURIComponent(resultId)}/confidence`, {
-          method: "PATCH",
-          body: JSON.stringify({ confidence }),
-        })
-          .then(refreshTaskManagementData)
-          .then(() => notify("指标信心已更新"))
-          .catch((error) => {
-            notify(businessMutationFailureMessage(error, "指标信心更新失败"));
-            void refreshTaskManagementData().catch(() => undefined);
-          });
-      },
-      submitLoot: async (input) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(input.objectiveId)}/loot`, {
-            method: "POST",
-            body: JSON.stringify({
-              body: input.body,
-              resultClaims: input.resultClaims,
-              selfTestReportUrl: input.selfTestReportUrl,
-              selfTestReportBody: input.selfTestReportBody,
-            }),
-          });
-          await refreshTaskManagementData();
-          notify("战利品已提交，请申请验收对齐并定好会议室");
-          return true;
-        } catch (error) {
-          notify(commentMutationFailureMessage(error, "战利品提交失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      submitObjectiveTrialReview: async (input) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(input.objectiveId)}/trial-reviews`, {
-            method: "POST",
-            body: JSON.stringify({
-              body: input.body,
-              resultClaims: input.resultClaims,
-              selfTestReportUrl: input.selfTestReportUrl,
-              selfTestReportBody: input.selfTestReportBody,
-            }),
-          });
-          await refreshTaskManagementData();
-          notify("试验收已提交");
-          return true;
-        } catch (error) {
-          notify(commentMutationFailureMessage(error, "试验收提交失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      reviewObjectiveTrialReview: async (objectiveId, trialReviewId, input) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/trial-reviews/${encodeURIComponent(trialReviewId)}`, {
-            method: "PATCH",
-            body: JSON.stringify(input),
-          });
-          await refreshTaskManagementData();
-          notify("试验收反馈已提交");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "试验收反馈提交失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      requestObjectiveAlignment: async (objectiveId, input) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/alignment-requests`, {
-            method: "POST",
-            body: JSON.stringify(input),
-          });
-          await refreshTaskManagementData();
-          notify(input.kind === "reestimateCompletion" ? "已申请重估对齐，请约时间并定好会议室" : "已申请验收对齐，请约时间并定好会议室");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "对齐申请失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
-      reviewObjectiveAlignment: async (objectiveId, requestId, input) => {
-        try {
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/alignment-requests/${encodeURIComponent(requestId)}`, {
-            method: "PATCH",
-            body: JSON.stringify(input),
-          });
-          await refreshTaskManagementData();
-          notify(input.status === "completed" ? "对齐已完成" : "对齐反馈已提交");
-          return true;
-        } catch (error) {
-          notify(businessMutationFailureMessage(error, "对齐处理失败"));
-          void refreshTaskManagementData().catch(() => undefined);
-          return false;
-        }
-      },
+      ...objectiveActions,
+      ...resultActions,
+      ...taskActions,
+      ...feedbackActions,
       ...userActions,
       ...commentActions,
     }),
@@ -1009,12 +398,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       markNotificationRead,
       notify,
       notifications,
+      objectiveActions,
       readModelInvalidations,
+      resultActions,
+      feedbackActions,
       refreshNotifications,
-      refreshTaskManagementDataAfterCreate,
       refreshTaskManagementData,
-      state,
       systemBroadcasts,
+      taskActions,
       toasts,
       unreadNotificationCount,
       userActions,
@@ -1022,19 +413,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   );
 
   return <OrfContext.Provider value={value}>{children}</OrfContext.Provider>;
-}
-
-function withObjectiveChallengerUserIds(
-  ratios: ContributionAllocation[],
-  objective: Pick<OrfState["objectives"][number], "challengers" | "challengerUserIds">,
-) {
-  const userIdByMember = new Map(
-    objectiveChallengerTargets(objective).map((target) => [target.member, target.memberUserId ?? null]),
-  );
-  return ratios.map((ratio) => ({
-    ...ratio,
-    memberUserId: ratio.memberUserId ?? userIdByMember.get(ratio.member) ?? null,
-  }));
 }
 
 export function useOrf() {

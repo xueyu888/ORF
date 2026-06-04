@@ -242,7 +242,7 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   objectiveAlignmentRequests: state.objectiveAlignmentRequests.filter((request) => !targets.objectiveIds.has(request.objectiveId)),
 });
 
-const emptyBusinessState = (): OrfState => ({
+export const emptyBusinessState = (): OrfState => ({
   ...cloneState(initialOrfState),
   objectives: [],
   results: [],
