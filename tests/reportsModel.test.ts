@@ -5,9 +5,9 @@ import type { Objective, OrfState, PointLedgerEntry } from "../src/types/orf";
 
 const baseState = (): Pick<OrfState, "objectives" | "pointLedger" | "users"> => ({
   users: [
-    { id: "user-a", name: "Ava", email: "ava@example.com", role: "member", status: "active" },
-    { id: "user-b", name: "Bo", email: "bo@example.com", role: "member", status: "active" },
-    { id: "user-c", name: "Cy", email: "cy@example.com", role: "member", status: "active" },
+    { id: "00000000-0000-4000-8000-000000000307", name: "Ava", email: "ava@example.com", role: "member", status: "active" },
+    { id: "00000000-0000-4000-8000-000000000308", name: "Bo", email: "bo@example.com", role: "member", status: "active" },
+    { id: "00000000-0000-4000-8000-000000000309", name: "Cy", email: "cy@example.com", role: "member", status: "active" },
   ],
   objectives: [],
   pointLedger: [],

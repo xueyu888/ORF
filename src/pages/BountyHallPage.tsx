@@ -227,6 +227,7 @@ export function BountyHallPage() {
         {filteredHallItems.length > 0 ? (
           <BountyObjectiveList
             activeObjectiveId={linkedBountyObjectiveId}
+            currentUserId={currentUser?.id ?? ""}
             currentUserName={currentUser?.name ?? ""}
             items={filteredHallItems}
             now={now}

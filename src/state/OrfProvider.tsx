@@ -421,8 +421,8 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         const canAdjustDuringReestimate = Boolean(
           objective &&
             isObjectiveReestimateWindowOpen(objective) &&
-            currentUser?.name &&
-            objective.challengers.includes(currentUser.name),
+            currentUser?.id &&
+            objective.challengerUserIds.includes(currentUser.id),
         );
         const canCreateManagerDefined = payload.source !== "memberProposed" && hasPermission(currentUser, state.permissionRules, "result.create");
         const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;

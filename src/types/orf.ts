@@ -57,6 +57,7 @@ export interface TrendPoint {
 export interface ChallengeApplication {
   id: string;
   applicant: string;
+  applicantUserId?: string | null;
   reason?: string;
   status: ChallengeApplicationStatus;
   createdAt: string;
@@ -107,7 +108,9 @@ export interface Objective {
   taskIds: string[];
   finalDueAt: string;
   challengers: string[];
+  challengerUserIds: string[];
   assignedChallengers: string[];
+  assignedChallengerUserIds: string[];
   challengeApplications: ChallengeApplication[];
   acceptedAt?: string | null;
   confirmationDueAt?: string | null;
@@ -132,6 +135,7 @@ export interface ObjectiveLoot {
   id: string;
   objectiveId: string;
   submittedBy: string;
+  submittedByUserId?: string | null;
   body: string;
   resultClaims: LootResultClaim[];
   selfTestReportUrl?: string | null;
@@ -143,12 +147,14 @@ export interface ObjectiveTrialReview {
   id: string;
   objectiveId: string;
   requestedBy: string;
+  requestedByUserId?: string | null;
   body: string;
   resultClaims: LootResultClaim[];
   selfTestReportBody?: string | null;
   status: ObjectiveTrialReviewStatus;
   commanderFeedback?: string | null;
   reviewedBy?: string | null;
+  reviewedByUserId?: string | null;
   reviewedAt?: string | null;
   requestedAt: string;
 }
@@ -158,6 +164,7 @@ export interface ObjectiveAlignmentRequest {
   objectiveId: string;
   kind: ObjectiveAlignmentRequestKind;
   requestedBy: string;
+  requestedByUserId?: string | null;
   status: ObjectiveAlignmentRequestStatus;
   proposedAt: string;
   scheduledAt?: string | null;
@@ -165,6 +172,7 @@ export interface ObjectiveAlignmentRequest {
   note?: string | null;
   commanderFeedback?: string | null;
   reviewedBy?: string | null;
+  reviewedByUserId?: string | null;
   reviewedAt?: string | null;
 }
 
@@ -180,6 +188,7 @@ export interface PointLedgerEntry {
 
 export interface ContributionAllocation {
   member: string;
+  memberUserId?: string | null;
   ratio: number;
 }
 
@@ -187,6 +196,7 @@ export interface ObjectiveContributionReview {
   id: string;
   objectiveId: string;
   reviewer: string;
+  reviewerUserId?: string | null;
   allocations: ContributionAllocation[];
   submittedAt: string;
 }
@@ -212,6 +222,7 @@ export interface Result {
   confidence: number;
   source?: BountySource;
   definer?: string;
+  definerUserId?: string | null;
   uncertaintyScore: number;
   acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
@@ -234,6 +245,7 @@ export interface Feedback {
   source: FeedbackSource;
   status: FeedbackStatus;
   owner: string;
+  ownerUserId?: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;
   createdAt: string;
@@ -255,6 +267,7 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   assignee: string;
+  assigneeUserId?: string | null;
   linkedObjectiveId: string;
   feedbackOriginId?: string;
   dueDate: string;
@@ -274,6 +287,7 @@ export interface Evidence {
   source: string;
   date: string;
   owner: string;
+  ownerUserId?: string | null;
   linkedResultId: string;
   linkedFeedbackId?: string;
 }

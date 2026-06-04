@@ -10,6 +10,7 @@ import { ParticipationPreview } from "./ParticipationPreview";
 
 export function BountyObjectiveList({
   activeObjectiveId,
+  currentUserId,
   currentUserName,
   items,
   now,
@@ -19,6 +20,7 @@ export function BountyObjectiveList({
   onAction,
 }: {
   activeObjectiveId: string | null;
+  currentUserId: string;
   currentUserName: string;
   items: BountyItem[];
   now: Date;
@@ -42,6 +44,7 @@ export function BountyObjectiveList({
         <BountyListRow
           key={item.objective.id}
           active={item.objective.id === activeObjectiveId}
+          currentUserId={currentUserId}
           currentUserName={currentUserName}
           item={item}
           now={now}
@@ -57,6 +60,7 @@ export function BountyObjectiveList({
 
 function BountyListRow({
   item,
+  currentUserId,
   currentUserName,
   now,
   onOpenChallengeWork,
@@ -66,6 +70,7 @@ function BountyListRow({
   active,
 }: {
   active: boolean;
+  currentUserId: string;
   currentUserName: string;
   item: BountyItem;
   now: Date;
@@ -74,7 +79,7 @@ function BountyListRow({
   processing: boolean;
   onAction: (action: ChallengeAction) => void;
 }) {
-  const currentApplication = item.applications.find((application) => application.status !== "declined" && application.applicant === currentUserName);
+  const currentApplication = item.applications.find((application) => application.status !== "declined" && application.applicantUserId === currentUserId);
   const canApply = item.isRecruitment || canApplyForObjectiveChallenge(item.objective);
   const openable = Boolean(onOpenObjective);
   const openObjective = () => onOpenObjective?.(item.objective.id);
@@ -125,7 +130,7 @@ function BountyListRow({
         </div>
       </div>
       <div className="bounty-row-participants" data-label="参与状态">
-        <ParticipationPreview currentUserName={currentUserName} item={item} />
+        <ParticipationPreview currentUserId={currentUserId} currentUserName={currentUserName} item={item} />
       </div>
       <div className="bounty-row-results" data-label="指标">
         <ResultPreview item={item} />

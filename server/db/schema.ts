@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type {
   BountySource,
   ChallengeApplication,
@@ -38,7 +38,7 @@ export const teams = pgTable("teams", {
 export const users = pgTable(
   "users",
   {
-    id: text("id").primaryKey(),
+    id: uuid("id").primaryKey(),
     name: text("name").notNull(),
     email: text("email"),
     oryIdentityId: text("ory_identity_id"),
@@ -60,7 +60,7 @@ export const teamMembers = pgTable(
     teamId: text("team_id")
       .notNull()
       .references(() => teams.id, { onDelete: "cascade" }),
-    userId: text("user_id")
+    userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: teamRoleEnum("role").notNull(),
@@ -106,7 +106,9 @@ export const objectives = pgTable("objectives", {
   successDefinition: text("success_definition").notNull(),
   finalDueAt: date("final_due_at", { mode: "string" }).notNull().default(sql`(CURRENT_DATE + INTERVAL '14 day')`),
   challengers: jsonb("challengers").$type<string[]>().notNull().default([]),
+  challengerUserIds: jsonb("challenger_user_ids").$type<string[]>().notNull().default([]),
   assignedChallengers: jsonb("assigned_challengers").$type<string[]>().notNull().default([]),
+  assignedChallengerUserIds: jsonb("assigned_challenger_user_ids").$type<string[]>().notNull().default([]),
   challengeApplications: jsonb("challenge_applications").$type<ChallengeApplication[]>().notNull().default([]),
   acceptedAt: timestamp("accepted_at", { mode: "string", withTimezone: true }),
   confirmationDueAt: timestamp("confirmation_due_at", { mode: "string", withTimezone: true }),
@@ -119,8 +121,8 @@ export const objectives = pgTable("objectives", {
   publishedAt: date("published_at", { mode: "string" }),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
-  createdBy: text("created_by").references(() => users.id),
-  updatedBy: text("updated_by").references(() => users.id),
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
 });
 
 export const objectiveLoot = pgTable("objective_loot", {
@@ -132,6 +134,7 @@ export const objectiveLoot = pgTable("objective_loot", {
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
   submittedBy: text("submitted_by").notNull(),
+  submittedByUserId: uuid("submitted_by_user_id").references(() => users.id),
   body: text("body").notNull(),
   resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
   selfTestReportUrl: text("self_test_report_url"),
@@ -150,12 +153,14 @@ export const objectiveTrialReviews = pgTable(
       .notNull()
       .references(() => objectives.id, { onDelete: "cascade" }),
     requestedBy: text("requested_by").notNull(),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
     body: text("body").notNull(),
     resultClaims: jsonb("result_claims").$type<LootResultClaim[]>().notNull().default([]),
     selfTestReportBody: text("self_test_report_body"),
     status: text("status").$type<ObjectiveTrialReviewStatus>().notNull().default("requested"),
     commanderFeedback: text("commander_feedback"),
     reviewedBy: text("reviewed_by"),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id),
     reviewedAt: timestamp("reviewed_at", { mode: "string", withTimezone: true }),
     requestedAt: timestamp("requested_at", { mode: "string", withTimezone: true }).notNull(),
   },
@@ -176,6 +181,7 @@ export const objectiveAlignmentRequests = pgTable(
       .references(() => objectives.id, { onDelete: "cascade" }),
     kind: text("kind").$type<ObjectiveAlignmentRequestKind>().notNull(),
     requestedBy: text("requested_by").notNull(),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id),
     status: text("status").$type<ObjectiveAlignmentRequestStatus>().notNull().default("requested"),
     proposedAt: timestamp("proposed_at", { mode: "string", withTimezone: true }).notNull(),
     scheduledAt: timestamp("scheduled_at", { mode: "string", withTimezone: true }),
@@ -183,6 +189,7 @@ export const objectiveAlignmentRequests = pgTable(
     note: text("note"),
     commanderFeedback: text("commander_feedback"),
     reviewedBy: text("reviewed_by"),
+    reviewedByUserId: uuid("reviewed_by_user_id").references(() => users.id),
     reviewedAt: timestamp("reviewed_at", { mode: "string", withTimezone: true }),
   },
   (table) => ({
@@ -200,6 +207,7 @@ export const objectiveContributionReviews = pgTable("objective_contribution_revi
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
   reviewer: text("reviewer").notNull(),
+  reviewerUserId: uuid("reviewer_user_id").references(() => users.id),
   allocations: jsonb("allocations").$type<ContributionAllocation[]>().notNull().default([]),
   submittedAt: timestamp("submitted_at", { mode: "string", withTimezone: true }).notNull(),
 });
@@ -212,7 +220,7 @@ export const pointLedger = pgTable("point_ledger", {
   objectiveId: text("objective_id")
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
-  userId: text("user_id").references(() => users.id),
+  userId: uuid("user_id").references(() => users.id),
   memberName: text("member_name").notNull(),
   points: real("points").notNull(),
   reason: text("reason").notNull(),
@@ -226,10 +234,10 @@ export const notifications = pgTable(
     teamId: text("team_id")
       .notNull()
       .references(() => teams.id, { onDelete: "cascade" }),
-    recipientUserId: text("recipient_user_id")
+    recipientUserId: uuid("recipient_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
     actorName: text("actor_name").notNull().default(""),
     kind: text("kind").$type<NotificationKind>().notNull(),
     title: text("title").notNull(),
@@ -274,14 +282,15 @@ export const results = pgTable("results", {
   confidence: integer("confidence").notNull(),
   source: text("source").$type<BountySource>().notNull().default("managerDefined"),
   definer: text("definer").notNull().default(""),
+  definerUserId: uuid("definer_user_id").references(() => users.id),
   uncertaintyScore: integer("uncertainty_score").notNull().default(0),
   acceptedResult: text("accepted_result").$type<ResultAcceptedResult>().notNull().default("unreviewed"),
   reviewCadence: text("review_cadence").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
-  createdBy: text("created_by").references(() => users.id),
-  updatedBy: text("updated_by").references(() => users.id),
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
 });
 
 export const resultTrendPoints = pgTable("result_trend_points", {
@@ -304,6 +313,7 @@ export const tasks = pgTable("tasks", {
   status: taskStatusEnum("status").notNull(),
   priority: priorityEnum("priority").notNull(),
   assignee: text("assignee").notNull(),
+  assigneeUserId: uuid("assignee_user_id").references(() => users.id),
   linkedObjectiveId: text("linked_objective_id")
     .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
@@ -313,8 +323,8 @@ export const tasks = pgTable("tasks", {
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
-  createdBy: text("created_by").references(() => users.id),
-  updatedBy: text("updated_by").references(() => users.id),
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
 });
 
 export const taskChecklistItems = pgTable("task_checklist_items", {
@@ -345,10 +355,11 @@ export const feedback = pgTable("feedback", {
   source: feedbackSourceEnum("source").notNull(),
   status: feedbackStatusEnum("status").notNull(),
   owner: text("owner").notNull(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id),
   createdAt: date("created_at", { mode: "string" }).notNull(),
   updatedAt: date("updated_at", { mode: "string" }).notNull(),
-  createdBy: text("created_by").references(() => users.id),
-  updatedBy: text("updated_by").references(() => users.id),
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
 });
 
 export const feedbackCauseCategories = pgTable(
@@ -376,12 +387,13 @@ export const evidence = pgTable("evidence", {
   source: text("source").notNull(),
   date: date("date", { mode: "string" }).notNull(),
   owner: text("owner").notNull(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id),
   linkedResultId: text("linked_result_id")
     .notNull()
     .references(() => results.id, { onDelete: "cascade" }),
   linkedFeedbackId: text("linked_feedback_id").references(() => feedback.id),
-  createdBy: text("created_by").references(() => users.id),
-  updatedBy: text("updated_by").references(() => users.id),
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
 });
 
 export const commentThreads = pgTable("comment_threads", {
@@ -393,7 +405,7 @@ export const commentThreads = pgTable("comment_threads", {
   targetId: text("target_id").notNull(),
   targetTitle: text("target_title").notNull(),
   status: commentStatusEnum("status").notNull().default("open"),
-  createdBy: text("created_by")
+  createdBy: uuid("created_by")
     .notNull()
     .references(() => users.id),
   createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
@@ -405,7 +417,7 @@ export const commentMessages = pgTable("comment_messages", {
   threadId: text("thread_id")
     .notNull()
     .references(() => commentThreads.id, { onDelete: "cascade" }),
-  authorUserId: text("author_user_id")
+  authorUserId: uuid("author_user_id")
     .notNull()
     .references(() => users.id),
   author: text("author").notNull(),
@@ -433,7 +445,7 @@ export const commentAttachments = pgTable(
     fileSize: integer("file_size").notNull(),
     width: integer("width"),
     height: integer("height"),
-    createdBy: text("created_by")
+    createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),

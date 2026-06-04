@@ -44,6 +44,23 @@ import {
 import type { CommentThread, Evidence, Feedback, Objective, OrfState, Result, Task } from "../src/types/orf";
 
 const date = "2026-05-14";
+const testUserIdByName = new Map([
+  ["Kai Wang", "00000000-0000-4000-8000-000000000301"],
+  ["Lee Chen", "00000000-0000-4000-8000-000000000302"],
+  ["Admin", "00000000-0000-4000-8000-000000000303"],
+  ["Stranger", "00000000-0000-4000-8000-000000000304"],
+  ["Observer", "00000000-0000-4000-8000-000000000305"],
+  ["Mia Chen", "00000000-0000-4000-8000-000000000306"],
+  ["Other Member", "00000000-0000-4000-8000-000000000307"],
+]);
+
+function testUserIdForName(name: string | null | undefined) {
+  return testUserIdByName.get(name?.trim() ?? "") ?? null;
+}
+
+function testUserIdsForNames(names: Array<string | null | undefined>) {
+  return Array.from(new Set(names.map(testUserIdForName).filter((userId): userId is string => Boolean(userId))));
+}
 
 test("buildChallengeTree filters objectives and preserves objective result order", () => {
   const objA = objective({ id: "obj-a", resultIds: ["res-b", "res-a"], taskIds: ["task-a", "task-b"], flowStatus: "reestimating", challengers: ["Kai Wang"] });
@@ -129,14 +146,14 @@ test("summarizeDashboard counts settled, review, unassigned, and average objecti
 });
 
 test("feedback status controls are limited to admins, creators, and owners", () => {
-  const item = feedback({ owner: "Kai Wang", createdBy: "user-kai" });
-  const creator = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
-  const assignee = { id: "user-lee", name: "Lee Chen", email: "lee@example.com", role: "member" as const, status: "active" as const };
-  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
-  const stranger = { id: "user-stranger", name: "Stranger", email: "stranger@example.com", role: "member" as const, status: "active" as const };
+  const item = feedback({ owner: "Kai Wang", createdBy: "00000000-0000-4000-8000-000000000301" });
+  const creator = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const assignee = { id: "00000000-0000-4000-8000-000000000302", name: "Lee Chen", email: "lee@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const stranger = { id: "00000000-0000-4000-8000-000000000304", name: "Stranger", email: "stranger@example.com", role: "member" as const, status: "active" as const };
 
   assert.equal(canManageFeedbackStatus(item, creator), true);
-  assert.equal(canManageFeedbackStatus(feedback({ owner: assignee.name, createdBy: "user-kai" }), assignee), true);
+  assert.equal(canManageFeedbackStatus(feedback({ owner: assignee.name, createdBy: "00000000-0000-4000-8000-000000000301" }), assignee), true);
   assert.equal(canManageFeedbackStatus(item, admin), true);
   assert.equal(canManageFeedbackStatus(item, stranger), false);
 });
@@ -149,9 +166,9 @@ test("feedback creation entry requires at least one visible result", () => {
 test("feedback creation entry is limited to admins and objective challengers", () => {
   const objectiveItem = objective({ id: "obj-feedback-access", challengers: ["Kai Wang"], resultIds: ["res-visible"] });
   const resultItem = result({ id: "res-visible", objectiveId: objectiveItem.id });
-  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
-  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
-  const observer = { id: "user-observer", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const observer = { id: "00000000-0000-4000-8000-000000000305", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
 
   assert.equal(canCreateFeedbackForObjective(objectiveItem, admin, [resultItem]), true);
   assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, [resultItem]), true);
@@ -161,8 +178,8 @@ test("feedback creation entry is limited to admins and objective challengers", (
 });
 
 test("objective visibility scopes member-facing records to current challengers", () => {
-  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
-  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
   const mine = objective({ id: "obj-mine", challengers: [challenger.name] });
   const other = objective({ id: "obj-other", challengers: ["Other Member"] });
   const memberVisibleIds = visibleObjectiveIdsForUser([mine, other], challenger);
@@ -342,8 +359,8 @@ test("freeze action requires reestimating objectives with concrete metrics", () 
 });
 
 test("metric creation action separates commander definition from challenger proposal", () => {
-  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
-  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
   const rules = [{ role: "member" as const, permissions: [] }];
   const dueAt = "2999-05-30T00:00:00.000Z";
 
@@ -377,8 +394,8 @@ test("metric creation action separates commander definition from challenger prop
 });
 
 test("metric edit access centralizes role, reestimate, and lifecycle gates", () => {
-  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
-  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
   const rules = [{ role: "member" as const, permissions: [] }];
   const now = new Date("2026-05-22T00:00:00.000Z");
   const dueAt = "2999-05-30T00:00:00.000Z";
@@ -422,9 +439,9 @@ test("metric edit access centralizes role, reestimate, and lifecycle gates", () 
 });
 
 test("objective work item mutation uses objective participation and lifecycle", () => {
-  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
-  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
-  const observer = { id: "user-mia", name: "Mia Chen", email: "mia@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const observer = { id: "00000000-0000-4000-8000-000000000306", name: "Mia Chen", email: "mia@example.com", role: "member" as const, status: "active" as const };
 
   assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "candidate" }), admin), true);
   assert.equal(canMutateObjectiveWorkItems(objective({ flowStatus: "reestimating", challengers: [challenger.name] }), challenger), true);
@@ -442,8 +459,8 @@ test("objective work item mutation uses objective participation and lifecycle", 
 });
 
 test("loot workbench actions keep commander review separate from member challenge actions", () => {
-  const admin = { id: "user-admin", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
-  const challenger = { id: "user-kai", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
+  const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
+  const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
   const pollutedFrozen = objective({ flowStatus: "frozen", challengers: [admin.name, challenger.name] });
   const pollutedSubmitted = objective({ flowStatus: "submitted", challengers: [admin.name, challenger.name] });
 
@@ -524,7 +541,7 @@ function state(overrides: Partial<OrfState> = {}): OrfState {
 }
 
 function objective(overrides: Partial<Objective> = {}): Objective {
-  return {
+  const item = {
     id: "obj-a",
     title: "Objective",
     description: "Objective description",
@@ -556,10 +573,19 @@ function objective(overrides: Partial<Objective> = {}): Objective {
     updatedAt: date,
     ...overrides,
   };
+  return {
+    ...item,
+    challengerUserIds: overrides.challengerUserIds ?? testUserIdsForNames(item.challengers),
+    assignedChallengerUserIds: overrides.assignedChallengerUserIds ?? testUserIdsForNames(item.assignedChallengers),
+    challengeApplications: item.challengeApplications.map((application) => ({
+      ...application,
+      applicantUserId: application.applicantUserId ?? testUserIdForName(application.applicant),
+    })),
+  };
 }
 
 function result(overrides: Partial<Result> = {}): Result {
-  return {
+  const item = {
     id: "res-a",
     objectiveId: "obj-a",
     title: "Result",
@@ -590,10 +616,14 @@ function result(overrides: Partial<Result> = {}): Result {
     updatedAt: date,
     ...overrides,
   };
+  return {
+    ...item,
+    definerUserId: overrides.definerUserId ?? testUserIdForName(item.definer),
+  };
 }
 
 function task(overrides: Partial<Task> = {}): Task {
-  return {
+  const item = {
     id: "task-a",
     title: "Task",
     description: "Task description",
@@ -608,10 +638,14 @@ function task(overrides: Partial<Task> = {}): Task {
     updatedAt: date,
     ...overrides,
   };
+  return {
+    ...item,
+    assigneeUserId: overrides.assigneeUserId ?? testUserIdForName(item.assignee),
+  };
 }
 
 function feedback(overrides: Partial<Feedback> = {}): Feedback {
-  return {
+  const item = {
     id: "fb-a",
     phenomenon: "Unexpected output",
     evidenceIds: [],
@@ -628,10 +662,14 @@ function feedback(overrides: Partial<Feedback> = {}): Feedback {
     activity: [],
     ...overrides,
   };
+  return {
+    ...item,
+    ownerUserId: overrides.ownerUserId ?? testUserIdForName(item.owner),
+  };
 }
 
 function evidence(overrides: Partial<Evidence> = {}): Evidence {
-  return {
+  const item = {
     id: "ev-a",
     type: "Dashboard snapshot",
     title: "Evidence",
@@ -642,6 +680,10 @@ function evidence(overrides: Partial<Evidence> = {}): Evidence {
     linkedResultId: "res-a",
     ...overrides,
   };
+  return {
+    ...item,
+    ownerUserId: overrides.ownerUserId ?? testUserIdForName(item.owner),
+  };
 }
 
 function comment(id: string, targetType: CommentThread["targetType"], targetId: string, bodies: string[]): CommentThread {
@@ -651,7 +693,7 @@ function comment(id: string, targetType: CommentThread["targetType"], targetId: 
     targetId,
     targetTitle: targetId,
     status: "open",
-    createdBy: "user-kai",
+    createdBy: "00000000-0000-4000-8000-000000000301",
     createdAt: date,
     updatedAt: date,
     messages: bodies.map((body, index) => ({ id: `${id}-${index}`, author: "Kai Wang", body, createdAt: date })),

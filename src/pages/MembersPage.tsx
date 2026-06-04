@@ -67,7 +67,6 @@ export function MembersPage() {
   const editingUser = dialog?.userId ? state.users.find((user) => user.id === dialog.userId) : null;
   const isCurrentUser = (user: OrfUser) => user.id === currentUserId;
   const isEditingCurrentAdmin = editingUser?.id === currentUserId && editingUser.role === "admin";
-  const isEditingBoundLogin = Boolean(editingUser?.authLinked);
 
   const users = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -325,8 +324,7 @@ export function MembersPage() {
               <input
                 type="email"
                 value={dialog.email}
-                disabled={submitting || isEditingBoundLogin}
-                title={isEditingBoundLogin ? "已绑定登录身份" : undefined}
+                disabled={submitting}
                 onChange={(event) => setDialog({ ...dialog, email: event.target.value })}
                 required
               />

@@ -50,7 +50,7 @@ export function canRequestObjectiveAlignment(
   return Boolean(
     objective &&
       currentUser?.role === "member" &&
-      objective.challengers.includes(currentUser.name) &&
+      objective.challengerUserIds.includes(currentUser.id) &&
       !existingRequest &&
       ((kind === "reestimateCompletion" && objective.flowStatus === "reestimating") ||
         (kind === "acceptance" && objective.flowStatus === "submitted")),

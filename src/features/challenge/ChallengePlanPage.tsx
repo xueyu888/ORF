@@ -140,7 +140,9 @@ function draftObjective(title: string): Objective {
     taskIds: [],
     finalDueAt,
     challengers: [],
+    challengerUserIds: [],
     assignedChallengers: [],
+    assignedChallengerUserIds: [],
     challengeApplications: [],
     acceptedAt: null,
     confirmationDueAt: null,
@@ -346,8 +348,8 @@ export function ChallengePlanPage() {
   const effectiveMemberFilter = canFilterByMember ? memberFilter : "all";
   const visibleObjectiveIds = useMemo(() => {
     if (showAll) return undefined;
-    return new Set(challengeState.objectives.filter((objective) => objective.challengers.includes(currentMember)).map((objective) => objective.id));
-  }, [challengeState.objectives, currentMember, showAll]);
+    return new Set(challengeState.objectives.filter((objective) => objective.challengerUserIds.includes(currentUser?.id ?? "")).map((objective) => objective.id));
+  }, [challengeState.objectives, currentUser?.id, showAll]);
   const groups = useMemo(
     () =>
       buildChallengeTree(

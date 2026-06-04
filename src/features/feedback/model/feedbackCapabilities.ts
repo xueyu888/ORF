@@ -5,7 +5,7 @@ export function canManageFeedbackStatus(feedback: Feedback, currentUser: OrfUser
     return false;
   }
 
-  return currentUser.role === "admin" || feedback.createdBy === currentUser.id || feedback.owner === currentUser.name;
+  return currentUser.role === "admin" || feedback.createdBy === currentUser.id || feedback.ownerUserId === currentUser.id;
 }
 
 export function canCreateFeedbackFromResults(results: readonly Result[]) {
@@ -17,7 +17,7 @@ export function canCreateFeedbackForObjective(objective: Objective | undefined, 
     return false;
   }
 
-  return currentUser.role === "admin" || objective.challengers.includes(currentUser.name);
+  return currentUser.role === "admin" || (objective.challengerUserIds ?? []).includes(currentUser.id);
 }
 
 export function canCreateFeedbackForResult(objective: Objective | undefined, currentUser: OrfUser | null, result: Result | undefined) {

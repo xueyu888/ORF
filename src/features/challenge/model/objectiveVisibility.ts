@@ -4,7 +4,7 @@ export function canViewObjectiveRecord(objective: Objective | undefined, current
   if (!currentUser) return false;
   if (currentUser.role === "admin") return true;
   if (!objective) return false;
-  return objective.challengers.includes(currentUser.name);
+  return (objective.challengerUserIds ?? []).includes(currentUser.id);
 }
 
 export function visibleObjectivesForUser(objectives: readonly Objective[], currentUser: OrfUser | null | undefined) {

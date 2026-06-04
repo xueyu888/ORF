@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "../db/client";
 import { teamMembers, users } from "../db/schema";
 import { env } from "../env";
@@ -17,6 +18,10 @@ export type AuthenticatedOrfUser = {
 
 type OryIdentity = {
   id: string;
+  schema_id?: string;
+  state?: string;
+  metadata_public?: unknown;
+  metadata_admin?: unknown;
   traits?: Record<string, unknown>;
 };
 
@@ -164,28 +169,13 @@ function identityName(identity: OryIdentity, email: string): string {
   return textTrait(identity.traits?.username) ?? email.split("@")[0] ?? "User";
 }
 
-function slug(value: string) {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized || "user";
-}
-
-async function nextUserId(email: string, identityId: string) {
-  const base = `user-${slug(email.split("@")[0] ?? identityId)}`;
-  let candidate = base;
-  let suffix = 1;
-
+async function nextUserId() {
   while (true) {
+    const candidate = randomUUID();
     const [existing] = await db.select({ id: users.id }).from(users).where(sql`${users.id} = ${candidate}`).limit(1);
     if (!existing) {
       return candidate;
     }
-
-    suffix += 1;
-    candidate = `${base}-${suffix}`;
   }
 }
 
@@ -255,7 +245,7 @@ async function upsertOrfUser(
     };
   }
 
-  const id = await nextUserId(email, identity.id);
+  const id = await nextUserId();
   const createdLastOnlineAt = lastOnlineAt ?? null;
   await db.insert(users).values({
     id,
@@ -457,6 +447,57 @@ export async function deleteOryIdentity(identityId: string | null | undefined) {
 
   if (!response.ok) {
     throw Object.assign(new Error(`Ory identity delete failed with ${response.status}`), { statusCode: 503 });
+  }
+}
+
+export async function updateOryIdentityEmail(identityId: string | null | undefined, email: string) {
+  const id = identityId?.trim();
+  const nextEmail = email.trim().toLowerCase();
+  if (!id || !nextEmail) {
+    return;
+  }
+
+  const currentResponse = await fetchOry(oryAdminUrl(`/admin/identities/${encodeURIComponent(id)}`), {
+    headers: {
+      accept: "application/json",
+    },
+  });
+
+  if (currentResponse.status === 404) {
+    throw Object.assign(new Error("Ory identity not found"), { statusCode: 404 });
+  }
+
+  if (!currentResponse.ok) {
+    throw Object.assign(new Error(`Ory identity read failed with ${currentResponse.status}`), { statusCode: 503 });
+  }
+
+  const identity = (await currentResponse.json()) as OryIdentity;
+  const traits = {
+    ...(identity.traits ?? {}),
+    email: nextEmail,
+  };
+
+  const updateResponse = await fetchOry(oryAdminUrl(`/admin/identities/${encodeURIComponent(id)}`), {
+    method: "PUT",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      metadata_admin: identity.metadata_admin ?? null,
+      metadata_public: identity.metadata_public ?? null,
+      schema_id: identity.schema_id ?? "default",
+      state: identity.state ?? "active",
+      traits,
+    }),
+  });
+
+  if (updateResponse.status === 409) {
+    throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
+  }
+
+  if (!updateResponse.ok) {
+    throw Object.assign(new Error(`Ory identity update failed with ${updateResponse.status}`), { statusCode: 503 });
   }
 }
 

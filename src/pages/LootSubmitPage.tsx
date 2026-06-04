@@ -106,8 +106,9 @@ export function LootSubmitPage() {
     return <Navigate to="/tasks" replace />;
   }
 
-  const currentMember = currentUser?.name ?? "";
-  const isChallenger = currentUser?.role === "member" && objective.challengers.includes(currentMember);
+  const currentMemberId = currentUser?.id ?? "";
+  const currentMemberName = currentUser?.name ?? "";
+  const isChallenger = currentUser?.role === "member" && objective.challengerUserIds.includes(currentMemberId);
   const canSubmit = canSubmitObjectiveLootByFlow(objective) && isChallenger;
   const canReview = Boolean(currentUser?.role === "admin" && canReviewObjectiveLootByFlow(objective) && latestLoot);
   const canRequestTrial = canRequestObjectiveTrialReview(objective, currentUser, latestTrialReview);
@@ -397,7 +398,7 @@ export function LootSubmitPage() {
               </div>
               <div className="grid gap-3">
                 <div className="text-sm font-semibold orf-text-primary">匿名互评贡献结果</div>
-                {usesLocalContributionSettlement ? <LocalSettlementSummaryView /> : <SingleContributionSummaryView member={objective.challengers[0] ?? currentMember} />}
+                {usesLocalContributionSettlement ? <LocalSettlementSummaryView /> : <SingleContributionSummaryView member={objective.challengers[0] ?? currentMemberName} />}
                 {needsContributionResolution && (
                   <div className="grid gap-3 rounded-md border orf-border p-3">
                     <div className="text-sm font-semibold orf-text-primary">处理分歧</div>
@@ -476,7 +477,7 @@ export function LootSubmitPage() {
               <ContributionPercentTotal total={percentInputTotal(contributionInputs, objective.challengers)} />
               <div className="grid gap-3">
                 {objective.challengers.map((member) => (
-                  <Field key={member} label={`${member}${member === currentMember ? "（你）" : ""} 贡献百分比`}>
+                  <Field key={member} label={`${member}${member === currentMemberName ? "（你）" : ""} 贡献百分比`}>
                     <input className="orf-input px-3 py-2 text-sm" type="number" min="0" max="100" step="0.01" inputMode="decimal" value={contributionInputs[member] ?? "0"} onChange={(event) => { setContributionInputs((items) => ({ ...items, [member]: event.target.value })); if (error) setError(""); }} />
                   </Field>
                 ))}

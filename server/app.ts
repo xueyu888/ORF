@@ -483,7 +483,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const permissionRules = await getPermissionRulesForScope(scope);
     const source = body.source ?? "managerDefined";
     const allowedByRole = user.role === "admin" || hasRolePermission(user.role, permissionRules, "result.create");
-    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.name, scope);
+    const allowedByReestimate = await canEditObjectiveResultsDuringReestimate(body.objectiveId, user.id, scope);
     const allowed = source === "memberProposed" ? allowedByReestimate : allowedByRole;
     if (!allowed) {
       return reply.code(403).send({ error: "Forbidden" });

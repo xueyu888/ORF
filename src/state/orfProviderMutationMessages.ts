@@ -36,10 +36,6 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
         return "该姓名已被 ORF 历史记录占用，不能使用";
       }
 
-      if (error.message === "Bound login email cannot be changed") {
-        return "已绑定登录身份的邮箱不能在成员管理中修改";
-      }
-
       return error.message;
     }
 
@@ -48,7 +44,7 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 503 && error.message === "Ory admin URL is not configured") {
-      return "删除已绑定登录账号需要先配置 Ory 管理接口";
+      return "修改或删除已绑定登录账号需要先配置 Ory 管理接口";
     }
 
     return error.message || fallback;

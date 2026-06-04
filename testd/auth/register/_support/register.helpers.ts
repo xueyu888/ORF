@@ -1,4 +1,5 @@
 import { and, asc, eq, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db } from "../../../_operators/testd-db-client";
 import { teamMembers, teams, users } from "../../../../server/db/schema";
 import {
@@ -131,7 +132,7 @@ export async function upsertAdminAccount(
   identityId: string | undefined,
 ) {
   const teamId = await ensureDefaultTeam();
-  const userId = `user-${slug(data.adminEmail.split("@")[0] ?? "register-admin")}`;
+  const userId = randomUUID();
   const [existing] = await db
     .select({ id: users.id })
     .from(users)
@@ -273,11 +274,4 @@ async function readUserMemberships(
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function slug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 }

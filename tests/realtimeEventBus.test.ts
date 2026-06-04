@@ -23,7 +23,7 @@ test("team realtime broadcast skips stale subscribers without blocking healthy c
   const unsubscribeStale = subscribeRealtimeEvents({
     id: "stale-client",
     teamId,
-    userId: "user-stale",
+    userId: "00000000-0000-4000-8000-000000000310",
     send: () => {
       throw new Error("connection closed");
     },
@@ -31,7 +31,7 @@ test("team realtime broadcast skips stale subscribers without blocking healthy c
   const unsubscribeHealthy = subscribeRealtimeEvents({
     id: "healthy-client",
     teamId,
-    userId: "user-healthy",
+    userId: "00000000-0000-4000-8000-000000000311",
     send: (event) => received.push(event),
   });
 
@@ -48,7 +48,7 @@ test("read model invalidation broadcasts model scope without business snapshots"
   const received: RealtimeEvent[] = [];
   const unsubscribe = subscribeRealtimeEvents({
     teamId,
-    userId: "user-healthy",
+    userId: "00000000-0000-4000-8000-000000000311",
     send: (event) => received.push(event),
   });
 

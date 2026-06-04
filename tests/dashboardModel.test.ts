@@ -3,6 +3,15 @@ import test from "node:test";
 import { summarizeDashboardState } from "../src/features/dashboard/model/dashboardSummary";
 import type { Feedback, Objective, OrfUser, Result, Task } from "../src/types/orf";
 
+const testUserIdByName = new Map([
+  ["Kai Wang", "00000000-0000-4000-8000-000000000301"],
+  ["Lee Chen", "00000000-0000-4000-8000-000000000302"],
+]);
+
+function testUserIdForName(name: string | null | undefined) {
+  return testUserIdByName.get(name?.trim() ?? "") ?? null;
+}
+
 test("summarizeDashboardState returns zero confidence for an empty objective list", () => {
   const summary = summarizeDashboardState({ objectives: [], results: [], feedback: [], tasks: [] });
 
@@ -138,7 +147,7 @@ function feedback(input: Partial<Feedback>): Feedback {
 }
 
 function task(input: Partial<Task>): Task {
-  return {
+  const item = {
     id: "task",
     title: "Task",
     description: "",
@@ -153,11 +162,15 @@ function task(input: Partial<Task>): Task {
     updatedAt: "2999-01-01T00:00:00.000Z",
     ...input,
   };
+  return {
+    ...item,
+    assigneeUserId: input.assigneeUserId ?? testUserIdForName(item.assignee),
+  };
 }
 
 function user(input: Partial<OrfUser>): OrfUser {
   return {
-    id: "user-kai",
+    id: "00000000-0000-4000-8000-000000000301",
     name: "Kai Wang",
     email: "kai@example.com",
     role: "member",

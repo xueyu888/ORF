@@ -12,7 +12,7 @@ export const adminEditMemberCase = {
     adminPassword: "OrfAdminEditMemberE2E!2026",
     adminName: "ORF Admin Edit Member E2E",
     adminRole: "admin",
-    targetUserId: "user-testd-admin-edit-member",
+    targetUserId: "00000000-0000-4000-8000-000000000102",
     originalName: "ORF Member Edit Source E2E",
     originalEmail: "orf-member-edit-source-e2e@orf.local",
     originalRole: "member",

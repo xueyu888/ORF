@@ -59,8 +59,8 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
         (user) =>
           user.status === "active" &&
           user.role === "member" &&
-          !objective.challengers.includes(user.name) &&
-          !objective.assignedChallengers.includes(user.name),
+          !objective.challengerUserIds.includes(user.id) &&
+          !objective.assignedChallengerUserIds.includes(user.id),
       )
     : [];
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);

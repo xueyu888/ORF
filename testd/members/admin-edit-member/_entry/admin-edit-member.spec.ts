@@ -1,4 +1,5 @@
 import { test, type TestInfo } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { runStateCase } from "../../../_framework/runner";
 import type { StateCaseSpec } from "../../../_framework/types";
 import { createTestInstanceSlug } from "../../../_framework/test-instance";
@@ -33,7 +34,7 @@ function createAdminEditMemberRunCase(testInfo: TestInfo): StateCaseSpec<AdminEd
     data: {
       ...adminEditMemberCase.data,
       adminEmail: `orf-admin-edit-member-${suffix}-e2e@orf.local`,
-      targetUserId: `user-testd-admin-edit-member-${suffix}`,
+      targetUserId: randomUUID(),
       originalEmail,
       updatedEmail,
       targetEmails: [originalEmail, updatedEmail],

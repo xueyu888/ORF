@@ -7,7 +7,9 @@ type ObjectiveChallengeFields = Pick<
   | "finalDueAt"
   | "flowStatus"
   | "challengers"
+  | "challengerUserIds"
   | "assignedChallengers"
+  | "assignedChallengerUserIds"
   | "challengeApplications"
   | "acceptedAt"
   | "confirmationDueAt"
@@ -69,6 +71,13 @@ function inferFlowStatus(objective: LegacyObjective, challengers: string[], assi
 
 function normalizeInitialState(state: LegacyInitialState): OrfState {
   const objectiveUpdatedAtById = new Map(state.objectives.map((objective) => [objective.id, objective.updatedAt]));
+  const userIdByName = new Map(state.users.map((user) => [user.name, user.id]));
+  const userNameById = new Map(state.users.map((user) => [user.id, user.name]));
+  const userIdsForNames = (names: string[]) => names.map((name) => userIdByName.get(name)).filter((id): id is string => Boolean(id));
+  const namesForUserIds = (userIds: string[], fallback: string[]) => {
+    const names = userIds.map((id) => userNameById.get(id)).filter((name): name is string => Boolean(name));
+    return names.length > 0 ? names : fallback;
+  };
   const results: Result[] = state.results.map((item) => {
     const {
       owner: _owner,
@@ -86,6 +95,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
 
     return {
       ...result,
+      definerUserId: item.definerUserId ?? (item.definer ? userIdByName.get(item.definer) ?? null : null),
       uncertaintyScore: item.uncertaintyScore ?? uncertaintyScore(item.uncertaintyLevel),
       acceptedResult: item.acceptedResult ?? "unreviewed",
       createdAt: item.createdAt ?? updatedAt,
@@ -95,9 +105,16 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
 
   const objectives: Objective[] = state.objectives.map((objective) => {
     const objectiveResults = state.results.filter((result) => result.objectiveId === objective.id);
-    const challengers = uniqueMembers(objective.challengers ?? objectiveResults.map((result) => result.owner));
-    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger));
-    const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
+    const fallbackChallengers = uniqueMembers(objective.challengers ?? objectiveResults.map((result) => result.owner));
+    const fallbackAssignedChallengers = uniqueMembers(objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger));
+    const challengerUserIds = objective.challengerUserIds ?? userIdsForNames(fallbackChallengers);
+    const assignedChallengerUserIds = objective.assignedChallengerUserIds ?? userIdsForNames(fallbackAssignedChallengers);
+    const challengers = namesForUserIds(challengerUserIds, fallbackChallengers);
+    const assignedChallengers = namesForUserIds(assignedChallengerUserIds, fallbackAssignedChallengers);
+    const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => ({
+      ...application,
+      applicantUserId: application.applicantUserId ?? userIdByName.get(application.applicant) ?? null,
+    }));
     const finalDueAt = objective.finalDueAt || addDays(objective.updatedAt, 14);
     const acceptedResults = results.filter(
       (result) => result.objectiveId === objective.id && (result.acceptedResult === "completed" || result.acceptedResult === "falsified"),
@@ -108,7 +125,9 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
       finalDueAt,
       flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
       challengers,
+      challengerUserIds,
       assignedChallengers,
+      assignedChallengerUserIds,
       challengeApplications,
       acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
       confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),
@@ -146,11 +165,11 @@ const confidenceTrend = [
 
 const legacyInitialOrfState: LegacyInitialState = {
   users: [
-    { id: "user-alex", name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastOnlineAt: "2026-05-05T09:42:00.000Z" },
-    { id: "user-mia", name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-04T18:10:00.000Z" },
-    { id: "user-ethan", name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-03T14:25:00.000Z" },
+    { id: "00000000-0000-4000-8000-000000000201", name: "Alex Chen", email: "alex@orf.local", role: "admin", status: "active", lastOnlineAt: "2026-05-05T09:42:00.000Z" },
+    { id: "00000000-0000-4000-8000-000000000202", name: "Mia Zhang", email: "mia@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-04T18:10:00.000Z" },
+    { id: "00000000-0000-4000-8000-000000000203", name: "Ethan Liu", email: "ethan@orf.local", role: "member", status: "active", lastOnlineAt: "2026-05-03T14:25:00.000Z" },
   ],
-  currentUserId: "user-alex",
+  currentUserId: "00000000-0000-4000-8000-000000000201",
   permissionRules: defaultPermissionRules,
   causeCategories: [
     "需求缺口",
@@ -1585,7 +1604,7 @@ const legacyInitialOrfState: LegacyInitialState = {
     {
       id: "ledger-demo-routing-kai",
       objectiveId: "obj-demo-settled-routing-quality",
-      userId: "user-kai-wang",
+      userId: "00000000-0000-4000-8000-000000000204",
       memberName: "Kai Wang",
       points: 60,
       reason: "匿名互评贡献比例 60%",
@@ -1594,7 +1613,7 @@ const legacyInitialOrfState: LegacyInitialState = {
     {
       id: "ledger-demo-routing-nora",
       objectiveId: "obj-demo-settled-routing-quality",
-      userId: "user-nora-patel",
+      userId: "00000000-0000-4000-8000-000000000205",
       memberName: "Nora Patel",
       points: 40,
       reason: "匿名互评贡献比例 40%",

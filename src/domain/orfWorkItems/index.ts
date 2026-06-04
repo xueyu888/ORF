@@ -7,8 +7,8 @@ export type ObjectiveWorkItemMutationAccess =
   | { status: "allowed" }
   | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" };
 
-type ObjectiveWorkItemTarget = Pick<Objective, "challengers" | "flowStatus"> | null | undefined;
-type ObjectiveWorkItemActor = Pick<OrfUser, "name" | "role"> | null | undefined;
+type ObjectiveWorkItemTarget = Pick<Objective, "challengerUserIds" | "flowStatus"> | null | undefined;
+type ObjectiveWorkItemActor = Pick<OrfUser, "id" | "role"> | null | undefined;
 
 export function taskBelongsToObjective(task: ObjectiveOwnedTask, objectiveId: string) {
   return task.linkedObjectiveId === objectiveId;
@@ -43,7 +43,7 @@ export function objectiveWorkItemMutationAccess(
   if (!objective) return { status: "blocked", reason: "notFound" };
   if (!canMutateObjectiveWorkItemsByFlow(objective)) return { status: "blocked", reason: "lifecycleLocked" };
   if (actor?.role === "admin") return { status: "allowed" };
-  if (actor?.role === "member" && memberNames(objective.challengers).includes(actor.name.trim())) return { status: "allowed" };
+  if (actor?.role === "member" && (objective.challengerUserIds ?? []).includes(actor.id)) return { status: "allowed" };
   return { status: "blocked", reason: "forbidden" };
 }
 
@@ -52,8 +52,4 @@ export function canMutateObjectiveWorkItemsForActor(
   actor: ObjectiveWorkItemActor,
 ): boolean {
   return objectiveWorkItemMutationAccess(objective, actor).status === "allowed";
-}
-
-function memberNames(values: readonly string[]) {
-  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }

@@ -2,7 +2,7 @@ import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
 import type { BountyItem } from "../model/bountyHallTypes";
 
-export function ParticipationPreview({ currentUserName, item }: { currentUserName: string; item: BountyItem }) {
+export function ParticipationPreview({ currentUserId, currentUserName, item }: { currentUserId: string; currentUserName: string; item: BountyItem }) {
   const applicationReasons = item.applications.filter((application) => application.status !== "declined" && application.reason?.trim());
 
   return (
@@ -17,16 +17,19 @@ export function ParticipationPreview({ currentUserName, item }: { currentUserNam
         <div className="bounty-participant-line">
           <span>申请中</span>
           <div className="bounty-applicant-list">
-            {item.pendingApplications.slice(0, 2).map((application) => (
-              <span
-                key={application.id}
-                className="bounty-applicant-pill"
-                data-current-user={application.applicant === currentUserName ? "true" : undefined}
-                title={application.reason || application.applicant}
-              >
-                {application.applicant === currentUserName ? `你 · ${application.applicant}` : application.applicant}
-              </span>
-            ))}
+            {item.pendingApplications.slice(0, 2).map((application) => {
+              const isCurrentUser = application.applicantUserId === currentUserId;
+              return (
+                <span
+                  key={application.id}
+                  className="bounty-applicant-pill"
+                  data-current-user={isCurrentUser ? "true" : undefined}
+                  title={application.reason || application.applicant}
+                >
+                  {isCurrentUser ? `你 · ${application.applicant}` : application.applicant}
+                </span>
+              );
+            })}
             {item.pendingApplications.length > 2 && <span className="bounty-applicant-more">+{item.pendingApplications.length - 2}</span>}
           </div>
         </div>

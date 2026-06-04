@@ -20,7 +20,7 @@ export function canRequestObjectiveTrialReview(
     objective &&
       currentUser?.role === "member" &&
       objective.flowStatus === "frozen" &&
-      objective.challengers.includes(currentUser.name) &&
+      objective.challengerUserIds.includes(currentUser.id) &&
       !existingReview,
   );
 }

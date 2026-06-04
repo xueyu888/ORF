@@ -264,7 +264,7 @@ test("deleteCommentMessage clears reply references to deleted messages", () => {
         targetId: "obj-a",
         targetTitle: "Objective A",
         status: "open",
-        createdBy: "user-kai",
+        createdBy: "00000000-0000-4000-8000-000000000301",
         createdAt: date,
         updatedAt: date,
         messages: [
@@ -299,15 +299,15 @@ test("acceptBountyChallenge confirms a recruited member and approves their pendi
         id: "obj-recruiting",
         flowStatus: "recruiting",
         finalDueAt: "2999-12-31",
-        assignedChallengers: ["Kai Wang"],
-        challengeApplications: [{ id: "app-kai", applicant: "Kai Wang", status: "pending", createdAt: date, decidedAt: null }],
+        assignedChallengers: ["Mia Zhang"],
+        challengeApplications: [{ id: "app-mia", applicant: "Mia Zhang", status: "pending", createdAt: date, decidedAt: null }],
       }),
     ],
   });
 
-  const next = store.acceptBountyChallenge(current, "obj-recruiting", " Kai Wang ");
+  const next = store.acceptBountyChallenge(current, "obj-recruiting", " Mia Zhang ");
 
-  assert.deepEqual(next.objectives[0]?.challengers, ["Kai Wang"]);
+  assert.deepEqual(next.objectives[0]?.challengers, ["Mia Zhang"]);
   assert.deepEqual(next.objectives[0]?.assignedChallengers, []);
   assert.equal(next.objectives[0]?.flowStatus, "reestimating");
   assert.equal(next.objectives[0]?.stage, "orfReestimate");
@@ -337,7 +337,7 @@ test("applyForBounty refuses objectives outside bounty application statuses", ()
       ],
     });
 
-    const next = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang", "I can take ownership of this objective.");
+    const next = store.applyForBounty(current, `obj-${flowStatus}`, "Mia Zhang", "I can take ownership of this objective.");
 
     assert.equal(next, current, `expected ${flowStatus} objective to reject challenge applications`);
   }
@@ -346,7 +346,7 @@ test("applyForBounty refuses objectives outside bounty application statuses", ()
     const current = state({
       objectives: [objective({ id: `obj-${flowStatus}`, flowStatus, stage: "resultClaiming" })],
     });
-    const applied = store.applyForBounty(current, `obj-${flowStatus}`, "Kai Wang", "I can take ownership of this objective.");
+    const applied = store.applyForBounty(current, `obj-${flowStatus}`, "Mia Zhang", "I can take ownership of this objective.");
 
     assert.notEqual(applied, current, `expected ${flowStatus} objective to accept challenge applications`);
     assert.equal(applied.objectives[0]?.flowStatus, flowStatus === "recruiting" ? "recruiting" : "applying");
@@ -573,7 +573,7 @@ function comment(
     targetId,
     targetTitle: targetId,
     status: "open",
-    createdBy: "user-kai",
+    createdBy: "00000000-0000-4000-8000-000000000301",
     createdAt: date,
     updatedAt: date,
     messages: [{ id: `${id}-message`, author: "Kai Wang", body: "Comment", createdAt: date }],
