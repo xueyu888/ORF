@@ -17,7 +17,6 @@ const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-ki
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
 const MembersPage = lazyNamed(() => import("./pages/MembersPage"), "MembersPage");
 const NotificationsPage = lazyNamed(() => import("./pages/NotificationsPage"), "NotificationsPage");
-const ObjectivesPage = lazyNamed(() => import("./pages/ObjectivesPage"), "ObjectivesPage");
 const PermissionsPage = lazyNamed(() => import("./pages/PermissionsPage"), "PermissionsPage");
 const PersonalSettingsPage = lazyNamed(() => import("./pages/PersonalSettingsPage"), "PersonalSettingsPage");
 const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage");
@@ -33,9 +32,8 @@ export function App() {
       <Route element={<RequireAuth />}>
         <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
-        <Route path="objectives" element={<LazyRoute><ObjectivesPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
-        <Route path="objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
+        <Route path="tasks/objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
         <Route path="fantasy-ui" element={<LazyRoute><FantasyUiPreviewPage /></LazyRoute>} />
         <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />

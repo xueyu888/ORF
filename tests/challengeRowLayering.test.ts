@@ -36,6 +36,17 @@ test("open row menu foreground state is backed by the objective panel layer rule
   );
 });
 
+test("challenge tree renders project sections above objective panels", () => {
+  const html = renderChallengeTree(null);
+
+  assert.match(html, /class="[^"]*orf-project-header/);
+  assert.match(html, /项目/);
+  assert.match(html, /Alpha Project/);
+  assert.match(html, /1 个目标/);
+  assert.match(html, /1 个指标/);
+  assert.equal(objectivePanels(html).length, 2);
+});
+
 test("fantasy select popovers escape challenge row stacking contexts", () => {
   const componentSource = readFileSync("src/components/FantasySelectMenu.tsx", "utf8");
   const css = readFileSync("src/styles.css", "utf8");
@@ -227,11 +238,11 @@ function challengeGroups(): ObjectiveNode[] {
 
   return [
     group(
-      objective({ id: "obj-alpha", title: "Alpha Objective", resultIds: ["res-alpha"], taskIds: ["task-alpha"] }),
+      objective({ id: "obj-alpha", title: "Alpha Objective", projectId: "project-alpha", projectName: "Alpha Project", resultIds: ["res-alpha"], taskIds: ["task-alpha"] }),
       [alphaTask],
       bounty(result({ id: "res-alpha", objectiveId: "obj-alpha", title: "Alpha Metric" })),
     ),
-    group(objective({ id: "obj-beta", title: "Beta Objective" })),
+    group(objective({ id: "obj-beta", title: "Beta Objective", projectId: "project-beta", projectName: "Beta Project" })),
   ];
 }
 

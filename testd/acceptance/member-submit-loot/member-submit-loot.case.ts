@@ -288,7 +288,7 @@ export const memberSubmitLootCase = {
         title: "当前页面 应为 本用例目标战利品提交页",
         object: "page.url",
         operator: "match",
-        params: { pattern: "/objectives/.+/loot$" },
+        params: { pattern: "/tasks/objectives/.+/loot$" },
       },
       {
         source: { caseStepId: "S0-3", method: "playwright" },

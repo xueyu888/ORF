@@ -20,7 +20,7 @@ export class DatabaseSchemaMismatchError extends Error {
   details: string[];
 
   constructor(details: string[]) {
-    super(`Database schema is not migrated for result-decoupled tasks. ${details.join(" ")}`);
+    super(`Database schema is not migrated for current ORF schema. ${details.join(" ")}`);
     this.name = "DatabaseSchemaMismatchError";
     this.details = details;
   }
@@ -63,9 +63,25 @@ export function validateObjectiveOwnedTaskSchema(snapshot: RuntimeSchemaSnapshot
   return errors;
 }
 
+export function validateObjectiveProjectDisplaySchema(snapshot: RuntimeSchemaSnapshot) {
+  const errors: string[] = [];
+  const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+
+  for (const columnName of ["project_id", "project_name"]) {
+    const column = columnByName.get(columnName);
+    if (!column) {
+      errors.push(`objectives.${columnName} is missing.`);
+    } else if (column.isNullable !== "YES") {
+      errors.push(`objectives.${columnName} must be nullable.`);
+    }
+  }
+
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
-  const [columnsResult, constraintsResult] = await Promise.all([
+  const [taskColumnsResult, taskConstraintsResult, objectiveColumnsResult] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
         select
@@ -90,11 +106,28 @@ export async function assertRuntimeDatabaseSchema() {
           and con.contype = 'f'
       `,
     ),
+    pool.query<RuntimeSchemaColumn>(
+      `
+        select
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'objectives'
+          and column_name in ('project_id', 'project_name')
+      `,
+    ),
   ]);
-  const errors = validateObjectiveOwnedTaskSchema({
-    columns: columnsResult.rows,
-    constraints: constraintsResult.rows,
-  });
+  const errors = [
+    ...validateObjectiveOwnedTaskSchema({
+      columns: taskColumnsResult.rows,
+      constraints: taskConstraintsResult.rows,
+    }),
+    ...validateObjectiveProjectDisplaySchema({
+      columns: objectiveColumnsResult.rows,
+      constraints: [],
+    }),
+  ];
 
   if (errors.length > 0) {
     throw new DatabaseSchemaMismatchError(errors);

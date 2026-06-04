@@ -219,7 +219,7 @@ export function workbenchActionForObjective({
     return {
       kind: "reviewTrial",
       label: "处理试验收",
-      to: `/objectives/${objective.id}/loot`,
+      to: `/tasks/objectives/${objective.id}/loot`,
     };
   }
 
@@ -227,7 +227,7 @@ export function workbenchActionForObjective({
     return {
       kind: "reviewLoot",
       label: "验收战利品",
-      to: `/objectives/${objective.id}/loot`,
+      to: `/tasks/objectives/${objective.id}/loot`,
     };
   }
 
@@ -235,7 +235,7 @@ export function workbenchActionForObjective({
     return {
       kind: "submitLoot",
       label: "提交战利品",
-      to: `/objectives/${objective.id}/loot`,
+      to: `/tasks/objectives/${objective.id}/loot`,
     };
   }
 
@@ -243,7 +243,7 @@ export function workbenchActionForObjective({
     return {
       kind: "submitPeerReview",
       label: "提交匿名互评",
-      to: `/objectives/${objective.id}/loot`,
+      to: `/tasks/objectives/${objective.id}/loot`,
     };
   }
 

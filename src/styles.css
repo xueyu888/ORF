@@ -5989,6 +5989,60 @@ body[data-dragging-floating="true"] {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.28);
 }
 
+.orf-project-section {
+  display: grid;
+  gap: 10px;
+}
+
+.orf-project-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 42px;
+  padding: 0 4px 8px;
+  border-bottom: 1px solid rgba(183, 139, 72, 0.34);
+}
+
+.orf-project-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--orf-text-muted);
+}
+
+.orf-project-title {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--orf-text-primary);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.orf-project-meta > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(183, 139, 72, 0.24);
+  background: rgba(255, 252, 244, 0.72);
+  clip-path: var(--orf-control-cut);
+}
+
 .orf-tabs {
   border-bottom: var(--orf-border-width) solid var(--orf-border);
 }
@@ -6566,6 +6620,18 @@ body[data-dragging-floating="true"] {
   height: 30px;
 }
 
+.orf-challenge-workbench .orf-project-header {
+  min-height: 36px;
+}
+
+.orf-challenge-workbench .orf-project-title {
+  font-size: 15px;
+}
+
+.orf-challenge-workbench .orf-project-meta {
+  font-size: var(--orf-challenge-chip-size);
+}
+
 .orf-challenge-workbench .orf-challenge-row {
   grid-template-columns:
     minmax(300px, 1fr)
@@ -6855,6 +6921,19 @@ body[data-dragging-floating="true"] {
 
   .orf-team-dashboard {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .orf-project-header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .orf-project-title {
+    white-space: normal;
+  }
+
+  .orf-project-meta {
+    justify-content: flex-start;
   }
 
   .orf-objective-header,

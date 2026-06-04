@@ -96,7 +96,7 @@ npm run test:e2e:explorer
 | `UI_EXPLORER_REPORT_DIR` | `.artifacts/ui-explorer` | 报告目录 |
 | `UI_EXPLORER_MAX_NO_CHANGE` | `30` | 连续无状态变化后的 reset 阈值 |
 | `UI_EXPLORER_BASE_URL` | Playwright `baseURL` | 目标 base URL |
-| `UI_EXPLORER_ALLOWED_PATH_PATTERNS` | 登录后主页面集合 | 逗号分隔的允许路径；默认覆盖 `/tasks`、`/bounties`、`/objectives`、`/feedback`、`/system`、`/system/members`、`/system/permissions`、`/system/settings`、`/settings` 等主应用页面 |
+| `UI_EXPLORER_ALLOWED_PATH_PATTERNS` | 登录后主页面集合 | 逗号分隔的允许路径；默认覆盖 `/tasks`、`/bounties`、`/feedback`、`/system`、`/system/members`、`/system/permissions`、`/system/settings`、`/settings` 等主应用页面 |
 | `UI_EXPLORER_WORKERS` | `min(4, CPU)` | 并行 explorer worker 数，仅加速版使用 |
 | `UI_EXPLORER_TOTAL_STEPS` | 未设置 | 并行加速版总步数，设置后会按 worker 平分 |
 | `UI_EXPLORER_PORT` | `5673` | 并行加速版自启动 Vite 的端口 |

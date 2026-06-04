@@ -173,6 +173,11 @@ function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
 }
 
+function nullableTrimmedText(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed || null;
+}
+
 function commentAttachmentContentUrl(id: string) {
   return `/api/comments/attachments/${encodeURIComponent(id)}/content`;
 }
@@ -893,6 +898,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       title: objective.title,
       description: objective.description,
       whyItMatters: objective.whyItMatters,
+      projectId: objective.projectId,
+      projectName: objective.projectName,
       cycle: objective.cycle,
       stage: objective.stage,
       flowStatus: objective.flowStatus,
@@ -1212,6 +1219,8 @@ export interface CreateTaskInput {
 export interface CreateObjectiveInput {
   title: string;
   whyItMatters: string;
+  projectId?: string | null;
+  projectName?: string | null;
   cycle: string;
   boundary: string;
   finalDueAt?: string;
@@ -1228,6 +1237,8 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     title: input.title,
     description: input.whyItMatters,
     whyItMatters: input.whyItMatters,
+    projectId: nullableTrimmedText(input.projectId),
+    projectName: nullableTrimmedText(input.projectName),
     cycle: input.cycle,
     stage: objectiveLifecycleInitialState.stage,
     flowStatus: objectiveLifecycleInitialState.flowStatus,
@@ -3796,7 +3807,7 @@ export type ObjectiveDetailsMutationOutcome =
 
 export async function updateObjectiveDetails(
   objectiveId: string,
-  input: { finalDueAt?: string; title?: string },
+  input: { finalDueAt?: string; projectId?: string | null; projectName?: string | null; title?: string },
   actorId?: string | null,
 ): Promise<ObjectiveDetailsMutationOutcome> {
   const nextTitle = input.title?.trim();
@@ -3815,6 +3826,14 @@ export async function updateObjectiveDetails(
 
     if (nextTitle !== undefined) {
       update.title = nextTitle;
+    }
+
+    if (input.projectId !== undefined) {
+      update.projectId = nullableTrimmedText(input.projectId);
+    }
+
+    if (input.projectName !== undefined) {
+      update.projectName = nullableTrimmedText(input.projectName);
     }
 
     if (input.finalDueAt !== undefined) {
