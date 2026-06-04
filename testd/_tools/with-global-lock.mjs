@@ -4,6 +4,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import os from "node:os";
 import process from "node:process";
+import readline from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { createPgPoolConfig, databaseDisplayUrl, loadEnvFile } from "../../scripts/db-connection.mjs";
@@ -12,9 +13,15 @@ const lockName = "testd-global";
 const lockNamespaceKey = 0x4f524644; // "ORFD"
 const lockResourceKey = 0x5444474c; // "TDGL"
 const waitLogIntervalMs = 10_000;
+const inlineWaitLogIntervalMs = 1_000;
 const heartbeatIntervalMs = 5_000;
 const defaultLockTimeoutMs = 1_800_000;
 const defaultStaleMs = 120_000;
+const inlineWaitLogEnabled =
+  process.stderr.isTTY &&
+  process.env.CI !== "true" &&
+  process.env.TERM !== "dumb" &&
+  process.env.TESTD_GLOBAL_LOCK_INLINE_LOG !== "0";
 
 const rawArgs = process.argv.slice(2);
 const commandArgs = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
@@ -36,6 +43,7 @@ let hasLock = false;
 let released = false;
 let terminating = false;
 let client;
+let inlineWaitLogLineCount = 0;
 
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.once(signal, () => {
@@ -82,12 +90,14 @@ try {
     staleMs,
   });
 
+  clearInlineWaitLog();
   await upsertHolderRow(client, owner);
   heartbeatTimer = startHeartbeat(client, owner);
 
   console.error(formatAcquiredLog(owner));
   process.exitCode = await runCommand(commandArgs, { TESTD_RUN_ID: testdRunId });
 } catch (error) {
+  clearInlineWaitLog();
   console.error(error?.message ?? String(error));
   process.exitCode = process.exitCode || 1;
 } finally {
@@ -117,10 +127,11 @@ async function waitForLock(lockClient, ownerInfo, options) {
     }
 
     const now = Date.now();
-    if (!announcedWaiting || now - lastLogAt >= waitLogIntervalMs) {
+    const logIntervalMs = inlineWaitLogEnabled ? inlineWaitLogIntervalMs : waitLogIntervalMs;
+    if (!announcedWaiting || now - lastLogAt >= logIntervalMs) {
       const holder = await currentHolder(lockClient);
       const queueLength = await queueLengthForLog(lockClient);
-      console.error(formatWaitingLog({
+      writeWaitingLog(formatWaitingLog({
         holder,
         ownerPosition: position,
         queueLength,
@@ -408,6 +419,7 @@ async function abortAfterLockLoss(error) {
     return;
   }
 
+  clearInlineWaitLog();
   console.error(`TestD 全局锁连接异常，停止当前测试以避免并发执行: ${error?.message ?? String(error)}`);
   process.exitCode = process.exitCode || 1;
 
@@ -422,6 +434,7 @@ async function handleTerminationSignal(signal) {
   }
   terminating = true;
 
+  clearInlineWaitLog();
   console.error(`TestD 全局锁收到 ${signal}，正在停止子进程并释放锁...`);
   process.exitCode = signalExitCode(signal);
   await terminateChild(signal, 5000);
@@ -561,6 +574,38 @@ function formatWaitingLog({ holder, ownerPosition, queueLength, hasKnownAdvisory
   lines.push(`当前排队: ${Math.max(queueLength - 1, 0)} 人`);
   lines.push("继续等待...");
   return lines.join("\n");
+}
+
+function writeWaitingLog(message) {
+  if (!inlineWaitLogEnabled) {
+    console.error(message);
+    return;
+  }
+
+  const text = trimTrailingNewlines(message);
+  const lines = text.split(/\r?\n/);
+
+  if (inlineWaitLogLineCount > 0) {
+    readline.moveCursor(process.stderr, 0, -inlineWaitLogLineCount);
+    readline.clearScreenDown(process.stderr);
+  }
+
+  process.stderr.write(`${text}\n`);
+  inlineWaitLogLineCount = lines.length;
+}
+
+function clearInlineWaitLog() {
+  if (!inlineWaitLogEnabled || inlineWaitLogLineCount === 0) {
+    return;
+  }
+
+  readline.moveCursor(process.stderr, 0, -inlineWaitLogLineCount);
+  readline.clearScreenDown(process.stderr);
+  inlineWaitLogLineCount = 0;
+}
+
+function trimTrailingNewlines(value) {
+  return value.replace(/[\r\n]+$/g, "");
 }
 
 function formatTimeoutLog(holder, timeoutMs) {
