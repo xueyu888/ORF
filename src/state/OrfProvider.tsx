@@ -83,7 +83,6 @@ type ReviewObjectiveAlignmentInput = {
 interface ModalState {
   type: ModalType;
   objectiveId?: string;
-  resultId?: string;
   source?: BountySource;
 }
 
