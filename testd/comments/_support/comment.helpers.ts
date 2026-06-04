@@ -609,7 +609,7 @@ export function commentMessageRow(page: Page, body: string) {
 
 export function commentImagePreviewButton(page: Page, fileName: string, body?: string) {
   const scope = body ? commentMessageRow(page, body) : commentPanel(page);
-  return scope.getByRole("button", { name: `查看图片 ${fileName}` });
+  return scope.getByRole("button", { name: `查看图片 ${fileName}` }).first();
 }
 
 export async function openCommentPanel(page: Page, target: CommentTarget) {

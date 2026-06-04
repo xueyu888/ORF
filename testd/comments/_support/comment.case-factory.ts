@@ -396,10 +396,8 @@ function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "delete") {
     return [
-      step("Action-1", "playwright", "comment_message.click_delete", "点击 本用例测试评论的 \"删除评论\" 操作", "page.comment_message", "click_delete", {
+      step("Action-1", "playwright", "comment_message.delete", "点击并确认 本用例测试评论的 \"删除评论\" 操作", "page.comment_message", "delete", {
         bodyFrom: "data.commentBody",
-      }),
-      step("Action-2", "playwright", "comment_message.confirm_delete", "确认删除评论操作", "page.comment_message", "confirm_delete", {
         saveAs: "deleteResponse",
         urlEndsWithFrom: "runtime.rootComment.messageApiPath",
       }),

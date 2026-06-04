@@ -162,7 +162,10 @@ function requiredPermissionRules(value: unknown): PermissionRule[] {
   });
 }
 
-function attachRolePermissionLockOwner(rules: PermissionRule[], lockOwner: string): PermissionRule[] {
+function attachRolePermissionLockOwner(rules: PermissionRule[], lockOwner?: string): PermissionRule[] {
+  if (!lockOwner) {
+    return rules;
+  }
   Object.defineProperty(rules, rolePermissionLockOwnerKey, {
     configurable: true,
     enumerable: false,

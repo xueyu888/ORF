@@ -16,10 +16,16 @@ const rolePermissionLockTimeoutMs = positiveIntegerEnv("TESTD_ROLE_PERMISSION_LO
 const heldRolePermissionLocks = new Map<string, HeldRolePermissionLock>();
 
 export async function acquireRolePermissionLock() {
+  if (isTestdGlobalLockHeld()) {
+    return undefined;
+  }
   return acquirePgAdvisoryRolePermissionLock("exclusive");
 }
 
 export async function acquireRolePermissionReadLock() {
+  if (isTestdGlobalLockHeld()) {
+    return undefined;
+  }
   return acquirePgAdvisoryRolePermissionLock("shared");
 }
 
@@ -83,4 +89,8 @@ async function acquirePgAdvisoryRolePermissionLock(mode: RolePermissionLockMode)
 function positiveIntegerEnv(name: string, fallback: number) {
   const parsed = Number.parseInt(process.env[name] ?? "", 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isTestdGlobalLockHeld() {
+  return process.env.TESTD_GLOBAL_LOCK_HELD === "1";
 }
