@@ -142,6 +142,27 @@ test("local store generated ids stay unique within one millisecond", () => {
   }
 });
 
+test("local store creates team-level feedback without mutating objective or result links", () => {
+  const current = state({
+    objectives: [objective({ id: "obj-base", resultIds: ["res-base"], feedbackIds: [] })],
+    results: [result({ id: "res-base", objectiveId: "obj-base", feedbackIds: [] })],
+  });
+
+  const next = store.createFeedback(current, {
+    phenomenon: "System access is confusing",
+    causeCategories: ["管理问题"],
+    impact: "Medium",
+    suggestedAdjustment: "Clarify the team process",
+    source: "Team review",
+    owner: "Kai Wang",
+  });
+
+  assert.equal(next.feedback[0]?.linkedObjectiveId, null);
+  assert.equal(next.feedback[0]?.linkedResultId, null);
+  assert.deepEqual(next.objectives[0]?.feedbackIds, []);
+  assert.deepEqual(next.results[0]?.feedbackIds, []);
+});
+
 test("deleteObjective cascades all linked records and keeps unrelated records", () => {
   const current = state({
     objectives: [

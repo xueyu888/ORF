@@ -1300,7 +1300,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     results: resultsForMember,
     tasks: tasksForMember,
     evidence: data.evidence.filter((item) => resultIds.has(item.linkedResultId)),
-    feedback: data.feedback.filter((item) => objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)),
+    feedback: data.feedback,
     comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
@@ -2282,8 +2282,8 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
 
 export type CreateFeedbackInput = Pick<
   Feedback,
-  "phenomenon" | "causeCategories" | "impact" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner"
->;
+  "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "source" | "owner"
+> & Partial<Pick<Feedback, "linkedObjectiveId" | "linkedResultId">>;
 export type CreateFeedbackOutcome =
   | { status: "ok"; feedback: Feedback }
   | { status: "notFound" }
@@ -2308,24 +2308,40 @@ export async function canCreateFeedbackForResult(
     return "notFound";
   }
 
-  if (actor.role === "admin") {
-    return "allowed";
-  }
-
-  const actorUserId = actor.id.trim();
-  return actorUserId && (target.challengerUserIds ?? []).includes(actorUserId)
-    ? "allowed"
-    : "forbidden";
+  return "allowed";
 }
 
-export async function createFeedback(input: CreateFeedbackInput, actorId: string): Promise<CreateFeedbackOutcome> {
-  const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
-  if (!result) {
+export async function createFeedback(input: CreateFeedbackInput, actor: Pick<CommentActor, "id" | "scope">): Promise<CreateFeedbackOutcome> {
+  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
+  const linkedResultId = input.linkedResultId?.trim() || null;
+  const linkedObjectiveIdInput = input.linkedObjectiveId?.trim() || null;
+  let teamId = storageScopeId;
+  let linkedObjectiveId: string | null = null;
+  let linkedResultIdForInsert: string | null = null;
+
+  if (linkedResultId) {
+    const [result] = await db.select().from(results).where(eq(results.id, linkedResultId)).limit(1);
+    if (!result || (storageScopeId && result.teamId !== storageScopeId)) {
+      return { status: "notFound" };
+    }
+    teamId = result.teamId;
+    linkedObjectiveId = result.objectiveId;
+    linkedResultIdForInsert = result.id;
+  } else if (linkedObjectiveIdInput) {
+    const [objective] = await db.select().from(objectives).where(eq(objectives.id, linkedObjectiveIdInput)).limit(1);
+    if (!objective || (storageScopeId && objective.teamId !== storageScopeId)) {
+      return { status: "notFound" };
+    }
+    teamId = objective.teamId;
+    linkedObjectiveId = objective.id;
+  }
+
+  if (!teamId) {
     return { status: "notFound" };
   }
 
   const owner = input.owner.trim();
-  const ownerUser = await resolveActiveMemberByName(result.teamId, owner);
+  const ownerUser = await resolveActiveMemberByName(teamId, owner);
   if (!ownerUser) {
     return { status: "invalidOwner" };
   }
@@ -2335,11 +2351,11 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
   await db.transaction(async (tx) => {
     await tx.insert(feedback).values({
       id,
-      teamId: result.teamId,
+      teamId,
       phenomenon: input.phenomenon,
       impact: input.impact,
-      linkedObjectiveId: result.objectiveId,
-      linkedResultId: result.id,
+      linkedObjectiveId,
+      linkedResultId: linkedResultIdForInsert,
       suggestedAdjustment: input.suggestedAdjustment,
       source: input.source,
       status: "New",
@@ -2347,8 +2363,8 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
       ownerUserId: ownerUser.id,
       createdAt: now,
       updatedAt: now,
-      createdBy: actorId,
-      updatedBy: actorId,
+      createdBy: actor.id,
+      updatedBy: actor.id,
     });
 
     const categories = input.causeCategories.map((category, index) => ({ feedbackId: id, category, sortOrder: index }));
@@ -2358,14 +2374,14 @@ export async function createFeedback(input: CreateFeedbackInput, actorId: string
   });
 
   publishOrfDataInvalidation({
-    actorUserId: actorId,
+    actorUserId: actor.id,
     models: ["taskManagement"],
     reason: "feedback.changed",
     target: { id, type: "feedback" },
-    teamId: result.teamId,
+    teamId,
   });
 
-  const data = await getTaskManagementData({ scope: runtimeScope(result.teamId) });
+  const data = await getTaskManagementData({ scope: runtimeScope(teamId) });
   const item = data.feedback.find((entry) => entry.id === id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
 }

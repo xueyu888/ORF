@@ -189,7 +189,10 @@ const collectCascadeTargets = (
   }
 
   for (const item of state.feedback) {
-    if (objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)) {
+    if (
+      (item.linkedObjectiveId && objectiveIds.has(item.linkedObjectiveId)) ||
+      (item.linkedResultId && resultIds.has(item.linkedResultId))
+    ) {
       feedbackIds.add(item.id);
     }
   }
@@ -231,7 +234,7 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   evidence: state.evidence.filter((item) => !targets.evidenceIds.has(item.id)),
   decisions: state.decisions.filter(
     (item) =>
-      !targets.objectiveIds.has(item.linkedObjectiveId) &&
+      !(item.linkedObjectiveId && targets.objectiveIds.has(item.linkedObjectiveId)) &&
       !(item.linkedResultId && targets.resultIds.has(item.linkedResultId)) &&
       !(item.linkedFeedbackId && targets.feedbackIds.has(item.linkedFeedbackId)),
   ),
@@ -481,9 +484,18 @@ export class OrfFlowStore {
     };
   }
 
-  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">): OrfState {
-    const result = state.results.find((item) => item.id === input.linkedResultId);
-    if (!result) {
+  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "source" | "owner"> & Partial<Pick<Feedback, "linkedObjectiveId" | "linkedResultId">>): OrfState {
+    const linkedResult = input.linkedResultId ? state.results.find((item) => item.id === input.linkedResultId) : undefined;
+    if (input.linkedResultId && !linkedResult) {
+      return state;
+    }
+
+    const linkedObjective = linkedResult
+      ? state.objectives.find((item) => item.id === linkedResult.objectiveId)
+      : input.linkedObjectiveId
+        ? state.objectives.find((item) => item.id === input.linkedObjectiveId)
+        : undefined;
+    if (input.linkedObjectiveId && !linkedObjective) {
       return state;
     }
 
@@ -497,8 +509,8 @@ export class OrfFlowStore {
       evidenceIds: [],
       causeCategories: input.causeCategories,
       impact: input.impact,
-      linkedObjectiveId: result.objectiveId,
-      linkedResultId: input.linkedResultId,
+      linkedObjectiveId: linkedObjective?.id ?? null,
+      linkedResultId: linkedResult?.id ?? null,
       suggestedAdjustment: input.suggestedAdjustment,
       source: input.source,
       status: "New",
@@ -513,10 +525,10 @@ export class OrfFlowStore {
       ...state,
       feedback: [feedback, ...state.feedback],
       objectives: state.objectives.map((objective) =>
-        objective.id === feedback.linkedObjectiveId ? { ...objective, feedbackIds: [feedback.id, ...objective.feedbackIds] } : objective,
+        feedback.linkedObjectiveId && objective.id === feedback.linkedObjectiveId ? { ...objective, feedbackIds: [feedback.id, ...objective.feedbackIds] } : objective,
       ),
       results: state.results.map((result) =>
-        result.id === feedback.linkedResultId ? { ...result, feedbackIds: [feedback.id, ...result.feedbackIds] } : result,
+        feedback.linkedResultId && result.id === feedback.linkedResultId ? { ...result, feedbackIds: [feedback.id, ...result.feedbackIds] } : result,
       ),
     };
   }

@@ -30,7 +30,7 @@
 | `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算，进入 `settled` |
 | `POST` | `/api/results` | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
 | `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
-| `POST` | `/api/feedback` | 创建反馈，记录 `createdBy` 和文本处理人 `owner`；仅管理员或目标挑战者可对目标下指标创建 |
+| `POST` | `/api/feedback` | 创建团队级内部反馈，记录 `createdBy` 和文本处理人 `owner`；目标和指标上下文可为空 |
 | `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
 | `POST` | `/api/tasks` | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务 |
 | `PATCH` | `/api/tasks/:taskId` | 更新任务标题 |
@@ -184,7 +184,7 @@ type ObjectiveFlowStatus =
 - 指挥官可以编辑未冻结目标下指标。
 - 挑战者只能在未过期 `reestimating` 状态提出或编辑自己参与目标下的指标；超过 `confirmationDueAt` 或目标冻结后均不可调整。
 - 反馈状态只能由管理员、反馈创建人或 `owner` 指定处理人更新；普通成员不能关闭或改写他人反馈状态。
-- 反馈创建遵循目标可见边界；普通成员只能给自己参与目标下的指标创建反馈，不能通过猜测指标 ID 写入别人的目标。
+- 反馈创建以当前默认团队作用域为边界；active 团队成员可以创建不绑定目标或指标的内部反馈，旧请求携带目标或指标上下文时只作为可选上下文解析。
 - 反馈 `owner` 必须是当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为反馈处理人。
 - 指标更新提案如果携带 `feedbackId`，该反馈必须属于同一默认作用域且绑定到当前指标；不能通过一个合法指标请求改写其他作用域或其他指标的反馈状态。
 - 任务创建基于目标授权和排序，不要求关联指标；创建时如果携带 `feedbackOriginId`，该反馈必须属于同一默认作用域且属于同一目标，不能把其他作用域或其他目标的反馈挂成任务来源。

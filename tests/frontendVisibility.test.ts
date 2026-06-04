@@ -142,18 +142,18 @@ test("system messages stay out of the primary sidebar navigation", () => {
   assert.doesNotMatch(sidebarSource, /labels: \[[^\]]*"消息"/, "Messages must not become a primary sidebar item");
 });
 
-test("feedback creation page actions use visible objective participation", () => {
+test("feedback creation page actions use team-level feedback capability", () => {
   for (const file of [
     path.resolve("src/components/AppShell.tsx"),
     path.resolve("src/pages/FeedbackInboxPage.tsx"),
   ]) {
-    assert.match(readFileSync(file, "utf8"), /canCreateFeedback(FromVisibleState|ForObjective)/, `${file} must hide feedback creation without objective participation`);
+    assert.match(readFileSync(file, "utf8"), /canCreateFeedbackFromVisibleState/, `${file} must use the team feedback capability helper`);
   }
 
   assert.match(
     readFileSync(path.resolve("src/pages/AIEvaluationPage.tsx"), "utf8"),
     /canCreateFeedbackForResult/,
-    "AI evaluation failure samples must hide feedback creation without objective participation",
+    "AI evaluation failure samples must reuse the feedback capability helper",
   );
 });
 
@@ -162,6 +162,8 @@ test("new feedback modal keeps feedback source internal", () => {
   assert.match(source, /const INTERNAL_FEEDBACK_SOURCE = "Team review" as const;/);
   assert.match(source, /source: INTERNAL_FEEDBACK_SOURCE/);
   assert.doesNotMatch(source, /<Field label="来源"/);
+  assert.doesNotMatch(source, /关联指标/);
+  assert.doesNotMatch(source, /linkedResultId/);
   assert.doesNotMatch(source, /"User report"/);
 });
 

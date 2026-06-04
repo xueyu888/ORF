@@ -128,7 +128,7 @@ interface OrfContextValue {
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
-  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">) => Promise<boolean>;
+  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "source" | "owner"> & Partial<Pick<Feedback, "linkedObjectiveId" | "linkedResultId">>) => Promise<boolean>;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Omit<Task, "linkedObjectiveId">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;
@@ -625,6 +625,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
               phenomenon: input.phenomenon,
               causeCategories: input.causeCategories,
               impact: input.impact,
+              linkedObjectiveId: input.linkedObjectiveId ?? null,
               linkedResultId: input.linkedResultId ?? null,
               suggestedAdjustment: input.suggestedAdjustment,
               source: input.source,

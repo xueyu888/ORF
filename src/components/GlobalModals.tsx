@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
 import { uncertaintyLevelOptions, uncertaintyScores } from "../domain/orfSettlement";
+import { BountyButton, BountyDialog } from "../features/bounty-hall/BountyHallSkin";
+import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import { useOrf } from "../state/OrfProvider";
 import type { Impact, UncertaintyLevel } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -46,7 +48,7 @@ export function GlobalModals() {
   const { modal } = useOrf();
 
   if (modal.type === "newResult") return <NewResultModal objectiveId={modal.objectiveId} source={modal.source} />;
-  if (modal.type === "newFeedback") return <NewFeedbackModal objectiveId={modal.objectiveId} resultId={modal.resultId} />;
+  if (modal.type === "newFeedback") return <NewFeedbackModal />;
   if (modal.type === "recruitChallengers") return <RecruitChallengersModal key={modal.objectiveId} objectiveId={modal.objectiveId} />;
   return null;
 }
@@ -161,15 +163,12 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
   );
 }
 
-function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; resultId?: string }) {
+function NewFeedbackModal() {
   const { state, createFeedback, closeModal, currentUser, notify } = useOrf();
   const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
-  const resultOptions = objectiveId ? state.results.filter((result) => result.objectiveId === objectiveId) : state.results;
-  const initialResultId = resultId && resultOptions.some((result) => result.id === resultId) ? resultId : resultOptions[0]?.id ?? state.results[0]?.id ?? "";
-  const [linkedResultId, setLinkedResultId] = useState(initialResultId);
-  const selectedResult = resultOptions.find((result) => result.id === linkedResultId) ?? (!objectiveId ? state.results.find((result) => result.id === linkedResultId) : undefined);
   const [phenomenon, setPhenomenon] = useState("");
-  const [cause, setCause] = useState(state.causeCategories[0] ?? "");
+  const causeOptions = teamFeedbackCauseOptions(state.causeCategories);
+  const [cause, setCause] = useState(causeOptions[0] ?? "技术问题");
   const [impact, setImpact] = useState<Impact>("Medium");
   const activeOwnerOptions = state.users.filter((user) => user.status === "active").map((user) => user.name);
   const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : [defaultOwner];
@@ -179,17 +178,28 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
   const [submitting, setSubmitting] = useState(false);
 
   return (
-    <ModalFrame title="新建反馈" size="lg">
+    <BountyDialog
+      className="feedback-create-dialog"
+      footer={(
+        <>
+          <BountyButton disabled={submitting} onClick={closeModal} variant="secondary">取消</BountyButton>
+          <BountyButton disabled={submitting} form="new-feedback-form" loading={submitting} type="submit">
+            <Check aria-hidden="true" />
+            保存反馈
+          </BountyButton>
+        </>
+      )}
+      onClose={closeModal}
+      subtitle="团队内部 issue 会进入统一反馈池。"
+      title="新建反馈"
+    >
       <form
-        className="grid gap-5"
+        className="feedback-create-form"
+        id="new-feedback-form"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (hasBlankRequiredValues([phenomenon, linkedResultId, cause, suggestedAdjustment, owner])) {
+          if (hasBlankRequiredValues([phenomenon, cause, suggestedAdjustment, owner])) {
             notify("请填写所有必填字段");
-            return;
-          }
-          if (!selectedResult) {
-            notify("请选择关联指标");
             return;
           }
           if (submitting) return;
@@ -200,8 +210,6 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
               phenomenon: phenomenon.trim(),
               causeCategories: [cause],
               impact,
-              linkedObjectiveId: selectedResult.objectiveId,
-              linkedResultId,
               suggestedAdjustment: suggestedAdjustment.trim(),
               source: INTERNAL_FEEDBACK_SOURCE,
               owner: owner.trim(),
@@ -212,41 +220,33 @@ function NewFeedbackModal({ objectiveId, resultId }: { objectiveId?: string; res
           }
         }}
       >
-        <Field label="标题">
-          <input className="orf-input h-10 px-3 text-sm" required value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} />
-        </Field>
-        <Field label="说明">
-          <textarea className="orf-input min-h-32 resize-y px-3 py-2.5 text-sm leading-6" required value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} />
-        </Field>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="关联指标">
-            <select className="orf-input h-10 px-3 text-sm" required value={linkedResultId} onChange={(event) => setLinkedResultId(event.target.value)}>
-              {resultOptions.map((result) => <option key={result.id} value={result.id}>{result.title}</option>)}
-            </select>
-          </Field>
-          <Field label="原因分类">
-            <select className="orf-input h-10 px-3 text-sm" required value={cause} onChange={(event) => setCause(event.target.value)}>
-              {state.causeCategories.map((item) => <option key={item}>{item}</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="影响">
-            <select className="orf-input h-10 px-3 text-sm" value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>
-              {feedbackImpactOptions.map((item) => <option key={item} value={item}>{impactLabel[item]}</option>)}
-            </select>
-          </Field>
-          <Field label="处理人">
-            <select className="orf-input h-10 px-3 text-sm" required value={owner} onChange={(event) => setOwner(event.target.value)}>
-              {ownerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-2 border-t orf-border pt-4 sm:flex sm:justify-end">
-          <Button className="w-full sm:w-auto" variant="secondary" type="button" onClick={closeModal}>取消</Button>
-          <Button className="w-full sm:w-auto" type="submit" disabled={submitting}><Check className="h-4 w-4" />保存反馈</Button>
-        </div>
+        <label className="feedback-form-field feedback-form-field-wide">
+          <span>标题</span>
+          <input required value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} />
+        </label>
+        <label className="feedback-form-field feedback-form-field-wide">
+          <span>说明</span>
+          <textarea required value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} />
+        </label>
+        <label className="feedback-form-field">
+          <span>分类</span>
+          <select required value={cause} onChange={(event) => setCause(event.target.value)}>
+            {causeOptions.map((item) => <option key={item}>{item}</option>)}
+          </select>
+        </label>
+        <label className="feedback-form-field">
+          <span>影响</span>
+          <select value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>
+            {feedbackImpactOptions.map((item) => <option key={item} value={item}>{impactLabel[item]}</option>)}
+          </select>
+        </label>
+        <label className="feedback-form-field feedback-form-field-wide">
+          <span>处理人</span>
+          <select required value={owner} onChange={(event) => setOwner(event.target.value)}>
+            {ownerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        </label>
       </form>
-    </ModalFrame>
+    </BountyDialog>
   );
 }

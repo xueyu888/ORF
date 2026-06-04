@@ -47,7 +47,7 @@ export function ObjectiveCard({ objective, results, feedback }: { objective: Obj
   );
 }
 
-export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; resultTitle?: string }) {
+export function FeedbackCard({ feedback }: { feedback: Feedback }) {
   return (
     <Card className="orf-card-padding">
       <div className="flex items-start justify-between gap-3">
@@ -57,7 +57,7 @@ export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; re
       <div className="mt-3 flex flex-wrap gap-1">
         {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
       </div>
-      <div className="mt-3 text-xs orf-text-muted">关联指标：<span className="orf-text-secondary">{resultTitle}</span></div>
+      <div className="mt-3 text-xs orf-text-muted">处理人：<span className="orf-text-secondary">{feedback.owner}</span></div>
       <div className="mt-3 text-xs orf-text-secondary">{feedback.suggestedAdjustment}</div>
     </Card>
   );

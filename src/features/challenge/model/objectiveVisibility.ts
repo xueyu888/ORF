@@ -28,5 +28,6 @@ export function filterTasksForVisibleObjectives(tasks: readonly Task[], visibleO
 
 export function filterFeedbackForVisibleObjectives(feedback: readonly Feedback[], visibleObjectiveIds: ReadonlySet<string>, currentUser?: OrfUser | null) {
   if (currentUser?.role === "admin") return [...feedback];
-  return feedback.filter((item) => visibleObjectiveIds.has(item.linkedObjectiveId));
+  if (currentUser?.status === "active") return [...feedback];
+  return feedback.filter((item) => !item.linkedObjectiveId || visibleObjectiveIds.has(item.linkedObjectiveId));
 }

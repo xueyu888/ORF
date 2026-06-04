@@ -143,7 +143,8 @@ const createFeedbackBodySchema = z.object({
   phenomenon: z.string().trim().min(1),
   causeCategories: z.array(z.string().trim().min(1)).min(1),
   impact: impactSchema,
-  linkedResultId: z.string().min(1),
+  linkedObjectiveId: optionalNullableTextSchema,
+  linkedResultId: optionalNullableTextSchema,
   suggestedAdjustment: z.string().trim().min(1),
   source: feedbackSourceSchema,
   owner: z.string().trim().min(1),
@@ -514,18 +515,20 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
     const { user, scope } = context;
 
     const body = createFeedbackBodySchema.parse(request.body);
-    const feedbackAccess = await canCreateFeedbackForResult(body.linkedResultId, { ...user, scope });
-    if (feedbackAccess === "notFound") {
-      return reply.code(404).send({ error: "Result not found" });
-    }
-    if (feedbackAccess === "forbidden") {
-      return reply.code(403).send({ error: "Forbidden" });
+    if (body.linkedResultId) {
+      const feedbackAccess = await canCreateFeedbackForResult(body.linkedResultId, { ...user, scope });
+      if (feedbackAccess === "notFound") {
+        return reply.code(404).send({ error: "Result not found" });
+      }
+      if (feedbackAccess === "forbidden") {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
     }
 
-    const outcome = await createFeedback(body, user.id);
+    const outcome = await createFeedback(body, { ...user, scope });
 
     if (outcome.status === "notFound") {
-      return reply.code(404).send({ error: "Result not found" });
+      return reply.code(404).send({ error: "Feedback target not found" });
     }
     if (outcome.status === "invalidOwner") {
       return reply.code(409).send({ error: "Feedback owner must be an active member" });

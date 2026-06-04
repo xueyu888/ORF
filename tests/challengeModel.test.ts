@@ -158,26 +158,33 @@ test("feedback status controls are limited to admins, creators, and owners", () 
   assert.equal(canManageFeedbackStatus(item, stranger), false);
 });
 
-test("feedback creation entry requires at least one visible result", () => {
-  assert.equal(canCreateFeedbackFromResults([]), false);
-  assert.equal(canCreateFeedbackFromResults([result({ id: "res-visible" })]), true);
+test("feedback creation entry is available to active team members without visible results", () => {
+  const activeMember = { id: "00000000-0000-4000-8000-000000000305", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
+  const pendingMember = { ...activeMember, status: "pending" as const };
+
+  assert.equal(canCreateFeedbackFromResults([], activeMember), true);
+  assert.equal(canCreateFeedbackFromResults([result({ id: "res-visible" })], activeMember), true);
+  assert.equal(canCreateFeedbackFromResults([], pendingMember), false);
+  assert.equal(canCreateFeedbackFromResults([], null), false);
 });
 
-test("feedback creation entry is limited to admins and objective challengers", () => {
+test("feedback creation entry does not depend on objective participation", () => {
   const objectiveItem = objective({ id: "obj-feedback-access", challengers: ["Kai Wang"], resultIds: ["res-visible"] });
   const resultItem = result({ id: "res-visible", objectiveId: objectiveItem.id });
   const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
   const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
   const observer = { id: "00000000-0000-4000-8000-000000000305", name: "Observer", email: "observer@example.com", role: "member" as const, status: "active" as const };
+  const disabled = { ...observer, status: "disabled" as const };
 
   assert.equal(canCreateFeedbackForObjective(objectiveItem, admin, [resultItem]), true);
   assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, [resultItem]), true);
-  assert.equal(canCreateFeedbackForObjective(objectiveItem, observer, [resultItem]), false);
-  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, []), false);
-  assert.equal(canCreateFeedbackFromVisibleState({ objectives: [objectiveItem], results: [resultItem] }, observer), false);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, observer, [resultItem]), true);
+  assert.equal(canCreateFeedbackForObjective(objectiveItem, challenger, []), true);
+  assert.equal(canCreateFeedbackFromVisibleState({ objectives: [], results: [] }, observer), true);
+  assert.equal(canCreateFeedbackFromVisibleState({ objectives: [objectiveItem], results: [resultItem] }, disabled), false);
 });
 
-test("objective visibility scopes member-facing records to current challengers", () => {
+test("objective visibility keeps objectives scoped while feedback stays team-visible", () => {
   const admin = { id: "00000000-0000-4000-8000-000000000303", name: "Admin", email: "admin@example.com", role: "admin" as const, status: "active" as const };
   const challenger = { id: "00000000-0000-4000-8000-000000000301", name: "Kai Wang", email: "kai@example.com", role: "member" as const, status: "active" as const };
   const mine = objective({ id: "obj-mine", challengers: [challenger.name] });
@@ -199,8 +206,8 @@ test("objective visibility scopes member-facing records to current challengers",
     ["task-mine"],
   );
   assert.deepEqual(
-    filterFeedbackForVisibleObjectives([feedback({ id: "fb-mine", linkedObjectiveId: "obj-mine" }), feedback({ id: "fb-other", linkedObjectiveId: "obj-other" })], memberVisibleIds).map((item) => item.id),
-    ["fb-mine"],
+    filterFeedbackForVisibleObjectives([feedback({ id: "fb-mine", linkedObjectiveId: "obj-mine" }), feedback({ id: "fb-team", linkedObjectiveId: null, linkedResultId: null }), feedback({ id: "fb-other", linkedObjectiveId: "obj-other" })], memberVisibleIds, challenger).map((item) => item.id),
+    ["fb-mine", "fb-team", "fb-other"],
   );
 });
 

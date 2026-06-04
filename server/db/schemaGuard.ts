@@ -79,9 +79,25 @@ export function validateObjectiveProjectDisplaySchema(snapshot: RuntimeSchemaSna
   return errors;
 }
 
+export function validateTeamFeedbackSchema(snapshot: RuntimeSchemaSnapshot) {
+  const errors: string[] = [];
+  const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+
+  for (const columnName of ["linked_objective_id", "linked_result_id"]) {
+    const column = columnByName.get(columnName);
+    if (!column) {
+      errors.push(`feedback.${columnName} is missing.`);
+    } else if (column.isNullable !== "YES") {
+      errors.push(`feedback.${columnName} must be nullable.`);
+    }
+  }
+
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
-  const [taskColumnsResult, taskConstraintsResult, objectiveColumnsResult] = await Promise.all([
+  const [taskColumnsResult, taskConstraintsResult, objectiveColumnsResult, feedbackColumnsResult] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
         select
@@ -117,6 +133,17 @@ export async function assertRuntimeDatabaseSchema() {
           and column_name in ('project_id', 'project_name')
       `,
     ),
+    pool.query<RuntimeSchemaColumn>(
+      `
+        select
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'feedback'
+          and column_name in ('linked_objective_id', 'linked_result_id')
+      `,
+    ),
   ]);
   const errors = [
     ...validateObjectiveOwnedTaskSchema({
@@ -125,6 +152,10 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateObjectiveProjectDisplaySchema({
       columns: objectiveColumnsResult.rows,
+      constraints: [],
+    }),
+    ...validateTeamFeedbackSchema({
+      columns: feedbackColumnsResult.rows,
       constraints: [],
     }),
   ];

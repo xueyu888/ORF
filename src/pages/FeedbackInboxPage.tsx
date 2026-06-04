@@ -1,14 +1,14 @@
-import { CheckCircle2, CircleDot, Plus, RotateCcw, Search } from "lucide-react";
+import { CheckCircle2, CircleDot, Plus, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { PageScaffold } from "../components/PageScaffold";
-import { Button, Card, StatusBadge } from "../components/ui";
-import { filterFeedbackForVisibleObjectives, filterResultsForVisibleObjectives, visibleObjectiveIdsForUser, visibleObjectivesForUser } from "../features/challenge/model/objectiveVisibility";
+import { filterFeedbackForVisibleObjectives, visibleObjectiveIdsForUser } from "../features/challenge/model/objectiveVisibility";
+import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
+import { FeedbackLinkedText } from "../features/feedback/components/FeedbackLinkedText";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
 import { useOrf } from "../state/OrfProvider";
-import type { Feedback, FeedbackStatus } from "../types/orf";
-import { feedbackStatusLabel } from "../utils/labels";
+import type { Feedback, FeedbackStatus, Impact } from "../types/orf";
+import { feedbackStatusLabel, impactLabel } from "../utils/labels";
 
 type FeedbackListState = "open" | "closed" | "all";
 
@@ -21,13 +21,9 @@ export function FeedbackInboxPage() {
   const [cause, setCause] = useState("All");
   const [status, setStatus] = useState<"All" | FeedbackStatus>("All");
   const visibleObjectiveIds = useMemo(() => visibleObjectiveIdsForUser(state.objectives, currentUser), [currentUser, state.objectives]);
-  const visibleObjectives = useMemo(() => visibleObjectivesForUser(state.objectives, currentUser), [currentUser, state.objectives]);
-  const visibleResults = useMemo(() => filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser), [currentUser, state.results, visibleObjectiveIds]);
   const visibleFeedback = useMemo(() => filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser), [currentUser, state.feedback, visibleObjectiveIds]);
-  const canCreateFeedback = canCreateFeedbackFromVisibleState({ objectives: visibleObjectives, results: visibleResults }, currentUser);
+  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const insights = useMemo(() => summarizeFeedbackInsights(visibleFeedback), [visibleFeedback]);
-  const resultTitleById = useMemo(() => new Map(visibleResults.map((result) => [result.id, result.title])), [visibleResults]);
-
   const openCount = visibleFeedback.filter((item) => item.status !== "Closed").length;
   const closedCount = visibleFeedback.length - openCount;
   const normalizedQuery = query.trim().toLowerCase();
@@ -39,19 +35,20 @@ export function FeedbackInboxPage() {
         const stateMatch = listState === "all" || (listState === "open" ? itemIsOpen : !itemIsOpen);
         const causeMatch = cause === "All" || item.causeCategories.includes(cause);
         const statusMatch = status === "All" || item.status === status;
-        const resultTitle = resultTitleById.get(item.linkedResultId) ?? "";
         const searchableText = [
           item.id,
           item.phenomenon,
           item.suggestedAdjustment,
           item.owner,
-          resultTitle,
+          item.source,
+          feedbackStatusLabel[item.status],
+          impactLabel[item.impact],
           ...item.causeCategories,
         ].join(" ").toLowerCase();
         const queryMatch = normalizedQuery.length === 0 || searchableText.includes(normalizedQuery);
         return stateMatch && causeMatch && statusMatch && queryMatch;
       }),
-    [cause, listState, normalizedQuery, resultTitleById, status, visibleFeedback],
+    [cause, listState, normalizedQuery, status, visibleFeedback],
   );
 
   const hasActiveFilters = normalizedQuery.length > 0 || listState !== "open" || cause !== "All" || status !== "All";
@@ -64,126 +61,131 @@ export function FeedbackInboxPage() {
   };
 
   return (
-    <PageScaffold
-      title="反馈"
-      subtitle="像 issue 一样收集、筛选和处理内部反馈。"
-      action={canCreateFeedback ? <Button onClick={() => openModal({ type: "newFeedback" })}><Plus className="h-4 w-4" />新建反馈</Button> : null}
-    >
-      <div className="flex flex-col gap-3 lg:flex-row">
-        <label className="relative min-w-0 flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 orf-text-muted" />
-          <input
-            className="orf-input h-10 px-9 text-sm"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索全部反馈"
-            aria-label="搜索反馈"
-          />
-        </label>
-        <FilterSelect ariaLabel="按原因筛选" value={cause} onChange={setCause}>
-          <option value="All">全部原因</option>
-          {insights.causeChart.map((item) => <option key={item.cause} value={item.cause}>{item.cause}</option>)}
-        </FilterSelect>
-        <FilterSelect ariaLabel="按状态筛选" value={status} onChange={(value) => setStatus(value as "All" | FeedbackStatus)}>
-          <option value="All">全部状态</option>
-          {feedbackStatusOptions.map((item) => <option key={item} value={item}>{feedbackStatusLabel[item]}</option>)}
-        </FilterSelect>
-        <Button className="h-10 px-3" variant="secondary" type="button" disabled={!hasActiveFilters} onClick={resetFilters}>
-          <RotateCcw className="h-4 w-4" />
-          重置
-        </Button>
+    <div className="bounty-hall-page feedback-issue-page">
+      <header className="feedback-issue-header">
+        <div className="feedback-issue-title-block">
+          <span className="bounty-page-eyebrow">REPORT / TEAM ISSUE BOARD</span>
+          <h1 className="bounty-page-title">反馈</h1>
+          <p>团队内部的技术、管理和系统问题都会进入同一个 issue 池。</p>
+        </div>
+        {canCreateFeedback && (
+          <BountyButton onClick={() => openModal({ type: "newFeedback" })}>
+            <Plus aria-hidden="true" />
+            新建反馈
+          </BountyButton>
+        )}
+      </header>
+
+      <div className="bounty-toolbar feedback-issue-toolbar">
+        <BountyTextInput ariaLabel="搜索反馈" value={query} onValueChange={setQuery} placeholder="搜索反馈" />
+        <div className="bounty-toolbar-controls">
+          <BountySelect label="分类" value={cause} onChange={setCause}>
+            <option value="All">全部分类</option>
+            {insights.causeChart.map((item) => <option key={item.cause} value={item.cause}>{item.cause}</option>)}
+          </BountySelect>
+          <BountySelect label="状态" value={status} onChange={(value) => setStatus(value as "All" | FeedbackStatus)}>
+            <option value="All">全部状态</option>
+            {feedbackStatusOptions.map((item) => <option key={item} value={item}>{feedbackStatusLabel[item]}</option>)}
+          </BountySelect>
+          <BountyButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
+            <RotateCcw aria-hidden="true" />
+            重置
+          </BountyButton>
+        </div>
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="flex flex-col gap-3 border-b orf-border bg-[var(--orf-bg-muted)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-4 text-sm">
+      <section className="feedback-issue-list bounty-list-table">
+        <div className="feedback-issue-list-head">
+          <div className="feedback-issue-state-tabs">
             <IssueStateButton active={listState === "open"} onClick={() => setListState("open")}>
-              <CircleDot className="h-4 w-4 text-[var(--orf-success-text)]" />
-              Open <span className="orf-text-muted">{openCount}</span>
+              <CircleDot aria-hidden="true" className="feedback-state-icon-open" />
+              Open <strong>{openCount}</strong>
             </IssueStateButton>
             <IssueStateButton active={listState === "closed"} onClick={() => setListState("closed")}>
-              <CheckCircle2 className="h-4 w-4 text-[var(--orf-neutral-text)]" />
-              Closed <span className="orf-text-muted">{closedCount}</span>
+              <CheckCircle2 aria-hidden="true" className="feedback-state-icon-closed" />
+              Closed <strong>{closedCount}</strong>
             </IssueStateButton>
             <IssueStateButton active={listState === "all"} onClick={() => setListState("all")}>
-              All <span className="orf-text-muted">{visibleFeedback.length}</span>
+              All <strong>{visibleFeedback.length}</strong>
             </IssueStateButton>
           </div>
-          <div className="text-xs orf-text-muted">{filteredFeedback.length} 条匹配</div>
+          <span className="feedback-issue-match-count">{filteredFeedback.length} 条匹配</span>
         </div>
 
         {filteredFeedback.length > 0 ? (
-          <div className="divide-y divide-[var(--orf-border)]">
+          <div className="feedback-issue-rows">
             {filteredFeedback.map((item) => (
-              <FeedbackIssueRow key={item.id} feedback={item} resultTitle={resultTitleById.get(item.linkedResultId)} />
+              <FeedbackIssueRow key={item.id} feedback={item} />
             ))}
           </div>
         ) : (
-          <div className="px-4 py-12 text-center">
-            <div className="text-sm font-semibold orf-text-primary">没有匹配的反馈</div>
-            <div className="mt-1 text-sm orf-text-secondary">调整搜索或筛选条件后再看。</div>
-          </div>
+          <BountyEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
         )}
-      </Card>
-    </PageScaffold>
-  );
-}
-
-function FilterSelect({ ariaLabel, value, onChange, children }: { ariaLabel: string; value: string; onChange: (value: string) => void; children: ReactNode }) {
-  return (
-    <div className="w-full lg:w-40">
-      <select className="orf-input h-10 px-3 text-sm" aria-label={ariaLabel} value={value} onChange={(event) => onChange(event.target.value)}>
-        {children}
-      </select>
+      </section>
     </div>
   );
 }
 
 function IssueStateButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button
-      className={active ? "inline-flex items-center gap-1.5 font-semibold orf-text-primary" : "inline-flex items-center gap-1.5 orf-text-secondary hover:text-[var(--orf-text-primary)]"}
-      type="button"
-      onClick={onClick}
-    >
+    <button className="feedback-issue-state-button" data-active={active ? "true" : "false"} type="button" onClick={onClick}>
       {children}
     </button>
   );
 }
 
-function FeedbackIssueRow({ feedback, resultTitle }: { feedback: Feedback; resultTitle?: string }) {
+function FeedbackIssueRow({ feedback }: { feedback: Feedback }) {
   const open = feedback.status !== "Closed";
   const causes = feedback.causeCategories.map((item) => item.trim()).filter(Boolean);
+  const preview = feedback.suggestedAdjustment.trim();
 
   return (
-    <article className="flex gap-3 px-4 py-4 transition hover:bg-[var(--orf-bg-row-hover)]">
-      <div className="pt-0.5">
-        {open ? <CircleDot className="h-4 w-4 text-[var(--orf-success-text)]" /> : <CheckCircle2 className="h-4 w-4 text-[var(--orf-neutral-text)]" />}
+    <article className="feedback-issue-row">
+      <div className="feedback-issue-row-icon" data-open={open ? "true" : "false"}>
+        {open ? <CircleDot aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
       </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <h2 className="min-w-0 text-sm font-semibold leading-5 orf-text-primary">{feedback.phenomenon}</h2>
-          {causes.map((item) => (
-            <span key={item} className="rounded-full border orf-border bg-[var(--orf-bg-muted)] px-2 py-0.5 text-xs font-medium orf-text-secondary">{item}</span>
-          ))}
-          <StatusBadge status={feedback.impact} />
+      <div className="feedback-issue-row-main">
+        <div className="feedback-issue-row-title-line">
+          <h2>{feedback.phenomenon}</h2>
+          <div className="feedback-issue-labels">
+            {causes.map((item) => (
+              <BountyBadge key={item} tone={causeTone(item)}>{item}</BountyBadge>
+            ))}
+            <BountyBadge tone={impactTone(feedback.impact)}>{impactLabel[feedback.impact]}</BountyBadge>
+          </div>
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs orf-text-muted">
-          <span>#{feedback.id}</span>
-          <span>·</span>
+        {preview && (
+          <p className="feedback-issue-preview">
+            <FeedbackLinkedText text={preview} />
+          </p>
+        )}
+        <div className="feedback-issue-meta">
+          <span title={feedback.id}>#{displayFeedbackId(feedback.id)}</span>
           <span>{feedback.owner} 更新于 {formatFeedbackDate(feedback.updatedAt)}</span>
-          <span>·</span>
           <span>{feedbackStatusLabel[feedback.status]}</span>
-          {resultTitle && (
-            <>
-              <span>·</span>
-              <span className="truncate">关联指标：{resultTitle}</span>
-            </>
-          )}
         </div>
       </div>
     </article>
   );
+}
+
+function displayFeedbackId(value: string) {
+  const normalized = value.replace(/^fb-/, "");
+  return normalized.length > 8 ? normalized.slice(0, 8) : normalized;
+}
+
+function causeTone(value: string) {
+  if (/管理|流程|协作/.test(value)) return "gold" as const;
+  if (/技术|系统|质量|缺陷|bug/i.test(value)) return "accent" as const;
+  if (/风险|事故|阻塞/.test(value)) return "warning" as const;
+  return "neutral" as const;
+}
+
+function impactTone(value: Impact) {
+  if (value === "Critical") return "danger" as const;
+  if (value === "High") return "warning" as const;
+  if (value === "Medium") return "accent" as const;
+  return "neutral" as const;
 }
 
 function formatFeedbackDate(value: string) {

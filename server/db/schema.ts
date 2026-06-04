@@ -346,10 +346,8 @@ export const feedback = pgTable("feedback", {
   phenomenon: text("phenomenon").notNull(),
   impact: impactEnum("impact").notNull(),
   linkedObjectiveId: text("linked_objective_id")
-    .notNull()
     .references(() => objectives.id, { onDelete: "cascade" }),
   linkedResultId: text("linked_result_id")
-    .notNull()
     .references(() => results.id, { onDelete: "cascade" }),
   suggestedAdjustment: text("suggested_adjustment").notNull(),
   source: feedbackSourceEnum("source").notNull(),

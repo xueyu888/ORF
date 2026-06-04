@@ -239,8 +239,8 @@ export interface Feedback {
   evidenceIds: string[];
   causeCategories: string[];
   impact: Impact;
-  linkedObjectiveId: string;
-  linkedResultId: string;
+  linkedObjectiveId: string | null;
+  linkedResultId: string | null;
   suggestedAdjustment: string;
   source: FeedbackSource;
   status: FeedbackStatus;
