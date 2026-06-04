@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { notifications, objectiveLoot, objectives, results } from "../../../../server/db/schema";
+import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import type {
   LootPrerequisiteResult,
   LootTarget,
@@ -31,11 +32,13 @@ export async function addLootTargetChallenger(target: LootTarget, memberName: st
   if (!objective) {
     throw new Error("目标不存在，无法设置成员提交战利品挑战者");
   }
+  const memberUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
 
   await db
     .update(objectives)
     .set({
       challengers: uniqueMembers([...objective.challengers, memberName]),
+      challengerUserIds: uniqueMembers([...objective.challengerUserIds, memberUserId]),
       updatedAt: today(),
     })
     .where(eq(objectives.id, target.objective.id));
@@ -132,7 +135,14 @@ export async function deleteTestLoot(body: string, loot?: SubmittedLoot | null) 
 
 export async function targetFrozenForMember(target: LootTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "frozen" && objective.stage === "goalFrozen" && objective.challengers.includes(memberName);
+  const memberUserId = objective ? await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName }) : null;
+  return (
+    !!objective &&
+    objective.flowStatus === "frozen" &&
+    objective.stage === "goalFrozen" &&
+    !!memberUserId &&
+    objective.challengerUserIds.includes(memberUserId)
+  );
 }
 
 export async function targetSubmitted(target: LootTarget) {
@@ -241,6 +251,7 @@ async function readObjective(objectiveId: string) {
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
       lootSubmittedAt: objectives.lootSubmittedAt,
     })
     .from(objectives)

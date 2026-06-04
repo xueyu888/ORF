@@ -94,6 +94,7 @@ function requiredFrozenProposalTarget(params: StepParams, key: string): FrozenPr
     typeof (value as FrozenProposalTarget).objective !== "object" ||
     (value as FrozenProposalTarget).objective === null ||
     typeof (value as FrozenProposalTarget).objective.id !== "string" ||
+    typeof (value as FrozenProposalTarget).objective.teamId !== "string" ||
     typeof (value as FrozenProposalTarget).objective.title !== "string" ||
     typeof (value as FrozenProposalTarget).objective.flowStatus !== "string"
   ) {

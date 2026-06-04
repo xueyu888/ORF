@@ -42,7 +42,7 @@ export const memberCreateTaskCase = {
   },
 
   Setup: {
-    description: "准备管理员、普通成员和本用例独占重估目标，目标挑战者包含普通成员",
+    description: "准备管理员、普通成员和本用例独占重估目标，目标挑战者账号身份包含普通成员",
     steps: [
       { source: { caseStepId: "Setup-1", method: "prisma" }, id: "db.admin_task.delete_residue", title: "删除可能残留的本用例管理员测试行动项", object: "db.task", operator: "delete", params: { titleFrom: "data.adminTaskTitle" } },
       { source: { caseStepId: "Setup-2", method: "prisma" }, id: "db.member_task.delete_residue", title: "删除可能残留的本用例成员测试行动项", object: "db.task", operator: "delete", params: { titleFrom: "data.memberTaskTitle" } },
@@ -96,7 +96,7 @@ export const memberCreateTaskCase = {
         },
       },
       { source: { caseStepId: "Setup-9", method: "prisma" }, id: "db.task_target.from_objective", title: "记录 本用例行动项目标", object: "db.task_target", operator: "from_objective", params: { objectiveIdFrom: "runtime.fixtureObjective.id", saveAs: "taskTarget" } },
-      { source: { caseStepId: "Setup-10", method: "prisma" }, id: "db.task_target.prepare", title: "设置本用例行动项目标的挑战者包含普通成员", object: "db.task_target", operator: "prepare", params: { targetFrom: "runtime.taskTarget", memberNameFrom: "data.memberName" } },
+      { source: { caseStepId: "Setup-10", method: "prisma" }, id: "db.task_target.prepare", title: "设置本用例行动项目标的挑战者账号身份包含普通成员", object: "db.task_target", operator: "prepare", params: { targetFrom: "runtime.taskTarget", memberNameFrom: "data.memberName" } },
       { source: { caseStepId: "Setup-11", method: "api" }, id: "ory.admin_sessions.revoke", title: "撤销管理员登录身份可能残留的登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.adminEmail" } },
       { source: { caseStepId: "Setup-12", method: "api" }, id: "ory.member_sessions.revoke", title: "撤销普通成员登录身份可能残留的登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.memberEmail" } },
       { source: { caseStepId: "Setup-13", method: "playwright" }, id: "auth.logout", title: "注销当前登录会话", object: "auth", operator: "logout" },
@@ -120,7 +120,7 @@ export const memberCreateTaskCase = {
       {
         source: { caseStepId: "S0-3", method: "prisma" },
         id: "db.task_target.member_can_create",
-        title: "本用例行动项目标 应允许 普通成员新增行动项",
+        title: "本用例行动项目标 应允许 普通成员账号身份新增行动项",
         object: "db.task_target",
         operator: "can_create_task",
         params: { targetFrom: "runtime.taskTarget", actorNameFrom: "data.memberName", roleFrom: "data.memberRole" },

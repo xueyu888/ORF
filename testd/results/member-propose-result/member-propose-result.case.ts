@@ -168,7 +168,7 @@ export const memberProposeResultCase = {
       {
         source: { caseStepId: "Setup-7", method: "prisma" },
         id: "db.proposal_target.prepare",
-        title: "设置本用例指标目标的挑战者包含普通成员，且重估窗口未关闭",
+        title: "设置本用例指标目标的挑战者账号身份包含普通成员，且重估窗口未关闭",
         object: "db.proposal_target",
         operator: "prepare",
         params: { targetFrom: "runtime.proposalTarget", memberNameFrom: "data.name" },
@@ -277,7 +277,7 @@ export const memberProposeResultCase = {
       {
         source: { caseStepId: "S0-5", method: "prisma" },
         id: "db.proposal_target.can_propose",
-        title: "本用例指标目标 应允许 普通成员提出指标",
+        title: "本用例指标目标 应允许 普通成员账号身份提出指标",
         object: "db.proposal_target",
         operator: "can_propose_result",
         params: { targetFrom: "runtime.proposalTarget", memberNameFrom: "data.name" },

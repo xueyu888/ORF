@@ -233,6 +233,7 @@ function requiredTaskTarget(params: StepParams, key: string): MemberCreateTaskTa
     typeof (value as MemberCreateTaskTarget).objective !== "object" ||
     (value as MemberCreateTaskTarget).objective === null ||
     typeof (value as MemberCreateTaskTarget).objective.id !== "string" ||
+    typeof (value as MemberCreateTaskTarget).objective.teamId !== "string" ||
     typeof (value as MemberCreateTaskTarget).objective.title !== "string" ||
     typeof (value as MemberCreateTaskTarget).objective.flowStatus !== "string"
   ) {

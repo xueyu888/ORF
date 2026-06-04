@@ -8,7 +8,9 @@ import {
   deleteTestObjectives,
   deleteTestUserMemberships,
   deleteTestUsers,
+  readTestUserIdByNameInTeam,
   readResponseBody,
+  requiredTestUserIdByNameInTeam,
   type TestObjectiveFixtureRecord,
   type TestUserAccountRecord,
   upsertTestUserAccount,
@@ -151,6 +153,7 @@ export async function setCommentObjectiveParticipant(objectiveId: string, member
   if (!objective) {
     throw new Error(`评论测试目标不存在: ${objectiveId}`);
   }
+  const memberUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
 
   await db
     .update(objectives)
@@ -158,6 +161,7 @@ export async function setCommentObjectiveParticipant(objectiveId: string, member
       stage: "orfReestimate",
       flowStatus: "reestimating",
       challengers: uniqueMembers([...objective.challengers, memberName]),
+      challengerUserIds: uniqueMembers([...objective.challengerUserIds, memberUserId]),
       updatedAt: todayIsoDate(),
     })
     .where(eq(objectives.id, objectiveId));
@@ -206,10 +210,12 @@ export async function commentTargetCanMutate(input: {
   if (input.role === "admin") {
     return true;
   }
+  const actorUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: input.actorName });
 
   return (
     canMutateObjectiveCommentsAsChallengerByFlow(objective) &&
-    objective.challengers.includes(input.actorName)
+    !!actorUserId &&
+    objective.challengerUserIds.includes(actorUserId)
   );
 }
 
@@ -667,6 +673,7 @@ function challengeRowTarget(target: CommentTarget) {
 
 async function readCommentObjective(objectiveId: string): Promise<(TestObjectiveFixtureRecord & {
   challengers: string[];
+  challengerUserIds: string[];
   flowStatus: ObjectiveFlowStatus;
 }) | null> {
   const [row] = await db
@@ -678,7 +685,9 @@ async function readCommentObjective(objectiveId: string): Promise<(TestObjective
       flowStatus: objectives.flowStatus,
       status: objectives.status,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
       assignedChallengers: objectives.assignedChallengers,
+      assignedChallengerUserIds: objectives.assignedChallengerUserIds,
       challengeApplications: objectives.challengeApplications,
       finalDueAt: objectives.finalDueAt,
       objectiveBasePoints: objectives.objectiveBasePoints,

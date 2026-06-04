@@ -160,6 +160,7 @@ function requiredProposalTarget(params: StepParams, key: string): MemberProposeR
     typeof (value as MemberProposeResultTarget).objective !== "object" ||
     (value as MemberProposeResultTarget).objective === null ||
     typeof (value as MemberProposeResultTarget).objective.id !== "string" ||
+    typeof (value as MemberProposeResultTarget).objective.teamId !== "string" ||
     typeof (value as MemberProposeResultTarget).objective.title !== "string" ||
     typeof (value as MemberProposeResultTarget).objective.flowStatus !== "string"
   ) {

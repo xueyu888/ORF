@@ -207,11 +207,11 @@ function setupSteps(definition: ReverseCommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "edit-forbidden" || definition.kind === "delete-forbidden") {
     steps.push(
-      step(`Setup-${index++}`, "prisma", "db.comment_objective.set_actor_participant", "设置非作者普通成员参与该目标", "db.comment_objective", "set_participant", {
+      step(`Setup-${index++}`, "prisma", "db.comment_objective.set_actor_participant", "设置非作者普通成员账号身份参与该目标", "db.comment_objective", "set_participant", {
         objectiveIdFrom: "runtime.fixtureObjective.id",
         memberNameFrom: "data.name",
       }),
-      step(`Setup-${index++}`, "prisma", "db.comment_objective.set_secondary_participant", "设置评论作者普通成员参与该目标", "db.comment_objective", "set_participant", {
+      step(`Setup-${index++}`, "prisma", "db.comment_objective.set_secondary_participant", "设置评论作者普通成员账号身份参与该目标", "db.comment_objective", "set_participant", {
         objectiveIdFrom: "runtime.fixtureObjective.id",
         memberNameFrom: "data.secondaryName",
       }),
@@ -364,7 +364,7 @@ function s0Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
     return [
       session,
       step("S0-2", "api", "session.role", "当前会话用户角色 应为 `member`", "auth.session.user_role", "equals", { roleFrom: "data.role" }),
-      step("S0-3", "prisma", "db.comment_target.not_mutable", "当前评论对象 应属于 非参与普通成员未参与且生命周期允许评论操作的目标", "db.comment_target", "not_mutable", {
+      step("S0-3", "prisma", "db.comment_target.not_mutable", "当前评论对象 应属于 非参与普通成员账号身份未参与且生命周期允许评论操作的目标", "db.comment_target", "not_mutable", {
         actorNameFrom: "data.name",
         roleFrom: "data.role",
         targetFrom: "runtime.commentTarget",
@@ -397,7 +397,7 @@ function s0Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
   return [
     session,
     step("S0-2", "api", "session.role", "当前会话用户角色 应为 `member`", "auth.session.user_role", "equals", { roleFrom: "data.role" }),
-    step("S0-3", "prisma", "db.comment_target.not_mutable", `当前评论对象 应属于 ${definition.actorLabel}未参与且生命周期允许新增评论的目标`, "db.comment_target", "not_mutable", {
+    step("S0-3", "prisma", "db.comment_target.not_mutable", `当前评论对象 应属于 ${definition.actorLabel}账号身份未参与且生命周期允许新增评论的目标`, "db.comment_target", "not_mutable", {
       actorNameFrom: "data.name",
       roleFrom: "data.role",
       targetFrom: "runtime.commentTarget",
@@ -704,7 +704,7 @@ function objectiveSetupTitle(kind: ReverseCommentCaseKind) {
 }
 
 function participantSetupTitle(kind: ReverseCommentCaseKind) {
-  return kind === "image-invalid-file" ? "设置普通成员参与该目标" : "设置目标参与成员参与该目标";
+  return kind === "image-invalid-file" ? "设置普通成员账号身份参与该目标" : "设置目标参与成员账号身份参与该目标";
 }
 
 function rootCommentSetupTitle(kind: ReverseCommentCaseKind) {

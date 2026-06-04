@@ -27,6 +27,7 @@ export type MemberCreateTaskCaseData = {
 export type MemberCreateTaskTarget = {
   objective: {
     id: string;
+    teamId: string;
     title: string;
     flowStatus: ObjectiveFlowStatus;
   };

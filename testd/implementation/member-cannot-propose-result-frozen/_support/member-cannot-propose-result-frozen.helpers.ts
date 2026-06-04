@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
+import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import type { FrozenProposalTarget } from "./member-cannot-propose-result-frozen.context";
 
 export async function frozenProposalTargetFromObjective(objectiveId: string): Promise<FrozenProposalTarget> {
@@ -12,6 +13,7 @@ export async function frozenProposalTargetFromObjective(objectiveId: string): Pr
   return {
     objective: {
       id: selected.id,
+      teamId: selected.teamId,
       title: selected.title,
       flowStatus: selected.flowStatus,
     },
@@ -23,6 +25,7 @@ export async function prepareFrozenProposalTarget(target: FrozenProposalTarget, 
   if (!objective) {
     throw new Error("目标不存在，无法准备实施阶段成员提出指标限制状态");
   }
+  const memberUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
 
   await db
     .update(objectives)
@@ -30,6 +33,7 @@ export async function prepareFrozenProposalTarget(target: FrozenProposalTarget, 
       stage: "goalFrozen",
       flowStatus: "frozen",
       challengers: uniqueMembers([...objective.challengers, memberName]),
+      challengerUserIds: uniqueMembers([...objective.challengerUserIds, memberUserId]),
       confirmationDueAt: null,
       confirmedAt: new Date().toISOString(),
       updatedAt: today(),
@@ -39,7 +43,14 @@ export async function prepareFrozenProposalTarget(target: FrozenProposalTarget, 
 
 export async function targetFrozenForMember(target: FrozenProposalTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "frozen" && objective.stage === "goalFrozen" && objective.challengers.includes(memberName);
+  const memberUserId = objective ? await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName }) : null;
+  return (
+    !!objective &&
+    objective.flowStatus === "frozen" &&
+    objective.stage === "goalFrozen" &&
+    !!memberUserId &&
+    objective.challengerUserIds.includes(memberUserId)
+  );
 }
 
 export async function testResultAbsent(title: string) {
@@ -97,10 +108,12 @@ async function readObjective(objectiveId: string) {
   const [row] = await db
     .select({
       id: objectives.id,
+      teamId: objectives.teamId,
       title: objectives.title,
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

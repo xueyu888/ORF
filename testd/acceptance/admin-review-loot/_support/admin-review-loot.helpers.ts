@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectiveLoot, objectives, pointLedger, results } from "../../../../server/db/schema";
+import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import type { AdminReviewLootCaseData, ReviewLoot, ReviewLootResult, ReviewLootTarget } from "./admin-review-loot.context";
 
 export async function reviewLootTargetFromObjective(objectiveId: string): Promise<ReviewLootTarget> {
@@ -21,6 +22,8 @@ export async function reviewLootTargetFromObjective(objectiveId: string): Promis
 }
 
 export async function prepareReviewLootTarget(target: ReviewLootTarget, memberName: string) {
+  const memberUserId = await requiredTestUserIdByNameInTeam({ teamId: target.objective.teamId, name: memberName });
+
   await db
     .update(objectives)
     .set({
@@ -28,6 +31,7 @@ export async function prepareReviewLootTarget(target: ReviewLootTarget, memberNa
       stage: "goalFrozen",
       flowStatus: "submitted",
       challengers: [memberName],
+      challengerUserIds: [memberUserId],
       lootSubmittedAt: new Date().toISOString(),
       acceptedResult: null,
       completionMultiplier: null,
@@ -96,6 +100,7 @@ export async function createReviewLoot(
   if (!objective) {
     throw new Error("目标不存在，无法创建测试战利品");
   }
+  const memberUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: input.memberName });
 
   const loot: ReviewLoot = {
     id: `loot-${objective.id}`,
@@ -110,6 +115,7 @@ export async function createReviewLoot(
     teamId: objective.teamId,
     objectiveId: objective.id,
     submittedBy: input.memberName,
+    submittedByUserId: memberUserId,
     body: input.lootBody,
     resultClaims: loot.resultClaims,
     selfTestReportUrl: null,
@@ -152,13 +158,17 @@ export async function testReviewLootLedgerAbsent(reason: string) {
 
 export async function reviewLootTargetSubmitted(target: ReviewLootTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
+  const memberUserId = objective ? await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName }) : null;
   return (
     !!objective &&
     objective.flowStatus === "submitted" &&
     objective.stage === "goalFrozen" &&
     !!objective.lootSubmittedAt &&
+    !!memberUserId &&
     objective.challengers.length === 1 &&
-    objective.challengers[0] === memberName
+    objective.challengers[0] === memberName &&
+    objective.challengerUserIds.length === 1 &&
+    objective.challengerUserIds[0] === memberUserId
   );
 }
 
@@ -262,6 +272,7 @@ async function readObjective(objectiveId: string) {
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
       lootSubmittedAt: objectives.lootSubmittedAt,
     })
     .from(objectives)

@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
+import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import type {
   MemberProposeResultCaseData,
   MemberProposeResultTarget,
@@ -16,6 +17,7 @@ export async function proposalTargetFromObjective(objectiveId: string): Promise<
   return {
     objective: {
       id: selected.id,
+      teamId: selected.teamId,
       title: selected.title,
       flowStatus: selected.flowStatus,
     },
@@ -27,6 +29,7 @@ export async function prepareProposalTarget(target: MemberProposeResultTarget, m
   if (!objective) {
     throw new Error("目标不存在，无法准备成员提出指标状态");
   }
+  const memberUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
 
   await db
     .update(objectives)
@@ -34,6 +37,7 @@ export async function prepareProposalTarget(target: MemberProposeResultTarget, m
       stage: "orfReestimate",
       flowStatus: "reestimating",
       challengers: uniqueMembers([...objective.challengers, memberName]),
+      challengerUserIds: uniqueMembers([...objective.challengerUserIds, memberUserId]),
       confirmationDueAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       updatedAt: today(),
     })
@@ -43,7 +47,8 @@ export async function prepareProposalTarget(target: MemberProposeResultTarget, m
 export async function targetCanProposeResult(target: MemberProposeResultTarget, memberName: string) {
   const objective = await readObjective(target.objective.id);
   if (!objective || objective.flowStatus !== "reestimating") return false;
-  if (!objective.challengers.includes(memberName)) return false;
+  const memberUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
+  if (!memberUserId || !objective.challengerUserIds.includes(memberUserId)) return false;
   if (!objective.confirmationDueAt) return true;
   const dueAt = new Date(objective.confirmationDueAt).getTime();
   return Number.isFinite(dueAt) && Date.now() <= dueAt;
@@ -150,9 +155,11 @@ async function readObjective(objectiveId: string) {
   const [row] = await db
     .select({
       id: objectives.id,
+      teamId: objectives.teamId,
       title: objectives.title,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
       confirmationDueAt: objectives.confirmationDueAt,
     })
     .from(objectives)

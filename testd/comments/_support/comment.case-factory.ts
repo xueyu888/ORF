@@ -169,7 +169,7 @@ function createSetupSteps(definition: CommentCaseDefinition, actorLabel: string)
   let index = 6;
   if (definition.actorRole === "member") {
     steps.push(
-      step("Setup-6", "prisma", "db.comment_objective.set_participant", "设置普通成员参与该目标", "db.comment_objective", "set_participant", {
+      step("Setup-6", "prisma", "db.comment_objective.set_participant", "设置普通成员账号身份参与该目标", "db.comment_objective", "set_participant", {
         objectiveIdFrom: "runtime.fixtureObjective.id",
         memberNameFrom: "data.name",
       }),
@@ -258,7 +258,7 @@ function createS0Assertions(definition: CommentCaseDefinition, actorLabel: strin
   if (definition.kind === "create") {
     return [
       session,
-      step("S0-2", "prisma", "db.comment_target.mutable", `当前评论对象 应属于 ${definition.actorRole === "admin" ? "" : "普通成员参与且"}生命周期允许新增评论的目标`, "db.comment_target", "mutable", {
+      step("S0-2", "prisma", "db.comment_target.mutable", `当前评论对象 应属于 ${definition.actorRole === "admin" ? "" : "普通成员账号身份参与且"}生命周期允许新增评论的目标`, "db.comment_target", "mutable", {
         actorNameFrom: "data.name",
         roleFrom: "data.role",
         targetFrom: "runtime.commentTarget",
