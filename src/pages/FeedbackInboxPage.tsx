@@ -1,63 +1,57 @@
-import { CheckCircle2, CircleDot, Plus, RotateCcw } from "lucide-react";
+import { CheckCircle2, CircleDot, MessageSquare, Plus, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { filterFeedbackForVisibleObjectives, visibleObjectiveIdsForUser } from "../features/challenge/model/objectiveVisibility";
+import { Link } from "react-router-dom";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
-import { FeedbackLinkedText } from "../features/feedback/components/FeedbackLinkedText";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
+import { feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
 import { useOrf } from "../state/OrfProvider";
-import type { Feedback, FeedbackStatus, Impact } from "../types/orf";
-import { feedbackStatusLabel, impactLabel } from "../utils/labels";
+import type { Feedback, Impact } from "../types/orf";
+import { impactLabel } from "../utils/labels";
 
 type FeedbackListState = "open" | "closed" | "all";
-
-const feedbackStatusOptions: FeedbackStatus[] = ["New", "Reviewing", "Action Created", "Result Updated", "Closed"];
 
 export function FeedbackInboxPage() {
   const { currentUser, state, openModal } = useOrf();
   const [query, setQuery] = useState("");
   const [listState, setListState] = useState<FeedbackListState>("open");
   const [cause, setCause] = useState("All");
-  const [status, setStatus] = useState<"All" | FeedbackStatus>("All");
-  const visibleObjectiveIds = useMemo(() => visibleObjectiveIdsForUser(state.objectives, currentUser), [currentUser, state.objectives]);
-  const visibleFeedback = useMemo(() => filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser), [currentUser, state.feedback, visibleObjectiveIds]);
+  const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? state.feedback : [], [currentUser, state.feedback]);
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const insights = useMemo(() => summarizeFeedbackInsights(visibleFeedback), [visibleFeedback]);
-  const openCount = visibleFeedback.filter((item) => item.status !== "Closed").length;
+  const openCount = visibleFeedback.filter(isFeedbackIssueOpen).length;
   const closedCount = visibleFeedback.length - openCount;
   const normalizedQuery = query.trim().toLowerCase();
 
   const filteredFeedback = useMemo(
     () =>
       visibleFeedback.filter((item) => {
-        const itemIsOpen = item.status !== "Closed";
+        const itemIsOpen = isFeedbackIssueOpen(item);
         const stateMatch = listState === "all" || (listState === "open" ? itemIsOpen : !itemIsOpen);
         const causeMatch = cause === "All" || item.causeCategories.includes(cause);
-        const statusMatch = status === "All" || item.status === status;
         const searchableText = [
           item.id,
           item.phenomenon,
           item.suggestedAdjustment,
           item.owner,
           item.source,
-          feedbackStatusLabel[item.status],
+          feedbackIssueStateLabel(item),
           impactLabel[item.impact],
           ...item.causeCategories,
         ].join(" ").toLowerCase();
         const queryMatch = normalizedQuery.length === 0 || searchableText.includes(normalizedQuery);
-        return stateMatch && causeMatch && statusMatch && queryMatch;
+        return stateMatch && causeMatch && queryMatch;
       }),
-    [cause, listState, normalizedQuery, status, visibleFeedback],
+    [cause, listState, normalizedQuery, visibleFeedback],
   );
 
-  const hasActiveFilters = normalizedQuery.length > 0 || listState !== "open" || cause !== "All" || status !== "All";
+  const hasActiveFilters = normalizedQuery.length > 0 || listState !== "open" || cause !== "All";
 
   const resetFilters = () => {
     setQuery("");
     setListState("open");
     setCause("All");
-    setStatus("All");
   };
 
   return (
@@ -82,10 +76,6 @@ export function FeedbackInboxPage() {
           <BountySelect label="分类" value={cause} onChange={setCause}>
             <option value="All">全部分类</option>
             {insights.causeChart.map((item) => <option key={item.cause} value={item.cause}>{item.cause}</option>)}
-          </BountySelect>
-          <BountySelect label="状态" value={status} onChange={(value) => setStatus(value as "All" | FeedbackStatus)}>
-            <option value="All">全部状态</option>
-            {feedbackStatusOptions.map((item) => <option key={item} value={item}>{feedbackStatusLabel[item]}</option>)}
           </BountySelect>
           <BountyButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
             <RotateCcw aria-hidden="true" />
@@ -115,7 +105,7 @@ export function FeedbackInboxPage() {
         {filteredFeedback.length > 0 ? (
           <div className="feedback-issue-rows">
             {filteredFeedback.map((item) => (
-              <FeedbackIssueRow key={item.id} feedback={item} />
+              <FeedbackIssueRow key={item.id} commentCount={feedbackIssueCommentCount(state.comments, item.id)} feedback={item} />
             ))}
           </div>
         ) : (
@@ -134,13 +124,13 @@ function IssueStateButton({ active, onClick, children }: { active: boolean; onCl
   );
 }
 
-function FeedbackIssueRow({ feedback }: { feedback: Feedback }) {
-  const open = feedback.status !== "Closed";
+function FeedbackIssueRow({ commentCount, feedback }: { commentCount: number; feedback: Feedback }) {
+  const open = isFeedbackIssueOpen(feedback);
   const causes = feedback.causeCategories.map((item) => item.trim()).filter(Boolean);
   const preview = feedback.suggestedAdjustment.trim();
 
   return (
-    <article className="feedback-issue-row">
+    <Link className="feedback-issue-row" to={`/feedback/${encodeURIComponent(feedback.id)}`}>
       <div className="feedback-issue-row-icon" data-open={open ? "true" : "false"}>
         {open ? <CircleDot aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
       </div>
@@ -156,22 +146,18 @@ function FeedbackIssueRow({ feedback }: { feedback: Feedback }) {
         </div>
         {preview && (
           <p className="feedback-issue-preview">
-            <FeedbackLinkedText text={preview} />
+            {preview}
           </p>
         )}
         <div className="feedback-issue-meta">
-          <span title={feedback.id}>#{displayFeedbackId(feedback.id)}</span>
+          <span title={feedback.id}>#{feedbackIssueDisplayId(feedback.id)}</span>
           <span>{feedback.owner} 更新于 {formatFeedbackDate(feedback.updatedAt)}</span>
-          <span>{feedbackStatusLabel[feedback.status]}</span>
+          <span>{feedbackIssueStateLabel(feedback)}</span>
+          <span className="feedback-issue-comment-meta"><MessageSquare aria-hidden="true" /> {commentCount}</span>
         </div>
       </div>
-    </article>
+    </Link>
   );
-}
-
-function displayFeedbackId(value: string) {
-  const normalized = value.replace(/^fb-/, "");
-  return normalized.length > 8 ? normalized.slice(0, 8) : normalized;
 }
 
 function causeTone(value: string) {

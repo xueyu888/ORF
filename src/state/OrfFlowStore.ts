@@ -135,6 +135,7 @@ const insertTaskByReference = (tasks: Task[], movingTask: Task, referenceTaskId?
 const removeCommentsForTargets = (
   comments: OrfState["comments"],
   targets: {
+    feedbackIds?: Set<string>;
     objectiveIds?: Set<string>;
     resultIds?: Set<string>;
     taskIds?: Set<string>;
@@ -152,6 +153,10 @@ const removeCommentsForTargets = (
 
     if (thread.targetType === "task") {
       return !targets.taskIds?.has(thread.targetId);
+    }
+
+    if (thread.targetType === "feedback") {
+      return !targets.feedbackIds?.has(thread.targetId);
     }
 
     return !targets.subtaskIds?.has(thread.targetId);
@@ -249,6 +254,7 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
     resultIds: targets.resultIds,
     taskIds: targets.taskIds,
     subtaskIds: targets.subtaskIds,
+    feedbackIds: targets.feedbackIds,
   }),
   objectiveAlignmentRequests: state.objectiveAlignmentRequests.filter((request) => !targets.objectiveIds.has(request.objectiveId)),
 });

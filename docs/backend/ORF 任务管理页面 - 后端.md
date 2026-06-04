@@ -8,45 +8,45 @@
 
 ## API
 
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| `GET` | `/api/tasks-page` | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据 |
-| `GET` | `/api/bounties` | 所有已通过用户返回悬赏大厅发现数据；角色只影响申请 / 接受动作能否写入，管理员不能因为无挑战权限而拿到空列表 |
-| `GET` | `/api/events` | 已登录 active 用户的 SSE 实时事件流；`notification.created` 投递个人通知，`system.broadcast` 投递作用域横幅广播 |
-| `GET` | `/api/my-challenges` | 返回当前用户已参与的挑战目标 |
-| `POST` | `/api/objectives` | 挑战页按 Enter 或标题输入框失焦快速创建候选目标，默认 `flowStatus=candidate` |
-| `PATCH` | `/api/objectives/:objectiveId` | 指挥官更新目标标题或截止日期 |
-| `PATCH` | `/api/objectives/:objectiveId/publish` | 指挥官发布目标，进入 `open` |
-| `POST` | `/api/objectives/:objectiveId/recruitments` | 指挥官征召 active 普通成员，进入 `recruiting` |
-| `POST` | `/api/objectives/:objectiveId/challenge-applications` | active 普通成员填写 `reason` 申请挑战，进入 `applying` |
-| `PATCH` | `/api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，写入挑战者并进入 `reestimating` |
-| `PATCH` | `/api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
-| `PATCH` | `/api/objectives/:objectiveId/challenge` | 被征召成员接受，写入挑战者并进入 `reestimating` |
-| `PATCH` | `/api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结，进入 `frozen` |
-| `POST` | `/api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品，进入 `submitted` |
-| `POST` | `/api/objectives/:objectiveId/trial-reviews` | 挑战者发起一次试验收，目标仍保持 `frozen` |
-| `PATCH` | `/api/objectives/:objectiveId/trial-reviews/:trialReviewId` | 指挥官反馈试验收，目标仍保持 `frozen` |
-| `POST` | `/api/objectives/:objectiveId/contribution-reviews` | 已关闭的旧匿名互评接口，返回 `410`，原始互评只提交到本地结算服务 |
-| `POST` | `/api/objectives/:objectiveId/review` | 指挥官验收指标并结算，进入 `settled` |
-| `POST` | `/api/results` | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
-| `PATCH` | `/api/results/:resultId` | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
-| `POST` | `/api/feedback` | 创建团队级内部反馈，记录 `createdBy` 和文本处理人 `owner`；目标和指标上下文可为空 |
-| `PATCH` | `/api/feedback/:feedbackId/status` | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行 |
-| `POST` | `/api/tasks` | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务 |
-| `PATCH` | `/api/tasks/:taskId` | 更新任务标题 |
-| `PATCH` | `/api/tasks/:taskId/status` | 更新任务状态 |
-| `PATCH` | `/api/tasks/:taskId/completion` | 更新任务勾选状态，并同步该任务下子任务完成状态 |
-| `PATCH` | `/api/tasks/:taskId/move` | 在同一目标下调整任务顺序 |
-| `DELETE` | `/api/tasks/:taskId` | 删除任务和子任务 |
-| `POST` | `/api/tasks/:taskId/checklist` | 创建子任务并返回 `{ item }` |
-| `PATCH` | `/api/tasks/:taskId/checklist/:itemId` | 更新子任务勾选状态，并同步父任务状态 |
-| `PATCH` | `/api/tasks/:taskId/checklist/:itemId/label` | 更新子任务标题 |
-| `PATCH` | `/api/tasks/:taskId/checklist/:itemId/move` | 在允许的目标任务范围内移动子任务 |
-| `DELETE` | `/api/tasks/:taskId/checklist/:itemId` | 删除子任务 |
-| `GET` | `/api/users` | 管理员读取成员和注册状态 |
-| `PATCH` | `/api/registration-requests/:userId/approve` | 通过注册申请 |
-| `PATCH` | `/api/registration-requests/:userId/reject` | 拒绝注册申请 |
-| `PATCH` | `/api/users/:userId/disable` | 停用用户 |
+| 方法     | 路径                                                                         | 说明                                                                                                                                               |
+| -------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/api/tasks-page`                                                            | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据                                      |
+| `GET`    | `/api/bounties`                                                              | 所有已通过用户返回悬赏大厅发现数据；角色只影响申请 / 接受动作能否写入，管理员不能因为无挑战权限而拿到空列表                                        |
+| `GET`    | `/api/events`                                                                | 已登录 active 用户的 SSE 实时事件流；`notification.created` 投递个人通知，`system.broadcast` 投递作用域横幅广播                                    |
+| `GET`    | `/api/my-challenges`                                                         | 返回当前用户已参与的挑战目标                                                                                                                       |
+| `POST`   | `/api/objectives`                                                            | 挑战页按 Enter 或标题输入框失焦快速创建候选目标，默认 `flowStatus=candidate`                                                                       |
+| `PATCH`  | `/api/objectives/:objectiveId`                                               | 指挥官更新目标标题或截止日期                                                                                                                       |
+| `PATCH`  | `/api/objectives/:objectiveId/publish`                                       | 指挥官发布目标，进入 `open`                                                                                                                        |
+| `POST`   | `/api/objectives/:objectiveId/recruitments`                                  | 指挥官征召 active 普通成员，进入 `recruiting`                                                                                                      |
+| `POST`   | `/api/objectives/:objectiveId/challenge-applications`                        | active 普通成员填写 `reason` 申请挑战，进入 `applying`                                                                                             |
+| `PATCH`  | `/api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，写入挑战者并进入 `reestimating`                                                                                                    |
+| `PATCH`  | `/api/objectives/:objectiveId/challenge-applications/:applicationId/reject`  | 指挥官拒绝申请                                                                                                                                     |
+| `PATCH`  | `/api/objectives/:objectiveId/challenge`                                     | 被征召成员接受，写入挑战者并进入 `reestimating`                                                                                                    |
+| `PATCH`  | `/api/objectives/:objectiveId/freeze`                                        | 指挥官完成重估并冻结，进入 `frozen`                                                                                                                |
+| `POST`   | `/api/objectives/:objectiveId/loot`                                          | 挑战者提交结构化战利品，进入 `submitted`                                                                                                           |
+| `POST`   | `/api/objectives/:objectiveId/trial-reviews`                                 | 挑战者发起一次试验收，目标仍保持 `frozen`                                                                                                          |
+| `PATCH`  | `/api/objectives/:objectiveId/trial-reviews/:trialReviewId`                  | 指挥官反馈试验收，目标仍保持 `frozen`                                                                                                              |
+| `POST`   | `/api/objectives/:objectiveId/contribution-reviews`                          | 已关闭的旧匿名互评接口，返回 `410`，原始互评只提交到本地结算服务                                                                                   |
+| `POST`   | `/api/objectives/:objectiveId/review`                                        | 指挥官验收指标并结算，进入 `settled`                                                                                                               |
+| `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
+| `PATCH`  | `/api/results/:resultId`                                                     | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标                                                       |
+| `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`；新反馈不接收目标或指标绑定                                                        |
+| `PATCH`  | `/api/feedback/:feedbackId/status`                                           | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行                                                                                               |
+| `POST`   | `/api/tasks`                                                                 | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务                                                                                  |
+| `PATCH`  | `/api/tasks/:taskId`                                                         | 更新任务标题                                                                                                                                       |
+| `PATCH`  | `/api/tasks/:taskId/status`                                                  | 更新任务状态                                                                                                                                       |
+| `PATCH`  | `/api/tasks/:taskId/completion`                                              | 更新任务勾选状态，并同步该任务下子任务完成状态                                                                                                     |
+| `PATCH`  | `/api/tasks/:taskId/move`                                                    | 在同一目标下调整任务顺序                                                                                                                           |
+| `DELETE` | `/api/tasks/:taskId`                                                         | 删除任务和子任务                                                                                                                                   |
+| `POST`   | `/api/tasks/:taskId/checklist`                                               | 创建子任务并返回 `{ item }`                                                                                                                        |
+| `PATCH`  | `/api/tasks/:taskId/checklist/:itemId`                                       | 更新子任务勾选状态，并同步父任务状态                                                                                                               |
+| `PATCH`  | `/api/tasks/:taskId/checklist/:itemId/label`                                 | 更新子任务标题                                                                                                                                     |
+| `PATCH`  | `/api/tasks/:taskId/checklist/:itemId/move`                                  | 在允许的目标任务范围内移动子任务                                                                                                                   |
+| `DELETE` | `/api/tasks/:taskId/checklist/:itemId`                                       | 删除子任务                                                                                                                                         |
+| `GET`    | `/api/users`                                                                 | 管理员读取成员和注册状态                                                                                                                           |
+| `PATCH`  | `/api/registration-requests/:userId/approve`                                 | 通过注册申请                                                                                                                                       |
+| `PATCH`  | `/api/registration-requests/:userId/reject`                                  | 拒绝注册申请                                                                                                                                       |
+| `PATCH`  | `/api/users/:userId/disable`                                                 | 停用用户                                                                                                                                           |
 
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
 读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
@@ -71,18 +71,18 @@
 
 `GET /api/tasks-page` 和 `GET /api/my-challenges` 返回同一种集合结构。区别是：`/api/tasks-page` 对管理员返回当前默认作用域内全量任务页数据，对普通成员返回等价于 `/api/my-challenges?scope=mine` 的数据；`/api/my-challenges?scope=all` 只允许管理员使用。
 
-| 集合 | 用途 |
-| --- | --- |
-| `objectives` | 页面根节点，也是挑战对象；可携带可空 `projectId` / `projectName` 作为前端项目分组展示字段 |
-| `results` | 目标下的指标 |
-| `tasks` | 目标下的任务和子任务 |
-| `evidence` | 证据 |
-| `feedback` | 系统或管理反馈，不驱动悬赏状态机 |
-| `comments` | 目标、指标、任务、子任务评论 |
-| `objectiveLoot` | 结构化战利品提交记录 |
-| `objectiveTrialReviews` | 目标试验收请求和指挥官反馈 |
-| `pointLedger` | 验收结算后的成员积分流水 |
-| `permissionRules` | 前端操作权限 |
+| 集合                    | 用途                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| `objectives`            | 页面根节点，也是挑战对象；可携带可空 `projectId` / `projectName` 作为前端项目分组展示字段 |
+| `results`               | 目标下的指标                                                                              |
+| `tasks`                 | 目标下的任务和子任务                                                                      |
+| `evidence`              | 证据                                                                                      |
+| `feedback`              | 系统或管理反馈，不驱动悬赏状态机                                                          |
+| `comments`              | 目标、指标、任务、子任务和反馈 issue 评论                                                 |
+| `objectiveLoot`         | 结构化战利品提交记录                                                                      |
+| `objectiveTrialReviews` | 目标试验收请求和指挥官反馈                                                                |
+| `pointLedger`           | 验收结算后的成员积分流水                                                                  |
+| `permissionRules`       | 前端操作权限                                                                              |
 
 ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只进入本地结算服务。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
 
@@ -131,7 +131,9 @@ type ObjectiveFlowStatus =
 旧 `POST /api/objectives/:objectiveId/contribution-reviews` 不再接受请求体，固定返回 `410`：
 
 ```json
-{ "error": "Anonymous contribution reviews must be submitted to the local settlement service" }
+{
+  "error": "Anonymous contribution reviews must be submitted to the local settlement service"
+}
 ```
 
 新前端不调用该接口。普通成员页面把 `0..100` 的百分比转换为 `0..1` 的标准比例后，在浏览器本地用本地结算服务公钥加密，并直接提交到本地结算服务。
@@ -154,9 +156,7 @@ type ObjectiveFlowStatus =
 ```json
 {
   "lootId": "loot-1",
-  "resultReviews": [
-    { "resultId": "res-1", "acceptedResult": "completed" }
-  ],
+  "resultReviews": [{ "resultId": "res-1", "acceptedResult": "completed" }],
   "contributionResolution": null,
   "reason": "验收说明"
 }

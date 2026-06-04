@@ -1392,6 +1392,8 @@
   min-width: 0;
   border-top: 1px solid rgba(218, 196, 152, 0.42);
   background: rgba(246, 228, 196, 0.34);
+  color: inherit;
+  text-decoration: none;
   padding: 15px 18px;
   transition:
     background 0.14s ease,
@@ -1494,6 +1496,278 @@
   margin-right: 10px;
   color: #b59a65;
   content: "·";
+}
+
+.feedback-issue-comment-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.feedback-issue-comment-meta svg {
+  width: 13px;
+  height: 13px;
+}
+
+.feedback-issue-detail-page {
+  display: grid;
+  gap: 16px;
+}
+
+.feedback-issue-detail-header {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.feedback-issue-detail-title-block {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.feedback-issue-back-link {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 6px;
+  color: #54708d;
+  font-size: 13px;
+  font-weight: 950;
+  text-decoration: none;
+}
+
+.feedback-issue-back-link svg {
+  width: 16px;
+  height: 16px;
+}
+
+.feedback-issue-back-link:hover {
+  color: #2d7397;
+  text-decoration: underline;
+}
+
+.feedback-issue-detail-title-block h1 {
+  max-width: 980px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #162842;
+  font-size: clamp(26px, 3.2vw, 42px);
+  font-weight: 950;
+  line-height: 1.12;
+}
+
+.feedback-issue-detail-meta,
+.feedback-issue-detail-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.feedback-issue-detail-meta {
+  color: #718196;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.feedback-issue-detail-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.feedback-issue-detail-meta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.feedback-issue-detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 18px;
+  align-items: start;
+}
+
+.feedback-issue-thread {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.feedback-issue-original-card,
+.feedback-issue-comment-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.feedback-issue-original-main,
+.feedback-issue-comment-main,
+.feedback-issue-composer {
+  min-width: 0;
+  border: 1px solid rgba(210, 182, 121, 0.54);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 252, 244, 0.86), rgba(247, 231, 201, 0.7)),
+    rgba(255, 248, 232, 0.82);
+  box-shadow: 0 14px 34px rgba(41, 54, 76, 0.11);
+}
+
+.feedback-issue-original-main,
+.feedback-issue-comment-main {
+  display: grid;
+}
+
+.feedback-issue-comment-header {
+  display: flex;
+  min-width: 0;
+  min-height: 42px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px 10px;
+  border-bottom: 1px solid rgba(218, 196, 152, 0.46);
+  background:
+    linear-gradient(180deg, rgba(247, 235, 210, 0.76), rgba(234, 213, 174, 0.34)),
+    rgba(247, 232, 202, 0.5);
+  color: #65758a;
+  font-size: 12px;
+  font-weight: 850;
+  padding: 0 12px;
+}
+
+.feedback-issue-comment-header strong {
+  color: #263b58;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.feedback-issue-reply-action {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(216, 237, 240, 0.64);
+  color: #316d82;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 950;
+  margin-left: auto;
+  padding: 0 9px;
+}
+
+.feedback-issue-reply-action svg {
+  width: 13px;
+  height: 13px;
+}
+
+.feedback-issue-reply-action:hover {
+  background: rgba(190, 226, 232, 0.82);
+}
+
+.feedback-issue-comment-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #34465f;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.72;
+  padding: 14px 14px 16px;
+}
+
+.feedback-issue-timeline {
+  display: grid;
+  gap: 14px;
+}
+
+.feedback-issue-composer {
+  margin-left: 46px;
+}
+
+.feedback-issue-composer .orf-comment-composer {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.feedback-issue-sidebar {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid rgba(210, 182, 121, 0.52);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(252, 240, 212, 0.78), rgba(233, 214, 176, 0.52)),
+    rgba(248, 234, 205, 0.72);
+  box-shadow: 0 16px 36px rgba(41, 54, 76, 0.12);
+  padding: 16px;
+}
+
+.feedback-issue-sidebar-block {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  border-bottom: 1px solid rgba(202, 174, 115, 0.36);
+  padding-bottom: 12px;
+}
+
+.feedback-issue-sidebar-block:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.feedback-issue-sidebar-block > span {
+  color: #7b8799;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.feedback-issue-sidebar-block strong {
+  overflow-wrap: anywhere;
+  color: #2f425d;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.feedback-issue-sidebar-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feedback-issue-state-badge {
+  display: inline-flex;
+  width: max-content;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 950;
+  padding: 0 11px;
+}
+
+.feedback-issue-state-badge[data-state="open"] {
+  background: linear-gradient(180deg, #5caf75, #3f8f59);
+  box-shadow: 0 8px 18px rgba(55, 129, 81, 0.24);
+}
+
+.feedback-issue-state-badge[data-state="closed"] {
+  background: linear-gradient(180deg, #8091a6, #5f7188);
+  box-shadow: 0 8px 18px rgba(61, 74, 92, 0.22);
+}
+
+.feedback-issue-state-badge svg {
+  width: 14px;
+  height: 14px;
 }
 
 .feedback-create-dialog {
@@ -1780,9 +2054,18 @@
   }
 
   .feedback-issue-header,
+  .feedback-issue-detail-header,
   .feedback-issue-list-head {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .feedback-issue-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .feedback-issue-sidebar {
+    order: -1;
   }
 
   .feedback-issue-list-head {
@@ -1892,6 +2175,15 @@
 
   .feedback-issue-row-title-line h2 {
     min-width: 100%;
+  }
+
+  .feedback-issue-original-card,
+  .feedback-issue-comment-card {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .feedback-issue-composer {
+    margin-left: 40px;
   }
 
   .feedback-create-form {

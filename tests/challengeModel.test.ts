@@ -41,6 +41,13 @@ import {
   canCreateFeedbackFromVisibleState,
   canManageFeedbackStatus,
 } from "../src/features/feedback/model/feedbackCapabilities";
+import {
+  feedbackIssueCommentCount,
+  feedbackIssueDisplayId,
+  feedbackIssueStateLabel,
+  isFeedbackIssueOpen,
+  nextFeedbackIssueStatus,
+} from "../src/features/feedback/model/feedbackIssue";
 import type { CommentThread, Evidence, Feedback, Objective, OrfState, Result, Task } from "../src/types/orf";
 
 const date = "2026-05-14";
@@ -250,6 +257,7 @@ test("comment helpers map challenge targets, count only messages, and detect obj
     comment("thread-result-legacy-loot", "result", "res-legacy-loot", ["战利品提交：old"]),
     comment("thread-loot", "objective", "obj-loot", ["战利品提交：done"]),
     comment("thread-task", "task", "task-a", ["task comment"]),
+    comment("thread-feedback", "feedback", "fb-team", ["feedback comment", "reply"]),
   ];
   const counts = commentCountsByTarget(threads);
 
@@ -261,7 +269,26 @@ test("comment helpers map challenge targets, count only messages, and detect obj
   assert.equal(commentCountFor(counts, "result", "res-a"), 2);
   assert.equal(commentCountFor(counts, "result", "res-b"), 0);
   assert.equal(commentCountFor(counts, "task", "task-a"), 1);
+  assert.equal(commentCountFor(counts, "feedback", "fb-team"), 2);
   assert.deepEqual([...submittedLootObjectiveIdsFromComments(threads)], ["obj-loot"]);
+});
+
+test("feedback issue helpers keep issue state and comments independent from metrics", () => {
+  const openFeedback = feedback({ id: "fb-123456789", status: "New" });
+  const closedFeedback = feedback({ id: "fb-closed", status: "Closed" });
+  const comments = [
+    comment("feedback-thread", "feedback", openFeedback.id, ["one", "two"]),
+    comment("objective-thread", "objective", "obj-a", ["ignore"]),
+  ];
+
+  assert.equal(isFeedbackIssueOpen(openFeedback), true);
+  assert.equal(isFeedbackIssueOpen(closedFeedback), false);
+  assert.equal(feedbackIssueStateLabel(openFeedback), "Open");
+  assert.equal(feedbackIssueStateLabel(closedFeedback), "Closed");
+  assert.equal(nextFeedbackIssueStatus(openFeedback), "Closed");
+  assert.equal(nextFeedbackIssueStatus(closedFeedback), "New");
+  assert.equal(feedbackIssueCommentCount(comments, openFeedback.id), 2);
+  assert.equal(feedbackIssueDisplayId(openFeedback.id), "12345678");
 });
 
 test("date and status helpers keep challenge display boundaries stable", () => {

@@ -488,8 +488,12 @@ function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: strin
   return `${path}#objective:${encodeURIComponent(objectiveId)}`;
 }
 
-function challengeCommentTargetHref(targetType: CommentTargetType, targetId: string) {
-  const challengeTargetTypeByCommentTarget: Record<CommentTargetType, "action" | "bounty" | "objective" | "subAction"> = {
+function commentTargetHref(targetType: CommentTargetType, targetId: string) {
+  if (targetType === "feedback") {
+    return `/feedback/${encodeURIComponent(targetId)}`;
+  }
+
+  const challengeTargetTypeByCommentTarget: Record<Exclude<CommentTargetType, "feedback">, "action" | "bounty" | "objective" | "subAction"> = {
     objective: "objective",
     result: "bounty",
     subtask: "subAction",
@@ -816,7 +820,7 @@ async function notifyMentionedUsersOfComment(input: {
       targetType: input.targetType,
     },
     recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, mentionedUserIds),
-    targetHref: challengeCommentTargetHref(input.targetType, input.targetId),
+    targetHref: commentTargetHref(input.targetType, input.targetId),
     targetId: input.commentMessageId,
     targetType: "comment",
     teamId: input.teamId,
@@ -1284,6 +1288,7 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
 }
 
 function filterComments(data: TaskManagementData, ids: {
+  feedbackIds: Set<string>;
   objectiveIds: Set<string>;
   resultIds: Set<string>;
   taskIds: Set<string>;
@@ -1294,6 +1299,7 @@ function filterComments(data: TaskManagementData, ids: {
     if (thread.targetType === "result") return ids.resultIds.has(thread.targetId);
     if (thread.targetType === "task") return ids.taskIds.has(thread.targetId);
     if (thread.targetType === "subtask") return ids.checklistItemIds.has(thread.targetId);
+    if (thread.targetType === "feedback") return ids.feedbackIds.has(thread.targetId);
     return false;
   });
 }
@@ -1309,6 +1315,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
   const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId));
   const taskIds = new Set(tasksForMember.map((task) => task.id));
   const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
+  const feedbackIds = new Set(data.feedback.map((item) => item.id));
 
   return {
     objectives: objectivesForMember,
@@ -1316,7 +1323,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     tasks: tasksForMember,
     evidence: data.evidence.filter((item) => resultIds.has(item.linkedResultId)),
     feedback: data.feedback,
-    comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
+    comments: filterComments(data, { feedbackIds, objectiveIds, resultIds, taskIds, checklistItemIds }),
     objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
@@ -2637,11 +2644,19 @@ export interface CreateCommentInput {
   replyToAuthor?: string;
 }
 
-type CommentTarget = {
-  objectiveId: string;
-  storageScopeId: string;
-  title: string;
-};
+type CommentTarget =
+  | {
+      kind: "workItem";
+      objectiveId: string;
+      storageScopeId: string;
+      title: string;
+    }
+  | {
+      feedbackId: string;
+      kind: "feedback";
+      storageScopeId: string;
+      title: string;
+    };
 
 export type ObjectiveWorkItemTarget =
   | { type: "objective"; id: string }
@@ -2799,6 +2814,27 @@ async function canReadObjectiveComment(
   return actorUserId && participants.includes(actorUserId) ? "allowed" : "forbidden";
 }
 
+function actorCanUseScopedTeamTarget(actor: CommentActor, storageScopeId: string) {
+  const actorStorageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
+  return Boolean(storageScopeId) && (!actorStorageScopeId || actorStorageScopeId === storageScopeId);
+}
+
+async function canMutateCommentTarget(actor: CommentActor, target: CommentTarget): Promise<ObjectiveWorkItemMutationOutcome> {
+  if (target.kind === "workItem") {
+    return canMutateObjectiveComment(actor, target.objectiveId);
+  }
+
+  return actorCanUseScopedTeamTarget(actor, target.storageScopeId) ? "allowed" : "notFound";
+}
+
+async function canReadCommentTarget(actor: CommentActor, target: CommentTarget): Promise<ObjectiveWorkItemMutationOutcome> {
+  if (target.kind === "workItem") {
+    return canReadObjectiveComment(actor, target.objectiveId);
+  }
+
+  return actorCanUseScopedTeamTarget(actor, target.storageScopeId) ? "allowed" : "notFound";
+}
+
 async function resolveCommentTarget(targetType: CommentTargetType, targetId: string): Promise<CommentTarget | null> {
   if (targetType === "objective") {
     const [target] = await db
@@ -2806,7 +2842,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(objectives)
       .where(eq(objectives.id, targetId))
       .limit(1);
-    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+    return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
   if (targetType === "result") {
@@ -2815,7 +2851,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(results)
       .where(eq(results.id, targetId))
       .limit(1);
-    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+    return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
   if (targetType === "task") {
@@ -2824,7 +2860,16 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(tasks)
       .where(eq(tasks.id, targetId))
       .limit(1);
-    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+    return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+  }
+
+  if (targetType === "feedback") {
+    const [target] = await db
+      .select({ feedbackId: feedback.id, teamId: feedback.teamId, title: feedback.phenomenon })
+      .from(feedback)
+      .where(eq(feedback.id, targetId))
+      .limit(1);
+    return target ? { feedbackId: target.feedbackId, kind: "feedback", storageScopeId: target.teamId, title: target.title } : null;
   }
 
   const [target] = await db
@@ -2833,7 +2878,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
     .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
     .where(eq(taskChecklistItems.id, targetId))
     .limit(1);
-  return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+  return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
 }
 
 async function getCommentThread(threadId: string): Promise<CommentThread | null> {
@@ -2889,7 +2934,7 @@ export async function listCommentMentionableUsers(
     return { status: "notFound" };
   }
 
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -2936,7 +2981,7 @@ export async function uploadCommentAttachment(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -3028,7 +3073,7 @@ export async function getCommentAttachmentContent(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canReadObjectiveComment(actor, target.objectiveId);
+  const access = await canReadCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -3056,7 +3101,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access === "notFound") {
     return { status: "notFound" };
   }
@@ -3068,14 +3113,26 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   const createdAt = nowIso();
   const attachmentIds = extractCommentAttachmentIds(body);
   const createdComment = await db.transaction(async (tx) => {
-    const [lockedObjective] = await tx
-      .select({ id: objectives.id })
-      .from(objectives)
-      .where(eq(objectives.id, target.objectiveId))
-      .limit(1)
-      .for("update");
-    if (!lockedObjective) {
-      return null;
+    if (target.kind === "workItem") {
+      const [lockedObjective] = await tx
+        .select({ id: objectives.id })
+        .from(objectives)
+        .where(eq(objectives.id, target.objectiveId))
+        .limit(1)
+        .for("update");
+      if (!lockedObjective) {
+        return null;
+      }
+    } else {
+      const [lockedFeedback] = await tx
+        .select({ id: feedback.id })
+        .from(feedback)
+        .where(eq(feedback.id, target.feedbackId))
+        .limit(1)
+        .for("update");
+      if (!lockedFeedback) {
+        return null;
+      }
     }
 
     const arePendingAttachmentsAvailable = async () => {
@@ -3262,7 +3319,7 @@ export async function updateCommentThreadStatus(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -3301,7 +3358,7 @@ export async function updateCommentMessage(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -3394,7 +3451,7 @@ export async function deleteCommentMessage(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }

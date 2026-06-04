@@ -194,6 +194,7 @@ test("deleteObjective cascades all linked records and keeps unrelated records", 
       comment("comment-result", "result", "res-delete"),
       comment("comment-task", "task", "task-delete"),
       comment("comment-subtask", "subtask", "ck-delete"),
+      comment("comment-feedback", "feedback", "fb-delete"),
       comment("comment-keep", "result", "res-keep"),
     ],
   });

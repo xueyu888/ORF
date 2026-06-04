@@ -27,7 +27,7 @@ export const evidenceTypeEnum = pgEnum("evidence_type", ["Eval run", "Log sample
 export const feedbackSourceEnum = pgEnum("feedback_source", ["User report", "Eval run", "Log", "Incident", "Team review"]);
 export const feedbackStatusEnum = pgEnum("feedback_status", ["New", "Reviewing", "Action Created", "Result Updated", "Closed"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "member", "readonly", "supervisor"]);
-export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask"]);
+export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask", "feedback"]);
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),

@@ -345,7 +345,7 @@ export interface OrfRules {
   autoCreateReviewSummary: boolean;
 }
 
-export type CommentTargetType = "objective" | "result" | "task" | "subtask";
+export type CommentTargetType = "objective" | "result" | "task" | "subtask" | "feedback";
 export type CommentStatus = "open" | "resolved";
 
 export interface CommentAttachment {

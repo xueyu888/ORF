@@ -16,6 +16,10 @@ const titleMap: Record<string, string> = {
 };
 
 export function breadcrumb(pathname: string) {
+  if (/^\/feedback\/[^/]+\/?$/.test(pathname)) {
+    return "反馈 / Issue";
+  }
+
   if (/^\/tasks\/objectives\/[^/]+\/loot\/?$/.test(pathname)) {
     return "目标战利品";
   }

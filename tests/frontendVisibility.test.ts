@@ -167,13 +167,21 @@ test("new feedback modal keeps feedback source internal", () => {
   assert.doesNotMatch(source, /"User report"/);
 });
 
-test("removed ORF secondary detail routes stay out of the route table", () => {
+test("route table keeps feedback issue detail while obsolete metric detail routes stay removed", () => {
   const appSource = readFileSync(path.resolve("src/App.tsx"), "utf8");
   assert.doesNotMatch(appSource, /objectives\/:objectiveId"\s+element=/, "Objective detail route must stay removed");
   assert.doesNotMatch(appSource, /objectives\/:objectiveId\/results\/:resultId/, "Result detail route must stay removed");
-  assert.doesNotMatch(appSource, /feedback\/:feedbackId/, "Feedback detail route must stay removed");
+  assert.match(appSource, /feedback\/:feedbackId/, "Feedback issue detail route must exist");
   assert.doesNotMatch(appSource, /path="objectives\/:objectiveId\/loot"/, "Old objective loot route must stay removed");
   assert.match(appSource, /tasks\/objectives\/:objectiveId\/loot/, "Loot detail route remains under the challenge task domain");
+});
+
+test("feedback issue detail composes the shared comment system", () => {
+  const source = readFileSync(path.resolve("src/pages/FeedbackIssuePage.tsx"), "utf8");
+  assert.match(source, /targetType:\s*"feedback"/);
+  assert.match(source, /CommentComposer/);
+  assert.match(source, /loadCommentMentionableUsers/);
+  assert.doesNotMatch(source, /关联指标|linkedResultId|linkedObjectiveId/);
 });
 
 test("frontend visibility rules are only accessed through the shared helpers", () => {

@@ -11,6 +11,7 @@ import {
   DatabaseSchemaMismatchError,
   databaseSchemaMismatchPayload,
   isDatabaseSchemaMismatchError,
+  validateFeedbackCommentTargetSchema,
   validateObjectiveOwnedTaskSchema,
   validateObjectiveProjectDisplaySchema,
 } from "../server/db/schemaGuard";
@@ -174,6 +175,13 @@ test("objective project display schema guard requires nullable objective project
     }),
     ["objectives.project_id must be nullable.", "objectives.project_name is missing."],
   );
+});
+
+test("comment target schema guard requires feedback issue comment target", () => {
+  assert.deepEqual(validateFeedbackCommentTargetSchema({ labels: ["objective", "result", "task", "subtask", "feedback"] }), []);
+  assert.deepEqual(validateFeedbackCommentTargetSchema({ labels: ["objective", "result", "task", "subtask"] }), [
+    "comment_target_type enum must include feedback.",
+  ]);
 });
 
 test("auth service unavailable errors are classified for 503 responses", () => {

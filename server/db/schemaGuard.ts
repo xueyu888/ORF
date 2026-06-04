@@ -15,6 +15,10 @@ export type RuntimeSchemaSnapshot = {
   constraints: RuntimeSchemaConstraint[];
 };
 
+export type RuntimeEnumSnapshot = {
+  labels: string[];
+};
+
 export class DatabaseSchemaMismatchError extends Error {
   statusCode = 503;
   details: string[];
@@ -95,6 +99,10 @@ export function validateTeamFeedbackSchema(snapshot: RuntimeSchemaSnapshot) {
   return errors;
 }
 
+export function validateFeedbackCommentTargetSchema(snapshot: RuntimeEnumSnapshot) {
+  return snapshot.labels.includes("feedback") ? [] : ["comment_target_type enum must include feedback."];
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [taskColumnsResult, taskConstraintsResult, objectiveColumnsResult, feedbackColumnsResult] = await Promise.all([
@@ -145,6 +153,16 @@ export async function assertRuntimeDatabaseSchema() {
       `,
     ),
   ]);
+  const commentTargetTypeResult = await pool.query<{ label: string }>(
+    `
+      select e.enumlabel as "label"
+      from pg_enum e
+      join pg_type t on t.oid = e.enumtypid
+      join pg_namespace nsp on nsp.oid = t.typnamespace
+      where nsp.nspname = current_schema()
+        and t.typname = 'comment_target_type'
+    `,
+  );
   const errors = [
     ...validateObjectiveOwnedTaskSchema({
       columns: taskColumnsResult.rows,
@@ -157,6 +175,9 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateTeamFeedbackSchema({
       columns: feedbackColumnsResult.rows,
       constraints: [],
+    }),
+    ...validateFeedbackCommentTargetSchema({
+      labels: commentTargetTypeResult.rows.map((row) => row.label),
     }),
   ];
 
