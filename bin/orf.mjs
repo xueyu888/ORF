@@ -10,9 +10,19 @@ import { checkDatabaseHealth, databaseDisplayUrl } from '../scripts/db-connectio
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const runDir = resolve(rootDir, '.orf', 'run');
 const logDir = resolve(rootDir, '.orf', 'logs');
+const envFile = resolve(rootDir, '.env');
+const envExampleFile = resolve(rootDir, '.env.example');
 const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const command = process.argv[2] ?? 'help';
+const args = process.argv.slice(3);
+const requiredEnvSectionHeader = '# Required project configuration.';
+const optionalEnvSectionHeader = '# Optional configuration.';
 
-dotenv.config({ path: resolve(rootDir, '.env'), quiet: true });
+if (shouldSyncRequiredEnvDefaults(command)) {
+  syncRequiredEnvDefaults();
+}
+
+dotenv.config({ path: envFile, quiet: true });
 
 const authBaseUrl = process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433';
 const storageBaseUrl = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000';
@@ -52,9 +62,6 @@ const statusChecks = {
   ...dependencyServices,
   ...appServices,
 };
-
-const command = process.argv[2] ?? 'help';
-const args = process.argv.slice(3);
 
 async function main() {
   switch (command) {
@@ -113,12 +120,6 @@ async function main() {
       }
       await runNpmScript('db:migrate', args);
       return;
-    case 'seed':
-      if (!validateDatabaseEnv()) {
-        return;
-      }
-      await runNpmScript('db:seed', args);
-      return;
     case 'logs':
       printLogs(args[0]);
       return;
@@ -150,7 +151,6 @@ Checks:
 
 Database:
   orf migrate         Run npm run db:migrate
-  orf seed            Run npm run db:seed
 `);
 }
 
@@ -375,6 +375,88 @@ function validateDatabaseEnv() {
   console.error('Create .env from .env.example, set the database URL, then run node scripts/verify-db.mjs.');
   process.exitCode = 1;
   return false;
+}
+
+function shouldSyncRequiredEnvDefaults(commandName) {
+  return new Set(['up', 'start', 'restart', 'dev', 'server', 'backend']).has(commandName);
+}
+
+function syncRequiredEnvDefaults() {
+  const defaults = readRequiredEnvDefaults(envExampleFile);
+  if (defaults.length === 0) {
+    return;
+  }
+
+  const existingKeys = readEnvKeys(envFile);
+  const missing = defaults.filter((entry) => !envKeySatisfied(entry.key, existingKeys));
+  if (missing.length === 0) {
+    return;
+  }
+
+  const current = existsSync(envFile) ? readFileSync(envFile, 'utf8') : '';
+  let next = current;
+  if (next.length > 0 && !next.endsWith('\n')) {
+    next += '\n';
+  }
+  if (next.trim().length > 0) {
+    next += '\n';
+  }
+  next += '# Added by orf from .env.example required defaults.\n';
+  next += missing.map((entry) => entry.line).join('\n');
+  next += '\n';
+
+  writeFileSync(envFile, next);
+  console.log(`Added missing required .env values from .env.example: ${missing.map((entry) => entry.key).join(', ')}`);
+}
+
+function readRequiredEnvDefaults(file) {
+  if (!existsSync(file)) {
+    return [];
+  }
+
+  const defaults = [];
+  let inRequiredSection = false;
+  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed === requiredEnvSectionHeader) {
+      inRequiredSection = true;
+      continue;
+    }
+    if (trimmed === optionalEnvSectionHeader && inRequiredSection) {
+      break;
+    }
+    if (!inRequiredSection) {
+      continue;
+    }
+
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+    if (match) {
+      defaults.push({ key: match[1], line });
+    }
+  }
+  return defaults;
+}
+
+function readEnvKeys(file) {
+  if (!existsSync(file)) {
+    return new Set();
+  }
+
+  const keys = new Set();
+  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
+    if (match) {
+      keys.add(match[1]);
+    }
+  }
+  return keys;
+}
+
+function envKeySatisfied(key, keys) {
+  if (key === 'DATABASE_URL' && keys.has('REMOTE_DATABASE_URL')) {
+    return true;
+  }
+  return keys.has(key);
 }
 
 async function checkServiceHealth(service) {

@@ -6,6 +6,8 @@ import {
   formatGitHubIssuesMessage,
   formatGitHubPushMessage,
   gitHubPushNotificationSyncKey,
+  readGitHubMattermostSyncConfig,
+  resolveGitHubMattermostPostConfig,
   resolveGitHubMattermostChannelId,
   type GitHubIssue,
   type GitHubPushPayload,
@@ -35,10 +37,38 @@ test("formats GitHub push payload for Mattermost", () => {
   const message = formatGitHubPushMessage(payload);
 
   assert.match(message, /GitHub push: \[xueyu888\/ORF\]/);
-  assert.match(message, /xueyu pushed 1 commit to `main`/);
+  assert.doesNotMatch(message, /pushed 1 commit/);
   assert.match(message, /`2222222`/);
-  assert.match(message, /feat: sync GitHub pushes - xueyu/);
+  assert.match(message, /\*\*xueyu\*\*: feat: sync GitHub pushes/);
   assert.doesNotMatch(message, /Body is omitted/);
+});
+
+test("resolves GitHub Mattermost sender from bot credentials only", () => {
+  const config = readGitHubMattermostSyncConfig({
+    MATTERMOST_URL: "https://mattermost.example.com",
+    MATTERMOST_LOGIN_ID: "human@example.com",
+    MATTERMOST_PASSWORD: "human-password",
+    MATTERMOST_BOT_TOKEN: "shared-bot-token",
+    GITHUB_MATTERMOST_BOT_TOKEN: "github-bot-token",
+    GITHUB_MATTERMOST_CHANNEL_ID: "github-channel",
+  });
+
+  assert.equal(config.GITHUB_MATTERMOST_REQUIRE_BOT, true);
+  assert.deepEqual(resolveGitHubMattermostPostConfig(config), {
+    MATTERMOST_URL: "https://mattermost.example.com",
+    MATTERMOST_ACCESS_TOKEN: "github-bot-token",
+    MATTERMOST_LOGIN_ID: undefined,
+    MATTERMOST_PASSWORD: undefined,
+    MATTERMOST_CHANNEL_ID: "github-channel",
+  });
+
+  const fallbackConfig = readGitHubMattermostSyncConfig({
+    MATTERMOST_URL: "https://mattermost.example.com",
+    MATTERMOST_BOT_TOKEN: "shared-bot-token",
+    MATTERMOST_PUSH_CHANNEL_ID: "push-channel",
+  });
+
+  assert.equal(resolveGitHubMattermostPostConfig(fallbackConfig).MATTERMOST_ACCESS_TOKEN, "shared-bot-token");
 });
 
 test("resolves the GitHub Mattermost target channel with push bot fallback", () => {
@@ -102,9 +132,9 @@ test("formats polled GitHub push commits for Mattermost", () => {
   });
 
   assert.match(message, /GitHub push: \[xueyu888\/ORF\]/);
-  assert.match(message, /Detected 1 pushed commit on `xy`/);
+  assert.doesNotMatch(message, /Detected 1 pushed commit/);
   assert.match(message, /`3333333`/);
-  assert.match(message, /docs: update sync instructions - xueyu/);
+  assert.match(message, /\*\*xueyu\*\*: docs: update sync instructions/);
   assert.doesNotMatch(message, /Long body/);
 });
 
@@ -135,17 +165,15 @@ test("formats GitHub issues for Mattermost", () => {
 test("GitHub webhook rejects oversized payloads before signature processing", async () => {
   const previousEnv = {
     GITHUB_WEBHOOK_SECRET: process.env.GITHUB_WEBHOOK_SECRET,
+    GITHUB_MATTERMOST_BOT_TOKEN: process.env.GITHUB_MATTERMOST_BOT_TOKEN,
     MATTERMOST_CHANNEL_ID: process.env.MATTERMOST_CHANNEL_ID,
     MATTERMOST_JIRA_REMINDER_ENABLED: process.env.MATTERMOST_JIRA_REMINDER_ENABLED,
-    MATTERMOST_LOGIN_ID: process.env.MATTERMOST_LOGIN_ID,
-    MATTERMOST_PASSWORD: process.env.MATTERMOST_PASSWORD,
     MATTERMOST_URL: process.env.MATTERMOST_URL,
   };
 
   process.env.GITHUB_WEBHOOK_SECRET = "test-webhook-secret-value";
   process.env.MATTERMOST_CHANNEL_ID = "channel-id";
-  process.env.MATTERMOST_LOGIN_ID = "bot@example.com";
-  process.env.MATTERMOST_PASSWORD = "password";
+  process.env.GITHUB_MATTERMOST_BOT_TOKEN = "bot-token";
   process.env.MATTERMOST_URL = "https://mattermost.example.com";
   process.env.MATTERMOST_JIRA_REMINDER_ENABLED = "false";
 

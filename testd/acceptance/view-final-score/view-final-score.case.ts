@@ -87,7 +87,7 @@ export const viewFinalScoreCase = {
     description: "登录普通成员打开统计页面查看所有成员最终分数",
     steps: [
       { source: { caseStepId: "Action-1", method: "playwright" }, id: "page.goto.reports", title: "登录普通成员打开统计页面", object: "page", operator: "goto", params: { path: "/reports" } },
-      { source: { caseStepId: "Action-2", method: "playwright" }, id: "click.all_time", title: "登录普通成员点击统计页面的 `全部时间` 时间范围按钮", object: "page", operator: "click", params: { role: "button", name: "全部时间" } },
+      { source: { caseStepId: "Action-2", method: "playwright" }, id: "click.all_time", title: "登录普通成员点击统计页面的 `全部` 时间范围按钮", object: "page", operator: "click", params: { role: "button", name: "全部", exact: true } },
     ],
   },
 

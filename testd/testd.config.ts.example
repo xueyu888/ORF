@@ -4,14 +4,11 @@ export type TestdCaseConfig = {
   id: string;
   title: string;
   doc: string;
-  // locked cases are manually confirmed; batch edits should skip them unless explicitly named.
   changePolicy: TestdCaseChangePolicy;
   enabled: boolean;
   fixtureLifecycle?: "isolated" | "legacy-base-data";
-  // Omitted for imported disabled cases until document-to-StepSpec mapping is verified.
   traceability?: "verified";
   spec?: string;
-  note?: string;
 };
 
 // Keep this list in the same order as testd-doc/cases/测试用例集合.md.
@@ -302,10 +299,9 @@ export const testdCases = [
     doc: "testd-doc/cases/acceptance/查看最终分数.md",
     changePolicy: "locked",
     spec: "testd/acceptance/view-final-score/_entry/view-final-score.spec.ts",
-    enabled: false,
+    enabled: true,
     fixtureLifecycle: "isolated",
     traceability: "verified",
-    note: "Temporarily disabled while the reports page time-range copy contract is being updated.",
   },
   {
     id: "acceptance.admin-review-loot",

@@ -85,10 +85,7 @@ cp .env.example .env
 # 把 ORY_PUBLIC_URL、OBJECT_STORAGE_* 和 ORF_PUBLIC_CA_CERT 统一切到公共服务。
 node scripts/verify-db.mjs
 npm run db:migrate
-npm run db:seed
 ```
-
-`db:seed` 会写入悬赏大厅、我的挑战、冻结提交、待验收和已结算等演示状态，便于本地检查完整 ORF 流程界面。`db:seed` 和 `db:seed:bounties` 默认写入独立的 `team-demo-ai-app`，不会写入正式团队 `team-ai-app`。当 `.env` 指向非本地 PostgreSQL 时，脚本会拒绝执行；确认要在共享库写入隔离演示数据时，需要显式设置 `ORF_ALLOW_REMOTE_DEMO_SEED=1`。
 
 如需排查正式排行榜是否混入演示、E2E 或手工测试流水，先运行只读审计：
 

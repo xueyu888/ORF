@@ -1,8 +1,8 @@
 import type { BrowserContext, Page, Response } from "@playwright/test";
-import { asc, eq, or, sql } from "drizzle-orm";
-import { db } from "../../server/db/client";
-import { objectives, teamMembers, teams, users } from "../../server/db/schema";
-import { deleteObjective } from "../../server/repositories/orfRepository";
+import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
+import { db } from "./testd-db-client";
+import { commentThreads, objectives, results, taskChecklistItems, tasks, teamMembers, teams, users } from "../../server/db/schema";
+import { canDeleteObjectiveByFlow } from "../../src/domain/orfLifecycle";
 import type { UserRole, UserStatus } from "../../src/types/orf";
 import type { ChallengeApplication, ObjectiveFlowStatus, OrfStage, WorkStatus } from "../../src/types/orf";
 import { ORF_SESSION_COOKIE, ORY_ADMIN_URL, type BrowserAuthStorageState, type BrowserSession, type OryIdentity } from "./common.context";
@@ -596,11 +596,51 @@ export async function testObjectiveAbsent(input: { id?: string; title?: string }
 export async function deleteTestObjectives(input: { id?: string; title?: string }) {
   const rows = await db.select({ id: objectives.id }).from(objectives).where(objectivePredicate(input));
   for (const row of rows) {
-    const deleted = await deleteObjective(row.id);
+    const deleted = await deleteTestObjective(row.id);
     if (!deleted) {
       await db.delete(objectives).where(eq(objectives.id, row.id));
     }
   }
+}
+
+export async function deleteTestObjective(objectiveId: string): Promise<boolean> {
+  const deleted = await db.transaction(async (tx) => {
+    const [objective] = await tx
+      .select({ flowStatus: objectives.flowStatus, id: objectives.id })
+      .from(objectives)
+      .where(eq(objectives.id, objectiveId))
+      .limit(1);
+
+    if (!objective || !canDeleteObjectiveByFlow(objective)) {
+      return false;
+    }
+
+    const resultRows = await tx.select({ id: results.id }).from(results).where(eq(results.objectiveId, objectiveId));
+    const taskRows = await tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.linkedObjectiveId, objectiveId));
+    const resultIds = resultRows.map((result) => result.id);
+    const taskIds = taskRows.map((task) => task.id);
+    const checklistRows =
+      taskIds.length > 0
+        ? await tx.select({ id: taskChecklistItems.id }).from(taskChecklistItems).where(inArray(taskChecklistItems.taskId, taskIds))
+        : [];
+    const checklistIds = checklistRows.map((item) => item.id);
+
+    if (checklistIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "subtask"), inArray(commentThreads.targetId, checklistIds)));
+    }
+    if (taskIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "task"), inArray(commentThreads.targetId, taskIds)));
+    }
+    if (resultIds.length > 0) {
+      await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "result"), inArray(commentThreads.targetId, resultIds)));
+    }
+    await tx.delete(commentThreads).where(and(eq(commentThreads.targetType, "objective"), eq(commentThreads.targetId, objectiveId)));
+
+    const deletedObjectives = await tx.delete(objectives).where(eq(objectives.id, objectiveId)).returning({ id: objectives.id });
+    return deletedObjectives.length > 0;
+  });
+
+  return deleted;
 }
 
 export async function oryAdminFetch<T>(path: string, init: RequestInit = {}): Promise<T> {

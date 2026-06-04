@@ -1,9 +1,8 @@
 import { expect } from "@playwright/test";
-import { getPermissionRulesForScope } from "../../../server/repositories/permissionRepository";
-import { runtimeScope } from "../../../server/repositories/runtimeScope";
 import type { OperatorRegistry } from "../../_framework/types";
 import { readBrowserSession } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
+import { getPermissionRulesForScope, runtimeScope } from "../../_operators/testd-permissions";
 import type {
   MemberPermissionForbiddenCaseData,
   MemberPermissionSnapshot,

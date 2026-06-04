@@ -31,8 +31,8 @@ const backgroundSections: Array<{
   },
   {
     scene: "app_background",
-    title: "应用背景设置",
-    description: "自定义登录后的系统应用背景。",
+    title: "AppShell 皮肤设置",
+    description: "自定义登录后侧边栏和顶部栏的系统默认皮肤。",
   },
 ];
 

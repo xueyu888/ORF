@@ -15,8 +15,6 @@
 | 悬赏大厅 E2E | `e2e/bounties/bounty-hall-skin.spec.ts` / `e2e/challenges/orf-frontend-flow.spec.ts` | 悬赏大厅全员可见、指挥官完整界面但挑战动作阻断、征召置顶、申请理由必填、申请后刷新、通过后头像继续公开展示 |
 | 挑战工作台 E2E | `e2e/challenges/orf-frontend-flow.spec.ts` | `/tasks` 悬赏目标挑战工作台中的流程按钮、审核条、范围过滤、目标树和冻结后入口 |
 | 评论 E2E | `e2e/comments/comment-persistence.spec.ts` | 评论提交后在当前页面保持可见 |
-| 真实评论布局 E2E | `e2e/challenges/orf-real-comment-layout.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证目标评论数量入口贴近标题文本 |
-| 真实评论上下文 E2E | `e2e/challenges/orf-real-comment-context.spec.ts` | 真实 API、真实数据库和 Playwright 页面验证切换评论对象会清空旧回复草稿，发送会写入当前对象 |
 | 成员管理 E2E | `e2e/members/member-management.spec.ts` | 成员列表、最近在线、预批准成员输入归一化、已绑定成员邮箱锁定、删除用户入口 |
 
 ## 角色视角
@@ -326,10 +324,7 @@ flowchart TD
 
 前端流程测试不维护静态覆盖数字。当前有效性以测试文件和 CI 结果为准，本文只定义真实用户链路、守卫场景和风险边界，避免文档用静态数字伪造确定性。
 
-主链路分两层：
-
-- `real user launch flow links commander and challengers from publish to settlement`：浏览器多页面 + route mock，快速审计前端状态机、显隐规则和截图。
-- `ORF real system multi-user flow`：浏览器多上下文 + 真实 Fastify API + 真实数据库。测试只把 `/api` 请求转发到测试启动的真实后端，不 `fulfill` 业务数据；认证使用测试 Ory 适配器返回真实 Cookie 会话。
+主链路由 `real user launch flow links commander and challengers from publish to settlement` 覆盖：浏览器多页面 + route mock，快速审计前端状态机、显隐规则和截图，不写入真实数据库或认证系统。
 
 上线后的用户行为必须按一个指挥官、多个成员、多个挑战者来验证：指挥官发布目标，多个挑战者申请或接受征召，挑战者在重估窗口内校准指标，目标冻结后提交战利品和匿名互评，指挥官验收后积分进入排行榜。
 
@@ -345,34 +340,6 @@ flowchart TD
 | 验收结算 | 验收指标并结算 | 查看积分结果 | 跳转 `/reports`，排行榜显示按贡献比例写入的积分 |
 
 测试里的时间不等真实分钟。每次流程 mutation 都推进一段业务时间戳；重估窗口使用固定未来 `confirmationDueAt` 保持开放，截止前 / 截止后 / 冻结后的边界由专门守卫测试用固定过去或未来时间验证。
-
-## 真实系统上线仿真套件
-
-真实系统测试拆分为独立的上线仿真套件，文件在 `e2e/challenges/orf-real-*.spec.ts`，公共测试能力只放在 `e2e/challenges/helpers/`。运行时需要显式打开：
-
-```bash
-ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=line --output="test-results/manual-real-system-suite-$(date +%Y%m%d-%H%M%S)"
-```
-
-测试数据使用唯一 `real-e2e-*` 前缀写入真实数据库；套件结束时默认清理本次 run 的团队、用户和关联业务数据，避免测试用户残留。
-
-| 文件 | 场景 | 必须验证 |
-| --- | --- | --- |
-| `orf-real-golden-flow.spec.ts` | 两个周期、两轮目标、两个挑战者，从发布、申请、审批、重估、冻结、战利品、匿名互评到验收结算 | 已结算目标从 `/bounties` 下架；观察成员 `/tasks` 看不到非本人挑战；`/reports` 累计积分正确 |
-| `orf-real-multi-state-dashboard.spec.ts` | 同时制造 candidate / open / applying / recruiting / reestimating / frozen / submitted / settled | 指挥官 `/tasks` 可总控；挑战者 `/tasks` 只看自己的目标；`/bounties` 对所有已通过用户展示大厅目标，指挥官看到完整操作区但挑战动作阻断，普通成员可申请目标并接受当前用户自己的征召令 |
-| `orf-real-recruitment.spec.ts` | 指挥官征召 A/B/C，A 和 B 连续接受，C 只保留接受入口，观察者越权接受 | A 接受后 B/C 仍能看到征召令；拒绝入口不可见；越权接受返回 403 |
-| `orf-real-reestimate-window.spec.ts` | 多挑战者在重估窗口内提出 / 编辑指标、加目标任务、加子任务，然后时间加速到窗口过期并冻结 | 窗口内可操作；过期后按钮不可见且 API 403；冻结后仍不可编辑指标 |
-| `orf-real-time-acceleration.spec.ts` | 不等待真实时间，直接推进重估截止和最终截止 | 准时、逾期、超额、放弃的 multiplier 与积分一致 |
-| `orf-real-settlement-ledger.spec.ts` | 三挑战者匿名互评、缺评时指挥官汇总确认、结算入账 | `objectiveBasePoints`、`objectiveSettlementPoints`、`pointLedger`、`/reports` 展示一致 |
-| `orf-real-race-and-stale-ui.spec.ts` | 旧页面、重复点击、重复提交、重复结算 | 旧页面按钮不能越过后端状态机；重复战利品和重复 ledger 不产生脏数据 |
-
-测试分层必须保持正交：
-
-- `realSystemHarness.ts` 只负责启动真实 Fastify API、Fake Ory、真实数据库种子和多浏览器上下文。
-- `realScenarioDsl.ts` 只封装用户动作，不写业务判定；页面内新建目标先定位到目标行的 `编辑目标标题` 输入框，temporary 目标面板不预置“待定义指标”和“待创建行动项”伪子行，按 Enter 或输入框失焦创建候选目标后退出标题编辑态并保持同一排序位置；指标和行动项新增应先点击目标行唯一主新增 `+`，再在类型选择层选择新增指标、提出指标或新增行动项，然后定位到对应 temporary 行的 `编辑指标标题` / `编辑行动项标题` 输入框；子任务新增应点击任务行 `+` 后定位到当前任务下的 temporary 子任务输入框；仍使用浮层的反馈、征召、战利品等表单先定位到对应 `dialog`，避免页面级筛选器或同名控件污染真实流程测试。
-- `realClock.ts` 只推进测试业务时间，不等待真实时间。
-- `realAssertions.ts` 只做页面和数据库不变量断言。
-- 产品代码不能 import 或依赖任何 `e2e/challenges/helpers/*`，也不能为了测试新增生产运行路径。
 
 ## 守卫场景索引
 
@@ -394,23 +361,20 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 | UI 状态 | loading、empty、API error、processing disabled、toast dismiss、目标行评论数量入口贴近标题文本、切换评论对象后清空旧回复状态都要有可见断言 |
 | 系统消息 | `e2e/notifications/notification-center.spec.ts` 验证顶部栏消息铃铛、未读数、消息浮层、完整消息页、已读动作和对象锚点跳转；消息不进入侧边栏主导航 |
 | 最近在线 | 成员管理展示 `最近在线`；在线上报只由用户交互、窗口 focus 或页面可见性变化触发，不使用轮询，也不提交客户端时间 |
-| 可访问控件名 | 征召、申请、提出指标、提交战利品和验收等关键流程控件必须有稳定可访问名称，真实流程测试按控件语义定位，不依赖 CSS 或拼接文本 |
+| 可访问控件名 | 征召、申请、提出指标、提交战利品和验收等关键流程控件必须有稳定可访问名称，流程测试按控件语义定位，不依赖 CSS 或拼接文本 |
 | 弹窗长列表 | 征召、指标、反馈等全局弹窗必须限制在视口内，内容区可滚动，长候选人列表不能把提交按钮或后续选项挤出可操作区域 |
 | 数据一致性 | mutation 成功但刷新旧数据或刷新失败时，流程性状态不能靠本地推断制造成功；任务完成状态只能保留短生命周期展示覆盖层，并在失败时撤销 |
 | 本地回退状态 | 本地 store 生成 Objective、Result、Feedback、子任务和决策 ID 时必须带单调计数和随机后缀；同一毫秒内连续操作不能产生重复 ID，即使伪随机数重复也不能撞 ID |
 
 ## 风险边界
 
-- route mock E2E 验证浏览器用户路径、刷新契约、权限显隐和页面跳转；真实系统 E2E 验证真实 API、真实数据库和 Cookie 会话。
-- 真实系统 E2E 的 Ory 是测试适配器，目的是稳定地产生多个真实登录会话；ORF 业务 API 和数据库不是 mock。
+- route mock E2E 验证浏览器用户路径、刷新契约、权限显隐和页面跳转；当前保留的 Playwright 固定场景不写入真实数据库、Ory 或对象存储。
 - 当前主流程用手动刷新 / 页面跳转模拟用户查看最新状态；如果后续引入 websocket 或轮询，需要新增实时同步断言。
 - 当前主流程覆盖目标级战利品和无分歧匿名互评；互评分歧处理、异常提交和越权访问由守卫测试分开验证。
 
 ## 测试数据原则
 
 - route mock E2E 使用 Playwright `route.fulfill` 构造 Objective / Result，避免依赖外部状态。
-- real-system E2E 不 `fulfill` 业务 API；它写入真实数据库，并且默认不清理数据。
-- real-system E2E helper 只允许存在于 `e2e/challenges/helpers/`；测试可以调用真实 API、真实 repository 和测试数据库，产品代码不能依赖测试 helper。
 - 用例内显式构造 Objective / Result，只保留当前断言需要的字段和状态。
 - 页面断言优先基于用户可见文案、按钮和链接，少量使用稳定 class 定位目标面板。
 - 每个测试开始清空 localStorage，避免 legacy 本地状态污染 API 优先契约。
@@ -454,7 +418,6 @@ ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=
 ```bash
 npm test
 npx playwright test e2e/challenges/orf-frontend-flow.spec.ts
-ORF_REAL_E2E=1 npx playwright test e2e/challenges/orf-real-*.spec.ts --reporter=line --output="test-results/manual-real-system-suite-$(date +%Y%m%d-%H%M%S)"
 npm run test:e2e
 npm run build
 ```

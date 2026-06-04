@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { and, eq, inArray } from "drizzle-orm";
-import { db } from "../../../../server/db/client";
+import { db } from "../../../_operators/testd-db-client";
 import { objectiveContributionReviews, objectiveLoot, objectives } from "../../../../server/db/schema";
 import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
 import {

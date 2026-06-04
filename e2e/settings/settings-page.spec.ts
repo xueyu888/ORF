@@ -65,15 +65,14 @@ test("settings page only exposes implemented visual configuration", async ({ pag
     }),
   ).toEqual({ complete: true, naturalWidth: 1 });
   await expect.poll(() =>
-    page.locator(".orf-sidebar").evaluate((sidebar) => {
-      const style = window.getComputedStyle(sidebar);
-      const beforeStyle = window.getComputedStyle(sidebar, "::before");
-      return {
-        backgroundColor: style.backgroundColor,
-        beforeBackgroundImage: beforeStyle.backgroundImage,
-      };
-    }),
-  ).toEqual({ backgroundColor: "rgba(0, 0, 0, 0)", beforeBackgroundImage: "none" });
+    page.locator(".orf-topbar").evaluate((topbar) => window.getComputedStyle(topbar).backgroundImage),
+  ).toContain("/settings/backgrounds/app_background/default/test-bg.png");
+  await expect.poll(() =>
+    page.locator(".orf-topbar-title").evaluate((title) => window.getComputedStyle(title).color),
+  ).toBe("rgb(255, 248, 232)");
+  await expect.poll(() =>
+    page.locator(".orf-main-content").evaluate((mainContent) => window.getComputedStyle(mainContent).backgroundImage),
+  ).toBe("none");
   await expect(page.getByLabel("系统管理导航")).toContainText("系统设置");
   await expect(page.getByText("Coming Soon")).toHaveCount(0);
 
