@@ -14,6 +14,7 @@ import {
   canDeleteObjective,
   createObjective,
   createObjectiveAlignmentRequest,
+  createProject,
   deleteObjective,
   freezeObjectiveAfterReestimate,
   publishObjective,
@@ -25,6 +26,7 @@ import {
   submitObjectiveLoot,
   submitObjectiveTrialReview,
   updateObjectiveDetails,
+  updateObjectiveProject,
 } from "../repositories/orfRepository";
 import { isDateOnlyString } from "../../src/utils/date";
 
@@ -44,17 +46,20 @@ const createObjectiveBodySchema = z.object({
   title: z.string().trim().min(1),
   whyItMatters: z.string().trim().min(1),
   projectId: optionalNullableTextSchema,
-  projectName: optionalNullableTextSchema,
   cycle: z.string().trim().min(1),
   boundary: z.string().trim().min(1),
   finalDueAt: dateOnlySchema.optional(),
 });
+const createProjectBodySchema = z.object({
+  name: requiredTextSchema,
+});
 const objectiveDetailsBodySchema = z.object({
   title: requiredTextSchema.optional(),
-  projectId: optionalNullableTextSchema,
-  projectName: optionalNullableTextSchema,
   finalDueAt: dateOnlySchema.optional(),
-}).refine((body) => body.title !== undefined || body.projectId !== undefined || body.projectName !== undefined || body.finalDueAt !== undefined, { message: "No objective fields to update" });
+}).refine((body) => body.title !== undefined || body.finalDueAt !== undefined, { message: "No objective fields to update" });
+const objectiveProjectBodySchema = z.object({
+  projectId: optionalNullableTextSchema,
+});
 const recruitBodySchema = z.object({
   members: z.array(z.string().trim().min(1)).min(1),
 });
@@ -224,6 +229,24 @@ function sendAlignmentRequestOutcome(
 }
 
 export function registerOrfObjectiveRoutes(app: FastifyInstance) {
+  app.post("/api/projects", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const body = createProjectBodySchema.parse(request.body);
+    const outcome = await createProject(body, { scope: context.scope, userId: context.user.id });
+    if (outcome.status === "invalid") {
+      return reply.code(400).send({ error: "Project name is required" });
+    }
+    if (outcome.status === "duplicate") {
+      return reply.code(409).send({ error: "Project already exists", project: outcome.project });
+    }
+
+    return { project: outcome.project };
+  });
+
   app.post("/api/objectives", async (request, reply) => {
     const context = await requireWriteContext(request, reply, "objective.create");
     if (!context) {
@@ -232,6 +255,9 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
 
     const body = createObjectiveBodySchema.parse(request.body);
     const objective = await createObjective(body, { scope: context.scope, userId: context.user.id });
+    if (!objective) {
+      return reply.code(400).send({ error: "Project not found" });
+    }
 
     return { objective };
   });
@@ -248,6 +274,17 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     }
 
     return sendObjectiveDetailsOutcome(reply, await updateObjectiveDetails(params.objectiveId, body, context.user.id));
+  });
+
+  app.patch("/api/objectives/:objectiveId/project", async (request, reply) => {
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = objectiveProjectBodySchema.parse(request.body);
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    return sendObjectiveDetailsOutcome(reply, await updateObjectiveProject(params.objectiveId, body, { scope: context.scope, userId: context.user.id }));
   });
 
   app.patch("/api/objectives/:objectiveId/publish", async (request, reply) => {

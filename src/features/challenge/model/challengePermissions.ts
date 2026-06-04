@@ -44,6 +44,7 @@ export function resourceForTarget(target: ChallengeTarget): ChallengePermissionR
 }
 
 export function resourceForDragItem(item: DragItem): ChallengePermissionResource {
+  if (item.type === "objective") return "objective";
   if (item.type === "bounty") return "result";
   if (item.type === "action") return "task";
   return "subtask";

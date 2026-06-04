@@ -12,6 +12,10 @@ export type DraftReturnContext = {
   status: ChallengeStatusFilter;
 };
 
+export type ObjectiveCreationProject = {
+  projectId: string | null;
+};
+
 export type ObjectiveDraftOrderAnchor = ListItemAnchor & {
   challengerCount: number;
   createdAt: string;
@@ -25,20 +29,24 @@ export type ObjectiveOrderAnchor = ObjectiveDraftOrderAnchor & {
 
 export type ObjectiveCreationSession =
   | { status: "idle" }
-  | { status: "editingDraft"; returnContext: DraftReturnContext; title: string }
-  | { status: "submittingDraft"; draftOrderAnchor: ObjectiveDraftOrderAnchor | null; returnContext: DraftReturnContext; title: string }
-  | { status: "failedEditingDraft"; returnContext: DraftReturnContext; title: string }
+  | { status: "editingDraft"; project: ObjectiveCreationProject; returnContext: DraftReturnContext; title: string }
+  | { status: "submittingDraft"; draftOrderAnchor: ObjectiveDraftOrderAnchor | null; project: ObjectiveCreationProject; returnContext: DraftReturnContext; title: string }
+  | { status: "failedEditingDraft"; project: ObjectiveCreationProject; returnContext: DraftReturnContext; title: string }
   | { status: "submittedOverlay"; objective: Objective; orderAnchor: ObjectiveOrderAnchor | null }
   | { status: "anchoredCreated"; objectiveId: string; orderAnchor: ObjectiveOrderAnchor };
 
 export const idleObjectiveCreationSession: ObjectiveCreationSession = { status: "idle" };
 
-export function beginObjectiveCreationSession(current: ObjectiveCreationSession, returnContext: DraftReturnContext): ObjectiveCreationSession {
+export function beginObjectiveCreationSession(
+  current: ObjectiveCreationSession,
+  returnContext: DraftReturnContext,
+  project: ObjectiveCreationProject = { projectId: null },
+): ObjectiveCreationSession {
   if (current.status === "editingDraft" || current.status === "failedEditingDraft" || current.status === "submittingDraft") {
     return current;
   }
 
-  return { status: "editingDraft", returnContext, title: "" };
+  return { status: "editingDraft", project, returnContext, title: "" };
 }
 
 export function updateObjectiveCreationDraftTitle(current: ObjectiveCreationSession, title: string): ObjectiveCreationSession {
@@ -52,7 +60,7 @@ export function submitObjectiveCreationDraft(
   draftOrderAnchor: ObjectiveDraftOrderAnchor | null,
 ): ObjectiveCreationSession {
   if (current.status !== "editingDraft" && current.status !== "failedEditingDraft") return current;
-  return { status: "submittingDraft", draftOrderAnchor, returnContext: current.returnContext, title };
+  return { status: "submittingDraft", draftOrderAnchor, project: current.project, returnContext: current.returnContext, title };
 }
 
 export function completeObjectiveCreationDraft(current: ObjectiveCreationSession, objective: Objective): ObjectiveCreationSession {
@@ -66,7 +74,7 @@ export function completeObjectiveCreationDraft(current: ObjectiveCreationSession
 
 export function failObjectiveCreationDraft(current: ObjectiveCreationSession, title: string): ObjectiveCreationSession {
   if (current.status !== "submittingDraft") return current;
-  return { status: "failedEditingDraft", returnContext: current.returnContext, title };
+  return { status: "failedEditingDraft", project: current.project, returnContext: current.returnContext, title };
 }
 
 export function cancelObjectiveCreationSession(current: ObjectiveCreationSession): {
@@ -93,6 +101,14 @@ export function materializeSubmittedObjectiveCreation(current: ObjectiveCreation
 export function objectiveCreationDraftTitle(current: ObjectiveCreationSession): string | null {
   if (current.status === "editingDraft" || current.status === "failedEditingDraft" || current.status === "submittingDraft") {
     return current.title;
+  }
+
+  return null;
+}
+
+export function objectiveCreationDraftProject(current: ObjectiveCreationSession): ObjectiveCreationProject | null {
+  if (current.status === "editingDraft" || current.status === "failedEditingDraft" || current.status === "submittingDraft") {
+    return current.project;
   }
 
   return null;

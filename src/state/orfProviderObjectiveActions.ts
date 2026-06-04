@@ -17,13 +17,15 @@ import type {
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
   ObjectiveTrialReviewStatus,
+  OrfProject,
   OrfState,
   OrfUser,
   ResultAcceptedResult,
 } from "../types/orf";
 
 export type CreateObjectiveInput = Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> &
-  Partial<Pick<Objective, "finalDueAt" | "projectId" | "projectName">>;
+  Partial<Pick<Objective, "finalDueAt" | "projectId">>;
+export type CreateProjectInput = Pick<OrfProject, "name">;
 export type SubmitLootInput = {
   objectiveId: string;
   body: string;
@@ -56,6 +58,7 @@ export type ReviewObjectiveAlignmentInput = {
 };
 
 type CreateObjectiveResponse = { objective: Objective };
+type CreateProjectResponse = { project: OrfProject };
 
 interface ObjectiveActionOptions {
   currentUser: OrfUser | null;
@@ -87,6 +90,26 @@ export function useOrfProviderObjectiveActions({
 }: ObjectiveActionOptions) {
   return useMemo(
     () => ({
+      createProject: async (input: CreateProjectInput) => {
+        if (currentUser?.role !== "admin") {
+          notify("只有指挥官可以创建项目");
+          return null;
+        }
+
+        try {
+          const data = await apiJson<CreateProjectResponse>("/api/projects", {
+            method: "POST",
+            body: JSON.stringify(input),
+          });
+          notify("项目已创建");
+          await refreshTaskManagementData();
+          return data.project;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "项目创建失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return null;
+        }
+      },
       createObjective: async (input: CreateObjectiveInput) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");
@@ -105,6 +128,26 @@ export function useOrfProviderObjectiveActions({
           notify(businessMutationFailureMessage(error, "目标创建失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return null;
+        }
+      },
+      setObjectiveProject: async (objectiveId: string, projectId: string | null) => {
+        if (currentUser?.role !== "admin") {
+          notify("只有指挥官可以调整目标项目");
+          return false;
+        }
+
+        try {
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/project`, {
+            method: "PATCH",
+            body: JSON.stringify({ projectId }),
+          });
+          await refreshTaskManagementData();
+          notify(projectId ? "目标已放入项目" : "目标已移出项目");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "目标项目调整失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
         }
       },
       publishObjective: async (objectiveId: string) => {

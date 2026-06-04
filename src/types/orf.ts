@@ -87,13 +87,19 @@ export interface ActivityItem {
   at: string;
 }
 
+export interface OrfProject {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Objective {
   id: string;
   title: string;
   description: string;
   whyItMatters: string;
   projectId?: string | null;
-  projectName?: string | null;
   cycle: string;
   stage: OrfStage;
   flowStatus: ObjectiveFlowStatus;
@@ -377,6 +383,7 @@ export interface OrfState {
   users: OrfUser[];
   currentUserId: string;
   permissionRules: PermissionRule[];
+  projects: OrfProject[];
   objectives: Objective[];
   results: Result[];
   feedback: Feedback[];

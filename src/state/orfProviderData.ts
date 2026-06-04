@@ -22,6 +22,7 @@ interface OrfDataStateOptions {
 export function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return normalizeState({
     ...state,
+    projects: data.projects ?? state.projects ?? [],
     objectives: data.objectives,
     results: data.results,
     tasks: data.tasks,

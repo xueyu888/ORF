@@ -13,10 +13,11 @@ export type OrfDataInvalidationReason =
   | "result.changed"
   | "task.changed"
   | "feedback.changed"
-  | "comment.changed";
+  | "comment.changed"
+  | "project.changed";
 export type OrfInvalidationTarget = {
   id: string;
-  type: "objective" | "result" | "task" | "subtask" | "feedback" | "comment";
+  type: "objective" | "result" | "task" | "subtask" | "feedback" | "comment" | "project";
 };
 
 export function publishOrfDataInvalidation(input: {

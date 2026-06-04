@@ -77,6 +77,7 @@ import {
   objectiveLoot,
   objectiveTrialReviews,
   pointLedger,
+  projects,
   results,
   taskChecklistItems,
   tasks,
@@ -700,16 +701,58 @@ export interface CreateObjectiveInput {
   title: string;
   whyItMatters: string;
   projectId?: string | null;
-  projectName?: string | null;
   cycle: string;
   boundary: string;
   finalDueAt?: string;
+}
+
+export interface CreateProjectInput {
+  name: string;
+}
+
+export async function createProject(input: CreateProjectInput, context: { scope: RuntimeScope; userId: string }) {
+  const name = input.name.trim();
+  if (!name) return { status: "invalid" as const };
+
+  const storageScopeId = runtimeScopeStorageId(context.scope);
+  const existing = await db.select().from(projects).where(and(eq(projects.teamId, storageScopeId), eq(projects.name, name))).limit(1);
+  if (existing[0]) return { status: "duplicate" as const, project: existing[0] };
+
+  const now = today();
+  const id = makeId("project");
+  const [project] = await db
+    .insert(projects)
+    .values({
+      id,
+      teamId: storageScopeId,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: context.userId,
+      updatedBy: context.userId,
+    })
+    .returning();
+
+  publishOrfDataInvalidation({
+    actorUserId: context.userId,
+    models: ["taskManagement"],
+    reason: "project.changed",
+    target: { id, type: "project" },
+    teamId: storageScopeId,
+  });
+
+  return { status: "ok" as const, project };
 }
 
 export async function createObjective(input: CreateObjectiveInput, context: { scope: RuntimeScope; userId: string }): Promise<Objective | null> {
   const id = makeId("obj");
   const now = today();
   const storageScopeId = runtimeScopeStorageId(context.scope);
+  const projectId = nullableTrimmedText(input.projectId);
+  if (projectId) {
+    const [project] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.teamId, storageScopeId))).limit(1);
+    if (!project) return null;
+  }
 
   await db.insert(objectives).values({
     id,
@@ -717,8 +760,7 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     title: input.title,
     description: input.whyItMatters,
     whyItMatters: input.whyItMatters,
-    projectId: nullableTrimmedText(input.projectId),
-    projectName: nullableTrimmedText(input.projectName),
+    projectId,
     cycle: input.cycle,
     stage: objectiveLifecycleInitialState.stage,
     flowStatus: objectiveLifecycleInitialState.flowStatus,
@@ -3110,7 +3152,7 @@ export type ObjectiveDetailsMutationOutcome =
 
 export async function updateObjectiveDetails(
   objectiveId: string,
-  input: { finalDueAt?: string; projectId?: string | null; projectName?: string | null; title?: string },
+  input: { finalDueAt?: string; title?: string },
   actorId?: string | null,
 ): Promise<ObjectiveDetailsMutationOutcome> {
   const nextTitle = input.title?.trim();
@@ -3129,14 +3171,6 @@ export async function updateObjectiveDetails(
 
     if (nextTitle !== undefined) {
       update.title = nextTitle;
-    }
-
-    if (input.projectId !== undefined) {
-      update.projectId = nullableTrimmedText(input.projectId);
-    }
-
-    if (input.projectName !== undefined) {
-      update.projectName = nullableTrimmedText(input.projectName);
     }
 
     if (input.finalDueAt !== undefined) {
@@ -3170,6 +3204,49 @@ export async function updateObjectiveDetails(
 
   publishObjectiveInvalidation({
     actorUserId: actorId,
+    reason: "objective.changed",
+    objectiveId,
+    teamId: updatedObjective.teamId,
+  });
+  return objectiveOutcome(objectiveId, runtimeScope(updatedObjective.teamId));
+}
+
+export async function updateObjectiveProject(
+  objectiveId: string,
+  input: { projectId?: string | null },
+  context: { scope: RuntimeScope; userId: string },
+): Promise<ObjectiveDetailsMutationOutcome> {
+  const storageScopeId = runtimeScopeStorageId(context.scope);
+  const nextProjectId = nullableTrimmedText(input.projectId);
+
+  const updatedObjective = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective || objective.teamId !== storageScopeId) return { status: "notFound" as const };
+
+    if (nextProjectId) {
+      const [project] = await tx.select({ id: projects.id }).from(projects).where(and(eq(projects.id, nextProjectId), eq(projects.teamId, storageScopeId))).limit(1);
+      if (!project) return { status: "invalid" as const };
+    }
+
+    const [updated] = await tx
+      .update(objectives)
+      .set({
+        projectId: nextProjectId,
+        updatedAt: today(),
+        updatedBy: context.userId,
+      })
+      .where(eq(objectives.id, objectiveId))
+      .returning({ id: objectives.id, teamId: objectives.teamId });
+
+    if (!updated) return { status: "notFound" as const };
+    return { status: "updated" as const, teamId: updated.teamId };
+  });
+
+  if (updatedObjective.status === "notFound") return { status: "notFound" };
+  if (updatedObjective.status === "invalid") return { status: "invalid" };
+
+  publishObjectiveInvalidation({
+    actorUserId: context.userId,
     reason: "objective.changed",
     objectiveId,
     teamId: updatedObjective.teamId,

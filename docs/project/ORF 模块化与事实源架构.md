@@ -7,7 +7,7 @@
 - `Result`、`Task`、评论、试验收、对齐申请、战利品和积分账本都挂在 `Objective` 下；它们是子事实或派生读模型，不反向拥有目标生命周期。
 - 数据库是业务事实源；前端 `OrfState` 是服务端 read model 快照，`completion/title/creation` overlay 只是临时 UI 状态。
 - 悬赏大厅和我的挑战是 `TaskManagementData` 的投影读模型，不是第二套事实源。
-- 项目归属当前仍是 `Objective.projectId/projectName` 轻量展示字段，不参与权限、成员、生命周期或积分结算。
+- 项目归属由 `Project` 注册表和可空 `Objective.projectId` 组成；`Project.name` 是项目名称事实源，目标可以保持未归属，项目不参与权限、成员、生命周期或积分结算。
 - 匿名互评原始数据进入本地结算服务；后端只接收结算后的贡献分配，不保存匿名原始评价。
 - 新增模块必须通过显式输入输出组合，不让页面局部状态、仓库私有 helper 或旧 store mutation 成为隐式状态机。
 

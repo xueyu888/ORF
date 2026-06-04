@@ -72,16 +72,29 @@ export function validateObjectiveOwnedTaskSchema(snapshot: RuntimeSchemaSnapshot
   return errors;
 }
 
-export function validateObjectiveProjectDisplaySchema(snapshot: RuntimeSchemaSnapshot) {
+export function validateObjectiveProjectDisplaySchema(snapshot: RuntimeSchemaSnapshot & { projectTableColumns?: RuntimeSchemaColumn[] }) {
   const errors: string[] = [];
   const columnByName = new Map(snapshot.columns.map((column) => [column.columnName, column]));
+  const projectId = columnByName.get("project_id");
 
-  for (const columnName of ["project_id", "project_name"]) {
-    const column = columnByName.get(columnName);
+  if (!projectId) {
+    errors.push("objectives.project_id is missing.");
+  } else if (projectId.isNullable !== "YES") {
+    errors.push("objectives.project_id must be nullable.");
+  }
+
+  if (columnByName.has("project_name")) {
+    errors.push("objectives.project_name must be dropped; project names belong to projects.");
+  }
+
+  const projectTableColumns = snapshot.projectTableColumns ?? [];
+  const projectColumnByName = new Map(projectTableColumns.map((column) => [column.columnName, column]));
+  for (const columnName of ["id", "team_id", "name", "created_at", "updated_at"]) {
+    const column = projectColumnByName.get(columnName);
     if (!column) {
-      errors.push(`objectives.${columnName} is missing.`);
-    } else if (column.isNullable !== "YES") {
-      errors.push(`objectives.${columnName} must be nullable.`);
+      errors.push(`projects.${columnName} is missing.`);
+    } else if (column.isNullable !== "NO") {
+      errors.push(`projects.${columnName} must be NOT NULL.`);
     }
   }
 
@@ -125,6 +138,7 @@ export async function assertRuntimeDatabaseSchema() {
     taskColumnsResult,
     taskConstraintsResult,
     objectiveColumnsResult,
+    projectColumnsResult,
     feedbackColumnsResult,
     evidenceColumnsResult,
     feedbackStatusResult,
@@ -162,6 +176,17 @@ export async function assertRuntimeDatabaseSchema() {
         where table_schema = current_schema()
           and table_name = 'objectives'
           and column_name in ('project_id', 'project_name')
+      `,
+    ),
+    pool.query<RuntimeSchemaColumn>(
+      `
+        select
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'projects'
+          and column_name in ('id', 'team_id', 'name', 'created_at', 'updated_at')
       `,
     ),
     pool.query<RuntimeSchemaColumn>(
@@ -216,6 +241,7 @@ export async function assertRuntimeDatabaseSchema() {
     ...validateObjectiveProjectDisplaySchema({
       columns: objectiveColumnsResult.rows,
       constraints: [],
+      projectTableColumns: projectColumnsResult.rows,
     }),
     ...validateTeamFeedbackSchema({
       columns: feedbackColumnsResult.rows,

@@ -4,7 +4,7 @@ import {
   userIdByNameMap,
   userNameByIdMap,
 } from "../domain/orfObjectiveParticipants";
-import type { ChallengeApplication, Objective, OrfState, Result } from "../types/orf";
+import type { ChallengeApplication, Objective, OrfProject, OrfState, Result } from "../types/orf";
 import { addCalendarDays } from "../utils/date";
 
 type ObjectiveChallengeFields = Pick<
@@ -66,6 +66,7 @@ function inferFlowStatus(objective: LegacyObjective, challengerUserIds: string[]
 }
 
 function normalizeInitialState(state: LegacyInitialState): OrfState {
+  const projects: OrfProject[] = state.projects ?? [];
   const objectiveUpdatedAtById = new Map(state.objectives.map((objective) => [objective.id, objective.updatedAt]));
   const userIdByName = userIdByNameMap(state.users);
   const userNameById = userNameByIdMap(state.users);
@@ -143,6 +144,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
   return {
     ...state,
     users: state.users.map((user) => ({ ...user, status: user.status ?? "active" })),
+    projects,
     objectives,
     results,
     objectiveLoot: state.objectiveLoot ?? [],
@@ -171,6 +173,12 @@ const legacyInitialOrfState: LegacyInitialState = {
   ],
   currentUserId: "00000000-0000-4000-8000-000000000201",
   permissionRules: defaultPermissionRules,
+  projects: [
+    { id: "project-ai-delivery", name: "AI 应用工程化", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+    { id: "project-feedback-eval", name: "反馈与评估", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+    { id: "project-cost-routing", name: "成本与路由", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+    { id: "project-acceptance-demo", name: "验收演示", createdAt: "2026-04-24", updatedAt: "2026-04-24" },
+  ],
   causeCategories: [
     "需求缺口",
     "Prompt 问题",
@@ -192,7 +200,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "把项目从 Demo 驱动转向可评估、可追踪、可灰度、可回滚的工程化交付方式。",
       whyItMatters: "AI 应用进入生产后，交付质量取决于评估、灰度、回滚和反馈闭环，而不是单次演示效果。",
       projectId: "project-ai-delivery",
-      projectName: "AI 应用工程化",
       cycle: "2026 Q2",
       stage: "orfReestimate",
       status: "At Risk",
@@ -211,7 +218,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "将线上失败案例沉淀为可分类、可追踪、可转化为改进动作的反馈系统。",
       whyItMatters: "没有结构化反馈，只能不断修补问题，无法把失败案例转成稳定的评估和工程能力。",
       projectId: "project-feedback-eval",
-      projectName: "反馈与评估",
       cycle: "2026 Q2",
       stage: "orfReestimate",
       status: "On Track",
@@ -230,7 +236,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "通过成本观测、Prompt 压缩、缓存和路由策略，降低运行成本并保持质量指标稳定。",
       whyItMatters: "AI 应用规模化后，成本和时延会直接影响上线范围、用户体验和业务可持续性。",
       projectId: "project-cost-routing",
-      projectName: "成本与路由",
       cycle: "2026 Q2",
       stage: "orfReestimate",
       status: "At Risk",
@@ -249,7 +254,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "让关键回答能稳定给出可核验引用，减少无依据结论。",
       whyItMatters: "用户信任来自可追溯证据，引用质量直接影响 AI 应用能否进入核心业务流程。",
       projectId: "project-feedback-eval",
-      projectName: "反馈与评估",
       cycle: "2026 Q2",
       stage: "resultClaiming",
       status: "Draft",
@@ -269,7 +273,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "为工具调用链路补齐幂等、重试和降级策略，避免重复创建或重复提交。",
       whyItMatters: "Agent 一旦进入生产系统，重复副作用会直接制造业务风险。",
       projectId: "project-ai-delivery",
-      projectName: "AI 应用工程化",
       cycle: "2026 Q2",
       stage: "resultClaiming",
       status: "At Risk",
@@ -290,7 +293,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "把线上失败和人工复盘样本转为稳定评估集，覆盖权限、成本和检索边界。",
       whyItMatters: "评估数据集不足会让质量改进停留在感觉层面，无法判断真实进步。",
       projectId: "project-feedback-eval",
-      projectName: "反馈与评估",
       cycle: "2026 Q2",
       stage: "resultClaiming",
       status: "On Track",
@@ -311,7 +313,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "按问题风险和上下文复杂度选择模型与检索策略，在保证质量的前提下降低成本。",
       whyItMatters: "成本不可控会限制 AI 应用规模化，路由策略是质量和成本之间的关键调节层。",
       projectId: "project-cost-routing",
-      projectName: "成本与路由",
       cycle: "2026 Q2",
       stage: "resultClaiming",
       status: "Draft",
@@ -331,7 +332,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "把 Agent 失败链路的日志、复现脚本和人工判定统一整理成可提交战利品。",
       whyItMatters: "冻结后的目标需要挑战者按指标提交证据，否则验收页无法判断每个指标是否完成。",
       projectId: "project-acceptance-demo",
-      projectName: "验收演示",
       cycle: "2026 Q2",
       stage: "goalFrozen",
       flowStatus: "frozen",
@@ -359,7 +359,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "挑战者已提交战利品，等待指挥官按指标验收并读取匿名互评贡献结果。",
       whyItMatters: "验收流程必须围绕每个指标的结论展开，贡献比例来自挑战者匿名互评。",
       projectId: "project-acceptance-demo",
-      projectName: "验收演示",
       cycle: "2026 Q2",
       stage: "goalFrozen",
       flowStatus: "submitted",
@@ -388,7 +387,6 @@ const legacyInitialOrfState: LegacyInitialState = {
       description: "低风险问题路由策略已完成验收结算，用于展示积分和排行榜效果。",
       whyItMatters: "结算后的目标需要沉淀指标验收结果、贡献比例和积分流水。",
       projectId: "project-acceptance-demo",
-      projectName: "验收演示",
       cycle: "2026 Q2",
       stage: "goalFrozen",
       flowStatus: "settled",

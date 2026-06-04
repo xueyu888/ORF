@@ -232,6 +232,13 @@
       "when": 1780700000000,
       "tag": "0032_feedback_issue_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780780000000,
+      "tag": "0033_light_project_registry",
+      "breakpoints": true
     }
   ]
 }

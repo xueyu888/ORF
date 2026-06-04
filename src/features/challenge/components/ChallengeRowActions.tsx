@@ -17,6 +17,14 @@ export const rowActionLeft = {
   subAction: HIERARCHY_TREE_METRICS.disclosureLeftByDepth[2],
 } as const;
 
+export type ChallengeRowMenuItem = {
+  icon: LucideIcon;
+  id: string;
+  label: string;
+  onAction: () => void;
+  tone?: "default" | "danger";
+};
+
 export function ChallengeRowActions({
   actionId,
   activeActionId,
@@ -24,6 +32,7 @@ export function ChallengeRowActions({
   addForceMenu,
   addLabel,
   dragItem,
+  extraMenuItems,
   left,
   onAction,
   onActiveActionChange,
@@ -39,6 +48,7 @@ export function ChallengeRowActions({
   addForceMenu?: boolean;
   addLabel?: string | null;
   dragItem?: DragItem;
+  extraMenuItems?: ChallengeRowMenuItem[];
   left: number;
   onAction: (action: ChallengeRowAction) => void;
   onActiveActionChange: (id: string | null) => void;
@@ -131,6 +141,27 @@ export function ChallengeRowActions({
         </button>
         {menuOpen && (
           <div className="orf-popover orf-block-menu pointer-events-auto absolute left-0 top-7 z-50 w-40 p-1" onPointerDown={(event) => event.stopPropagation()}>
+            {extraMenuItems?.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={clsx(
+                    "orf-block-menu-item flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition hover:bg-[var(--orf-bg-muted)]",
+                    item.tone === "danger" ? "text-[#d92d20]" : "text-[#344054]",
+                  )}
+                  onClick={() => {
+                    item.onAction();
+                    onOpenActionChange(null);
+                  }}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </button>
+              );
+            })}
             {actionItems.map((item) => {
               const Icon = item.icon;
 

@@ -85,6 +85,22 @@ export const rolePermissions = pgTable(
   }),
 );
 
+export const projects = pgTable(
+  "projects",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id").notNull(),
+    name: text("name").notNull(),
+    createdAt: date("created_at", { mode: "string" }).notNull(),
+    updatedAt: date("updated_at", { mode: "string" }).notNull(),
+    createdBy: uuid("created_by"),
+    updatedBy: uuid("updated_by"),
+  },
+  (table) => ({
+    teamNameUnique: uniqueIndex("projects_team_name_unique").on(table.teamId, table.name),
+  }),
+);
+
 export const objectives = pgTable("objectives", {
   id: text("id").primaryKey(),
   teamId: text("team_id")
@@ -93,8 +109,7 @@ export const objectives = pgTable("objectives", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   whyItMatters: text("why_it_matters").notNull(),
-  projectId: text("project_id"),
-  projectName: text("project_name"),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
   cycle: text("cycle").notNull(),
   stage: text("stage").$type<OrfStage>().notNull().default("orfReestimate"),
   flowStatus: text("flow_status").$type<ObjectiveFlowStatus>().notNull().default("candidate"),

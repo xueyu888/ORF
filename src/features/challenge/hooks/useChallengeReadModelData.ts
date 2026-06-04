@@ -27,6 +27,7 @@ export function useChallengeReadModelData(input: {
     state.objectiveAlignmentRequests,
     state.objectiveTrialReviews,
     state.objectives,
+    state.projects,
     state.results,
     state.tasks,
     taskManagementInvalidationKey,

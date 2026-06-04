@@ -136,6 +136,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
   const feedbackIssueIds = new Set(data.feedback.map((item) => item.id));
 
   return {
+    projects: data.projects.filter((project) => objectivesForMember.some((objective) => objective.projectId === project.id)),
     objectives: objectivesForMember,
     results: resultsForMember,
     tasks: tasksForMember,

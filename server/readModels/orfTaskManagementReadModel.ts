@@ -11,6 +11,7 @@ import type {
   Objective,
   ObjectiveAlignmentRequest,
   ObjectiveLoot,
+  OrfProject,
   ObjectiveTrialReview,
   OrfState,
   PointLedgerEntry,
@@ -31,6 +32,7 @@ import {
   objectiveLoot,
   objectives,
   objectiveTrialReviews,
+  projects,
   pointLedger,
   results,
   resultTrendPoints,
@@ -175,6 +177,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const objectiveRows = storageScopeId
     ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id))
     : await db.select().from(objectives).orderBy(desc(objectives.createdAt), desc(objectives.id));
+  const projectRows = storageScopeId ? await db.select().from(projects).where(eq(projects.teamId, storageScopeId)).orderBy(desc(projects.createdAt), desc(projects.id)) : await db.select().from(projects);
   const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
   const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
   const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
@@ -222,6 +225,12 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
 
   const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
+  const projectItems: OrfProject[] = projectRows.map((project) => ({
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  }));
   const messagesByThread = new Map<string, CommentThread["messages"]>();
   const attachmentsByMessage = groupCommentAttachmentsByMessage(commentAttachmentRows);
   for (const message of [...commentMessageRows].sort(
@@ -346,7 +355,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       description: objective.description,
       whyItMatters: objective.whyItMatters,
       projectId: objective.projectId,
-      projectName: objective.projectName,
       cycle: objective.cycle,
       stage: objective.stage,
       flowStatus: objective.flowStatus,
@@ -450,6 +458,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     }));
 
   return {
+    projects: projectItems,
     objectives: objectiveItems,
     results: resultItems,
     tasks: taskItems,

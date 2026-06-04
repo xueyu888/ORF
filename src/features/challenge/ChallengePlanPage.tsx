@@ -80,6 +80,7 @@ import {
   failObjectiveCreationDraft,
   idleObjectiveCreationSession,
   materializeSubmittedObjectiveCreation,
+  objectiveCreationDraftProject,
   objectiveCreationDraftTitle,
   objectiveCreationIsDraftEditing,
   objectiveCreationIsSubmitting,
@@ -88,6 +89,7 @@ import {
   submitObjectiveCreationDraft,
   updateObjectiveCreationDraftTitle,
   type DraftReturnContext,
+  type ObjectiveCreationProject,
   type ObjectiveCreationSession,
 } from "./model/objectiveCreationSession";
 import {
@@ -121,7 +123,7 @@ function rowActionOwnsOpenMenu(openActionId: string, actionId: string) {
   return openActionId === actionId || openActionId === `${actionId}:add`;
 }
 
-function draftObjective(title: string): Objective {
+function draftObjective(title: string, project: ObjectiveCreationProject): Objective {
   const today = localDateString(new Date());
   const finalDueAt = defaultFinalDueAt();
   return {
@@ -129,6 +131,7 @@ function draftObjective(title: string): Objective {
     title,
     description: "",
     whyItMatters: "",
+    projectId: project.projectId,
     cycle: defaultCycleLabel(),
     stage: "goalSetting",
     flowStatus: objectiveLifecycleInitialState.flowStatus,
@@ -158,8 +161,8 @@ function draftObjective(title: string): Objective {
   };
 }
 
-function draftObjectiveNode(title: string): ObjectiveNode {
-  return objectiveNode(draftObjective(title));
+function draftObjectiveNode(title: string, project: ObjectiveCreationProject): ObjectiveNode {
+  return objectiveNode(draftObjective(title, project));
 }
 
 function objectiveNode(objective: Objective): ObjectiveNode {
@@ -183,6 +186,7 @@ export function ChallengePlanPage() {
     deleteResult,
     deleteTask,
     deleteTaskChecklistItem,
+    createProject,
     moveResult,
     moveTask,
     moveTaskChecklistItem,
@@ -202,6 +206,7 @@ export function ChallengePlanPage() {
     state,
     updateCommentMessage,
     updateObjectiveFinalDueAt,
+    setObjectiveProject,
     updateObjectiveTitle,
     updateResultTitle,
     updateResultUncertaintyLevel,
@@ -318,7 +323,8 @@ export function ChallengePlanPage() {
     setCompletionOverlays((items) => items.filter((item) => item.id !== overlayId));
   };
   const draftTitle = objectiveCreationDraftTitle(objectiveCreationSession);
-  const draftGroup = useMemo(() => (draftTitle === null ? null : draftObjectiveNode(draftTitle)), [draftTitle]);
+  const draftProject = objectiveCreationDraftProject(objectiveCreationSession);
+  const draftGroup = useMemo(() => (draftTitle === null ? null : draftObjectiveNode(draftTitle, draftProject ?? { projectId: null })), [draftTitle, draftProject]);
   const draftIsEditing = objectiveCreationIsDraftEditing(objectiveCreationSession);
   const draftIsSubmitting = objectiveCreationIsSubmitting(objectiveCreationSession);
   const effectiveEditingTarget = draftIsEditing ? ({ type: "objective", id: draftObjectiveId, title: draftTitle ?? "" } satisfies ChallengeTarget) : editingTarget;
@@ -449,6 +455,53 @@ export function ChallengePlanPage() {
     notify(objectiveDeadlineUnavailableMessage(editState));
   };
 
+  const beginObjectiveCreation = useCallback(
+    (project: ObjectiveCreationProject = { projectId: null }) => {
+      const normalizedProject = normalizeObjectiveCreationProject(project);
+
+      if (!canCreateObjective) {
+        notify("没有新建目标权限");
+        return;
+      }
+
+      if (objectiveCreationSession.status === "submittingDraft") {
+        notify("目标正在创建，请稍后");
+        return;
+      }
+
+      if (childCreationIsSubmitting(childCreationSession) || childCreationIsAwaitingSnapshot(childCreationSession)) {
+        notify("请先完成当前草稿");
+        return;
+      }
+
+      if (objectiveCreationSession.status === "editingDraft" || objectiveCreationSession.status === "failedEditingDraft") {
+        notify("请先完成当前目标草稿");
+        return;
+      }
+
+      setObjectiveCreationSession((current) =>
+        beginObjectiveCreationSession(current, { cycle: cycleFilter, member: memberFilter, scope, status: statusFilter }, normalizedProject),
+      );
+      setEditingTarget(null);
+      clearChildCreation();
+      if (canShowAllChallenges) setScope("all");
+      setCycleFilter("all");
+      setMemberFilter("all");
+      setStatusFilter("unassigned");
+    },
+    [
+      canCreateObjective,
+      canShowAllChallenges,
+      childCreationSession,
+      cycleFilter,
+      memberFilter,
+      notify,
+      objectiveCreationSession.status,
+      scope,
+      statusFilter,
+    ],
+  );
+
   useEffect(() => {
     if (!linkedChallengeTarget) {
       appliedLinkedTargetRef.current = null;
@@ -516,46 +569,12 @@ export function ChallengePlanPage() {
     next.delete("create");
     setSearchParams(next, { replace: true });
 
-    if (!canCreateObjective) {
-      notify("没有新建目标权限");
-      return;
-    }
-
-    if (objectiveCreationSession.status === "submittingDraft") {
-      notify("目标正在创建，请稍后");
-      return;
-    }
-
-    if (childCreationIsSubmitting(childCreationSession) || childCreationIsAwaitingSnapshot(childCreationSession)) {
-      notify("请先完成当前草稿");
-      return;
-    }
-
-    if (objectiveCreationSession.status === "editingDraft" || objectiveCreationSession.status === "failedEditingDraft") {
-      notify("请先完成当前目标草稿");
-      return;
-    }
-
-    setObjectiveCreationSession((current) => beginObjectiveCreationSession(current, { cycle: cycleFilter, member: memberFilter, scope, status: statusFilter }));
-    setEditingTarget(null);
-    clearChildCreation();
-    if (canShowAllChallenges) setScope("all");
-    setCycleFilter("all");
-    setMemberFilter("all");
-    setStatusFilter("unassigned");
+    beginObjectiveCreation();
   }, [
-    canCreateObjective,
-    canShowAllChallenges,
-    childCreationSession,
-    cycleFilter,
+    beginObjectiveCreation,
     hasObjectiveCreationEntry,
-    memberFilter,
-    notify,
-    objectiveCreationSession.status,
-    scope,
     searchParams,
     setSearchParams,
-    statusFilter,
   ]);
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
@@ -734,6 +753,8 @@ export function ChallengePlanPage() {
       return false;
     }
 
+    const creationProject = objectiveCreationDraftProject(objectiveCreationSession);
+
     const orderAnchor = draftOrderAnchor(displayedGroups);
     setObjectiveCreationSession((current) => submitObjectiveCreationDraft(current, value, orderAnchor));
     void createObjective({
@@ -742,6 +763,7 @@ export function ChallengePlanPage() {
       cycle: defaultCycleLabel(),
       boundary: "待补充",
       finalDueAt: defaultFinalDueAt(),
+      projectId: creationProject?.projectId ?? null,
     }).then((objective) => {
       if (objective) {
         setObjectiveCreationSession((current) => completeObjectiveCreationDraft(current, objective));
@@ -1058,6 +1080,20 @@ export function ChallengePlanPage() {
     onDropTargetChange: setDropTarget,
     onDrop: (target: DropTarget) => {
       if (!dragItem) return;
+      if (dragItem.type === "objective") {
+        if (currentUser?.role !== "admin") {
+          notify("只有指挥官可以移动目标项目归属");
+          setDragItem(null);
+          setDropTarget(null);
+          return;
+        }
+        if (target.type === "project") {
+          void setObjectiveProject(dragItem.id, target.projectId);
+        }
+        setDragItem(null);
+        setDropTarget(null);
+        return;
+      }
       if (dragItem.type === "bounty" && !canMutateMetricForObjective(dragItem.objectiveId)) {
         notifyUnavailableMetricEdit(dragItem.objectiveId);
         setDragItem(null);
@@ -1146,6 +1182,8 @@ export function ChallengePlanPage() {
           trialReviews: challengeState.objectiveTrialReviews,
           currentUser,
           draftObjectiveId,
+          canCreateObjective,
+          canManageProjects: currentUser?.role === "admin",
           metricActionLabel: (objective) =>
             metricCreationActionForObjective({
               objective,
@@ -1169,6 +1207,7 @@ export function ChallengePlanPage() {
           onActiveActionChange: activateRowAction,
           onAddAction: addAction,
           onAddBounty: addBounty,
+          onAddObjective: (projectId) => beginObjectiveCreation({ projectId }),
           onAddSubAction: addSubAction,
           onApproveApplication: approveAnchoredChallengeApplication,
           onCancelEdit: cancelEdit,
@@ -1182,7 +1221,9 @@ export function ChallengePlanPage() {
           onPublishObjective: publishObjective,
           onRecruitObjective: (objectiveId) => openModal({ type: "recruitChallengers", objectiveId }),
           onRejectApplication: rejectAnchoredChallengeApplication,
+          onCreateProject: (name) => createProject({ name }),
           onSaveObjectiveDeadline: saveObjectiveDeadline,
+          onSetObjectiveProject: setObjectiveProject,
           onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
           onUnavailableMetricEdit: notifyUnavailableMetricEdit,
           onSaveMetricDifficulty: saveMetricDifficulty,
@@ -1194,6 +1235,7 @@ export function ChallengePlanPage() {
           canManageFlow: canShowFrontend(currentUser, "challenge.scope.all"),
         }}
         now={now}
+        projects={challengeState.projects}
         scope={scope}
       />
 
@@ -1260,6 +1302,10 @@ function rowActionIdForLinkedChallengeTarget(target: ChallengeUrlTarget, state: 
 
   const parentActionId = parentActionIdForLinkedSubAction(target, state);
   return parentActionId ? `subAction:${parentActionId}:${target.id}` : null;
+}
+
+function normalizeObjectiveCreationProject(project: ObjectiveCreationProject): ObjectiveCreationProject {
+  return { projectId: project.projectId?.trim() || null };
 }
 
 function objectiveDeadlineUnavailableMessage(editState: Extract<ObjectiveDeadlineEditState, { status: "blocked" }>) {

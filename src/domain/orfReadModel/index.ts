@@ -19,6 +19,7 @@ export type TaskManagementData = Pick<
   | "objectiveAlignmentRequests"
   | "pointLedger"
   | "permissionRules"
+  | "projects"
 >;
 
 export type BountyHallItem = {
