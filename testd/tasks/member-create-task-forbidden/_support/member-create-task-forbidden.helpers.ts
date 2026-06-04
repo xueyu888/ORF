@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, taskChecklistItems, tasks } from "../../../../server/db/schema";
 import type { OrfStage } from "../../../../src/types/orf";
+import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import {
   deleteTestTask,
   targetCanCreateTask,
@@ -22,6 +23,8 @@ export async function prepareForbiddenTaskTarget(
   if (!objective) {
     throw new Error("行动项反向用例目标不存在");
   }
+  const challengerUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: input.challengerName });
+  const forbiddenUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: input.forbiddenName });
 
   await db
     .update(objectives)
@@ -29,6 +32,10 @@ export async function prepareForbiddenTaskTarget(
       stage: "orfReestimate",
       flowStatus: "reestimating",
       challengers: uniqueMembers([input.challengerName, ...objective.challengers.filter((name) => name !== input.forbiddenName)]),
+      challengerUserIds: uniqueMembers([
+        challengerUserId,
+        ...objective.challengerUserIds.filter((userId) => userId !== forbiddenUserId),
+      ]),
       updatedAt: today(),
     })
     .where(eq(objectives.id, target.objective.id));
@@ -43,7 +50,12 @@ export async function targetStage(target: MemberCreateTaskForbiddenTarget): Prom
 }
 
 export async function targetHasChallenger(target: MemberCreateTaskForbiddenTarget, memberName: string) {
-  return Boolean((await readObjective(target))?.challengers.includes(memberName));
+  const objective = await readObjective(target);
+  if (!objective) {
+    return false;
+  }
+  const memberUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
+  return !!memberUserId && objective.challengerUserIds.includes(memberUserId);
 }
 
 export async function targetSubtaskAbsent(target: MemberCreateTaskForbiddenTarget, label: string) {
@@ -96,9 +108,11 @@ async function readObjective(target: MemberCreateTaskForbiddenTarget) {
   const [row] = await db
     .select({
       id: objectives.id,
+      teamId: objectives.teamId,
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
     })
     .from(objectives)
     .where(eq(objectives.id, target.objective.id))

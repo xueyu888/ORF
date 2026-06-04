@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { objectives } from "../../../../server/db/schema";
 import type { OrfStage } from "../../../../src/types/orf";
 import { db } from "../../../_operators/testd-db-client";
+import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import {
   challengeScopeTab,
   challengeStatusTrigger,
@@ -44,6 +45,8 @@ export async function prepareForbiddenReestimateDeleteTaskTarget(
   if (!objective) {
     throw new Error("重估中删除行动项反向用例目标不存在");
   }
+  const challengerUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: input.challengerName });
+  const forbiddenUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: input.forbiddenName });
 
   await db
     .update(objectives)
@@ -51,6 +54,10 @@ export async function prepareForbiddenReestimateDeleteTaskTarget(
       stage: "orfReestimate",
       flowStatus: "reestimating",
       challengers: uniqueMembers([input.challengerName, ...objective.challengers.filter((name) => name !== input.forbiddenName)]),
+      challengerUserIds: uniqueMembers([
+        challengerUserId,
+        ...objective.challengerUserIds.filter((userId) => userId !== forbiddenUserId),
+      ]),
       updatedAt: todayIsoDate(),
     })
     .where(eq(objectives.id, target.objective.id));
@@ -65,16 +72,24 @@ export async function targetStage(target: MemberDeleteTaskReestimateForbiddenTar
 }
 
 export async function targetHasChallenger(target: MemberDeleteTaskReestimateForbiddenTarget, memberName: string) {
-  return Boolean((await readObjective(target.objective.id))?.challengers.includes(memberName));
+  const objective = await readObjective(target.objective.id);
+  if (!objective) {
+    return false;
+  }
+  const memberUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
+  return !!memberUserId && objective.challengerUserIds.includes(memberUserId);
 }
 
 export async function targetCanDeleteTask(target: MemberDeleteTaskReestimateForbiddenTarget, actor: { name: string; role: string }) {
   const objective = await readObjective(target.objective.id);
-  return (
-    !!objective &&
-    (objective.flowStatus === "frozen" || objective.flowStatus === "reestimating") &&
-    (actor.role === "admin" || objective.challengers.includes(actor.name))
-  );
+  if (!objective || (objective.flowStatus !== "frozen" && objective.flowStatus !== "reestimating")) {
+    return false;
+  }
+  if (actor.role === "admin") {
+    return true;
+  }
+  const actorUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: actor.name });
+  return !!actorUserId && objective.challengerUserIds.includes(actorUserId);
 }
 
 export function taskDeleteMenuButton(
@@ -128,9 +143,11 @@ async function readObjective(objectiveId: string) {
   const [row] = await db
     .select({
       id: objectives.id,
+      teamId: objectives.teamId,
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
