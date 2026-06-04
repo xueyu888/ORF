@@ -48,7 +48,7 @@ export async function createReviewLootResult(
   }
 
   const result: ReviewLootResult = {
-    id: "res-testd-admin-review-loot",
+    id: `res-${objective.id}`,
     objectiveId: objective.id,
     title: input.resultTitle,
     points: input.points,
@@ -98,7 +98,7 @@ export async function createReviewLoot(
   }
 
   const loot: ReviewLoot = {
-    id: "loot-testd-admin-review-loot",
+    id: `loot-${objective.id}`,
     objectiveId: objective.id,
     body: input.lootBody,
     submittedBy: input.memberName,

@@ -66,7 +66,7 @@ export const adminReviewLootCase = {
       { source: { caseStepId: "Setup-18", method: "playwright" }, id: "fill.password", title: "在密码输入框输入管理员固定测试密码", object: "page", operator: "fill", params: { label: "Password", exact: true, valueFrom: "data.adminPassword" } },
       { source: { caseStepId: "Setup-19", method: "playwright" }, id: "click.sign_in", title: "点击 `Sign In` 登录操作", object: "page", operator: "click", params: { role: "button", name: "Sign In" } },
       { source: { caseStepId: "Setup-20", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 管理员的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
-      { source: { caseStepId: "Setup-21", method: "playwright" }, id: "page.goto.loot", title: "管理员打开本用例目标战利品页面", object: "page.review_loot", operator: "goto", params: { targetFrom: "runtime.reviewLootTarget" } },
+      { source: { caseStepId: "Setup-21", method: "playwright" }, id: "page.goto.loot", title: "管理员打开任务模块下的本用例目标战利品页面", object: "page.review_loot", operator: "goto", params: { targetFrom: "runtime.reviewLootTarget" } },
     ],
   },
 
@@ -74,7 +74,7 @@ export const adminReviewLootCase = {
     description: "管理员已登录并位于本用例目标战利品页面，目标可验收结算",
     assertions: [
       { source: { caseStepId: "S0-1", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 邮箱 `orf-admin-review-loot-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
-      { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.loot", title: "当前页面 应为 本用例目标战利品页面", object: "page.url", operator: "match", params: { pattern: "/tasks/objectives/.+/loot$" } },
+      { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.loot", title: "当前页面 应为 任务模块下的本用例目标战利品页面", object: "page.url", operator: "match", params: { pattern: "/tasks/objectives/.+/loot$" } },
       { source: { caseStepId: "S0-3", method: "playwright" }, id: "review_loot_form.visible", title: "验收战利品表单 应可见", object: "page.review_loot_form", operator: "visible" },
       { source: { caseStepId: "S0-4", method: "prisma" }, id: "db.review_loot_target.submitted", title: "本用例待验收目标 应为 `submitted`，阶段为 `goalFrozen`，战利品提交时间已存在，挑战者仅包含普通成员", object: "db.review_loot_target", operator: "submitted", params: { targetFrom: "runtime.reviewLootTarget", memberNameFrom: "data.memberName" } },
       { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.review_loot_result.present", title: "本用例待验收目标 应存在 指标积分为 `30` 的测试指标", object: "db.review_loot_result", operator: "present", params: { targetFrom: "runtime.reviewLootTarget", resultFrom: "runtime.reviewLootResult", pointsFrom: "data.points" } },

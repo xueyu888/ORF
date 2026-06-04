@@ -1,28 +1,71 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import type { PoolClient } from "pg";
+import { testdPool } from "./testd-db-client";
 
-const rolePermissionLockDir = path.join(process.cwd(), ".artifacts", "testd-role-permissions.lock");
-const rolePermissionLockTimeoutMs = 45_000;
-const staleRolePermissionLockMs = 120_000;
+type RolePermissionLockMode = "exclusive" | "shared";
+
+type HeldRolePermissionLock = {
+  client: PoolClient;
+  mode: RolePermissionLockMode;
+};
+
+const rolePermissionLockNamespaceKey = 0x4f524650; // "ORFP"
+const rolePermissionLockResourceKey = 0x54445052; // "TDPR"
+const rolePermissionLockTimeoutMs = positiveIntegerEnv("TESTD_ROLE_PERMISSION_LOCK_TIMEOUT_MS", 300_000);
+const heldRolePermissionLocks = new Map<string, HeldRolePermissionLock>();
 
 export async function acquireRolePermissionLock() {
-  const owner = `${process.pid}-${Date.now()}-${randomUUID()}`;
+  return acquirePgAdvisoryRolePermissionLock("exclusive");
+}
+
+export async function acquireRolePermissionReadLock() {
+  return acquirePgAdvisoryRolePermissionLock("shared");
+}
+
+export async function releaseRolePermissionLock(owner?: string | null) {
+  if (!owner) {
+    return;
+  }
+
+  const heldLock = heldRolePermissionLocks.get(owner);
+  if (!heldLock) {
+    return;
+  }
+
+  const unlockFunction = heldLock.mode === "shared"
+    ? "pg_advisory_unlock_shared"
+    : "pg_advisory_unlock";
+
+  try {
+    await heldLock.client.query(
+      `select ${unlockFunction}($1::int, $2::int)`,
+      [rolePermissionLockNamespaceKey, rolePermissionLockResourceKey],
+    );
+  } finally {
+    heldRolePermissionLocks.delete(owner);
+    heldLock.client.release();
+  }
+}
+
+async function acquirePgAdvisoryRolePermissionLock(mode: RolePermissionLockMode) {
+  const owner = `${mode}-${process.pid}-${Date.now()}-${randomUUID()}`;
+  const client = await testdPool.connect();
+  const lockFunction = mode === "shared"
+    ? "pg_try_advisory_lock_shared"
+    : "pg_try_advisory_lock";
   const startedAt = Date.now();
 
-  while (true) {
-    try {
-      await mkdir(rolePermissionLockDir, { recursive: false });
-      await writeFile(path.join(rolePermissionLockDir, "owner"), owner, "utf8");
-      return owner;
-    } catch (error) {
-      if (!isNodeErrorCode(error, "EEXIST")) {
-        throw error;
-      }
+  try {
+    while (true) {
+      const result = await client.query<{ locked: boolean }>(
+        `select ${lockFunction}($1::int, $2::int) as locked`,
+        [rolePermissionLockNamespaceKey, rolePermissionLockResourceKey],
+      );
 
-      if (await rolePermissionLockIsStale()) {
-        await rm(rolePermissionLockDir, { recursive: true, force: true });
-        continue;
+      if (result.rows[0]?.locked) {
+        heldRolePermissionLocks.set(owner, { client, mode });
+        return owner;
       }
 
       if (Date.now() - startedAt > rolePermissionLockTimeoutMs) {
@@ -31,45 +74,13 @@ export async function acquireRolePermissionLock() {
 
       await delay(100);
     }
-  }
-}
-
-export async function releaseRolePermissionLock(owner?: string | null) {
-  if (!owner) {
-    return;
-  }
-
-  try {
-    const currentOwner = await readFile(path.join(rolePermissionLockDir, "owner"), "utf8");
-    if (currentOwner !== owner) {
-      return;
-    }
   } catch (error) {
-    if (isNodeErrorCode(error, "ENOENT")) {
-      return;
-    }
-    throw error;
-  }
-
-  await rm(rolePermissionLockDir, { recursive: true, force: true });
-}
-
-async function rolePermissionLockIsStale() {
-  try {
-    const lockStat = await stat(rolePermissionLockDir);
-    return Date.now() - lockStat.mtimeMs > staleRolePermissionLockMs;
-  } catch (error) {
-    if (isNodeErrorCode(error, "ENOENT")) {
-      return false;
-    }
+    client.release();
     throw error;
   }
 }
 
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isNodeErrorCode(error: unknown, code: string): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && (error as NodeJS.ErrnoException).code === code;
+function positiveIntegerEnv(name: string, fallback: number) {
+  const parsed = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }

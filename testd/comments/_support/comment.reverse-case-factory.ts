@@ -170,16 +170,9 @@ function setupSteps(definition: ReverseCommentCaseDefinition): StepSpec[] {
       roleFrom: "data.role",
       saveAs: "actor",
     }),
-    step("Setup-5", "prisma", "db.member_comment_manage_permission.snapshot", "记录默认团队 member 角色评论管理权限配置快照", "db.member_comment_manage_permission", "snapshot", {
-      teamIdFrom: "runtime.actor.teamId",
-      saveAs: "memberCommentManagePermissionSnapshot",
-    }),
-    step("Setup-6", "prisma", "db.member_comment_manage_permission.disable", "确保默认团队 member 角色不具备 `comment.manage` 权限", "db.member_comment_manage_permission", "disable", {
-      teamIdFrom: "runtime.actor.teamId",
-    }),
   ];
 
-  let index = 7;
+  let index = 5;
   if (definition.kind !== "image-invalid-file") {
     steps.push(
       step(`Setup-${index++}`, "api", "ory.secondary_identity.upsert", `准备${definition.secondaryLabel ?? "目标参与成员"}登录身份`, "ory.identity", "upsert_password", {
@@ -592,30 +585,27 @@ function cleanSteps(definition: ReverseCommentCaseDefinition): StepSpec[] {
     step("Clean-1", "playwright", "comment_panel.close", "若评论窗口仍打开，关闭评论窗口", "page.comment_panel", "close", {
       optional: true,
     }),
-    step("Clean-2", "prisma", "db.member_comment_manage_permission.restore", "若已记录 member 角色评论管理权限配置快照，恢复该快照", "db.member_comment_manage_permission", "restore_snapshot", {
-      snapshotFrom: "runtime.memberCommentManagePermissionSnapshot",
-    }),
-    step("Clean-3", "prisma", "db.test_comments.delete", cleanDeleteCommentTitle(definition.kind), "db.test_comments", "delete", {
+    step("Clean-2", "prisma", "db.test_comments.delete", cleanDeleteCommentTitle(definition.kind), "db.test_comments", "delete", {
       markerFrom: "data.commentBodyMarker",
       ...(definition.kind === "image-invalid-file" ? { imageFileNameFrom: "data.invalidFileName" } : {}),
     }),
-    step("Clean-4", "prisma", "db.comment_task.delete", "删除 本用例创建的任务", "db.comment_task", "delete", {
+    step("Clean-3", "prisma", "db.comment_task.delete", "删除 本用例创建的任务", "db.comment_task", "delete", {
       taskIdFrom: "data.taskId",
       taskTitleFrom: "data.taskTitle",
     }),
-    step("Clean-5", "prisma", "db.objective.delete", "删除 本用例创建的目标及其派生数据", "db.objective", "delete", {
+    step("Clean-4", "prisma", "db.objective.delete", "删除 本用例创建的目标及其派生数据", "db.objective", "delete", {
       idFrom: "data.objectiveId",
       titleFrom: "data.objectiveTitle",
     }),
-    step("Clean-6", "api", "auth.logout", "注销当前登录会话", "auth", "logout"),
-    step("Clean-7", "playwright", "page.runtime.stop", "离开当前 ORF 前端页面", "page.runtime", "stop"),
-    step("Clean-8", "playwright", "browser.clear", "移除当前浏览器中的残留登录态", "browser", "clear_state"),
-    step("Clean-9", "api", "ory.actor_sessions.revoke", `撤销${definition.actorLabel}登录身份的残留登录会话`, "ory.sessions", "revoke_by_email", {
+    step("Clean-5", "api", "auth.logout", "注销当前登录会话", "auth", "logout"),
+    step("Clean-6", "playwright", "page.runtime.stop", "离开当前 ORF 前端页面", "page.runtime", "stop"),
+    step("Clean-7", "playwright", "browser.clear", "移除当前浏览器中的残留登录态", "browser", "clear_state"),
+    step("Clean-8", "api", "ory.actor_sessions.revoke", `撤销${definition.actorLabel}登录身份的残留登录会话`, "ory.sessions", "revoke_by_email", {
       emailFrom: "data.email",
     }),
   ];
 
-  let index = 10;
+  let index = 9;
   if (definition.kind !== "image-invalid-file") {
     steps.push(
       step(`Clean-${index++}`, "api", "ory.secondary_sessions.revoke", `撤销${definition.secondaryLabel ?? "目标参与成员"}登录身份的残留登录会话`, "ory.sessions", "revoke_by_email", {

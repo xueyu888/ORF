@@ -263,7 +263,7 @@ export const memberSubmitLootCase = {
       {
         source: { caseStepId: "Setup-18", method: "playwright" },
         id: "page.goto.loot",
-        title: "打开 本用例目标战利品提交页",
+        title: "打开 任务模块下的本用例目标战利品提交页",
         object: "page.loot",
         operator: "goto",
         params: { targetFrom: "runtime.lootTarget" },
@@ -285,7 +285,7 @@ export const memberSubmitLootCase = {
       {
         source: { caseStepId: "S0-2", method: "playwright" },
         id: "url.loot",
-        title: "当前页面 应为 本用例目标战利品提交页",
+        title: "当前页面 应为 任务模块下的本用例目标战利品提交页",
         object: "page.url",
         operator: "match",
         params: { pattern: "/tasks/objectives/.+/loot$" },

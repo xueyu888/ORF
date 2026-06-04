@@ -10,6 +10,7 @@ import {
   findOryIdentityByEmail,
   oryAdminFetch,
 } from "../../../_operators/common.helpers";
+import { createStableUuid, isUuid } from "../../../_shared/ids";
 import type { MemberAccountRecord, MloginCaseData } from "./mlogin.context";
 
 export async function memberAccountActive(email: string) {
@@ -128,13 +129,12 @@ export async function upsertOrfMember(
   identityId: string | undefined,
 ) {
   const teamId = await ensureDefaultTeam();
-  const userId = `user-${slug(data.email.split("@")[0] ?? "member-login")}`;
   const [existing] = await db
     .select({ id: users.id })
     .from(users)
     .where(sql`lower(${users.email}) = ${data.email.toLowerCase()}`)
     .limit(1);
-  const effectiveUserId = existing?.id ?? userId;
+  const effectiveUserId = existing?.id ?? (isUuid(identityId) ? identityId : createStableUuid("testd-member-login-user", `${data.email.toLowerCase()}:${identityId ?? ""}`));
 
   if (existing) {
     await db
@@ -272,11 +272,4 @@ async function readMemberAccountRecords(
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function slug(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 }
