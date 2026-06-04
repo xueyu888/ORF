@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import pg from "pg";
+import { createPgPoolConfig } from "./db-connection.mjs";
 
 const testdRunId = process.env.TESTD_RUN_ID ?? createTestdRunId();
 const extraArgs = process.argv.slice(2);
@@ -18,23 +20,43 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   });
 }
 
-for (const suite of suites) {
-  if (terminating) {
-    break;
-  }
+if (await shouldRunRecoveryPass(extraArgs)) {
+  for (const suite of suites) {
+    if (terminating) {
+      break;
+    }
 
-  const exitCode = await runPlaywright(suite, extraArgs);
-  if (terminating) {
-    process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
-    break;
-  }
-  if (exitCode !== 0) {
-    process.exitCode = exitCode;
-    break;
+    const exitCode = await runPlaywright(suite, extraArgs, { TESTD_RECOVERY_ONLY: "1" });
+    if (terminating) {
+      process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
+      break;
+    }
+    if (exitCode !== 0) {
+      process.exitCode = exitCode;
+      break;
+    }
   }
 }
 
-function runPlaywright(suite, args) {
+if (!process.exitCode) {
+  for (const suite of suites) {
+    if (terminating) {
+      break;
+    }
+
+    const exitCode = await runPlaywright(suite, extraArgs);
+    if (terminating) {
+      process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
+      break;
+    }
+    if (exitCode !== 0) {
+      process.exitCode = exitCode;
+      break;
+    }
+  }
+}
+
+function runPlaywright(suite, args, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
@@ -45,6 +67,7 @@ function runPlaywright(suite, args) {
           ...process.env,
           TESTD_RUN_ID: testdRunId,
           TESTD_SUITE: suite,
+          ...extraEnv,
         },
         stdio: "inherit",
       },
@@ -105,6 +128,71 @@ function signalExitCode(signal) {
 
 function compactDate() {
   return new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+}
+
+async function shouldRunRecoveryPass(args) {
+  if (process.env.TESTD_RECOVERY === "0" || process.env.TESTD_RECOVERY_ONLY === "1") {
+    return false;
+  }
+
+  if (args.some((arg) => arg === "--list" || arg === "--help" || arg === "-h")) {
+    return false;
+  }
+
+  return hasPendingRecoveryCases();
+}
+
+async function hasPendingRecoveryCases() {
+  const connectionString = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
+  if (!connectionString) {
+    return false;
+  }
+
+  const pool = new pg.Pool(
+    createPgPoolConfig(connectionString, {
+      max: 1,
+      connectionTimeoutMillis: positiveIntegerEnv("DATABASE_CONNECTION_TIMEOUT_MS", 10_000),
+      queryTimeoutMillis: positiveIntegerEnv("DATABASE_QUERY_TIMEOUT_MS", 10_000),
+      idleTimeoutMillis: positiveIntegerEnv("DATABASE_IDLE_TIMEOUT_MS", 10_000),
+    }),
+  );
+
+  try {
+    const table = await pool.query("select to_regclass('public.testd_recovery_cases') as table_name");
+    if (!table.rows[0]?.table_name) {
+      return false;
+    }
+
+    const staleMs = process.env.TESTD_GLOBAL_LOCK_HELD === "1"
+      ? positiveIntegerEnv("TESTD_RECOVERY_STALE_MS", 1)
+      : positiveIntegerEnv("TESTD_RECOVERY_STALE_MS", 120_000);
+    const result = await pool.query(
+      `
+        select exists (
+          select 1
+          from testd_recovery_cases
+          where
+            cleanup_completed_at is null
+            and (
+              $1::boolean
+              or heartbeat_at < now() - ($2::bigint * interval '1 millisecond')
+            )
+        ) as has_pending
+      `,
+      [process.env.TESTD_GLOBAL_LOCK_HELD === "1", staleMs],
+    );
+    return result.rows[0]?.has_pending === true;
+  } catch (error) {
+    console.error(`TestD recovery pending check failed; continuing without pre-pass: ${error?.message ?? String(error)}`);
+    return false;
+  } finally {
+    await pool.end().catch(() => {});
+  }
+}
+
+function positiveIntegerEnv(name, fallback) {
+  const value = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
 function inferSuiteFromArgs(args) {

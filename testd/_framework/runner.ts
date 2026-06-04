@@ -27,8 +27,27 @@ import {
   markTestdCaseCleanupRequired,
   waitForTestdInterruptWrapperTermination,
 } from "./interrupt";
+import {
+  claimStaleTestdRecoveryCases,
+  isTestdRecoveryOnly,
+  markTestdRecoveryCleanupCompleted,
+  markTestdRecoveryCleanupFailed,
+  markTestdRecoveryCleanupStarted,
+  recordTestdRecoveryStepComplete,
+  recordTestdRecoveryStepFailed,
+  recordTestdRecoveryStepStart,
+  registerTestdRecoveryCase,
+  registerTestdRecoveryRun,
+  type TestdRecoveryCaseRecord,
+} from "./recovery";
 
 const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
+
+type RecoveryTarget = {
+  runId: string;
+  caseId: string;
+  markerId: string;
+};
 
 type RunStateCaseOptions<
   TContext,
@@ -67,9 +86,21 @@ export async function runStateCase<
       rolePermissionReadLockOwner = await acquireRolePermissionReadLock();
     }
 
-    await runStateBlock("B", testCase.B);
+    await registerTestdRecoveryRun(runScope.runId);
+    await recoverStaleCasesForCurrentTestCase();
+
+    if (isTestdRecoveryOnly()) {
+      return;
+    }
+
+    await runStateBlock("B", testCase.B, scopedTestCase, runtime);
 
     let primaryError: unknown;
+    const recoveryTarget: RecoveryTarget = {
+      runId: runScope.runId,
+      caseId: scopedTestCase.id,
+      markerId: cleanupMarkerId,
+    };
     try {
       markTestdCaseCleanupRequired({
         markerId: cleanupMarkerId,
@@ -77,19 +108,27 @@ export async function runStateCase<
         title: scopedTestCase.title,
       });
       cleanupRequired = true;
-      await runActionBlock("Setup", testCase.Setup);
-      await runStateBlock("S0", testCase.S0);
-      await runActionBlock("Action", testCase.Action);
-      await runStateBlock("S1", testCase.S1);
+      await registerTestdRecoveryCase({
+        runId: runScope.runId,
+        markerId: cleanupMarkerId,
+        testCase: scopedTestCase,
+        workerIndex: runScope.workerIndex,
+      });
+      await runActionBlock("Setup", testCase.Setup, scopedTestCase, runtime, recoveryTarget);
+      await runStateBlock("S0", testCase.S0, scopedTestCase, runtime, recoveryTarget);
+      await runActionBlock("Action", testCase.Action, scopedTestCase, runtime, recoveryTarget);
+      await runStateBlock("S1", testCase.S1, scopedTestCase, runtime, recoveryTarget);
     } catch (error) {
       primaryError = error;
     }
 
     let cleanCompleted = false;
     primaryError = await runCleanupBlock("Clean", async () => {
-      await runActionBlock("Clean", testCase.Clean);
+      await markTestdRecoveryCleanupStarted(recoveryTarget);
+      await runActionBlock("Clean", testCase.Clean, scopedTestCase, runtime, recoveryTarget);
       cleanCompleted = true;
       if (cleanupRequired) {
+        await markTestdRecoveryCleanupCompleted({ ...recoveryTarget, runtime });
         markTestdCaseCleanupComplete({ markerId: cleanupMarkerId, testCaseId: scopedTestCase.id });
       }
     }, primaryError);
@@ -106,7 +145,7 @@ export async function runStateCase<
     if (!isTestdInterruptRequested() && !isTestdInterruptError(primaryError)) {
       primaryError = await runCleanupBlock(
         "B after Clean",
-        () => runStateBlock("B after Clean", testCase.B),
+        () => runStateBlock("B after Clean", testCase.B, scopedTestCase, runtime),
         primaryError,
       );
     }
@@ -134,22 +173,43 @@ export async function runStateCase<
       return primaryError;
     } catch (error) {
       failedStage ??= stage;
+      if (stage === "Clean") {
+        await markTestdRecoveryCleanupFailed({
+          runId: runScope.runId,
+          caseId: scopedTestCase.id,
+          markerId: cleanupMarkerId,
+          runtime,
+          error,
+        });
+      }
       return primaryError ?? error;
     }
   }
 
-  async function runStateBlock(stage: StateCaseRunStageName, block: StateBlock) {
+  async function runStateBlock(
+    stage: StateCaseRunStageName,
+    block: StateBlock,
+    activeTestCase: StateCaseSpec<TData>,
+    activeRuntime: StateCaseRuntime,
+    recoveryTarget?: RecoveryTarget,
+  ) {
     await runStage(stage, async () => {
-      for (const step of block.assertions) {
-        await runStep(stage, step);
+      for (const [index, step] of block.assertions.entries()) {
+        await runStep(stage, step, activeTestCase, activeRuntime, index + 1, recoveryTarget);
       }
     });
   }
 
-  async function runActionBlock(stage: StateCaseRunStageName, block: ActionBlock) {
+  async function runActionBlock(
+    stage: StateCaseRunStageName,
+    block: ActionBlock,
+    activeTestCase: StateCaseSpec<TData>,
+    activeRuntime: StateCaseRuntime,
+    recoveryTarget?: RecoveryTarget,
+  ) {
     await runStage(stage, async () => {
-      for (const step of block.steps) {
-        await runStep(stage, step);
+      for (const [index, step] of block.steps.entries()) {
+        await runStep(stage, step, activeTestCase, activeRuntime, index + 1, recoveryTarget);
       }
     });
   }
@@ -168,33 +228,118 @@ export async function runStateCase<
     });
   }
 
-  async function runStep(stage: StateCaseRunStageName, step: StepSpec) {
+  async function runStep(
+    stage: StateCaseRunStageName,
+    step: StepSpec,
+    activeTestCase: StateCaseSpec<TData>,
+    activeRuntime: StateCaseRuntime,
+    stepIndex: number,
+    recoveryTarget?: RecoveryTarget,
+  ) {
     await test.step(formatStepTitle(step), async () => {
-      if (stage !== "Clean" && isTestdInterruptRequested()) {
-        throw createTestdInterruptError();
-      }
+      try {
+        if (recoveryTarget) {
+          await recordTestdRecoveryStepStart({
+            ...recoveryTarget,
+            stage,
+            step,
+            stepIndex,
+          });
+        }
 
-      const operator = options.operators[step.object]?.[step.operator];
-      if (!operator) {
-        throw new Error(`未注册测试算子: ${formatStepOperator(step)}`);
-      }
+        if (stage !== "Clean" && isTestdInterruptRequested()) {
+          throw createTestdInterruptError();
+        }
 
-      const params = resolveStepParams(step.params ?? {}, scopedTestCase.data, runtime);
-      const result = await operator({
-        ctx,
-        data: scopedTestCase.data,
-        runtime,
-        testCase: scopedTestCase,
-        stage,
-        step,
-        params,
-      });
+        const operator = options.operators[step.object]?.[step.operator];
+        if (!operator) {
+          throw new Error(`未注册测试算子: ${formatStepOperator(step)}`);
+        }
 
-      const saveAs = params.saveAs;
-      if (typeof saveAs === "string" && result !== undefined) {
-        runtime.values[saveAs] = result;
+        const params = resolveStepParams(step.params ?? {}, activeTestCase.data, activeRuntime);
+        const result = await operator({
+          ctx,
+          data: activeTestCase.data,
+          runtime: activeRuntime,
+          testCase: activeTestCase,
+          stage,
+          step,
+          params,
+        });
+
+        const saveAs = params.saveAs;
+        if (typeof saveAs === "string" && result !== undefined) {
+          activeRuntime.values[saveAs] = result;
+        }
+
+        if (recoveryTarget) {
+          await recordTestdRecoveryStepComplete({
+            ...recoveryTarget,
+            stage,
+            step,
+            stepIndex,
+            runtime: activeRuntime,
+          });
+        }
+      } catch (error) {
+        if (recoveryTarget) {
+          await recordTestdRecoveryStepFailed({
+            ...recoveryTarget,
+            stage,
+            step,
+            stepIndex,
+            runtime: activeRuntime,
+            error,
+          });
+        }
+        throw error;
       }
     });
+  }
+
+  async function recoverStaleCasesForCurrentTestCase() {
+    const records = await claimStaleTestdRecoveryCases({
+      currentRunId: runScope.runId,
+      caseId: scopedTestCase.id,
+    });
+
+    for (const record of records) {
+      await recoverStaleCase(record);
+    }
+  }
+
+  async function recoverStaleCase(record: TestdRecoveryCaseRecord) {
+    const recoveryTarget: RecoveryTarget = {
+      runId: record.runId,
+      caseId: record.caseId,
+      markerId: record.markerId,
+    };
+    const recoveryRuntime: StateCaseRuntime = { values: record.runtimeValues };
+    const recoveryTestCase = {
+      ...scopedTestCase,
+      title: record.caseTitle,
+      data: record.scopedData as TData,
+    };
+
+    console.error(
+      `TestD recovery 正在补清理旧运行: run=${record.runId} case=${record.caseId}`,
+    );
+
+    try {
+      await markTestdRecoveryCleanupStarted(recoveryTarget);
+      await runActionBlock("Clean", recoveryTestCase.Clean, recoveryTestCase, recoveryRuntime, recoveryTarget);
+      await markTestdRecoveryCleanupCompleted({ ...recoveryTarget, runtime: recoveryRuntime });
+      console.error(
+        `TestD recovery 已完成旧运行清理: run=${record.runId} case=${record.caseId}`,
+      );
+    } catch (error) {
+      await markTestdRecoveryCleanupFailed({
+        ...recoveryTarget,
+        runtime: recoveryRuntime,
+        error,
+      });
+      throw error;
+    }
   }
 }
 

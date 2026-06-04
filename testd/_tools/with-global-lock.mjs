@@ -597,6 +597,7 @@ function testdRuntimeEnv() {
     TESTD_INTERRUPT_ACTIVE_DIR: interruptActiveDir,
     TESTD_INTERRUPT_CLEANED_DIR: interruptCleanedDir,
     TESTD_INTERRUPT_WAIT_FOR_WRAPPER: "1",
+    TESTD_GLOBAL_LOCK_HELD: hasLock ? "1" : "0",
   };
 }
 
