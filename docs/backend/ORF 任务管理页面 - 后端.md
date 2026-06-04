@@ -162,7 +162,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。本地结算服务解密匿名互评并计算贡献比例；ORF 后端只读取 `contributionResolution`，不读取新匿名互评原始数据。有缺评、分歧或申诉时，指挥官通过 `contributionResolution` 提供处理后的比例和说明。
+目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。本地结算服务解密匿名互评并计算贡献比例；ORF 后端只读取 `contributionResolution`，不读取新匿名互评原始数据。有缺评、分歧或申诉时，指挥官通过 `contributionResolution` 提供处理后的比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示名和旧请求兼容字段。
 
 结算后后端写入：
 

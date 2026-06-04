@@ -431,6 +431,21 @@ async function getActiveMemberRowsByIdsInScope(
     .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "active"), inArray(users.id, userIds)));
 }
 
+async function getMemberRowsByIdsInScope(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  values: Array<string | undefined | null>,
+) {
+  const userIds = uniqueUserIds(values);
+  if (userIds.length === 0) return [];
+
+  return client
+    .select({ id: users.id, name: users.name })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, storageScopeId), inArray(users.id, userIds)));
+}
+
 async function resolveActiveMemberByName(storageScopeId: string, memberName: string): Promise<ScopedMemberIdentity | null> {
   const rows = await getActiveMemberRowsByNamesInScope(storageScopeId, [memberName]);
   return rows.find((member) => member.name === memberName.trim()) ?? null;
@@ -3740,7 +3755,7 @@ export interface ReviewObjectiveLootInput {
   acceptedResult?: ObjectiveAcceptedResult;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
-  contributionRatios?: Array<{ member: string; ratio: number }>;
+  contributionRatios?: ContributionAllocation[];
   reason?: string;
 }
 
@@ -3762,11 +3777,13 @@ export async function reviewObjectiveLoot(
   if (!loot) return { status: "notFound" };
 
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
-  const challengerRows = await getActiveChallengerRowsByIdsInScope(db, objective.teamId, objective.challengerUserIds ?? []);
+  const challengerRows = await getMemberRowsByIdsInScope(db, objective.teamId, objective.challengerUserIds ?? []);
   const challengerNameById = new Map(challengerRows.map((member) => [member.id, member.name]));
-  const challengers = uniqueUserIds(objective.challengerUserIds ?? []).map((userId) => challengerNameById.get(userId)).filter((name): name is string => Boolean(name));
+  const challengerUserIds = uniqueUserIds(objective.challengerUserIds ?? []);
+  const challengerUserIdSet = new Set(challengerUserIds);
+  const challengers = challengerUserIds.map((userId) => challengerNameById.get(userId)).filter((name): name is string => Boolean(name));
   const settlementPlan = planObjectiveSettlement({
-    objective: { ...objective, challengers },
+    objective: { ...objective, challengers, challengerUserIds },
     results: resultRows.map((result) => ({
       id: result.id,
       uncertaintyLevel: result.uncertaintyLevel ?? undefined,
@@ -3779,24 +3796,16 @@ export async function reviewObjectiveLoot(
     contributionRatios: input.contributionRatios,
   });
   if (!settlementPlan) return { status: "invalid" };
-  const memberRows =
-    settlementPlan.contributionRatios.length > 0
-      ? await db
-          .select({ id: users.id, name: users.name })
-          .from(teamMembers)
-          .innerJoin(users, eq(teamMembers.userId, users.id))
-          .where(
-            and(
-              eq(teamMembers.teamId, objective.teamId),
-              inArray(
-                users.name,
-                settlementPlan.contributionRatios.map((item) => item.member),
-              ),
-            ),
-          )
-      : [];
-  const userIdByName = new Map(memberRows.map((user) => [user.name, user.id]));
-  if (settlementPlan.contributionRatios.some((item) => !userIdByName.has(item.member))) {
+  const userIdByName = new Map(challengerRows.map((user) => [user.name, user.id]));
+  const contributionRatios = settlementPlan.contributionRatios.map((item) => {
+    const userId = item.memberUserId?.trim() || userIdByName.get(item.member) || "";
+    return {
+      ...item,
+      memberName: userId ? challengerNameById.get(userId) ?? item.member : item.member,
+      userId,
+    };
+  });
+  if (contributionRatios.some((item) => !item.userId || !challengerUserIdSet.has(item.userId))) {
     return { status: "invalid" };
   }
   const createdAt = nowIso();
@@ -3830,14 +3839,14 @@ export async function reviewObjectiveLoot(
         .where(eq(results.id, result.id));
     }
     await tx.delete(pointLedger).where(eq(pointLedger.objectiveId, objectiveId));
-    if (settlementPlan.contributionRatios.length > 0) {
+    if (contributionRatios.length > 0) {
       await tx.insert(pointLedger).values(
-        settlementPlan.contributionRatios.map((item) => ({
+        contributionRatios.map((item) => ({
           id: makeId("points"),
           teamId: objective.teamId,
           objectiveId: objective.id,
-          userId: userIdByName.get(item.member) ?? null,
-          memberName: item.member,
+          userId: item.userId,
+          memberName: item.memberName,
           points: Number((settlementPlan.settlementPoints * item.ratio).toFixed(2)),
           reason,
           createdAt,

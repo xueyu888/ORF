@@ -218,6 +218,7 @@ const reviewAlignmentRequestBodySchema = z.object({
 });
 const contributionAllocationSchema = z.object({
   member: z.string().trim().min(1),
+  memberUserId: z.string().trim().min(1).nullable().optional(),
   ratio: z.number().min(0).max(1),
 });
 const reviewLootBodySchema = z.object({

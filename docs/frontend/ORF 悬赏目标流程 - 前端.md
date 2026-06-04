@@ -71,9 +71,12 @@
 
 | 字段 | 用途 |
 | --- | --- |
-| `Objective.challengers` | 当前普通成员挑战者；用于挑战者数量和互评范围 |
-| `Objective.challengeApplications` | 当前普通成员申请状态和申请理由；指挥官/管理员触发挑战动作时不能新增申请 |
-| `Objective.assignedChallengers` | 当前普通成员是否被征召 |
+| `Objective.challengerUserIds` | 当前普通成员挑战者的身份事实源；权限、去重、当前用户判断和互评范围都以该字段为准 |
+| `Objective.challengers` | 按 `challengerUserIds` 派生的挑战者显示名投影；只用于头像、筛选标签和文案展示 |
+| `Objective.challengeApplications[].applicantUserId` | 申请人的身份事实源；当前用户是否已申请、申请审核和重复申请判断都以该字段为准 |
+| `Objective.challengeApplications[].applicant` | 申请人显示名快照和申请理由展示；指挥官/管理员触发挑战动作时不能新增申请 |
+| `Objective.assignedChallengerUserIds` | 被征召普通成员的身份事实源；当前用户是否被征召和接受征召判断以该字段为准 |
+| `Objective.assignedChallengers` | 按 `assignedChallengerUserIds` 派生的被征召成员显示名投影 |
 | `Objective.flowStatus` | 候选、申请、征召、重估、冻结、验收和结算状态 |
 | `Objective.publishedAt` | 指挥官发布到悬赏大厅的日期；大厅显示和发布时间排序使用该字段 |
 | `Objective.finalDueAt` | 剩余时间、排序和按时结算判断 |
@@ -83,7 +86,7 @@
 | `BountyHallData.publicItems` | 大厅公开列表，包含 `open/applying/recruiting/reestimating` 目标 |
 | `BountyHallItem.isRecruitment` | 是否展示 `征召令` 并置顶 |
 | `BountyHallItem.hasCurrentApplication` | 当前普通成员是否已申请，用于禁用重复申请；指挥官/管理员不能用该字段伪造可写申请状态 |
-| `BountyHallItem.challengers` | 已通过挑战者头像来源 |
+| `BountyHallItem.challengers` | 已通过挑战者头像和姓名展示来源；身份判断仍使用对应用户 UUID |
 | `BountyHallItem.pendingApplications` | 申请中成员和理由摘要来源 |
 
 不在 `Result` 层表达挑战关系。

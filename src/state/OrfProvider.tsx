@@ -580,8 +580,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
             ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
             : null;
           const settlementInput =
-            localSummary?.status === "ready" && localSummary.contributionResolution
-              ? { ...input, contributionResolution: localSummary.contributionResolution }
+            objective && localSummary?.status === "ready" && localSummary.contributionResolution
+              ? {
+                  ...input,
+                  contributionResolution: {
+                    ...localSummary.contributionResolution,
+                    ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios, objective),
+                  },
+                }
               : input;
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
             method: "POST",
@@ -1015,6 +1021,19 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   );
 
   return <OrfContext.Provider value={value}>{children}</OrfContext.Provider>;
+}
+
+function withObjectiveChallengerUserIds(
+  ratios: ContributionAllocation[],
+  objective: Pick<OrfState["objectives"][number], "challengers" | "challengerUserIds">,
+) {
+  const userIdByMember = new Map(
+    objective.challengers.map((member, index) => [member, objective.challengerUserIds[index] ?? null]),
+  );
+  return ratios.map((ratio) => ({
+    ...ratio,
+    memberUserId: ratio.memberUserId ?? userIdByMember.get(ratio.member) ?? null,
+  }));
 }
 
 export function useOrf() {
