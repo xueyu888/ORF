@@ -17,6 +17,7 @@ const command = process.argv[2] ?? 'help';
 const args = process.argv.slice(3);
 const requiredEnvSectionHeader = '# Required project configuration.';
 const optionalEnvSectionHeader = '# Optional configuration.';
+const generatedRequiredEnvDefaultComment = 'Added by orf from .env.example required default.';
 
 if (shouldSyncRequiredEnvDefaults(command)) {
   syncRequiredEnvDefaults();
@@ -382,7 +383,8 @@ function shouldSyncRequiredEnvDefaults(commandName) {
 }
 
 function syncRequiredEnvDefaults() {
-  const defaults = readRequiredEnvDefaults(envExampleFile);
+  const requiredSection = readRequiredEnvSection(envExampleFile);
+  const defaults = requiredSection.defaults;
   if (defaults.length === 0) {
     return;
   }
@@ -394,27 +396,18 @@ function syncRequiredEnvDefaults() {
   }
 
   const current = existsSync(envFile) ? readFileSync(envFile, 'utf8') : '';
-  let next = current;
-  if (next.length > 0 && !next.endsWith('\n')) {
-    next += '\n';
-  }
-  if (next.trim().length > 0) {
-    next += '\n';
-  }
-  next += '# Added by orf from .env.example required defaults.\n';
-  next += missing.map((entry) => entry.line).join('\n');
-  next += '\n';
+  const next = insertRequiredEnvDefaults(current, requiredSection, missing);
 
   writeFileSync(envFile, next);
   console.log(`Added missing required .env values from .env.example: ${missing.map((entry) => entry.key).join(', ')}`);
 }
 
-function readRequiredEnvDefaults(file) {
+function readRequiredEnvSection(file) {
   if (!existsSync(file)) {
-    return [];
+    return { lines: [], defaults: [] };
   }
 
-  const defaults = [];
+  const lines = [];
   let inRequiredSection = false;
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -429,12 +422,103 @@ function readRequiredEnvDefaults(file) {
       continue;
     }
 
+    lines.push(line);
+  }
+
+  const defaults = [];
+  lines.forEach((line, index) => {
     const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
     if (match) {
-      defaults.push({ key: match[1], line });
+      defaults.push({ key: match[1], line, sectionIndex: index });
+    }
+  });
+
+  return { lines, defaults };
+}
+
+function insertRequiredEnvDefaults(current, requiredSection, missing) {
+  const lines = splitEnvLines(current);
+  for (const entry of missing) {
+    if (findEnvKeyLineIndex(lines, entry.key) !== -1) {
+      continue;
+    }
+
+    const index = findRequiredEnvDefaultInsertionIndex(lines, requiredSection, entry);
+    lines.splice(index, 0, `${entry.line} # ${generatedRequiredEnvDefaultComment}`);
+  }
+  return joinEnvLines(lines);
+}
+
+function findRequiredEnvDefaultInsertionIndex(lines, requiredSection, entry) {
+  for (let index = entry.sectionIndex - 1; index >= 0; index -= 1) {
+    const anchor = findEnvAnchorLineIndex(lines, requiredSection.lines[index]);
+    if (anchor !== -1) {
+      return anchor + 1;
     }
   }
-  return defaults;
+
+  for (let index = entry.sectionIndex + 1; index < requiredSection.lines.length; index += 1) {
+    const anchor = findEnvAnchorLineIndex(lines, requiredSection.lines[index]);
+    if (anchor !== -1) {
+      return anchor;
+    }
+  }
+
+  if (lines.length > 0 && lines.at(-1).trim() !== '') {
+    lines.push('');
+  }
+  return lines.length;
+}
+
+function findEnvAnchorLineIndex(lines, exampleLine) {
+  if (exampleLine.trim() === '') {
+    return -1;
+  }
+
+  const assignment = parseEnvAssignmentKey(exampleLine);
+  if (assignment) {
+    const assignmentIndex = findEnvKeyLineIndex(lines, assignment);
+    if (assignmentIndex !== -1) {
+      return assignmentIndex;
+    }
+    if (assignment === 'DATABASE_URL') {
+      const remoteDatabaseUrlIndex = findEnvKeyLineIndex(lines, 'REMOTE_DATABASE_URL');
+      if (remoteDatabaseUrlIndex !== -1) {
+        return remoteDatabaseUrlIndex;
+      }
+    }
+    return -1;
+  }
+
+  return lines.findIndex((line) => line.trim() === exampleLine.trim());
+}
+
+function splitEnvLines(text) {
+  if (text.length === 0) {
+    return [];
+  }
+
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  if (lines.at(-1) === '') {
+    lines.pop();
+  }
+  return lines;
+}
+
+function joinEnvLines(lines) {
+  if (lines.length === 0) {
+    return '';
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+function findEnvKeyLineIndex(lines, key) {
+  return lines.findIndex((line) => parseEnvAssignmentKey(line) === key);
+}
+
+function parseEnvAssignmentKey(line) {
+  const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+  return match?.[1];
 }
 
 function readEnvKeys(file) {
@@ -444,9 +528,9 @@ function readEnvKeys(file) {
 
   const keys = new Set();
   for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
-    if (match) {
-      keys.add(match[1]);
+    const key = parseEnvAssignmentKey(line);
+    if (key) {
+      keys.add(key);
     }
   }
   return keys;
