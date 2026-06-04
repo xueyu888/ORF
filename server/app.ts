@@ -8,6 +8,7 @@ import {
   authorizeObjectiveWorkItemMutation,
   requireAdminContext,
   requireFeedbackInScope,
+  requireObjectiveContentEditContext,
   requireResultEditContext,
   requireTargetInScope,
   requireUserScopeContext,
@@ -597,11 +598,10 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/objectives/:objectiveId", async (request, reply) => {
     const params = objectiveParamsSchema.parse(request.params);
     const body = objectiveDetailsBodySchema.parse(request.body);
-    const context = await requireAdminContext(request, reply);
+    const context = await requireObjectiveContentEditContext(request, reply);
     if (!context) {
       return reply;
     }
-    const { user } = context;
     if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
       return reply;
     }
@@ -749,11 +749,8 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/results/:resultId/confidence", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = updateResultConfidenceBodySchema.parse(request.body);
-    const context = await requireWriteContext(request, reply, "result.edit");
+    const context = await requireResultEditContext(request, reply, params.resultId);
     if (!context) {
-      return reply;
-    }
-    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {
@@ -792,11 +789,8 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.post("/api/results/:resultId/update-proposal", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = resultUpdateProposalBodySchema.parse(request.body);
-    const context = await requireWriteContext(request, reply, "result.edit");
+    const context = await requireResultEditContext(request, reply, params.resultId);
     if (!context) {
-      return reply;
-    }
-    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
     if (!(await requireResultUnlocked(reply, params.resultId))) {
@@ -1038,11 +1032,8 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   app.patch("/api/results/:resultId/order", async (request, reply) => {
     const params = resultParamsSchema.parse(request.params);
     const body = moveResultBodySchema.parse(request.body);
-    const context = await requireWriteContext(request, reply, "result.edit");
+    const context = await requireResultEditContext(request, reply, params.resultId);
     if (!context) {
-      return reply;
-    }
-    if (!(await requireTargetInScope(reply, { type: "result", id: params.resultId }, context.scope, "Result not found"))) {
       return reply;
     }
     if (!(await requireTargetInScope(reply, { type: "result", id: body.referenceResultId }, context.scope, "Result move target not found"))) {

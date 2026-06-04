@@ -9,7 +9,7 @@
 我的挑战过滤规则：
 
 ```text
-currentUser in Objective.challengers
+currentUser.id in Objective.challengerUserIds
 ```
 
 悬赏大厅对所有已通过用户可见，但它只是发现页，不决定工作台归属。目标来自挑战页内候选目标创建、悬赏大厅申请、征召或接受挑战流程；普通成员只有在申请被通过或接受征召后，目标才进入本页。
@@ -21,7 +21,7 @@ currentUser in Objective.challengers
 | 区域 | 内容 |
 | --- | --- |
 | 全局概览 | 管理员在所有挑战视图下可见：已结算、目标总体进度、待征召、待验收 |
-| 工具栏 | 所有挑战 / 我的挑战、周期、状态筛选；状态筛选包含目标层级的“未分配”，按 `Objective.challengers` 为空判断 |
+| 工具栏 | 所有挑战 / 我的挑战、周期、状态筛选；状态筛选包含目标层级的“未分配”，按 `Objective.challengerUserIds` 为空判断 |
 | 新建目标 temporary 行 | 有 `objective.create` 权限时在挑战树内插入 temporary 目标行；temporary 目标按目标统一排序进入未分配候选区，标题输入按 Enter 或输入框失焦快速生成 `candidate` 目标行；请求发起后立即退出标题编辑态，API 返回真实目标后必须连续替换为 persisted 目标，刷新完成前不能出现目标消失或跳位；没有真实指标或行动项时不渲染伪子行，新增必须通过目标行 `+` 发起 |
 | 挑战树 | 先按 `Objective.projectId` / `Objective.projectName` 做项目一级分组，再在项目内展示 `Objective -> Result` 与 `Objective -> Task -> TaskChecklistItem` 两条分支 |
 
@@ -121,7 +121,7 @@ currentUser in Objective.challengers
 | 发布/冻结 | 指挥官在所有挑战视图中操作 |
 | 审核挑战申请 | 指挥官在目标行处理待审核申请；审批成功后立即刷新目标状态和申请记录，当前目标使用列表位置锚点保持原展示位置，直到用户离开当前目标上下文 |
 
-目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑自己参与目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengers` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
+目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
 
 反馈状态控件仅对管理员、反馈创建人或反馈 `owner` 指定处理人显示。普通成员可以看到自己可见范围内的反馈内容，但不能关闭或改写他人反馈状态。
 

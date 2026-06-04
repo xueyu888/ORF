@@ -5,9 +5,9 @@
 - 挑战对象是 `Objective`，页面称为“悬赏目标”。
 - `Result` 是“指标”，只作为目标的验收口径和计分基础，不拥有独立截止日期。
 - `Task` 是目标执行行动项，归属于 `Objective`，不归属于 `Result`。
-- 挑战者绑定到 `Objective.challengers`，不绑定到 `Result`。
-- 挑战者只能是当前作用域内的 active 普通成员；指挥官/管理员不进入 `Objective.challengers`、`Objective.assignedChallengers` 或挑战申请。
-- 同一目标下的任务和子任务由 `Objective.challengers` 共同维护；`assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只是审计字段，不能作为同目标成员之间的私有维护边界。
+- 挑战者身份绑定到 `Objective.challengerUserIds`，不绑定到 `Result`；`Objective.challengers` 只是按 UUID 派生的显示名投影。
+- 挑战者只能是当前作用域内的 active 普通成员；指挥官/管理员不进入 `Objective.challengerUserIds`、`Objective.assignedChallengerUserIds` 或挑战申请。
+- 同一目标下的任务和子任务由 `Objective.challengerUserIds` 共同维护；`assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只是审计字段，不能作为同目标成员之间的私有维护边界。
 - 悬赏大厅是所有已通过用户都可见的公开交互页，不只是未领取目标列表。`open`、`applying`、`recruiting`、`reestimating` 目标都在大厅展示当前申请人、申请理由、已通过挑战者头像和征召状态；角色只决定挑战动作能否生效，不决定界面是否隐藏。active 普通成员可以申请公开目标或接受自己的征召；指挥官/管理员需要看到完整大厅界面和操作区，但点击申请或接受时必须被提示不能挑战，不能写入申请、接受或挑战者关系。
 - 一个目标可以有多个挑战者；一个目标可以包含多个指标。
 - 新建目标属于挑战页内的候选目标编辑流程；全局入口只负责把用户带到挑战页。页面先插入完整 temporary 目标面板，标题输入按 Enter 或输入框失焦快速创建 `candidate`；创建 UI 必须用单一 `objectiveCreationSession` 表达 `editingDraft → submittingDraft → submittedOverlay → anchoredCreated / failedEditingDraft`。请求发起后 temporary 目标立即退出标题编辑态、留在原位并在状态列显示“保存中”，此时重复点击全局 `新建目标` 只能提示“目标正在创建，请稍后”，不能发起第二次创建。`POST /api/objectives` 返回真实目标后立即连续替换为 persisted 目标并沿用原位置，任务管理数据刷新只负责撤掉覆盖层，一次性排序锚点保留到用户切换筛选或业务排序键变化，刷新前后都不能出现目标消失或跳位。没有真实指标或行动项时，不渲染“待定义指标 / 待创建行动项”伪子行；新增必须从父级 `+` 发起。真实目标行 hover 只保留一个主新增 `+`，点击后打开子级类型选择，只能在当前权限和状态允许的 `新增/提出指标`、`新增行动项` 中选择一项。任务行 `+` 直接新增该任务的 temporary 子任务。指标行没有 `+`，因为指标当前没有子级对象。点击 `+` 后才插入对应 temporary 行并进入标题编辑；提交成功后由后端返回的真实 `Result` / `Task` / `TaskChecklistItem` 进入一次性创建覆盖层并替换 temporary 行，直到挑战页刷新数据包含同一真实 id 后撤掉覆盖层。保存成功后不自动追加下一条 temporary 行，不在目标头堆叠多个相同 `+`。
@@ -64,7 +64,7 @@
 | 页面 | 状态 |
 | --- | --- |
 | 悬赏大厅 | 所有已通过用户可见 `open`、`applying`、`recruiting`、`reestimating` 的公开招募和参与状态；默认显示招募中目标，`reestimating` 或已有挑战者的目标自动进入已开始分组；奖励列只展示难度、分数和征召标记，不承载生命周期状态；参与列展示申请者、挑战者并高亮当前用户身份；操作列只表达当前用户可执行动作或暂无操作；active 普通成员可申请或接受自己的征召；申请必须填写理由；通过后挑战者头像继续挂在大厅目标上；新悬赏发布写入消息中心并通过实时横幅广播提醒在线用户；指挥官/管理员完整显示大厅界面，但挑战动作被提示并阻断 |
-| 我的挑战 / 挑战工作台 | 指挥官可见 `candidate` 和全量挑战，并可按正式挑战者筛选目标；成员只见自己参与的 `reestimating`、`frozen`、`submitted`、`settled` |
+| 我的挑战 / 挑战工作台 | 指挥官可见 `candidate` 和全量挑战，并可按正式挑战者筛选目标；成员只见 `Objective.challengerUserIds` 包含自己的 `reestimating`、`frozen`、`submitted`、`settled` |
 | 成员管理 | 注册待审核、启用、拒绝、停用 |
 | 统计 | `pointLedger` 结算后的成员积分 |
 

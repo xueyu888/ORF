@@ -1,4 +1,5 @@
 import { canMutateObjectiveWorkItemsByFlow } from "../orfLifecycle";
+import { isObjectiveChallenger } from "../orfObjectiveParticipants";
 import type { Objective, OrfUser, Task } from "../../types/orf";
 
 export type ObjectiveTaskOwner = Pick<Objective, "id" | "taskIds">;
@@ -43,7 +44,7 @@ export function objectiveWorkItemMutationAccess(
   if (!objective) return { status: "blocked", reason: "notFound" };
   if (!canMutateObjectiveWorkItemsByFlow(objective)) return { status: "blocked", reason: "lifecycleLocked" };
   if (actor?.role === "admin") return { status: "allowed" };
-  if (actor?.role === "member" && (objective.challengerUserIds ?? []).includes(actor.id)) return { status: "allowed" };
+  if (actor?.role === "member" && isObjectiveChallenger(objective, actor.id)) return { status: "allowed" };
   return { status: "blocked", reason: "forbidden" };
 }
 

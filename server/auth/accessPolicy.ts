@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { PermissionKey } from "../../src/config/permissions";
+import { canEditObjectiveContentForUser } from "../../src/domain/orfObjectiveContent";
 import { authServiceUnavailablePayload, isAuthServiceUnavailableError } from "./errors";
 import { getAuthenticatedOrfUser } from "./ory";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
@@ -147,6 +148,20 @@ export async function requireWriteContext(
   return context;
 }
 
+export async function requireObjectiveContentEditContext(request: FastifyRequest, reply: FastifyReply) {
+  const context = await requireUserScopeContext(request, reply);
+  if (!context) {
+    return null;
+  }
+
+  if (!canEditObjectiveContentForUser(context.user)) {
+    reply.code(403).send({ error: "Forbidden" });
+    return null;
+  }
+
+  return context;
+}
+
 export async function requireTargetInScope(
   reply: FastifyReply,
   target: Parameters<typeof resolveRuntimeScopeForWorkItem>[0],
@@ -189,7 +204,7 @@ export async function requireResultEditContext(request: FastifyRequest, reply: F
 
   const permissionRules = await getPermissionRulesForScope(scope);
   const allowedByRole = hasRolePermission(user.role, permissionRules, "result.edit");
-  const allowedByReestimate = await canEditResultDuringReestimate(resultId, user.name);
+  const allowedByReestimate = await canEditResultDuringReestimate(resultId, user.id);
   if (!allowedByRole && !allowedByReestimate) {
     reply.code(403).send({ error: "Forbidden" });
     return null;

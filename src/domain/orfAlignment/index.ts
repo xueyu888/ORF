@@ -1,4 +1,5 @@
 import type { Objective, ObjectiveAlignmentRequest, ObjectiveAlignmentRequestKind, OrfUser } from "../../types/orf";
+import { isObjectiveChallenger } from "../orfObjectiveParticipants";
 
 export const objectiveAlignmentRequestKinds = ["reestimateCompletion", "acceptance"] as const satisfies readonly ObjectiveAlignmentRequestKind[];
 export const openObjectiveAlignmentRequestStatuses = ["requested", "scheduled"] as const;
@@ -48,9 +49,9 @@ export function canRequestObjectiveAlignment(
   existingRequest: ObjectiveAlignmentRequest | null | undefined,
 ): boolean {
   return Boolean(
-    objective &&
+      objective &&
       currentUser?.role === "member" &&
-      objective.challengerUserIds.includes(currentUser.id) &&
+      isObjectiveChallenger(objective, currentUser.id) &&
       !existingRequest &&
       ((kind === "reestimateCompletion" && objective.flowStatus === "reestimating") ||
         (kind === "acceptance" && objective.flowStatus === "submitted")),

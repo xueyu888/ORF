@@ -28,8 +28,8 @@
 | `PATCH`  | `/api/objectives/:objectiveId/trial-reviews/:trialReviewId`                  | 指挥官反馈试验收，目标仍保持 `frozen`                                                                                                              |
 | `POST`   | `/api/objectives/:objectiveId/contribution-reviews`                          | 已关闭的旧匿名互评接口，返回 `410`，原始互评只提交到本地结算服务                                                                                   |
 | `POST`   | `/api/objectives/:objectiveId/review`                                        | 指挥官验收指标并结算，进入 `settled`                                                                                                               |
-| `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许正式挑战者在未过期 `reestimating` 阶段创建 |
-| `PATCH`  | `/api/results/:resultId`                                                     | 更新指标；指挥官可编辑未冻结目标下指标，挑战者仅能在未过期 `reestimating` 编辑自己目标下指标                                                       |
+| `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许 `Objective.challengerUserIds` 中的正式挑战者在未过期 `reestimating` 阶段创建 |
+| `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题、难度、信心和同目标排序；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`；新反馈不接收目标或指标绑定                                                        |
 | `PATCH`  | `/api/feedback/:feedbackId/status`                                           | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行                                                                                               |
 | `POST`   | `/api/tasks`                                                                 | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务                                                                                  |
@@ -49,7 +49,7 @@
 | `PATCH`  | `/api/users/:userId/disable`                                                 | 停用用户                                                                                                                                           |
 
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
-读取目标数据时，`challengers` 会去重，`assignedChallengers` 会去重并剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
+读取目标数据时，`challengerUserIds` / `assignedChallengerUserIds` 是身份事实源，`challengers` / `assignedChallengers` 是显示名投影并会去重、剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/settled/closed` 返回 409。
 
@@ -57,7 +57,7 @@
 
 任务和子任务完成状态接口只表达执行进度写入，不触发指标验收、目标提交、结算或积分。前端可以在挑战页展示层使用短生命周期完成状态覆盖层即时反馈点击；后端返回的任务管理数据仍是完成状态的持久化事实源，刷新数据包含同一任务或子任务完成状态后前端撤销覆盖层。
 
-任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户是否为该目标的正式挑战者；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。
+任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户 id 是否在该目标的 `Objective.challengerUserIds`；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。
 
 ## 术语
 
@@ -88,7 +88,7 @@ ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只�
 
 `PATCH /api/objectives/:objectiveId/publish` 是候选目标进入悬赏大厅的唯一发布动作，必须写入 `Objective.publishedAt`，并为当前作用域 active 用户创建 `objective.published` 系统通知；持久化通知遵守“触发人不接收自己消息”的原则。通知写入后，后端还会通过 `/api/events` 发送 `system.broadcast`，让当前作用域所有在线 active 用户即时看到横幅并刷新大厅。后续申请、征召、审核、重估、编辑和冻结只能更新对应业务字段或 `updatedAt`，不能覆盖 `publishedAt`。
 
-`GET /api/bounties` 对所有已通过用户返回 `publicItems`，包含 `flowStatus in (open, applying, recruiting, reestimating)` 的公开大厅目标。`publicItems` 是大厅主列表，必须带上 `applications`、`pendingApplications`、`approvedApplicants`、`challengers`、`isCurrentChallenger`、`hasCurrentApplication` 和目标的 `publishedAt`，用于公开展示申请理由、申请人、已通过挑战者头像和发布到大厅时间。`availableItems` 只表示当前仍可发起申请的目标；`recruitmentItems` 表示当前 active 普通成员自己待接受的征召。指挥官/管理员读取同一接口时仍能看到大厅目标；前端可以完整显示申请 / 接受操作入口，但所有申请 / 接受动作接口必须返回 403 或等价 forbidden，不能把管理员写入 `challengers`、`assignedChallengers` 或申请记录。
+`GET /api/bounties` 对所有已通过用户返回 `publicItems`，包含 `flowStatus in (open, applying, recruiting, reestimating)` 的公开大厅目标。`publicItems` 是大厅主列表，必须带上 `applications`、`pendingApplications`、`approvedApplicants`、`challengers`、`isCurrentChallenger`、`hasCurrentApplication` 和目标的 `publishedAt`，用于公开展示申请理由、申请人、已通过挑战者头像和发布到大厅时间。`availableItems` 只表示当前仍可发起申请的目标；`recruitmentItems` 表示当前 active 普通成员自己待接受的征召。指挥官/管理员读取同一接口时仍能看到大厅目标；前端可以完整显示申请 / 接受操作入口，但所有申请 / 接受动作接口必须返回 403 或等价 forbidden，不能把管理员写入 `challengerUserIds`、`assignedChallengerUserIds` 或申请记录。
 
 申请挑战只接受 active 普通成员在 `open/applying/recruiting` 发起，且 body 必须包含 trim 后非空的 `reason`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
 
@@ -188,7 +188,7 @@ type ObjectiveFlowStatus =
 - 反馈 `owner` 必须是当前默认作用域内 `active` 成员；停用、待审核、拒绝或不存在的姓名不能成为反馈处理人。
 - 指标更新提案不接受 `feedbackId`，不会改写反馈状态；指标更新只影响结果和结果评论审计。
 - 任务创建基于目标授权和排序，不要求关联指标，也不接受反馈来源；反馈不会被挂成任务来源。
-- 任务和子任务维护权限以 `Objective.challengers` 为边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
+- 任务和子任务维护权限以 `Objective.challengerUserIds` 为身份边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
 - `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
 - 当前不开放退回重估；重估截止后停止调整，不续期。
@@ -198,11 +198,11 @@ type ObjectiveFlowStatus =
 - 评论回复的 `replyToMessageId` 必须属于同一评论线程，`replyToAuthor` 由后端用真实消息作者回填，不能信任客户端提交值。
 - 删除评论消息时必须同步清理仍保留消息中的 `replyToMessageId` / `replyToAuthor`，不能留下指向已删除消息的断链回复。
 - 并发给同一目标下的目标、指标、任务或子任务新增评论时，必须锁住目标后再查找或创建 open thread，避免同一目标生成多个打开中的根评论线程。
-- `申请挑战` 只表达意愿，并必须保存申请理由；指挥官通过后才写入 `Objective.challengers`，通过后的目标仍在 `GET /api/bounties.publicItems` 中展示挑战者头像和剩余申请。
+- `申请挑战` 只表达意愿，并必须保存申请理由；指挥官通过后才写入 `Objective.challengerUserIds`，通过后的目标仍在 `GET /api/bounties.publicItems` 中展示挑战者头像和剩余申请。
 - 多名成员同时申请同一目标时，后端必须用行级锁保护 `challengeApplications` 的读改写，不能让后一次写入覆盖前一次申请。
-- 审批申请、征召和接受征召都会同时读改写 `Objective.challengers` / `Objective.assignedChallengers` / `Objective.challengeApplications`，必须在同一行级锁事务内完成。
+- 审批申请、征召和接受征召都会同时读改写 `Objective.challengerUserIds` / `Objective.assignedChallengerUserIds` / `Objective.challengeApplications`，并同步显示名投影，必须在同一行级锁事务内完成。
 - 并发新增或移动指标、任务、子任务时，后端必须锁住对应父级目标或任务后再计算 `sortOrder`，避免重复排序号导致页面顺序不稳定；任务排序父级是目标，不是指标。
-- `征召挑战` 的成员必须是当前默认作用域内 `active` 用户；停用、待审核、拒绝或不存在的姓名不能写入 `Objective.assignedChallengers`。
+- `征召挑战` 的成员必须是当前默认作用域内 `active` 用户；停用、待审核、拒绝或不存在的用户不能写入 `Objective.assignedChallengerUserIds`。
 - `接受挑战` 只用于征召；当前不开放成员拒绝征召，有异议时线下找指挥官处理。
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。
 - `提交试验收` 仅允许目标挑战者在 `frozen` 状态执行一次；`试验收反馈` 仅允许指挥官在 `frozen` 状态处理，且不推进状态。

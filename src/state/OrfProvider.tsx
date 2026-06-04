@@ -14,6 +14,11 @@ import {
 } from "./orfProviderMutationMessages";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
+import {
+  isObjectiveChallenger,
+  objectiveChallengerCount,
+  objectiveChallengerTargets,
+} from "../domain/orfObjectiveParticipants";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { fetchLocalSettlementSummary, submitLocalEncryptedContributionReview } from "../services/localSettlementClient";
@@ -418,10 +423,10 @@ export function OrfProvider({ children }: { children: ReactNode }) {
         };
         const objective = state.objectives.find((item) => item.id === payload.objectiveId);
         const canAdjustDuringReestimate = Boolean(
-          objective &&
+            objective &&
             isObjectiveReestimateWindowOpen(objective) &&
             currentUser?.id &&
-            objective.challengerUserIds.includes(currentUser.id),
+            isObjectiveChallenger(objective, currentUser.id),
         );
         const canCreateManagerDefined = payload.source !== "memberProposed" && hasPermission(currentUser, state.permissionRules, "result.create");
         const canCreateMemberProposed = payload.source === "memberProposed" && canAdjustDuringReestimate;
@@ -575,7 +580,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       reviewObjectiveLoot: async (objectiveId, input) => {
         try {
           const objective = state.objectives.find((item) => item.id === objectiveId);
-          const localSummary = objective && objective.challengers.length > 1
+          const localSummary = objective && objectiveChallengerCount(objective) > 1
             ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
             : null;
           const settlementInput =
@@ -1024,7 +1029,7 @@ function withObjectiveChallengerUserIds(
   objective: Pick<OrfState["objectives"][number], "challengers" | "challengerUserIds">,
 ) {
   const userIdByMember = new Map(
-    objective.challengers.map((member, index) => [member, objective.challengerUserIds[index] ?? null]),
+    objectiveChallengerTargets(objective).map((target) => [target.member, target.memberUserId ?? null]),
   );
   return ratios.map((ratio) => ({
     ...ratio,

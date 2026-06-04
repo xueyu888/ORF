@@ -3,6 +3,10 @@ import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { useDraggableFloating } from "../hooks/useDraggableFloating";
+import {
+  isObjectiveAssignedChallenger,
+  isObjectiveChallenger,
+} from "../domain/orfObjectiveParticipants";
 import { uncertaintyLevelOptions, uncertaintyScores } from "../domain/orfSettlement";
 import { BountyButton, BountyDialog } from "../features/bounty-hall/BountyHallSkin";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
@@ -60,8 +64,8 @@ function RecruitChallengersModal({ objectiveId }: { objectiveId?: string }) {
         (user) =>
           user.status === "active" &&
           user.role === "member" &&
-          !objective.challengerUserIds.includes(user.id) &&
-          !objective.assignedChallengerUserIds.includes(user.id),
+          !isObjectiveChallenger(objective, user.id) &&
+          !isObjectiveAssignedChallenger(objective, user.id),
       )
     : [];
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);

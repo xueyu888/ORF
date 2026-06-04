@@ -10,8 +10,11 @@ import type {
 } from "../../types/orf";
 import {
   validateContributionAllocationInput,
+} from "../orfContributionReview";
+import {
+  objectiveChallengerTargets,
   type ContributionMemberTarget,
-} from "../../features/challenge/model/contributionReview";
+} from "../orfObjectiveParticipants";
 
 export const uncertaintyLevelOptions: UncertaintyLevel[] = [
   "入门",
@@ -176,12 +179,7 @@ export function planObjectiveSettlement(input: {
   const settlementPoints = Number(
     (basePoints * completionMultiplier).toFixed(2),
   );
-  const challengerTargets = input.objective.challengers
-    .map((member, index) => ({
-      member: member.trim(),
-      memberUserId: input.objective.challengerUserIds[index]?.trim() || null,
-    }))
-    .filter((member) => member.member);
+  const challengerTargets = objectiveChallengerTargets(input.objective);
   const resolutionRatios =
     input.contributionResolution?.ratios ?? input.contributionRatios;
   const contributionRatios = resolutionRatios

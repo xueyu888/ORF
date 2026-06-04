@@ -42,6 +42,17 @@ import {
 } from "../../src/domain/orfSettlement";
 import { objectiveWorkItemMutationAccess } from "../../src/domain/orfWorkItems";
 import {
+  isObjectiveAssignedChallenger,
+  isObjectiveChallenger,
+  objectiveChallengerUserIds,
+  objectiveHasChallengers,
+  objectiveParticipantSnapshot,
+  participantDisplayNamesForUserIds,
+  participantUserIdsForNames,
+  uniqueParticipantNames,
+  uniqueParticipantUserIds,
+} from "../../src/domain/orfObjectiveParticipants";
+import {
   canAcceptObjectiveChallengeByFlow,
   canApplyForObjectiveChallenge,
   canDeleteObjectiveByFlow,
@@ -331,30 +342,8 @@ function reorderIds(ids: string[], movingId: string, referenceId: string, placem
   return [...withoutMoving.slice(0, insertIndex), movingId, ...withoutMoving.slice(insertIndex)];
 }
 
-function isRealMember(value: string | undefined | null) {
-  const name = value?.trim() ?? "";
-  return name !== "" && name !== "User" && name !== "未分配";
-}
-
-function uniqueMembers(values: Array<string | undefined | null>) {
-  return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
-}
-
-function uniqueUserIds(values: Array<string | undefined | null>) {
-  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
-}
-
 function nameForUserId(userNameById: Map<string, string>, userId: string | null | undefined, fallback = "") {
   return userId ? userNameById.get(userId) ?? fallback : fallback;
-}
-
-function displayNamesForUserIds(userNameById: Map<string, string>, userIds: Array<string | undefined | null>, fallbackNames: string[] = []) {
-  const names = uniqueUserIds(userIds).map((userId) => userNameById.get(userId)).filter((name): name is string => Boolean(name));
-  return names.length > 0 ? names : uniqueMembers(fallbackNames);
-}
-
-function userIdsForNames(userIdByName: Map<string, string>, names: Array<string | undefined | null>) {
-  return uniqueMembers(names).map((name) => userIdByName.get(name)).filter((userId): userId is string => Boolean(userId));
 }
 
 async function getUserMapsForScope(storageScopeId: string | null | undefined) {
@@ -374,7 +363,7 @@ async function getUserMapsForScope(storageScopeId: string | null | undefined) {
 type ScopedMemberIdentity = { id: string; name: string };
 
 async function getActiveMemberRowsByNamesInScope(storageScopeId: string, values: Array<string | undefined | null>) {
-  const memberNames = uniqueMembers(values);
+  const memberNames = uniqueParticipantNames(values);
   if (memberNames.length === 0) return [];
 
   const rows = await db
@@ -390,7 +379,7 @@ async function getActiveChallengerRowsByNamesInScope(
   storageScopeId: string,
   values: Array<string | undefined | null>,
 ) {
-  const memberNames = uniqueMembers(values);
+  const memberNames = uniqueParticipantNames(values);
   if (memberNames.length === 0) return [];
 
   const rows = await client
@@ -406,7 +395,7 @@ async function getActiveChallengerRowsByIdsInScope(
   storageScopeId: string,
   values: Array<string | undefined | null>,
 ) {
-  const userIds = uniqueUserIds(values);
+  const userIds = uniqueParticipantUserIds(values);
   if (userIds.length === 0) return [];
 
   return client
@@ -421,7 +410,7 @@ async function getActiveMemberRowsByIdsInScope(
   storageScopeId: string,
   values: Array<string | undefined | null>,
 ) {
-  const userIds = uniqueUserIds(values);
+  const userIds = uniqueParticipantUserIds(values);
   if (userIds.length === 0) return [];
 
   return client
@@ -436,7 +425,7 @@ async function getMemberRowsByIdsInScope(
   storageScopeId: string,
   values: Array<string | undefined | null>,
 ) {
-  const userIds = uniqueUserIds(values);
+  const userIds = uniqueParticipantUserIds(values);
   if (userIds.length === 0) return [];
 
   return client
@@ -466,10 +455,10 @@ async function challengerUserIdsForRow(
   userIds: Array<string | undefined | null>,
   names: Array<string | undefined | null>,
 ) {
-  const normalizedUserIds = uniqueUserIds(userIds);
+  const normalizedUserIds = uniqueParticipantUserIds(userIds);
   if (normalizedUserIds.length > 0) return normalizedUserIds;
   const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, names);
-  return userIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
+  return participantUserIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
 }
 
 async function assignedChallengerUserIdsForRow(
@@ -478,10 +467,10 @@ async function assignedChallengerUserIdsForRow(
   userIds: Array<string | undefined | null>,
   names: Array<string | undefined | null>,
 ) {
-  const normalizedUserIds = uniqueUserIds(userIds);
+  const normalizedUserIds = uniqueParticipantUserIds(userIds);
   if (normalizedUserIds.length > 0) return normalizedUserIds;
   const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, names);
-  return userIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
+  return participantUserIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
 }
 
 function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: string) {
@@ -1004,12 +993,14 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const objectiveItems: Objective[] = objectiveRows.map((objective) => {
     const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
     const objectiveBasePoints = objectiveBasePointsForResults(objectiveResults);
-    const challengerUserIds = uniqueUserIds(objective.challengerUserIds ?? userIdsForNames(userIdByName, objective.challengers ?? []));
-    const assignedChallengerUserIds = uniqueUserIds(objective.assignedChallengerUserIds ?? userIdsForNames(userIdByName, objective.assignedChallengers ?? [])).filter(
-      (userId) => !challengerUserIds.includes(userId),
-    );
-    const challengers = displayNamesForUserIds(userNameById, challengerUserIds, objective.challengers ?? []);
-    const assignedChallengers = displayNamesForUserIds(userNameById, assignedChallengerUserIds, objective.assignedChallengers ?? []);
+    const participants = objectiveParticipantSnapshot({
+      challengerUserIds: objective.challengerUserIds,
+      challengerNames: objective.challengers ?? [],
+      assignedChallengerUserIds: objective.assignedChallengerUserIds,
+      assignedChallengerNames: objective.assignedChallengers ?? [],
+      userIdByName,
+      userNameById,
+    });
     const challengeApplications = (objective.challengeApplications ?? []).map((application) => {
       const applicantUserId = application.applicantUserId ?? userIdByName.get(application.applicant) ?? null;
       return {
@@ -1037,10 +1028,10 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       resultIds: objectiveResults.map((result) => result.id),
       taskIds: taskItems.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id),
       finalDueAt: objective.finalDueAt || addDays(objective.updatedAt, 14),
-      challengers,
-      challengerUserIds,
-      assignedChallengers,
-      assignedChallengerUserIds,
+      challengers: participants.challengers,
+      challengerUserIds: participants.challengerUserIds,
+      assignedChallengers: participants.assignedChallengers,
+      assignedChallengerUserIds: participants.assignedChallengerUserIds,
       challengeApplications,
       acceptedAt: objective.acceptedAt,
       confirmationDueAt: objective.confirmationDueAt,
@@ -1229,7 +1220,7 @@ function contributionSummaryFor(data: TaskManagementData, memberUserId: string) 
 
   return {
     points: data.objectives.reduce((sum, objective) => {
-      if (!objective.challengerUserIds.includes(memberUserId)) return sum;
+      if (!isObjectiveChallenger(objective, memberUserId)) return sum;
       return sum + (objective.objectiveSettlementPoints ?? 0);
     }, 0),
   };
@@ -1241,13 +1232,13 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
   const items = data.objectives.flatMap((objective) => {
     const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
     const result = objectiveResults[0];
-    const isRecruitment = canUseChallengeActions && objective.assignedChallengerUserIds.includes(viewer.id) && canAcceptObjectiveChallengeByFlow(objective);
+    const isRecruitment = canUseChallengeActions && isObjectiveAssignedChallenger(objective, viewer.id) && canAcceptObjectiveChallengeByFlow(objective);
     if (!objectiveVisibleInBountyHall(objective) && !isRecruitment) return [];
 
     const applications = objective.challengeApplications ?? [];
     const pendingApplications = applications.filter((application) => application.status === "pending");
     const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
-    const challengers = uniqueMembers(objective.challengers ?? []);
+    const challengers = uniqueParticipantNames(objective.challengers ?? []);
     return [{
       applications,
       approvedApplicants,
@@ -1257,7 +1248,7 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
       definer: result?.definer ?? "",
       difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
       hasCurrentApplication: canUseChallengeActions && pendingApplications.some((application) => application.applicantUserId === viewer.id),
-      isCurrentChallenger: canUseChallengeActions && objective.challengerUserIds.includes(viewer.id),
+      isCurrentChallenger: canUseChallengeActions && isObjectiveChallenger(objective, viewer.id),
       isRecruitment,
       objective,
       pendingApplications,
@@ -1300,7 +1291,7 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
   const data = await getTaskManagementData(scope);
   if (includeAll) return data;
 
-  const objectivesForMember = data.objectives.filter((objective) => objective.challengerUserIds.includes(memberUserId));
+  const objectivesForMember = data.objectives.filter((objective) => isObjectiveChallenger(objective, memberUserId));
   const objectiveIds = new Set(objectivesForMember.map((objective) => objective.id));
   const resultsForMember = data.results.filter((result) => objectiveIds.has(result.objectiveId));
   const resultIds = new Set(resultsForMember.map((result) => result.id));
@@ -1529,7 +1520,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     }
 
     const currentChallengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
-    const currentChallengers = uniqueMembers(objective.challengers ?? []);
+    const currentChallengers = uniqueParticipantNames(objective.challengers ?? []);
     if (currentChallengerUserIds.includes(actor.id)) {
       return { status: "alreadyAccepted" as const, challengers: currentChallengers };
     }
@@ -1538,10 +1529,10 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     }
 
     const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
-    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+    const assignedChallengers = uniqueParticipantNames(objective.assignedChallengers ?? []);
     const applications = objective.challengeApplications ?? [];
     const hasApprovedApplication = applications.some((application) => (application.applicantUserId ?? null) === actor.id && application.status === "approved");
-    if (!assignedChallengerUserIds.includes(actor.id) && !hasApprovedApplication) {
+    if (!isObjectiveAssignedChallenger({ assignedChallengerUserIds, challengerUserIds: currentChallengerUserIds }, actor.id) && !hasApprovedApplication) {
       return { status: "forbidden" as const };
     }
 
@@ -1634,8 +1625,8 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     }
 
     const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
-    const challengers = uniqueMembers(objective.challengers ?? []);
-    if (challengerUserIds.includes(actor.id)) {
+    const challengers = uniqueParticipantNames(objective.challengers ?? []);
+    if (isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "alreadyAccepted" as const, challengers };
     }
     if (objectiveClosedForChallengeEntry(objective) || !canApplyForObjectiveChallenge(objective)) {
@@ -1774,12 +1765,12 @@ export async function approveObjectiveChallengeApplication(
     if (!applicant) return { status: "invalid" as const };
 
     const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
-    const challengers = uniqueMembers([...(objective.challengers ?? []), applicant.name]);
+    const challengers = uniqueParticipantNames([...(objective.challengers ?? []), applicant.name]);
     await tx
       .update(objectives)
       .set({
         challengers,
-        challengerUserIds: uniqueUserIds([...challengerUserIds, applicant.id]),
+        challengerUserIds: uniqueParticipantUserIds([...challengerUserIds, applicant.id]),
         flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
         stage: objectiveLifecycleTransitions.acceptChallenge.stage,
         acceptedAt: objective.acceptedAt ?? acceptedAt,
@@ -1839,7 +1830,7 @@ export async function rejectObjectiveChallengeApplication(
       .set({
         challengeApplications: nextApplications,
         flowStatus: objectiveFlowStatusAfterChallengeApplicationReview({
-          hasAcceptedChallengers: challengerUserIds.length > 0,
+          hasAcceptedChallengers: objectiveHasChallengers({ challengerUserIds }),
           hasAssignedChallengers: assignedChallengerUserIds.length > 0,
           hasPendingApplications: hasPending,
         }),
@@ -1874,7 +1865,7 @@ export async function recruitObjectiveChallengers(
     if (objectiveClosedForChallengeEntry(objective) || !canRecruitObjectiveChallengersByFlow(objective)) return { status: "invalid" as const };
     const currentChallengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
     const recruitMemberRows = await getActiveChallengerRowsByNamesInScope(tx, objective.teamId, members);
-    const recruitMembers = uniqueMembers(members);
+    const recruitMembers = uniqueParticipantNames(members);
     if (recruitMembers.some((member) => !recruitMemberRows.some((row) => row.name === member))) return { status: "invalid" as const };
     const recruitCandidates = recruitMembers
       .map((member) => recruitMemberRows.find((row) => row.name === member))
@@ -1884,7 +1875,7 @@ export async function recruitObjectiveChallengers(
     if (recruitCandidates.length === 0) return { status: "invalid" as const };
     const currentAssignedUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
     const currentAssignedRows = await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, currentAssignedUserIds);
-    const assignedChallengerUserIds = uniqueUserIds([...currentAssignedUserIds, ...recruitCandidates.map((member) => member.id)]).filter((userId) => !currentChallengerUserIds.includes(userId));
+    const assignedChallengerUserIds = uniqueParticipantUserIds([...currentAssignedUserIds, ...recruitCandidates.map((member) => member.id)]).filter((userId) => !currentChallengerUserIds.includes(userId));
     if (assignedChallengerUserIds.length === 0) return { status: "invalid" as const };
     const assignedNameById = new Map([...currentAssignedRows, ...recruitMemberRows, ...recruitCandidates].map((member) => [member.id, member.name]));
     const assignedChallengers = assignedChallengerUserIds.map((userId) => assignedNameById.get(userId)).filter((name): name is string => Boolean(name));
@@ -2025,7 +2016,7 @@ export async function createObjectiveAlignmentRequest(
     if (!objective) return { status: "notFound" as const };
     if (!objectiveAcceptsAlignmentRequest(objective, input.kind)) return { status: "closed" as const };
     const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
-    if (actor.role !== "member" || !challengerUserIds.includes(actor.id)) {
+    if (actor.role !== "member" || !isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "forbidden" as const };
     }
 
@@ -2194,14 +2185,13 @@ export async function reviewObjectiveAlignmentRequest(
   return outcome;
 }
 
-export async function canEditResultDuringReestimate(resultId: string, memberUserId: string): Promise<boolean> {
-  const actorUserId = memberUserId.trim();
+export async function canEditResultDuringReestimate(resultId: string, userId: string): Promise<boolean> {
+  const actorUserId = userId.trim();
   if (!actorUserId) return false;
 
   const [row] = await db
     .select({
       flowStatus: objectives.flowStatus,
-      challengers: objectives.challengers,
       challengerUserIds: objectives.challengerUserIds,
       confirmationDueAt: objectives.confirmationDueAt,
     })
@@ -2276,7 +2266,6 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
   const [objective] = await db
     .select({
       flowStatus: objectives.flowStatus,
-      challengers: objectives.challengers,
       challengerUserIds: objectives.challengerUserIds,
       confirmationDueAt: objectives.confirmationDueAt,
       teamId: objectives.teamId,
@@ -2735,8 +2724,7 @@ async function canReadObjectiveComment(
   }
 
   const actorUserId = actor.id.trim();
-  const participants = uniqueUserIds([...(objective.challengerUserIds ?? []), ...(objective.assignedChallengerUserIds ?? [])]);
-  return actorUserId && participants.includes(actorUserId) ? "allowed" : "forbidden";
+  return actorUserId && (isObjectiveChallenger(objective, actorUserId) || isObjectiveAssignedChallenger(objective, actorUserId)) ? "allowed" : "forbidden";
 }
 
 function actorCanUseScopedTeamTarget(actor: CommentActor, storageScopeId: string) {
@@ -3761,7 +3749,7 @@ export async function reviewObjectiveLoot(
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
   const challengerRows = await getMemberRowsByIdsInScope(db, objective.teamId, objective.challengerUserIds ?? []);
   const challengerNameById = new Map(challengerRows.map((member) => [member.id, member.name]));
-  const challengerUserIds = uniqueUserIds(objective.challengerUserIds ?? []);
+  const challengerUserIds = objectiveChallengerUserIds(objective);
   const challengerUserIdSet = new Set(challengerUserIds);
   const challengers = challengerUserIds.map((userId) => challengerNameById.get(userId)).filter((name): name is string => Boolean(name));
   const settlementPlan = planObjectiveSettlement({

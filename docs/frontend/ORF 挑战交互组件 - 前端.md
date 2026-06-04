@@ -28,12 +28,11 @@
 
 ## 2. 权限拦截
 
-前端在执行下列目标、指标和流程操作前检查 `permissionRules`。行动项和子行动项不使用独立权限 key；它们走目标级工作项维护能力，由目标生命周期以及当前用户是否为指挥官或 `Objective.challengers` 正式挑战者共同决定。
+前端在执行下列指标和流程操作前检查 `permissionRules`。目标标题、内容和截止日期不使用成员权限 key，统一由指挥官 / 管理员能力控制。行动项和子行动项不使用独立权限 key；它们走目标级工作项维护能力，由目标生命周期以及当前用户是否为指挥官或 `Objective.challengerUserIds` 正式挑战者共同决定。
 
 | 操作 | 权限 key |
 | --- | --- |
 | 新增指标 | `result.create` |
-| 编辑目标 | `objective.edit` |
 | 编辑指标 | `result.edit` |
 | 拖拽指标 | `result.edit` |
 | 删除目标 | `objective.delete` |

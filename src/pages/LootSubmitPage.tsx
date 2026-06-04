@@ -22,12 +22,17 @@ import {
   latestObjectiveTrialReview,
   objectiveTrialReviewStatusLabel,
 } from "../domain/orfTrialReview";
+import {
+  isObjectiveChallenger,
+  objectiveChallengerCount,
+  objectiveChallengerTargets,
+  type ContributionMemberTarget,
+} from "../domain/orfObjectiveParticipants";
 import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
   LootResultClaim,
   LootResultClaimStatus,
-  Objective,
   ObjectiveTrialReviewStatus,
   ResultAcceptedResult,
 } from "../types/orf";
@@ -101,7 +106,7 @@ export function LootSubmitPage() {
     [objectiveId, state.objectiveAlignmentRequests],
   );
   const challengerAllocationTargets = useMemo(
-    () => (objective ? contributionTargetsForObjective(objective) : []),
+    () => (objective ? objectiveChallengerTargets(objective) : []),
     [objective],
   );
   const openAcceptanceAlignment = useMemo(
@@ -192,7 +197,7 @@ export function LootSubmitPage() {
   const currentMemberName = currentUser?.name ?? "";
   const isChallenger =
     currentUser?.role === "member" &&
-    objective.challengerUserIds.includes(currentMemberId);
+    isObjectiveChallenger(objective, currentMemberId);
   const canSubmit = canSubmitObjectiveLootByFlow(objective) && isChallenger;
   const canReview = Boolean(
     currentUser?.role === "admin" &&
@@ -217,7 +222,7 @@ export function LootSubmitPage() {
     "acceptance",
     openAcceptanceAlignment,
   );
-  const usesLocalContributionSettlement = objective.challengers.length > 1;
+  const usesLocalContributionSettlement = objectiveChallengerCount(objective) > 1;
   const needsContributionResolution = usesLocalContributionSettlement;
   const objectiveReviewResult = objectiveAcceptedResultFromReviews(
     results.map((result) => resultReviews[result.id] ?? "completed"),
@@ -986,19 +991,7 @@ function balancedPercentDefaults(members: string[]) {
   return next;
 }
 
-type ContributionAllocationTarget = {
-  member: string;
-  memberUserId?: string | null;
-};
-
-function contributionTargetsForObjective(
-  objective: Pick<Objective, "challengers" | "challengerUserIds">,
-): ContributionAllocationTarget[] {
-  return objective.challengers.map((member, index) => ({
-    member,
-    memberUserId: objective.challengerUserIds[index] ?? null,
-  }));
-}
+type ContributionAllocationTarget = ContributionMemberTarget;
 
 function percentInputsToAllocations(
   values: Record<string, string>,

@@ -10,7 +10,6 @@ const permissionLabelByKey = new Map(permissionDefinitions.map((item) => [item.k
 export function permissionKeyForChallengeAction(resource: ChallengePermissionResource, action: ChallengePermissionAction): PermissionKey | null {
   if (resource === "objective") {
     if (action === "create") return "objective.create";
-    if (action === "edit") return "objective.edit";
     if (action === "delete") return "objective.delete";
   }
 

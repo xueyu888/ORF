@@ -1,10 +1,11 @@
 import type { Feedback, Objective, OrfUser, Result, Task } from "../../../types/orf";
+import { isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 
 export function canViewObjectiveRecord(objective: Objective | undefined, currentUser: OrfUser | null | undefined) {
   if (!currentUser) return false;
   if (currentUser.role === "admin") return true;
   if (!objective) return false;
-  return (objective.challengerUserIds ?? []).includes(currentUser.id);
+  return isObjectiveChallenger(objective, currentUser.id);
 }
 
 export function visibleObjectivesForUser(objectives: readonly Objective[], currentUser: OrfUser | null | undefined) {

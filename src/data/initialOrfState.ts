@@ -1,4 +1,9 @@
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
+import {
+  objectiveParticipantSnapshot,
+  userIdByNameMap,
+  userNameByIdMap,
+} from "../domain/orfObjectiveParticipants";
 import type { ChallengeApplication, Objective, OrfState, Result } from "../types/orf";
 import { addCalendarDays } from "../utils/date";
 
@@ -46,24 +51,15 @@ function latestDate(values: Array<string | undefined | null>) {
   return values.filter(Boolean).sort().at(-1) ?? "";
 }
 
-function isRealMember(value: string | undefined | null) {
-  const name = value?.trim() ?? "";
-  return name !== "" && name !== "User" && name !== "未分配";
-}
-
-function uniqueMembers(values: Array<string | undefined | null>) {
-  return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
-}
-
 const uncertaintyScore = uncertaintyScoreFor;
 
-function inferFlowStatus(objective: LegacyObjective, challengers: string[], assignedChallengers: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
+function inferFlowStatus(objective: LegacyObjective, challengerUserIds: string[], assignedChallengerUserIds: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
   if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
   if (objective.lootSubmittedAt) return "submitted";
   if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
-  if (challengers.length > 0) return "reestimating";
-  if (assignedChallengers.length > 0) return "recruiting";
+  if (challengerUserIds.length > 0) return "reestimating";
+  if (assignedChallengerUserIds.length > 0) return "recruiting";
   if (challengeApplications.some((application) => application.status === "pending")) return "applying";
   if (objective.stage === "resultClaiming") return "open";
   return "candidate";
@@ -71,19 +67,14 @@ function inferFlowStatus(objective: LegacyObjective, challengers: string[], assi
 
 function normalizeInitialState(state: LegacyInitialState): OrfState {
   const objectiveUpdatedAtById = new Map(state.objectives.map((objective) => [objective.id, objective.updatedAt]));
-  const userIdByName = new Map(state.users.map((user) => [user.name, user.id]));
-  const userNameById = new Map(state.users.map((user) => [user.id, user.name]));
+  const userIdByName = userIdByNameMap(state.users);
+  const userNameById = userNameByIdMap(state.users);
   const evidenceIdsByResult = new Map<string, string[]>();
   for (const evidence of state.evidence) {
     const ids = evidenceIdsByResult.get(evidence.linkedResultId) ?? [];
     ids.push(evidence.id);
     evidenceIdsByResult.set(evidence.linkedResultId, ids);
   }
-  const userIdsForNames = (names: string[]) => names.map((name) => userIdByName.get(name)).filter((id): id is string => Boolean(id));
-  const namesForUserIds = (userIds: string[], fallback: string[]) => {
-    const names = userIds.map((id) => userNameById.get(id)).filter((name): name is string => Boolean(name));
-    return names.length > 0 ? names : fallback;
-  };
   const results: Result[] = state.results.map((item) => {
     const {
       owner: _owner,
@@ -112,12 +103,14 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
 
   const objectives: Objective[] = state.objectives.map((objective) => {
     const objectiveResults = state.results.filter((result) => result.objectiveId === objective.id);
-    const fallbackChallengers = uniqueMembers(objective.challengers ?? objectiveResults.map((result) => result.owner));
-    const fallbackAssignedChallengers = uniqueMembers(objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger));
-    const challengerUserIds = objective.challengerUserIds ?? userIdsForNames(fallbackChallengers);
-    const assignedChallengerUserIds = objective.assignedChallengerUserIds ?? userIdsForNames(fallbackAssignedChallengers);
-    const challengers = namesForUserIds(challengerUserIds, fallbackChallengers);
-    const assignedChallengers = namesForUserIds(assignedChallengerUserIds, fallbackAssignedChallengers);
+    const participants = objectiveParticipantSnapshot({
+      challengerUserIds: objective.challengerUserIds,
+      challengerNames: objective.challengers ?? objectiveResults.map((result) => result.owner),
+      assignedChallengerUserIds: objective.assignedChallengerUserIds,
+      assignedChallengerNames: objective.assignedChallengers ?? objectiveResults.map((result) => result.assignedChallenger),
+      userIdByName,
+      userNameById,
+    });
     const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => ({
       ...application,
       applicantUserId: application.applicantUserId ?? userIdByName.get(application.applicant) ?? null,
@@ -130,11 +123,11 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
     return {
       ...objective,
       finalDueAt,
-      flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
-      challengers,
-      challengerUserIds,
-      assignedChallengers,
-      assignedChallengerUserIds,
+      flowStatus: inferFlowStatus(objective, participants.challengerUserIds, participants.assignedChallengerUserIds, challengeApplications),
+      challengers: participants.challengers,
+      challengerUserIds: participants.challengerUserIds,
+      assignedChallengers: participants.assignedChallengers,
+      assignedChallengerUserIds: participants.assignedChallengerUserIds,
       challengeApplications,
       acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
       confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),

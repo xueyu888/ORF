@@ -16,6 +16,8 @@ import {
   objectiveWorkItemMutationAccess,
   type ObjectiveWorkItemMutationAccess,
 } from "../../../domain/orfWorkItems";
+import { canEditObjectiveContentForUser } from "../../../domain/orfObjectiveContent";
+import { isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 import type {
   Objective,
   ObjectiveTrialReview,
@@ -32,6 +34,10 @@ type MetricCreationAction = {
 export type MetricEditAccess =
   | { status: "allowed" }
   | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" };
+
+export type MetricLifecycleMutationAccess =
+  | { status: "allowed" }
+  | { status: "blocked"; reason: "notFound" | "lifecycleLocked" };
 
 export type WorkItemMutationAccess = ObjectiveWorkItemMutationAccess;
 
@@ -67,7 +73,7 @@ export function canProposeObjectiveMetric(
 ): boolean {
   return Boolean(
     memberUserId &&
-      (objective.challengerUserIds ?? []).includes(memberUserId) &&
+      isObjectiveChallenger(objective, memberUserId) &&
       isReestimateWindowOpen(objective, now),
   );
 }
@@ -91,6 +97,22 @@ export function workItemMutationUnavailableMessage(access: WorkItemMutationAcces
   if (access.reason === "notFound") return "行动项所属目标不可用";
   if (access.reason === "lifecycleLocked") return "目标当前阶段不能修改行动项";
   return "只有目标正式挑战者或指挥官可以修改行动项";
+}
+
+export function canEditObjectiveContent(currentUser: OrfUser | null): boolean {
+  return canEditObjectiveContentForUser(currentUser);
+}
+
+export function objectiveContentEditUnavailableMessage() {
+  return "只有指挥官可以编辑目标";
+}
+
+export function metricLifecycleMutationAccessForObjective(
+  objective: Objective | undefined,
+): MetricLifecycleMutationAccess {
+  if (!objective) return { status: "blocked", reason: "notFound" };
+  if (isObjectiveResultLocked(objective)) return { status: "blocked", reason: "lifecycleLocked" };
+  return { status: "allowed" };
 }
 
 export function metricEditAccessForObjective({

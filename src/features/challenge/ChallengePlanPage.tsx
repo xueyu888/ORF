@@ -9,6 +9,7 @@ import { hasPermission } from "../../config/permissions";
 import { getMyChallengesData, type TaskManagementData } from "../../state/apiClient";
 import { useOrf } from "../../state/OrfProvider";
 import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
+import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { Objective, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
@@ -91,12 +92,14 @@ import {
   type ObjectiveCreationSession,
 } from "./model/objectiveCreationSession";
 import {
+  canEditObjectiveContent,
   canMutateObjectiveWorkItems,
   canRecruitObjectiveChallengers,
-  isObjectiveResultLocked,
   metricCreationActionForObjective,
   metricEditAccessForObjective,
   metricEditUnavailableMessage,
+  metricLifecycleMutationAccessForObjective,
+  objectiveContentEditUnavailableMessage,
   workItemMutationAccessForObjective,
   workItemMutationUnavailableMessage,
 } from "./model/orfFlowCapabilities";
@@ -347,7 +350,7 @@ export function ChallengePlanPage() {
   const effectiveMemberFilter = canFilterByMember ? memberFilter : "all";
   const visibleObjectiveIds = useMemo(() => {
     if (showAll) return undefined;
-    return new Set(challengeState.objectives.filter((objective) => objective.challengerUserIds.includes(currentUser?.id ?? "")).map((objective) => objective.id));
+    return new Set(challengeState.objectives.filter((objective) => isObjectiveChallenger(objective, currentUser?.id)).map((objective) => objective.id));
   }, [challengeState.objectives, currentUser?.id, showAll]);
   const groups = useMemo(
     () =>
@@ -370,7 +373,7 @@ export function ChallengePlanPage() {
   }, [groups, submittedObjective]);
   const displaySourceGroups = useMemo(() => (optimisticGroup ? [optimisticGroup, ...groups] : groups), [groups, optimisticGroup]);
   const cycleOptions = useMemo(() => challengeCycleOptions(displaySourceGroups), [displaySourceGroups]);
-  const memberOptions = useMemo(() => challengeMemberOptions(displaySourceGroups), [displaySourceGroups]);
+  const memberOptions = useMemo(() => challengeMemberOptions(displaySourceGroups, challengeState.users), [challengeState.users, displaySourceGroups]);
   const filteredGroups = useMemo(
     () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, member: effectiveMemberFilter, status: statusFilter })),
     [cycleFilter, displaySourceGroups, effectiveMemberFilter, statusFilter],
@@ -398,7 +401,7 @@ export function ChallengePlanPage() {
     }
   }, [cycleFilter, cycleOptions]);
   useEffect(() => {
-    if (memberFilter !== "all" && (!canFilterByMember || !memberOptions.includes(memberFilter))) {
+    if (memberFilter !== "all" && (!canFilterByMember || !memberOptions.some((option) => option.value === memberFilter))) {
       setMemberFilter("all");
     }
   }, [canFilterByMember, memberFilter, memberOptions]);
@@ -432,7 +435,6 @@ export function ChallengePlanPage() {
     });
   }, [baseChallengeState]);
   const objectiveById = (objectiveId: string) => challengeState.objectives.find((item) => item.id === objectiveId);
-  const canMutateMetricForObjective = (objectiveId: string) => !isObjectiveResultLocked(objectiveById(objectiveId));
   const metricEditAccessForObjectiveId = (objectiveId: string) =>
     metricEditAccessForObjective({
       objective: objectiveById(objectiveId),
@@ -440,10 +442,18 @@ export function ChallengePlanPage() {
       permissionRules: challengeState.permissionRules,
       now,
     });
+  const canMutateMetricForObjective = (objectiveId: string) => metricEditAccessForObjectiveId(objectiveId).status === "allowed";
   const notifyUnavailableMetricEdit = (objectiveId: string) => {
     const access = metricEditAccessForObjectiveId(objectiveId);
     if (access.status === "allowed") return;
     notify(metricEditUnavailableMessage(access));
+  };
+  const metricLifecycleMutationAccessForObjectiveId = (objectiveId: string) =>
+    metricLifecycleMutationAccessForObjective(objectiveById(objectiveId));
+  const notifyUnavailableMetricDeletion = (objectiveId: string) => {
+    const access = metricLifecycleMutationAccessForObjectiveId(objectiveId);
+    if (access.status === "allowed") return;
+    notify(access.reason === "lifecycleLocked" ? "指标已冻结，不能删除" : "指标所属目标不可用");
   };
   const workItemMutationAccessForObjectiveId = (objectiveId: string) =>
     workItemMutationAccessForObjective({
@@ -573,6 +583,12 @@ export function ChallengePlanPage() {
   ]);
 
   const requireTargetPermission = (target: ChallengeTarget, action: "create" | "delete" | "edit") => {
+    if (target.type === "objective" && action === "edit") {
+      if (canEditObjectiveContent(currentUser)) return true;
+      notify(objectiveContentEditUnavailableMessage());
+      return false;
+    }
+
     if (target.type === "bounty" && action === "edit") {
       const access = metricEditAccessForObjectiveId(target.objectiveId);
       if (access.status === "allowed") return true;
@@ -580,9 +596,12 @@ export function ChallengePlanPage() {
       return false;
     }
 
-    if (target.type === "bounty" && action === "delete" && !canMutateMetricForObjective(target.objectiveId)) {
-      notify("指标已冻结，不能删除");
-      return false;
+    if (target.type === "bounty" && action === "delete") {
+      const access = metricLifecycleMutationAccessForObjectiveId(target.objectiveId);
+      if (access.status !== "allowed") {
+        notifyUnavailableMetricDeletion(target.objectiveId);
+        return false;
+      }
     }
 
     if ((target.type === "action" || target.type === "subAction") && (action === "edit" || action === "delete")) {
@@ -1063,15 +1082,15 @@ export function ChallengePlanPage() {
     onDropTargetChange: setDropTarget,
     onDrop: (target: DropTarget) => {
       if (!dragItem) return;
-      if (!canAccessDragItem(challengeState, role, dragItem)) {
-        const key = permissionKeyForChallengeAction(resourceForDragItem(dragItem), "edit");
-        if (key) notify(permissionDeniedMessage(key));
+      if (dragItem.type === "bounty" && !canMutateMetricForObjective(dragItem.objectiveId)) {
+        notifyUnavailableMetricEdit(dragItem.objectiveId);
         setDragItem(null);
         setDropTarget(null);
         return;
       }
-      if (dragItem.type === "bounty" && !canMutateMetricForObjective(dragItem.objectiveId)) {
-        notify("指标已冻结，不能排序");
+      if (dragItem.type !== "bounty" && !canAccessDragItem(challengeState, role, dragItem)) {
+        const key = permissionKeyForChallengeAction(resourceForDragItem(dragItem), "edit");
+        if (key) notify(permissionDeniedMessage(key));
         setDragItem(null);
         setDropTarget(null);
         return;
