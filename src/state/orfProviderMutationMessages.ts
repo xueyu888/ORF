@@ -33,7 +33,7 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
       }
 
       if (error.message === "Name is referenced by ORF records") {
-        return "该姓名已被 ORF 历史记录占用，不能创建新成员";
+        return "该姓名已被 ORF 历史记录占用，不能使用";
       }
 
       if (error.message === "Bound login email cannot be changed") {

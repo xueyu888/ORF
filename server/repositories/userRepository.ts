@@ -311,9 +311,119 @@ async function assertCanRenameUser(scope: RuntimeScope, userId: string, nextName
     return;
   }
 
-  if (await isUserNameReferencedByOrfRecords(scope, user.name)) {
-    throw Object.assign(new Error("User name is referenced by ORF records"), { statusCode: 409 });
+  if (await isUserNameReferencedByOrfRecords(scope, nextName)) {
+    throw Object.assign(new Error("Name is referenced by ORF records"), { statusCode: 409 });
   }
+}
+
+async function migrateScopedUserNameReferences(client: Pick<typeof db, "execute">, scope: RuntimeScope, userId: string, previousName: string, nextName: string) {
+  if (previousName === nextName) {
+    return;
+  }
+
+  const storageScopeId = runtimeScopeStorageId(scope);
+
+  await client.execute(sql`
+    update ${objectives}
+    set challengers = (
+      select coalesce(
+        jsonb_agg(case when item.value = ${previousName} then to_jsonb(${nextName}::text) else to_jsonb(item.value) end order by item.ordinality),
+        '[]'::jsonb
+      )
+      from jsonb_array_elements_text(${objectives.challengers}) with ordinality as item(value, ordinality)
+    )
+    where ${objectives.teamId} = ${storageScopeId} and ${objectives.challengers} ? ${previousName}
+  `);
+
+  await client.execute(sql`
+    update ${objectives}
+    set assigned_challengers = (
+      select coalesce(
+        jsonb_agg(case when item.value = ${previousName} then to_jsonb(${nextName}::text) else to_jsonb(item.value) end order by item.ordinality),
+        '[]'::jsonb
+      )
+      from jsonb_array_elements_text(${objectives.assignedChallengers}) with ordinality as item(value, ordinality)
+    )
+    where ${objectives.teamId} = ${storageScopeId} and ${objectives.assignedChallengers} ? ${previousName}
+  `);
+
+  await client.execute(sql`
+    update ${objectives}
+    set challenge_applications = (
+      select coalesce(
+        jsonb_agg(
+          case
+            when item.value->>'applicant' = ${previousName}
+              then jsonb_set(item.value, '{applicant}', to_jsonb(${nextName}::text), false)
+            else item.value
+          end
+          order by item.ordinality
+        ),
+        '[]'::jsonb
+      )
+      from jsonb_array_elements(${objectives.challengeApplications}) with ordinality as item(value, ordinality)
+    )
+    where ${objectives.teamId} = ${storageScopeId}
+      and exists (
+        select 1
+        from jsonb_array_elements(${objectives.challengeApplications}) as item(value)
+        where item.value->>'applicant' = ${previousName}
+      )
+  `);
+
+  await client.execute(sql`update ${results} set definer = ${nextName} where ${results.teamId} = ${storageScopeId} and ${results.definer} = ${previousName}`);
+  await client.execute(sql`update ${tasks} set assignee = ${nextName} where ${tasks.teamId} = ${storageScopeId} and ${tasks.assignee} = ${previousName}`);
+  await client.execute(sql`update ${feedback} set owner = ${nextName} where ${feedback.teamId} = ${storageScopeId} and ${feedback.owner} = ${previousName}`);
+  await client.execute(sql`update ${evidence} set owner = ${nextName} where ${evidence.teamId} = ${storageScopeId} and ${evidence.owner} = ${previousName}`);
+  await client.execute(sql`update ${objectiveLoot} set submitted_by = ${nextName} where ${objectiveLoot.teamId} = ${storageScopeId} and ${objectiveLoot.submittedBy} = ${previousName}`);
+  await client.execute(sql`update ${objectiveTrialReviews} set requested_by = ${nextName} where ${objectiveTrialReviews.teamId} = ${storageScopeId} and ${objectiveTrialReviews.requestedBy} = ${previousName}`);
+  await client.execute(sql`update ${objectiveTrialReviews} set reviewed_by = ${nextName} where ${objectiveTrialReviews.teamId} = ${storageScopeId} and ${objectiveTrialReviews.reviewedBy} = ${previousName}`);
+  await client.execute(sql`update ${objectiveAlignmentRequests} set requested_by = ${nextName} where ${objectiveAlignmentRequests.teamId} = ${storageScopeId} and ${objectiveAlignmentRequests.requestedBy} = ${previousName}`);
+  await client.execute(sql`update ${objectiveAlignmentRequests} set reviewed_by = ${nextName} where ${objectiveAlignmentRequests.teamId} = ${storageScopeId} and ${objectiveAlignmentRequests.reviewedBy} = ${previousName}`);
+  await client.execute(sql`update ${objectiveContributionReviews} set reviewer = ${nextName} where ${objectiveContributionReviews.teamId} = ${storageScopeId} and ${objectiveContributionReviews.reviewer} = ${previousName}`);
+  await client.execute(sql`update ${pointLedger} set member_name = ${nextName} where ${pointLedger.teamId} = ${storageScopeId} and ${pointLedger.memberName} = ${previousName}`);
+  await client.execute(sql`update ${notifications} set actor_name = ${nextName} where ${notifications.teamId} = ${storageScopeId} and ${notifications.actorUserId} = ${userId}`);
+  await client.execute(sql`
+    update ${commentMessages}
+    set author = ${nextName}
+    from ${commentThreads}
+    where ${commentMessages.threadId} = ${commentThreads.id}
+      and ${commentThreads.teamId} = ${storageScopeId}
+      and ${commentMessages.authorUserId} = ${userId}
+      and ${commentMessages.author} = ${previousName}
+  `);
+  await client.execute(sql`
+    update ${commentMessages}
+    set reply_to_author = ${nextName}
+    from ${commentThreads}
+    where ${commentMessages.threadId} = ${commentThreads.id}
+      and ${commentThreads.teamId} = ${storageScopeId}
+      and ${commentMessages.replyToAuthor} = ${previousName}
+  `);
+
+  await client.execute(sql`
+    update ${objectiveContributionReviews}
+    set allocations = (
+      select coalesce(
+        jsonb_agg(
+          case
+            when item.value->>'member' = ${previousName}
+              then jsonb_set(item.value, '{member}', to_jsonb(${nextName}::text), false)
+            else item.value
+          end
+          order by item.ordinality
+        ),
+        '[]'::jsonb
+      )
+      from jsonb_array_elements(${objectiveContributionReviews.allocations}) with ordinality as item(value, ordinality)
+    )
+    where ${objectiveContributionReviews.teamId} = ${storageScopeId}
+      and exists (
+        select 1
+        from jsonb_array_elements(${objectiveContributionReviews.allocations}) as item(value)
+        where item.value->>'member' = ${previousName}
+      )
+  `);
 }
 
 function assertCanChangeRole(actorUserId: string, userId: string, nextRole: UserRole) {
@@ -442,6 +552,9 @@ export async function createScopedUser(scope: RuntimeScope, actorUserId: string,
     const userId = existingUser?.id ?? (await nextUserId(normalized.email));
 
     if (existingUser) {
+      if (matchedMembership) {
+        await migrateScopedUserNameReferences(tx, scope, userId, existingUser.name, normalized.name);
+      }
       await tx.update(users).set({ name: normalized.name, email: normalized.email, status: "active" }).where(eq(users.id, userId));
     } else {
       await tx.insert(users).values({
@@ -477,7 +590,7 @@ async function updateScopedUserRecord(scope: RuntimeScope, userId: string, norma
   }
 
   await assertMembershipExists(scope, userId);
-  const [currentUser] = await db.select({ email: users.email, oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.id, userId)).limit(1);
+  const [currentUser] = await db.select({ email: users.email, name: users.name, oryIdentityId: users.oryIdentityId }).from(users).where(eq(users.id, userId)).limit(1);
   if (!currentUser) {
     throw Object.assign(new Error("User not found"), { statusCode: 404 });
   }
@@ -496,10 +609,12 @@ async function updateScopedUserRecord(scope: RuntimeScope, userId: string, norma
     throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
   }
 
+  const previousName = currentUser.name;
   await assertCanRenameUser(scope, userId, normalized.name);
   await assertUniqueUserNameInScope(scope, userId, normalized.name);
 
   await db.transaction(async (tx) => {
+    await migrateScopedUserNameReferences(tx, scope, userId, previousName, normalized.name);
     await tx.update(users).set({ name: normalized.name, email: normalized.email }).where(eq(users.id, userId));
     await tx
       .update(teamMembers)
