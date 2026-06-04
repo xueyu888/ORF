@@ -18,6 +18,9 @@ const env = { ...process.env };
 const fileEnv = readEnvFile(envFile);
 const publicCaCert = env.ORF_PUBLIC_CA_CERT ?? fileEnv.ORF_PUBLIC_CA_CERT;
 const localBin = path.join(rootDir, "node_modules", ".bin");
+let childExited = false;
+let terminating = false;
+let terminationSignal;
 
 if (!env.NODE_EXTRA_CA_CERTS && publicCaCert && fs.existsSync(publicCaCert)) {
   env.NODE_EXTRA_CA_CERTS = publicCaCert;
@@ -32,13 +35,70 @@ const child = spawn(args[0], args.slice(1), {
   stdio: "inherit",
 });
 
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    handleTerminationSignal(signal);
+  });
+}
+
+child.on("error", (error) => {
+  console.error(error?.message ?? String(error));
+  process.exit(1);
+});
+
 child.on("exit", (code, signal) => {
+  childExited = true;
+  if (terminationSignal) {
+    process.exit(signalExitCode(terminationSignal));
+    return;
+  }
   if (signal) {
-    process.kill(process.pid, signal);
+    process.exit(signalExitCode(signal));
     return;
   }
   process.exit(code ?? 0);
 });
+
+function handleTerminationSignal(signal) {
+  if (terminating) {
+    console.error(`收到 ${signal}，强制停止子进程...`);
+    if (!childExited) {
+      child.kill("SIGKILL");
+    }
+    return;
+  }
+
+  terminating = true;
+  terminationSignal = signal;
+  process.exitCode = signalExitCode(signal);
+
+  if (childExited) {
+    process.exit(process.exitCode);
+    return;
+  }
+
+  console.error(`收到 ${signal}，等待子进程完成清理后退出...`);
+  if (shouldForwardSignalToChild()) {
+    child.kill(signal);
+  }
+}
+
+function shouldForwardSignalToChild() {
+  return process.stdin.isTTY !== true;
+}
+
+function signalExitCode(signal) {
+  if (signal === "SIGINT") {
+    return 130;
+  }
+  if (signal === "SIGTERM") {
+    return 143;
+  }
+  if (signal === "SIGHUP") {
+    return 129;
+  }
+  return 1;
+}
 
 function readEnvFile(file) {
   if (!fs.existsSync(file)) {

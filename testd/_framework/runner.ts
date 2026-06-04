@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { test, type Page, type TestInfo } from "@playwright/test";
 import type {
   ActionBlock,
@@ -17,6 +18,15 @@ import {
   acquireRolePermissionReadLock,
   releaseRolePermissionLock,
 } from "../_operators/role-permission-lock";
+import {
+  createTestdInterruptError,
+  installTestdInterruptHandlers,
+  isTestdInterruptError,
+  isTestdInterruptRequested,
+  markTestdCaseCleanupComplete,
+  markTestdCaseCleanupRequired,
+  waitForTestdInterruptWrapperTermination,
+} from "./interrupt";
 
 const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
 
@@ -36,11 +46,15 @@ export async function runStateCase<
   ctx: TContext,
   options: RunStateCaseOptions<TContext, TData>,
 ) {
+  installTestdInterruptHandlers();
+
   const runScope = createTestdRunScope(testCase, options.testInfo);
   const scopedTestCase = scopeStateCaseSpec(testCase, runScope);
+  const cleanupMarkerId = `${process.pid}-${randomUUID()}`;
   const runtime: StateCaseRuntime = { values: {} };
   let failedStage: StateCaseRunStageName | undefined;
   let rolePermissionReadLockOwner: string | undefined;
+  let cleanupRequired = false;
 
   options.testInfo?.annotations.push(
     { type: "state-case-id", description: testCase.id },
@@ -57,6 +71,12 @@ export async function runStateCase<
 
     let primaryError: unknown;
     try {
+      markTestdCaseCleanupRequired({
+        markerId: cleanupMarkerId,
+        testCaseId: scopedTestCase.id,
+        title: scopedTestCase.title,
+      });
+      cleanupRequired = true;
       await runActionBlock("Setup", testCase.Setup);
       await runStateBlock("S0", testCase.S0);
       await runActionBlock("Action", testCase.Action);
@@ -65,12 +85,31 @@ export async function runStateCase<
       primaryError = error;
     }
 
-    primaryError = await runCleanupBlock("Clean", () => runActionBlock("Clean", testCase.Clean), primaryError);
-    primaryError = await runCleanupBlock(
-      "B after Clean",
-      () => runStateBlock("B after Clean", testCase.B),
-      primaryError,
-    );
+    let cleanCompleted = false;
+    primaryError = await runCleanupBlock("Clean", async () => {
+      await runActionBlock("Clean", testCase.Clean);
+      cleanCompleted = true;
+      if (cleanupRequired) {
+        markTestdCaseCleanupComplete({ markerId: cleanupMarkerId, testCaseId: scopedTestCase.id });
+      }
+    }, primaryError);
+
+    if (isTestdInterruptRequested()) {
+      if (!primaryError) {
+        primaryError = createTestdInterruptError();
+      }
+      if (cleanCompleted) {
+        await waitForTestdInterruptWrapperTermination();
+      }
+    }
+
+    if (!isTestdInterruptRequested() && !isTestdInterruptError(primaryError)) {
+      primaryError = await runCleanupBlock(
+        "B after Clean",
+        () => runStateBlock("B after Clean", testCase.B),
+        primaryError,
+      );
+    }
 
     if (primaryError) {
       throw primaryError;
@@ -120,8 +159,10 @@ export async function runStateCase<
       try {
         return await body();
       } catch (error) {
-        failedStage ??= stage;
-        await attachScreenshot(ctx, options.testInfo, stage, "on-failure");
+        if (!isTestdInterruptError(error)) {
+          failedStage ??= stage;
+          await attachScreenshot(ctx, options.testInfo, stage, "on-failure");
+        }
         throw error;
       }
     });
@@ -129,6 +170,10 @@ export async function runStateCase<
 
   async function runStep(stage: StateCaseRunStageName, step: StepSpec) {
     await test.step(formatStepTitle(step), async () => {
+      if (stage !== "Clean" && isTestdInterruptRequested()) {
+        throw createTestdInterruptError();
+      }
+
       const operator = options.operators[step.object]?.[step.operator];
       if (!operator) {
         throw new Error(`未注册测试算子: ${formatStepOperator(step)}`);

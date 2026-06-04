@@ -2,7 +2,9 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
 import os from "node:os";
+import path from "node:path";
 import process from "node:process";
 import readline from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
@@ -17,6 +19,7 @@ const inlineWaitLogIntervalMs = 1_000;
 const heartbeatIntervalMs = 5_000;
 const defaultLockTimeoutMs = 1_800_000;
 const defaultStaleMs = 120_000;
+const interruptCleanupWaitLogIntervalMs = 10_000;
 const inlineWaitLogEnabled =
   process.stderr.isTTY &&
   process.env.CI !== "true" &&
@@ -35,6 +38,21 @@ loadEnvFile();
 
 const testdRunId = process.env.TESTD_RUN_ID ?? createTestdRunId();
 process.env.TESTD_RUN_ID = testdRunId;
+const interruptRootDir =
+  process.env.TESTD_INTERRUPT_DIR ??
+  path.join(process.cwd(), ".artifacts", "testd-interrupt", safeFileName(testdRunId));
+const interruptFile =
+  process.env.TESTD_INTERRUPT_FILE ??
+  path.join(interruptRootDir, "request.json");
+const interruptCleanupFile = process.env.TESTD_INTERRUPT_CLEANED_FILE ?? path.join(interruptRootDir, "cleaned.json");
+const interruptActiveDir = process.env.TESTD_INTERRUPT_ACTIVE_DIR ?? path.join(interruptRootDir, "active");
+const interruptCleanedDir = process.env.TESTD_INTERRUPT_CLEANED_DIR ?? path.join(interruptRootDir, "cleaned");
+process.env.TESTD_INTERRUPT_DIR = interruptRootDir;
+process.env.TESTD_INTERRUPT_FILE = interruptFile;
+process.env.TESTD_INTERRUPT_CLEANED_FILE = interruptCleanupFile;
+process.env.TESTD_INTERRUPT_ACTIVE_DIR = interruptActiveDir;
+process.env.TESTD_INTERRUPT_CLEANED_DIR = interruptCleanedDir;
+clearInterruptMarkers();
 
 let childProcess;
 let childExited = true;
@@ -42,18 +60,20 @@ let heartbeatTimer;
 let hasLock = false;
 let released = false;
 let terminating = false;
+let terminationSignal;
 let client;
 let inlineWaitLogLineCount = 0;
+const owner = collectOwnerInfo(testdRunId);
 
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
-  process.once(signal, () => {
+  process.on(signal, () => {
     void handleTerminationSignal(signal);
   });
 }
 
 if (process.env.TESTD_GLOBAL_LOCK === "0") {
   console.error(`TestD 全局锁已关闭，本次 TESTD_RUN_ID=${testdRunId}`);
-  process.exitCode = await runCommand(commandArgs, { TESTD_RUN_ID: testdRunId });
+  process.exitCode = await runCommand(commandArgs, testdRuntimeEnv());
   process.exit();
 }
 
@@ -64,7 +84,6 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const owner = collectOwnerInfo(testdRunId);
 const lockTimeoutMs = positiveIntegerEnv("TESTD_GLOBAL_LOCK_TIMEOUT_MS", defaultLockTimeoutMs);
 const staleMs = positiveIntegerEnv("TESTD_GLOBAL_LOCK_STALE_MS", defaultStaleMs);
 const { Client } = pg;
@@ -95,7 +114,7 @@ try {
   heartbeatTimer = startHeartbeat(client, owner);
 
   console.error(formatAcquiredLog(owner));
-  process.exitCode = await runCommand(commandArgs, { TESTD_RUN_ID: testdRunId });
+  process.exitCode = await runCommand(commandArgs, testdRuntimeEnv());
 } catch (error) {
   clearInlineWaitLog();
   console.error(error?.message ?? String(error));
@@ -430,16 +449,71 @@ async function abortAfterLockLoss(error) {
 
 async function handleTerminationSignal(signal) {
   if (terminating) {
+    clearInlineWaitLog();
+    console.error(`TestD 全局锁再次收到 ${signal}，强制停止子进程并释放锁...`);
+    process.exitCode = signalExitCode(terminationSignal ?? signal);
+    await terminateChild("SIGKILL", 0);
+    await cleanupAndDisconnect();
+    process.exit(process.exitCode);
     return;
   }
   terminating = true;
+  terminationSignal = signal;
 
   clearInlineWaitLog();
-  console.error(`TestD 全局锁收到 ${signal}，正在停止子进程并释放锁...`);
+  console.error(`TestD 全局锁收到 ${signal}，等待当前用例完成 Clean 后释放锁...`);
+  console.error("再次发送中断信号将强制停止子进程。");
   process.exitCode = signalExitCode(signal);
-  await terminateChild(signal, 5000);
+  writeInterruptMarker(signal);
+
+  if (childProcess && !childExited) {
+    const cleanupCompleted = await waitForChildExitOrInterruptCleanup();
+    if (cleanupCompleted && !childExited) {
+      await terminateChild("SIGTERM", 3000);
+    } else if (!childExited && shouldForwardSignalToChild()) {
+      await terminateChild(signal, 0);
+    }
+  }
+
   await cleanupAndDisconnect();
   process.exit(process.exitCode);
+}
+
+function shouldForwardSignalToChild() {
+  return process.stdin.isTTY !== true;
+}
+
+async function waitForChildExitOrInterruptCleanup() {
+  const startedAt = Date.now();
+  let lastLogAt = 0;
+  while (!childExited) {
+    const pending = pendingCleanupMarkers();
+    if (pending.length === 0 && Date.now() - startedAt >= 500) {
+      console.error("TestD 当前运行中需要清理的用例均已完成 Clean，正在停止后续测试调度...");
+      return true;
+    }
+
+    const now = Date.now();
+    if (now - lastLogAt >= interruptCleanupWaitLogIntervalMs) {
+      lastLogAt = now;
+      console.error(`TestD 正在等待当前用例 Clean 完成... 待清理: ${pending.length}`);
+    }
+
+    await delay(250);
+  }
+
+  return false;
+}
+
+function pendingCleanupMarkers() {
+  if (!fs.existsSync(interruptActiveDir)) {
+    return [];
+  }
+
+  return fs
+    .readdirSync(interruptActiveDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name);
 }
 
 async function terminateChild(signal, graceMs) {
@@ -447,7 +521,7 @@ async function terminateChild(signal, graceMs) {
     return;
   }
 
-  childProcess.kill(signal);
+  signalChild(signal);
 
   const startedAt = Date.now();
   while (!childExited && Date.now() - startedAt < graceMs) {
@@ -455,7 +529,25 @@ async function terminateChild(signal, graceMs) {
   }
 
   if (!childExited) {
-    childProcess.kill("SIGKILL");
+    signalChild("SIGKILL");
+  }
+}
+
+function signalChild(signal) {
+  if (!childProcess || childExited) {
+    return;
+  }
+
+  try {
+    if (process.platform !== "win32" && childProcess.pid) {
+      process.kill(-childProcess.pid, signal);
+    } else {
+      childProcess.kill(signal);
+    }
+  } catch (error) {
+    if (error?.code !== "ESRCH") {
+      throw error;
+    }
   }
 }
 
@@ -470,13 +562,18 @@ function runCommand(args, extraEnv) {
       },
       shell: process.platform === "win32",
       stdio: "inherit",
+      detached: process.platform !== "win32",
     });
 
     childProcess.on("error", reject);
     childProcess.on("exit", (code, signal) => {
       childExited = true;
+      if (terminating) {
+        resolve(signalExitCode(terminationSignal ?? signal ?? "SIGINT"));
+        return;
+      }
       if (signal) {
-        resolve(1);
+        resolve(signalExitCode(signal));
         return;
       }
       resolve(code ?? 1);
@@ -493,6 +590,42 @@ function collectOwnerInfo(runId) {
     gitCommit: shellOutput("git", ["rev-parse", "--short=12", "HEAD"]) || "unknown",
     pid: process.pid,
   };
+}
+
+function testdRuntimeEnv() {
+  return {
+    TESTD_RUN_ID: testdRunId,
+    TESTD_INTERRUPT_DIR: interruptRootDir,
+    TESTD_INTERRUPT_FILE: interruptFile,
+    TESTD_INTERRUPT_CLEANED_FILE: interruptCleanupFile,
+    TESTD_INTERRUPT_ACTIVE_DIR: interruptActiveDir,
+    TESTD_INTERRUPT_CLEANED_DIR: interruptCleanedDir,
+    TESTD_INTERRUPT_WAIT_FOR_WRAPPER: "1",
+  };
+}
+
+function writeInterruptMarker(signal) {
+  const marker = {
+    type: "testd-interrupt-request",
+    runId: testdRunId,
+    signal,
+    requestedAt: new Date().toISOString(),
+    owner,
+  };
+
+  fs.mkdirSync(path.dirname(interruptFile), { recursive: true });
+  fs.writeFileSync(interruptFile, `${JSON.stringify(marker, null, 2)}\n`);
+}
+
+function clearInterruptMarkers() {
+  fs.rmSync(interruptFile, { force: true });
+  fs.rmSync(interruptCleanupFile, { force: true });
+  fs.rmSync(interruptActiveDir, { recursive: true, force: true });
+  fs.rmSync(interruptCleanedDir, { recursive: true, force: true });
+}
+
+function safeFileName(value) {
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "-");
 }
 
 function currentGitBranch() {
