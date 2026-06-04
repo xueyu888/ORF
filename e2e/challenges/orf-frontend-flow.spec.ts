@@ -240,26 +240,26 @@ test("real user launch flow links commander and challengers from publish to sett
 
     await challengerPage.goto("/tasks");
     await expect(objectivePanel(challengerPage, objective.title).getByRole("link", { name: "提交战利品" })).toBeVisible();
-    await challengerPage.goto(`/objectives/${objective.id}/loot`);
+    await challengerPage.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(challengerPage.getByRole("heading", { name: "提交战利品" })).toBeVisible();
     await challengerPage.getByLabel("完成说明").fill("已完成权限策略幻觉率验证，目标指标达成。");
     await challengerPage.getByPlaceholder("证据、数据或链接").fill("https://example.test/orf/live-flow/evidence");
     await challengerPage.getByLabel("自测报告").fill("全量回归和抽样人工复核均通过。");
-    await challengerPage.getByRole("button", { name: "提交" }).click();
+    await challengerPage.getByRole("button", { name: "正式提交" }).click();
     await expect(challengerPage).toHaveURL(/\/tasks$/);
     await expect(objectivePanel(challengerPage, objective.title)).toContainText("待验收");
 
-    await challengerPage.goto(`/objectives/${objective.id}/loot`);
+    await challengerPage.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(challengerPage.getByRole("heading", { name: "提交匿名互评" })).toBeVisible();
     await challengerPage.getByRole("button", { name: "提交匿名互评" }).click();
     await expect(challengerPage).toHaveURL(/\/tasks$/);
 
-    await secondChallengerPage.goto(`/objectives/${objective.id}/loot`);
+    await secondChallengerPage.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(secondChallengerPage.getByRole("heading", { name: "提交匿名互评" })).toBeVisible();
     await secondChallengerPage.getByRole("button", { name: "提交匿名互评" }).click();
     await expect(secondChallengerPage).toHaveURL(/\/tasks$/);
 
-    await commanderPage.goto(`/objectives/${objective.id}/loot`);
+    await commanderPage.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(commanderPage.getByRole("heading", { name: "验收战利品" })).toBeVisible();
     await expect(commanderPage.getByText("匿名互评贡献结果")).toBeVisible();
     await expect(commanderPage.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
@@ -643,24 +643,24 @@ test.describe("ORF high-level audit coverage", () => {
       await objectivePanel(commanderPage, round.title).getByRole("button", { name: "冻结" }).click();
       await expect(objectivePanel(commanderPage, round.title)).toContainText("已冻结");
 
-      await challengerPage.goto(`/objectives/${round.id}/loot`);
+      await challengerPage.goto(`/tasks/objectives/${round.id}/loot`);
       await challengerPage.getByLabel("完成说明").fill(`${round.title} 已完成并通过自测。`);
       await challengerPage.getByPlaceholder("证据、数据或链接").fill(`https://example.test/orf/audit/${round.id}`);
       await challengerPage.getByLabel("自测报告").fill(`${round.title} 自动化和人工抽样均通过。`);
-      await challengerPage.getByRole("button", { name: "提交" }).click();
+      await challengerPage.getByRole("button", { name: "正式提交" }).click();
       await expect(challengerPage).toHaveURL(/\/tasks$/);
       await expect(objectivePanel(challengerPage, round.title)).toContainText("待验收");
 
       for (const page of [challengerPage, secondChallengerPage]) {
         activeObjectiveId = round.id;
-        await page.goto(`/objectives/${round.id}/loot`);
+        await page.goto(`/tasks/objectives/${round.id}/loot`);
         await expect(page.getByRole("heading", { name: "提交匿名互评" })).toBeVisible();
         await page.getByRole("button", { name: "提交匿名互评" }).click();
         await expect(page).toHaveURL(/\/tasks$/);
       }
 
       activeObjectiveId = round.id;
-      await commanderPage.goto(`/objectives/${round.id}/loot`);
+      await commanderPage.goto(`/tasks/objectives/${round.id}/loot`);
       await attachAuditScreenshot(commanderPage, testInfo, `audit-multi-round-${index}-review`);
       await expect(commanderPage.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
       await commanderPage.getByLabel("验收说明").fill(`${round.title} 验收通过。`);
@@ -802,7 +802,7 @@ test.describe("ORF high-level audit coverage", () => {
     await expect.soft(page.getByText(leaked.title)).toHaveCount(0);
     await expect.soft(page.getByText("审计 他人的指标")).toHaveCount(0);
 
-    await page.goto("/objectives");
+    await page.goto("/tasks");
     await expect.soft(page.getByText(mine.title).first()).toBeVisible();
     await expect.soft(page.getByText(leaked.title)).toHaveCount(0);
   });
@@ -1354,7 +1354,7 @@ test("member can submit loot only after frozen objective and returns to challeng
     tasks: () => data,
   });
 
-  await page.goto(`/objectives/${objective.id}/loot`);
+  await page.goto(`/tasks/objectives/${objective.id}/loot`);
   await expect(page.getByRole("heading", { name: "提交战利品" })).toBeVisible();
   await expect(page.getByPlaceholder("记录自测覆盖、复核结论或风险说明")).toBeVisible();
   await expect(page.getByText("文件编辑器接入后")).toHaveCount(0);
@@ -1362,7 +1362,7 @@ test("member can submit loot only after frozen objective and returns to challeng
   await page.getByLabel("完成说明").fill("提交前端 E2E 验证战利品。");
   await page.getByPlaceholder("证据、数据或链接").fill("E2E evidence link");
   await page.getByLabel("自测报告").fill("自测摘要：前端流程通过。");
-  await page.getByRole("button", { name: "提交" }).click();
+  await page.getByRole("button", { name: "正式提交" }).click();
 
   await expect(page).toHaveURL(/\/tasks$/);
   await expect(objectivePanel(page, objective.title)).toContainText("待验收");
@@ -1406,7 +1406,7 @@ test("commander reviews submitted loot and sees settled points after refreshed d
     tasks: () => data,
   });
 
-  await page.goto(`/objectives/${objective.id}/loot`);
+  await page.goto(`/tasks/objectives/${objective.id}/loot`);
   await expect(page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
   await expect(page.getByText("请验收前端 E2E 战利品。")).toBeVisible();
 
@@ -1705,12 +1705,12 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await page.getByLabel("完成说明").fill("失败路径提交说明");
     await page.getByPlaceholder("证据、数据或链接").fill("failure evidence");
-    await page.getByRole("button", { name: "提交" }).click();
+    await page.getByRole("button", { name: "正式提交" }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/objectives/${objective.id}/loot$`));
+    await expect(page).toHaveURL(new RegExp(`/tasks/objectives/${objective.id}/loot$`));
     await expect(page.getByRole("heading", { name: "提交战利品" })).toBeVisible();
     await expect(page.getByText("loot submit rejected")).toBeVisible();
   });
@@ -1735,11 +1735,11 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await page.getByLabel("验收说明").fill("失败路径验收说明");
     await page.getByRole("button", { name: "验收并结算" }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/objectives/${objective.id}/loot$`));
+    await expect(page).toHaveURL(new RegExp(`/tasks/objectives/${objective.id}/loot$`));
     await expect(page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
     await expect(page.getByText("review rejected")).toBeVisible();
     await expect(page.getByLabel("100 积分")).toHaveCount(0);
@@ -1785,7 +1785,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await mockOrfApp(page, memberUser, data, { mineChallenges: () => data, tasks: () => data });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByRole("heading", { name: "验收战利品" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "验收并结算" })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "提交匿名互评" })).toBeVisible();
@@ -1806,10 +1806,10 @@ test.describe("ORF frontend guard coverage", () => {
 
     await mockOrfApp(page, observerUser, data, { tasks: () => data });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(page.getByText(objective.title)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "提交" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "正式提交" })).toHaveCount(0);
   });
 
   test("member never sees commander flow actions with full data", async ({ page }) => {
@@ -1846,9 +1846,9 @@ test.describe("ORF frontend guard coverage", () => {
 
     await mockOrfApp(page, adminUser, data, { allChallenges: () => data, tasks: () => data });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByRole("heading", { name: "提交战利品" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "提交" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "正式提交" })).toBeDisabled();
   });
 
   test("loot entry is visible only to current challenger", async ({ page }) => {
@@ -1993,8 +1993,8 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
-    await page.getByRole("button", { name: "提交" }).click();
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
+    await page.getByRole("button", { name: "正式提交" }).click();
     await expect(page.getByText("请填写完成说明")).toBeVisible();
     await expect.poll(() => postCount).toBe(0);
   });
@@ -2012,9 +2012,9 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await page.getByLabel("完成说明").fill("提交前端 E2E 验证战利品。");
-    await page.getByRole("button", { name: "提交" }).click();
+    await page.getByRole("button", { name: "正式提交" }).click();
     await expect(page.getByText("请填写每个已声明指标的证据、数据或链接")).toBeVisible();
     await expect.poll(() => postCount).toBe(0);
   });
@@ -2031,9 +2031,9 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await page.getByLabel("完成说明").fill("没有指标也不能提交");
-    await page.getByRole("button", { name: "提交" }).click();
+    await page.getByRole("button", { name: "正式提交" }).click();
     await expect(page.getByText("这个目标没有可验收的指标")).toBeVisible();
     await expect.poll(() => postCount).toBe(0);
   });
@@ -2051,9 +2051,9 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByRole("button", { name: "验收并结算" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "提交" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "正式提交" })).toBeDisabled();
     await expect.poll(() => reviewCount).toBe(0);
   });
 
@@ -2246,7 +2246,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await mockOrfApp(page, adminUser, data, { tasks: () => data });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByText("匿名互评贡献结果")).toBeVisible();
     await expect(page.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
     await expect(page.getByLabel(`${memberUser.name} 处理后贡献百分比`)).toBeVisible();
@@ -2282,7 +2282,7 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByText("验收时从本地结算服务读取匿名互评汇总。")).toBeVisible();
     await page.getByRole("button", { name: "验收并结算" }).click();
 
@@ -2300,7 +2300,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await mockOrfApp(page, adminUser, data, { tasks: () => data });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByText(memberUser.name)).toBeVisible();
     await expect(page.getByText("100%")).toBeVisible();
     await expect(page.getByText(observerUser.name)).toHaveCount(0);
@@ -2314,10 +2314,10 @@ test.describe("ORF frontend guard coverage", () => {
 
     await mockOrfApp(page, memberUser, data, { tasks: () => data });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByRole("heading", { name: "目标战利品" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "提交战利品" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "提交" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "正式提交" })).toBeEnabled();
   });
 
   test("loot deep link opens review form for commander on submitted objective", async ({ page }) => {
@@ -2328,7 +2328,7 @@ test.describe("ORF frontend guard coverage", () => {
 
     await mockOrfApp(page, adminUser, data, { tasks: () => data });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await expect(page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
     await expect(page.getByRole("button", { name: "验收并结算" })).toBeEnabled();
   });
@@ -2337,7 +2337,7 @@ test.describe("ORF frontend guard coverage", () => {
     const data = taskManagementData({ objectives: [], results: [] });
     await mockOrfApp(page, memberUser, data, { tasks: () => data });
 
-    await page.goto("/objectives/missing-objective/loot");
+    await page.goto("/tasks/objectives/missing-objective/loot");
     await expect(page).toHaveURL(/\/tasks$/);
   });
 
@@ -2589,10 +2589,10 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     await page.getByLabel("完成说明").fill("重复点击提交说明");
     await page.getByPlaceholder("证据、数据或链接").fill("duplicate click evidence");
-    const submitButton = page.getByRole("button", { name: "提交" });
+    const submitButton = page.getByRole("button", { name: "正式提交" });
     await submitButton.click();
     await submitButton.click({ force: true });
     deferred.resolve();
@@ -2617,7 +2617,7 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     const submitButton = page.getByRole("button", { name: "提交匿名互评" });
     await submitButton.click();
     await submitButton.click({ force: true });
@@ -2643,7 +2643,7 @@ test.describe("ORF frontend guard coverage", () => {
       tasks: () => data,
     });
 
-    await page.goto(`/objectives/${objective.id}/loot`);
+    await page.goto(`/tasks/objectives/${objective.id}/loot`);
     const submitButton = page.getByRole("button", { name: "验收并结算" });
     await submitButton.click();
     await submitButton.click({ force: true });

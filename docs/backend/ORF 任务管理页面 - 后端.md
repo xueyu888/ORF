@@ -73,7 +73,7 @@
 
 | 集合 | 用途 |
 | --- | --- |
-| `objectives` | 页面根节点，也是挑战对象 |
+| `objectives` | 页面根节点，也是挑战对象；可携带可空 `projectId` / `projectName` 作为前端项目分组展示字段 |
 | `results` | 目标下的指标 |
 | `tasks` | 目标下的任务和子任务 |
 | `evidence` | 证据 |

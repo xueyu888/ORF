@@ -54,7 +54,7 @@ export function DashboardPage() {
               <div className="text-sm font-semibold orf-text-primary">目标健康看板</div>
               <div className="mt-1 text-xs orf-text-muted">目标健康度、关联指标和最新反馈。</div>
             </div>
-            <Link className="text-sm orf-accent-text orf-hover-text" to="/objectives">查看全部</Link>
+            <Link className="text-sm orf-accent-text orf-hover-text" to="/tasks">查看全部</Link>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
             {visibleObjectives.map((objective) => (

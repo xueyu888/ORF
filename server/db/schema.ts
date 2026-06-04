@@ -94,6 +94,8 @@ export const objectives = pgTable("objectives", {
   title: text("title").notNull(),
   description: text("description").notNull(),
   whyItMatters: text("why_it_matters").notNull(),
+  projectId: text("project_id"),
+  projectName: text("project_name"),
   cycle: text("cycle").notNull(),
   stage: text("stage").$type<OrfStage>().notNull().default("orfReestimate"),
   flowStatus: text("flow_status").$type<ObjectiveFlowStatus>().notNull().default("candidate"),

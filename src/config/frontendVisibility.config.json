@@ -23,10 +23,6 @@
     "label": "侧边栏系统管理入口",
     "audience": "systemManagementViewer"
   },
-  "command.objectives": {
-    "label": "命令菜单目标入口",
-    "audience": "all"
-  },
   "page.systemManagement": {
     "label": "系统管理页面访问",
     "audience": "systemManagementViewer"

@@ -356,6 +356,31 @@ export function formatGitHubIssuesMessage(input: { repository: string; issues: G
   return [`#### GitHub issues: [${input.repository}](${repoUrl})`, summary, issueLines.join("\n")].join("\n\n");
 }
 
+function gitHubMattermostIntegrationEnabled(config: GitHubMattermostSyncConfig) {
+  return Boolean(config.GITHUB_SYNC_ENABLED || config.GITHUB_ISSUES_SYNC_ENABLED || config.GITHUB_WEBHOOK_SECRET);
+}
+
+export function assertGitHubMattermostConfig(config: GitHubMattermostSyncConfig) {
+  const targetConfig = githubMattermostChannelPostConfig(config);
+  const missing: string[] = [];
+
+  if (!targetConfig.MATTERMOST_URL) {
+    missing.push("MATTERMOST_URL");
+  }
+
+  if (!targetConfig.MATTERMOST_CHANNEL_ID) {
+    missing.push("GITHUB_MATTERMOST_CHANNEL_ID or MATTERMOST_PUSH_CHANNEL_ID or MATTERMOST_CHANNEL_ID");
+  }
+
+  if (!targetConfig.MATTERMOST_ACCESS_TOKEN && !(targetConfig.MATTERMOST_LOGIN_ID && targetConfig.MATTERMOST_PASSWORD)) {
+    missing.push("GITHUB_MATTERMOST_BOT_TOKEN or MATTERMOST_BOT_TOKEN or GITHUB_MATTERMOST_LOGIN_ID/GITHUB_MATTERMOST_PASSWORD");
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`GitHub Mattermost sync is enabled but required environment is missing: ${missing.join(", ")}`);
+  }
+}
+
 function hasMattermostConfig(config: GitHubMattermostSyncConfig) {
   return hasMattermostChannelPostConfig(githubMattermostChannelPostConfig(config));
 }
@@ -365,11 +390,11 @@ function webhookConfigured(config: GitHubMattermostSyncConfig) {
 }
 
 function pollingConfigured(config: GitHubMattermostSyncConfig) {
-  return Boolean(config.GITHUB_SYNC_ENABLED && hasMattermostConfig(config));
+  return config.GITHUB_SYNC_ENABLED;
 }
 
 function issuePollingConfigured(config: GitHubMattermostSyncConfig) {
-  return Boolean(config.GITHUB_ISSUES_SYNC_ENABLED && hasMattermostConfig(config));
+  return config.GITHUB_ISSUES_SYNC_ENABLED;
 }
 
 function timingSafeTokenEqual(left: string, right: string) {
@@ -485,7 +510,18 @@ async function reserveGitHubPushNotification(context: GitHubPushNotificationCont
         updated_at
       )
       values ($1, $2, $3, $4, $5, $6, 'reserved', now())
-      on conflict (sync_key) do nothing
+      on conflict (sync_key) do update
+      set channel_id = excluded.channel_id,
+          source = excluded.source,
+          status = 'reserved',
+          mattermost_post_id = null,
+          error = null,
+          updated_at = now()
+      where ${githubPushNotificationLedgerTableName}.status = 'failed'
+         or (
+           ${githubPushNotificationLedgerTableName}.status = 'reserved'
+           and ${githubPushNotificationLedgerTableName}.updated_at < now() - interval '10 minutes'
+         )
       returning sync_key
     `,
     [context.syncKey, context.repository, context.ref, context.afterSha, channelId, context.source],
@@ -1022,6 +1058,26 @@ async function syncGitHubIssues(app: FastifyInstance, config: GitHubMattermostSy
   }
 }
 
+async function assertGitHubMattermostSenderReady(config: GitHubMattermostSyncConfig) {
+  assertGitHubMattermostConfig(config);
+
+  const targetConfig = githubMattermostChannelPostConfig(config);
+  const channelId = targetConfig.MATTERMOST_CHANNEL_ID;
+  if (!channelId) {
+    throw new Error("GitHub Mattermost target channel is not configured");
+  }
+
+  const client = new MattermostClient(targetConfig);
+  const sender = await client.getCurrentUser();
+  if (config.GITHUB_MATTERMOST_REQUIRE_BOT && !sender.is_bot) {
+    throw new Error("GitHub Mattermost sync sender must be a bot user");
+  }
+
+  await client.getMyChannelMember(channelId);
+
+  return sender;
+}
+
 function startGitHubPolling(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
   if (!pollingConfigured(config)) {
     app.log.info(
@@ -1051,10 +1107,33 @@ function startGitHubPolling(app: FastifyInstance, config: GitHubMattermostSyncCo
     }
   };
 
-  void run();
-  const interval = setInterval(run, config.GITHUB_SYNC_INTERVAL_SECONDS * 1000);
+  let interval: NodeJS.Timeout | undefined;
+  app.addHook("onReady", async () => {
+    void run();
+    interval = setInterval(run, config.GITHUB_SYNC_INTERVAL_SECONDS * 1000);
+  });
   app.addHook("onClose", async () => {
-    clearInterval(interval);
+    if (interval) {
+      clearInterval(interval);
+    }
+  });
+}
+
+function registerGitHubMattermostStartupValidation(app: FastifyInstance, config: GitHubMattermostSyncConfig) {
+  if (!pollingConfigured(config) && !issuePollingConfigured(config)) {
+    return;
+  }
+
+  app.addHook("onReady", async () => {
+    const sender = await assertGitHubMattermostSenderReady(config);
+    app.log.info(
+      {
+        repository: config.GITHUB_REPOSITORY_FULL_NAME,
+        sender: sender.username ?? sender.id,
+        channelId: resolveGitHubMattermostChannelId(config),
+      },
+      "GitHub Mattermost sender config verified",
+    );
   });
 }
 
@@ -1087,10 +1166,15 @@ function startGitHubIssuesPolling(app: FastifyInstance, config: GitHubMattermost
     }
   };
 
-  void run();
-  const interval = setInterval(run, config.GITHUB_ISSUES_SYNC_INTERVAL_SECONDS * 1000);
+  let interval: NodeJS.Timeout | undefined;
+  app.addHook("onReady", async () => {
+    void run();
+    interval = setInterval(run, config.GITHUB_ISSUES_SYNC_INTERVAL_SECONDS * 1000);
+  });
   app.addHook("onClose", async () => {
-    clearInterval(interval);
+    if (interval) {
+      clearInterval(interval);
+    }
   });
 }
 
@@ -1188,7 +1272,11 @@ function registerOptionalWebhook(app: FastifyInstance, config: GitHubMattermostS
 
 export function registerGitHubMattermostSync(app: FastifyInstance) {
   const config = readConfig();
+  if (gitHubMattermostIntegrationEnabled(config)) {
+    assertGitHubMattermostConfig(config);
+  }
   registerOptionalWebhook(app, config);
+  registerGitHubMattermostStartupValidation(app, config);
   startGitHubPolling(app, config);
   startGitHubIssuesPolling(app, config);
 }
