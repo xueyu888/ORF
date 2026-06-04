@@ -62,6 +62,18 @@ npm run testd
 .artifacts/playwright-test-results/
 ```
 
+`npm run testd` 会先并行运行普通业务用例，再分别串行运行权限管理用例和 settings 用例。单独调试时可以直接使用：
+
+```bash
+npm run testd:isolated
+npm run testd:permissions
+npm run testd:settings
+```
+
+`npm run testd` 会为三段套件复用同一个 `TESTD_RUN_ID`；单独运行某个 suite 时，Playwright 配置会为本次运行生成 `TESTD_RUN_ID`。testd 会把邮箱、ID、标题、文件名等测试资源派生为运行内独占值。默认测试连接池为后端 `DATABASE_POOL_MAX=15`、testd 直连 `TESTD_DATABASE_POOL_MAX=2`。
+
+普通业务用例不会修改 `role_permissions`。权限管理用例单独串行运行；其中真正写入 member 角色权限的用例会持有 PostgreSQL advisory 独占锁，其他 testd 用例持共享锁，所以多个测试人员共用 PG/Ory/MinIO 时，普通业务用例可以并行，权限配置写入会等待正在运行的业务用例结束。默认单用例超时为普通业务套件 60000ms、权限/settings 串行套件 180000ms，权限锁等待超时为 `TESTD_ROLE_PERMISSION_LOCK_TIMEOUT_MS=300000`。
+
 没有设置 `PLAYWRIGHT_BASE_URL` 时，Playwright 会自动启动前端。普通模式默认端口是 `5173`，真实系统模式默认端口是 `5174`。
 
 ```bash

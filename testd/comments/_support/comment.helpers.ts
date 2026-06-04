@@ -2,14 +2,8 @@ import type { Page } from "@playwright/test";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { canMutateObjectiveCommentsAsChallengerByFlow, canMutateObjectiveCommentsByFlow } from "../../../src/domain/orfLifecycle";
 import { db } from "../../_operators/testd-db-client";
-import { commentAttachments, commentMessages, commentThreads, objectives, rolePermissions, tasks, users } from "../../../server/db/schema";
+import { commentAttachments, commentMessages, commentThreads, objectives, tasks, users } from "../../../server/db/schema";
 import { objectStorage } from "../../../server/storage/objectStorage";
-import { normalizePermissionKeys, type PermissionKey } from "../../../src/config/permissions";
-import { permissionStorageResource, permissionStorageStage } from "../../_operators/testd-permissions";
-import {
-  acquireRolePermissionLock,
-  releaseRolePermissionLock,
-} from "../../_operators/role-permission-lock";
 import {
   deleteTestObjectives,
   deleteTestUserMemberships,
@@ -32,12 +26,6 @@ import type {
 } from "./comment.context";
 
 export type MyChallengesScope = "mine" | "all";
-
-export type MemberCommentManagePermissionSnapshot = {
-  actions: PermissionKey[] | null;
-  teamId: string;
-  lockOwner?: string;
-};
 
 export async function prepareCommentActor(input: {
   email: string;
@@ -173,94 +161,6 @@ export async function setCommentObjectiveParticipant(objectiveId: string, member
       updatedAt: todayIsoDate(),
     })
     .where(eq(objectives.id, objectiveId));
-}
-
-export async function readMemberCommentManagePermissionSnapshot(teamId: string): Promise<MemberCommentManagePermissionSnapshot> {
-  const lockOwner = await acquireRolePermissionLock();
-  try {
-    return {
-      actions: await readMemberCommentManagePermissionActions(teamId),
-      teamId,
-      lockOwner,
-    };
-  } catch (error) {
-    await releaseRolePermissionLock(lockOwner);
-    throw error;
-  }
-}
-
-async function readMemberCommentManagePermissionActions(teamId: string): Promise<PermissionKey[] | null> {
-  const [row] = await db
-    .select({ actions: rolePermissions.actions })
-    .from(rolePermissions)
-    .where(
-      and(
-        eq(rolePermissions.teamId, teamId),
-        eq(rolePermissions.role, "member"),
-        eq(rolePermissions.stage, permissionStorageStage),
-        eq(rolePermissions.resource, permissionStorageResource),
-      ),
-    )
-    .limit(1);
-
-  return row ? normalizePermissionKeys(row.actions) : null;
-}
-
-export async function disableMemberCommentManagePermission(teamId: string) {
-  const actions = await readMemberCommentManagePermissionActions(teamId);
-  const nextActions = normalizePermissionKeys((actions ?? []).filter((permission) => permission !== "comment.manage"));
-
-  await db
-    .insert(rolePermissions)
-    .values({
-      teamId,
-      role: "member",
-      stage: permissionStorageStage,
-      resource: permissionStorageResource,
-      actions: nextActions,
-    })
-    .onConflictDoUpdate({
-      target: [rolePermissions.teamId, rolePermissions.role, rolePermissions.stage, rolePermissions.resource],
-      set: { actions: nextActions },
-    });
-}
-
-export async function restoreMemberCommentManagePermissionSnapshot(snapshot: MemberCommentManagePermissionSnapshot | null | undefined) {
-  if (!snapshot) {
-    return;
-  }
-
-  try {
-    if (!snapshot.actions) {
-      await db
-        .delete(rolePermissions)
-        .where(
-          and(
-            eq(rolePermissions.teamId, snapshot.teamId),
-            eq(rolePermissions.role, "member"),
-            eq(rolePermissions.stage, permissionStorageStage),
-            eq(rolePermissions.resource, permissionStorageResource),
-          ),
-        );
-      return;
-    }
-
-    await db
-      .insert(rolePermissions)
-      .values({
-        teamId: snapshot.teamId,
-        role: "member",
-        stage: permissionStorageStage,
-        resource: permissionStorageResource,
-        actions: snapshot.actions,
-      })
-      .onConflictDoUpdate({
-        target: [rolePermissions.teamId, rolePermissions.role, rolePermissions.stage, rolePermissions.resource],
-        set: { actions: snapshot.actions },
-      });
-  } finally {
-    await releaseRolePermissionLock(snapshot.lockOwner);
-  }
 }
 
 export async function commentTargetFromFixture(input: {

@@ -9,6 +9,14 @@ import type {
   StepParams,
   StepSpec,
 } from "./types";
+import {
+  createTestdRunScope,
+  scopeStateCaseSpec,
+} from "./run-scope";
+import {
+  acquireRolePermissionReadLock,
+  releaseRolePermissionLock,
+} from "../_operators/role-permission-lock";
 
 const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
 
@@ -28,15 +36,23 @@ export async function runStateCase<
   ctx: TContext,
   options: RunStateCaseOptions<TContext, TData>,
 ) {
+  const runScope = createTestdRunScope(testCase, options.testInfo);
+  const scopedTestCase = scopeStateCaseSpec(testCase, runScope);
   const runtime: StateCaseRuntime = { values: {} };
   let failedStage: StateCaseRunStageName | undefined;
+  let rolePermissionReadLockOwner: string | undefined;
 
   options.testInfo?.annotations.push(
     { type: "state-case-id", description: testCase.id },
     { type: "state-case-title", description: testCase.title },
+    { type: "testd-run-id", description: runScope.runId },
   );
 
   try {
+    if (!stateCaseWritesRolePermissions(testCase)) {
+      rolePermissionReadLockOwner = await acquireRolePermissionReadLock();
+    }
+
     await runStateBlock("B", testCase.B);
 
     let primaryError: unknown;
@@ -60,8 +76,12 @@ export async function runStateCase<
       throw primaryError;
     }
   } finally {
+    const releaseError = await releaseRolePermissionLock(rolePermissionReadLockOwner).catch((error: unknown) => error);
     if (failedStage) {
       await attachScreenshot(ctx, options.testInfo, failedStage, "after-failure");
+    }
+    if (releaseError && !failedStage) {
+      throw releaseError;
     }
   }
 
@@ -114,12 +134,12 @@ export async function runStateCase<
         throw new Error(`未注册测试算子: ${formatStepOperator(step)}`);
       }
 
-      const params = resolveStepParams(step.params ?? {}, testCase.data, runtime);
+      const params = resolveStepParams(step.params ?? {}, scopedTestCase.data, runtime);
       const result = await operator({
         ctx,
-        data: testCase.data,
+        data: scopedTestCase.data,
         runtime,
-        testCase,
+        testCase: scopedTestCase,
         stage,
         step,
         params,
@@ -131,6 +151,29 @@ export async function runStateCase<
       }
     });
   }
+}
+
+const rolePermissionWriteOperators = new Set([
+  "api.permissions.update_member",
+  "api.permissions.restore_member",
+  "page.permissions_save.submit",
+]);
+
+function stateCaseWritesRolePermissions(testCase: StateCaseSpec) {
+  return stateCaseSteps(testCase).some((step) =>
+    rolePermissionWriteOperators.has(`${step.object}.${step.operator}`),
+  );
+}
+
+function stateCaseSteps(testCase: StateCaseSpec) {
+  return [
+    ...testCase.B.assertions,
+    ...testCase.Setup.steps,
+    ...testCase.S0.assertions,
+    ...testCase.Action.steps,
+    ...testCase.S1.assertions,
+    ...testCase.Clean.steps,
+  ];
 }
 
 function formatStepTitle(step: StepSpec) {

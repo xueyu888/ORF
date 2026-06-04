@@ -71,7 +71,7 @@ export async function createLootPrerequisiteResult(
     throw new Error("目标不存在，无法创建战利品前置指标");
   }
 
-  const id = "res-testd-member-submit-loot";
+  const id = `res-${objective.id}`;
   await db.insert(results).values({
     id,
     teamId: objective.teamId,
@@ -190,7 +190,7 @@ export function lootFromResponse(body: unknown): SubmittedLoot {
 }
 
 export function lootPagePath(target: LootTarget) {
-  return `/objectives/${encodeURIComponent(target.objective.id)}/loot`;
+  return `/tasks/objectives/${encodeURIComponent(target.objective.id)}/loot`;
 }
 
 export function claimEvidenceInput(page: Page) {

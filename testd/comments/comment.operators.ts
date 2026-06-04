@@ -20,7 +20,6 @@ import {
   createCommentTask,
   createRootFixtureComment,
   deleteCommentActor,
-  disableMemberCommentManagePermission,
   deleteCommentAttachmentObjects,
   deleteCommentTargetAndTask,
   deleteCommentTask,
@@ -36,10 +35,8 @@ import {
   myChallengesScopeFor,
   openCommentPanel,
   prepareCommentActor,
-  readMemberCommentManagePermissionSnapshot,
   replyCountForParent,
   removeTestComments,
-  restoreMemberCommentManagePermissionSnapshot,
   replyCommentPersisted,
   rootCommentPersisted,
   setCommentObjectiveParticipant,
@@ -112,18 +109,6 @@ export const commentOperators = {
   "db.comment_objective": {
     set_participant: async ({ params }) => {
       await setCommentObjectiveParticipant(requiredString(params, "objectiveId"), requiredString(params, "memberName"));
-    },
-  },
-
-  "db.member_comment_manage_permission": {
-    snapshot: async ({ params }) => readMemberCommentManagePermissionSnapshot(requiredString(params, "teamId")),
-
-    disable: async ({ params }) => {
-      await disableMemberCommentManagePermission(requiredString(params, "teamId"));
-    },
-
-    restore_snapshot: async ({ params }) => {
-      await restoreMemberCommentManagePermissionSnapshot(params.snapshot as Parameters<typeof restoreMemberCommentManagePermissionSnapshot>[0]);
     },
   },
 

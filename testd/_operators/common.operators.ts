@@ -288,8 +288,8 @@ export function createCommonOperators<
           boundary: optionalString(params, "boundary"),
           successDefinition: optionalString(params, "successDefinition"),
           finalDueAt: optionalString(params, "finalDueAt"),
-          challengers: optionalStringArray(params, "challengers"),
-          assignedChallengers: optionalStringArray(params, "assignedChallengers"),
+          challengers: optionalStringList(params, "challengers"),
+          assignedChallengers: optionalStringList(params, "assignedChallengers"),
           objectiveBasePoints: optionalNumber(params, "objectiveBasePoints"),
           createdBy: optionalString(params, "createdBy"),
           updatedBy: optionalString(params, "updatedBy"),
@@ -645,6 +645,14 @@ function optionalStringArray(params: StepParams, key: string): string[] | undefi
     return value;
   }
   throw new Error(`参数 ${key} 必须是字符串数组`);
+}
+
+function optionalStringList(params: StepParams, key: string): string[] | undefined {
+  const value = params[key];
+  if (typeof value === "string") {
+    return [value];
+  }
+  return optionalStringArray(params, key);
 }
 
 function requiredUserRole(params: StepParams, key: string) {

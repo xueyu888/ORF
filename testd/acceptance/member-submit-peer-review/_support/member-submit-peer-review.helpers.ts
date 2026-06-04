@@ -64,7 +64,7 @@ export async function createPeerReviewLoot(target: PeerReviewTarget, body: strin
     throw new Error("目标不存在，无法创建匿名互评前置战利品");
   }
 
-  const id = "loot-testd-member-submit-peer-review";
+  const id = `loot-${objective.id}`;
   await db.insert(objectiveLoot).values({
     id,
     teamId: objective.teamId,
@@ -125,7 +125,7 @@ export async function targetLootPresent(target: PeerReviewTarget, loot: PeerRevi
 }
 
 export function lootPagePath(target: PeerReviewTarget) {
-  return `/objectives/${encodeURIComponent(target.objective.id)}/loot`;
+  return `/tasks/objectives/${encodeURIComponent(target.objective.id)}/loot`;
 }
 
 async function readLootByBody(body: string) {

@@ -92,6 +92,8 @@ export interface Objective {
   title: string;
   description: string;
   whyItMatters: string;
+  projectId?: string | null;
+  projectName?: string | null;
   cycle: string;
   stage: OrfStage;
   flowStatus: ObjectiveFlowStatus;

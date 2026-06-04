@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildServer } from "../server/app";
 import {
+  assertGitHubMattermostConfig,
   formatGitHubCommitSyncMessage,
   formatGitHubIssuesMessage,
   formatGitHubPushMessage,
@@ -69,6 +70,21 @@ test("resolves GitHub Mattermost sender from bot credentials only", () => {
   });
 
   assert.equal(resolveGitHubMattermostPostConfig(fallbackConfig).MATTERMOST_ACCESS_TOKEN, "shared-bot-token");
+});
+
+test("GitHub Mattermost sync requires bot sender config when enabled", () => {
+  const config = readGitHubMattermostSyncConfig({
+    GITHUB_SYNC_ENABLED: "true",
+    MATTERMOST_URL: "https://mattermost.example.com",
+    MATTERMOST_LOGIN_ID: "human@example.com",
+    MATTERMOST_PASSWORD: "human-password",
+    GITHUB_MATTERMOST_CHANNEL_ID: "github-channel",
+  });
+
+  assert.throws(
+    () => assertGitHubMattermostConfig(config),
+    /GITHUB_MATTERMOST_BOT_TOKEN or MATTERMOST_BOT_TOKEN or GITHUB_MATTERMOST_LOGIN_ID\/GITHUB_MATTERMOST_PASSWORD/,
+  );
 });
 
 test("resolves the GitHub Mattermost target channel with push bot fallback", () => {
@@ -166,6 +182,8 @@ test("GitHub webhook rejects oversized payloads before signature processing", as
   const previousEnv = {
     GITHUB_WEBHOOK_SECRET: process.env.GITHUB_WEBHOOK_SECRET,
     GITHUB_MATTERMOST_BOT_TOKEN: process.env.GITHUB_MATTERMOST_BOT_TOKEN,
+    GITHUB_SYNC_ENABLED: process.env.GITHUB_SYNC_ENABLED,
+    GITHUB_ISSUES_SYNC_ENABLED: process.env.GITHUB_ISSUES_SYNC_ENABLED,
     MATTERMOST_CHANNEL_ID: process.env.MATTERMOST_CHANNEL_ID,
     MATTERMOST_JIRA_REMINDER_ENABLED: process.env.MATTERMOST_JIRA_REMINDER_ENABLED,
     MATTERMOST_URL: process.env.MATTERMOST_URL,
@@ -174,6 +192,8 @@ test("GitHub webhook rejects oversized payloads before signature processing", as
   process.env.GITHUB_WEBHOOK_SECRET = "test-webhook-secret-value";
   process.env.MATTERMOST_CHANNEL_ID = "channel-id";
   process.env.GITHUB_MATTERMOST_BOT_TOKEN = "bot-token";
+  process.env.GITHUB_SYNC_ENABLED = "false";
+  process.env.GITHUB_ISSUES_SYNC_ENABLED = "false";
   process.env.MATTERMOST_URL = "https://mattermost.example.com";
   process.env.MATTERMOST_JIRA_REMINDER_ENABLED = "false";
 

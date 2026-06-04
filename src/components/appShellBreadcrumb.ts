@@ -1,7 +1,6 @@
 const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
   bounties: "悬赏大厅",
-  objectives: "目标",
   tasks: "我的挑战",
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",
@@ -17,7 +16,7 @@ const titleMap: Record<string, string> = {
 };
 
 export function breadcrumb(pathname: string) {
-  if (/^\/objectives\/[^/]+\/loot\/?$/.test(pathname)) {
+  if (/^\/tasks\/objectives\/[^/]+\/loot\/?$/.test(pathname)) {
     return "目标战利品";
   }
 

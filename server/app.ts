@@ -93,6 +93,7 @@ const objectiveAcceptedResultSchema = z.enum(["completed", "falsified", "overtur
 const resultAcceptedResultSchema = z.enum(["unreviewed", "completed", "falsified", "failed"]);
 const requiredTextSchema = z.string().trim().min(1);
 const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
+const optionalNullableTextSchema = z.string().trim().transform((value) => value || null).nullable().optional();
 const updateTaskStatusBodySchema = z.object({ status: taskStatusSchema });
 const titleBodySchema = z.object({ title: requiredTextSchema });
 const labelBodySchema = z.object({ label: requiredTextSchema });
@@ -126,14 +127,18 @@ const createResultBodySchema = z.object({
 const createObjectiveBodySchema = z.object({
   title: z.string().trim().min(1),
   whyItMatters: z.string().trim().min(1),
+  projectId: optionalNullableTextSchema,
+  projectName: optionalNullableTextSchema,
   cycle: z.string().trim().min(1),
   boundary: z.string().trim().min(1),
   finalDueAt: dateOnlySchema.optional(),
 });
 const objectiveDetailsBodySchema = z.object({
   title: requiredTextSchema.optional(),
+  projectId: optionalNullableTextSchema,
+  projectName: optionalNullableTextSchema,
   finalDueAt: dateOnlySchema.optional(),
-}).refine((body) => body.title !== undefined || body.finalDueAt !== undefined, { message: "No objective fields to update" });
+}).refine((body) => body.title !== undefined || body.projectId !== undefined || body.projectName !== undefined || body.finalDueAt !== undefined, { message: "No objective fields to update" });
 const createFeedbackBodySchema = z.object({
   phenomenon: z.string().trim().min(1),
   causeCategories: z.array(z.string().trim().min(1)).min(1),

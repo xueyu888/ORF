@@ -71,8 +71,8 @@ test("quick command configuration keeps creation actions separate from pages", (
 });
 
 test("app shell breadcrumb labels objective loot deep links", () => {
-  assert.equal(breadcrumb("/objectives/objective-1/loot"), "目标战利品");
-  assert.equal(breadcrumb("/objectives/objective-1/loot/"), "目标战利品");
+  assert.equal(breadcrumb("/tasks/objectives/objective-1/loot"), "目标战利品");
+  assert.equal(breadcrumb("/tasks/objectives/objective-1/loot/"), "目标战利品");
   assert.doesNotMatch(
     readFileSync(path.resolve("src/components/AppShell.tsx"), "utf8"),
     /\/tasks\/bounties/,
@@ -162,7 +162,8 @@ test("removed ORF secondary detail routes stay out of the route table", () => {
   assert.doesNotMatch(appSource, /objectives\/:objectiveId"\s+element=/, "Objective detail route must stay removed");
   assert.doesNotMatch(appSource, /objectives\/:objectiveId\/results\/:resultId/, "Result detail route must stay removed");
   assert.doesNotMatch(appSource, /feedback\/:feedbackId/, "Feedback detail route must stay removed");
-  assert.match(appSource, /objectives\/:objectiveId\/loot/, "Loot detail route remains the objective flow deep link");
+  assert.doesNotMatch(appSource, /path="objectives\/:objectiveId\/loot"/, "Old objective loot route must stay removed");
+  assert.match(appSource, /tasks\/objectives\/:objectiveId\/loot/, "Loot detail route remains under the challenge task domain");
 });
 
 test("frontend visibility rules are only accessed through the shared helpers", () => {
