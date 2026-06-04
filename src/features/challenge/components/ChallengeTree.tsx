@@ -146,7 +146,6 @@ export function ChallengeTree({
         >
           <ProjectHeader
             canCreateObjective={handlers.canCreateObjective}
-            now={now}
             onAddObjective={handlers.onAddObjective}
             project={project}
           />
@@ -183,6 +182,7 @@ function ProjectNavigator({
   projects: ObjectiveProjectGroup[];
 }) {
   const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
 
   const submitProject = async () => {
@@ -193,6 +193,7 @@ function ProjectNavigator({
     setCreating(false);
     if (project) {
       setName("");
+      setCreateOpen(false);
       window.requestAnimationFrame(() => scrollProjectIntoView(project.id));
     }
   };
@@ -212,25 +213,32 @@ function ProjectNavigator({
         </button>
       ))}
       {canManageProjects && (
-        <form
-          className="orf-project-create"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submitProject();
-          }}
-        >
-          <input
-            aria-label="新项目名称"
-            className="orf-project-create-input"
-            disabled={creating}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="新建项目"
-            value={name}
-          />
-          <button className="orf-project-create-button" disabled={creating || !name.trim()} type="submit">
+        createOpen ? (
+          <form
+            className="orf-project-create"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitProject();
+            }}
+          >
+            <input
+              aria-label="新项目名称"
+              className="orf-project-create-input"
+              disabled={creating}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="项目名"
+              value={name}
+            />
+            <button className="orf-project-create-button" disabled={creating || !name.trim()} type="submit">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </form>
+        ) : (
+          <button className="orf-project-create-collapsed" type="button" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
+            项目
           </button>
-        </form>
+        )
       )}
     </nav>
   );
@@ -238,45 +246,30 @@ function ProjectNavigator({
 
 function ProjectHeader({
   canCreateObjective,
-  now,
   onAddObjective,
   project,
 }: {
   canCreateObjective: boolean;
-  now: Date;
   onAddObjective: (projectId: string | null) => void;
   project: ObjectiveProjectGroup;
 }) {
-  const progress = clampProgress(project.averageProgress);
-  const deadlineLabel = project.nextDeadline ? remainingTime(project.nextDeadline, now) : "无截止日";
-
   return (
     <div className="orf-project-header">
       <div className="orf-project-heading min-w-0">
-        <div className="orf-project-kicker">项目工作区</div>
         <h2 className="orf-project-title">{project.name}</h2>
-        <div className="orf-project-status-line">
-          <span className={`orf-project-status orf-project-status-${project.statusTone}`}>{project.statusLabel}</span>
-          <span>{deadlineLabel}</span>
-        </div>
+        <span className="orf-project-count">{project.objectiveCount} 目标</span>
       </div>
-      <div className="orf-project-summary">
-        {canCreateObjective && (
-          <button className="orf-project-add-button" type="button" onClick={() => onAddObjective(project.projectId)}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            {project.isUnassigned ? "新增未归属目标" : "新增目标"}
-          </button>
-        )}
-        <div className="orf-project-meta" aria-label={`${project.name} 项目概览`}>
-          <span>{project.objectiveCount} 个目标</span>
-          <span>{project.bountyCount} 个指标</span>
-          <span>{project.actionCount} 个行动项</span>
-          <span>{progress}% 进度</span>
-        </div>
-        <div className="orf-project-progress" aria-label={`${project.name} 平均进度 ${progress}%`}>
-          <span style={{ width: `${progress}%` }} />
-        </div>
-      </div>
+      {canCreateObjective && (
+        <button
+          aria-label={project.isUnassigned ? "新增未归属目标" : `在${project.name}中新增目标`}
+          className="orf-project-add-button"
+          title={project.isUnassigned ? "新增未归属目标" : "新增目标"}
+          type="button"
+          onClick={() => onAddObjective(project.projectId)}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 }
@@ -287,10 +280,6 @@ function scrollProjectIntoView(projectId: string) {
 
 function projectSectionDomId(projectId: string) {
   return `orf-project-${encodeURIComponent(projectId)}`;
-}
-
-function clampProgress(value: number) {
-  return Math.max(0, Math.min(100, value));
 }
 
 function ObjectivePanel({
@@ -685,9 +674,8 @@ function ObjectiveProjectPicker({
 
   return (
     <span className="orf-objective-project-picker" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
-      <button className="orf-objective-project-trigger" type="button" title="移动到项目" onClick={() => setOpen(!open)}>
+      <button className="orf-objective-project-trigger" type="button" aria-label={`移动到项目，当前：${projectName}`} title={`移动到项目，当前：${projectName}`} onClick={() => setOpen(!open)}>
         <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" />
-        {projectName}
       </button>
       {open && (
         <span className="orf-popover orf-objective-project-menu">
