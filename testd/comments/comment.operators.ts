@@ -548,7 +548,9 @@ export const commentOperators = {
     },
 
     image_visible: async ({ ctx, params }) => {
-      await expect(commentImagePreviewButton(ctx.page, requiredString(params, "fileName"))).toBeVisible();
+      await expect(
+        commentImagePreviewButton(ctx.page, requiredString(params, "fileName"), optionalString(params, "body")),
+      ).toBeVisible();
     },
 
     close: async ({ ctx, params }) => {

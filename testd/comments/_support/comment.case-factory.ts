@@ -530,7 +530,8 @@ function createS1Assertions(definition: CommentCaseDefinition, actorLabel: strin
     step("S1-3", "playwright", "comment_panel.body.visible", "评论窗口 应显示 本用例测试评论正文", "page.comment_panel", "body_visible", {
       bodyFrom: "data.commentBody",
     }),
-    step("S1-4", "playwright", "comment_panel.image.visible", "评论窗口 应显示 本用例测试图片", "page.comment_panel", "image_visible", {
+    step("S1-4", "playwright", "comment_panel.image.visible", "评论窗口的本用例测试评论 应显示 本用例测试图片", "page.comment_panel", "image_visible", {
+      bodyFrom: "data.commentBody",
       fileNameFrom: "data.imageFileName",
     }),
     step("S1-5", "api", "api.my_challenges.image_comment.present", "普通成员计划页数据 应包含 当前评论对象的图片评论", "api.my_challenges.comment", "image_present", {

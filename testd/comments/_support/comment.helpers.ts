@@ -607,8 +607,9 @@ export function commentMessageRow(page: Page, body: string) {
   return commentPanel(page).locator(".orf-comment-message-row").filter({ hasText: body }).first();
 }
 
-export function commentImagePreviewButton(page: Page, fileName: string) {
-  return commentPanel(page).getByRole("button", { name: `查看图片 ${fileName}` });
+export function commentImagePreviewButton(page: Page, fileName: string, body?: string) {
+  const scope = body ? commentMessageRow(page, body) : commentPanel(page);
+  return scope.getByRole("button", { name: `查看图片 ${fileName}` });
 }
 
 export async function openCommentPanel(page: Page, target: CommentTarget) {
