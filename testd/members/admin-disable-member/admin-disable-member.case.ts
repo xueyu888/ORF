@@ -12,7 +12,7 @@ export const adminDisableMemberCase = {
     adminPassword: "OrfAdminDisableMemberE2E!2026",
     adminName: "ORF Admin Disable Member E2E",
     adminRole: "admin",
-    memberUserId: "00000000-0000-4000-8000-000000000104",
+    memberUserId: "user-testd-admin-disable-member",
     memberName: "ORF Member Disable Target E2E",
     memberEmail: "orf-member-disable-target-e2e@orf.local",
     memberRole: "member",

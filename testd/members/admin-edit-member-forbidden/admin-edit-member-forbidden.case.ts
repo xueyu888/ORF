@@ -12,7 +12,7 @@ export const adminEditMemberForbiddenCase = {
     memberPassword: "OrfMemberEditForbiddenE2E!2026",
     memberName: "ORF Member Edit Forbidden E2E",
     memberRole: "member",
-    targetUserId: "00000000-0000-4000-8000-000000000106",
+    targetUserId: "user-member-edit-forbidden-target-e2e",
     targetName: "ORF Member Edit Forbidden Target E2E",
     targetEmail: "orf-member-edit-forbidden-target-e2e@orf.local",
     targetRole: "member",

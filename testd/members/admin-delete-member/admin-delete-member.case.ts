@@ -12,7 +12,7 @@ export const adminDeleteMemberCase = {
     adminPassword: "OrfAdminDeleteMemberE2E!2026",
     adminName: "ORF Admin Delete Member E2E",
     adminRole: "admin",
-    memberUserId: "00000000-0000-4000-8000-000000000107",
+    memberUserId: "user-testd-admin-delete-member",
     memberName: "ORF Member Delete Target E2E",
     memberEmail: "orf-member-delete-target-e2e@orf.local",
     memberRole: "member",

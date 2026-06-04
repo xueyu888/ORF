@@ -1,6 +1,5 @@
 import type { BrowserContext, Page, Response } from "@playwright/test";
 import { and, asc, eq, inArray, or, sql } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import { db } from "./testd-db-client";
 import { commentThreads, objectives, results, taskChecklistItems, tasks, teamMembers, teams, users } from "../../server/db/schema";
 import { canDeleteObjectiveByFlow } from "../../src/domain/orfLifecycle";
@@ -316,7 +315,7 @@ export async function upsertTestUserRecord(input: {
   const [existingByEmail] = existingById
     ? []
     : await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${input.email.toLowerCase()}`).limit(1);
-  const userId = existingById?.id ?? existingByEmail?.id ?? input.userId ?? randomUUID();
+  const userId = existingById?.id ?? existingByEmail?.id ?? input.userId ?? `user-${slug(input.email.split("@")[0] ?? "testd-user")}`;
   const status = input.status ?? "active";
 
   if (existingById || existingByEmail) {
