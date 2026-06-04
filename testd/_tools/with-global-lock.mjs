@@ -6,7 +6,7 @@ import os from "node:os";
 import process from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
-import { createPgPoolConfig, databaseDisplayUrl, loadEnvFile } from "./db-connection.mjs";
+import { createPgPoolConfig, databaseDisplayUrl, loadEnvFile } from "../../scripts/db-connection.mjs";
 
 const lockName = "testd-global";
 const lockNamespaceKey = 0x4f524644; // "ORFD"
@@ -20,7 +20,7 @@ const rawArgs = process.argv.slice(2);
 const commandArgs = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
 
 if (commandArgs.length === 0) {
-  console.error("Usage: node scripts/with-testd-global-lock.mjs -- <command> [args...]");
+  console.error("Usage: node testd/_tools/with-global-lock.mjs -- <command> [args...]");
   process.exit(1);
 }
 
