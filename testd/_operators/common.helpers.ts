@@ -317,13 +317,17 @@ export async function upsertTestUserRecord(input: {
   const [existingByEmail] = existingById
     ? []
     : await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${input.email.toLowerCase()}`).limit(1);
+  const [existingByIdentity] =
+    existingById || existingByEmail || !input.identityId
+      ? []
+      : await db.select({ id: users.id }).from(users).where(eq(users.oryIdentityId, input.identityId)).limit(1);
   const fallbackUserId = isUuid(input.identityId)
     ? input.identityId
     : createStableUuid("testd-user", `${input.email.toLowerCase()}:${input.identityId ?? ""}`);
-  const userId = existingById?.id ?? existingByEmail?.id ?? requestedUserId ?? fallbackUserId;
+  const userId = existingById?.id ?? existingByEmail?.id ?? existingByIdentity?.id ?? requestedUserId ?? fallbackUserId;
   const status = input.status ?? "active";
 
-  if (existingById || existingByEmail) {
+  if (existingById || existingByEmail || existingByIdentity) {
     await db
       .update(users)
       .set({
