@@ -72,12 +72,7 @@ function createTestdRunId() {
 
 function handleTerminationSignal(signal) {
   if (terminating) {
-    console.error(`testd runner 再次收到 ${signal}，强制停止当前 Playwright 子进程...`);
-    if (currentChild && !currentChildExited) {
-      currentChild.kill("SIGKILL");
-    } else {
-      process.exit(signalExitCode(terminationSignal ?? signal));
-    }
+    console.error(`testd runner 已收到 ${terminationSignal ?? signal}，仍在等待当前 Playwright 用例清理；重复 ${signal} 不会强制中断。`);
     return;
   }
 
@@ -85,6 +80,7 @@ function handleTerminationSignal(signal) {
   terminationSignal = signal;
   process.exitCode = signalExitCode(signal);
   console.error(`testd runner 收到 ${signal}，等待当前 Playwright 用例清理后退出...`);
+  console.error("重复发送中断信号不会强制停止；TestD 会继续等待 Clean 完成。");
   if (currentChild && !currentChildExited && shouldForwardSignalToChild()) {
     currentChild.kill(signal);
   }

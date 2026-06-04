@@ -166,12 +166,12 @@ function requestTestdInterrupt(signal: TestdInterruptSignal, source: TestdInterr
     process.exitCode = signalExitCode(signal);
     const sourceText = interruptSource === "marker" ? `中断请求 ${signal}` : signal;
     process.stderr.write(`\nTestD 收到 ${sourceText}，将跳过后续非清理阶段，执行当前用例 Clean 后退出。\n`);
-    process.stderr.write("再次发送中断信号将交给外层进程强制停止。\n");
+    process.stderr.write("重复发送中断信号不会强制停止；TestD 会继续等待 Clean 完成。\n");
     return;
   }
 
   if (interruptCount === 2) {
-    process.stderr.write("\nTestD 已在清理当前用例；外层进程如再次收到中断会强制退出。\n");
+    process.stderr.write("\nTestD 已在清理当前用例；重复中断不会跳过 Clean。\n");
   }
 }
 

@@ -450,11 +450,7 @@ async function abortAfterLockLoss(error) {
 async function handleTerminationSignal(signal) {
   if (terminating) {
     clearInlineWaitLog();
-    console.error(`TestD 全局锁再次收到 ${signal}，强制停止子进程并释放锁...`);
-    process.exitCode = signalExitCode(terminationSignal ?? signal);
-    await terminateChild("SIGKILL", 0);
-    await cleanupAndDisconnect();
-    process.exit(process.exitCode);
+    console.error(`TestD 全局锁已收到 ${terminationSignal ?? signal}，仍在等待当前用例完成 Clean；重复 ${signal} 不会强制中断。`);
     return;
   }
   terminating = true;
@@ -462,7 +458,7 @@ async function handleTerminationSignal(signal) {
 
   clearInlineWaitLog();
   console.error(`TestD 全局锁收到 ${signal}，等待当前用例完成 Clean 后释放锁...`);
-  console.error("再次发送中断信号将强制停止子进程。");
+  console.error("重复发送中断信号不会强制停止；TestD 会继续等待 Clean 完成。");
   process.exitCode = signalExitCode(signal);
   writeInterruptMarker(signal);
 

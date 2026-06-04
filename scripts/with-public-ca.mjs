@@ -61,6 +61,11 @@ child.on("exit", (code, signal) => {
 
 function handleTerminationSignal(signal) {
   if (terminating) {
+    if (shouldProtectTestdCleanup()) {
+      console.error(`收到 ${signal}，TestD 正在等待 Clean 完成；重复中断不会强制停止子进程。`);
+      return;
+    }
+
     console.error(`收到 ${signal}，强制停止子进程...`);
     if (!childExited) {
       child.kill("SIGKILL");
@@ -81,6 +86,10 @@ function handleTerminationSignal(signal) {
   if (shouldForwardSignalToChild()) {
     child.kill(signal);
   }
+}
+
+function shouldProtectTestdCleanup() {
+  return env.TESTD_INTERRUPT_WAIT_FOR_WRAPPER === "1";
 }
 
 function shouldForwardSignalToChild() {
