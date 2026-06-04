@@ -6006,19 +6006,30 @@ body[data-dragging-floating="true"] {
   max-width: 210px;
   height: 32px;
   padding: 0 9px;
-  border: 1px solid rgba(80, 138, 190, 0.2);
-  background: rgba(255, 252, 244, 0.68);
+  border: 1px solid rgba(var(--orf-project-accent, 80, 138, 190), 0.32);
+  background:
+    linear-gradient(90deg, rgba(var(--orf-project-accent, 80, 138, 190), 0.14), rgba(255, 252, 244, 0.7) 44%),
+    rgba(255, 252, 244, 0.68);
   color: var(--orf-text-primary);
   clip-path: var(--orf-control-cut);
+  box-shadow: inset 3px 0 0 rgba(var(--orf-project-accent, 80, 138, 190), 0.72);
   transition:
     border-color 160ms ease,
+    box-shadow 160ms ease,
     transform 160ms ease;
 }
 
 .orf-project-nav-item:hover {
-  border-color: rgba(80, 138, 190, 0.48);
-  background: rgba(237, 244, 248, 0.84);
+  border-color: rgba(var(--orf-project-accent, 80, 138, 190), 0.52);
+  background:
+    linear-gradient(90deg, rgba(var(--orf-project-accent, 80, 138, 190), 0.2), rgba(var(--orf-project-accent-soft, 237, 244, 248), 0.82) 54%),
+    rgba(255, 252, 244, 0.82);
+  box-shadow: inset 3px 0 0 rgba(var(--orf-project-accent, 80, 138, 190), 0.9), 0 8px 18px rgba(var(--orf-project-accent, 80, 138, 190), 0.08);
   transform: translateY(-1px);
+}
+
+.orf-project-nav-item svg {
+  color: rgb(var(--orf-project-accent-deep, 35, 73, 117));
 }
 
 .orf-project-nav-name {
@@ -6108,10 +6119,15 @@ body[data-dragging-floating="true"] {
 
 .orf-project-section {
   display: grid;
-  gap: 8px;
-  padding-left: 10px;
-  border-left: 1px solid rgba(80, 138, 190, 0.22);
+  gap: 9px;
+  border: 1px solid rgba(var(--orf-project-accent, 80, 138, 190), 0.18);
+  border-left: 4px solid rgba(var(--orf-project-accent, 80, 138, 190), 0.82);
+  border-radius: 6px;
+  background:
+    linear-gradient(90deg, rgba(var(--orf-project-accent-soft, 244, 247, 251), 0.58), rgba(255, 252, 244, 0.26) 46%, transparent 100%);
+  padding: 8px 8px 10px 12px;
   scroll-margin-top: 86px;
+  box-shadow: 0 10px 26px rgba(var(--orf-project-accent, 80, 138, 190), 0.05), inset 1px 0 0 rgba(255, 255, 255, 0.62);
 }
 
 .orf-project-header {
@@ -6120,9 +6136,11 @@ body[data-dragging-floating="true"] {
   align-items: center;
   gap: 8px;
   min-height: 36px;
-  padding: 4px 4px 4px 10px;
-  border-bottom: 1px solid rgba(183, 139, 72, 0.18);
-  background: rgba(255, 252, 244, 0.38);
+  padding: 5px 5px 5px 9px;
+  border: 1px solid rgba(var(--orf-project-accent, 80, 138, 190), 0.14);
+  border-left: 0;
+  background:
+    linear-gradient(90deg, rgba(var(--orf-project-accent, 80, 138, 190), 0.16), rgba(255, 252, 244, 0.62) 52%, rgba(255, 252, 244, 0.3));
 }
 
 .orf-project-heading {
@@ -6132,12 +6150,22 @@ body[data-dragging-floating="true"] {
   gap: 8px;
 }
 
+.orf-project-heading::before {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgb(var(--orf-project-accent, 80, 138, 190));
+  content: "";
+  box-shadow: 0 0 0 3px rgba(var(--orf-project-accent, 80, 138, 190), 0.12);
+}
+
 .orf-project-title {
   margin: 0;
   overflow: hidden;
-  color: var(--orf-text-primary);
+  color: rgb(var(--orf-project-accent-deep, 35, 73, 117));
   font-size: 14px;
-  font-weight: 800;
+  font-weight: 900;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6150,15 +6178,19 @@ body[data-dragging-floating="true"] {
   white-space: nowrap;
 }
 
+.orf-project-body {
+  padding-left: 3px;
+}
+
 .orf-project-add-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(80, 138, 190, 0.34);
+  border: 1px solid rgba(var(--orf-project-accent, 80, 138, 190), 0.34);
   background:
-    linear-gradient(180deg, rgba(80, 138, 190, 0.94), rgba(43, 82, 128, 0.98));
+    linear-gradient(180deg, rgba(var(--orf-project-accent, 80, 138, 190), 0.92), rgba(var(--orf-project-accent-deep, 43, 82, 128), 0.98));
   color: #fff8df;
   clip-path: var(--orf-control-cut);
   line-height: 1;
@@ -6174,8 +6206,8 @@ body[data-dragging-floating="true"] {
 .orf-project-empty {
   min-height: 38px;
   padding: 10px 12px;
-  border: 1px dashed rgba(80, 138, 190, 0.26);
-  background: rgba(255, 252, 244, 0.58);
+  border: 1px dashed rgba(var(--orf-project-accent, 80, 138, 190), 0.3);
+  background: rgba(var(--orf-project-accent-soft, 244, 247, 251), 0.44);
   color: var(--orf-text-muted);
   font-size: 12px;
   font-weight: 700;

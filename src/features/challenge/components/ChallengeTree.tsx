@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, UserPlus, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
@@ -131,7 +131,7 @@ export function ChallengeTree({
         onCreateProject={handlers.onCreateProject}
         projects={projectGroups}
       />
-      {projectGroups.map((project) => (
+      {projectGroups.map((project, index) => (
         <div
           key={project.id}
           className={clsx(
@@ -140,6 +140,7 @@ export function ChallengeTree({
           )}
           data-project-group-id={project.id}
           id={projectSectionDomId(project.id)}
+          style={projectAccentStyle(project, index)}
           onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
           onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
           onDrop={(event) => handleRowDrop(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
@@ -149,7 +150,7 @@ export function ChallengeTree({
             onAddObjective={handlers.onAddObjective}
             project={project}
           />
-          <div className="grid gap-3">
+          <div className="orf-project-body grid gap-3">
             {project.objectives.length > 0 ? (
               project.objectives.map((group) => (
                 <ObjectivePanel
@@ -200,10 +201,11 @@ function ProjectNavigator({
 
   return (
     <nav className="orf-project-nav" aria-label="项目目标聚合导航">
-      {projects.map((project) => (
+      {projects.map((project, index) => (
         <button
           key={project.id}
           className="orf-project-nav-item"
+          style={projectAccentStyle(project, index)}
           type="button"
           onClick={() => scrollProjectIntoView(project.id)}
         >
@@ -281,6 +283,34 @@ function scrollProjectIntoView(projectId: string) {
 function projectSectionDomId(projectId: string) {
   return `orf-project-${encodeURIComponent(projectId)}`;
 }
+
+function projectAccentStyle(project: ObjectiveProjectGroup, index: number): ProjectAccentStyle {
+  const palette = project.isUnassigned
+    ? projectAccentPalette.unassigned
+    : projectAccentPalette.projects[index % projectAccentPalette.projects.length];
+
+  return {
+    "--orf-project-accent": palette.accent,
+    "--orf-project-accent-deep": palette.deep,
+    "--orf-project-accent-soft": palette.soft,
+  } as ProjectAccentStyle;
+}
+
+type ProjectAccentStyle = CSSProperties & {
+  "--orf-project-accent": string;
+  "--orf-project-accent-deep": string;
+  "--orf-project-accent-soft": string;
+};
+
+const projectAccentPalette = {
+  projects: [
+    { accent: "47, 156, 137", deep: "22, 111, 99", soft: "232, 250, 246" },
+    { accent: "216, 139, 42", deep: "141, 89, 25", soft: "255, 246, 229" },
+    { accent: "98, 91, 185", deep: "71, 59, 142", soft: "242, 239, 255" },
+    { accent: "50, 132, 206", deep: "31, 91, 150", soft: "232, 244, 255" },
+  ],
+  unassigned: { accent: "100, 116, 139", deep: "71, 85, 105", soft: "244, 247, 251" },
+} as const;
 
 function ObjectivePanel({
   group,
