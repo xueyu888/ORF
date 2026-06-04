@@ -26,7 +26,7 @@ if (await shouldRunRecoveryPass(extraArgs)) {
       break;
     }
 
-    const exitCode = await runPlaywright(suite, extraArgs, { TESTD_RECOVERY_ONLY: "1" });
+    const exitCode = await runRecoveryPass(suite, extraArgs, "pre");
     if (terminating) {
       process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
       break;
@@ -51,6 +51,7 @@ if (!process.exitCode) {
     }
     if (exitCode !== 0) {
       process.exitCode = exitCode;
+      await runPostFailureRecoveryPass(suite, extraArgs, exitCode);
       break;
     }
   }
@@ -89,8 +90,63 @@ function runPlaywright(suite, args, extraEnv = {}) {
   });
 }
 
+function runRecoveryPass(suite, args, reason) {
+  const recoveryRunId = createTestdRunId();
+  console.error(`TestD recovery ${reason} pass 启动: suite=${suite} TESTD_RUN_ID=${recoveryRunId}`);
+  return runPlaywright(suite, recoveryArgs(args), {
+    TESTD_RECOVERY_ONLY: "1",
+    TESTD_RUN_ID: recoveryRunId,
+  });
+}
+
+async function runPostFailureRecoveryPass(suite, args, originalExitCode) {
+  if (terminating || !isRecoveryPassAllowed(args)) {
+    return;
+  }
+
+  console.error(`TestD 检测到 ${suite} suite 失败，开始补清理本轮异常退出留下的 recovery case...`);
+  const recoveryExitCode = await runRecoveryPass(suite, args, "post-failure");
+  if (terminating) {
+    process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
+    return;
+  }
+
+  if (recoveryExitCode !== 0) {
+    process.exitCode = recoveryExitCode;
+    console.error(`TestD post-failure recovery 清理失败，保留退出码 ${recoveryExitCode}。`);
+    return;
+  }
+
+  process.exitCode = originalExitCode;
+  console.error(`TestD post-failure recovery 已完成；保留原始测试失败退出码 ${originalExitCode}。`);
+}
+
 function createTestdRunId() {
   return `td-${compactDate()}-${randomUUID().slice(0, 8)}`;
+}
+
+function recoveryArgs(args) {
+  const output = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (isTimeoutArg(arg)) {
+      if (arg === "--timeout" || arg === "--global-timeout") {
+        index += 1;
+      }
+      continue;
+    }
+    output.push(arg);
+  }
+  return output;
+}
+
+function isTimeoutArg(arg) {
+  return (
+    arg === "--timeout" ||
+    arg.startsWith("--timeout=") ||
+    arg === "--global-timeout" ||
+    arg.startsWith("--global-timeout=")
+  );
 }
 
 function handleTerminationSignal(signal) {
@@ -131,6 +187,14 @@ function compactDate() {
 }
 
 async function shouldRunRecoveryPass(args) {
+  if (!isRecoveryPassAllowed(args)) {
+    return false;
+  }
+
+  return hasPendingRecoveryCases();
+}
+
+function isRecoveryPassAllowed(args) {
   if (process.env.TESTD_RECOVERY === "0" || process.env.TESTD_RECOVERY_ONLY === "1") {
     return false;
   }
@@ -139,7 +203,7 @@ async function shouldRunRecoveryPass(args) {
     return false;
   }
 
-  return hasPendingRecoveryCases();
+  return true;
 }
 
 async function hasPendingRecoveryCases() {
