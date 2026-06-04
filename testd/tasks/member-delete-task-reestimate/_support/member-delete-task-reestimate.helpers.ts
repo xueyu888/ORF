@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { db } from "../../../../server/db/client";
 import { objectives } from "../../../../server/db/schema";
+import { db } from "../../../_operators/testd-db-client";
 import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import type { MemberDeleteTaskTarget } from "./member-delete-task-reestimate.context";
 
