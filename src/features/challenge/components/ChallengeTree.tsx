@@ -390,7 +390,6 @@ function ObjectivePanel({
           },
         ]
       : [];
-
   return (
     <section
       ref={setObjectiveElement}
@@ -440,20 +439,18 @@ function ObjectivePanel({
             <div className={clsx("orf-objective-title min-w-0 truncate font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{group.objective.title}</div>
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
-          {!isDraftObjective && handlers.canManageProjects && (
-            <ObjectiveProjectPicker
-              objectiveId={group.objective.id}
-              onCreateProject={handlers.onCreateProject}
-              onSetObjectiveProject={handlers.onSetObjectiveProject}
-              open={projectPickerOpen}
-              onOpenChange={(open) => {
-                handlers.onActiveActionChange(actionId);
-                handlers.onOpenActionChange(open ? projectPickerActionId : null);
-              }}
-              projectId={group.objective.projectId ?? null}
-              projects={projects}
-            />
-          )}
+          <ObjectiveProjectMenu
+            objectiveId={group.objective.id}
+            onCreateProject={handlers.onCreateProject}
+            onSetObjectiveProject={handlers.onSetObjectiveProject}
+            open={projectPickerOpen}
+            onOpenChange={(open) => {
+              handlers.onActiveActionChange(actionId);
+              handlers.onOpenActionChange(open ? projectPickerActionId : null);
+            }}
+            projectId={group.objective.projectId ?? null}
+            projects={projects}
+          />
         </HierarchyRootCell>
         <ObjectiveFlowAction disabled={isDraftObjective} group={group} handlers={handlers} />
         <AvatarStack names={group.challengers} />
@@ -659,7 +656,7 @@ function AlignmentActionButton({
   );
 }
 
-function ObjectiveProjectPicker({
+function ObjectiveProjectMenu({
   objectiveId,
   onCreateProject,
   onOpenChange,
@@ -678,14 +675,14 @@ function ObjectiveProjectPicker({
 }) {
   const [newProjectName, setNewProjectName] = useState("");
   const [saving, setSaving] = useState(false);
-  const setOpen = onOpenChange;
-  const projectName = projects.find((project) => project.id === projectId)?.name ?? unassignedObjectiveProjectName;
+
+  if (!open) return null;
 
   const setProject = async (nextProjectId: string | null) => {
     setSaving(true);
     try {
       const ok = await onSetObjectiveProject(objectiveId, nextProjectId);
-      if (ok) setOpen(false);
+      if (ok) onOpenChange(false);
     } finally {
       setSaving(false);
     }
@@ -700,7 +697,7 @@ function ObjectiveProjectPicker({
         const ok = await onSetObjectiveProject(objectiveId, project.id);
         if (ok) {
           setNewProjectName("");
-          setOpen(false);
+          onOpenChange(false);
         }
       }
     } finally {
@@ -709,46 +706,41 @@ function ObjectiveProjectPicker({
   };
 
   return (
-    <span className="orf-objective-project-picker" data-challenge-row-actions="true" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
-      <button className="orf-objective-project-trigger" type="button" aria-label={`移动到项目，当前：${projectName}`} title={`移动到项目，当前：${projectName}`} onClick={() => setOpen(!open)}>
-        <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" />
-      </button>
-      {open && (
-        <span className="orf-popover orf-objective-project-menu">
-          <button className="orf-objective-project-menu-item" disabled={saving || projectId === null} type="button" onClick={() => void setProject(null)}>
-            移出项目
+    <span className="orf-objective-project-menu-anchor" data-challenge-row-actions="true" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
+      <span className="orf-popover orf-objective-project-menu">
+        <button className="orf-objective-project-menu-item" disabled={saving || projectId === null} type="button" onClick={() => void setProject(null)}>
+          移出项目
+        </button>
+        {projects.map((project) => (
+          <button
+            key={project.id}
+            className="orf-objective-project-menu-item"
+            disabled={saving || project.id === projectId}
+            type="button"
+            onClick={() => void setProject(project.id)}
+          >
+            {project.name}
           </button>
-          {projects.map((project) => (
-            <button
-              key={project.id}
-              className="orf-objective-project-menu-item"
-              disabled={saving || project.id === projectId}
-              type="button"
-              onClick={() => void setProject(project.id)}
-            >
-              {project.name}
-            </button>
-          ))}
-          <span className="orf-objective-project-create">
-            <input
-              aria-label="新项目名称"
-              disabled={saving}
-              onChange={(event) => setNewProjectName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  void createAndAssign();
-                }
-              }}
-              placeholder="新建并放入"
-              value={newProjectName}
-            />
-            <button disabled={saving || !newProjectName.trim()} type="button" onClick={() => void createAndAssign()}>
-              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-            </button>
-          </span>
+        ))}
+        <span className="orf-objective-project-create">
+          <input
+            aria-label="新项目名称"
+            disabled={saving}
+            onChange={(event) => setNewProjectName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void createAndAssign();
+              }
+            }}
+            placeholder="新建并放入"
+            value={newProjectName}
+          />
+          <button disabled={saving || !newProjectName.trim()} type="button" onClick={() => void createAndAssign()}>
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
         </span>
-      )}
+      </span>
     </span>
   );
 }
@@ -1196,12 +1188,20 @@ function CompletionCheckbox({ checked, onChange }: { checked: boolean; onChange:
 }
 
 function CommentCountBadge({ count, onClick }: { count: number; onClick: () => void }) {
-  if (count <= 0) return null;
+  const hasComments = count > 0;
+  const label = hasComments ? `打开 ${count} 条评论` : "添加评论";
 
   return (
-    <button type="button" aria-label={`打开 ${count} 条评论`} className="orf-comment-count-badge" onClick={(event) => { event.stopPropagation(); onClick(); }} title={`打开 ${count} 条评论`}>
+    <button
+      type="button"
+      aria-label={label}
+      className="orf-comment-count-badge"
+      data-empty={hasComments ? undefined : "true"}
+      onClick={(event) => { event.stopPropagation(); onClick(); }}
+      title={label}
+    >
       <MessageSquare className="h-3.5 w-3.5" />
-      <span>{count}</span>
+      {hasComments && <span>{count}</span>}
     </button>
   );
 }
