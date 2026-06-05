@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
+import { objectiveChildMenuButton, objectiveChildMenuItem, objectivePanelByTitle } from "../../../_operators/challenge-workbench.helpers";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
 import type { ObjectiveFlowStatus } from "../../../../src/types/orf";
@@ -54,15 +55,15 @@ export async function deleteTestResult(title: string, createdResult?: AdminCreat
 }
 
 export function objectivePanel(page: Page, target: AdminCreateResultTarget) {
-  return page.locator("section.orf-objective-panel").filter({ hasText: target.objective.title }).first();
+  return objectivePanelByTitle(page, target.objective.title);
 }
 
 export function targetMetricButton(page: Page, target: AdminCreateResultTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增子级" }).first();
+  return objectiveChildMenuButton(page, target.objective.title);
 }
 
 export function targetMetricMenuItem(page: Page, target: AdminCreateResultTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增指标" }).first();
+  return objectiveChildMenuItem(page, target.objective.title, "新增指标");
 }
 
 export function targetResultRow(page: Page, target: AdminCreateResultTarget, result: Pick<AdminCreatedResult, "title">) {

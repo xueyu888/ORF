@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
+import { objectiveChildMenuButton, objectiveChildMenuItem, objectivePanelByTitle } from "../../../_operators/challenge-workbench.helpers";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
 import type { FrozenAdminResultTarget } from "./admin-cannot-create-result-frozen.context";
@@ -54,24 +55,19 @@ export async function deleteTestResult(title: string) {
 }
 
 export function objectivePanel(page: Page, target: FrozenAdminResultTarget) {
-  return page
-    .locator("section.orf-objective-panel")
-    .filter({
-      has: page.locator(".orf-objective-title").filter({ hasText: new RegExp(`^${escapeRegExp(target.objective.title)}$`) }),
-    })
-    .first();
+  return objectivePanelByTitle(page, target.objective.title);
 }
 
 export function targetAddMenuButton(page: Page, target: FrozenAdminResultTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增子级" }).first();
+  return objectiveChildMenuButton(page, target.objective.title);
 }
 
 export function targetActionMenuItem(page: Page, target: FrozenAdminResultTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增行动项" }).first();
+  return objectiveChildMenuItem(page, target.objective.title, "新增行动项");
 }
 
 export function targetMetricButton(page: Page, target: FrozenAdminResultTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增指标" });
+  return objectiveChildMenuItem(page, target.objective.title, "新增指标");
 }
 
 export function targetResultRow(page: Page, target: FrozenAdminResultTarget, title: string) {
@@ -115,8 +111,4 @@ async function readObjective(objectiveId: string) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

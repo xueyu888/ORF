@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import { openObjectiveChildMenu } from "../../_operators/challenge-workbench.helpers";
 import { requiredString } from "../../_operators/params";
 import type {
   FrozenMemberProposalCaseData,
@@ -12,7 +13,6 @@ import {
   objectivePanel,
   prepareFrozenProposalTarget,
   targetActionMenuItem,
-  targetAddMenuButton,
   targetFrozenForMember,
   targetMetricButton,
   targetResultAbsent,
@@ -79,11 +79,7 @@ export const memberCannotProposeResultFrozenOperators = {
 } satisfies OperatorRegistry<TestContext, FrozenMemberProposalCaseData>;
 
 async function openAddMenu(ctx: TestContext, target: FrozenProposalTarget) {
-  await objectivePanel(ctx.page, target).hover();
-  await expect(targetAddMenuButton(ctx.page, target)).toBeEnabled();
-  if (!(await targetActionMenuItem(ctx.page, target).isVisible())) {
-    await targetAddMenuButton(ctx.page, target).click();
-  }
+  await openObjectiveChildMenu(ctx.page, target.objective.title, "新增行动项");
 }
 
 function requiredFrozenProposalTarget(params: StepParams, key: string): FrozenProposalTarget {
