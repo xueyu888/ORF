@@ -4547,10 +4547,44 @@ button:disabled {
 .orf-main-content {
   position: relative;
   z-index: 3;
+  isolation: isolate;
   min-height: calc(100vh - var(--orf-topbar-height));
-  background: var(--orf-bg-page);
+  background: transparent;
   color: var(--orf-text-primary);
   padding: var(--orf-page-padding-y) var(--orf-page-padding-x);
+}
+
+.orf-main-content::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: "";
+  background:
+    linear-gradient(90deg, rgba(237, 243, 247, 0.2) 0%, rgba(237, 243, 247, 0.08) 44%, rgba(237, 243, 247, 0.18) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(237, 243, 247, 0.1) 38%, rgba(237, 243, 247, 0.22) 100%),
+    var(--orf-app-chrome-bg-image),
+    var(--orf-bg-page);
+  background-position:
+    center,
+    center,
+    center top,
+    center;
+  background-repeat:
+    no-repeat,
+    no-repeat,
+    no-repeat,
+    repeat;
+  background-size:
+    cover,
+    cover,
+    cover,
+    auto;
+  pointer-events: none;
+}
+
+.orf-main-content > * {
+  position: relative;
+  z-index: 1;
 }
 
 .orf-app-shell[data-bounty-hall="true"] .orf-main-content {
@@ -4560,7 +4594,7 @@ button:disabled {
 .orf-shell-body {
   position: relative;
   z-index: 3;
-  background: var(--orf-bg-page);
+  background: transparent;
 }
 
 .orf-app-shell[data-bounty-hall="true"] .orf-shell-body {
@@ -5834,9 +5868,9 @@ body[data-dragging-floating="true"] {
   padding: 8px 10px;
   border-radius: var(--orf-radius-card);
   background:
-    linear-gradient(90deg, rgba(255, 248, 232, 0.9) 0%, rgba(235, 249, 255, 0.82) 100%);
-  box-shadow: 0 14px 34px rgba(98, 77, 48, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(18px);
+    linear-gradient(90deg, rgba(255, 255, 255, 0.48) 0%, rgba(235, 249, 255, 0.3) 100%);
+  box-shadow: 0 12px 26px rgba(31, 49, 74, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.52);
+  backdrop-filter: blur(16px) saturate(1.16);
 }
 
 .orf-task-toolbar-actions {
@@ -6071,18 +6105,20 @@ body[data-dragging-floating="true"] {
 .orf-dashboard-metric {
   position: relative;
   overflow: hidden;
-  min-height: 112px;
-  border: var(--orf-border-width) solid rgba(183, 139, 72, 0.32);
-  border-radius: 0;
+  min-height: 108px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 14px;
   background:
-    radial-gradient(circle at 50% 18%, color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 16%, transparent) 0 18%, transparent 42%),
-    radial-gradient(circle at 50% 92%, rgba(82, 215, 246, 0.12) 0 14%, transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 252, 0.98), rgba(255, 238, 204, 0.88)),
-    var(--orf-bg-card);
-  clip-path: polygon(12px 0, calc(100% - 12px) 0, 100% 12px, 100% calc(100% - 12px), calc(100% - 12px) 100%, 12px 100%, 0 calc(100% - 12px), 0 12px);
-  box-shadow: 0 18px 42px rgba(98, 77, 48, 0.13), inset 0 0 0 1px rgba(255, 255, 255, 0.72), inset 0 -1px 0 rgba(183, 139, 72, 0.22);
+    radial-gradient(circle at 50% -8%, color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 4%, transparent) 0 30%, transparent 64%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.08) 48%, rgba(255, 255, 255, 0.05) 100%),
+    rgba(255, 255, 255, 0.05);
+  clip-path: none;
+  box-shadow:
+    0 12px 24px rgba(31, 49, 74, 0.045),
+    0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 -1px 0 rgba(31, 49, 74, 0.045) inset;
   padding: 14px 18px;
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px) saturate(1.2);
   transition:
     box-shadow 160ms ease,
     transform 160ms ease;
@@ -6091,48 +6127,56 @@ body[data-dragging-floating="true"] {
 .orf-dashboard-metric::before,
 .orf-dashboard-metric::after {
   position: absolute;
-  width: 24px;
-  height: 24px;
-  border-color: var(--orf-ornate-line-strong);
   content: "";
   pointer-events: none;
 }
 
 .orf-dashboard-metric::before {
-  top: 7px;
-  left: 7px;
-  border-top: 1px solid;
-  border-left: 1px solid;
+  inset: 1px;
+  border-radius: inherit;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.06) 38%, transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 44%);
+  opacity: 0.36;
 }
 
 .orf-dashboard-metric::after {
-  right: 7px;
-  bottom: 7px;
-  border-right: 1px solid;
-  border-bottom: 1px solid;
+  top: 9px;
+  right: 12px;
+  left: 12px;
+  height: 1px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  opacity: 0.42;
 }
 
 .orf-dashboard-metric:hover {
-  box-shadow: 0 24px 58px rgba(98, 77, 48, 0.18), 0 0 0 1px rgba(82, 215, 246, 0.24), inset 0 0 0 1px rgba(255, 255, 255, 0.82);
-  transform: translateY(-2px);
+  box-shadow:
+    0 18px 34px rgba(31, 49, 74, 0.075),
+    0 0 0 1px color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 7%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.62) inset,
+    0 -1px 0 rgba(31, 49, 74, 0.045) inset;
+  transform: translateY(-1px);
 }
 
 .orf-dashboard-emblem {
   position: relative;
-  color: #fff8df;
+  z-index: 1;
+  border: 1px solid color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 10%, rgba(255, 255, 255, 0.58));
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 62%, #415266 18%);
   background:
-    radial-gradient(circle at 50% 46%, rgba(255, 255, 255, 0.18) 0 20%, transparent 42%),
-    linear-gradient(180deg, color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 86%, #ffffff 10%) 0%, color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 74%, #102033 26%) 100%);
-  clip-path: polygon(50% 0, 87% 14%, 100% 50%, 87% 86%, 50% 100%, 13% 86%, 0 50%, 13% 14%);
-  box-shadow: 0 10px 22px color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 28%, transparent), inset 0 0 0 1px rgba(255, 226, 160, 0.72);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.12)),
+    color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 6%, rgba(255, 255, 255, 0.14));
+  clip-path: none;
+  box-shadow:
+    0 6px 14px color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 7%, transparent),
+    0 1px 0 rgba(255, 255, 255, 0.48) inset,
+    0 -1px 0 color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 5%, transparent) inset;
 }
 
 .orf-dashboard-emblem::after {
-  position: absolute;
-  inset: 8px;
-  border: 1px solid rgba(255, 235, 179, 0.58);
-  content: "";
-  transform: rotate(45deg);
+  display: none;
 }
 
 .orf-dashboard-emblem > svg {
@@ -6140,10 +6184,27 @@ body[data-dragging-floating="true"] {
   z-index: 1;
 }
 
+.orf-dashboard-metric .text-3xl {
+  position: relative;
+  z-index: 1;
+  color: #1f3047;
+  font-weight: 820;
+}
+
+.orf-dashboard-metric .text-xs {
+  position: relative;
+  z-index: 1;
+  color: #647083;
+}
+
 .orf-dashboard-progress {
+  position: relative;
+  z-index: 1;
   border-radius: 999px;
-  background: rgba(183, 139, 72, 0.18);
-  box-shadow: inset 0 0 0 1px rgba(183, 139, 72, 0.2);
+  background: rgba(31, 49, 74, 0.08);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.58) inset,
+    0 -1px 0 rgba(31, 49, 74, 0.06) inset;
 }
 
 .orf-dashboard-progress > span {
@@ -6151,18 +6212,18 @@ body[data-dragging-floating="true"] {
   height: 100%;
   border-radius: inherit;
   background:
-    linear-gradient(90deg, color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 72%, #ffffff 12%), var(--orf-fantasy-gold));
-  box-shadow: 0 0 10px color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 28%, transparent);
+    linear-gradient(90deg, color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 45%, #c7d2da 20%), color-mix(in srgb, var(--orf-dashboard-color, #3f75ad) 26%, #d8c9a6 22%));
+  box-shadow: none;
 }
 
 .orf-scope-tabs {
   border-radius: 0;
   background:
-    linear-gradient(180deg, rgba(255, 252, 244, 0.96) 0%, rgba(246, 229, 198, 0.88) 100%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5) 0%, rgba(246, 229, 198, 0.32) 100%);
   padding: 4px;
   clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%);
-  box-shadow: 0 12px 30px rgba(98, 77, 48, 0.1), inset 0 0 0 1px rgba(183, 139, 72, 0.32);
-  backdrop-filter: blur(14px);
+  box-shadow: 0 10px 22px rgba(31, 49, 74, 0.06), inset 0 0 0 1px rgba(183, 139, 72, 0.18);
+  backdrop-filter: blur(14px) saturate(1.12);
 }
 
 .orf-scope-tab {
@@ -6267,13 +6328,13 @@ body[data-dragging-floating="true"] {
   display: grid;
   gap: 0;
   overflow: hidden;
-  border: 1px solid rgba(255, 251, 239, 0.42);
+  border: 1px solid rgba(255, 251, 239, 0.34);
   border-radius: 12px;
-  background: rgba(238, 228, 208, 0.46);
+  background: rgba(255, 255, 255, 0.24);
   padding: 0;
   scroll-margin-top: 86px;
-  box-shadow: 0 14px 30px rgba(31, 49, 74, 0.08);
-  backdrop-filter: blur(10px) saturate(1.02);
+  box-shadow: 0 12px 26px rgba(31, 49, 74, 0.055);
+  backdrop-filter: blur(16px) saturate(1.14);
 }
 
 .orf-project-section::before {
@@ -6301,7 +6362,7 @@ body[data-dragging-floating="true"] {
 
 .orf-project-header:hover,
 .orf-project-header:focus-within {
-  background: rgba(255, 251, 239, 0.24);
+  background: rgba(255, 255, 255, 0.18);
   box-shadow: none;
 }
 
@@ -6429,7 +6490,7 @@ body[data-dragging-floating="true"] {
   padding: 10px 12px;
   border: 1px dashed rgba(126, 151, 178, 0.22);
   border-radius: 8px;
-  background: rgba(255, 251, 239, 0.28);
+  background: rgba(255, 255, 255, 0.18);
   color: #68788c;
   font-size: 12px;
   font-weight: 700;
@@ -7185,14 +7246,15 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-challenge-workbench .orf-objective-panel {
-  border: 1px solid rgba(255, 251, 239, 0.52);
+  border: 1px solid rgba(255, 251, 239, 0.34);
   border-radius: 10px;
-  background: rgba(255, 251, 239, 0.58);
-  box-shadow: 0 8px 18px rgba(31, 49, 74, 0.06);
+  background: rgba(255, 255, 255, 0.26);
+  box-shadow: 0 8px 18px rgba(31, 49, 74, 0.045);
+  backdrop-filter: blur(14px) saturate(1.12);
 }
 
 .orf-challenge-workbench .orf-objective-panel:hover {
-  box-shadow: 0 10px 22px rgba(31, 49, 74, 0.08);
+  box-shadow: 0 10px 22px rgba(31, 49, 74, 0.06);
   transform: translateY(-1px);
 }
 
@@ -7205,12 +7267,12 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-challenge-workbench .orf-objective-panel-editable {
-  background: rgba(255, 251, 239, 0.58);
+  background: rgba(255, 255, 255, 0.26);
 }
 
 .orf-challenge-workbench .orf-objective-panel-editable .orf-objective-header,
 .orf-challenge-workbench .orf-objective-panel-frozen .orf-objective-header {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .orf-challenge-workbench .orf-objective-body {
