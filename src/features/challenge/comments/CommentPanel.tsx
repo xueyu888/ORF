@@ -31,8 +31,7 @@ export type CommentDraft = {
 
 export type CommentDraftMode =
   | { type: "default" }
-  | { type: "reply"; rootMessageId: string; targetAuthor: string; targetMessageId: string }
-  | { type: "edit"; messageId: string; targetAuthor: string; threadId: string };
+  | { type: "reply"; rootMessageId: string; targetAuthor: string; targetMessageId: string };
 
 export type CommentReplyInput = {
   parentMessageId?: string;
@@ -76,6 +75,7 @@ export function CommentPanel({
 }) {
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
+  const [editState, setEditState] = useState<{ draft: CommentDraft; messageId: string; threadId: string } | null>(null);
   const [activeRootMessageId, setActiveRootMessageId] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null);
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
@@ -141,6 +141,12 @@ export function CommentPanel({
     setImagePreview(null);
   }, [targetId, targetType]);
 
+  useEffect(() => {
+    if (editState && !commentEntries.some((entry) => entry.message.id === editState.messageId)) {
+      setEditState(null);
+    }
+  }, [commentEntries, editState]);
+
   const resetDraft = () => {
     setDraftMode({ type: "default" });
     setDraft(emptyCommentDraft());
@@ -151,46 +157,41 @@ export function CommentPanel({
     const value = serializeCommentDraft(draft).trim();
     if (!value) return;
 
-    if (draftMode.type === "edit") {
-      onUpdateComment(draftMode.threadId, draftMode.messageId, value);
-    } else {
-      const replyInput =
-        draftMode.type === "reply"
-          ? {
-              parentMessageId: draftMode.rootMessageId,
-              replyToMessageId: draftMode.targetMessageId === draftMode.rootMessageId ? undefined : draftMode.targetMessageId,
-              replyToAuthor: draftMode.targetMessageId === draftMode.rootMessageId ? undefined : draftMode.targetAuthor,
-            }
-          : activeRootEntry
-            ? { parentMessageId: activeRootEntry.message.id }
-            : undefined;
+    const replyInput =
+      draftMode.type === "reply"
+        ? {
+            parentMessageId: draftMode.rootMessageId,
+            replyToMessageId: draftMode.targetMessageId === draftMode.rootMessageId ? undefined : draftMode.targetMessageId,
+            replyToAuthor: draftMode.targetMessageId === draftMode.rootMessageId ? undefined : draftMode.targetAuthor,
+          }
+        : activeRootEntry
+          ? { parentMessageId: activeRootEntry.message.id }
+          : undefined;
 
-      onAddComment(value, replyInput);
-    }
+    onAddComment(value, replyInput);
 
     resetDraft();
   };
 
   const handleReply = (rootMessageId: string, message: CommentMessage) => {
     setSelectedMessageId(message.id);
+    setEditState(null);
     setDraftMode({ type: "reply", rootMessageId, targetMessageId: message.id, targetAuthor: message.author });
     setDraft(emptyCommentDraft());
   };
 
   const handleEdit = (threadId: string, message: CommentMessage) => {
     setSelectedMessageId(message.id);
-    setDraftMode({ type: "edit", threadId, messageId: message.id, targetAuthor: message.author });
-    setDraft(commentDraftFromStoredBody(message.body, mentionUsersById));
+    resetDraft();
+    setEditState({ draft: commentDraftFromStoredBody(message.body, mentionUsersById), messageId: message.id, threadId });
   };
 
   const handleDelete = (threadId: string, messageId: string) => {
     const deletingRoot = rootEntries.some((entry) => entry.message.id === messageId);
     if (deletingRoot && activeRootMessageId === messageId) setActiveRootMessageId(null);
     if (selectedMessageId === messageId) setSelectedMessageId(null);
-    if (
-      (draftMode.type === "reply" && (draftMode.rootMessageId === messageId || draftMode.targetMessageId === messageId)) ||
-      (draftMode.type === "edit" && draftMode.messageId === messageId)
-    ) {
+    if (editState?.messageId === messageId) setEditState(null);
+    if (draftMode.type === "reply" && (draftMode.rootMessageId === messageId || draftMode.targetMessageId === messageId)) {
       resetDraft();
     }
     onDeleteComment(threadId, messageId);
@@ -199,7 +200,19 @@ export function CommentPanel({
   const openReplyDetail = (entry: CommentEntry) => {
     setActiveRootMessageId(entry.message.id);
     setSelectedMessageId(entry.message.id);
+    setEditState(null);
     resetDraft();
+  };
+  const updateEditDraft = (messageId: string, draft: CommentDraft) => {
+    setEditState((current) => (current?.messageId === messageId ? { ...current, draft } : current));
+  };
+  const submitEdit = (event: FormEvent, messageId: string) => {
+    event.preventDefault();
+    if (!editState || editState.messageId !== messageId) return;
+    const value = serializeCommentDraft(editState.draft).trim();
+    if (!value) return;
+    onUpdateComment(editState.threadId, editState.messageId, value);
+    setEditState(null);
   };
 
   return (
@@ -231,12 +244,19 @@ export function CommentPanel({
                     entry={activeRootEntry}
                     canManageAllComments={canManageAllComments}
                     currentMember={currentMember}
+                    currentUserId={currentUserId}
+                    editDraft={editState?.messageId === activeRootEntry.message.id ? editState.draft : null}
                     mentionUsersById={mentionUsersById}
+                    mentionableUsers={mentionableUsers}
                     selected={selectedMessageId === activeRootEntry.message.id}
                     onOpenImage={setImagePreview}
                     onSelect={setSelectedMessageId}
                     onReply={(message) => handleReply(activeRootEntry.message.id, message)}
                     onEdit={handleEdit}
+                    onCancelEdit={() => setEditState(null)}
+                    onEditDraftChange={(draft) => updateEditDraft(activeRootEntry.message.id, draft)}
+                    onSubmitEdit={(event) => submitEdit(event, activeRootEntry.message.id)}
+                    onUploadAttachment={onUploadAttachment}
                     onDelete={handleDelete}
                   />
                 </div>
@@ -248,12 +268,19 @@ export function CommentPanel({
                         entry={entry}
                         canManageAllComments={canManageAllComments}
                         currentMember={currentMember}
+                        currentUserId={currentUserId}
+                        editDraft={editState?.messageId === entry.message.id ? editState.draft : null}
                         mentionUsersById={mentionUsersById}
+                        mentionableUsers={mentionableUsers}
                         selected={selectedMessageId === entry.message.id}
                         onOpenImage={setImagePreview}
                         onSelect={setSelectedMessageId}
                         onReply={(message) => handleReply(activeRootEntry.message.id, message)}
                         onEdit={handleEdit}
+                        onCancelEdit={() => setEditState(null)}
+                        onEditDraftChange={(draft) => updateEditDraft(entry.message.id, draft)}
+                        onSubmitEdit={(event) => submitEdit(event, entry.message.id)}
+                        onUploadAttachment={onUploadAttachment}
                         onDelete={handleDelete}
                       />
                     ))}
@@ -270,7 +297,10 @@ export function CommentPanel({
                     entry={entry}
                     canManageAllComments={canManageAllComments}
                     currentMember={currentMember}
+                    currentUserId={currentUserId}
+                    editDraft={editState?.messageId === entry.message.id ? editState.draft : null}
                     mentionUsersById={mentionUsersById}
+                    mentionableUsers={mentionableUsers}
                     selected={selectedMessageId === entry.message.id}
                     showReplyEntry
                     onOpenImage={setImagePreview}
@@ -278,6 +308,10 @@ export function CommentPanel({
                     onReply={(message) => handleReply(entry.message.id, message)}
                     onEnterReplies={() => openReplyDetail(entry)}
                     onEdit={handleEdit}
+                    onCancelEdit={() => setEditState(null)}
+                    onEditDraftChange={(draft) => updateEditDraft(entry.message.id, draft)}
+                    onSubmitEdit={(event) => submitEdit(event, entry.message.id)}
+                    onUploadAttachment={onUploadAttachment}
                     onDelete={handleDelete}
                   />
                 ))}
@@ -309,32 +343,46 @@ export function CommentPanel({
 function CommentMessageRow({
   canManageAllComments,
   currentMember,
+  currentUserId,
+  editDraft,
   entry,
   mentionUsersById,
+  mentionableUsers,
+  onCancelEdit,
   onDelete,
   onEdit,
+  onEditDraftChange,
   onEnterReplies,
   onOpenImage,
   onReply,
   onSelect,
+  onSubmitEdit,
+  onUploadAttachment,
   selected,
   showReplyEntry = false,
 }: {
   canManageAllComments: boolean;
   currentMember: string;
+  currentUserId: string;
+  editDraft: CommentDraft | null;
   entry: CommentEntry;
   mentionUsersById: Map<string, CommentMentionUser>;
+  mentionableUsers: CommentMentionUser[];
+  onCancelEdit: () => void;
   onDelete: (threadId: string, messageId: string) => void;
   onEdit: (threadId: string, message: CommentMessage) => void;
+  onEditDraftChange: (draft: CommentDraft) => void;
   onEnterReplies?: () => void;
   onOpenImage: (preview: ImagePreview) => void;
   onReply: (message: CommentMessage) => void;
   onSelect: (messageId: string) => void;
+  onSubmitEdit: (event: FormEvent) => void;
+  onUploadAttachment: (file: File) => Promise<string | null>;
   selected: boolean;
   showReplyEntry?: boolean;
 }) {
   const { message, threadId } = entry;
-  const canManageMessage = canManageAllComments || message.author === currentMember;
+  const canManageMessage = canManageAllComments || (message.authorUserId ? message.authorUserId === currentUserId : message.author === currentMember);
   const createdTime = commentTimeDisplay(message.createdAt);
   const deleteMessage = () => {
     if (window.confirm("删除这条评论？")) {
@@ -365,11 +413,23 @@ function CommentMessageRow({
             )}
           </div>
         </div>
-        <div className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
-          {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
-          <CommentBodyText attachments={message.attachments ?? []} body={message.body} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
-        </div>
-        {showReplyEntry && entry.replyCount > 0 && (
+        {editDraft ? (
+          <CommentInlineEditor
+            currentUserId={currentUserId}
+            draft={editDraft}
+            mentionableUsers={mentionableUsers}
+            onCancel={onCancelEdit}
+            onDraftChange={onEditDraftChange}
+            onSubmit={onSubmitEdit}
+            onUploadAttachment={onUploadAttachment}
+          />
+        ) : (
+          <div className="orf-comment-body" onDoubleClick={(event) => { event.stopPropagation(); if (canManageMessage) onEdit(threadId, message); }}>
+            {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
+            <CommentBodyText attachments={message.attachments ?? []} body={message.body} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
+          </div>
+        )}
+        {!editDraft && showReplyEntry && entry.replyCount > 0 && (
           <button type="button" className="orf-comment-reply-count" onClick={(event) => { event.stopPropagation(); onEnterReplies?.(); }}>
             共 {entry.replyCount} 条回复
             <ChevronRight className="h-3.5 w-3.5" />
@@ -509,7 +569,7 @@ export function emptyCommentDraft(): CommentDraft {
   return { mentions: [], text: "" };
 }
 
-function commentDraftFromStoredBody(body: string, mentionUsersById: Map<string, CommentMentionUser>): CommentDraft {
+export function commentDraftFromStoredBody(body: string, mentionUsersById: Map<string, CommentMentionUser>): CommentDraft {
   const mentions: CommentDraftMention[] = [];
   let text = "";
   let lastIndex = 0;
@@ -640,30 +700,28 @@ function replaceCommentDraftText(
   };
 }
 
-export function CommentComposer({
-  currentMember,
-  currentUserAvatarUrl,
+function CommentDraftFields({
+  autoFocus = false,
+  cancelLabel = "取消",
   currentUserId,
-  defaultReplyAuthor,
   draft,
   mentionableUsers,
-  mode,
-  onCancelMode,
+  onCancel,
   onDraftChange,
-  onSubmit,
   onUploadAttachment,
+  placeholder,
+  submitLabel,
 }: {
-  currentMember: string;
-  currentUserAvatarUrl?: string | null;
+  autoFocus?: boolean;
+  cancelLabel?: string;
   currentUserId: string;
-  defaultReplyAuthor?: string;
   draft: CommentDraft;
   mentionableUsers: CommentMentionUser[];
-  mode: CommentDraftMode;
-  onCancelMode: () => void;
+  onCancel?: () => void;
   onDraftChange: (draft: CommentDraft) => void;
-  onSubmit: (event: FormEvent) => void;
   onUploadAttachment: (file: File) => Promise<string | null>;
+  placeholder: string;
+  submitLabel: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -672,8 +730,6 @@ export function CommentComposer({
   const [mentionRange, setMentionRange] = useState<CommentMentionRange | null>(null);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const draftRef = useRef(draft);
-  const placeholder = mode.type === "edit" ? "编辑评论..." : mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
-  const submitLabel = mode.type === "edit" ? "保存评论" : mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";
   const filteredMentionUsers = useMemo(() => {
     if (!mentionRange) return [];
     const query = mentionRange.query.trim().toLowerCase();
@@ -690,6 +746,17 @@ export function CommentComposer({
   useEffect(() => {
     setSelectedMentionIndex(0);
   }, [mentionRange?.query, filteredMentionUsers.length]);
+
+  useEffect(() => {
+    if (!autoFocus) return;
+    window.requestAnimationFrame(() => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const cursor = textarea.value.length;
+      textarea.focus();
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  }, [autoFocus]);
 
   const commitDraftChange = (nextDraft: CommentDraft) => {
     draftRef.current = nextDraft;
@@ -775,17 +842,7 @@ export function CommentComposer({
   };
 
   return (
-    <form className="orf-comment-composer" onSubmit={onSubmit}>
-      <PersonAvatar avatarUrl={currentUserAvatarUrl} name={currentMember} />
-      <div className="orf-comment-composer-main">
-        <span className="orf-comment-author-name">{currentMember}</span>
-        {mode.type !== "default" && (
-          <button type="button" className="orf-comment-draft-target" onClick={onCancelMode}>
-            <span>{mode.type === "reply" ? `回复 ${mode.targetAuthor}` : "编辑评论"}</span>
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+    <>
       <textarea
         ref={textareaRef}
         className="orf-comment-compose-field"
@@ -876,10 +933,103 @@ export function CommentComposer({
         >
           <ImagePlus className="h-4 w-4" />
         </button>
+        {onCancel && (
+          <button type="button" className="orf-comment-icon-button" aria-label={cancelLabel} title={cancelLabel} onClick={onCancel}>
+            <X className="h-4 w-4" />
+          </button>
+        )}
         <button type="submit" className="orf-comment-send-button" disabled={!draft.text.trim() || uploadingImage} aria-label={submitLabel} title={submitLabel}>
           <Send className="h-4 w-4" />
         </button>
       </div>
+    </>
+  );
+}
+
+export function CommentInlineEditor({
+  currentUserId,
+  draft,
+  mentionableUsers,
+  onCancel,
+  onDraftChange,
+  onSubmit,
+  onUploadAttachment,
+}: {
+  currentUserId: string;
+  draft: CommentDraft;
+  mentionableUsers: CommentMentionUser[];
+  onCancel: () => void;
+  onDraftChange: (draft: CommentDraft) => void;
+  onSubmit: (event: FormEvent) => void;
+  onUploadAttachment: (file: File) => Promise<string | null>;
+}) {
+  return (
+    <form className="orf-comment-inline-editor" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onSubmit={onSubmit}>
+      <CommentDraftFields
+        autoFocus
+        cancelLabel="取消编辑"
+        currentUserId={currentUserId}
+        draft={draft}
+        mentionableUsers={mentionableUsers}
+        onCancel={onCancel}
+        onDraftChange={onDraftChange}
+        onUploadAttachment={onUploadAttachment}
+        placeholder="编辑评论..."
+        submitLabel="保存评论"
+      />
+    </form>
+  );
+}
+
+export function CommentComposer({
+  currentMember,
+  currentUserAvatarUrl,
+  currentUserId,
+  defaultReplyAuthor,
+  draft,
+  mentionableUsers,
+  mode,
+  onCancelMode,
+  onDraftChange,
+  onSubmit,
+  onUploadAttachment,
+}: {
+  currentMember: string;
+  currentUserAvatarUrl?: string | null;
+  currentUserId: string;
+  defaultReplyAuthor?: string;
+  draft: CommentDraft;
+  mentionableUsers: CommentMentionUser[];
+  mode: CommentDraftMode;
+  onCancelMode: () => void;
+  onDraftChange: (draft: CommentDraft) => void;
+  onSubmit: (event: FormEvent) => void;
+  onUploadAttachment: (file: File) => Promise<string | null>;
+}) {
+  const placeholder = mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
+  const submitLabel = mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";
+
+  return (
+    <form className="orf-comment-composer" onSubmit={onSubmit}>
+      <PersonAvatar avatarUrl={currentUserAvatarUrl} name={currentMember} />
+      <div className="orf-comment-composer-main">
+        <span className="orf-comment-author-name">{currentMember}</span>
+        {mode.type === "reply" && (
+          <button type="button" className="orf-comment-draft-target" onClick={onCancelMode}>
+            <span>{`回复 ${mode.targetAuthor}`}</span>
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+      <CommentDraftFields
+        currentUserId={currentUserId}
+        draft={draft}
+        mentionableUsers={mentionableUsers}
+        onDraftChange={onDraftChange}
+        onUploadAttachment={onUploadAttachment}
+        placeholder={placeholder}
+        submitLabel={submitLabel}
+      />
     </form>
   );
 }

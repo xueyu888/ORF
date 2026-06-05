@@ -1644,6 +1644,10 @@
   padding: 0 9px;
 }
 
+.feedback-issue-reply-action + .feedback-issue-reply-action {
+  margin-left: 0;
+}
+
 .feedback-issue-reply-action svg {
   width: 13px;
   height: 13px;
