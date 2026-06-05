@@ -151,6 +151,11 @@ export function BountyHallPage() {
   };
 
   const applyChallenge = async (item: BountyItem, reason: string) => {
+    if (item.isRecruitment) {
+      await loadBountyData();
+      setConfirmTarget(null);
+      return;
+    }
     if (!canApplyForObjectiveChallenge(item.objective)) {
       await loadBountyData();
       setConfirmTarget(null);

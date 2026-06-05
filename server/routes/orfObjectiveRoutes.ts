@@ -466,6 +466,9 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     if (outcome.status === "alreadyAccepted") {
       return reply.code(409).send({ error: "Objective already includes this challenger", challengers: outcome.challengers });
     }
+    if (outcome.status === "alreadyRecruited") {
+      return reply.code(409).send({ error: "Objective already recruited this challenger" });
+    }
     if (outcome.status === "alreadyApplied") {
       return reply.code(409).send({ error: "Challenge application already exists" });
     }

@@ -1074,6 +1074,7 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "applied"; objective: Objective }
   | { status: "alreadyApplied" }
   | { status: "alreadyAccepted"; challengers: string[] }
+  | { status: "alreadyRecruited" }
   | { status: "forbidden" }
   | { status: "invalidReason" }
   | { status: "closed" }
@@ -1106,6 +1107,10 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     const challengers = uniqueParticipantNames(objective.challengers ?? []);
     if (isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "alreadyAccepted" as const, challengers };
+    }
+    const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
+    if (isObjectiveAssignedChallenger({ assignedChallengerUserIds, challengerUserIds }, actor.id)) {
+      return { status: "alreadyRecruited" as const };
     }
     if (objectiveClosedForChallengeEntry(objective) || !canApplyForObjectiveChallenge(objective)) {
       return { status: "closed" as const };
