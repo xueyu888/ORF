@@ -1,4 +1,4 @@
-import { Loader2, Plus, Search, Shield } from "lucide-react";
+import { Plus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
@@ -8,7 +8,7 @@ import { GlobalModals } from "./GlobalModals";
 import { NotificationBell } from "./NotificationBell";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
-import { toCssImageUrl } from "../config/assetLibrary";
+import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
@@ -60,14 +60,8 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  if (sidebarBackground.status === "error") {
-    throw sidebarBackground.error;
-  }
-  if (sidebarBackground.status === "loading") {
-    return <AppShellBackgroundLoading />;
-  }
-
-  const sidebarBackgroundUrl = sidebarBackground.url;
+  const sidebarBackgroundUrl =
+    sidebarBackground.status === "ready" ? sidebarBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
   const shellStyle = {
     "--orf-app-chrome-bg-image": toCssImageUrl(sidebarBackgroundUrl),
   } as CSSProperties;
@@ -134,19 +128,5 @@ export function AppShell() {
       <GlobalModals />
       <Toasts />
     </div>
-  );
-}
-
-function AppShellBackgroundLoading() {
-  return (
-    <main className="orf-auth-loading-page" role="status" aria-live="polite">
-      <div className="orf-auth-loading-panel">
-        <Loader2 className="h-7 w-7 animate-spin" />
-        <div>
-          <div className="orf-auth-loading-title">正在加载视觉背景</div>
-          <div className="orf-auth-loading-copy">侧边栏背景图片加载完成后进入系统。</div>
-        </div>
-      </div>
-    </main>
   );
 }

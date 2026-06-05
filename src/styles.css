@@ -2942,7 +2942,7 @@ button:disabled {
 }
 
 .orf-app-shell[data-bounty-hall="true"] {
-  background: #efd4ad;
+  background: #ddd4c7;
 }
 
 .orf-app-shell::before {
@@ -2956,8 +2956,8 @@ button:disabled {
 
 .orf-app-shell[data-bounty-hall="true"]::before {
   background:
-    linear-gradient(90deg, rgba(19, 26, 38, 0.08) 0%, rgba(255, 245, 220, 0.16) 34%, rgba(255, 241, 205, 0.4) 100%),
-    linear-gradient(135deg, #eb9ea5 0%, #e9b59f 34%, #efca9c 68%, #f5ddb0 100%);
+    linear-gradient(90deg, rgba(100, 74, 86, 0.18) 0%, rgba(224, 214, 197, 0.38) 42%, rgba(83, 119, 144, 0.14) 100%),
+    linear-gradient(135deg, #ded3c2 0%, #d9cab9 38%, #d4d0d8 68%, #e6dac6 100%);
   background-position:
     center,
     center;
@@ -3048,9 +3048,9 @@ button:disabled {
 }
 
 .orf-app-shell[data-bounty-hall="true"] .orf-topbar {
-  border-bottom-color: rgba(255, 226, 160, 0.2);
+  border-bottom-color: rgba(162, 217, 238, 0.22);
   background:
-    linear-gradient(90deg, rgba(29, 41, 62, 0.88) 0%, rgba(50, 85, 119, 0.64) 48%, rgba(31, 45, 67, 0.8) 100%),
+    linear-gradient(90deg, rgba(22, 35, 58, 0.88) 0%, rgba(38, 79, 111, 0.66) 48%, rgba(34, 42, 68, 0.78) 100%),
     var(--orf-app-chrome-bg-image);
   background-position:
     center,
@@ -3062,11 +3062,11 @@ button:disabled {
     cover,
     cover;
   backdrop-filter: blur(16px) saturate(1.08);
-  box-shadow: 0 14px 30px rgba(17, 24, 38, 0.16);
+  box-shadow: 0 14px 30px rgba(15, 35, 58, 0.13);
 }
 
 .orf-topbar-title.orf-text-primary {
-  color: #fff8e8;
+  color: #f6fbff;
   text-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
 }
 
@@ -3088,7 +3088,7 @@ button:disabled {
   height: 30px;
   flex: 0 0 auto;
   place-items: center;
-  color: #f6d58f;
+  color: #a8e8ff;
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.2));
 }
 
@@ -4584,21 +4584,21 @@ button:disabled {
 }
 
 .orf-search-trigger:hover {
-  border-color: rgba(255, 226, 160, 0.56);
+  border-color: rgba(129, 221, 246, 0.52);
   background: rgba(18, 32, 52, 0.56);
-  color: #fff8e8;
-  box-shadow: inset 0 1px 0 rgba(255, 248, 232, 0.12), 0 8px 18px rgba(10, 18, 32, 0.14);
+  color: #f5fbff;
+  box-shadow: inset 0 1px 0 rgba(236, 253, 255, 0.12), 0 8px 18px rgba(10, 18, 32, 0.14);
 }
 
 .orf-muted-icon-button {
   border-radius: var(--orf-radius-control);
-  color: rgba(255, 248, 232, 0.72);
+  color: rgba(226, 247, 255, 0.74);
 }
 
 .orf-muted-icon-button:hover {
-  background: rgba(255, 248, 232, 0.12);
-  color: #fff8e8;
-  box-shadow: 0 10px 22px rgba(10, 14, 22, 0.16), 0 0 0 1px rgba(215, 173, 95, 0.16);
+  background: rgba(226, 247, 255, 0.12);
+  color: #f5fbff;
+  box-shadow: 0 10px 22px rgba(10, 14, 22, 0.16), 0 0 0 1px rgba(129, 221, 246, 0.16);
   transform: translateY(-1px);
 }
 
