@@ -996,18 +996,19 @@ function MetricDetailsBlock({
               aria-label="编辑指标详情"
               className="orf-result-details-textarea"
               disabled={saving}
+              onBlur={() => {
+                if (!saving) void saveDetails();
+              }}
               onChange={(event) => setDraft({ detail: event.target.value })}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  void saveDetails();
+                }
+              }}
               rows={4}
               value={draft.detail}
             />
-            <div className="orf-result-details-editor-actions">
-              <button disabled={saving} type="button" onClick={() => setEditing(false)}>
-                取消
-              </button>
-              <button disabled={saving} type="submit">
-                保存
-              </button>
-            </div>
           </form>
         ) : (
           <div
@@ -1021,7 +1022,9 @@ function MetricDetailsBlock({
             {detail ? (
               <p className="orf-result-details-text">{detail}</p>
             ) : (
-              <p className="orf-result-details-placeholder">未填写指标详情，双击编辑</p>
+              <p className="orf-result-details-placeholder">
+                未填写指标详情，双击编辑。Enter 保存，Shift+Enter 换行，点击外部保存。
+              </p>
             )}
           </div>
         )}

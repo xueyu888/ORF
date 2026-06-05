@@ -6887,11 +6887,12 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-result-details-editor {
-  display: grid;
-  gap: 10px;
+  display: block;
 }
 
 .orf-result-details-textarea {
+  display: block;
+  width: 100%;
   min-height: 88px;
   resize: vertical;
   border: 1px solid rgba(126, 151, 178, 0.34);
@@ -6902,41 +6903,13 @@ body[data-dragging-floating="true"] {
   font-size: 13px;
   font-weight: 700;
   line-height: 1.5;
-  padding: 7px 9px;
+  padding: 9px 10px;
 }
 
 .orf-result-details-textarea:focus {
   border-color: rgba(69, 181, 196, 0.62);
   box-shadow: 0 0 0 2px rgba(69, 181, 196, 0.18);
   outline: none;
-}
-
-.orf-result-details-editor-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.orf-result-details-editor-actions button {
-  min-height: 28px;
-  border: 1px solid rgba(126, 151, 178, 0.28);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.78);
-  color: #344054;
-  font-size: 12px;
-  font-weight: 900;
-  padding: 0 12px;
-}
-
-.orf-result-details-editor-actions button[type="submit"] {
-  border-color: rgba(32, 141, 128, 0.3);
-  background: linear-gradient(180deg, rgba(224, 251, 247, 0.92), rgba(202, 243, 237, 0.82));
-  color: #0b766c;
-}
-
-.orf-result-details-editor-actions button:disabled {
-  cursor: wait;
-  opacity: 0.62;
 }
 
 .orf-task-row,
