@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
+import { openObjectiveChildMenu } from "../../_operators/challenge-workbench.helpers";
 import { requiredString } from "../../_operators/params";
 import type {
   FrozenAdminCreateResultCaseData,
@@ -12,7 +13,6 @@ import {
   objectivePanel,
   prepareFrozenAdminResultTarget,
   targetActionMenuItem,
-  targetAddMenuButton,
   targetFrozen,
   targetMetricButton,
   targetResultAbsent,
@@ -77,11 +77,7 @@ export const adminCannotCreateResultFrozenOperators = {
 } satisfies OperatorRegistry<TestContext, FrozenAdminCreateResultCaseData>;
 
 async function openAddMenu(ctx: TestContext, target: FrozenAdminResultTarget) {
-  await objectivePanel(ctx.page, target).hover();
-  await expect(targetAddMenuButton(ctx.page, target)).toBeEnabled();
-  if (!(await targetActionMenuItem(ctx.page, target).isVisible())) {
-    await targetAddMenuButton(ctx.page, target).click();
-  }
+  await openObjectiveChildMenu(ctx.page, target.objective.title, "新增行动项");
 }
 
 function requiredFrozenAdminResultTarget(params: StepParams, key: string): FrozenAdminResultTarget {

@@ -1,6 +1,7 @@
 import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import type { CapturedResponse } from "../../_operators/common.context";
+import { openObjectiveChildMenu } from "../../_operators/challenge-workbench.helpers";
 import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { requiredString } from "../../_operators/params";
@@ -16,7 +17,6 @@ import {
   objectivePanel,
   prepareProposalTarget,
   proposalTargetFromObjective,
-  targetAddMenuButton,
   targetCanProposeResult,
   targetMetricMenuItem,
   targetResultAbsent,
@@ -53,7 +53,6 @@ export const memberProposeResultOperators = {
           targetResultPresent(requiredProposalTarget(params, "target"), {
             name: requiredString(params, "memberName"),
             resultTitle: requiredString(params, "title"),
-            metricName: requiredString(params, "metricName"),
           }),
         )
         .toBe(true);
@@ -83,7 +82,6 @@ export const memberProposeResultOperators = {
       expect(result).toMatchObject({
         objectiveId: target.objective.id,
         title: requiredString(params, "title"),
-        metricName: requiredString(params, "metricName"),
         source: requiredString(params, "source"),
         definer: requiredString(params, "definer"),
       });
@@ -99,7 +97,6 @@ export const memberProposeResultOperators = {
       const target = requiredProposalTarget(params, "target");
       await openMetricProposalMenu(ctx, target);
       await expect(targetMetricMenuItem(ctx.page, target)).toBeEnabled();
-      await targetAddMenuButton(ctx.page, target).click();
     },
 
     propose_metric: async ({ ctx, params }) => {
@@ -144,12 +141,7 @@ async function toCapturedResponse(response: Response): Promise<CapturedResponse>
 }
 
 async function openMetricProposalMenu(ctx: TestContext, target: MemberProposeResultTarget) {
-  await objectivePanel(ctx.page, target).hover();
-  await expect(targetAddMenuButton(ctx.page, target)).toBeEnabled();
-  if (!(await targetMetricMenuItem(ctx.page, target).isVisible())) {
-    await targetAddMenuButton(ctx.page, target).click();
-  }
-  await expect(targetMetricMenuItem(ctx.page, target)).toBeVisible();
+  await openObjectiveChildMenu(ctx.page, target.objective.title, "提出指标");
 }
 
 function requiredProposalTarget(params: StepParams, key: string): MemberProposeResultTarget {
@@ -178,7 +170,7 @@ function requiredCreatedResult(params: StepParams, key: string): MemberProposedR
     typeof (value as MemberProposedResult).id !== "string" ||
     typeof (value as MemberProposedResult).objectiveId !== "string" ||
     typeof (value as MemberProposedResult).title !== "string" ||
-    typeof (value as MemberProposedResult).metricName !== "string"
+    typeof (value as MemberProposedResult).detail !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是提出的指标`);
   }

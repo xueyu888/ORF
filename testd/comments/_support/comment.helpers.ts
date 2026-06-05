@@ -596,7 +596,15 @@ export function commentPanel(page: Page) {
 }
 
 export function commentComposer(page: Page) {
-  return commentPanel(page).locator("textarea.orf-comment-compose-field");
+  return commentPanel(page).getByPlaceholder("添加评论...");
+}
+
+export function commentReplyComposer(page: Page) {
+  return commentPanel(page).getByPlaceholder(/^(回复 .+|添加回复)\.\.\.$/);
+}
+
+export function commentEditComposer(page: Page) {
+  return commentPanel(page).getByPlaceholder("编辑评论...");
 }
 
 export function commentTargetRow(page: Page, target: CommentTarget) {

@@ -1,6 +1,7 @@
 import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import type { CapturedResponse } from "../../_operators/common.context";
+import { openObjectiveChildMenu } from "../../_operators/challenge-workbench.helpers";
 import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { requiredString } from "../../_operators/params";
@@ -16,7 +17,6 @@ import {
   objectivePanel,
   resultTargetFromObjective,
   targetCanCreateResult,
-  targetMetricButton,
   targetMetricMenuItem,
   targetResultAbsent,
   targetResultPresent,
@@ -44,7 +44,6 @@ export const adminCreateResultOperators = {
       await expect
         .poll(() => targetResultPresent(requiredResultTarget(params, "target"), {
           resultTitle: requiredString(params, "title"),
-          metricName: requiredString(params, "metricName"),
         }))
         .toBe(true);
     },
@@ -73,7 +72,6 @@ export const adminCreateResultOperators = {
       expect(result).toMatchObject({
         objectiveId: target.objective.id,
         title: requiredString(params, "title"),
-        metricName: requiredString(params, "metricName"),
         source: requiredString(params, "source"),
       });
     },
@@ -132,12 +130,7 @@ async function toCapturedResponse(response: Response): Promise<CapturedResponse>
 }
 
 async function openMetricCreationMenu(ctx: TestContext, target: AdminCreateResultTarget) {
-  await objectivePanel(ctx.page, target).hover();
-  await expect(targetMetricButton(ctx.page, target)).toBeEnabled();
-  if (!(await targetMetricMenuItem(ctx.page, target).isVisible())) {
-    await targetMetricButton(ctx.page, target).click();
-  }
-  await expect(targetMetricMenuItem(ctx.page, target)).toBeVisible();
+  await openObjectiveChildMenu(ctx.page, target.objective.title, "新增指标");
 }
 
 function requiredResultTarget(params: StepParams, key: string): AdminCreateResultTarget {
@@ -165,7 +158,7 @@ function requiredCreatedResult(params: StepParams, key: string): AdminCreatedRes
     typeof (value as AdminCreatedResult).id !== "string" ||
     typeof (value as AdminCreatedResult).objectiveId !== "string" ||
     typeof (value as AdminCreatedResult).title !== "string" ||
-    typeof (value as AdminCreatedResult).metricName !== "string"
+    typeof (value as AdminCreatedResult).detail !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是新增的指标`);
   }

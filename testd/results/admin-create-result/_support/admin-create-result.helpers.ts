@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
+import { objectiveChildMenuButton, objectiveChildMenuItem, objectivePanelByTitle } from "../../../_operators/challenge-workbench.helpers";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
 import type { ObjectiveFlowStatus } from "../../../../src/types/orf";
@@ -36,12 +37,11 @@ export async function targetResultAbsent(target: AdminCreateResultTarget, title:
 
 export async function targetResultPresent(
   target: AdminCreateResultTarget,
-  expected: Pick<AdminCreateResultCaseData, "resultTitle" | "metricName">,
+  expected: Pick<AdminCreateResultCaseData, "resultTitle">,
 ) {
   const row = await readTargetResult(target.objective.id, expected.resultTitle);
   return (
     !!row &&
-    row.metricName === expected.metricName &&
     row.source === "managerDefined" &&
     row.objectiveId === target.objective.id
   );
@@ -55,15 +55,15 @@ export async function deleteTestResult(title: string, createdResult?: AdminCreat
 }
 
 export function objectivePanel(page: Page, target: AdminCreateResultTarget) {
-  return page.locator("section.orf-objective-panel").filter({ hasText: target.objective.title }).first();
+  return objectivePanelByTitle(page, target.objective.title);
 }
 
 export function targetMetricButton(page: Page, target: AdminCreateResultTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增子级" }).first();
+  return objectiveChildMenuButton(page, target.objective.title);
 }
 
 export function targetMetricMenuItem(page: Page, target: AdminCreateResultTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增指标" }).first();
+  return objectiveChildMenuItem(page, target.objective.title, "新增指标");
 }
 
 export function targetResultRow(page: Page, target: AdminCreateResultTarget, result: Pick<AdminCreatedResult, "title">) {
@@ -85,7 +85,7 @@ export function createdResultFromResponse(body: unknown): AdminCreatedResult {
     typeof result.id !== "string" ||
     typeof result.objectiveId !== "string" ||
     typeof result.title !== "string" ||
-    typeof result.metricName !== "string"
+    typeof result.detail !== "string"
   ) {
     throw new Error("新增指标接口响应 result 结构不完整");
   }
@@ -94,7 +94,7 @@ export function createdResultFromResponse(body: unknown): AdminCreatedResult {
     id: result.id,
     objectiveId: result.objectiveId,
     title: result.title,
-    metricName: result.metricName,
+    detail: result.detail,
     source: typeof result.source === "string" ? result.source as AdminCreatedResult["source"] : undefined,
     definer: typeof result.definer === "string" ? result.definer : undefined,
   };
@@ -106,7 +106,7 @@ async function readTargetResult(objectiveId: string, title: string) {
       id: results.id,
       objectiveId: results.objectiveId,
       title: results.title,
-      metricName: results.metricName,
+      detail: results.detail,
       source: results.source,
     })
     .from(results)

@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
+import { objectiveChildMenuButton, objectiveChildMenuItem, objectivePanelByTitle } from "../../../_operators/challenge-workbench.helpers";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
 import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
@@ -66,19 +67,19 @@ export async function deleteTestResult(title: string) {
 }
 
 export function objectivePanel(page: Page, target: FrozenProposalTarget) {
-  return page.locator("section.orf-objective-panel").filter({ hasText: target.objective.title }).first();
+  return objectivePanelByTitle(page, target.objective.title);
 }
 
 export function targetAddMenuButton(page: Page, target: FrozenProposalTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增子级" }).first();
+  return objectiveChildMenuButton(page, target.objective.title);
 }
 
 export function targetActionMenuItem(page: Page, target: FrozenProposalTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "新增行动项" }).first();
+  return objectiveChildMenuItem(page, target.objective.title, "新增行动项");
 }
 
 export function targetMetricButton(page: Page, target: FrozenProposalTarget) {
-  return objectivePanel(page, target).getByRole("button", { name: "提出指标" });
+  return objectiveChildMenuItem(page, target.objective.title, "提出指标");
 }
 
 export function targetResultRow(page: Page, target: FrozenProposalTarget, title: string) {

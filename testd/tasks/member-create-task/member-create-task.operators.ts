@@ -1,6 +1,7 @@
 import { expect, type Response } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../../_framework/types";
 import type { CapturedResponse } from "../../_operators/common.context";
+import { clickChallengeRowActionButton, openObjectiveChildMenu } from "../../_operators/challenge-workbench.helpers";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
 import { readResponseBody } from "../../_operators/common.helpers";
 import { requiredString } from "../../_operators/params";
@@ -17,7 +18,6 @@ import {
   deleteTestTask,
   objectivePanel,
   prepareTaskTarget,
-  targetAddMenuButton,
   targetCanCreateTask,
   targetSubtaskButton,
   targetSubtaskRow,
@@ -120,7 +120,6 @@ export const memberCreateTaskOperators = {
       const target = requiredTaskTarget(params, "target");
       await openTaskCreationMenu(ctx, target);
       await expect(targetTaskMenuItem(ctx.page, target)).toBeEnabled();
-      await targetAddMenuButton(ctx.page, target).click();
     },
 
     add_task: async ({ ctx, params }) => {
@@ -134,9 +133,7 @@ export const memberCreateTaskOperators = {
       const task = requiredTask(params, "task");
       await retryAfterDomRefresh(async () => {
         await expect(targetTaskRow(ctx.page, target, task)).toBeVisible();
-        await targetTaskRow(ctx.page, target, task).hover();
-        await expect(targetSubtaskButton(ctx.page, target, task)).toBeEnabled();
-        await targetSubtaskButton(ctx.page, target, task).click();
+        await clickChallengeRowActionButton(targetSubtaskButton(ctx.page, target, task));
         await expect(ctx.page.getByLabel("编辑子行动项标题")).toBeVisible({ timeout: 2_000 });
       });
     },
@@ -203,12 +200,7 @@ async function toCapturedResponse(response: Response): Promise<CapturedResponse>
 }
 
 async function openTaskCreationMenu(ctx: TestContext, target: MemberCreateTaskTarget) {
-  await objectivePanel(ctx.page, target).hover();
-  await expect(targetAddMenuButton(ctx.page, target)).toBeEnabled();
-  if (!(await targetTaskMenuItem(ctx.page, target).isVisible())) {
-    await targetAddMenuButton(ctx.page, target).click();
-  }
-  await expect(targetTaskMenuItem(ctx.page, target)).toBeVisible();
+  await openObjectiveChildMenu(ctx.page, target.objective.title, "新增行动项");
 }
 
 async function retryAfterDomRefresh(action: () => Promise<void>) {

@@ -8,10 +8,12 @@ import type { CommentCaseData, CommentTarget, FixtureComment, MockImageFile, Tes
 import {
   commentBodyAbsent,
   commentComposer,
+  commentEditComposer,
   commentImageAbsent,
   commentImagePreviewButton,
   commentMessageRow,
   commentPanel,
+  commentReplyComposer,
   commentTargetAndTaskAbsent,
   commentTargetCanMutate,
   commentTargetCannotMutate,
@@ -581,13 +583,17 @@ export const commentOperators = {
     },
 
     fill_reply: async ({ ctx, params }) => {
-      await expect(commentComposer(ctx.page)).toHaveAttribute("placeholder", /回复 |添加回复/);
-      await commentComposer(ctx.page).fill(requiredString(params, "value"));
+      const composer = commentReplyComposer(ctx.page);
+      await expect(composer).toBeVisible();
+      await expect(composer).toBeEnabled();
+      await composer.fill(requiredString(params, "value"));
     },
 
     fill_edit: async ({ ctx, params }) => {
-      await expect(commentComposer(ctx.page)).toHaveAttribute("placeholder", "编辑评论...");
-      await commentComposer(ctx.page).fill(requiredString(params, "value"));
+      const composer = commentEditComposer(ctx.page);
+      await expect(composer).toBeVisible();
+      await expect(composer).toBeEnabled();
+      await composer.fill(requiredString(params, "value"));
     },
 
     submit_comment: async ({ ctx }) => {

@@ -15,7 +15,6 @@ export const memberProposeResultCase = {
     objectiveId: "obj-testd-member-propose-result",
     objectiveTitle: "E2E-MEMBER-PROPOSE-RESULT: 目标前置",
     resultTitle: "E2E-RESULT-PROPOSE: 成员提出指标",
-    metricName: "E2E-RESULT-PROPOSE: 成员提出指标",
   },
 
   B: {
@@ -353,14 +352,13 @@ export const memberProposeResultCase = {
       {
         source: { caseStepId: "S1-2", method: "api" },
         id: "created_result.matches",
-        title: "新增指标结果中的指标 应属于本用例目标，标题、衡量指标、来源和提出人正确",
+        title: "新增指标结果中的指标 应属于本用例目标，标题、来源和提出人正确",
         object: "api.result_create_response",
         operator: "matches",
         params: {
           resultFrom: "runtime.createdResult",
           targetFrom: "runtime.proposalTarget",
           titleFrom: "data.resultTitle",
-          metricNameFrom: "data.metricName",
           source: "memberProposed",
           definerFrom: "data.name",
         },
@@ -374,7 +372,6 @@ export const memberProposeResultCase = {
         params: {
           targetFrom: "runtime.proposalTarget",
           titleFrom: "data.resultTitle",
-          metricNameFrom: "data.metricName",
           memberNameFrom: "data.name",
         },
       },

@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectiveLoot, objectives, pointLedger, results } from "../../../../server/db/schema";
 import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
+import { testResultDetail } from "../../../_operators/result-detail.helpers";
 import type { AdminReviewLootCaseData, ReviewLoot, ReviewLootResult, ReviewLootTarget } from "./admin-review-loot.context";
 
 export async function reviewLootTargetFromObjective(objectiveId: string): Promise<ReviewLootTarget> {
@@ -63,13 +64,7 @@ export async function createReviewLootResult(
     teamId: objective.teamId,
     objectiveId: objective.id,
     title: input.resultTitle,
-    description: "用于管理员验收战利品测试的前置指标。",
-    metricName: input.metricName,
-    metricRequirement: `${input.metricName}：用于管理员验收战利品测试。`,
-    statisticalObject: null,
-    completionStandard: null,
-    sampleSet: null,
-    measurementScope: null,
+    detail: testResultDetail(input.metricName, "用于管理员验收战利品测试。"),
     uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
