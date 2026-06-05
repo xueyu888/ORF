@@ -169,7 +169,7 @@ function createSetupSteps(definition: CommentCaseDefinition, actorLabel: string)
   let index = 6;
   if (definition.actorRole === "member") {
     steps.push(
-      step("Setup-6", "prisma", "db.comment_objective.set_participant", "设置普通成员参与该目标", "db.comment_objective", "set_participant", {
+      step("Setup-6", "prisma", "db.comment_objective.set_participant", "设置普通成员账号身份参与该目标", "db.comment_objective", "set_participant", {
         objectiveIdFrom: "runtime.fixtureObjective.id",
         memberNameFrom: "data.name",
       }),
@@ -258,7 +258,7 @@ function createS0Assertions(definition: CommentCaseDefinition, actorLabel: strin
   if (definition.kind === "create") {
     return [
       session,
-      step("S0-2", "prisma", "db.comment_target.mutable", `当前评论对象 应属于 ${definition.actorRole === "admin" ? "" : "普通成员参与且"}生命周期允许新增评论的目标`, "db.comment_target", "mutable", {
+      step("S0-2", "prisma", "db.comment_target.mutable", `当前评论对象 应属于 ${definition.actorRole === "admin" ? "" : "普通成员账号身份参与且"}生命周期允许新增评论的目标`, "db.comment_target", "mutable", {
         actorNameFrom: "data.name",
         roleFrom: "data.role",
         targetFrom: "runtime.commentTarget",
@@ -396,10 +396,8 @@ function createActionSteps(definition: CommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "delete") {
     return [
-      step("Action-1", "playwright", "comment_message.click_delete", "点击 本用例测试评论的 \"删除评论\" 操作", "page.comment_message", "click_delete", {
+      step("Action-1", "playwright", "comment_message.delete", "点击并确认 本用例测试评论的 \"删除评论\" 操作", "page.comment_message", "delete", {
         bodyFrom: "data.commentBody",
-      }),
-      step("Action-2", "playwright", "comment_message.confirm_delete", "确认删除评论操作", "page.comment_message", "confirm_delete", {
         saveAs: "deleteResponse",
         urlEndsWithFrom: "runtime.rootComment.messageApiPath",
       }),
@@ -530,7 +528,8 @@ function createS1Assertions(definition: CommentCaseDefinition, actorLabel: strin
     step("S1-3", "playwright", "comment_panel.body.visible", "评论窗口 应显示 本用例测试评论正文", "page.comment_panel", "body_visible", {
       bodyFrom: "data.commentBody",
     }),
-    step("S1-4", "playwright", "comment_panel.image.visible", "评论窗口 应显示 本用例测试图片", "page.comment_panel", "image_visible", {
+    step("S1-4", "playwright", "comment_panel.image.visible", "评论窗口的本用例测试评论 应显示 本用例测试图片", "page.comment_panel", "image_visible", {
+      bodyFrom: "data.commentBody",
       fileNameFrom: "data.imageFileName",
     }),
     step("S1-5", "api", "api.my_challenges.image_comment.present", "普通成员计划页数据 应包含 当前评论对象的图片评论", "api.my_challenges.comment", "image_present", {

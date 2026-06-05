@@ -24,20 +24,8 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
         return "已存在同名成员";
       }
 
-      if (error.message === "User name is referenced by ORF records") {
-        return "该成员已被 ORF 业务记录引用，不能改名";
-      }
-
       if (error.message === "User is referenced by ORF records") {
         return "该成员已被 ORF 业务记录引用，不能删除，请改为停用";
-      }
-
-      if (error.message === "Name is referenced by ORF records") {
-        return "该姓名已被 ORF 历史记录占用，不能创建新成员";
-      }
-
-      if (error.message === "Bound login email cannot be changed") {
-        return "已绑定登录身份的邮箱不能在成员管理中修改";
       }
 
       return error.message;
@@ -48,7 +36,7 @@ export function userMutationFailureMessage(error: unknown, fallback: string) {
     }
 
     if (error.status === 503 && error.message === "Ory admin URL is not configured") {
-      return "删除已绑定登录账号需要先配置 Ory 管理接口";
+      return "修改或删除已绑定登录账号需要先配置 Ory 管理接口";
     }
 
     return error.message || fallback;

@@ -5,9 +5,18 @@ import {
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../domain/orfLifecycle";
+import {
+  isObjectiveChallenger,
+  objectiveParticipantSnapshot,
+  participantUserIdsForNames,
+  uniqueParticipantNames,
+  uniqueParticipantUserIds,
+  userIdByNameMap,
+  userNameByIdMap,
+} from "../domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { taskIdsForObjective } from "../domain/orfWorkItems";
-import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus } from "../types/orf";
+import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfProject, OrfState, Result, Task, TaskStatus } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
 type Placement = "before" | "after";
@@ -57,7 +66,12 @@ const randomIdSegment = () => {
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomIdSegment()}`;
 const currentTime = () => new Date().toISOString();
 const currentDate = () => localDateString(new Date());
+const currentUserId = (state: OrfState) => state.currentUserId || state.users[0]?.id || "";
 const currentUserName = (state: OrfState) => state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
+const userByName = (state: OrfState, name: string) => state.users.find((user) => user.name === name.trim());
+const userNameForId = (state: OrfState, userId: string | null | undefined, fallback = "") => state.users.find((user) => user.id === userId)?.name ?? fallback;
+const userIdForName = (state: OrfState, name: string | null | undefined) => state.users.find((user) => user.name === name?.trim())?.id ?? null;
+const userIdsForNames = (state: OrfState, names: Array<string | null | undefined>) => participantUserIdsForNames(userIdByNameMap(state.users), names);
 const latestDate = (values: Array<string | undefined | null>) => values.filter(Boolean).sort().at(-1) ?? "";
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
@@ -80,11 +94,6 @@ const confirmationDueAt = (finalDueAt: string | undefined, acceptedAt: string) =
   const confirmationHalves = Math.min(MAX_CONFIRMATION_HALVES, Math.max(1, roundedHalfDays));
   return new Date(acceptedDate.getTime() + confirmationHalves * HALF_DAY_MS).toISOString();
 };
-const isRealMember = (owner: string | undefined | null) => {
-  const value = owner?.trim() ?? "";
-  return value !== "" && value !== "User" && value !== "未分配";
-};
-const uniqueMembers = (values: Array<string | undefined | null>) => Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
 const uncertaintyScore = uncertaintyScoreFor;
 const taskStatusForChecklist = (checklist: Task["checklist"], fallback: TaskStatus): TaskStatus => {
   if (checklist.length === 0) {
@@ -156,18 +165,16 @@ type CascadeTargets = {
   resultIds: Set<string>;
   taskIds: Set<string>;
   subtaskIds: Set<string>;
-  feedbackIds: Set<string>;
   evidenceIds: Set<string>;
 };
 
 const collectCascadeTargets = (
   state: OrfState,
-  input: { objectiveIds?: Iterable<string>; resultIds?: Iterable<string>; taskIds?: Iterable<string>; feedbackIds?: Iterable<string> },
+  input: { objectiveIds?: Iterable<string>; resultIds?: Iterable<string>; taskIds?: Iterable<string> },
 ): CascadeTargets => {
   const objectiveIds = new Set(input.objectiveIds ?? []);
   const resultIds = new Set(input.resultIds ?? []);
   const taskIds = new Set(input.taskIds ?? []);
-  const feedbackIds = new Set(input.feedbackIds ?? []);
   const evidenceIds = new Set<string>();
 
   for (const result of state.results) {
@@ -182,14 +189,8 @@ const collectCascadeTargets = (
     }
   }
 
-  for (const item of state.feedback) {
-    if (objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)) {
-      feedbackIds.add(item.id);
-    }
-  }
-
   for (const item of state.evidence) {
-    if (resultIds.has(item.linkedResultId) || (item.linkedFeedbackId && feedbackIds.has(item.linkedFeedbackId))) {
+    if (resultIds.has(item.linkedResultId)) {
       evidenceIds.add(item.id);
     }
   }
@@ -200,7 +201,7 @@ const collectCascadeTargets = (
       .flatMap((task) => task.checklist.map((item) => item.id)),
   );
 
-  return { objectiveIds, resultIds, taskIds, subtaskIds, feedbackIds, evidenceIds };
+  return { objectiveIds, resultIds, taskIds, subtaskIds, evidenceIds };
 };
 
 const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState => ({
@@ -211,23 +212,20 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
       ...objective,
       resultIds: objective.resultIds.filter((id) => !targets.resultIds.has(id)),
       taskIds: objective.taskIds.filter((id) => !targets.taskIds.has(id)),
-      feedbackIds: objective.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
     })),
   results: state.results
     .filter((result) => !targets.resultIds.has(result.id))
     .map((result) => ({
       ...result,
-      feedbackIds: result.feedbackIds.filter((id) => !targets.feedbackIds.has(id)),
       evidenceIds: result.evidenceIds.filter((id) => !targets.evidenceIds.has(id)),
-    })),
+  })),
   tasks: state.tasks.filter((task) => !targets.taskIds.has(task.id)),
-  feedback: state.feedback.filter((item) => !targets.feedbackIds.has(item.id)),
+  feedback: state.feedback,
   evidence: state.evidence.filter((item) => !targets.evidenceIds.has(item.id)),
   decisions: state.decisions.filter(
     (item) =>
-      !targets.objectiveIds.has(item.linkedObjectiveId) &&
-      !(item.linkedResultId && targets.resultIds.has(item.linkedResultId)) &&
-      !(item.linkedFeedbackId && targets.feedbackIds.has(item.linkedFeedbackId)),
+      !(item.linkedObjectiveId && targets.objectiveIds.has(item.linkedObjectiveId)) &&
+      !(item.linkedResultId && targets.resultIds.has(item.linkedResultId)),
   ),
   evalRuns: state.evalRuns.filter((item) => !targets.resultIds.has(item.linkedResultId)),
   scenarios: state.scenarios.filter((item) => !targets.objectiveIds.has(item.linkedObjectiveId)),
@@ -244,8 +242,9 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   objectiveAlignmentRequests: state.objectiveAlignmentRequests.filter((request) => !targets.objectiveIds.has(request.objectiveId)),
 });
 
-const emptyBusinessState = (): OrfState => ({
+export const emptyBusinessState = (): OrfState => ({
   ...cloneState(initialOrfState),
+  projects: [],
   objectives: [],
   results: [],
   feedback: [],
@@ -264,38 +263,43 @@ const emptyBusinessState = (): OrfState => ({
 
 function inferFlowStatus(
   objective: Objective,
-  challengers: string[],
-  assignedChallengers: string[],
+  challengerUserIds: string[],
+  assignedChallengerUserIds: string[],
   challengeApplications: ChallengeApplication[],
 ): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
   if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
   if (objective.lootSubmittedAt) return "submitted";
   if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
-  if (challengers.length) return "reestimating";
-  if (assignedChallengers.length > 0) return "recruiting";
+  if (challengerUserIds.length) return "reestimating";
+  if (assignedChallengerUserIds.length > 0) return "recruiting";
   if (challengeApplications.some((application) => application.status === "pending")) return "applying";
   if (objective.stage === "resultClaiming") return "open";
   return "candidate";
 }
 
 export const normalizeState = (state: OrfState): OrfState => {
+  const normalizedUsers = (state.users ?? cloneValue(initialOrfState.users)).map((user) => ({ ...user, status: user.status ?? "active" }));
+  const userIdByName = userIdByNameMap(normalizedUsers);
+  const userNameById = userNameByIdMap(normalizedUsers);
   const tasks = state.tasks.map((task) => ({
     ...task,
+    assigneeUserId: task.assigneeUserId ?? userIdByName.get(task.assignee) ?? null,
     checklist: task.checklist.map((item) => ({ ...item, updatedAt: item.updatedAt ?? task.updatedAt })),
   }));
   const legacyResults = state.results as LegacyResult[];
 
   return {
     ...state,
-    users: (state.users ?? cloneValue(initialOrfState.users)).map((user) => ({ ...user, status: user.status ?? "active" })),
+    users: normalizedUsers,
     currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
+    projects: (state.projects ?? []).map((project) => normalizeProject(project)).filter((project): project is OrfProject => Boolean(project)),
     comments: (state.comments ?? []).map((thread) => ({
       ...thread,
       messages: (thread.messages ?? []).map((message) => ({ ...message, attachments: message.attachments ?? [] })),
     })),
-    objectives: state.objectives.map((objective) => normalizeObjective(objective, legacyResults, tasks)),
-    results: legacyResults.map(normalizeResult),
+    objectives: state.objectives.map((objective) => normalizeObjective(objective, legacyResults, tasks, userIdByName, userNameById)),
+    results: legacyResults.map((result) => normalizeResult(result, userIdByName)),
     tasks,
     objectiveLoot: state.objectiveLoot ?? [],
     objectiveTrialReviews: state.objectiveTrialReviews ?? [],
@@ -304,29 +308,52 @@ export const normalizeState = (state: OrfState): OrfState => {
   };
 };
 
-function normalizeObjective(objective: Objective, results: LegacyResult[], tasks: Task[]): Objective {
+function normalizeProject(project: OrfProject): OrfProject | null {
+  const id = project.id?.trim();
+  const name = project.name?.trim();
+  if (!id || !name) return null;
+  return {
+    ...project,
+    id,
+    name,
+    createdAt: project.createdAt ?? currentDate(),
+    updatedAt: project.updatedAt ?? project.createdAt ?? currentDate(),
+  };
+}
+
+function normalizeObjective(objective: Objective, results: LegacyResult[], tasks: Task[], userIdByName: Map<string, string>, userNameById: Map<string, string>): Objective {
   const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
-  const typedResults = objectiveResults.map(normalizeResult);
+  const typedResults = objectiveResults.map((result) => normalizeResult(result, userIdByName));
   const acceptedResults = typedResults.filter((result) => result.acceptedResult === "completed" || result.acceptedResult === "falsified");
-  const challengers = objective.challengers?.length ? uniqueMembers(objective.challengers) : uniqueMembers(objectiveResults.map((result) => result.owner));
   const rawAssignedChallengers = objective.assignedChallengers?.length
     ? objective.assignedChallengers
     : objectiveResults.map((result) => result.assignedChallenger);
-  const assignedChallengers = uniqueMembers(rawAssignedChallengers).filter((member) => !challengers.includes(member));
-  const challengeApplications = objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? []);
+  const participants = objectiveParticipantSnapshot({
+    challengerUserIds: objective.challengerUserIds,
+    challengerNames: objective.challengers?.length ? objective.challengers : objectiveResults.map((result) => result.owner),
+    assignedChallengerUserIds: objective.assignedChallengerUserIds,
+    assignedChallengerNames: rawAssignedChallengers,
+    userIdByName,
+    userNameById,
+  });
+  const challengeApplications = (objective.challengeApplications ?? objectiveResults.flatMap((result) => result.challengeApplications ?? [])).map((application) => ({
+    ...application,
+    applicantUserId: application.applicantUserId ?? userIdByName.get(application.applicant) ?? null,
+  }));
 
   return {
     ...objective,
     projectId: objective.projectId?.trim() || null,
-    projectName: objective.projectName?.trim() || null,
     stage: objective.stage ?? "orfReestimate",
-    flowStatus: inferFlowStatus(objective, challengers, assignedChallengers, challengeApplications),
+    flowStatus: inferFlowStatus(objective, participants.challengerUserIds, participants.assignedChallengerUserIds, challengeApplications),
     finalDueAt:
       objective.finalDueAt ||
       latestDate(tasks.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.dueDate)) ||
       addDays(objective.updatedAt, 14),
-    challengers,
-    assignedChallengers,
+    challengers: participants.challengers,
+    challengerUserIds: participants.challengerUserIds,
+    assignedChallengers: participants.assignedChallengers,
+    assignedChallengerUserIds: participants.assignedChallengerUserIds,
     challengeApplications,
     acceptedAt: objective.acceptedAt ?? objectiveResults.find((result) => result.acceptedAt)?.acceptedAt ?? null,
     confirmationDueAt: objective.confirmationDueAt ?? (latestDate(objectiveResults.map((result) => result.confirmationDueAt)) || null),
@@ -339,7 +366,7 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
   };
 }
 
-function normalizeResult(result: LegacyResult): Result {
+function normalizeResult(result: LegacyResult, userIdByName = new Map<string, string>()): Result {
   const {
     owner: _owner,
     finalDueAt: _finalDueAt,
@@ -358,6 +385,7 @@ function normalizeResult(result: LegacyResult): Result {
     ...(rest as Result),
     source: result.source ?? "managerDefined",
     definer: result.definer ?? "",
+    definerUserId: result.definerUserId ?? userIdByName.get(result.definer ?? "") ?? null,
     uncertaintyScore: typeof result.uncertaintyScore === "number" ? result.uncertaintyScore : uncertaintyScore(result.uncertaintyLevel),
     acceptedResult: result.acceptedResult ?? "unreviewed",
     createdAt: result.createdAt ?? updatedAt,
@@ -374,7 +402,20 @@ export class OrfFlowStore {
     return normalizeState(emptyBusinessState());
   }
 
-  createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt" | "projectId" | "projectName">>): OrfState {
+  createProject(state: OrfState, input: Pick<OrfProject, "name">): OrfState {
+    const name = input.name.trim();
+    if (!name) return state;
+    const now = currentDate();
+    const project: OrfProject = {
+      id: makeId("project"),
+      name,
+      createdAt: now,
+      updatedAt: now,
+    };
+    return { ...state, projects: [project, ...state.projects] };
+  }
+
+  createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt" | "projectId">>): OrfState {
     const id = makeId("obj");
     const now = currentDate();
     const objective = {
@@ -383,7 +424,6 @@ export class OrfFlowStore {
       description: input.whyItMatters,
       whyItMatters: input.whyItMatters,
       projectId: input.projectId?.trim() || null,
-      projectName: input.projectName?.trim() || null,
       cycle: input.cycle,
       stage: objectiveLifecycleInitialState.stage,
       flowStatus: objectiveLifecycleInitialState.flowStatus,
@@ -393,11 +433,12 @@ export class OrfFlowStore {
       boundary: input.boundary,
       successDefinition: "Success definition will be refined during result planning.",
       resultIds: [],
-      feedbackIds: [],
       taskIds: [],
       finalDueAt: input.finalDueAt ?? addDays(now, 14),
       challengers: [],
+      challengerUserIds: [],
       assignedChallengers: [],
+      assignedChallengerUserIds: [],
       challengeApplications: [],
       acceptedAt: null,
       confirmationDueAt: null,
@@ -438,10 +479,10 @@ export class OrfFlowStore {
       confidence: input.confidence ?? 50,
       source: input.source ?? "managerDefined",
       definer: input.definer ?? currentUserName(state),
+      definerUserId: input.definerUserId ?? userIdForName(state, input.definer ?? currentUserName(state)) ?? null,
       uncertaintyScore: input.uncertaintyScore ?? uncertaintyScore(input.uncertaintyLevel),
       acceptedResult: input.acceptedResult ?? "unreviewed",
       evidenceIds: [],
-      feedbackIds: [],
       trend: [{ date: now, value: input.current ?? 0 }],
       reviewCadence: input.reviewCadence ?? "Weekly",
       createdAt: now,
@@ -459,27 +500,20 @@ export class OrfFlowStore {
     };
   }
 
-  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "linkedObjectiveId" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner">): OrfState {
-    const result = state.results.find((item) => item.id === input.linkedResultId);
-    if (!result) {
-      return state;
-    }
-
+  createFeedback(state: OrfState, input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner">): OrfState {
     const id = makeId("fb");
     const now = currentDate();
     const owner = input.owner || currentUserName(state);
+    const ownerUserId = userIdForName(state, owner);
     const feedback: Feedback = {
       id,
       phenomenon: input.phenomenon,
-      evidenceIds: [],
       causeCategories: input.causeCategories,
       impact: input.impact,
-      linkedObjectiveId: result.objectiveId,
-      linkedResultId: input.linkedResultId,
       suggestedAdjustment: input.suggestedAdjustment,
-      source: input.source,
-      status: "New",
+      status: "Open",
       owner,
+      ownerUserId,
       createdAt: now,
       updatedAt: now,
       activity: [{ id: makeId("act"), actor: owner, action: "创建了结构化反馈", at: now }],
@@ -488,12 +522,6 @@ export class OrfFlowStore {
     return {
       ...state,
       feedback: [feedback, ...state.feedback],
-      objectives: state.objectives.map((objective) =>
-        objective.id === feedback.linkedObjectiveId ? { ...objective, feedbackIds: [feedback.id, ...objective.feedbackIds] } : objective,
-      ),
-      results: state.results.map((result) =>
-        result.id === feedback.linkedResultId ? { ...result, feedbackIds: [feedback.id, ...result.feedbackIds] } : result,
-      ),
     };
   }
 
@@ -511,8 +539,8 @@ export class OrfFlowStore {
       status: input.status ?? "Todo",
       priority: input.priority,
       assignee: input.assignee || currentUserName(state),
+      assigneeUserId: input.assigneeUserId ?? userIdForName(state, input.assignee || currentUserName(state)),
       linkedObjectiveId: objective.id,
-      feedbackOriginId: input.feedbackOriginId,
       dueDate: input.dueDate ?? now,
       tags: input.tags ?? ["ORF"],
       checklist: (input.checklist ?? []).map((item) => ({ ...item, updatedAt: item.updatedAt ?? now })),
@@ -631,6 +659,19 @@ export class OrfFlowStore {
     };
   }
 
+  updateObjectiveProject(state: OrfState, objectiveId: string, projectId: string | null): OrfState {
+    const nextProjectId = projectId?.trim() || null;
+    if (nextProjectId && !state.projects.some((project) => project.id === nextProjectId)) {
+      return state;
+    }
+
+    const now = currentDate();
+    return {
+      ...state,
+      objectives: state.objectives.map((objective) => (objective.id === objectiveId ? { ...objective, projectId: nextProjectId, updatedAt: now } : objective)),
+    };
+  }
+
   updateResultTitle(state: OrfState, resultId: string, title: string): OrfState {
     const nextTitle = title.trim();
     if (!nextTitle) {
@@ -654,18 +695,24 @@ export class OrfFlowStore {
     }
 
     const objective = state.objectives.find((item) => item.id === objectiveId);
-    if (!objective || !canApplyForObjectiveChallenge(objective) || objective.challengers.includes(nextApplicant)) {
+    const applicantUser = userByName(state, nextApplicant);
+    const challengerUserIds = objective ? uniqueParticipantUserIds([...(objective.challengerUserIds ?? []), ...userIdsForNames(state, objective.challengers ?? [])]) : [];
+    if (!objective || !applicantUser || !canApplyForObjectiveChallenge(objective) || isObjectiveChallenger({ challengerUserIds }, applicantUser.id)) {
       return state;
     }
 
-    const applications = objective.challengeApplications ?? [];
-    if (applications.some((item) => item.applicant === nextApplicant && item.status === "pending")) {
+    const applications = (objective.challengeApplications ?? []).map((item) => ({
+      ...item,
+      applicantUserId: item.applicantUserId ?? userIdForName(state, item.applicant),
+    }));
+    if (applications.some((item) => item.applicantUserId === applicantUser.id && item.status === "pending")) {
       return state;
     }
 
     const application: ChallengeApplication = {
       id: makeId("challenge-application"),
-      applicant: nextApplicant,
+      applicant: applicantUser.name,
+      applicantUserId: applicantUser.id,
       reason: applicationReason,
       status: "pending",
       createdAt: currentTime(),
@@ -694,7 +741,10 @@ export class OrfFlowStore {
     }
 
     const objective = state.objectives.find((item) => item.id === objectiveId);
-    if (!objective || objective.challengers.includes(nextChallenger)) {
+    const challengerUser = userByName(state, nextChallenger);
+    const currentChallengerNames = objective ? uniqueParticipantNames(objective.challengers ?? []) : [];
+    const currentChallengerUserIds = objective ? uniqueParticipantUserIds([...(objective.challengerUserIds ?? []), ...userIdsForNames(state, currentChallengerNames)]) : [];
+    if (!objective || !challengerUser || currentChallengerUserIds.includes(challengerUser.id)) {
       return state;
     }
 
@@ -703,6 +753,12 @@ export class OrfFlowStore {
     if (!nextConfirmationDueAt) {
       return state;
     }
+    const currentAssignedNames = uniqueParticipantNames(objective.assignedChallengers ?? []);
+    const currentAssignedUserIds = uniqueParticipantUserIds([...(objective.assignedChallengerUserIds ?? []), ...userIdsForNames(state, currentAssignedNames)]);
+    const applications = (objective.challengeApplications ?? []).map((application) => ({
+      ...application,
+      applicantUserId: application.applicantUserId ?? userIdForName(state, application.applicant),
+    }));
 
     return {
       ...state,
@@ -710,15 +766,17 @@ export class OrfFlowStore {
         item.id === objectiveId
           ? {
               ...item,
-              challengers: [...item.challengers, nextChallenger],
-              assignedChallengers: item.assignedChallengers.filter((member) => member !== nextChallenger),
+              challengers: uniqueParticipantNames([...currentChallengerNames, challengerUser.name]),
+              challengerUserIds: uniqueParticipantUserIds([...currentChallengerUserIds, challengerUser.id]),
+              assignedChallengers: currentAssignedNames.filter((member) => member !== challengerUser.name),
+              assignedChallengerUserIds: currentAssignedUserIds.filter((userId) => userId !== challengerUser.id),
               flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
               stage: objectiveLifecycleTransitions.acceptChallenge.stage,
               acceptedAt: item.acceptedAt ?? now,
               confirmationDueAt: item.confirmationDueAt ?? nextConfirmationDueAt,
-              challengeApplications: (item.challengeApplications ?? []).map((application) =>
-                application.applicant === nextChallenger && application.status === "pending"
-                  ? { ...application, status: "approved", decidedAt: now }
+              challengeApplications: applications.map((application) =>
+                application.applicantUserId === challengerUser.id && application.status === "pending"
+                  ? { ...application, applicant: challengerUser.name, applicantUserId: challengerUser.id, status: "approved", decidedAt: now }
                   : application,
               ),
               status: item.status === "Draft" ? "On Track" : item.status,
@@ -1114,7 +1172,7 @@ export class OrfFlowStore {
     };
   }
 
-  proposeResultUpdate(state: OrfState, resultId: string, title: string, reason: string, feedbackId?: string): OrfState {
+  proposeResultUpdate(state: OrfState, resultId: string, title: string, reason: string): OrfState {
     const result = state.results.find((item) => item.id === resultId);
     if (!result) {
       return state;
@@ -1129,18 +1187,14 @@ export class OrfFlowStore {
           id: makeId("dec"),
           title: `更新指标：${title}`,
           reason,
-          evidence: feedbackId ? `关联反馈 ${feedbackId}` : "手动 ORF 复盘",
+          evidence: "手动 ORF 复盘",
           owner: currentUserName(state),
           date: now,
           linkedObjectiveId: result.objectiveId,
           linkedResultId: resultId,
-          linkedFeedbackId: feedbackId,
         },
         ...state.decisions,
       ],
-      feedback: feedbackId
-        ? state.feedback.map((item) => (item.id === feedbackId ? { ...item, status: "Result Updated", updatedAt: now } : item))
-        : state.feedback,
     };
   }
 }

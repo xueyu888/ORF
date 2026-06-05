@@ -42,7 +42,9 @@ export type TestObjectiveFixtureInput = {
   successDefinition?: string;
   finalDueAt?: string;
   challengers?: string[];
+  challengerUserIds?: string[];
   assignedChallengers?: string[];
+  assignedChallengerUserIds?: string[];
   challengeApplications?: ChallengeApplication[];
   objectiveBasePoints?: number;
   createdBy?: string;
@@ -57,7 +59,9 @@ export type TestObjectiveFixtureRecord = {
   flowStatus: ObjectiveFlowStatus;
   status: WorkStatus;
   challengers: string[];
+  challengerUserIds: string[];
   assignedChallengers: string[];
+  assignedChallengerUserIds: string[];
   challengeApplications: ChallengeApplication[];
   finalDueAt: string;
   objectiveBasePoints: number;
@@ -407,6 +411,33 @@ export async function readTestUserAccount(input: { email?: string; userId?: stri
   return input.role ? rows.find((row) => row.role === input.role) ?? null : rows[0] ?? null;
 }
 
+export async function readTestUserIdByNameInTeam(input: { teamId: string; name: string }) {
+  return (await readTestUserIdsByNamesInTeam({ teamId: input.teamId, names: [input.name] }))[0] ?? null;
+}
+
+export async function requiredTestUserIdByNameInTeam(input: { teamId: string; name: string }) {
+  const userId = await readTestUserIdByNameInTeam(input);
+  if (!userId) {
+    throw new Error(`测试用户不属于目标团队或不存在: ${input.name}`);
+  }
+  return userId;
+}
+
+export async function readTestUserIdsByNamesInTeam(input: { teamId: string; names: readonly string[] }) {
+  const names = uniqueStrings(input.names);
+  if (names.length === 0) {
+    return [];
+  }
+
+  const rows = await db
+    .select({ userId: users.id, name: users.name })
+    .from(users)
+    .innerJoin(teamMembers, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, input.teamId), inArray(users.name, names)));
+  const userIdByName = new Map(rows.map((row) => [row.name, row.userId]));
+  return names.map((name) => userIdByName.get(name)).filter((userId): userId is string => Boolean(userId));
+}
+
 export async function testUserRecordMatches(input: {
   email?: string;
   userId?: string;
@@ -515,6 +546,10 @@ export async function deleteTestUsers(input: { email?: string; emails?: string[]
 export async function upsertTestObjective(input: TestObjectiveFixtureInput) {
   const id = input.id ?? `obj-${slug(input.title)}`;
   const todayValue = today();
+  const challengers = input.challengers ?? [];
+  const assignedChallengers = input.assignedChallengers ?? [];
+  const challengerUserIds = input.challengerUserIds ?? (await readTestUserIdsByNamesInTeam({ teamId: input.teamId, names: challengers }));
+  const assignedChallengerUserIds = input.assignedChallengerUserIds ?? (await readTestUserIdsByNamesInTeam({ teamId: input.teamId, names: assignedChallengers }));
   const values = {
     id,
     teamId: input.teamId,
@@ -530,8 +565,10 @@ export async function upsertTestObjective(input: TestObjectiveFixtureInput) {
     boundary: input.boundary ?? "Owned by the current isolated TestD case.",
     successDefinition: input.successDefinition ?? "Fixture is available for the current TestD action.",
     finalDueAt: input.finalDueAt ?? addDaysIsoDate(21),
-    challengers: input.challengers ?? [],
-    assignedChallengers: input.assignedChallengers ?? [],
+    challengers,
+    challengerUserIds,
+    assignedChallengers,
+    assignedChallengerUserIds,
     challengeApplications: input.challengeApplications ?? [],
     objectiveBasePoints: input.objectiveBasePoints ?? 0,
     createdAt: todayValue,
@@ -560,7 +597,9 @@ export async function upsertTestObjective(input: TestObjectiveFixtureInput) {
         successDefinition: values.successDefinition,
         finalDueAt: values.finalDueAt,
         challengers: values.challengers,
+        challengerUserIds: values.challengerUserIds,
         assignedChallengers: values.assignedChallengers,
+        assignedChallengerUserIds: values.assignedChallengerUserIds,
         challengeApplications: values.challengeApplications,
         objectiveBasePoints: values.objectiveBasePoints,
         updatedAt: values.updatedAt,
@@ -586,7 +625,9 @@ export async function readTestObjective(input: { id?: string; title?: string }):
       flowStatus: objectives.flowStatus,
       status: objectives.status,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
       assignedChallengers: objectives.assignedChallengers,
+      assignedChallengerUserIds: objectives.assignedChallengerUserIds,
       challengeApplications: objectives.challengeApplications,
       finalDueAt: objectives.finalDueAt,
       objectiveBasePoints: objectives.objectiveBasePoints,
@@ -773,4 +814,8 @@ function slug(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function uniqueStrings(values: readonly string[]) {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }

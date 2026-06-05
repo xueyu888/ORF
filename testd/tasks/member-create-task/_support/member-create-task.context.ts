@@ -15,6 +15,7 @@ export type MemberCreateTaskCaseData = {
   memberPassword: string;
   memberName: string;
   memberRole: "member";
+  cleanupEmails: string[];
   objectiveId: string;
   objectiveTitle: string;
   adminTaskTitle: string;
@@ -27,6 +28,7 @@ export type MemberCreateTaskCaseData = {
 export type MemberCreateTaskTarget = {
   objective: {
     id: string;
+    teamId: string;
     title: string;
     flowStatus: ObjectiveFlowStatus;
   };

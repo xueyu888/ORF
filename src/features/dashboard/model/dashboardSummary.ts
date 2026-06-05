@@ -14,7 +14,7 @@ export interface DashboardSummary {
   myOpenTasks: Task[];
 }
 
-export function summarizeDashboardState(state: DashboardSummaryInput, currentUser?: Pick<OrfUser, "name"> | null): DashboardSummary {
+export function summarizeDashboardState(state: DashboardSummaryInput, currentUser?: Pick<OrfUser, "id"> | null): DashboardSummary {
   const pendingFeedback = state.feedback.filter((feedback) => feedback.status !== "Closed");
   const causeCounts = new Map<string, number>();
 
@@ -35,7 +35,7 @@ export function summarizeDashboardState(state: DashboardSummaryInput, currentUse
       .sort((left, right) => right.count - left.count || left.cause.localeCompare(right.cause)),
     latestCycle: latestObjectiveCycle(state.objectives),
     myOpenTasks: currentUser
-      ? state.tasks.filter((task) => task.assignee === currentUser.name && task.status !== "Done")
+      ? state.tasks.filter((task) => task.assigneeUserId === currentUser.id && task.status !== "Done")
       : [],
   };
 }

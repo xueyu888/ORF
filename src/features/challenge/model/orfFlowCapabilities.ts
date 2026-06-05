@@ -16,6 +16,8 @@ import {
   objectiveWorkItemMutationAccess,
   type ObjectiveWorkItemMutationAccess,
 } from "../../../domain/orfWorkItems";
+import { canEditObjectiveContentForUser } from "../../../domain/orfObjectiveContent";
+import { isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 import type {
   Objective,
   ObjectiveTrialReview,
@@ -32,6 +34,10 @@ type MetricCreationAction = {
 export type MetricEditAccess =
   | { status: "allowed" }
   | { status: "blocked"; reason: "notFound" | "lifecycleLocked" | "forbidden" };
+
+export type MetricLifecycleMutationAccess =
+  | { status: "allowed" }
+  | { status: "blocked"; reason: "notFound" | "lifecycleLocked" };
 
 export type WorkItemMutationAccess = ObjectiveWorkItemMutationAccess;
 
@@ -62,12 +68,12 @@ export function isReestimateWindowOpen(
 
 export function canProposeObjectiveMetric(
   objective: Objective,
-  memberName?: string | null,
+  memberUserId?: string | null,
   now = new Date(),
 ): boolean {
   return Boolean(
-    memberName &&
-      objective.challengers.includes(memberName) &&
+    memberUserId &&
+      isObjectiveChallenger(objective, memberUserId) &&
       isReestimateWindowOpen(objective, now),
   );
 }
@@ -93,6 +99,22 @@ export function workItemMutationUnavailableMessage(access: WorkItemMutationAcces
   return "只有目标正式挑战者或指挥官可以修改行动项";
 }
 
+export function canEditObjectiveContent(currentUser: OrfUser | null): boolean {
+  return canEditObjectiveContentForUser(currentUser);
+}
+
+export function objectiveContentEditUnavailableMessage() {
+  return "只有指挥官可以编辑目标";
+}
+
+export function metricLifecycleMutationAccessForObjective(
+  objective: Objective | undefined,
+): MetricLifecycleMutationAccess {
+  if (!objective) return { status: "blocked", reason: "notFound" };
+  if (isObjectiveResultLocked(objective)) return { status: "blocked", reason: "lifecycleLocked" };
+  return { status: "allowed" };
+}
+
 export function metricEditAccessForObjective({
   objective,
   currentUser,
@@ -107,7 +129,7 @@ export function metricEditAccessForObjective({
   if (!objective) return { status: "blocked", reason: "notFound" };
   if (isObjectiveResultLocked(objective)) return { status: "blocked", reason: "lifecycleLocked" };
   if (hasPermission(currentUser, permissionRules, "result.edit")) return { status: "allowed" };
-  if (canProposeObjectiveMetric(objective, currentUser?.name, now)) return { status: "allowed" };
+  if (canProposeObjectiveMetric(objective, currentUser?.id, now)) return { status: "allowed" };
   return { status: "blocked", reason: "forbidden" };
 }
 
@@ -148,7 +170,7 @@ export function metricCreationActionForObjective({
     return { label: "新增指标", source: "managerDefined" };
   }
 
-  if (canProposeObjectiveMetric(objective, currentUser?.name, now)) {
+  if (canProposeObjectiveMetric(objective, currentUser?.id, now)) {
     return { label: "提出指标", source: "memberProposed" };
   }
 
@@ -179,7 +201,7 @@ export function canSubmitObjectiveLoot(
       currentUser &&
       currentUser.role === "member" &&
       canSubmitObjectiveLootByFlow(objective) &&
-      objective.challengers.includes(currentUser.name),
+      (objective.challengerUserIds ?? []).includes(currentUser.id),
   );
 }
 
@@ -192,7 +214,7 @@ export function canSubmitObjectivePeerReview(
       currentUser &&
       currentUser.role === "member" &&
       canSubmitObjectiveContributionReviewByFlow(objective) &&
-      objective.challengers.includes(currentUser.name),
+      (objective.challengerUserIds ?? []).includes(currentUser.id),
   );
 }
 

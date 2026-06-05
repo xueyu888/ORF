@@ -1,10 +1,11 @@
 import type { Feedback, Objective, OrfUser, Result, Task } from "../../../types/orf";
+import { isObjectiveChallenger } from "../../../domain/orfObjectiveParticipants";
 
 export function canViewObjectiveRecord(objective: Objective | undefined, currentUser: OrfUser | null | undefined) {
   if (!currentUser) return false;
   if (currentUser.role === "admin") return true;
   if (!objective) return false;
-  return objective.challengers.includes(currentUser.name);
+  return isObjectiveChallenger(objective, currentUser.id);
 }
 
 export function visibleObjectivesForUser(objectives: readonly Objective[], currentUser: OrfUser | null | undefined) {
@@ -26,7 +27,8 @@ export function filterTasksForVisibleObjectives(tasks: readonly Task[], visibleO
   return tasks.filter((task) => visibleObjectiveIds.has(task.linkedObjectiveId));
 }
 
-export function filterFeedbackForVisibleObjectives(feedback: readonly Feedback[], visibleObjectiveIds: ReadonlySet<string>, currentUser?: OrfUser | null) {
+export function filterFeedbackForVisibleObjectives(feedback: readonly Feedback[], _visibleObjectiveIds: ReadonlySet<string>, currentUser?: OrfUser | null) {
   if (currentUser?.role === "admin") return [...feedback];
-  return feedback.filter((item) => visibleObjectiveIds.has(item.linkedObjectiveId));
+  if (currentUser?.status === "active") return [...feedback];
+  return [];
 }

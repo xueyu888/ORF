@@ -102,7 +102,10 @@ export async function visibleObjectiveInWorkbench(page: Page, target: ObjectiveP
   await objectivePanel(page, target).waitFor({ state: "visible" });
 }
 
-export function objectivePanel(page: Page, target: Pick<ObjectivePublishTarget, "title">) {
+export function objectivePanel(page: Page, target: Pick<ObjectivePublishTarget, "title"> & Partial<Pick<ObjectivePublishTarget, "id">>) {
+  if (target.id) {
+    return page.locator(`section.orf-objective-panel[data-objective-panel-id="${target.id}"]`).first();
+  }
   return page.locator("section.orf-objective-panel").filter({ hasText: target.title }).first();
 }
 

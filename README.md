@@ -136,8 +136,7 @@ orf frontend
 ## Feedback
 
 - 使用 `npm run check` 检查基础工具链是否可用。
-- 使用 `npm test` 运行快速业务不变量测试。
-- 使用 `npm run testd` 或 `npm run test:e2e` 运行当前数据化 Playwright 测试。
-- 使用 `npm run verify` 执行完整验证：构建、快速测试和端到端测试。
+- 使用 `npm run testd` 运行当前数据化 Playwright 测试。
+- 使用 `npm run verify` 执行完整验证：构建和数据化测试。
 - 涉及产品需求、功能设计或业务代码的改动，必须说明目标、预期结果、反馈方式、来源文档和验证方式。
 - 如果产品方向违背 ORF 思想，或业务代码缺少文档来源，必须拒绝修改。

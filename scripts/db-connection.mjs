@@ -19,18 +19,42 @@ export function loadEnvFile(envFile = ".env") {
 
     const index = line.indexOf("=");
     const key = line.slice(0, index);
-    const value = unquoteEnvValue(line.slice(index + 1));
+    const value = parseEnvValue(line.slice(index + 1));
     process.env[key] ??= value;
   }
 }
 
-function unquoteEnvValue(value) {
-  const trimmed = value.trim();
+function parseEnvValue(value) {
+  const withoutComment = stripInlineEnvComment(value);
+  const trimmed = withoutComment.trim();
   if (
     (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
     (trimmed.startsWith("'") && trimmed.endsWith("'"))
   ) {
     return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function stripInlineEnvComment(value) {
+  let quote;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+
+    if (character === "#") {
+      return value.slice(0, index);
+    }
   }
   return value;
 }

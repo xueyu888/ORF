@@ -1,86 +1,183 @@
-import { Plus } from "lucide-react";
+import { CheckCircle2, CircleDot, MessageSquare, Plus, RotateCcw } from "lucide-react";
+import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { Bar, BarChart, Tooltip, XAxis, YAxis } from "recharts";
-import { ChartFrame } from "../components/ChartFrame";
-import { PageScaffold } from "../components/PageScaffold";
-import { FeedbackCard } from "../components/SharedCards";
-import { Button, Card, StatusBadge } from "../components/ui";
-import { filterFeedbackForVisibleObjectives, filterResultsForVisibleObjectives, visibleObjectiveIdsForUser, visibleObjectivesForUser } from "../features/challenge/model/objectiveVisibility";
+import { Link } from "react-router-dom";
+import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
-import { formatAverageResponseHours, summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
+import { summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
+import { feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
 import { useOrf } from "../state/OrfProvider";
-import type { FeedbackStatus, Impact } from "../types/orf";
+import type { Feedback, Impact } from "../types/orf";
+import { impactLabel } from "../utils/labels";
+
+type FeedbackListState = "open" | "closed" | "all";
 
 export function FeedbackInboxPage() {
   const { currentUser, state, openModal } = useOrf();
+  const [query, setQuery] = useState("");
+  const [listState, setListState] = useState<FeedbackListState>("open");
   const [cause, setCause] = useState("All");
-  const [status, setStatus] = useState<"All" | FeedbackStatus>("All");
-  const [impact, setImpact] = useState<"All" | Impact>("All");
-  const visibleObjectiveIds = useMemo(() => visibleObjectiveIdsForUser(state.objectives, currentUser), [currentUser, state.objectives]);
-  const visibleObjectives = useMemo(() => visibleObjectivesForUser(state.objectives, currentUser), [currentUser, state.objectives]);
-  const visibleResults = useMemo(() => filterResultsForVisibleObjectives(state.results, visibleObjectiveIds, currentUser), [currentUser, state.results, visibleObjectiveIds]);
-  const visibleFeedback = useMemo(() => filterFeedbackForVisibleObjectives(state.feedback, visibleObjectiveIds, currentUser), [currentUser, state.feedback, visibleObjectiveIds]);
-  const canCreateFeedback = canCreateFeedbackFromVisibleState({ objectives: visibleObjectives, results: visibleResults }, currentUser);
+  const visibleFeedback = useMemo(() => currentUser?.status === "active" || currentUser?.role === "admin" ? state.feedback : [], [currentUser, state.feedback]);
+  const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const insights = useMemo(() => summarizeFeedbackInsights(visibleFeedback), [visibleFeedback]);
+  const openCount = visibleFeedback.filter(isFeedbackIssueOpen).length;
+  const closedCount = visibleFeedback.length - openCount;
+  const normalizedQuery = query.trim().toLowerCase();
 
-  const feedback = useMemo(
+  const filteredFeedback = useMemo(
     () =>
       visibleFeedback.filter((item) => {
+        const itemIsOpen = isFeedbackIssueOpen(item);
+        const stateMatch = listState === "all" || (listState === "open" ? itemIsOpen : !itemIsOpen);
         const causeMatch = cause === "All" || item.causeCategories.includes(cause);
-        const statusMatch = status === "All" || item.status === status;
-        const impactMatch = impact === "All" || item.impact === impact;
-        return causeMatch && statusMatch && impactMatch;
+        const searchableText = [
+          item.id,
+          item.phenomenon,
+          item.suggestedAdjustment,
+          item.owner,
+          feedbackIssueStateLabel(item),
+          impactLabel[item.impact],
+          ...item.causeCategories,
+        ].join(" ").toLowerCase();
+        const queryMatch = normalizedQuery.length === 0 || searchableText.includes(normalizedQuery);
+        return stateMatch && causeMatch && queryMatch;
       }),
-    [cause, impact, status, visibleFeedback],
+    [cause, listState, normalizedQuery, visibleFeedback],
   );
 
-  const chart = insights.causeChart.slice(0, 8).map((item) => ({
-    cause: item.cause,
-    causeLabel: item.cause.replace(" Issue", ""),
-    count: item.count,
-  }));
+  const hasActiveFilters = normalizedQuery.length > 0 || listState !== "open" || cause !== "All";
+
+  const resetFilters = () => {
+    setQuery("");
+    setListState("open");
+    setCause("All");
+  };
 
   return (
-    <PageScaffold
-      title="反馈收件箱"
-      subtitle="收集信号、归类原因，并反向更新指标。"
-      action={canCreateFeedback ? <Button onClick={() => openModal({ type: "newFeedback" })}><Plus className="h-4 w-4" />新建反馈</Button> : null}
-    >
-      <Card className="flex flex-wrap items-center gap-3 orf-card-padding">
-        <select className="orf-input h-9 max-w-48 px-3 text-sm" value={cause} onChange={(event) => setCause(event.target.value)}><option value="All">全部原因</option>{insights.causeChart.map((item) => <option key={item.cause}>{item.cause}</option>)}</select>
-        <select className="orf-input h-9 max-w-48 px-3 text-sm" value={status} onChange={(event) => setStatus(event.target.value as "All" | FeedbackStatus)}><option value="All">全部状态</option>{["New", "Reviewing", "Action Created", "Result Updated", "Closed"].map((item) => <option key={item} value={item}>{item === "New" ? "新反馈" : item === "Reviewing" ? "评审中" : item === "Action Created" ? "已建动作" : item === "Result Updated" ? "已更新指标" : "已关闭"}</option>)}</select>
-        <select className="orf-input h-9 max-w-48 px-3 text-sm" value={impact} onChange={(event) => setImpact(event.target.value as "All" | Impact)}><option value="All">全部影响</option>{["Low", "Medium", "High", "Critical"].map((item) => <option key={item} value={item}>{item === "Low" ? "低" : item === "Medium" ? "中" : item === "High" ? "高" : "严重"}</option>)}</select>
-      </Card>
-      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-        <div className="grid gap-3">
-          {feedback.map((item) => <FeedbackCard key={item.id} feedback={item} resultTitle={visibleResults.find((result) => result.id === item.linkedResultId)?.title} />)}
-          {feedback.length === 0 && <Card className="orf-card-padding text-sm orf-text-secondary">暂无匹配反馈。</Card>}
+    <div className="bounty-hall-page feedback-issue-page">
+      <header className="feedback-issue-header">
+        <div className="feedback-issue-title-block">
+          <span className="bounty-page-eyebrow">REPORT / TEAM ISSUE BOARD</span>
+          <h1 className="bounty-page-title">反馈</h1>
+          <p>团队内部的技术、管理和系统问题都会进入同一个 issue 池。</p>
         </div>
-        <Card className="orf-card-padding">
-          <div className="text-sm font-semibold orf-text-primary">洞察面板</div>
-          <ChartFrame className="mt-4 h-56 min-w-0">
-            {({ width, height }) => (
-              <BarChart width={width} height={height} data={chart}>
-                <XAxis dataKey="causeLabel" tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} />
-                <YAxis tick={{ fill: "var(--orf-text-muted)", fontSize: 11 }} allowDecimals={false} />
-                <Tooltip contentStyle={{ background: "var(--orf-bg-elevated)", border: "1px solid var(--orf-border)", color: "var(--orf-text-primary)" }} />
-                <Bar dataKey="count" fill="var(--orf-accent)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            )}
-          </ChartFrame>
-          <div className="mt-4 grid gap-2">
-            <Insight label="高影响反馈" value={insights.highImpactCount.toString()} />
-            <Insight label="未分类" value={insights.uncategorizedCount.toString()} />
-            <Insight label="平均响应时间" value={formatAverageResponseHours(insights.averageResponseHours)} />
-            <Insight label="最高频问题" value={insights.topCause ?? "暂无数据"} />
-          </div>
-          <div className="mt-4 text-xs orf-text-muted">状态流：<StatusBadge status="New" /> → <StatusBadge status="Reviewing" /> → <StatusBadge status="Action Created" /> → <StatusBadge status="Result Updated" /> → <StatusBadge status="Closed" /></div>
-        </Card>
+        {canCreateFeedback && (
+          <BountyButton onClick={() => openModal({ type: "newFeedback" })}>
+            <Plus aria-hidden="true" />
+            新建反馈
+          </BountyButton>
+        )}
+      </header>
+
+      <div className="bounty-toolbar feedback-issue-toolbar">
+        <BountyTextInput ariaLabel="搜索反馈" value={query} onValueChange={setQuery} placeholder="搜索反馈" />
+        <div className="bounty-toolbar-controls">
+          <BountySelect label="分类" value={cause} onChange={setCause}>
+            <option value="All">全部分类</option>
+            {insights.causeChart.map((item) => <option key={item.cause} value={item.cause}>{item.cause}</option>)}
+          </BountySelect>
+          <BountyButton className="feedback-reset-button" disabled={!hasActiveFilters} onClick={resetFilters} variant="secondary">
+            <RotateCcw aria-hidden="true" />
+            重置
+          </BountyButton>
+        </div>
       </div>
-    </PageScaffold>
+
+      <section className="feedback-issue-list bounty-list-table">
+        <div className="feedback-issue-list-head">
+          <div className="feedback-issue-state-tabs">
+            <IssueStateButton active={listState === "open"} onClick={() => setListState("open")}>
+              <CircleDot aria-hidden="true" className="feedback-state-icon-open" />
+              Open <strong>{openCount}</strong>
+            </IssueStateButton>
+            <IssueStateButton active={listState === "closed"} onClick={() => setListState("closed")}>
+              <CheckCircle2 aria-hidden="true" className="feedback-state-icon-closed" />
+              Closed <strong>{closedCount}</strong>
+            </IssueStateButton>
+            <IssueStateButton active={listState === "all"} onClick={() => setListState("all")}>
+              All <strong>{visibleFeedback.length}</strong>
+            </IssueStateButton>
+          </div>
+          <span className="feedback-issue-match-count">{filteredFeedback.length} 条匹配</span>
+        </div>
+
+        {filteredFeedback.length > 0 ? (
+          <div className="feedback-issue-rows">
+            {filteredFeedback.map((item) => (
+              <FeedbackIssueRow key={item.id} commentCount={feedbackIssueCommentCount(state.comments, item.id)} feedback={item} />
+            ))}
+          </div>
+        ) : (
+          <BountyEmptyState title="没有匹配的反馈" description="调整搜索或筛选条件后再看。" />
+        )}
+      </section>
+    </div>
   );
 }
 
-function Insight({ label, value }: { label: string; value: string }) {
-  return <div className="flex items-center justify-between rounded-md orf-surface-muted px-3 py-2 text-sm"><span className="orf-text-secondary">{label}</span><span className="font-medium orf-text-primary">{value}</span></div>;
+function IssueStateButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button className="feedback-issue-state-button" data-active={active ? "true" : "false"} type="button" onClick={onClick}>
+      {children}
+    </button>
+  );
+}
+
+function FeedbackIssueRow({ commentCount, feedback }: { commentCount: number; feedback: Feedback }) {
+  const open = isFeedbackIssueOpen(feedback);
+  const causes = feedback.causeCategories.map((item) => item.trim()).filter(Boolean);
+  const preview = feedback.suggestedAdjustment.trim();
+
+  return (
+    <Link className="feedback-issue-row" to={`/feedback/${encodeURIComponent(feedback.id)}`}>
+      <div className="feedback-issue-row-icon" data-open={open ? "true" : "false"}>
+        {open ? <CircleDot aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
+      </div>
+      <div className="feedback-issue-row-main">
+        <div className="feedback-issue-row-title-line">
+          <h2>{feedback.phenomenon}</h2>
+          <div className="feedback-issue-labels">
+            {causes.map((item) => (
+              <BountyBadge key={item} tone={causeTone(item)}>{item}</BountyBadge>
+            ))}
+            <BountyBadge tone={impactTone(feedback.impact)}>{impactLabel[feedback.impact]}</BountyBadge>
+          </div>
+        </div>
+        {preview && (
+          <p className="feedback-issue-preview">
+            {preview}
+          </p>
+        )}
+        <div className="feedback-issue-meta">
+          <span title={feedback.id}>#{feedbackIssueDisplayId(feedback.id)}</span>
+          <span>{feedback.owner} 更新于 {formatFeedbackDate(feedback.updatedAt)}</span>
+          <span>{feedbackIssueStateLabel(feedback)}</span>
+          <span className="feedback-issue-comment-meta"><MessageSquare aria-hidden="true" /> {commentCount}</span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function causeTone(value: string) {
+  if (/管理|流程|协作/.test(value)) return "gold" as const;
+  if (/技术|系统|质量|缺陷|bug/i.test(value)) return "accent" as const;
+  if (/风险|事故|阻塞/.test(value)) return "warning" as const;
+  return "neutral" as const;
+}
+
+function impactTone(value: Impact) {
+  if (value === "Critical") return "danger" as const;
+  if (value === "High") return "warning" as const;
+  if (value === "Medium") return "accent" as const;
+  return "neutral" as const;
+}
+
+function formatFeedbackDate(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit" }).format(date);
 }

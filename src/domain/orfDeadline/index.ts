@@ -1,5 +1,6 @@
 import type { Objective, ObjectiveFlowStatus, UserRole } from "../../types/orf";
 import { isDateOnlyString } from "../../utils/date";
+import { canEditObjectiveContentForRole } from "../orfObjectiveContent";
 
 type ObjectiveDeadlineTarget = Pick<Objective, "finalDueAt" | "flowStatus"> | null | undefined;
 
@@ -31,11 +32,11 @@ export function resolveObjectiveDeadlineEditState(target: ObjectiveDeadlineTarge
   }
 
   if (directlyEditableDeadlineStatuses.has(target.flowStatus)) {
-    return role === "admin" ? { status: "editable", mode: "edit" } : { status: "blocked", reason: "noPermission" };
+    return canEditObjectiveContentForRole(role) ? { status: "editable", mode: "edit" } : { status: "blocked", reason: "noPermission" };
   }
 
   if (target.flowStatus === "frozen") {
-    return role === "admin" ? { status: "editable", mode: "extendFrozen" } : { status: "blocked", reason: "noPermission" };
+    return canEditObjectiveContentForRole(role) ? { status: "editable", mode: "extendFrozen" } : { status: "blocked", reason: "noPermission" };
   }
 
   return { status: "blocked", reason: "lifecycleLocked" };

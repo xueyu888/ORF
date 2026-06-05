@@ -179,7 +179,7 @@ export const memberSubmitLootCase = {
       {
         source: { caseStepId: "Setup-8", method: "prisma" },
         id: "db.loot_target.add_challenger",
-        title: "设置 本用例目标的挑战者包含普通成员",
+        title: "设置 本用例目标的挑战者账号身份包含普通成员",
         object: "db.loot_target",
         operator: "add_challenger",
         params: { targetFrom: "runtime.lootTarget", memberNameFrom: "data.name" },
@@ -300,7 +300,7 @@ export const memberSubmitLootCase = {
       {
         source: { caseStepId: "S0-4", method: "prisma" },
         id: "db.loot_target.frozen_for_member",
-        title: "本用例目标 应为 流转状态 `frozen`、阶段 `goalFrozen` 且挑战者包含普通成员",
+        title: "本用例目标 应为 流转状态 `frozen`、阶段 `goalFrozen` 且挑战者账号身份包含普通成员",
         object: "db.loot_target",
         operator: "frozen_for_member",
         params: { targetFrom: "runtime.lootTarget", memberNameFrom: "data.name" },

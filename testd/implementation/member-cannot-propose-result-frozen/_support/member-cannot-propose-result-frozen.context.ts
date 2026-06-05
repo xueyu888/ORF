@@ -19,6 +19,7 @@ export type FrozenMemberProposalCaseData = {
 export interface FrozenProposalTarget {
   objective: {
     id: string;
+    teamId: string;
     title: string;
     flowStatus: ObjectiveFlowStatus;
   };

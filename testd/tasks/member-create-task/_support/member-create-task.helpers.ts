@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, taskChecklistItems, tasks } from "../../../../server/db/schema";
+import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
 import type { MemberCreateTaskTarget, MemberCreatedSubtask, MemberCreatedTask } from "./member-create-task.context";
 
 export async function taskTargetFromObjective(objectiveId: string): Promise<MemberCreateTaskTarget> {
@@ -12,6 +13,7 @@ export async function taskTargetFromObjective(objectiveId: string): Promise<Memb
   return {
     objective: {
       id: selected.id,
+      teamId: selected.teamId,
       title: selected.title,
       flowStatus: selected.flowStatus,
     },
@@ -23,6 +25,7 @@ export async function prepareTaskTarget(target: MemberCreateTaskTarget, memberNa
   if (!objective) {
     throw new Error("目标不存在，无法准备用户新增行动项状态");
   }
+  const memberUserId = await requiredTestUserIdByNameInTeam({ teamId: objective.teamId, name: memberName });
 
   await db
     .update(objectives)
@@ -30,6 +33,7 @@ export async function prepareTaskTarget(target: MemberCreateTaskTarget, memberNa
       stage: "orfReestimate",
       flowStatus: "reestimating",
       challengers: uniqueMembers([...objective.challengers, memberName]),
+      challengerUserIds: uniqueMembers([...objective.challengerUserIds, memberUserId]),
       updatedAt: today(),
     })
     .where(eq(objectives.id, target.objective.id));
@@ -37,7 +41,14 @@ export async function prepareTaskTarget(target: MemberCreateTaskTarget, memberNa
 
 export async function targetCanCreateTask(target: MemberCreateTaskTarget, actor: { name: string; role: string }) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "reestimating" && (actor.role === "admin" || objective.challengers.includes(actor.name));
+  if (!objective || objective.flowStatus !== "reestimating") {
+    return false;
+  }
+  if (actor.role === "admin") {
+    return true;
+  }
+  const actorUserId = await readTestUserIdByNameInTeam({ teamId: objective.teamId, name: actor.name });
+  return !!actorUserId && objective.challengerUserIds.includes(actorUserId);
 }
 
 export async function testTaskAbsent(title: string) {
@@ -193,9 +204,11 @@ async function readObjective(objectiveId: string) {
   const [row] = await db
     .select({
       id: objectives.id,
+      teamId: objectives.teamId,
       title: objectives.title,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

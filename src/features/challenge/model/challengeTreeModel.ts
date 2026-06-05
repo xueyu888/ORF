@@ -1,5 +1,6 @@
-import type { Evidence, Feedback, Objective, Result, Task } from "../../../types/orf";
+import type { Evidence, Objective, Result, Task } from "../../../types/orf";
 import { orderObjectiveTasks } from "../../../domain/orfWorkItems";
+import { objectiveHasChallengers } from "../../../domain/orfObjectiveParticipants";
 import { resultProgress } from "../../../utils/format";
 import { addDays, bountyUpdatedAt, latestDate } from "./challengeDates";
 import { bountyDifficulty, bountyStatus } from "./challengeStatus";
@@ -8,7 +9,6 @@ import type { BountyNode, ObjectiveNode } from "./types";
 export function buildChallengeTree(
   input: {
     evidence: Evidence[];
-    feedback: Feedback[];
     objectives: Objective[];
     results: Result[];
     tasks: Task[];
@@ -24,7 +24,7 @@ export function buildChallengeTree(
       const bounties = orderedResults.map((result) => ({
         result,
         status: bountyStatus(result, objective),
-        updatedAt: bountyUpdatedAt(result, input.feedback, input.evidence),
+        updatedAt: bountyUpdatedAt(result, input.evidence),
         progress: resultProgress(result),
         difficulty: bountyDifficulty(result),
       }) satisfies BountyNode);
@@ -46,7 +46,7 @@ export function summarizeDashboard(groups: ObjectiveNode[]) {
   const objectiveTotal = Math.max(1, groups.length);
   const settled = bounties.filter((bounty) => bounty.status === "settled").length;
   const review = bounties.filter((bounty) => bounty.status === "review").length;
-  const unassigned = groups.filter((group) => group.objective.challengers.length === 0).length;
+  const unassigned = groups.filter((group) => !objectiveHasChallengers(group.objective)).length;
   const objectiveProgress = Math.round(average(groups.map((group) => group.objective.progress)));
 
   return {

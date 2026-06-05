@@ -48,23 +48,28 @@ export function BountyButton({
   children,
   className,
   disabled,
+  form,
   loading,
   onClick,
+  type = "button",
   variant = "primary",
 }: {
   children: ReactNode;
   className?: string;
   disabled?: boolean;
+  form?: string;
   loading?: boolean;
   onClick?: () => void;
+  type?: "button" | "submit";
   variant?: ButtonVariant;
 }) {
   return (
     <button
       className={clsx("bounty-action", `bounty-action-${variant}`, className)}
       disabled={disabled || loading}
+      form={form}
       onClick={onClick}
-      type="button"
+      type={type}
     >
       {loading ? "处理中..." : children}
     </button>

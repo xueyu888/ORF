@@ -15,10 +15,9 @@ export function MetricCard({ title, value, delta, icon: Icon }: { title: string;
   );
 }
 
-export function ObjectiveCard({ objective, results, feedback }: { objective: Objective; results: Result[]; feedback: Feedback[] }) {
+export function ObjectiveCard({ objective, results }: { objective: Objective; results: Result[] }) {
   const onTrack = results.filter((result) => result.status === "On Track").length;
   const atRisk = results.filter((result) => result.status === "At Risk").length;
-  const latestFeedback = feedback[0];
   const description = objective.description.trim() || "目标规划待完善";
 
   return (
@@ -42,12 +41,11 @@ export function ObjectiveCard({ objective, results, feedback }: { objective: Obj
         <div className="rounded-md orf-surface-muted p-2">正常 {onTrack}</div>
         <div className="rounded-md orf-surface-muted p-2">有风险 {atRisk}</div>
       </div>
-      {latestFeedback && <div className="mt-3 rounded-md border orf-border orf-surface-muted p-2 text-xs orf-text-secondary">最新反馈：{latestFeedback.phenomenon}</div>}
     </Card>
   );
 }
 
-export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; resultTitle?: string }) {
+export function FeedbackCard({ feedback }: { feedback: Feedback }) {
   return (
     <Card className="orf-card-padding">
       <div className="flex items-start justify-between gap-3">
@@ -57,7 +55,7 @@ export function FeedbackCard({ feedback, resultTitle }: { feedback: Feedback; re
       <div className="mt-3 flex flex-wrap gap-1">
         {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
       </div>
-      <div className="mt-3 text-xs orf-text-muted">关联指标：<span className="orf-text-secondary">{resultTitle}</span></div>
+      <div className="mt-3 text-xs orf-text-muted">处理人：<span className="orf-text-secondary">{feedback.owner}</span></div>
       <div className="mt-3 text-xs orf-text-secondary">{feedback.suggestedAdjustment}</div>
     </Card>
   );

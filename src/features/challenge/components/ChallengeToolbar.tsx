@@ -4,6 +4,7 @@ import {
   challengeStatusFilterOptions,
   type ChallengeCycleFilter,
   type ChallengeMemberFilter,
+  type ChallengeMemberOption,
   type ChallengeStatusFilter,
 } from "../model/challengeFilters";
 import type { ChallengeScope } from "../model/types";
@@ -26,7 +27,7 @@ export function ChallengeToolbar({
   cycle: ChallengeCycleFilter;
   cycleOptions: string[];
   member: ChallengeMemberFilter;
-  memberOptions: string[];
+  memberOptions: ChallengeMemberOption[];
   onScopeChange: (scope: ChallengeScope) => void;
   onCycleChange: (cycle: ChallengeCycleFilter) => void;
   onMemberChange: (member: ChallengeMemberFilter) => void;
@@ -41,7 +42,7 @@ export function ChallengeToolbar({
   ];
   const memberSelectOptions = [
     { label: "全部成员", value: "all", alwaysVisible: true },
-    ...memberOptions.map((item) => ({ label: item, value: item })),
+    ...memberOptions,
   ];
 
   return (

@@ -1,11 +1,10 @@
-import type { Evidence, Feedback, Result } from "../../../types/orf";
+import type { Evidence, Result } from "../../../types/orf";
 import { addCalendarDays } from "../../../utils/date";
 
-export function bountyUpdatedAt(result: Result, feedback: Feedback[], evidence: Evidence[]) {
+export function bountyUpdatedAt(result: Result, evidence: Evidence[]) {
   return latestDate([
     result.updatedAt,
     result.trend.at(-1)?.date,
-    ...feedback.filter((item) => item.linkedResultId === result.id).map((item) => item.updatedAt),
     ...evidence.filter((item) => item.linkedResultId === result.id).map((item) => item.date),
   ]);
 }

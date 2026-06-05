@@ -170,8 +170,11 @@ async function toCapturedResponse(response: Response): Promise<CapturedResponse>
 }
 
 function objectiveFromCapturedResponse(response: Awaited<ReturnType<typeof requiredCapturedResponse>>): ObjectivePublishTarget {
-  expect(response.ok).toBe(true);
-  expect(response.status).toBe(200);
+  if (!response.ok || response.status !== 200) {
+    throw new Error(
+      `目标接口响应不是成功状态：${response.method} ${response.url} -> ${response.status}; body=${JSON.stringify(response.body)}`,
+    );
+  }
 
   const objective = (response.body as { objective?: unknown } | null)?.objective;
   if (!isObjectivePublishTarget(objective)) {

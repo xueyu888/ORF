@@ -48,7 +48,9 @@ export function isObjectiveStageCompatibleWithFlowStatus(flowStatus: ObjectiveFl
 }
 
 export function objectiveFlowStatusAfterChallengeApplication(flowStatus: ObjectiveFlowStatus): ObjectiveFlowStatus {
-  return flowStatus === "recruiting" ? "recruiting" : "applying";
+  if (flowStatus === "open" || flowStatus === "applying") return "applying";
+  if (flowStatus === "recruiting" || flowStatus === "reestimating") return flowStatus;
+  return flowStatus;
 }
 
 export function objectiveFlowStatusAfterChallengeApplicationReview(input: {

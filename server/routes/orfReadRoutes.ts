@@ -2,11 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAdminContext, requireApiUser } from "../auth/accessPolicy";
 import {
-  getBountyHallData,
-  getMyChallengesData,
   getOrfStateSnapshot,
   getTaskManagementData,
-} from "../repositories/orfRepository";
+} from "../readModels/orfTaskManagementReadModel";
+import { getBountyHallData, getMyChallengesData } from "../readModels/orfChallengeReadModels";
 import { getDefaultRuntimeScopeForUser } from "../repositories/runtimeScope";
 
 const myChallengesQuerySchema = z.object({
@@ -27,7 +26,7 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
 
     return user.role === "admin"
       ? getTaskManagementData({ scope })
-      : getMyChallengesData(user.name, false, { scope });
+      : getMyChallengesData(user.id, false, { scope });
   });
 
   app.get("/api/bounties", async (request, reply) => {
@@ -41,7 +40,7 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
       return reply.code(404).send({ error: "Runtime scope not found" });
     }
 
-    return getBountyHallData(user.name, { scope }, user.role);
+    return getBountyHallData(user, { scope });
   });
 
   app.get("/api/my-challenges", async (request, reply) => {
@@ -60,7 +59,7 @@ export function registerOrfReadRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: "Forbidden" });
     }
 
-    return getMyChallengesData(user.name, query.scope === "all", { scope });
+    return getMyChallengesData(user.id, query.scope === "all", { scope });
   });
 
   app.get("/api/orf-state", async (request, reply) => {

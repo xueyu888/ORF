@@ -20,6 +20,9 @@ export function notificationTargetHref(notification: AppNotification) {
   if (notification.kind === "comment.mention.created") {
     const commentTargetType = notification.metadata.targetType;
     const commentTargetId = notification.metadata.targetId;
+    if (commentTargetType === "feedback" && commentTargetId) {
+      return `/feedback/${encodeURIComponent(commentTargetId)}`;
+    }
     const challengeTargetType = commentTargetType ? commentTargetTypeToChallengeTargetType[commentTargetType] : null;
     if (challengeTargetType && commentTargetId) {
       return challengePathForTarget({ id: commentTargetId, type: challengeTargetType });

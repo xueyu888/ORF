@@ -21,7 +21,5 @@
 
 ## 测试约定
 
-- 快速测试使用 Node 内置 test runner，通过 `npm test` 执行。
-- 业务状态、权限、日期、排序、评论和数据来源优先写纯函数或状态层测试。
-- Playwright 只覆盖关键用户旅程和跨层数据来源回归，通过 `npm run test:e2e` 执行。
-- 完整验收使用 `npm run verify`，包含构建、快速测试和端到端测试。
+- 当前仓库保留的数据化测试入口是 `npm run testd`。
+- 完整验收使用 `npm run verify`，包含构建和数据化测试。

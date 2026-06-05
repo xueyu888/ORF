@@ -1,4 +1,5 @@
 import type { Objective, ObjectiveTrialReview, OrfUser } from "../../types/orf";
+import { isObjectiveChallenger } from "../orfObjectiveParticipants";
 
 export const objectiveTrialReviewStatuses = ["requested", "approved", "needsWork"] as const;
 
@@ -20,7 +21,7 @@ export function canRequestObjectiveTrialReview(
     objective &&
       currentUser?.role === "member" &&
       objective.flowStatus === "frozen" &&
-      objective.challengers.includes(currentUser.name) &&
+      isObjectiveChallenger(objective, currentUser.id) &&
       !existingReview,
   );
 }

@@ -289,7 +289,9 @@ export function createCommonOperators<
           successDefinition: optionalString(params, "successDefinition"),
           finalDueAt: optionalString(params, "finalDueAt"),
           challengers: optionalStringList(params, "challengers"),
+          challengerUserIds: optionalStringList(params, "challengerUserIds"),
           assignedChallengers: optionalStringList(params, "assignedChallengers"),
+          assignedChallengerUserIds: optionalStringList(params, "assignedChallengerUserIds"),
           objectiveBasePoints: optionalNumber(params, "objectiveBasePoints"),
           createdBy: optionalString(params, "createdBy"),
           updatedBy: optionalString(params, "updatedBy"),
@@ -513,7 +515,18 @@ export function createCommonOperators<
 
     "page.runtime": {
       stop: async ({ ctx }) => {
-        await ctx.page.goto("about:blank");
+        if (ctx.page.isClosed()) {
+          return;
+        }
+
+        try {
+          await ctx.page.goto("about:blank");
+        } catch (error) {
+          if (isPlaywrightTargetClosedError(error)) {
+            return;
+          }
+          throw error;
+        }
       },
     },
 
@@ -742,4 +755,13 @@ function optionalUserAccount(params: StepParams, key: string): TestUserAccountRe
     return value as TestUserAccountRecord;
   }
   throw new Error(`参数 ${key} 必须是测试用户账号记录`);
+}
+
+function isPlaywrightTargetClosedError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("Target page, context or browser has been closed") ||
+    message.includes("Target closed") ||
+    message.includes("Page closed")
+  );
 }

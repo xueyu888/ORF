@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { OrfUser, UserRole } from "../../src/types/orf";
-import { deleteOryIdentity } from "../auth/ory";
+import { deleteOryIdentity, updateOryIdentityEmail } from "../auth/ory";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -115,90 +115,6 @@ async function assertUniqueUserNameInScope(scope: RuntimeScope, userId: string |
   }
 }
 
-async function isUserNameReferencedByOrfRecords(scope: RuntimeScope, name: string) {
-  const storageScopeId = runtimeScopeStorageId(scope);
-  const objectiveRows = await db
-    .select({
-      challengers: objectives.challengers,
-      assignedChallengers: objectives.assignedChallengers,
-      challengeApplications: objectives.challengeApplications,
-    })
-    .from(objectives)
-    .where(eq(objectives.teamId, storageScopeId));
-  if (
-    objectiveRows.some(
-      (objective) =>
-        (objective.challengers ?? []).includes(name) ||
-        (objective.assignedChallengers ?? []).includes(name) ||
-        (objective.challengeApplications ?? []).some((application) => application.applicant === name),
-    )
-  ) {
-    return true;
-  }
-
-  const contributionRows = await db
-    .select({
-      reviewer: objectiveContributionReviews.reviewer,
-      allocations: objectiveContributionReviews.allocations,
-    })
-    .from(objectiveContributionReviews)
-    .where(eq(objectiveContributionReviews.teamId, storageScopeId));
-  if (
-    contributionRows.some(
-      (review) =>
-        review.reviewer === name ||
-        (review.allocations ?? []).some((allocation) => allocation.member === name),
-    )
-  ) {
-    return true;
-  }
-
-  const [resultRef, taskRef, feedbackRef, evidenceRef, lootRef, trialReviewRef, alignmentRequestRef, ledgerRef] = await Promise.all([
-    db
-      .select({ id: results.id })
-      .from(results)
-      .where(and(eq(results.teamId, storageScopeId), eq(results.definer, name)))
-      .limit(1),
-    db
-      .select({ id: tasks.id })
-      .from(tasks)
-      .where(and(eq(tasks.teamId, storageScopeId), eq(tasks.assignee, name)))
-      .limit(1),
-    db
-      .select({ id: feedback.id })
-      .from(feedback)
-      .where(and(eq(feedback.teamId, storageScopeId), eq(feedback.owner, name)))
-      .limit(1),
-    db
-      .select({ id: evidence.id })
-      .from(evidence)
-      .where(and(eq(evidence.teamId, storageScopeId), eq(evidence.owner, name)))
-      .limit(1),
-    db
-      .select({ id: objectiveLoot.id })
-      .from(objectiveLoot)
-      .where(and(eq(objectiveLoot.teamId, storageScopeId), eq(objectiveLoot.submittedBy, name)))
-      .limit(1),
-    db
-      .select({ id: objectiveTrialReviews.id })
-      .from(objectiveTrialReviews)
-      .where(and(eq(objectiveTrialReviews.teamId, storageScopeId), or(eq(objectiveTrialReviews.requestedBy, name), eq(objectiveTrialReviews.reviewedBy, name))))
-      .limit(1),
-    db
-      .select({ id: objectiveAlignmentRequests.id })
-      .from(objectiveAlignmentRequests)
-      .where(and(eq(objectiveAlignmentRequests.teamId, storageScopeId), or(eq(objectiveAlignmentRequests.requestedBy, name), eq(objectiveAlignmentRequests.reviewedBy, name))))
-      .limit(1),
-    db
-      .select({ id: pointLedger.id })
-      .from(pointLedger)
-      .where(and(eq(pointLedger.teamId, storageScopeId), eq(pointLedger.memberName, name)))
-      .limit(1),
-  ]);
-
-  return [resultRef, taskRef, feedbackRef, evidenceRef, lootRef, trialReviewRef, alignmentRequestRef, ledgerRef].some((rows) => rows.length > 0);
-}
-
 async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: string) {
   const storageScopeId = runtimeScopeStorageId(scope);
   const [
@@ -207,9 +123,11 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     taskRef,
     feedbackRef,
     evidenceRef,
+    lootRef,
     ledgerRef,
     trialReviewRef,
     alignmentRequestRef,
+    contributionReviewRef,
     threadRef,
     messageRef,
     attachmentRef,
@@ -217,27 +135,47 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     db
       .select({ id: objectives.id })
       .from(objectives)
-      .where(and(eq(objectives.teamId, storageScopeId), or(eq(objectives.createdBy, userId), eq(objectives.updatedBy, userId))))
+      .where(
+        and(
+          eq(objectives.teamId, storageScopeId),
+          or(
+            eq(objectives.createdBy, userId),
+            eq(objectives.updatedBy, userId),
+            sql`${objectives.challengerUserIds} ? ${userId}`,
+            sql`${objectives.assignedChallengerUserIds} ? ${userId}`,
+            sql`exists (
+              select 1
+              from jsonb_array_elements(${objectives.challengeApplications}) as application(value)
+              where application.value->>'applicantUserId' = ${userId}
+            )`,
+          ),
+        ),
+      )
       .limit(1),
     db
       .select({ id: results.id })
       .from(results)
-      .where(and(eq(results.teamId, storageScopeId), or(eq(results.createdBy, userId), eq(results.updatedBy, userId))))
+      .where(and(eq(results.teamId, storageScopeId), or(eq(results.createdBy, userId), eq(results.updatedBy, userId), eq(results.definerUserId, userId))))
       .limit(1),
     db
       .select({ id: tasks.id })
       .from(tasks)
-      .where(and(eq(tasks.teamId, storageScopeId), or(eq(tasks.createdBy, userId), eq(tasks.updatedBy, userId))))
+      .where(and(eq(tasks.teamId, storageScopeId), or(eq(tasks.createdBy, userId), eq(tasks.updatedBy, userId), eq(tasks.assigneeUserId, userId))))
       .limit(1),
     db
       .select({ id: feedback.id })
       .from(feedback)
-      .where(and(eq(feedback.teamId, storageScopeId), or(eq(feedback.createdBy, userId), eq(feedback.updatedBy, userId))))
+      .where(and(eq(feedback.teamId, storageScopeId), or(eq(feedback.createdBy, userId), eq(feedback.updatedBy, userId), eq(feedback.ownerUserId, userId))))
       .limit(1),
     db
       .select({ id: evidence.id })
       .from(evidence)
-      .where(and(eq(evidence.teamId, storageScopeId), or(eq(evidence.createdBy, userId), eq(evidence.updatedBy, userId))))
+      .where(and(eq(evidence.teamId, storageScopeId), or(eq(evidence.createdBy, userId), eq(evidence.updatedBy, userId), eq(evidence.ownerUserId, userId))))
+      .limit(1),
+    db
+      .select({ id: objectiveLoot.id })
+      .from(objectiveLoot)
+      .where(and(eq(objectiveLoot.teamId, storageScopeId), eq(objectiveLoot.submittedByUserId, userId)))
       .limit(1),
     db
       .select({ id: pointLedger.id })
@@ -247,12 +185,29 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     db
       .select({ id: objectiveTrialReviews.id })
       .from(objectiveTrialReviews)
-      .where(and(eq(objectiveTrialReviews.teamId, storageScopeId), or(eq(objectiveTrialReviews.requestedBy, userId), eq(objectiveTrialReviews.reviewedBy, userId))))
+      .where(and(eq(objectiveTrialReviews.teamId, storageScopeId), or(eq(objectiveTrialReviews.requestedByUserId, userId), eq(objectiveTrialReviews.reviewedByUserId, userId))))
       .limit(1),
     db
       .select({ id: objectiveAlignmentRequests.id })
       .from(objectiveAlignmentRequests)
-      .where(and(eq(objectiveAlignmentRequests.teamId, storageScopeId), or(eq(objectiveAlignmentRequests.requestedBy, userId), eq(objectiveAlignmentRequests.reviewedBy, userId))))
+      .where(and(eq(objectiveAlignmentRequests.teamId, storageScopeId), or(eq(objectiveAlignmentRequests.requestedByUserId, userId), eq(objectiveAlignmentRequests.reviewedByUserId, userId))))
+      .limit(1),
+    db
+      .select({ id: objectiveContributionReviews.id })
+      .from(objectiveContributionReviews)
+      .where(
+        and(
+          eq(objectiveContributionReviews.teamId, storageScopeId),
+          or(
+            eq(objectiveContributionReviews.reviewerUserId, userId),
+            sql`exists (
+              select 1
+              from jsonb_array_elements(${objectiveContributionReviews.allocations}) as allocation(value)
+              where allocation.value->>'memberUserId' = ${userId}
+            )`,
+          ),
+        ),
+      )
       .limit(1),
     db
       .select({ id: commentThreads.id })
@@ -278,28 +233,15 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     taskRef,
     feedbackRef,
     evidenceRef,
+    lootRef,
     ledgerRef,
     trialReviewRef,
     alignmentRequestRef,
+    contributionReviewRef,
     threadRef,
     messageRef,
     attachmentRef,
   ].some((rows) => rows.length > 0);
-}
-
-async function isUserAccountReferencedByOrfRecords(scope: RuntimeScope, user: { id: string; name: string }) {
-  return (await isUserNameReferencedByOrfRecords(scope, user.name)) || (await isUserIdReferencedByOrfRecords(scope, user.id));
-}
-
-async function assertCanRenameUser(scope: RuntimeScope, userId: string, nextName: string) {
-  const [user] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
-  if (!user || user.name === nextName) {
-    return;
-  }
-
-  if (await isUserNameReferencedByOrfRecords(scope, user.name)) {
-    throw Object.assign(new Error("User name is referenced by ORF records"), { statusCode: 409 });
-  }
 }
 
 function assertCanChangeRole(actorUserId: string, userId: string, nextRole: UserRole) {
@@ -313,8 +255,8 @@ async function assertCanDeleteUser(scope: RuntimeScope, actorUserId: string, use
     throw Object.assign(new Error("Admin cannot delete self"), { statusCode: 409 });
   }
 
-  const [user] = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
-  if (user && (await isUserAccountReferencedByOrfRecords(scope, user))) {
+  const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+  if (user && (await isUserIdReferencedByOrfRecords(scope, user.id))) {
     throw Object.assign(new Error("User is referenced by ORF records"), { statusCode: 409 });
   }
 }
@@ -414,14 +356,10 @@ export async function createScopedUser(scope: RuntimeScope, actorUserId: string,
 
     if (matchedMembership) {
       assertCanChangeRole(actorUserId, matchedUser.id, normalized.role);
-      await assertCanRenameUser(scope, matchedUser.id, normalized.name);
     }
   }
 
   await assertUniqueUserNameInScope(scope, matchedUser?.id ?? null, normalized.name);
-  if (!matchedMembership && (await isUserNameReferencedByOrfRecords(scope, normalized.name))) {
-    throw Object.assign(new Error("Name is referenced by ORF records"), { statusCode: 409 });
-  }
 
   await db.transaction(async (tx) => {
     const existingUser = matchedUser ?? (await tx.select().from(users).where(sql`lower(${users.email}) = ${normalized.email}`).limit(1))[0];
@@ -468,10 +406,6 @@ async function updateScopedUserRecord(scope: RuntimeScope, userId: string, norma
     throw Object.assign(new Error("User not found"), { statusCode: 404 });
   }
 
-  if (currentUser.oryIdentityId && normalizeEmail(currentUser.email ?? "") !== normalized.email) {
-    throw Object.assign(new Error("Bound login email cannot be changed"), { statusCode: 409 });
-  }
-
   const [emailOwner] = await db
     .select({ id: users.id })
     .from(users)
@@ -482,16 +416,27 @@ async function updateScopedUserRecord(scope: RuntimeScope, userId: string, norma
     throw Object.assign(new Error("Email already exists"), { statusCode: 409 });
   }
 
-  await assertCanRenameUser(scope, userId, normalized.name);
   await assertUniqueUserNameInScope(scope, userId, normalized.name);
+  const previousEmail = normalizeEmail(currentUser.email ?? "");
+  const shouldSyncOryEmail = Boolean(currentUser.oryIdentityId && previousEmail !== normalized.email);
+  if (shouldSyncOryEmail) {
+    await updateOryIdentityEmail(currentUser.oryIdentityId, normalized.email);
+  }
 
-  await db.transaction(async (tx) => {
-    await tx.update(users).set({ name: normalized.name, email: normalized.email }).where(eq(users.id, userId));
-    await tx
-      .update(teamMembers)
-      .set({ role: normalized.role })
-      .where(and(eq(teamMembers.teamId, runtimeScopeStorageId(scope)), eq(teamMembers.userId, userId)));
-  });
+  try {
+    await db.transaction(async (tx) => {
+      await tx.update(users).set({ name: normalized.name, email: normalized.email }).where(eq(users.id, userId));
+      await tx
+        .update(teamMembers)
+        .set({ role: normalized.role })
+        .where(and(eq(teamMembers.teamId, runtimeScopeStorageId(scope)), eq(teamMembers.userId, userId)));
+    });
+  } catch (error) {
+    if (shouldSyncOryEmail && previousEmail) {
+      await updateOryIdentityEmail(currentUser.oryIdentityId, previousEmail).catch(() => undefined);
+    }
+    throw error;
+  }
 
   return getScopedUsers(scope);
 }

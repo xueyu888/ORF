@@ -1,7 +1,7 @@
 import type { PermissionKey } from "../config/permissions";
 
 export type WorkStatus = "On Track" | "At Risk" | "Blocked" | "Draft";
-export type FeedbackStatus = "New" | "Reviewing" | "Action Created" | "Result Updated" | "Closed";
+export type FeedbackStatus = "Open" | "Closed";
 export type TaskStatus = "Backlog" | "Todo" | "In Progress" | "In Review" | "Done";
 export type Priority = "Low" | "Medium" | "High" | "Critical";
 export type Impact = "Low" | "Medium" | "High" | "Critical";
@@ -23,7 +23,6 @@ export type NotificationTargetType = "objective" | "objectiveLoot" | "comment";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
-export type FeedbackSource = "User report" | "Eval run" | "Log" | "Incident" | "Team review";
 export type UserRole = "admin" | "member";
 export type UserStatus = "pending" | "active" | "rejected" | "disabled";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
@@ -57,6 +56,7 @@ export interface TrendPoint {
 export interface ChallengeApplication {
   id: string;
   applicant: string;
+  applicantUserId?: string | null;
   reason?: string;
   status: ChallengeApplicationStatus;
   createdAt: string;
@@ -87,13 +87,19 @@ export interface ActivityItem {
   at: string;
 }
 
+export interface OrfProject {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Objective {
   id: string;
   title: string;
   description: string;
   whyItMatters: string;
   projectId?: string | null;
-  projectName?: string | null;
   cycle: string;
   stage: OrfStage;
   flowStatus: ObjectiveFlowStatus;
@@ -103,11 +109,12 @@ export interface Objective {
   boundary: string;
   successDefinition: string;
   resultIds: string[];
-  feedbackIds: string[];
   taskIds: string[];
   finalDueAt: string;
   challengers: string[];
+  challengerUserIds: string[];
   assignedChallengers: string[];
+  assignedChallengerUserIds: string[];
   challengeApplications: ChallengeApplication[];
   acceptedAt?: string | null;
   confirmationDueAt?: string | null;
@@ -132,6 +139,7 @@ export interface ObjectiveLoot {
   id: string;
   objectiveId: string;
   submittedBy: string;
+  submittedByUserId?: string | null;
   body: string;
   resultClaims: LootResultClaim[];
   selfTestReportUrl?: string | null;
@@ -143,12 +151,14 @@ export interface ObjectiveTrialReview {
   id: string;
   objectiveId: string;
   requestedBy: string;
+  requestedByUserId?: string | null;
   body: string;
   resultClaims: LootResultClaim[];
   selfTestReportBody?: string | null;
   status: ObjectiveTrialReviewStatus;
   commanderFeedback?: string | null;
   reviewedBy?: string | null;
+  reviewedByUserId?: string | null;
   reviewedAt?: string | null;
   requestedAt: string;
 }
@@ -158,6 +168,7 @@ export interface ObjectiveAlignmentRequest {
   objectiveId: string;
   kind: ObjectiveAlignmentRequestKind;
   requestedBy: string;
+  requestedByUserId?: string | null;
   status: ObjectiveAlignmentRequestStatus;
   proposedAt: string;
   scheduledAt?: string | null;
@@ -165,6 +176,7 @@ export interface ObjectiveAlignmentRequest {
   note?: string | null;
   commanderFeedback?: string | null;
   reviewedBy?: string | null;
+  reviewedByUserId?: string | null;
   reviewedAt?: string | null;
 }
 
@@ -180,6 +192,7 @@ export interface PointLedgerEntry {
 
 export interface ContributionAllocation {
   member: string;
+  memberUserId?: string | null;
   ratio: number;
 }
 
@@ -187,6 +200,7 @@ export interface ObjectiveContributionReview {
   id: string;
   objectiveId: string;
   reviewer: string;
+  reviewerUserId?: string | null;
   allocations: ContributionAllocation[];
   submittedAt: string;
 }
@@ -212,10 +226,10 @@ export interface Result {
   confidence: number;
   source?: BountySource;
   definer?: string;
+  definerUserId?: string | null;
   uncertaintyScore: number;
   acceptedResult: ResultAcceptedResult;
   evidenceIds: string[];
-  feedbackIds: string[];
   trend: TrendPoint[];
   reviewCadence: string;
   createdAt: string;
@@ -225,15 +239,12 @@ export interface Result {
 export interface Feedback {
   id: string;
   phenomenon: string;
-  evidenceIds: string[];
   causeCategories: string[];
   impact: Impact;
-  linkedObjectiveId: string;
-  linkedResultId: string;
   suggestedAdjustment: string;
-  source: FeedbackSource;
   status: FeedbackStatus;
   owner: string;
+  ownerUserId?: string | null;
   createdBy?: string | null;
   updatedBy?: string | null;
   createdAt: string;
@@ -255,8 +266,8 @@ export interface Task {
   status: TaskStatus;
   priority: Priority;
   assignee: string;
+  assigneeUserId?: string | null;
   linkedObjectiveId: string;
-  feedbackOriginId?: string;
   dueDate: string;
   tags: string[];
   checklist: TaskChecklistItem[];
@@ -274,8 +285,8 @@ export interface Evidence {
   source: string;
   date: string;
   owner: string;
+  ownerUserId?: string | null;
   linkedResultId: string;
-  linkedFeedbackId?: string;
 }
 
 export interface Decision {
@@ -287,7 +298,6 @@ export interface Decision {
   date: string;
   linkedObjectiveId: string;
   linkedResultId?: string;
-  linkedFeedbackId?: string;
 }
 
 export interface EvalRun {
@@ -331,7 +341,7 @@ export interface OrfRules {
   autoCreateReviewSummary: boolean;
 }
 
-export type CommentTargetType = "objective" | "result" | "task" | "subtask";
+export type CommentTargetType = "objective" | "result" | "task" | "subtask" | "feedback";
 export type CommentStatus = "open" | "resolved";
 
 export interface CommentAttachment {
@@ -373,6 +383,7 @@ export interface OrfState {
   users: OrfUser[];
   currentUserId: string;
   permissionRules: PermissionRule[];
+  projects: OrfProject[];
   objectives: Objective[];
   results: Result[];
   feedback: Feedback[];

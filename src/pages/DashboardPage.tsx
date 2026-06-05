@@ -52,7 +52,7 @@ export function DashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold orf-text-primary">目标健康看板</div>
-              <div className="mt-1 text-xs orf-text-muted">目标健康度、关联指标和最新反馈。</div>
+              <div className="mt-1 text-xs orf-text-muted">目标健康度和进度。</div>
             </div>
             <Link className="text-sm orf-accent-text orf-hover-text" to="/tasks">查看全部</Link>
           </div>
@@ -62,7 +62,6 @@ export function DashboardPage() {
                 key={objective.id}
                 objective={objective}
                 results={visibleResults.filter((result) => objective.resultIds.includes(result.id))}
-                feedback={visibleFeedback.filter((feedback) => objective.feedbackIds.includes(feedback.id))}
               />
             ))}
           </div>
@@ -72,7 +71,7 @@ export function DashboardPage() {
           <div className="mb-3 text-sm font-semibold orf-text-primary">待处理反馈</div>
           <div className="grid gap-3">
             {summary.pendingFeedback.slice(0, 4).map((feedback) => (
-              <FeedbackCard key={feedback.id} feedback={feedback} resultTitle={state.results.find((result) => result.id === feedback.linkedResultId)?.title} />
+              <FeedbackCard key={feedback.id} feedback={feedback} />
             ))}
             {summary.pendingFeedback.length === 0 && <div className="rounded-md border orf-border orf-surface-muted p-3 text-sm orf-text-muted">暂无待处理反馈。</div>}
           </div>

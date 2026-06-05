@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
-import { and, desc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
-import { initialOrfState } from "../../src/data/initialOrfState";
+import { and, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 import type {
   CommentAttachment,
   BountySource,
@@ -10,9 +9,6 @@ import type {
   CommentTargetType,
   ContributionAllocation,
   CommentThread,
-  Evidence,
-  Feedback,
-  FeedbackStatus,
   LootResultClaim,
   MetricDirection,
   ObjectiveAlignmentRequest,
@@ -24,7 +20,6 @@ import type {
   ObjectiveTrialReview,
   ObjectiveTrialReviewStatus,
   OrfState,
-  PointLedgerEntry,
   Priority,
   Result,
   ResultAcceptedResult,
@@ -40,7 +35,16 @@ import {
   planObjectiveSettlement,
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
-import { objectiveWorkItemMutationAccess } from "../../src/domain/orfWorkItems";
+import {
+  isObjectiveAssignedChallenger,
+  isObjectiveChallenger,
+  objectiveChallengerUserIds,
+  objectiveHasChallengers,
+  participantDisplayNamesForUserIds,
+  participantUserIdsForNames,
+  uniqueParticipantNames,
+  uniqueParticipantUserIds,
+} from "../../src/domain/orfObjectiveParticipants";
 import {
   canAcceptObjectiveChallengeByFlow,
   canApplyForObjectiveChallenge,
@@ -53,8 +57,6 @@ import {
   canReviewObjectiveChallengeApplications,
   canReviewObjectiveLootByFlow,
   canSubmitObjectiveLootByFlow,
-  isObjectiveChallengeDiscoverableByFlow,
-  isObjectiveChallengeEntryClosedByFlow,
   isObjectiveReestimateWindowOpen,
   objectiveFlowStatusAfterChallengeApplication,
   objectiveFlowStatusAfterChallengeApplicationReview,
@@ -62,29 +64,26 @@ import {
   objectiveLifecycleInitialState,
   objectiveLifecycleTransitions,
 } from "../../src/domain/orfLifecycle";
+import { objectiveChallengeEntryClosed as objectiveClosedForChallengeEntry } from "../../src/domain/orfChallengeEntry";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
 import { db } from "../db/client";
 import {
   commentAttachments,
   commentMessages,
   commentThreads,
-  evidence,
   feedback,
-  feedbackCauseCategories,
   objectiveAlignmentRequests,
   objectives,
   objectiveLoot,
   objectiveTrialReviews,
   pointLedger,
+  projects,
   results,
-  resultTrendPoints,
   taskChecklistItems,
   tasks,
   teamMembers,
-  teams,
   users,
 } from "../db/schema";
-import { getPermissionRulesForScope } from "./permissionRepository";
 import {
   createNotifications,
   getActiveAdminNotificationRecipients,
@@ -98,28 +97,11 @@ import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/utils/date";
-import { publishRealtimeReadModelInvalidation, publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
+import { publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
+import { publishObjectiveInvalidation, publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { objectStorage } from "../storage/objectStorage";
 import { validateImageUpload } from "../storage/images";
-
-export type TaskManagementData = Pick<
-  OrfState,
-  | "objectives"
-  | "results"
-  | "tasks"
-  | "evidence"
-  | "feedback"
-  | "comments"
-  | "objectiveLoot"
-  | "objectiveTrialReviews"
-  | "objectiveAlignmentRequests"
-  | "pointLedger"
-  | "permissionRules"
->;
-
-export type TaskManagementDataScope = {
-  scope?: RuntimeScope | null;
-};
+import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
 
 type CommentActor = {
   canManageAllComments?: boolean;
@@ -138,8 +120,6 @@ type CommentMentionableUsersOutcome =
   | { status: "ok"; users: OrfState["users"] }
   | { status: "notFound" }
   | { status: "forbidden" };
-type CommentThreadRow = typeof commentThreads.$inferSelect;
-type CommentMessageRow = typeof commentMessages.$inferSelect;
 type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
 
 const today = () => localDateString(new Date());
@@ -161,14 +141,6 @@ const MAX_CONFIRMATION_HALVES = 18;
 const PENDING_COMMENT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 const COMMENT_ATTACHMENT_TOKEN_PATTERN = /!\[[^\]\n]*\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
 const COMMENT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
-const difficultyRanks: Record<UncertaintyLevel, number> = {
-  入门: 1,
-  进阶: 2,
-  破局: 3,
-  渡劫: 4,
-  飞升: 5,
-};
-
 function optional<T>(value: T | null): T | undefined {
   return value ?? undefined;
 }
@@ -262,19 +234,6 @@ function addDays(value: string, days: number) {
   return addCalendarDays(value, days, value);
 }
 
-function isMissingCommentStorageError(error: unknown) {
-  const cause = error && typeof error === "object" && "cause" in error ? (error as { cause?: unknown }).cause : error;
-  if (!cause || typeof cause !== "object" || !("code" in cause)) {
-    return false;
-  }
-
-  return cause.code === "42P01" || cause.code === "42704";
-}
-
-function scopedStorageId(scope: TaskManagementDataScope = {}) {
-  return scope.scope ? runtimeScopeStorageId(scope.scope).trim() : "";
-}
-
 function taskAuditUpdate(actorId?: string | null) {
   return actorId ? { updatedBy: actorId } : {};
 }
@@ -282,33 +241,6 @@ function taskAuditUpdate(actorId?: string | null) {
 function storageScope(id: string | null | undefined): RuntimeScope | null {
   const storageId = id?.trim();
   return storageId ? runtimeScope(storageId) : null;
-}
-
-async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[CommentThreadRow[], CommentMessageRow[], CommentAttachmentRow[]]> {
-  try {
-    const storageScopeId = scopedStorageId(scope);
-    const threadRows = storageScopeId
-      ? await db.select().from(commentThreads).where(eq(commentThreads.teamId, storageScopeId))
-      : await db.select().from(commentThreads);
-    const threadIds = threadRows.map((thread) => thread.id);
-    const messageRows =
-      threadIds.length > 0
-        ? await db.select().from(commentMessages).where(inArray(commentMessages.threadId, threadIds))
-        : [];
-    const messageIds = messageRows.map((message) => message.id);
-    const attachmentRows =
-      messageIds.length > 0
-        ? await db.select().from(commentAttachments).where(inArray(commentAttachments.messageId, messageIds))
-        : [];
-
-    return [threadRows, messageRows, attachmentRows];
-  } catch (error) {
-    if (isMissingCommentStorageError(error)) {
-      return [[], [], []];
-    }
-
-    throw error;
-  }
 }
 
 function statusFromChecklist(rows: readonly { done: boolean }[], fallback: TaskStatus = "Todo"): TaskStatus {
@@ -331,109 +263,135 @@ function reorderIds(ids: string[], movingId: string, referenceId: string, placem
   return [...withoutMoving.slice(0, insertIndex), movingId, ...withoutMoving.slice(insertIndex)];
 }
 
-function isRealMember(value: string | undefined | null) {
-  const name = value?.trim() ?? "";
-  return name !== "" && name !== "User" && name !== "未分配";
-}
+type ScopedMemberIdentity = { id: string; name: string };
 
-function uniqueMembers(values: Array<string | undefined | null>) {
-  return Array.from(new Set(values.filter(isRealMember).map((value) => value!.trim())));
-}
-
-async function getActiveMemberNameSetInScope(storageScopeId: string, values: Array<string | undefined | null>) {
-  const memberNames = uniqueMembers(values);
-  if (memberNames.length === 0) return new Set<string>();
+async function getActiveMemberRowsByNamesInScope(storageScopeId: string, values: Array<string | undefined | null>) {
+  const memberNames = uniqueParticipantNames(values);
+  if (memberNames.length === 0) return [];
 
   const rows = await db
-    .select({ name: users.name })
+    .select({ id: users.id, name: users.name })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "active"), inArray(users.name, memberNames)));
-  return new Set(rows.map((member) => member.name));
+  return rows;
 }
 
-async function getActiveChallengerNameSetInScope(
+async function getActiveChallengerRowsByNamesInScope(
   client: Pick<typeof db, "select">,
   storageScopeId: string,
   values: Array<string | undefined | null>,
 ) {
-  const memberNames = uniqueMembers(values);
-  if (memberNames.length === 0) return new Set<string>();
+  const memberNames = uniqueParticipantNames(values);
+  if (memberNames.length === 0) return [];
 
   const rows = await client
-    .select({ name: users.name })
+    .select({ id: users.id, name: users.name })
     .from(teamMembers)
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(eq(teamMembers.teamId, storageScopeId), eq(teamMembers.role, "member"), eq(users.status, "active"), inArray(users.name, memberNames)));
-  return new Set(rows.map((member) => member.name));
+  return rows;
 }
 
-async function isActiveChallengerInScope(client: Pick<typeof db, "select">, storageScopeId: string, memberName: string) {
-  return (await getActiveChallengerNameSetInScope(client, storageScopeId, [memberName])).has(memberName);
+async function getActiveChallengerRowsByIdsInScope(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  values: Array<string | undefined | null>,
+) {
+  const userIds = uniqueParticipantUserIds(values);
+  if (userIds.length === 0) return [];
+
+  return client
+    .select({ id: users.id, name: users.name })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, storageScopeId), eq(teamMembers.role, "member"), eq(users.status, "active"), inArray(users.id, userIds)));
+}
+
+async function getActiveMemberRowsByIdsInScope(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  values: Array<string | undefined | null>,
+) {
+  const userIds = uniqueParticipantUserIds(values);
+  if (userIds.length === 0) return [];
+
+  return client
+    .select({ id: users.id, name: users.name })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, storageScopeId), eq(users.status, "active"), inArray(users.id, userIds)));
+}
+
+async function getMemberRowsByIdsInScope(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  values: Array<string | undefined | null>,
+) {
+  const userIds = uniqueParticipantUserIds(values);
+  if (userIds.length === 0) return [];
+
+  return client
+    .select({ id: users.id, name: users.name })
+    .from(teamMembers)
+    .innerJoin(users, eq(teamMembers.userId, users.id))
+    .where(and(eq(teamMembers.teamId, storageScopeId), inArray(users.id, userIds)));
+}
+
+async function resolveActiveMemberByName(storageScopeId: string, memberName: string): Promise<ScopedMemberIdentity | null> {
+  const rows = await getActiveMemberRowsByNamesInScope(storageScopeId, [memberName]);
+  return rows.find((member) => member.name === memberName.trim()) ?? null;
+}
+
+async function resolveActiveChallengerByName(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  memberName: string,
+): Promise<ScopedMemberIdentity | null> {
+  const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, [memberName]);
+  return rows.find((member) => member.name === memberName.trim()) ?? null;
+}
+
+async function challengerUserIdsForRow(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  userIds: Array<string | undefined | null>,
+  names: Array<string | undefined | null>,
+) {
+  const normalizedUserIds = uniqueParticipantUserIds(userIds);
+  if (normalizedUserIds.length > 0) return normalizedUserIds;
+  const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, names);
+  return participantUserIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
+}
+
+async function assignedChallengerUserIdsForRow(
+  client: Pick<typeof db, "select">,
+  storageScopeId: string,
+  userIds: Array<string | undefined | null>,
+  names: Array<string | undefined | null>,
+) {
+  const normalizedUserIds = uniqueParticipantUserIds(userIds);
+  if (normalizedUserIds.length > 0) return normalizedUserIds;
+  const rows = await getActiveChallengerRowsByNamesInScope(client, storageScopeId, names);
+  return participantUserIdsForNames(new Map(rows.map((member) => [member.name, member.id])), names);
 }
 
 function challengeObjectiveHref(path: "/bounties" | "/tasks", objectiveId: string) {
   return `${path}#objective:${encodeURIComponent(objectiveId)}`;
 }
 
-function challengeCommentTargetHref(targetType: CommentTargetType, targetId: string) {
-  const challengeTargetTypeByCommentTarget: Record<CommentTargetType, "action" | "bounty" | "objective" | "subAction"> = {
+function commentTargetHref(targetType: CommentTargetType, targetId: string) {
+  if (targetType === "feedback") {
+    return `/feedback/${encodeURIComponent(targetId)}`;
+  }
+
+  const challengeTargetTypeByCommentTarget: Record<Exclude<CommentTargetType, "feedback">, "action" | "bounty" | "objective" | "subAction"> = {
     objective: "objective",
     result: "bounty",
     subtask: "subAction",
     task: "action",
   };
   return `/tasks#${challengeTargetTypeByCommentTarget[targetType]}:${encodeURIComponent(targetId)}`;
-}
-
-function publishOrfDataInvalidation(input: {
-  actorUserId?: string | null;
-  models?: Array<"taskManagement" | "bountyHall">;
-  reason:
-    | "objective.created"
-    | "objective.changed"
-    | "objective.lifecycle.changed"
-    | "objective.challenge.application.changed"
-    | "objective.challenge.recruitment.changed"
-    | "objective.alignment.changed"
-    | "objective.loot.changed"
-    | "objective.trialReview.changed"
-    | "result.changed"
-    | "task.changed"
-    | "feedback.changed"
-    | "comment.changed";
-  target?: { id: string; type: "objective" | "result" | "task" | "subtask" | "feedback" | "comment" };
-  teamId: string;
-}) {
-  publishRealtimeReadModelInvalidation(input.teamId, {
-    actorUserId: input.actorUserId,
-    models: input.models ?? ["taskManagement"],
-    reason: input.reason,
-    target: input.target,
-  });
-}
-
-function publishObjectiveInvalidation(input: {
-  actorUserId?: string | null;
-  reason:
-    | "objective.created"
-    | "objective.changed"
-    | "objective.lifecycle.changed"
-    | "objective.challenge.application.changed"
-    | "objective.challenge.recruitment.changed"
-    | "objective.alignment.changed"
-    | "objective.loot.changed"
-    | "objective.trialReview.changed";
-  objectiveId: string;
-  teamId: string;
-}) {
-  publishOrfDataInvalidation({
-    actorUserId: input.actorUserId,
-    models: ["taskManagement", "bountyHall"],
-    reason: input.reason,
-    target: { id: input.objectiveId, type: "objective" },
-    teamId: input.teamId,
-  });
 }
 
 async function notifyAdminsOfChallengeApplication(input: {
@@ -704,489 +662,12 @@ async function notifyMentionedUsersOfComment(input: {
       targetType: input.targetType,
     },
     recipientUserIds: await getActiveMemberNotificationRecipientsByIds(input.teamId, mentionedUserIds),
-    targetHref: challengeCommentTargetHref(input.targetType, input.targetId),
+    targetHref: commentTargetHref(input.targetType, input.targetId),
     targetId: input.commentMessageId,
     targetType: "comment",
     teamId: input.teamId,
     title: "评论提到了你",
   });
-}
-
-function uncertaintyScore(level: UncertaintyLevel | null) {
-  return uncertaintyScoreFor(level);
-}
-
-function objectiveClosedForChallengeEntry(objective: Pick<Objective, "acceptedResult" | "flowStatus" | "lootSubmittedAt" | "objectiveSettlementPoints">) {
-  return isObjectiveChallengeEntryClosedByFlow(objective) || Boolean(objective.lootSubmittedAt || objective.acceptedResult || objective.objectiveSettlementPoints != null);
-}
-
-async function getResultTrendRows(resultIds: string[]) {
-  if (resultIds.length === 0) return [];
-  return db.select().from(resultTrendPoints).where(inArray(resultTrendPoints.resultId, resultIds));
-}
-
-async function getChecklistRows(taskIds: string[]) {
-  if (taskIds.length === 0) return [];
-  return db.select().from(taskChecklistItems).where(inArray(taskChecklistItems.taskId, taskIds));
-}
-
-async function getFeedbackCauseRows(feedbackIds: string[]) {
-  if (feedbackIds.length === 0) return [];
-  return db.select().from(feedbackCauseCategories).where(inArray(feedbackCauseCategories.feedbackId, feedbackIds));
-}
-
-export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
-  const storageScopeId = scopedStorageId(scope);
-  const objectiveRows = storageScopeId
-    ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id))
-    : await db.select().from(objectives).orderBy(desc(objectives.createdAt), desc(objectives.id));
-  const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
-  const taskRows = storageScopeId ? await db.select().from(tasks).where(eq(tasks.teamId, storageScopeId)) : await db.select().from(tasks);
-  const evidenceRows = storageScopeId ? await db.select().from(evidence).where(eq(evidence.teamId, storageScopeId)) : await db.select().from(evidence);
-  const feedbackRows = storageScopeId ? await db.select().from(feedback).where(eq(feedback.teamId, storageScopeId)) : await db.select().from(feedback);
-  const objectiveLootRows = storageScopeId ? await db.select().from(objectiveLoot).where(eq(objectiveLoot.teamId, storageScopeId)) : await db.select().from(objectiveLoot);
-  const objectiveTrialReviewRows = storageScopeId
-    ? await db.select().from(objectiveTrialReviews).where(eq(objectiveTrialReviews.teamId, storageScopeId))
-    : await db.select().from(objectiveTrialReviews);
-  const objectiveAlignmentRequestRows = storageScopeId
-    ? await db.select().from(objectiveAlignmentRequests).where(eq(objectiveAlignmentRequests.teamId, storageScopeId))
-    : await db.select().from(objectiveAlignmentRequests);
-  const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
-  const scopeRows = storageScopeId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)) : await db.select({ id: teams.id }).from(teams);
-  const resultIds = resultRows.map((result) => result.id);
-  const taskIds = taskRows.map((task) => task.id);
-  const feedbackIds = feedbackRows.map((item) => item.id);
-  const trendRows = await getResultTrendRows(resultIds);
-  const checklistRows = await getChecklistRows(taskIds);
-  const causeRows = await getFeedbackCauseRows(feedbackIds);
-  const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
-  const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
-  const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
-
-  const checklistByTask = new Map<string, Task["checklist"]>();
-  for (const item of checklistRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
-    const list = checklistByTask.get(item.taskId) ?? [];
-    list.push({ id: item.id, label: item.label, done: item.done, updatedAt: item.updatedAt });
-    checklistByTask.set(item.taskId, list);
-  }
-
-  const trendByResult = new Map<string, Result["trend"]>();
-  for (const point of trendRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
-    const list = trendByResult.get(point.resultId) ?? [];
-    list.push({ date: point.date, value: point.value });
-    trendByResult.set(point.resultId, list);
-  }
-
-  const causeCategoriesByFeedback = new Map<string, string[]>();
-  for (const item of causeRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
-    const list = causeCategoriesByFeedback.get(item.feedbackId) ?? [];
-    list.push(item.category);
-    causeCategoriesByFeedback.set(item.feedbackId, list);
-  }
-
-  const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
-  const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
-  const messagesByThread = new Map<string, CommentThread["messages"]>();
-  const attachmentsByMessage = groupCommentAttachmentsByMessage(commentAttachmentRows);
-  for (const message of [...commentMessageRows].sort(
-    (left, right) => left.sortOrder - right.sortOrder || left.createdAt.localeCompare(right.createdAt),
-  )) {
-    const messages = messagesByThread.get(message.threadId) ?? [];
-    messages.push({
-      id: message.id,
-      author: message.author,
-      authorUserId: optional(message.authorUserId),
-      authorAvatarUrl: message.authorUserId ? commentAuthorAvatarUrls.get(message.authorUserId) ?? null : null,
-      body: message.body,
-      attachments: attachmentsByMessage.get(message.id) ?? [],
-      createdAt: message.createdAt,
-      parentMessageId: optional(message.parentMessageId),
-      replyToMessageId: optional(message.replyToMessageId),
-      replyToAuthor: optional(message.replyToAuthor),
-    });
-    messagesByThread.set(message.threadId, messages);
-  }
-
-  const taskItems: Task[] = orderedTaskRows.map((task) => ({
-    id: task.id,
-    title: task.title,
-    description: task.description,
-    status: task.status,
-    priority: task.priority,
-    assignee: task.assignee,
-    linkedObjectiveId: task.linkedObjectiveId,
-    feedbackOriginId: optional(task.feedbackOriginId),
-    dueDate: task.dueDate,
-    tags: task.tags,
-    checklist: checklistByTask.get(task.id) ?? [],
-    createdBy: task.createdBy,
-    updatedBy: task.updatedBy,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-  }));
-
-  const evidenceItems: Evidence[] = evidenceRows.map((item) => ({
-    id: item.id,
-    type: item.type,
-    title: item.title,
-    summary: item.summary,
-    source: item.source,
-    date: item.date,
-    owner: item.owner,
-    linkedResultId: item.linkedResultId,
-    linkedFeedbackId: optional(item.linkedFeedbackId),
-  }));
-
-  const feedbackItems: Feedback[] = feedbackRows.map((item) => ({
-    id: item.id,
-    phenomenon: item.phenomenon,
-    evidenceIds: evidenceItems.filter((evidenceItem) => evidenceItem.linkedFeedbackId === item.id).map((evidenceItem) => evidenceItem.id),
-    causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
-    impact: item.impact,
-    linkedObjectiveId: item.linkedObjectiveId,
-    linkedResultId: item.linkedResultId,
-    suggestedAdjustment: item.suggestedAdjustment,
-    source: item.source,
-    status: item.status,
-    owner: item.owner,
-    createdBy: item.createdBy,
-    updatedBy: item.updatedBy,
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
-    activity: [],
-  }));
-
-  const resultItems: Result[] = orderedResultRows.map((result) => ({
-    id: result.id,
-    objectiveId: result.objectiveId,
-    title: result.title,
-    description: result.description,
-    metricName: result.metricName,
-    metricRequirement: optional(result.metricRequirement),
-    statisticalObject: optional(result.statisticalObject),
-    completionStandard: optional(result.completionStandard),
-    sampleSet: optional(result.sampleSet),
-    measurementScope: optional(result.measurementScope),
-    uncertaintyLevel: optional(result.uncertaintyLevel),
-    baseline: result.baseline,
-    current: result.current,
-    target: result.target,
-    unit: result.unit,
-    direction: result.direction,
-    status: result.status,
-    confidence: result.confidence,
-    source: result.source,
-    definer: result.definer,
-    uncertaintyScore: result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel),
-    acceptedResult: result.acceptedResult ?? "unreviewed",
-    evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
-    feedbackIds: feedbackItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
-    trend: trendByResult.get(result.id) ?? [],
-    reviewCadence: result.reviewCadence,
-    createdAt: result.createdAt,
-    updatedAt: result.updatedAt,
-  }));
-
-  const objectiveItems: Objective[] = objectiveRows.map((objective) => {
-    const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
-    const objectiveBasePoints = objectiveBasePointsForResults(objectiveResults);
-    const challengers = uniqueMembers(objective.challengers ?? []);
-    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []).filter((member) => !challengers.includes(member));
-
-    return {
-      id: objective.id,
-      title: objective.title,
-      description: objective.description,
-      whyItMatters: objective.whyItMatters,
-      projectId: objective.projectId,
-      projectName: objective.projectName,
-      cycle: objective.cycle,
-      stage: objective.stage,
-      flowStatus: objective.flowStatus,
-      status: objective.status,
-      confidence: objective.confidence,
-      progress: Math.max(0, Math.min(100, Math.round(objective.progress))),
-      boundary: objective.boundary,
-      successDefinition: objective.successDefinition,
-      resultIds: objectiveResults.map((result) => result.id),
-      feedbackIds: feedbackItems.filter((item) => item.linkedObjectiveId === objective.id).map((item) => item.id),
-      taskIds: taskItems.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id),
-      finalDueAt: objective.finalDueAt || addDays(objective.updatedAt, 14),
-      challengers,
-      assignedChallengers,
-      challengeApplications: objective.challengeApplications,
-      acceptedAt: objective.acceptedAt,
-      confirmationDueAt: objective.confirmationDueAt,
-      confirmedAt: objective.confirmedAt,
-      lootSubmittedAt: objective.lootSubmittedAt,
-      acceptedResult: objective.acceptedResult,
-      completionMultiplier: objective.completionMultiplier,
-      objectiveBasePoints,
-      objectiveSettlementPoints: objective.objectiveSettlementPoints,
-      publishedAt: objective.publishedAt,
-      createdAt: objective.createdAt,
-      updatedAt: objective.updatedAt,
-    };
-  });
-  const objectiveLootItems: ObjectiveLoot[] = objectiveLootRows
-    .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
-    .map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      submittedBy: item.submittedBy,
-      body: item.body,
-      resultClaims: item.resultClaims,
-      selfTestReportUrl: item.selfTestReportUrl,
-      selfTestReportBody: item.selfTestReportBody,
-      submittedAt: item.submittedAt,
-    }));
-  const objectiveTrialReviewItems: ObjectiveTrialReview[] = objectiveTrialReviewRows
-    .sort((left, right) => right.requestedAt.localeCompare(left.requestedAt))
-    .map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      requestedBy: item.requestedBy,
-      body: item.body,
-      resultClaims: item.resultClaims,
-      selfTestReportBody: item.selfTestReportBody,
-      status: item.status,
-      commanderFeedback: item.commanderFeedback,
-      reviewedBy: item.reviewedBy,
-      reviewedAt: item.reviewedAt,
-      requestedAt: item.requestedAt,
-    }));
-  const objectiveAlignmentRequestItems: ObjectiveAlignmentRequest[] = objectiveAlignmentRequestRows
-    .sort((left, right) => right.proposedAt.localeCompare(left.proposedAt))
-    .map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      kind: item.kind,
-      requestedBy: item.requestedBy,
-      status: item.status,
-      proposedAt: item.proposedAt,
-      scheduledAt: item.scheduledAt,
-      meetingRoom: item.meetingRoom,
-      note: item.note,
-      commanderFeedback: item.commanderFeedback,
-      reviewedBy: item.reviewedBy,
-      reviewedAt: item.reviewedAt,
-    }));
-  const pointLedgerItems: PointLedgerEntry[] = pointLedgerRows
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      userId: item.userId,
-      memberName: item.memberName,
-      points: item.points,
-      reason: item.reason,
-      createdAt: item.createdAt,
-    }));
-  const commentItems: CommentThread[] = [...commentThreadRows]
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
-    .map((thread) => ({
-      id: thread.id,
-      targetType: thread.targetType,
-      targetId: thread.targetId,
-      targetTitle: thread.targetTitle,
-      status: thread.status,
-      createdBy: thread.createdBy,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      messages: messagesByThread.get(thread.id) ?? [],
-    }));
-
-  return {
-    objectives: objectiveItems,
-    results: resultItems,
-    tasks: taskItems,
-    evidence: evidenceItems,
-    feedback: feedbackItems,
-    comments: commentItems,
-    objectiveLoot: objectiveLootItems,
-    objectiveTrialReviews: objectiveTrialReviewItems,
-    objectiveAlignmentRequests: objectiveAlignmentRequestItems,
-    pointLedger: pointLedgerItems,
-    permissionRules,
-  };
-}
-
-export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): Promise<OrfState> {
-  const storageScopeId = scopedStorageId(scope);
-  const data = await getTaskManagementData(scope);
-  const [scopeRow] = storageScopeId
-    ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)).limit(1)
-    : await db.select({ id: teams.id }).from(teams).limit(1);
-  const scopeUsers = scopeRow ? await getScopedUsers(runtimeScope(scopeRow.id)) : initialOrfState.users;
-
-  return {
-    ...data,
-    users: scopeUsers,
-    currentUserId: scopeUsers[0]?.id ?? initialOrfState.currentUserId,
-    decisions: [],
-    evalRuns: [],
-    scenarios: [],
-    failureSamples: [],
-    comments: data.comments,
-    causeCategories: Array.from(new Set(data.feedback.flatMap((item) => item.causeCategories))),
-    rules: {
-      requireResultForTask: false,
-      requireEvidenceForFeedback: true,
-      weeklyFeedbackCadence: true,
-      autoCreateReviewSummary: false,
-    },
-  };
-}
-
-export type BountyHallItem = {
-  applications: ChallengeApplication[];
-  approvedApplicants: string[];
-  challengers: string[];
-  uncertaintyPoints: number;
-  deadline: string;
-  definer: string;
-  difficultyRank: number;
-  hasCurrentApplication: boolean;
-  isCurrentChallenger: boolean;
-  isRecruitment: boolean;
-  objective: Objective;
-  pendingApplications: ChallengeApplication[];
-  result: Result | null;
-  results: Result[];
-  source: BountySource;
-};
-
-export type BountyHallData = {
-  publicItems: BountyHallItem[];
-  recruitmentItems: BountyHallItem[];
-  availableItems: BountyHallItem[];
-  objectiveOptions: Objective[];
-  contribution: { points: number };
-};
-
-function resultDifficultyRank(result: Result) {
-  return result.uncertaintyLevel ? difficultyRanks[result.uncertaintyLevel] : 0;
-}
-
-function bountySortTitle(item: BountyHallItem) {
-  return item.result?.title ?? item.objective.title;
-}
-
-function compareBountyItems(left: BountyHallItem, right: BountyHallItem) {
-  if (left.isRecruitment !== right.isRecruitment) return left.isRecruitment ? -1 : 1;
-  const leftDeadline = left.deadline || "9999-12-31";
-  const rightDeadline = right.deadline || "9999-12-31";
-  return leftDeadline.localeCompare(rightDeadline) || right.uncertaintyPoints - left.uncertaintyPoints || bountySortTitle(left).localeCompare(bountySortTitle(right));
-}
-
-function objectiveVisibleInBountyHall(objective: Objective) {
-  return isObjectiveChallengeDiscoverableByFlow(objective) && !objectiveClosedForChallengeEntry(objective);
-}
-
-function objectiveAvailableForBountyApplication(objective: Objective) {
-  return canApplyForObjectiveChallenge(objective) && !objectiveClosedForChallengeEntry(objective);
-}
-
-function contributionSummaryFor(data: TaskManagementData, member: string) {
-  const ledgerPoints = data.pointLedger
-    .filter((entry) => entry.memberName === member)
-    .reduce((sum, entry) => sum + entry.points, 0);
-  if (ledgerPoints > 0) {
-    return { points: ledgerPoints };
-  }
-
-  return {
-    points: data.objectives.reduce((sum, objective) => {
-      if (!objective.challengers.includes(member)) return sum;
-      return sum + (objective.objectiveSettlementPoints ?? 0);
-    }, 0),
-  };
-}
-
-export async function getBountyHallData(viewerName: string, scope: TaskManagementDataScope = {}, viewerRole: UserRole = "member"): Promise<BountyHallData> {
-  const data = await getTaskManagementData(scope);
-  const canUseChallengeActions = viewerRole === "member";
-  const items = data.objectives.flatMap((objective) => {
-    const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
-    const result = objectiveResults[0];
-    const isRecruitment = canUseChallengeActions && objective.assignedChallengers.includes(viewerName) && canAcceptObjectiveChallengeByFlow(objective);
-    if (!objectiveVisibleInBountyHall(objective) && !isRecruitment) return [];
-
-    const applications = objective.challengeApplications ?? [];
-    const pendingApplications = applications.filter((application) => application.status === "pending");
-    const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
-    const challengers = uniqueMembers(objective.challengers ?? []);
-    return [{
-      applications,
-      approvedApplicants,
-      challengers,
-      uncertaintyPoints: objectiveBasePointsForResults(objectiveResults),
-      deadline: objective.finalDueAt,
-      definer: result?.definer ?? "",
-      difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
-      hasCurrentApplication: canUseChallengeActions && pendingApplications.some((application) => application.applicant === viewerName),
-      isCurrentChallenger: canUseChallengeActions && challengers.includes(viewerName),
-      isRecruitment,
-      objective,
-      pendingApplications,
-      result: result ?? null,
-      results: objectiveResults,
-      source: result?.source ?? "managerDefined",
-    }];
-  }).sort(compareBountyItems);
-
-  const availableItems = items.filter((item) => !item.isRecruitment && objectiveAvailableForBountyApplication(item.objective));
-  const objectiveOptionIds = new Set(items.map((item) => item.objective.id));
-
-  return {
-    publicItems: items,
-    recruitmentItems: items.filter((item) => item.isRecruitment),
-    availableItems,
-    objectiveOptions: data.objectives.filter((objective) => objectiveOptionIds.has(objective.id)),
-    contribution: contributionSummaryFor(data, viewerName),
-  };
-}
-
-function filterComments(data: TaskManagementData, ids: {
-  objectiveIds: Set<string>;
-  resultIds: Set<string>;
-  taskIds: Set<string>;
-  checklistItemIds: Set<string>;
-}) {
-  return data.comments.filter((thread) => {
-    if (thread.targetType === "objective") return ids.objectiveIds.has(thread.targetId);
-    if (thread.targetType === "result") return ids.resultIds.has(thread.targetId);
-    if (thread.targetType === "task") return ids.taskIds.has(thread.targetId);
-    if (thread.targetType === "subtask") return ids.checklistItemIds.has(thread.targetId);
-    return false;
-  });
-}
-
-export async function getMyChallengesData(member: string, includeAll = false, scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
-  const data = await getTaskManagementData(scope);
-  if (includeAll) return data;
-
-  const objectivesForMember = data.objectives.filter((objective) => objective.challengers.includes(member));
-  const objectiveIds = new Set(objectivesForMember.map((objective) => objective.id));
-  const resultsForMember = data.results.filter((result) => objectiveIds.has(result.objectiveId));
-  const resultIds = new Set(resultsForMember.map((result) => result.id));
-  const tasksForMember = data.tasks.filter((task) => objectiveIds.has(task.linkedObjectiveId));
-  const taskIds = new Set(tasksForMember.map((task) => task.id));
-  const checklistItemIds = new Set(tasksForMember.flatMap((task) => task.checklist.map((item) => item.id)));
-
-  return {
-    objectives: objectivesForMember,
-    results: resultsForMember,
-    tasks: tasksForMember,
-    evidence: data.evidence.filter((item) => resultIds.has(item.linkedResultId)),
-    feedback: data.feedback.filter((item) => objectiveIds.has(item.linkedObjectiveId) || resultIds.has(item.linkedResultId)),
-    comments: filterComments(data, { objectiveIds, resultIds, taskIds, checklistItemIds }),
-    objectiveLoot: data.objectiveLoot.filter((item) => objectiveIds.has(item.objectiveId)),
-    objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
-    objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
-    pointLedger: data.pointLedger,
-    permissionRules: data.permissionRules,
-  };
 }
 
 export interface CreateResultInput {
@@ -1203,6 +684,7 @@ export interface CreateResultInput {
   uncertaintyLevel?: UncertaintyLevel;
   source?: BountySource;
   definer?: string;
+  definerUserId?: string | null;
 }
 
 export interface CreateTaskInput {
@@ -1213,23 +695,64 @@ export interface CreateTaskInput {
   priority?: Priority;
   linkedObjectiveId: string;
   dueDate?: string;
-  feedbackOriginId?: string;
 }
 
 export interface CreateObjectiveInput {
   title: string;
   whyItMatters: string;
   projectId?: string | null;
-  projectName?: string | null;
   cycle: string;
   boundary: string;
   finalDueAt?: string;
+}
+
+export interface CreateProjectInput {
+  name: string;
+}
+
+export async function createProject(input: CreateProjectInput, context: { scope: RuntimeScope; userId: string }) {
+  const name = input.name.trim();
+  if (!name) return { status: "invalid" as const };
+
+  const storageScopeId = runtimeScopeStorageId(context.scope);
+  const existing = await db.select().from(projects).where(and(eq(projects.teamId, storageScopeId), eq(projects.name, name))).limit(1);
+  if (existing[0]) return { status: "duplicate" as const, project: existing[0] };
+
+  const now = today();
+  const id = makeId("project");
+  const [project] = await db
+    .insert(projects)
+    .values({
+      id,
+      teamId: storageScopeId,
+      name,
+      createdAt: now,
+      updatedAt: now,
+      createdBy: context.userId,
+      updatedBy: context.userId,
+    })
+    .returning();
+
+  publishOrfDataInvalidation({
+    actorUserId: context.userId,
+    models: ["taskManagement"],
+    reason: "project.changed",
+    target: { id, type: "project" },
+    teamId: storageScopeId,
+  });
+
+  return { status: "ok" as const, project };
 }
 
 export async function createObjective(input: CreateObjectiveInput, context: { scope: RuntimeScope; userId: string }): Promise<Objective | null> {
   const id = makeId("obj");
   const now = today();
   const storageScopeId = runtimeScopeStorageId(context.scope);
+  const projectId = nullableTrimmedText(input.projectId);
+  if (projectId) {
+    const [project] = await db.select({ id: projects.id }).from(projects).where(and(eq(projects.id, projectId), eq(projects.teamId, storageScopeId))).limit(1);
+    if (!project) return null;
+  }
 
   await db.insert(objectives).values({
     id,
@@ -1237,8 +760,7 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     title: input.title,
     description: input.whyItMatters,
     whyItMatters: input.whyItMatters,
-    projectId: nullableTrimmedText(input.projectId),
-    projectName: nullableTrimmedText(input.projectName),
+    projectId,
     cycle: input.cycle,
     stage: objectiveLifecycleInitialState.stage,
     flowStatus: objectiveLifecycleInitialState.flowStatus,
@@ -1249,7 +771,9 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     successDefinition: "Success definition will be refined during result planning.",
     finalDueAt: input.finalDueAt ?? addDays(now, 14),
     challengers: [],
+    challengerUserIds: [],
     assignedChallengers: [],
+    assignedChallengerUserIds: [],
     challengeApplications: [],
     acceptedAt: null,
     confirmationDueAt: null,
@@ -1274,7 +798,7 @@ export async function createObjective(input: CreateObjectiveInput, context: { sc
     teamId: storageScopeId,
   });
 
-  const data = await getTaskManagementData({ scope: context.scope });
+  const data = await getOrfStateSnapshot({ scope: context.scope });
   return data.objectives.find((objective) => objective.id === id) ?? null;
 }
 
@@ -1303,6 +827,15 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("res");
     const now = today();
+    const requestedDefinerName = input.definer?.trim() || "";
+    const resolvedDefiner = input.definerUserId
+      ? (await getActiveMemberRowsByIdsInScope(tx, objective.teamId, [input.definerUserId]))[0] ?? null
+      : requestedDefinerName
+        ? await resolveActiveMemberByName(objective.teamId, requestedDefinerName)
+        : null;
+    if ((input.definerUserId || requestedDefinerName) && !resolvedDefiner) {
+      return null;
+    }
 
     await tx.insert(results).values({
       id,
@@ -1325,8 +858,9 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
       status: "Draft",
       confidence: 50,
       source: input.source ?? "managerDefined",
-      definer: input.definer?.trim() || "",
-      uncertaintyScore: uncertaintyScore(input.uncertaintyLevel ?? null),
+      definer: resolvedDefiner?.name ?? "",
+      definerUserId: resolvedDefiner?.id ?? null,
+      uncertaintyScore: uncertaintyScoreFor(input.uncertaintyLevel ?? null),
       acceptedResult: "unreviewed",
       reviewCadence: "Weekly",
       sortOrder,
@@ -1350,7 +884,7 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
     teamId: runtimeScopeStorageId(created.scope),
   });
 
-  const data = await getTaskManagementData({ scope: created.scope });
+  const data = await getOrfStateSnapshot({ scope: created.scope });
   return data.results.find((result) => result.id === created.id) ?? null;
 }
 
@@ -1364,7 +898,7 @@ export type AcceptObjectiveChallengeOutcome =
 
 export async function acceptObjectiveChallenge(objectiveId: string, challenger: string, actorId?: string): Promise<AcceptObjectiveChallengeOutcome> {
   const nextChallenger = challenger.trim();
-  if (!nextChallenger) {
+  if (!nextChallenger && !actorId) {
     return { status: "notFound" };
   }
 
@@ -1374,21 +908,27 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       return { status: "notFound" as const };
     }
 
-    const currentChallengers = uniqueMembers(objective.challengers ?? []);
-    if (currentChallengers.includes(nextChallenger)) {
+    const actor = actorId
+      ? (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [actorId]))[0] ?? null
+      : await resolveActiveChallengerByName(tx, objective.teamId, nextChallenger);
+    if (!actor) {
+      return { status: "forbidden" as const };
+    }
+
+    const currentChallengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const currentChallengers = uniqueParticipantNames(objective.challengers ?? []);
+    if (currentChallengerUserIds.includes(actor.id)) {
       return { status: "alreadyAccepted" as const, challengers: currentChallengers };
     }
     if (objectiveClosedForChallengeEntry(objective) || !canAcceptObjectiveChallengeByFlow(objective)) {
       return { status: "closed" as const };
     }
-    if (!(await isActiveChallengerInScope(tx, objective.teamId, nextChallenger))) {
-      return { status: "forbidden" as const };
-    }
 
-    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
+    const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
+    const assignedChallengers = uniqueParticipantNames(objective.assignedChallengers ?? []);
     const applications = objective.challengeApplications ?? [];
-    const hasApprovedApplication = applications.some((application) => application.applicant === nextChallenger && application.status === "approved");
-    if (!assignedChallengers.includes(nextChallenger) && !hasApprovedApplication) {
+    const hasApprovedApplication = applications.some((application) => (application.applicantUserId ?? null) === actor.id && application.status === "approved");
+    if (!isObjectiveAssignedChallenger({ assignedChallengerUserIds, challengerUserIds: currentChallengerUserIds }, actor.id) && !hasApprovedApplication) {
       return { status: "forbidden" as const };
     }
 
@@ -1401,14 +941,16 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     await tx
       .update(objectives)
       .set({
-        challengers: [...currentChallengers, nextChallenger],
-        assignedChallengers: assignedChallengers.filter((member) => member !== nextChallenger),
+        challengers: [...currentChallengers, actor.name],
+        challengerUserIds: [...currentChallengerUserIds, actor.id],
+        assignedChallengers: assignedChallengers.filter((member) => member !== actor.name),
+        assignedChallengerUserIds: assignedChallengerUserIds.filter((userId) => userId !== actor.id),
         flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
         stage: objectiveLifecycleTransitions.acceptChallenge.stage,
         acceptedAt: objective.acceptedAt ?? acceptedAt,
         confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
         challengeApplications: applications.map((application) =>
-          application.applicant === nextChallenger && application.status === "approved" ? { ...application, decidedAt: application.decidedAt ?? acceptedAt } : application,
+          (application.applicantUserId ?? null) === actor.id && application.status === "approved" ? { ...application, applicant: actor.name, applicantUserId: actor.id, decidedAt: application.decidedAt ?? acceptedAt } : application,
         ),
         status: objective.status === "Draft" ? "On Track" : objective.status,
         updatedAt: today(),
@@ -1421,7 +963,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
       scope: runtimeScope(objective.teamId),
       notification: {
         actorUserId: actorId,
-        challenger: nextChallenger,
+        challenger: actor.name,
         objectiveId,
         objectiveTitle: objective.title,
         teamId: objective.teamId,
@@ -1441,7 +983,7 @@ export async function acceptObjectiveChallenge(objectiveId: string, challenger: 
     teamId: runtimeScopeStorageId(acceptedResult.scope),
   });
 
-  const data = await getTaskManagementData({ scope: acceptedResult.scope });
+  const data = await getOrfStateSnapshot({ scope: acceptedResult.scope });
   const accepted = data.objectives.find((item) => item.id === objectiveId);
   return accepted ? { status: "accepted", objective: accepted } : { status: "notFound" };
 }
@@ -1457,7 +999,7 @@ export type ApplyObjectiveChallengeOutcome =
 
 export async function applyForObjectiveChallenge(objectiveId: string, applicant: string, actorUserId: string | null | undefined, reason: string): Promise<ApplyObjectiveChallengeOutcome> {
   const nextApplicant = applicant.trim();
-  if (!nextApplicant) {
+  if (!nextApplicant && !actorUserId) {
     return { status: "notFound" };
   }
   const applicationReason = reason.trim();
@@ -1471,25 +1013,31 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
       return { status: "notFound" as const };
     }
 
-    const challengers = uniqueMembers(objective.challengers ?? []);
-    if (challengers.includes(nextApplicant)) {
+    const actor = actorUserId
+      ? (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [actorUserId]))[0] ?? null
+      : await resolveActiveChallengerByName(tx, objective.teamId, nextApplicant);
+    if (!actor) {
+      return { status: "forbidden" as const };
+    }
+
+    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const challengers = uniqueParticipantNames(objective.challengers ?? []);
+    if (isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "alreadyAccepted" as const, challengers };
     }
     if (objectiveClosedForChallengeEntry(objective) || !canApplyForObjectiveChallenge(objective)) {
       return { status: "closed" as const };
     }
-    if (!(await isActiveChallengerInScope(tx, objective.teamId, nextApplicant))) {
-      return { status: "forbidden" as const };
-    }
 
     const applications = objective.challengeApplications ?? [];
-    if (applications.some((application) => application.applicant === nextApplicant && application.status === "pending")) {
+    if (applications.some((application) => (application.applicantUserId ?? null) === actor.id && application.status === "pending")) {
       return { status: "alreadyApplied" as const };
     }
 
     const application: ChallengeApplication = {
       id: makeId("challenge-application"),
-      applicant: nextApplicant,
+      applicant: actor.name,
+      applicantUserId: actor.id,
       reason: applicationReason,
       status: "pending",
       createdAt: nowIso(),
@@ -1510,7 +1058,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
       scope: runtimeScope(objective.teamId),
       notification: {
         actorUserId,
-        applicant: nextApplicant,
+        applicant: actor.name,
         objectiveId,
         objectiveTitle: objective.title,
         reason: applicationReason,
@@ -1531,7 +1079,7 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     teamId: runtimeScopeStorageId(appliedResult.scope),
   });
 
-  const data = await getTaskManagementData({ scope: appliedResult.scope });
+  const data = await getOrfStateSnapshot({ scope: appliedResult.scope });
   const applied = data.objectives.find((item) => item.id === objectiveId);
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
@@ -1550,13 +1098,13 @@ export type ObjectiveAlignmentMutationOutcome =
   | { status: "closed" };
 
 async function objectiveOutcome(objectiveId: string, scope?: RuntimeScope | null): Promise<ObjectiveFlowMutationOutcome> {
-  const data = await getTaskManagementData({ scope });
+  const data = await getOrfStateSnapshot({ scope });
   const objective = data.objectives.find((item) => item.id === objectiveId);
   return objective ? { status: "ok", objective } : { status: "notFound" };
 }
 
 async function objectiveAlignmentOutcome(requestId: string, scope?: RuntimeScope | null): Promise<ObjectiveAlignmentMutationOutcome> {
-  const data = await getTaskManagementData({ scope });
+  const data = await getOrfStateSnapshot({ scope });
   const request = data.objectiveAlignmentRequests.find((item) => item.id === requestId);
   return request ? { status: "ok", request } : { status: "notFound" };
 }
@@ -1607,19 +1155,24 @@ export async function approveObjectiveChallengeApplication(
     const acceptedAt = nowIso();
     const nextConfirmationDueAt = confirmationDueAt(objective.finalDueAt, acceptedAt);
     if (!nextConfirmationDueAt) return { status: "invalid" as const };
-    if (!(await isActiveChallengerInScope(tx, objective.teamId, application.applicant))) return { status: "invalid" as const };
+    const applicant = application.applicantUserId
+      ? (await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, [application.applicantUserId]))[0] ?? null
+      : await resolveActiveChallengerByName(tx, objective.teamId, application.applicant);
+    if (!applicant) return { status: "invalid" as const };
 
-    const challengers = uniqueMembers([...(objective.challengers ?? []), application.applicant]);
+    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const challengers = uniqueParticipantNames([...(objective.challengers ?? []), applicant.name]);
     await tx
       .update(objectives)
       .set({
         challengers,
+        challengerUserIds: uniqueParticipantUserIds([...challengerUserIds, applicant.id]),
         flowStatus: objectiveLifecycleTransitions.acceptChallenge.to,
         stage: objectiveLifecycleTransitions.acceptChallenge.stage,
         acceptedAt: objective.acceptedAt ?? acceptedAt,
         confirmationDueAt: objective.confirmationDueAt ?? nextConfirmationDueAt,
         challengeApplications: applications.map((item) =>
-          item.id === applicationId ? { ...item, status: "approved", decidedAt: acceptedAt, decidedBy: actorId } : item,
+          item.id === applicationId ? { ...item, applicant: applicant.name, applicantUserId: applicant.id, status: "approved", decidedAt: acceptedAt, decidedBy: actorId } : item,
         ),
         status: objective.status === "Draft" ? "On Track" : objective.status,
         updatedAt: today(),
@@ -1632,7 +1185,7 @@ export async function approveObjectiveChallengeApplication(
       scope: runtimeScope(objective.teamId),
       notification: {
         actorUserId: actorId,
-        applicant: application.applicant,
+        applicant: applicant.name,
         objectiveId,
         objectiveTitle: objective.title,
         teamId: objective.teamId,
@@ -1666,15 +1219,15 @@ export async function rejectObjectiveChallengeApplication(
       item.id === applicationId ? { ...item, status: "declined" as const, decidedAt: nowIso(), decidedBy: actorId } : item,
     );
     const hasPending = nextApplications.some((item) => item.status === "pending");
-    const assignedChallengers = uniqueMembers(objective.assignedChallengers ?? []);
-    const challengers = uniqueMembers(objective.challengers ?? []);
+    const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
+    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
     await tx
       .update(objectives)
       .set({
         challengeApplications: nextApplications,
         flowStatus: objectiveFlowStatusAfterChallengeApplicationReview({
-          hasAcceptedChallengers: challengers.length > 0,
-          hasAssignedChallengers: assignedChallengers.length > 0,
+          hasAcceptedChallengers: objectiveHasChallengers({ challengerUserIds }),
+          hasAssignedChallengers: assignedChallengerUserIds.length > 0,
           hasPendingApplications: hasPending,
         }),
         updatedAt: today(),
@@ -1706,20 +1259,30 @@ export async function recruitObjectiveChallengers(
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
     if (objectiveClosedForChallengeEntry(objective) || !canRecruitObjectiveChallengersByFlow(objective)) return { status: "invalid" as const };
-    const currentChallengers = uniqueMembers(objective.challengers ?? []);
-    const recruitMembers = uniqueMembers(members).filter((member) => !currentChallengers.includes(member));
+    const currentChallengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    const recruitMemberRows = await getActiveChallengerRowsByNamesInScope(tx, objective.teamId, members);
+    const recruitMembers = uniqueParticipantNames(members);
+    if (recruitMembers.some((member) => !recruitMemberRows.some((row) => row.name === member))) return { status: "invalid" as const };
+    const recruitCandidates = recruitMembers
+      .map((member) => recruitMemberRows.find((row) => row.name === member))
+      .filter((member): member is ScopedMemberIdentity => Boolean(member))
+      .filter((member) => !currentChallengerUserIds.includes(member.id));
     if (recruitMembers.length === 0) return { status: "invalid" as const };
-    const activeChallengerNames = await getActiveChallengerNameSetInScope(tx, objective.teamId, recruitMembers);
-    if (recruitMembers.some((member) => !activeChallengerNames.has(member))) return { status: "invalid" as const };
-    const assignedChallengers = uniqueMembers([...(objective.assignedChallengers ?? []), ...recruitMembers]).filter((member) => !currentChallengers.includes(member));
-    if (assignedChallengers.length === 0) return { status: "invalid" as const };
+    if (recruitCandidates.length === 0) return { status: "invalid" as const };
+    const currentAssignedUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
+    const currentAssignedRows = await getActiveChallengerRowsByIdsInScope(tx, objective.teamId, currentAssignedUserIds);
+    const assignedChallengerUserIds = uniqueParticipantUserIds([...currentAssignedUserIds, ...recruitCandidates.map((member) => member.id)]).filter((userId) => !currentChallengerUserIds.includes(userId));
+    if (assignedChallengerUserIds.length === 0) return { status: "invalid" as const };
+    const assignedNameById = new Map([...currentAssignedRows, ...recruitMemberRows, ...recruitCandidates].map((member) => [member.id, member.name]));
+    const assignedChallengers = assignedChallengerUserIds.map((userId) => assignedNameById.get(userId)).filter((name): name is string => Boolean(name));
     await tx
       .update(objectives)
       .set({
         assignedChallengers,
+        assignedChallengerUserIds,
         flowStatus: objectiveFlowStatusAfterRecruitment({
           currentFlowStatus: objective.flowStatus,
-          hasAcceptedChallengers: currentChallengers.length > 0,
+          hasAcceptedChallengers: currentChallengerUserIds.length > 0,
         }),
         updatedAt: today(),
         updatedBy: actorId,
@@ -1730,7 +1293,7 @@ export async function recruitObjectiveChallengers(
       scope: runtimeScope(objective.teamId),
       notification: {
         actorUserId: actorId,
-        memberNames: recruitMembers,
+        memberNames: recruitCandidates.map((member) => member.name),
         objectiveId,
         objectiveTitle: objective.title,
         teamId: objective.teamId,
@@ -1775,6 +1338,7 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
       .update(objectives)
       .set({
         assignedChallengers: [],
+        assignedChallengerUserIds: [],
         challengeApplications,
         flowStatus: objectiveLifecycleTransitions.freezeAfterReestimate.to,
         stage: objectiveLifecycleTransitions.freezeAfterReestimate.stage,
@@ -1790,6 +1354,7 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
         status: "completed",
         commanderFeedback: "重估对齐完成，目标已冻结。",
         reviewedBy: actorId,
+        reviewedByUserId: actorId,
         reviewedAt: decidedAt,
       })
       .where(
@@ -1846,7 +1411,8 @@ export async function createObjectiveAlignmentRequest(
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
     if (!objectiveAcceptsAlignmentRequest(objective, input.kind)) return { status: "closed" as const };
-    if (actor.role !== "member" || !uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
+    const challengerUserIds = await challengerUserIdsForRow(tx, objective.teamId, objective.challengerUserIds ?? [], objective.challengers ?? []);
+    if (actor.role !== "member" || !isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "forbidden" as const };
     }
 
@@ -1869,6 +1435,7 @@ export async function createObjectiveAlignmentRequest(
       objectiveId: objective.id,
       kind: input.kind,
       requestedBy: actor.name,
+      requestedByUserId: actor.id,
       status: input.scheduledAt || input.meetingRoom ? "scheduled" : "requested",
       proposedAt,
       scheduledAt: input.scheduledAt?.trim() || null,
@@ -1876,6 +1443,7 @@ export async function createObjectiveAlignmentRequest(
       note: input.note?.trim() || null,
       commanderFeedback: null,
       reviewedBy: null,
+      reviewedByUserId: null,
       reviewedAt: null,
     });
 
@@ -1928,6 +1496,7 @@ export async function reviewObjectiveAlignmentRequest(
       kind: objectiveAlignmentRequests.kind,
       objectiveId: objectiveAlignmentRequests.objectiveId,
       requestedBy: objectiveAlignmentRequests.requestedBy,
+      requestedByUserId: objectiveAlignmentRequests.requestedByUserId,
       status: objectiveAlignmentRequests.status,
       teamId: objectiveAlignmentRequests.teamId,
       objectiveTitle: objectives.title,
@@ -1972,6 +1541,7 @@ export async function reviewObjectiveAlignmentRequest(
         meetingRoom: input.meetingRoom?.trim() || null,
         commanderFeedback: feedback,
         reviewedBy: actorId,
+        reviewedByUserId: actorId,
         reviewedAt,
       })
       .where(
@@ -2009,28 +1579,6 @@ export async function reviewObjectiveAlignmentRequest(
     });
   }
   return outcome;
-}
-
-export async function canEditResultDuringReestimate(resultId: string, member: string): Promise<boolean> {
-  const actorName = member.trim();
-  if (!actorName) return false;
-
-  const [row] = await db
-    .select({
-      flowStatus: objectives.flowStatus,
-      challengers: objectives.challengers,
-      confirmationDueAt: objectives.confirmationDueAt,
-    })
-    .from(results)
-    .innerJoin(objectives, eq(objectives.id, results.objectiveId))
-    .where(eq(results.id, resultId))
-    .limit(1);
-
-  return Boolean(
-    row &&
-      isObjectiveReestimateWindowOpen(row) &&
-      uniqueMembers(row.challengers ?? []).includes(actorName),
-  );
 }
 
 export type ObjectiveStateMutationAccess =
@@ -2084,15 +1632,15 @@ export async function canDeleteObjective(objectiveId: string): Promise<Objective
     : { status: "locked", flowStatus: objective.flowStatus };
 }
 
-export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, member: string, scope?: RuntimeScope | null): Promise<boolean> {
-  const actorName = member.trim();
-  if (!actorName) return false;
+export async function canEditObjectiveResultsDuringReestimate(objectiveId: string, memberUserId: string, scope?: RuntimeScope | null): Promise<boolean> {
+  const actorUserId = memberUserId.trim();
+  if (!actorUserId) return false;
   const storageScopeId = scope ? runtimeScopeStorageId(scope) : "";
 
   const [objective] = await db
     .select({
       flowStatus: objectives.flowStatus,
-      challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
       confirmationDueAt: objectives.confirmationDueAt,
       teamId: objectives.teamId,
     })
@@ -2104,151 +1652,8 @@ export async function canEditObjectiveResultsDuringReestimate(objectiveId: strin
     objective &&
     isObjectiveReestimateWindowOpen(objective) &&
     (!storageScopeId || objective.teamId === storageScopeId) &&
-    uniqueMembers(objective.challengers ?? []).includes(actorName)
+    (objective.challengerUserIds ?? []).includes(actorUserId)
   );
-}
-
-export type CreateFeedbackInput = Pick<
-  Feedback,
-  "phenomenon" | "causeCategories" | "impact" | "linkedResultId" | "suggestedAdjustment" | "source" | "owner"
->;
-export type CreateFeedbackOutcome =
-  | { status: "ok"; feedback: Feedback }
-  | { status: "notFound" }
-  | { status: "invalidOwner" };
-
-export async function canCreateFeedbackForResult(
-  resultId: string,
-  actor: Pick<CommentActor, "name" | "role" | "scope">,
-): Promise<ObjectiveWorkItemMutationOutcome> {
-  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
-  const [target] = await db
-    .select({ objectiveId: results.objectiveId, challengers: objectives.challengers, teamId: results.teamId })
-    .from(results)
-    .innerJoin(objectives, eq(objectives.id, results.objectiveId))
-    .where(eq(results.id, resultId))
-    .limit(1);
-  if (!target) {
-    return "notFound";
-  }
-
-  if (storageScopeId && target.teamId !== storageScopeId) {
-    return "notFound";
-  }
-
-  if (actor.role === "admin") {
-    return "allowed";
-  }
-
-  const member = actor.name.trim();
-  return member && uniqueMembers(target.challengers ?? []).includes(member)
-    ? "allowed"
-    : "forbidden";
-}
-
-export async function createFeedback(input: CreateFeedbackInput, actorId: string): Promise<CreateFeedbackOutcome> {
-  const [result] = await db.select().from(results).where(eq(results.id, input.linkedResultId)).limit(1);
-  if (!result) {
-    return { status: "notFound" };
-  }
-
-  const owner = input.owner.trim();
-  const activeOwnerNames = await getActiveMemberNameSetInScope(result.teamId, [owner]);
-  if (!activeOwnerNames.has(owner)) {
-    return { status: "invalidOwner" };
-  }
-
-  const id = makeId("fb");
-  const now = today();
-  await db.transaction(async (tx) => {
-    await tx.insert(feedback).values({
-      id,
-      teamId: result.teamId,
-      phenomenon: input.phenomenon,
-      impact: input.impact,
-      linkedObjectiveId: result.objectiveId,
-      linkedResultId: result.id,
-      suggestedAdjustment: input.suggestedAdjustment,
-      source: input.source,
-      status: "New",
-      owner,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: actorId,
-      updatedBy: actorId,
-    });
-
-    const categories = input.causeCategories.map((category, index) => ({ feedbackId: id, category, sortOrder: index }));
-    if (categories.length > 0) {
-      await tx.insert(feedbackCauseCategories).values(categories);
-    }
-  });
-
-  publishOrfDataInvalidation({
-    actorUserId: actorId,
-    models: ["taskManagement"],
-    reason: "feedback.changed",
-    target: { id, type: "feedback" },
-    teamId: result.teamId,
-  });
-
-  const data = await getTaskManagementData({ scope: runtimeScope(result.teamId) });
-  const item = data.feedback.find((entry) => entry.id === id);
-  return item ? { status: "ok", feedback: item } : { status: "notFound" };
-}
-
-type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; scope?: RuntimeScope | null };
-
-export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
-
-function canManageFeedbackStatus(
-  item: { owner: string; createdBy: string | null },
-  actor: FeedbackStatusActor,
-) {
-  return actor.role === "admin" || item.createdBy === actor.id || item.owner === actor.name;
-}
-
-export async function updateFeedbackStatus(
-  feedbackId: string,
-  status: FeedbackStatus,
-  actor: FeedbackStatusActor,
-): Promise<FeedbackStatusUpdateResult> {
-  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
-  const [target] = await db
-    .select({ id: feedback.id, owner: feedback.owner, createdBy: feedback.createdBy, teamId: feedback.teamId })
-    .from(feedback)
-    .where(eq(feedback.id, feedbackId))
-    .limit(1);
-
-  if (!target) {
-    return { status: "notFound" };
-  }
-
-  if (storageScopeId && target.teamId !== storageScopeId) {
-    return { status: "notFound" };
-  }
-
-  if (!canManageFeedbackStatus(target, actor)) {
-    return { status: "forbidden" };
-  }
-
-  const updated = await db
-    .update(feedback)
-    .set({ status, updatedAt: today(), updatedBy: actor.id })
-    .where(eq(feedback.id, feedbackId))
-    .returning({ id: feedback.id });
-  if (updated.length === 0) {
-    return { status: "notFound" };
-  }
-
-  publishOrfDataInvalidation({
-    actorUserId: actor.id,
-    models: ["taskManagement"],
-    reason: "feedback.changed",
-    target: { id: feedbackId, type: "feedback" },
-    teamId: target.teamId,
-  });
-  return { status: "ok" };
 }
 
 export async function updateResultConfidence(resultId: string, confidence: number, actorId: string): Promise<boolean> {
@@ -2301,7 +1706,7 @@ export async function updateResultUncertaintyLevel(resultId: string, uncertainty
 
     const updated = await tx
       .update(results)
-      .set({ uncertaintyLevel, uncertaintyScore: uncertaintyScore(uncertaintyLevel), updatedAt: today(), updatedBy: actorId })
+      .set({ uncertaintyLevel, uncertaintyScore: uncertaintyScoreFor(uncertaintyLevel), updatedAt: today(), updatedBy: actorId })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
     return updated.length > 0 ? { teamId: target.teamId } : null;
@@ -2322,7 +1727,7 @@ export async function updateResultUncertaintyLevel(resultId: string, uncertainty
 }
 
 export async function proposeResultUpdate(
-  input: { resultId: string; title: string; reason: string; feedbackId?: string },
+  input: { resultId: string; title: string; reason: string },
   actor: { id: string; name: string },
 ): Promise<boolean> {
   const nextTitle = input.title.trim();
@@ -2347,17 +1752,6 @@ export async function proposeResultUpdate(
       return false;
     }
 
-    if (input.feedbackId) {
-      const [linkedFeedback] = await tx
-        .select({ id: feedback.id, teamId: feedback.teamId, linkedResultId: feedback.linkedResultId })
-        .from(feedback)
-        .where(eq(feedback.id, input.feedbackId))
-        .limit(1);
-      if (!linkedFeedback || linkedFeedback.teamId !== target.teamId || linkedFeedback.linkedResultId !== target.id) {
-        return null;
-      }
-    }
-
     const updated = await tx
       .update(results)
       .set({ title: nextTitle, updatedAt: today(), updatedBy: actor.id })
@@ -2371,13 +1765,6 @@ export async function proposeResultUpdate(
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "result"), eq(commentThreads.targetId, input.resultId)));
-
-    if (input.feedbackId) {
-      await tx
-        .update(feedback)
-        .set({ status: "Result Updated", updatedAt: today(), updatedBy: actor.id })
-        .where(eq(feedback.id, input.feedbackId));
-    }
 
     const threadId = makeId("cthread");
     const messageId = makeId("cmsg");
@@ -2433,102 +1820,21 @@ export interface CreateCommentInput {
   replyToAuthor?: string;
 }
 
-type CommentTarget = {
-  objectiveId: string;
-  storageScopeId: string;
-  title: string;
-};
+type CommentTarget =
+  | {
+      kind: "workItem";
+      objectiveId: string;
+      storageScopeId: string;
+      title: string;
+    }
+  | {
+      feedbackId: string;
+      kind: "feedback";
+      storageScopeId: string;
+      title: string;
+    };
 
-export type ObjectiveWorkItemTarget =
-  | { type: "objective"; id: string }
-  | { type: "result"; id: string }
-  | { type: "task"; id: string }
-  | { type: "subtask"; id: string; taskId?: string };
-
-export type ObjectiveWorkItemMutationOutcome = "allowed" | "forbidden" | "notFound";
-
-export async function resolveObjectiveIdForWorkItem(target: ObjectiveWorkItemTarget): Promise<string | null> {
-  if (target.type === "objective") {
-    const [objective] = await db.select({ objectiveId: objectives.id }).from(objectives).where(eq(objectives.id, target.id)).limit(1);
-    return objective?.objectiveId ?? null;
-  }
-
-  if (target.type === "result") {
-    const [result] = await db.select({ objectiveId: results.objectiveId }).from(results).where(eq(results.id, target.id)).limit(1);
-    return result?.objectiveId ?? null;
-  }
-
-  if (target.type === "task") {
-    const [task] = await db.select({ objectiveId: tasks.linkedObjectiveId }).from(tasks).where(eq(tasks.id, target.id)).limit(1);
-    return task?.objectiveId ?? null;
-  }
-
-  const conditions = target.taskId
-    ? and(eq(taskChecklistItems.id, target.id), eq(taskChecklistItems.taskId, target.taskId))
-    : eq(taskChecklistItems.id, target.id);
-  const [item] = await db
-    .select({ objectiveId: tasks.linkedObjectiveId })
-    .from(taskChecklistItems)
-    .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
-    .where(conditions)
-    .limit(1);
-  return item?.objectiveId ?? null;
-}
-
-export async function resolveRuntimeScopeForWorkItem(target: ObjectiveWorkItemTarget): Promise<RuntimeScope | null> {
-  if (target.type === "objective") {
-    const [objective] = await db.select({ teamId: objectives.teamId }).from(objectives).where(eq(objectives.id, target.id)).limit(1);
-    return storageScope(objective?.teamId);
-  }
-
-  if (target.type === "result") {
-    const [result] = await db.select({ teamId: results.teamId }).from(results).where(eq(results.id, target.id)).limit(1);
-    return storageScope(result?.teamId);
-  }
-
-  if (target.type === "task") {
-    const [task] = await db.select({ teamId: tasks.teamId }).from(tasks).where(eq(tasks.id, target.id)).limit(1);
-    return storageScope(task?.teamId);
-  }
-
-  const conditions = target.taskId
-    ? and(eq(taskChecklistItems.id, target.id), eq(taskChecklistItems.taskId, target.taskId))
-    : eq(taskChecklistItems.id, target.id);
-  const [item] = await db
-    .select({ teamId: tasks.teamId })
-    .from(taskChecklistItems)
-    .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
-    .where(conditions)
-    .limit(1);
-  return storageScope(item?.teamId);
-}
-
-export async function resolveRuntimeScopeForFeedback(feedbackId: string): Promise<RuntimeScope | null> {
-  const [target] = await db.select({ teamId: feedback.teamId }).from(feedback).where(eq(feedback.id, feedbackId)).limit(1);
-  return storageScope(target?.teamId);
-}
-
-export async function canMutateObjectiveWorkItem(
-  actor: Pick<CommentActor, "name" | "role" | "scope">,
-  objectiveId: string,
-): Promise<ObjectiveWorkItemMutationOutcome> {
-  const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
-  const [objective] = await db
-    .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus, teamId: objectives.teamId })
-    .from(objectives)
-    .where(eq(objectives.id, objectiveId))
-    .limit(1);
-  if (!objective) {
-    return "notFound";
-  }
-
-  if (storageScopeId && objective.teamId !== storageScopeId) {
-    return "notFound";
-  }
-
-  const access = objectiveWorkItemMutationAccess(objective, actor);
-  return access.status === "allowed" ? "allowed" : "forbidden";
-}
+type ObjectiveWorkItemMutationOutcome = "allowed" | "forbidden" | "notFound";
 
 async function canMutateObjectiveComment(
   actor: CommentActor,
@@ -2536,7 +1842,7 @@ async function canMutateObjectiveComment(
 ): Promise<ObjectiveWorkItemMutationOutcome> {
   const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
   const [objective] = await db
-    .select({ challengers: objectives.challengers, flowStatus: objectives.flowStatus, teamId: objectives.teamId })
+    .select({ challengerUserIds: objectives.challengerUserIds, flowStatus: objectives.flowStatus, teamId: objectives.teamId })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))
     .limit(1);
@@ -2556,10 +1862,10 @@ async function canMutateObjectiveComment(
     return "allowed";
   }
 
-  const member = actor.name.trim();
-  return member &&
+  const actorUserId = actor.id.trim();
+  return actorUserId &&
     canMutateObjectiveCommentsAsChallengerByFlow(objective) &&
-    uniqueMembers(objective.challengers ?? []).includes(member)
+    (objective.challengerUserIds ?? []).includes(actorUserId)
     ? "allowed"
     : "forbidden";
 }
@@ -2571,8 +1877,8 @@ async function canReadObjectiveComment(
   const storageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
   const [objective] = await db
     .select({
-      assignedChallengers: objectives.assignedChallengers,
-      challengers: objectives.challengers,
+      assignedChallengerUserIds: objectives.assignedChallengerUserIds,
+      challengerUserIds: objectives.challengerUserIds,
       teamId: objectives.teamId,
     })
     .from(objectives)
@@ -2590,9 +1896,29 @@ async function canReadObjectiveComment(
     return "allowed";
   }
 
-  const member = actor.name.trim();
-  const participants = uniqueMembers([...(objective.challengers ?? []), ...(objective.assignedChallengers ?? [])]);
-  return member && participants.includes(member) ? "allowed" : "forbidden";
+  const actorUserId = actor.id.trim();
+  return actorUserId && (isObjectiveChallenger(objective, actorUserId) || isObjectiveAssignedChallenger(objective, actorUserId)) ? "allowed" : "forbidden";
+}
+
+function actorCanUseScopedTeamTarget(actor: CommentActor, storageScopeId: string) {
+  const actorStorageScopeId = actor.scope ? runtimeScopeStorageId(actor.scope) : "";
+  return Boolean(storageScopeId) && (!actorStorageScopeId || actorStorageScopeId === storageScopeId);
+}
+
+async function canMutateCommentTarget(actor: CommentActor, target: CommentTarget): Promise<ObjectiveWorkItemMutationOutcome> {
+  if (target.kind === "workItem") {
+    return canMutateObjectiveComment(actor, target.objectiveId);
+  }
+
+  return actorCanUseScopedTeamTarget(actor, target.storageScopeId) ? "allowed" : "notFound";
+}
+
+async function canReadCommentTarget(actor: CommentActor, target: CommentTarget): Promise<ObjectiveWorkItemMutationOutcome> {
+  if (target.kind === "workItem") {
+    return canReadObjectiveComment(actor, target.objectiveId);
+  }
+
+  return actorCanUseScopedTeamTarget(actor, target.storageScopeId) ? "allowed" : "notFound";
 }
 
 async function resolveCommentTarget(targetType: CommentTargetType, targetId: string): Promise<CommentTarget | null> {
@@ -2602,7 +1928,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(objectives)
       .where(eq(objectives.id, targetId))
       .limit(1);
-    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+    return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
   if (targetType === "result") {
@@ -2611,7 +1937,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(results)
       .where(eq(results.id, targetId))
       .limit(1);
-    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+    return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
   }
 
   if (targetType === "task") {
@@ -2620,7 +1946,16 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
       .from(tasks)
       .where(eq(tasks.id, targetId))
       .limit(1);
-    return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+    return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+  }
+
+  if (targetType === "feedback") {
+    const [target] = await db
+      .select({ feedbackId: feedback.id, teamId: feedback.teamId, title: feedback.phenomenon })
+      .from(feedback)
+      .where(eq(feedback.id, targetId))
+      .limit(1);
+    return target ? { feedbackId: target.feedbackId, kind: "feedback", storageScopeId: target.teamId, title: target.title } : null;
   }
 
   const [target] = await db
@@ -2629,7 +1964,7 @@ async function resolveCommentTarget(targetType: CommentTargetType, targetId: str
     .innerJoin(tasks, eq(tasks.id, taskChecklistItems.taskId))
     .where(eq(taskChecklistItems.id, targetId))
     .limit(1);
-  return target ? { objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
+  return target ? { kind: "workItem", objectiveId: target.objectiveId, storageScopeId: target.teamId, title: target.title } : null;
 }
 
 async function getCommentThread(threadId: string): Promise<CommentThread | null> {
@@ -2685,7 +2020,7 @@ export async function listCommentMentionableUsers(
     return { status: "notFound" };
   }
 
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -2732,7 +2067,7 @@ export async function uploadCommentAttachment(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -2824,7 +2159,7 @@ export async function getCommentAttachmentContent(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canReadObjectiveComment(actor, target.objectiveId);
+  const access = await canReadCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -2852,7 +2187,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access === "notFound") {
     return { status: "notFound" };
   }
@@ -2864,14 +2199,26 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   const createdAt = nowIso();
   const attachmentIds = extractCommentAttachmentIds(body);
   const createdComment = await db.transaction(async (tx) => {
-    const [lockedObjective] = await tx
-      .select({ id: objectives.id })
-      .from(objectives)
-      .where(eq(objectives.id, target.objectiveId))
-      .limit(1)
-      .for("update");
-    if (!lockedObjective) {
-      return null;
+    if (target.kind === "workItem") {
+      const [lockedObjective] = await tx
+        .select({ id: objectives.id })
+        .from(objectives)
+        .where(eq(objectives.id, target.objectiveId))
+        .limit(1)
+        .for("update");
+      if (!lockedObjective) {
+        return null;
+      }
+    } else {
+      const [lockedFeedback] = await tx
+        .select({ id: feedback.id })
+        .from(feedback)
+        .where(eq(feedback.id, target.feedbackId))
+        .limit(1)
+        .for("update");
+      if (!lockedFeedback) {
+        return null;
+      }
     }
 
     const arePendingAttachmentsAvailable = async () => {
@@ -3058,7 +2405,7 @@ export async function updateCommentThreadStatus(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -3097,7 +2444,7 @@ export async function updateCommentMessage(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -3190,7 +2537,7 @@ export async function deleteCommentMessage(
   if (!target) {
     return { status: "notFound" };
   }
-  const access = await canMutateObjectiveComment(actor, target.objectiveId);
+  const access = await canMutateCommentTarget(actor, target);
   if (access !== "allowed") {
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
@@ -3344,7 +2691,7 @@ export async function submitObjectiveLoot(
     return { status: "closed" };
   }
 
-  if (actor.role !== "member" || !uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
+  if (actor.role !== "member" || !(objective.challengerUserIds ?? []).includes(actor.id)) {
     return { status: "forbidden" };
   }
 
@@ -3370,6 +2717,7 @@ export async function submitObjectiveLoot(
       teamId: objective.teamId,
       objectiveId: objective.id,
       submittedBy: actor.name,
+      submittedByUserId: actor.id,
       body,
       resultClaims: resultClaims.resultClaims,
       selfTestReportUrl: input.selfTestReportUrl?.trim() || null,
@@ -3398,7 +2746,7 @@ export async function submitObjectiveLoot(
     teamId: objective.teamId,
   });
 
-  const data = await getTaskManagementData({ scope: runtimeScope(objective.teamId) });
+  const data = await getOrfStateSnapshot({ scope: runtimeScope(objective.teamId) });
   const loot = data.objectiveLoot.find((item) => item.id === lootId);
   return loot ? { status: "ok", loot } : { status: "notFound" };
 }
@@ -3422,7 +2770,7 @@ export async function submitObjectiveTrialReview(
     return { status: "closed" };
   }
 
-  if (actor.role !== "member" || !uniqueMembers(objective.challengers ?? []).includes(actor.name)) {
+  if (actor.role !== "member" || !(objective.challengerUserIds ?? []).includes(actor.id)) {
     return { status: "forbidden" };
   }
 
@@ -3450,12 +2798,14 @@ export async function submitObjectiveTrialReview(
       teamId: lockedObjective.teamId,
       objectiveId: lockedObjective.id,
       requestedBy: actor.name,
+      requestedByUserId: actor.id,
       body,
       resultClaims: resultClaims.resultClaims,
       selfTestReportBody: input.selfTestReportBody?.trim() || null,
       status: "requested",
       commanderFeedback: null,
       reviewedBy: null,
+      reviewedByUserId: null,
       reviewedAt: null,
       requestedAt,
     });
@@ -3479,7 +2829,7 @@ export async function submitObjectiveTrialReview(
     teamId: created.teamId,
   });
 
-  const data = await getTaskManagementData({ scope: runtimeScope(created.teamId) });
+  const data = await getOrfStateSnapshot({ scope: runtimeScope(created.teamId) });
   const trialReview = data.objectiveTrialReviews.find((item) => item.id === trialReviewId);
   return trialReview ? { status: "ok", trialReview } : { status: "notFound" };
 }
@@ -3515,6 +2865,7 @@ export async function reviewObjectiveTrialReview(
         status: input.status,
         commanderFeedback,
         reviewedBy: actorId,
+        reviewedByUserId: actorId,
         reviewedAt,
       })
       .where(eq(objectiveTrialReviews.id, trialReviewId));
@@ -3537,7 +2888,7 @@ export async function reviewObjectiveTrialReview(
     teamId: reviewed.teamId,
   });
 
-  const data = await getTaskManagementData({ scope: runtimeScope(reviewed.teamId) });
+  const data = await getOrfStateSnapshot({ scope: runtimeScope(reviewed.teamId) });
   const trialReview = data.objectiveTrialReviews.find((item) => item.id === trialReviewId);
   return trialReview ? { status: "ok", trialReview } : { status: "notFound" };
 }
@@ -3547,7 +2898,7 @@ export interface ReviewObjectiveLootInput {
   acceptedResult?: ObjectiveAcceptedResult;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
-  contributionRatios?: Array<{ member: string; ratio: number }>;
+  contributionRatios?: ContributionAllocation[];
   reason?: string;
 }
 
@@ -3569,9 +2920,13 @@ export async function reviewObjectiveLoot(
   if (!loot) return { status: "notFound" };
 
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
-  const challengers = uniqueMembers(objective.challengers ?? []);
+  const challengerRows = await getMemberRowsByIdsInScope(db, objective.teamId, objective.challengerUserIds ?? []);
+  const challengerNameById = new Map(challengerRows.map((member) => [member.id, member.name]));
+  const challengerUserIds = objectiveChallengerUserIds(objective);
+  const challengerUserIdSet = new Set(challengerUserIds);
+  const challengers = challengerUserIds.map((userId) => challengerNameById.get(userId)).filter((name): name is string => Boolean(name));
   const settlementPlan = planObjectiveSettlement({
-    objective: { ...objective, challengers },
+    objective: { ...objective, challengers, challengerUserIds },
     results: resultRows.map((result) => ({
       id: result.id,
       uncertaintyLevel: result.uncertaintyLevel ?? undefined,
@@ -3584,23 +2939,18 @@ export async function reviewObjectiveLoot(
     contributionRatios: input.contributionRatios,
   });
   if (!settlementPlan) return { status: "invalid" };
-  const memberRows =
-    settlementPlan.contributionRatios.length > 0
-      ? await db
-          .select({ id: users.id, name: users.name })
-          .from(teamMembers)
-          .innerJoin(users, eq(teamMembers.userId, users.id))
-          .where(
-            and(
-              eq(teamMembers.teamId, objective.teamId),
-              inArray(
-                users.name,
-                settlementPlan.contributionRatios.map((item) => item.member),
-              ),
-            ),
-          )
-      : [];
-  const userIdByName = new Map(memberRows.map((user) => [user.name, user.id]));
+  const userIdByName = new Map(challengerRows.map((user) => [user.name, user.id]));
+  const contributionRatios = settlementPlan.contributionRatios.map((item) => {
+    const userId = item.memberUserId?.trim() || userIdByName.get(item.member) || "";
+    return {
+      ...item,
+      memberName: userId ? challengerNameById.get(userId) ?? item.member : item.member,
+      userId,
+    };
+  });
+  if (contributionRatios.some((item) => !item.userId || !challengerUserIdSet.has(item.userId))) {
+    return { status: "invalid" };
+  }
   const createdAt = nowIso();
   const reason = input.reason?.trim() || input.contributionResolution?.reason.trim() || `目标结算：${objective.title}`;
 
@@ -3615,6 +2965,7 @@ export async function reviewObjectiveLoot(
         objectiveBasePoints: settlementPlan.basePoints,
         objectiveSettlementPoints: settlementPlan.settlementPoints,
         assignedChallengers: [],
+        assignedChallengerUserIds: [],
         updatedAt: today(),
         updatedBy: actorId,
       })
@@ -3631,14 +2982,14 @@ export async function reviewObjectiveLoot(
         .where(eq(results.id, result.id));
     }
     await tx.delete(pointLedger).where(eq(pointLedger.objectiveId, objectiveId));
-    if (settlementPlan.contributionRatios.length > 0) {
+    if (contributionRatios.length > 0) {
       await tx.insert(pointLedger).values(
-        settlementPlan.contributionRatios.map((item) => ({
+        contributionRatios.map((item) => ({
           id: makeId("points"),
           teamId: objective.teamId,
           objectiveId: objective.id,
-          userId: userIdByName.get(item.member) ?? null,
-          memberName: item.member,
+          userId: item.userId,
+          memberName: item.memberName,
           points: Number((settlementPlan.settlementPoints * item.ratio).toFixed(2)),
           reason,
           createdAt,
@@ -3651,6 +3002,7 @@ export async function reviewObjectiveLoot(
         status: "completed",
         commanderFeedback: "验收对齐完成，目标已结算。",
         reviewedBy: actorId,
+        reviewedByUserId: actorId,
         reviewedAt: createdAt,
       })
       .where(
@@ -3691,22 +3043,15 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       return null;
     }
 
-    const feedbackOriginId = input.feedbackOriginId?.trim() || null;
-    if (feedbackOriginId) {
-      const [originFeedback] = await tx
-        .select({ id: feedback.id, teamId: feedback.teamId, linkedObjectiveId: feedback.linkedObjectiveId })
-        .from(feedback)
-        .where(eq(feedback.id, feedbackOriginId))
-        .limit(1);
-      if (!originFeedback || originFeedback.teamId !== objective.teamId || originFeedback.linkedObjectiveId !== objective.id) {
-        return null;
-      }
-    }
-
     const siblingRows = await tx.select({ sortOrder: tasks.sortOrder }).from(tasks).where(eq(tasks.linkedObjectiveId, objective.id));
     const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
     const id = makeId("ORF");
     const now = today();
+    const assigneeName = input.assignee.trim();
+    const assigneeUser = assigneeName ? await resolveActiveMemberByName(objective.teamId, assigneeName) : null;
+    if (assigneeName && !assigneeUser) {
+      return null;
+    }
 
     await tx.insert(tasks).values({
       id,
@@ -3715,9 +3060,9 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       description: input.description?.trim() || "执行支撑目标的下一步技术任务。",
       status: "Todo",
       priority: input.priority ?? "Medium",
-      assignee: input.assignee,
+      assignee: assigneeUser?.name ?? "",
+      assigneeUserId: assigneeUser?.id ?? null,
       linkedObjectiveId: objective.id,
-      feedbackOriginId,
       dueDate: dueDate ?? now,
       tags: ["ORF"],
       createdAt: now,
@@ -3741,7 +3086,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
     teamId: runtimeScopeStorageId(created.scope),
   });
 
-  const data = await getTaskManagementData({ scope: created.scope });
+  const data = await getOrfStateSnapshot({ scope: created.scope });
   return data.tasks.find((task) => task.id === created.id) ?? null;
 }
 
@@ -3807,7 +3152,7 @@ export type ObjectiveDetailsMutationOutcome =
 
 export async function updateObjectiveDetails(
   objectiveId: string,
-  input: { finalDueAt?: string; projectId?: string | null; projectName?: string | null; title?: string },
+  input: { finalDueAt?: string; title?: string },
   actorId?: string | null,
 ): Promise<ObjectiveDetailsMutationOutcome> {
   const nextTitle = input.title?.trim();
@@ -3826,14 +3171,6 @@ export async function updateObjectiveDetails(
 
     if (nextTitle !== undefined) {
       update.title = nextTitle;
-    }
-
-    if (input.projectId !== undefined) {
-      update.projectId = nullableTrimmedText(input.projectId);
-    }
-
-    if (input.projectName !== undefined) {
-      update.projectName = nullableTrimmedText(input.projectName);
     }
 
     if (input.finalDueAt !== undefined) {
@@ -3867,6 +3204,49 @@ export async function updateObjectiveDetails(
 
   publishObjectiveInvalidation({
     actorUserId: actorId,
+    reason: "objective.changed",
+    objectiveId,
+    teamId: updatedObjective.teamId,
+  });
+  return objectiveOutcome(objectiveId, runtimeScope(updatedObjective.teamId));
+}
+
+export async function updateObjectiveProject(
+  objectiveId: string,
+  input: { projectId?: string | null },
+  context: { scope: RuntimeScope; userId: string },
+): Promise<ObjectiveDetailsMutationOutcome> {
+  const storageScopeId = runtimeScopeStorageId(context.scope);
+  const nextProjectId = nullableTrimmedText(input.projectId);
+
+  const updatedObjective = await db.transaction(async (tx) => {
+    const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
+    if (!objective || objective.teamId !== storageScopeId) return { status: "notFound" as const };
+
+    if (nextProjectId) {
+      const [project] = await tx.select({ id: projects.id }).from(projects).where(and(eq(projects.id, nextProjectId), eq(projects.teamId, storageScopeId))).limit(1);
+      if (!project) return { status: "invalid" as const };
+    }
+
+    const [updated] = await tx
+      .update(objectives)
+      .set({
+        projectId: nextProjectId,
+        updatedAt: today(),
+        updatedBy: context.userId,
+      })
+      .where(eq(objectives.id, objectiveId))
+      .returning({ id: objectives.id, teamId: objectives.teamId });
+
+    if (!updated) return { status: "notFound" as const };
+    return { status: "updated" as const, teamId: updated.teamId };
+  });
+
+  if (updatedObjective.status === "notFound") return { status: "notFound" };
+  if (updatedObjective.status === "invalid") return { status: "invalid" };
+
+  publishObjectiveInvalidation({
+    actorUserId: context.userId,
     reason: "objective.changed",
     objectiveId,
     teamId: updatedObjective.teamId,

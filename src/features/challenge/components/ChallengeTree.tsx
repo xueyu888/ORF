@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, MessageSquare, Send, UserPlus, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, UserPlus, type LucideIcon } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
@@ -23,6 +23,7 @@ import type {
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
   ObjectiveTrialReview,
+  OrfProject,
   OrfUser,
   Task,
   TaskChecklistItem,
@@ -39,16 +40,17 @@ import {
   handleRowDragOver,
   handleRowDrop,
   objectiveActionsDropTargetForEvent,
+  projectDropTargetForEvent,
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
 import { canFreezeObjectiveAfterReestimate, metricEditUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
-import { groupChallengeGroupsByProject } from "../model/projectGroups";
+import { groupChallengeGroupsByProject, unassignedObjectiveProjectName, type ObjectiveProjectGroup } from "../model/projectGroups";
 import type { TitleSubmissionContext } from "../model/titleSubmission";
 import type { BountyNode, ChallengeRowAction, ChallengeScope, ChallengeTarget, DragDropController, ObjectiveNode } from "../model/types";
-import { ChallengeRowActions, DisclosureAction, rowActionLeft } from "./ChallengeRowActions";
+import { ChallengeRowActions, DisclosureAction, rowActionLeft, type ChallengeRowMenuItem } from "./ChallengeRowActions";
 import { handleRowDoubleClick, InlineTitleEditor, isSameTarget } from "./InlineTitleEditor";
 
 type RowHandlers = {
@@ -67,6 +69,8 @@ type RowHandlers = {
   canMutateWorkItems: (objectiveId: string) => boolean;
   currentUser: OrfUser | null;
   draftObjectiveId?: string;
+  canCreateObjective: boolean;
+  canManageProjects: boolean;
   metricActionLabel: (objective: ObjectiveNode["objective"]) => string | null;
   metricEditAccess: (objectiveId: string) => MetricEditAccess;
   canPublishObjective: (objective: ObjectiveNode["objective"]) => boolean;
@@ -76,6 +80,7 @@ type RowHandlers = {
   onActiveActionChange: (id: string | null) => void;
   onAddAction: (objectiveId: string) => void;
   onAddBounty: (objectiveId: string) => void;
+  onAddObjective: (projectId: string | null) => void;
   onAddSubAction: (actionId: string, afterItemId?: string) => void;
   onApproveApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCancelEdit: () => void;
@@ -89,7 +94,9 @@ type RowHandlers = {
   onPublishObjective: (objectiveId: string) => Promise<boolean>;
   onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
+  onCreateProject: (name: string) => Promise<OrfProject | null>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  onSetObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
   onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
   onSaveMetricDifficulty: (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   onUnavailableMetricEdit: (objectiveId: string) => void;
@@ -105,62 +112,222 @@ export function ChallengeTree({
   groups,
   handlers,
   now,
+  projects,
   scope,
 }: {
   emptyText: string;
   groups: ObjectiveNode[];
   handlers: RowHandlers;
   now: Date;
+  projects: OrfProject[];
   scope: ChallengeScope;
 }) {
-  const projectGroups = groupChallengeGroupsByProject(groups);
+  const projectGroups = groupChallengeGroupsByProject(groups, projects);
 
   return (
     <div className="grid gap-5">
-      {projectGroups.map((project) => (
-        <div key={project.id} className="orf-project-section" data-project-group-id={project.id}>
-          <div className="orf-project-header">
-            <div className="min-w-0">
-              <div className="orf-project-kicker">项目</div>
-              <h2 className="orf-project-title">{project.name}</h2>
-            </div>
-            <div className="orf-project-meta" aria-label={`${project.name} 项目概览`}>
-              <span>{project.objectiveCount} 个目标</span>
-              <span>{project.bountyCount} 个指标</span>
-              <span>{project.actionCount} 个行动项</span>
-            </div>
-          </div>
-          <div className="grid gap-3">
-            {project.objectives.map((group) => (
-              <ObjectivePanel
-                key={group.objective.id}
-                group={group}
-                handlers={handlers}
-                now={now}
-                scope={scope}
-              />
-            ))}
+      <ProjectNavigator
+        canManageProjects={handlers.canManageProjects}
+        onCreateProject={handlers.onCreateProject}
+        projects={projectGroups}
+      />
+      {projectGroups.map((project, index) => (
+        <div
+          key={project.id}
+          className={clsx(
+            "orf-project-section",
+            handlers.dragDrop.dragItem?.type === "objective" && dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "project", projectId: project.projectId }]),
+          )}
+          data-project-group-id={project.id}
+          id={projectSectionDomId(project.id)}
+          style={projectAccentStyle(project, index)}
+          onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
+          onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
+          onDrop={(event) => handleRowDrop(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
+        >
+          <ProjectHeader
+            canCreateObjective={handlers.canCreateObjective}
+            onAddObjective={handlers.onAddObjective}
+            project={project}
+          />
+          <div className="orf-project-body grid gap-3">
+            {project.objectives.length > 0 ? (
+              project.objectives.map((group) => (
+                <ObjectivePanel
+                  key={group.objective.id}
+                  group={group}
+                  handlers={handlers}
+                  now={now}
+                  projects={projects}
+                  scope={scope}
+                />
+              ))
+            ) : (
+              <div className="orf-project-empty">{project.isUnassigned ? "当前没有未归属目标。" : "当前项目还没有目标。"}</div>
+            )}
           </div>
         </div>
       ))}
-      {groups.length === 0 && <div className="orf-card orf-card-padding text-center text-sm orf-text-secondary">{emptyText}</div>}
+      {groups.length === 0 && projects.length === 0 && <div className="orf-card orf-card-padding text-center text-sm orf-text-secondary">{emptyText}</div>}
     </div>
   );
 }
+
+function ProjectNavigator({
+  canManageProjects,
+  onCreateProject,
+  projects,
+}: {
+  canManageProjects: boolean;
+  onCreateProject: (name: string) => Promise<OrfProject | null>;
+  projects: ObjectiveProjectGroup[];
+}) {
+  const [creating, setCreating] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [name, setName] = useState("");
+
+  const submitProject = async () => {
+    const value = name.trim();
+    if (!value) return;
+    setCreating(true);
+    const project = await onCreateProject(value);
+    setCreating(false);
+    if (project) {
+      setName("");
+      setCreateOpen(false);
+      window.requestAnimationFrame(() => scrollProjectIntoView(project.id));
+    }
+  };
+
+  return (
+    <nav className="orf-project-nav" aria-label="项目目标聚合导航">
+      {projects.map((project, index) => (
+        <button
+          key={project.id}
+          className="orf-project-nav-item"
+          style={projectAccentStyle(project, index)}
+          type="button"
+          onClick={() => scrollProjectIntoView(project.id)}
+        >
+          <FolderKanban className="h-4 w-4" aria-hidden="true" />
+          <span className="orf-project-nav-name">{project.name}</span>
+          <span className="orf-project-nav-count">{project.objectiveCount} 目标</span>
+        </button>
+      ))}
+      {canManageProjects && (
+        createOpen ? (
+          <form
+            className="orf-project-create"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitProject();
+            }}
+          >
+            <input
+              aria-label="新项目名称"
+              className="orf-project-create-input"
+              disabled={creating}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="项目名"
+              value={name}
+            />
+            <button className="orf-project-create-button" disabled={creating || !name.trim()} type="submit">
+              <Plus className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </form>
+        ) : (
+          <button className="orf-project-create-collapsed" type="button" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" aria-hidden="true" />
+            项目
+          </button>
+        )
+      )}
+    </nav>
+  );
+}
+
+function ProjectHeader({
+  canCreateObjective,
+  onAddObjective,
+  project,
+}: {
+  canCreateObjective: boolean;
+  onAddObjective: (projectId: string | null) => void;
+  project: ObjectiveProjectGroup;
+}) {
+  return (
+    <div className="orf-project-header">
+      <div className="orf-project-heading min-w-0">
+        <h2 className="orf-project-title">{project.name}</h2>
+        <span className="orf-project-count">{project.objectiveCount} 目标</span>
+      </div>
+      {canCreateObjective && (
+        <button
+          aria-label={project.isUnassigned ? "新增未归属目标" : `在${project.name}中新增目标`}
+          className="orf-project-add-button"
+          title={project.isUnassigned ? "新增未归属目标" : "新增目标"}
+          type="button"
+          onClick={() => onAddObjective(project.projectId)}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function scrollProjectIntoView(projectId: string) {
+  document.getElementById(projectSectionDomId(projectId))?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function projectSectionDomId(projectId: string) {
+  return `orf-project-${encodeURIComponent(projectId)}`;
+}
+
+function projectAccentStyle(project: ObjectiveProjectGroup, index: number): ProjectAccentStyle {
+  const palette = project.isUnassigned
+    ? projectAccentPalette.unassigned
+    : projectAccentPalette.projects[index % projectAccentPalette.projects.length];
+
+  return {
+    "--orf-project-accent": palette.accent,
+    "--orf-project-accent-deep": palette.deep,
+    "--orf-project-accent-soft": palette.soft,
+  } as ProjectAccentStyle;
+}
+
+type ProjectAccentStyle = CSSProperties & {
+  "--orf-project-accent": string;
+  "--orf-project-accent-deep": string;
+  "--orf-project-accent-soft": string;
+};
+
+const projectAccentPalette = {
+  projects: [
+    { accent: "47, 156, 137", deep: "22, 111, 99", soft: "232, 250, 246" },
+    { accent: "216, 139, 42", deep: "141, 89, 25", soft: "255, 246, 229" },
+    { accent: "98, 91, 185", deep: "71, 59, 142", soft: "242, 239, 255" },
+    { accent: "50, 132, 206", deep: "31, 91, 150", soft: "232, 244, 255" },
+  ],
+  unassigned: { accent: "100, 116, 139", deep: "71, 85, 105", soft: "244, 247, 251" },
+} as const;
 
 function ObjectivePanel({
   group,
   handlers,
   now,
+  projects,
   scope,
 }: {
   group: ObjectiveNode;
   handlers: RowHandlers;
   now: Date;
+  projects: OrfProject[];
   scope: ChallengeScope;
 }) {
   const target: ChallengeTarget = { type: "objective", id: group.objective.id, title: group.objective.title };
   const [objectiveElement, setObjectiveElement] = useState<HTMLElement | null>(null);
+  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const complete = objectiveComplete(group.objective);
   const actionId = `objective:${group.objective.id}`;
   const anchorId = `objective:${group.objective.id}`;
@@ -211,6 +378,17 @@ function ObjectivePanel({
           ...(metricAddLabel ? [{ label: metricAddLabel, onAdd: () => handlers.onAddBounty(group.objective.id) }] : []),
           ...(canCreateAction ? [{ label: "新增行动项", onAdd: () => handlers.onAddAction(group.objective.id) }] : []),
         ];
+  const objectiveMenuItems: ChallengeRowMenuItem[] =
+    !isDraftObjective && handlers.canManageProjects
+      ? [
+          {
+            id: "move-objective-project",
+            icon: FolderKanban,
+            label: "移动到项目",
+            onAction: () => setProjectPickerOpen(true),
+          },
+        ]
+      : [];
 
   return (
     <section
@@ -237,9 +415,13 @@ function ObjectivePanel({
           activeActionId={handlers.activeActionId}
           addActions={objectiveAddActions}
           addForceMenu
+          dragItem={!isDraftObjective && handlers.canManageProjects ? { type: "objective", id: group.objective.id, projectId: group.objective.projectId ?? null } : undefined}
+          extraMenuItems={objectiveMenuItems}
           left={rowActionLeft.objective}
           onAction={(action) => handlers.onActionRowAction(action, target)}
           onActiveActionChange={handlers.onActiveActionChange}
+          onDragEnd={handlers.dragDrop.onDragEnd}
+          onDragStart={handlers.dragDrop.onDragStart}
           onOpenActionChange={handlers.onOpenActionChange}
           openActionId={handlers.openActionId}
         />
@@ -257,6 +439,17 @@ function ObjectivePanel({
             <div className={clsx("orf-objective-title min-w-0 truncate font-bold", complete ? "text-[#98a2b3] line-through" : "text-[#111827]")}>{group.objective.title}</div>
           )}
           <CommentCountBadge count={commentCountFor(handlers.commentCounts, "objective", group.objective.id)} onClick={() => handlers.onActionRowAction("comment", target)} />
+          {!isDraftObjective && handlers.canManageProjects && (
+            <ObjectiveProjectPicker
+              objectiveId={group.objective.id}
+              onCreateProject={handlers.onCreateProject}
+              onSetObjectiveProject={handlers.onSetObjectiveProject}
+              open={projectPickerOpen}
+              onOpenChange={setProjectPickerOpen}
+              projectId={group.objective.projectId ?? null}
+              projects={projects}
+            />
+          )}
         </HierarchyRootCell>
         <ObjectiveFlowAction disabled={isDraftObjective} group={group} handlers={handlers} />
         <AvatarStack names={group.challengers} />
@@ -455,6 +648,102 @@ function AlignmentActionButton({
     >
       {action.label}
     </button>
+  );
+}
+
+function ObjectiveProjectPicker({
+  objectiveId,
+  onCreateProject,
+  onOpenChange,
+  onSetObjectiveProject,
+  open: controlledOpen,
+  projectId,
+  projects,
+}: {
+  objectiveId: string;
+  onCreateProject: (name: string) => Promise<OrfProject | null>;
+  onOpenChange?: (open: boolean) => void;
+  onSetObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
+  open?: boolean;
+  projectId: string | null;
+  projects: OrfProject[];
+}) {
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
+  const projectName = projects.find((project) => project.id === projectId)?.name ?? unassignedObjectiveProjectName;
+
+  const setProject = async (nextProjectId: string | null) => {
+    setSaving(true);
+    try {
+      const ok = await onSetObjectiveProject(objectiveId, nextProjectId);
+      if (ok) setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const createAndAssign = async () => {
+    const name = newProjectName.trim();
+    if (!name) return;
+    setSaving(true);
+    try {
+      const project = await onCreateProject(name);
+      if (project) {
+        const ok = await onSetObjectiveProject(objectiveId, project.id);
+        if (ok) {
+          setNewProjectName("");
+          setOpen(false);
+        }
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <span className="orf-objective-project-picker" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
+      <button className="orf-objective-project-trigger" type="button" aria-label={`移动到项目，当前：${projectName}`} title={`移动到项目，当前：${projectName}`} onClick={() => setOpen(!open)}>
+        <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      {open && (
+        <span className="orf-popover orf-objective-project-menu">
+          <button className="orf-objective-project-menu-item" disabled={saving || projectId === null} type="button" onClick={() => void setProject(null)}>
+            移出项目
+          </button>
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              className="orf-objective-project-menu-item"
+              disabled={saving || project.id === projectId}
+              type="button"
+              onClick={() => void setProject(project.id)}
+            >
+              {project.name}
+            </button>
+          ))}
+          <span className="orf-objective-project-create">
+            <input
+              aria-label="新项目名称"
+              disabled={saving}
+              onChange={(event) => setNewProjectName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void createAndAssign();
+                }
+              }}
+              placeholder="新建并放入"
+              value={newProjectName}
+            />
+            <button disabled={saving || !newProjectName.trim()} type="button" onClick={() => void createAndAssign()}>
+              <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        </span>
+      )}
+    </span>
   );
 }
 

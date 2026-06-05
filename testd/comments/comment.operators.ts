@@ -1,4 +1,4 @@
-import { expect, type Dialog, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import type { OperatorRegistry, StepParams } from "../_framework/types";
 import type { CapturedResponse } from "../_operators/common.context";
 import { readResponseBody } from "../_operators/common.helpers";
@@ -548,7 +548,9 @@ export const commentOperators = {
     },
 
     image_visible: async ({ ctx, params }) => {
-      await expect(commentImagePreviewButton(ctx.page, requiredString(params, "fileName"))).toBeVisible();
+      await expect(
+        commentImagePreviewButton(ctx.page, requiredString(params, "fileName"), optionalString(params, "body")),
+      ).toBeVisible();
     },
 
     close: async ({ ctx, params }) => {
@@ -675,23 +677,16 @@ export const commentOperators = {
       await expect(commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" })).toHaveCount(0);
     },
 
-    click_delete: async ({ ctx, runtime, params }) => {
-      const dialogPromise = ctx.page.waitForEvent("dialog");
-      const clickPromise = commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" }).click();
-      runtime.values.pendingCommentDeleteDialog = await dialogPromise;
-      runtime.values.pendingCommentDeleteClick = clickPromise;
-    },
-
-    confirm_delete: async ({ ctx, runtime, params }) => {
-      const dialog = runtime.values.pendingCommentDeleteDialog;
-      if (!isDialog(dialog)) {
-        throw new Error("没有待确认的删除评论弹窗");
-      }
+    delete: async ({ ctx, params }) => {
       return performWithCapturedResponse(
         captureCommentResponse(ctx.page, "DELETE", requiredString(params, "urlEndsWith")),
         async () => {
+          const dialogPromise = ctx.page.waitForEvent("dialog");
+          const clickPromise = commentMessageRow(ctx.page, requiredString(params, "body")).getByRole("button", { name: "删除评论" }).click();
+          const dialog = await dialogPromise;
+          expect(dialog.type()).toBe("confirm");
           await dialog.accept();
-          await runtime.values.pendingCommentDeleteClick;
+          await clickPromise;
         },
       );
     },
@@ -841,8 +836,4 @@ function createReplyPayload(params: StepParams) {
     ...createCommentPayload(params),
     parentMessageId: parent.messageId,
   };
-}
-
-function isDialog(value: unknown): value is Dialog {
-  return typeof value === "object" && value !== null && typeof (value as Dialog).accept === "function";
 }

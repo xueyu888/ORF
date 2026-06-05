@@ -167,7 +167,7 @@ export const memberCannotProposeResultFrozenCase = {
       {
         source: { caseStepId: "Setup-7", method: "prisma" },
         id: "db.frozen_proposal_target.prepare",
-        title: "设置本用例冻结目标的挑战者包含普通成员，并保持实施阶段状态",
+        title: "设置本用例冻结目标的挑战者账号身份包含普通成员，并保持实施阶段状态",
         object: "db.frozen_proposal_target",
         operator: "prepare",
         params: { targetFrom: "runtime.frozenProposalTarget", memberNameFrom: "data.name" },
@@ -268,7 +268,7 @@ export const memberCannotProposeResultFrozenCase = {
       {
         source: { caseStepId: "S0-4", method: "prisma" },
         id: "db.frozen_proposal_target.frozen_for_member",
-        title: "本用例冻结目标 应为 流转状态 `frozen`、阶段 `goalFrozen` 且挑战者包含普通成员",
+        title: "本用例冻结目标 应为 流转状态 `frozen`、阶段 `goalFrozen` 且挑战者账号身份包含普通成员",
         object: "db.frozen_proposal_target",
         operator: "frozen_for_member",
         params: { targetFrom: "runtime.frozenProposalTarget", memberNameFrom: "data.name" },

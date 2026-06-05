@@ -20,6 +20,7 @@ export type MemberProposeResultCaseData = {
 export type MemberProposeResultTarget = {
   objective: {
     id: string;
+    teamId: string;
     title: string;
     flowStatus: ObjectiveFlowStatus;
   };

@@ -49,7 +49,7 @@ export async function createFreezePrerequisiteResult(
     throw new Error("目标不存在，无法创建冻结前置指标");
   }
 
-  const id = `res-testd-admin-freeze-${Date.now()}`;
+  const id = freezePrerequisiteResultId(objective.id);
   const siblingRows = await db.select({ sortOrder: results.sortOrder }).from(results).where(eq(results.objectiveId, objective.id));
   const sortOrder = siblingRows.reduce((max, row) => Math.max(max, row.sortOrder), -1) + 1;
 
@@ -206,4 +206,8 @@ async function readObjective(objectiveId: string) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function freezePrerequisiteResultId(objectiveId: string) {
+  return `res-testd-admin-freeze-${objectiveId}`;
 }

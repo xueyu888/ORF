@@ -15,21 +15,21 @@ type CommentEntry = {
   threadId: string;
 };
 
-type CommentMentionUser = Pick<OrfUser, "avatarUrl" | "email" | "id" | "name" | "role" | "status">;
+export type CommentMentionUser = Pick<OrfUser, "avatarUrl" | "email" | "id" | "name" | "role" | "status">;
 
-type CommentDraftMention = {
+export type CommentDraftMention = {
   end: number;
   label: string;
   start: number;
   userId: string;
 };
 
-type CommentDraft = {
+export type CommentDraft = {
   mentions: CommentDraftMention[];
   text: string;
 };
 
-type CommentDraftMode =
+export type CommentDraftMode =
   | { type: "default" }
   | { type: "reply"; rootMessageId: string; targetAuthor: string; targetMessageId: string }
   | { type: "edit"; messageId: string; targetAuthor: string; threadId: string };
@@ -441,7 +441,7 @@ function CommentLinkedText({ value }: { value: string }) {
   );
 }
 
-function CommentBodyText({
+export function CommentBodyText({
   attachments,
   body,
   mentionUsersById,
@@ -505,7 +505,7 @@ function decodeMentionUserId(rawUserId: string) {
   }
 }
 
-function emptyCommentDraft(): CommentDraft {
+export function emptyCommentDraft(): CommentDraft {
   return { mentions: [], text: "" };
 }
 
@@ -534,7 +534,7 @@ function commentDraftFromStoredBody(body: string, mentionUsersById: Map<string, 
   return { mentions, text };
 }
 
-function serializeCommentDraft(draft: CommentDraft) {
+export function serializeCommentDraft(draft: CommentDraft) {
   const validMentions = draft.mentions
     .filter((mention) => draft.text.slice(mention.start, mention.end) === `@${mention.label}`)
     .sort((left, right) => left.start - right.start);
@@ -640,7 +640,7 @@ function replaceCommentDraftText(
   };
 }
 
-function CommentComposer({
+export function CommentComposer({
   currentMember,
   currentUserAvatarUrl,
   currentUserId,
