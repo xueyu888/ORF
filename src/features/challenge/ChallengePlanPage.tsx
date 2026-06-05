@@ -12,7 +12,7 @@ import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } fr
 import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
 import type { ResultDetailsInput } from "../../domain/orfResultDetails";
-import type { Objective, OrfState, UncertaintyLevel } from "../../types/orf";
+import type { Objective, OrfProject, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
 import { useChallengeReadModelData, type ChallengeReadModelState } from "./hooks/useChallengeReadModelData";
@@ -26,10 +26,12 @@ import {
   sortChallengeGroups,
   type ChallengeCycleFilter,
   type ChallengeMemberFilter,
+  type ChallengeProjectFilter,
   type ChallengeStatusFilter,
 } from "./model/challengeFilters";
 import { buildChallengeTree } from "./model/challengeTreeModel";
 import { deleteConfirmMessage } from "./model/deleteConfirm";
+import { unassignedObjectiveProjectName } from "./model/projectGroups";
 import {
   applyTaskCompletionOverlays,
   taskCompletionOverlayMaterialized,
@@ -230,6 +232,7 @@ export function ChallengePlanPage() {
   const [scope, setScope] = useState<ChallengeScope>(canShowAllChallenges ? "all" : "mine");
   const [cycleFilter, setCycleFilter] = useState<ChallengeCycleFilter>("all");
   const [memberFilter, setMemberFilter] = useState<ChallengeMemberFilter>("all");
+  const [projectFilter, setProjectFilter] = useState<ChallengeProjectFilter>("all");
   const [statusFilter, setStatusFilter] = useState<ChallengeStatusFilter>("all");
   const [collapsedBountyIds, setCollapsedBountyIds] = useState<Set<string>>(() => new Set());
   const [collapsedActionIds, setCollapsedActionIds] = useState<Set<string>>(() => new Set());
@@ -363,9 +366,17 @@ export function ChallengePlanPage() {
   const displaySourceGroups = useMemo(() => (optimisticGroup ? [optimisticGroup, ...groups] : groups), [groups, optimisticGroup]);
   const cycleOptions = useMemo(() => challengeCycleOptions(displaySourceGroups), [displaySourceGroups]);
   const memberOptions = useMemo(() => challengeMemberOptions(displaySourceGroups, challengeState.users), [challengeState.users, displaySourceGroups]);
+  const projectOptions = useMemo(
+    () => [
+      { label: "全部项目", value: "all" as const, alwaysVisible: true },
+      ...challengeState.projects.map((project) => ({ label: project.name, value: project.id })),
+      { label: unassignedObjectiveProjectName, value: "unassigned" as const, alwaysVisible: true },
+    ],
+    [challengeState.projects],
+  );
   const filteredGroups = useMemo(
-    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, member: effectiveMemberFilter, status: statusFilter })),
-    [cycleFilter, displaySourceGroups, effectiveMemberFilter, statusFilter],
+    () => sortChallengeGroups(filterChallengeGroups(displaySourceGroups, { cycle: cycleFilter, member: effectiveMemberFilter, project: projectFilter, status: statusFilter })),
+    [cycleFilter, displaySourceGroups, effectiveMemberFilter, projectFilter, statusFilter],
   );
   const sortedDisplayedGroups = useMemo(() => sortChallengeGroups(draftGroup ? [draftGroup, ...filteredGroups] : filteredGroups), [draftGroup, filteredGroups]);
   const creationAnchoredGroups = useMemo(
@@ -377,7 +388,12 @@ export function ChallengePlanPage() {
     [creationAnchoredGroups, objectiveInteractionAnchor],
   );
   const commentCounts = useMemo(() => commentCountsByTarget(challengeState.comments), [challengeState.comments]);
-  const hasActiveFilters = cycleFilter !== "all" || effectiveMemberFilter !== "all" || statusFilter !== "all";
+  const hasContentFilters = cycleFilter !== "all" || effectiveMemberFilter !== "all" || statusFilter !== "all";
+  const hasActiveFilters = hasContentFilters || projectFilter !== "all";
+  const visibleProjects = useMemo(
+    () => projectsForChallengeTree(challengeState.projects, displayedGroups, hasContentFilters, projectFilter),
+    [challengeState.projects, displayedGroups, hasContentFilters, projectFilter],
+  );
   const emptyText = hasActiveFilters
     ? "没有符合筛选条件的挑战目标。"
     : showAll
@@ -394,6 +410,11 @@ export function ChallengePlanPage() {
       setMemberFilter("all");
     }
   }, [canFilterByMember, memberFilter, memberOptions]);
+  useEffect(() => {
+    if (projectFilter !== "all" && projectFilter !== "unassigned" && !challengeState.projects.some((project) => project.id === projectFilter)) {
+      setProjectFilter("all");
+    }
+  }, [challengeState.projects, projectFilter]);
   useEffect(() => {
     if (!listContainsAnchoredItem(creationAnchoredGroups, objectiveInteractionAnchor, objectiveGroupId)) {
       setObjectiveInteractionAnchor(null);
@@ -487,13 +508,18 @@ export function ChallengePlanPage() {
       }
 
       setObjectiveCreationSession((current) =>
-        beginObjectiveCreationSession(current, { cycle: cycleFilter, member: memberFilter, scope, status: statusFilter }, normalizedProject),
+        beginObjectiveCreationSession(
+          current,
+          { cycle: cycleFilter, member: memberFilter, project: projectFilter, scope, status: statusFilter },
+          normalizedProject,
+        ),
       );
       setEditingTarget(null);
       clearChildCreation();
       if (canShowAllChallenges) setScope("all");
       setCycleFilter("all");
       setMemberFilter("all");
+      setProjectFilter(normalizedProject.projectId ?? "unassigned");
       setStatusFilter("unassigned");
     },
     [
@@ -504,6 +530,7 @@ export function ChallengePlanPage() {
       memberFilter,
       notify,
       objectiveCreationSession.status,
+      projectFilter,
       scope,
       statusFilter,
     ],
@@ -526,12 +553,13 @@ export function ChallengePlanPage() {
     if (cycleFilter !== "all") setCycleFilter("all");
     if (memberFilter !== "all") setMemberFilter("all");
     if (statusFilter !== "all") setStatusFilter("all");
+    if (projectFilter !== "all") setProjectFilter("all");
 
     const parentActionId = parentActionIdForLinkedSubAction(linkedChallengeTarget, challengeState) ?? parentActionIdForLinkedSubAction(linkedChallengeTarget, state);
     if (parentActionId) {
       setCollapsedActionIds((items) => (items.has(parentActionId) ? withoutItem(items, parentActionId) : items));
     }
-  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, memberFilter, scope, state, statusFilter]);
+  }, [canShowAllChallenges, challengeState, cycleFilter, linkedChallengeTarget, memberFilter, projectFilter, scope, state, statusFilter]);
 
   useEffect(() => {
     if (!linkedChallengeTarget) return undefined;
@@ -787,6 +815,7 @@ export function ChallengePlanPage() {
     setScope(returnContext.scope);
     setCycleFilter(returnContext.cycle);
     setMemberFilter(returnContext.member);
+    setProjectFilter(returnContext.project);
     setStatusFilter(returnContext.status);
   }, []);
 
@@ -836,6 +865,28 @@ export function ChallengePlanPage() {
     setTitleEditOverlays([]);
     setObjectiveInteractionAnchor(null);
     setStatusFilter(next);
+  };
+
+  const updateProjectFilter = (next: ChallengeProjectFilter) => {
+    setObjectiveCreationSession(clearSubmittedObjectiveCreation);
+    setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
+    setObjectiveInteractionAnchor(null);
+    setProjectFilter(next);
+  };
+
+  const createProjectAndSelect = async (name: string) => {
+    const project = await createProject({ name });
+    if (!project) return null;
+    setObjectiveCreationSession(clearSubmittedObjectiveCreation);
+    setChildCreationSession(clearChildCreationSession);
+    setTitleEditOverlays([]);
+    setObjectiveInteractionAnchor(null);
+    setCycleFilter("all");
+    setMemberFilter("all");
+    setProjectFilter(project.id);
+    setStatusFilter("all");
+    return project;
   };
 
   const createChildDraft = (target: ChallengeTarget, title: string, context: TitleSubmissionContext) => {
@@ -1168,14 +1219,19 @@ export function ChallengePlanPage() {
       {!showAll && <PendingChallengeApplicationsPanel applications={challengeState.pendingChallengeApplications} />}
       <ChallengeToolbar
         canShowAll={canShowAllChallenges}
+        canManageProjects={currentUser?.role === "admin"}
         cycle={cycleFilter}
         cycleOptions={cycleOptions}
         member={memberFilter}
         memberOptions={memberOptions}
+        onCreateProject={createProjectAndSelect}
         onCycleChange={updateCycleFilter}
         onMemberChange={updateMemberFilter}
+        onProjectChange={updateProjectFilter}
         onScopeChange={updateScope}
         onStatusChange={updateStatusFilter}
+        project={projectFilter}
+        projectOptions={projectOptions}
         showMemberFilter={canFilterByMember}
         scope={scope}
         status={statusFilter}
@@ -1252,6 +1308,7 @@ export function ChallengePlanPage() {
         now={now}
         projects={challengeState.projects}
         scope={scope}
+        visibleProjects={visibleProjects}
       />
 
       {commentTarget && (
@@ -1355,4 +1412,26 @@ function withoutItem<T>(items: Set<T>, item: T) {
 
 function objectiveGroupId(group: ObjectiveNode) {
   return group.objective.id;
+}
+
+function projectsForChallengeTree(
+  projects: readonly OrfProject[],
+  groups: readonly ObjectiveNode[],
+  hasContentFilters: boolean,
+  projectFilter: ChallengeProjectFilter,
+) {
+  if (projectFilter === "unassigned") return [];
+
+  const visibleProjectIds = new Set(
+    groups
+      .map((group) => group.objective.projectId?.trim())
+      .filter((projectId): projectId is string => Boolean(projectId)),
+  );
+
+  if (projectFilter !== "all") {
+    return projects.filter((project) => project.id === projectFilter && (!hasContentFilters || visibleProjectIds.has(project.id)));
+  }
+
+  if (!hasContentFilters) return [...projects];
+  return projects.filter((project) => visibleProjectIds.has(project.id));
 }

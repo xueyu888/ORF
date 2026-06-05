@@ -1,41 +1,56 @@
-import { CalendarDays, Filter, UserRound } from "lucide-react";
-import { FantasySelectMenu } from "../../../components/FantasySelectMenu";
+import { CalendarDays, Filter, FolderKanban, Plus, UserRound } from "lucide-react";
+import { useState } from "react";
+import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
 import {
   challengeStatusFilterOptions,
   type ChallengeCycleFilter,
   type ChallengeMemberFilter,
   type ChallengeMemberOption,
+  type ChallengeProjectFilter,
   type ChallengeStatusFilter,
 } from "../model/challengeFilters";
 import type { ChallengeScope } from "../model/types";
 
 export function ChallengeToolbar({
   canShowAll,
+  canManageProjects,
   cycle,
   cycleOptions,
   member,
   memberOptions,
+  onCreateProject,
   onScopeChange,
   onCycleChange,
   onMemberChange,
+  onProjectChange,
   onStatusChange,
+  project,
+  projectOptions,
   showMemberFilter,
   scope,
   status,
 }: {
   canShowAll: boolean;
+  canManageProjects: boolean;
   cycle: ChallengeCycleFilter;
   cycleOptions: string[];
   member: ChallengeMemberFilter;
   memberOptions: ChallengeMemberOption[];
+  onCreateProject: (name: string) => Promise<{ id: string } | null>;
   onScopeChange: (scope: ChallengeScope) => void;
   onCycleChange: (cycle: ChallengeCycleFilter) => void;
   onMemberChange: (member: ChallengeMemberFilter) => void;
+  onProjectChange: (project: ChallengeProjectFilter) => void;
   onStatusChange: (status: ChallengeStatusFilter) => void;
+  project: ChallengeProjectFilter;
+  projectOptions: Array<FantasySelectOption<ChallengeProjectFilter>>;
   showMemberFilter: boolean;
   scope: ChallengeScope;
   status: ChallengeStatusFilter;
 }) {
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
   const cycleSelectOptions = [
     { label: "全部周期", value: "all", alwaysVisible: true },
     ...cycleOptions.map((item) => ({ label: item, value: item })),
@@ -44,11 +59,67 @@ export function ChallengeToolbar({
     { label: "全部成员", value: "all", alwaysVisible: true },
     ...memberOptions,
   ];
+  const submitProject = async () => {
+    const value = newProjectName.trim();
+    if (!value) return;
+    setCreating(true);
+    try {
+      const createdProject = await onCreateProject(value);
+      if (createdProject) {
+        setNewProjectName("");
+        setCreateOpen(false);
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <div className="orf-task-toolbar">
       <ScopeTabs canShowAll={canShowAll} onChange={onScopeChange} value={scope} />
       <div className="orf-task-toolbar-actions">
+        {canManageProjects && (
+          createOpen ? (
+            <form
+              className="orf-toolbar-project-create"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitProject();
+              }}
+            >
+              <input
+                aria-label="新项目名称"
+                disabled={creating}
+                onChange={(event) => setNewProjectName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== "Escape") return;
+                  setNewProjectName("");
+                  setCreateOpen(false);
+                }}
+                placeholder="项目名"
+                value={newProjectName}
+              />
+              <button aria-label="创建项目" disabled={creating || !newProjectName.trim()} type="submit">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+              </button>
+            </form>
+          ) : (
+            <button className="orf-toolbar-project-create-button orf-floating-control" type="button" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              项目
+            </button>
+          )
+        )}
+        <FantasySelectMenu
+          ariaLabel="挑战项目"
+          className="orf-filter-chip orf-project-filter-chip"
+          leadingIcon={<FolderKanban className="h-4 w-4" />}
+          onChange={onProjectChange}
+          options={projectOptions}
+          searchable
+          searchPlaceholder="搜索项目"
+          value={project}
+        />
         <FantasySelectMenu
           ariaLabel="挑战周期"
           className="orf-filter-chip"

@@ -6191,127 +6191,75 @@ body[data-dragging-floating="true"] {
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.28);
 }
 
-.orf-project-nav {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 1px 2px 6px;
-  scrollbar-width: thin;
-}
-
-.orf-project-nav-item {
-  display: grid;
-  grid-template-columns: 15px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
+.orf-project-filter-chip {
   min-width: 132px;
-  max-width: 214px;
-  height: 32px;
-  padding: 0 9px;
-  border: 1px solid rgba(126, 151, 178, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 251, 239, 0.38);
+}
+
+.orf-toolbar-project-create-button,
+.orf-toolbar-project-create {
+  height: 34px;
+  border: 1px solid rgba(80, 138, 190, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.48);
   color: var(--orf-text-primary);
-  box-shadow: none;
-  transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease;
+  box-shadow: 0 8px 18px rgba(48, 85, 92, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.68);
 }
 
-.orf-project-nav-item:hover {
-  border-color: rgba(var(--orf-project-accent, 80, 138, 190), 0.32);
-  background: rgba(255, 251, 239, 0.62);
-  color: rgb(var(--orf-project-accent-deep, 35, 73, 117));
-}
-
-.orf-project-nav-item svg {
-  color: rgb(var(--orf-project-accent-deep, 35, 73, 117));
-}
-
-.orf-project-nav-name {
-  overflow: hidden;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.orf-project-nav-count {
-  color: var(--orf-text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.orf-project-create {
-  display: grid;
-  grid-template-columns: minmax(96px, 1fr) 28px;
+.orf-toolbar-project-create-button {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-width: 142px;
-  height: 32px;
-  padding: 0 4px 0 9px;
-  border: 1px solid rgba(126, 151, 178, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 251, 239, 0.38);
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
 }
 
-.orf-project-create-input {
+.orf-toolbar-project-create-button:hover {
+  border-color: rgba(80, 138, 190, 0.34);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.orf-toolbar-project-create {
+  display: grid;
+  width: 158px;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px 0 12px;
+}
+
+.orf-toolbar-project-create input {
   min-width: 0;
-  height: 26px;
+  height: 28px;
   border: 0;
   background: transparent;
   color: var(--orf-text-primary);
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 12px;
+  font-weight: 820;
   outline: none;
 }
 
-.orf-project-create-input::placeholder {
-  color: var(--orf-text-muted);
+.orf-toolbar-project-create input::placeholder {
+  color: #7a8898;
 }
 
-.orf-project-create-button {
+.orf-toolbar-project-create button {
   display: inline-flex;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(126, 151, 178, 0.22);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.42);
-  color: #526376;
-  cursor: pointer;
+  border: 1px solid rgba(80, 138, 190, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.58);
+  color: #2c5e8d;
 }
 
-.orf-project-create-button:disabled {
-  color: var(--orf-text-muted);
+.orf-toolbar-project-create button:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.orf-project-create-collapsed {
-  display: inline-flex;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  border: 1px solid rgba(126, 151, 178, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 251, 239, 0.38);
-  color: var(--orf-text-primary);
-  padding: 0 10px;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.orf-project-create-collapsed:hover {
-  border-color: rgba(126, 151, 178, 0.32);
-  background: rgba(255, 251, 239, 0.62);
+  opacity: 0.52;
 }
 
 .orf-project-section {
@@ -7234,11 +7182,6 @@ body[data-dragging-floating="true"] {
 
 .orf-challenge-workbench .orf-project-title {
   font-size: 14px;
-}
-
-.orf-challenge-workbench .orf-project-nav-item {
-  min-width: 128px;
-  height: 32px;
 }
 
 .orf-challenge-workbench .orf-objective-panel {

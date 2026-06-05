@@ -123,6 +123,7 @@ export function ChallengeTree({
   now,
   projects,
   scope,
+  visibleProjects,
 }: {
   emptyText: string;
   groups: ObjectiveNode[];
@@ -130,16 +131,12 @@ export function ChallengeTree({
   now: Date;
   projects: OrfProject[];
   scope: ChallengeScope;
+  visibleProjects: OrfProject[];
 }) {
-  const projectGroups = groupChallengeGroupsByProject(groups, projects);
+  const projectGroups = groupChallengeGroupsByProject(groups, visibleProjects);
 
   return (
     <div className="grid gap-5">
-      <ProjectNavigator
-        canManageProjects={handlers.canManageProjects}
-        onCreateProject={handlers.onCreateProject}
-        projects={projectGroups}
-      />
       {projectGroups.map((project, index) => (
         <div
           key={project.id}
@@ -179,81 +176,8 @@ export function ChallengeTree({
           </div>
         </div>
       ))}
-      {groups.length === 0 && projects.length === 0 && <div className="orf-card orf-card-padding text-center text-sm orf-text-secondary">{emptyText}</div>}
+      {groups.length === 0 && visibleProjects.length === 0 && <div className="orf-card orf-card-padding text-center text-sm orf-text-secondary">{emptyText}</div>}
     </div>
-  );
-}
-
-function ProjectNavigator({
-  canManageProjects,
-  onCreateProject,
-  projects,
-}: {
-  canManageProjects: boolean;
-  onCreateProject: (name: string) => Promise<OrfProject | null>;
-  projects: ObjectiveProjectGroup[];
-}) {
-  const [creating, setCreating] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("");
-
-  const submitProject = async () => {
-    const value = name.trim();
-    if (!value) return;
-    setCreating(true);
-    const project = await onCreateProject(value);
-    setCreating(false);
-    if (project) {
-      setName("");
-      setCreateOpen(false);
-      window.requestAnimationFrame(() => scrollProjectIntoView(project.id));
-    }
-  };
-
-  return (
-    <nav className="orf-project-nav" aria-label="项目目标聚合导航">
-      {projects.map((project, index) => (
-        <button
-          key={project.id}
-          className="orf-project-nav-item"
-          style={projectAccentStyle(project, index)}
-          type="button"
-          onClick={() => scrollProjectIntoView(project.id)}
-        >
-          <FolderKanban className="h-4 w-4" aria-hidden="true" />
-          <span className="orf-project-nav-name">{project.name}</span>
-          <span className="orf-project-nav-count">{project.objectiveCount} 目标</span>
-        </button>
-      ))}
-      {canManageProjects && (
-        createOpen ? (
-          <form
-            className="orf-project-create"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitProject();
-            }}
-          >
-            <input
-              aria-label="新项目名称"
-              className="orf-project-create-input"
-              disabled={creating}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="项目名"
-              value={name}
-            />
-            <button className="orf-project-create-button" disabled={creating || !name.trim()} type="submit">
-              <Plus className="h-4 w-4" aria-hidden="true" />
-            </button>
-          </form>
-        ) : (
-          <button className="orf-project-create-collapsed" type="button" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            项目
-          </button>
-        )
-      )}
-    </nav>
   );
 }
 
@@ -313,10 +237,6 @@ function ProjectHeader({
       </div>
     </div>
   );
-}
-
-function scrollProjectIntoView(projectId: string) {
-  document.getElementById(projectSectionDomId(projectId))?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function projectSectionDomId(projectId: string) {

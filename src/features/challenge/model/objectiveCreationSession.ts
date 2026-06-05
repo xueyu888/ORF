@@ -1,6 +1,6 @@
 import type { Objective } from "../../../types/orf";
 import { applyListItemAnchor, createListItemAnchor, type ListItemAnchor } from "../../interaction/listItemAnchor";
-import type { ChallengeCycleFilter, ChallengeMemberFilter, ChallengeStatusFilter } from "./challengeFilters";
+import type { ChallengeCycleFilter, ChallengeMemberFilter, ChallengeProjectFilter, ChallengeStatusFilter } from "./challengeFilters";
 import type { ChallengeScope, ObjectiveNode } from "./types";
 
 export const draftObjectiveId = "draft-objective";
@@ -8,6 +8,7 @@ export const draftObjectiveId = "draft-objective";
 export type DraftReturnContext = {
   cycle: ChallengeCycleFilter;
   member: ChallengeMemberFilter;
+  project: ChallengeProjectFilter;
   scope: ChallengeScope;
   status: ChallengeStatusFilter;
 };
