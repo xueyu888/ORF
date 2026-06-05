@@ -355,6 +355,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     objectiveTrialReviews: objectiveTrialReviewItems,
     objectiveAlignmentRequests: objectiveAlignmentRequestItems,
     pointLedger: pointLedgerItems,
+    pendingChallengeApplications: [],
   };
 }
 

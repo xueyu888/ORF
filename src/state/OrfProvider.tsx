@@ -86,6 +86,7 @@ interface OrfContextValue {
   clearAllNotifications: () => Promise<boolean>;
   createObjective: (input: CreateObjectiveInput) => Promise<Objective | null>;
   createProject: (input: { name: string }) => Promise<OrfState["projects"][number] | null>;
+  deleteProject: (projectId: string) => Promise<boolean>;
   setObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
   createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;

@@ -4,6 +4,8 @@ import type { BountyItem } from "../model/bountyHallTypes";
 
 export function ParticipationPreview({ currentUserId, currentUserName, item }: { currentUserId: string; currentUserName: string; item: BountyItem }) {
   const applicationReasons = item.applications.filter((application) => application.status !== "declined" && application.reason?.trim());
+  const assignedChallengers = item.assignedChallengers.filter((name) => !item.challengers.includes(name));
+  const hasParticipationState = item.challengers.length > 0 || assignedChallengers.length > 0 || item.pendingApplications.length > 0;
 
   return (
     <div className="bounty-participants">
@@ -11,6 +13,12 @@ export function ParticipationPreview({ currentUserId, currentUserName, item }: {
         <div className="bounty-participant-line">
           <span>挑战者</span>
           <BountyAvatarStack currentUserName={currentUserName} names={item.challengers} />
+        </div>
+      ) : null}
+      {assignedChallengers.length > 0 ? (
+        <div className="bounty-participant-line">
+          <span>待响应征召</span>
+          <BountyAvatarStack currentUserName={currentUserName} names={assignedChallengers} variant="recruitment" />
         </div>
       ) : null}
       {item.pendingApplications.length > 0 ? (
@@ -34,7 +42,7 @@ export function ParticipationPreview({ currentUserId, currentUserName, item }: {
           </div>
         </div>
       ) : null}
-      {item.challengers.length === 0 && item.pendingApplications.length === 0 && <span className="bounty-participants-empty">等待申请</span>}
+      {!hasParticipationState && <span className="bounty-participants-empty">等待申请</span>}
       {applicationReasons.length > 0 && (
         <div className="bounty-application-reasons" aria-label="申请理由">
           {applicationReasons.slice(0, 3).map((application) => (
@@ -49,12 +57,12 @@ export function ParticipationPreview({ currentUserId, currentUserName, item }: {
   );
 }
 
-function BountyAvatarStack({ currentUserName, names }: { currentUserName: string; names: string[] }) {
+function BountyAvatarStack({ currentUserName, names, variant }: { currentUserName: string; names: string[]; variant?: "recruitment" }) {
   if (names.length === 0) return null;
   const orderedNames = orderCurrentUserFirst(names, currentUserName);
 
   return (
-    <div className="bounty-avatar-stack">
+    <div className="bounty-avatar-stack" data-variant={variant}>
       {orderedNames.slice(0, 4).map((name, index) => (
         <span
           key={name}

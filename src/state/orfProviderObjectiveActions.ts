@@ -110,6 +110,23 @@ export function useOrfProviderObjectiveActions({
           return null;
         }
       },
+      deleteProject: async (projectId: string) => {
+        if (currentUser?.role !== "admin") {
+          notify("只有指挥官可以删除项目");
+          return false;
+        }
+
+        try {
+          await apiRequest(`/api/projects/${encodeURIComponent(projectId)}`, { method: "DELETE" });
+          await refreshTaskManagementData();
+          notify("项目已删除，目标已移到未归属");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "项目删除失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
       createObjective: async (input: CreateObjectiveInput) => {
         if (!hasPermission(currentUser, state.permissionRules, "objective.create")) {
           notify("没有新建目标权限");

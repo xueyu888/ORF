@@ -96,6 +96,10 @@ export function bountyMutationFailureMessage(error: unknown, fallback: string) {
         return "你已经申请过这个目标";
       }
 
+      if (error.message === "Objective already recruited this challenger") {
+        return "你已被征召，请直接接受挑战";
+      }
+
       if (error.message === "Objective final due date is too close to start confirmation") {
         return "目标截止时间太近，不能接受征召";
       }

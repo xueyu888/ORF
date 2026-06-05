@@ -632,18 +632,24 @@ function extractCommentMentionUserIds(body: string) {
   return Array.from(new Set(userIds));
 }
 
+function uniqueNotificationUserIds(userIds: Array<string | null | undefined>) {
+  const normalized = userIds.map((userId) => userId?.trim()).filter((userId): userId is string => Boolean(userId));
+  return Array.from(new Set(normalized));
+}
+
 async function notifyMentionedUsersOfComment(input: {
   actorName: string;
   actorUserId: string;
   body: string;
   commentMessageId: string;
   commentThreadId: string;
+  mentionedUserIds?: string[];
   targetId: string;
   targetTitle: string;
   targetType: CommentTargetType;
   teamId: string;
 }) {
-  const mentionedUserIds = extractCommentMentionUserIds(input.body);
+  const mentionedUserIds = input.mentionedUserIds ?? extractCommentMentionUserIds(input.body);
   if (mentionedUserIds.length === 0) {
     return;
   }
@@ -667,6 +673,90 @@ async function notifyMentionedUsersOfComment(input: {
     targetType: "comment",
     teamId: input.teamId,
     title: "评论提到了你",
+  });
+}
+
+async function getFeedbackCommentNotificationRecipients(input: {
+  actorUserId: string;
+  excludedUserIds: string[];
+  feedbackId: string;
+  teamId: string;
+}) {
+  const [target] = await db
+    .select({
+      createdBy: feedback.createdBy,
+      ownerUserId: feedback.ownerUserId,
+      teamId: feedback.teamId,
+    })
+    .from(feedback)
+    .where(eq(feedback.id, input.feedbackId))
+    .limit(1);
+  if (!target || target.teamId !== input.teamId) {
+    return [];
+  }
+
+  const participantRows = await db
+    .select({ authorUserId: commentMessages.authorUserId })
+    .from(commentThreads)
+    .innerJoin(commentMessages, eq(commentMessages.threadId, commentThreads.id))
+    .where(
+      and(
+        eq(commentThreads.teamId, input.teamId),
+        eq(commentThreads.targetType, "feedback"),
+        eq(commentThreads.targetId, input.feedbackId),
+      ),
+    );
+  const participantUserIds = participantRows.map((row) => row.authorUserId);
+  const relatedUserIds = uniqueNotificationUserIds([target.createdBy, target.ownerUserId, ...participantUserIds]);
+  const [adminUserIds, activeRelatedUserIds] = await Promise.all([
+    getActiveAdminNotificationRecipients(input.teamId),
+    getActiveMemberNotificationRecipientsByIds(input.teamId, relatedUserIds),
+  ]);
+
+  const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
+  return uniqueNotificationUserIds([...adminUserIds, ...activeRelatedUserIds]).filter(
+    (userId) => !excludedUserIds.has(userId),
+  );
+}
+
+async function notifyFeedbackParticipantsOfComment(input: {
+  actorName: string;
+  actorUserId: string;
+  commentMessageId: string;
+  commentThreadId: string;
+  mentionedUserIds: string[];
+  targetId: string;
+  targetTitle: string;
+  teamId: string;
+}) {
+  const recipientUserIds = await getFeedbackCommentNotificationRecipients({
+    actorUserId: input.actorUserId,
+    excludedUserIds: input.mentionedUserIds,
+    feedbackId: input.targetId,
+    teamId: input.teamId,
+  });
+  if (recipientUserIds.length === 0) {
+    return;
+  }
+
+  await createNotifications({
+    actorName: input.actorName,
+    actorUserId: input.actorUserId,
+    body: `${input.actorName} 回复了反馈「${input.targetTitle}」。`,
+    kind: "feedback.commented",
+    metadata: {
+      commentMessageId: input.commentMessageId,
+      commentThreadId: input.commentThreadId,
+      targetId: input.targetId,
+      targetTitle: input.targetTitle,
+      targetType: "feedback",
+    },
+    recipientUserIds,
+    targetHref: commentTargetHref("feedback", input.targetId),
+    targetId: input.targetId,
+    targetType: "feedback",
+    teamId: input.teamId,
+    title: "反馈有新回复",
   });
 }
 
@@ -741,6 +831,46 @@ export async function createProject(input: CreateProjectInput, context: { scope:
   });
 
   return { status: "ok" as const, project };
+}
+
+export async function deleteProject(projectId: string, context: { scope: RuntimeScope; userId: string }) {
+  const nextProjectId = projectId.trim();
+  if (!nextProjectId) return { status: "notFound" as const };
+
+  const storageScopeId = runtimeScopeStorageId(context.scope);
+  const deletedProject = await db.transaction(async (tx) => {
+    const [project] = await tx
+      .select({
+        id: projects.id,
+        name: projects.name,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+      })
+      .from(projects)
+      .where(and(eq(projects.id, nextProjectId), eq(projects.teamId, storageScopeId)))
+      .limit(1)
+      .for("update");
+    if (!project) return null;
+
+    await tx
+      .update(objectives)
+      .set({ projectId: null, updatedAt: today(), updatedBy: context.userId })
+      .where(and(eq(objectives.teamId, storageScopeId), eq(objectives.projectId, nextProjectId)));
+    await tx.delete(projects).where(and(eq(projects.id, nextProjectId), eq(projects.teamId, storageScopeId)));
+    return project;
+  });
+
+  if (!deletedProject) return { status: "notFound" as const };
+
+  publishOrfDataInvalidation({
+    actorUserId: context.userId,
+    models: ["taskManagement"],
+    reason: "project.changed",
+    target: { id: nextProjectId, type: "project" },
+    teamId: storageScopeId,
+  });
+
+  return { status: "deleted" as const, project: deletedProject };
 }
 
 export async function createObjective(input: CreateObjectiveInput, context: { scope: RuntimeScope; userId: string }): Promise<Objective | null> {
@@ -984,6 +1114,7 @@ export type ApplyObjectiveChallengeOutcome =
   | { status: "applied"; objective: Objective }
   | { status: "alreadyApplied" }
   | { status: "alreadyAccepted"; challengers: string[] }
+  | { status: "alreadyRecruited" }
   | { status: "forbidden" }
   | { status: "invalidReason" }
   | { status: "closed" }
@@ -1016,6 +1147,10 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
     const challengers = uniqueParticipantNames(objective.challengers ?? []);
     if (isObjectiveChallenger({ challengerUserIds }, actor.id)) {
       return { status: "alreadyAccepted" as const, challengers };
+    }
+    const assignedChallengerUserIds = await assignedChallengerUserIdsForRow(tx, objective.teamId, objective.assignedChallengerUserIds ?? [], objective.assignedChallengers ?? []);
+    if (isObjectiveAssignedChallenger({ assignedChallengerUserIds, challengerUserIds }, actor.id)) {
+      return { status: "alreadyRecruited" as const };
     }
     if (objectiveClosedForChallengeEntry(objective) || !canApplyForObjectiveChallenge(objective)) {
       return { status: "closed" as const };
@@ -2190,6 +2325,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
   const targetTitle = target.title;
   const createdAt = nowIso();
   const attachmentIds = extractCommentAttachmentIds(body);
+  const mentionedUserIds = extractCommentMentionUserIds(body);
   const createdComment = await db.transaction(async (tx) => {
     if (target.kind === "workItem") {
       const [lockedObjective] = await tx
@@ -2366,11 +2502,25 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     body,
     commentMessageId: createdComment.messageId,
     commentThreadId: createdComment.threadId,
+    mentionedUserIds,
     targetId: input.targetId,
     targetTitle,
     targetType: input.targetType,
     teamId: target.storageScopeId,
   });
+
+  if (input.targetType === "feedback") {
+    await notifyFeedbackParticipantsOfComment({
+      actorName: actor.name,
+      actorUserId: actor.id,
+      commentMessageId: createdComment.messageId,
+      commentThreadId: createdComment.threadId,
+      mentionedUserIds,
+      targetId: input.targetId,
+      targetTitle,
+      teamId: target.storageScopeId,
+    });
+  }
 
   publishOrfDataInvalidation({
     actorUserId: actor.id,

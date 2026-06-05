@@ -15,6 +15,7 @@ import {
   createObjective,
   createObjectiveAlignmentRequest,
   createProject,
+  deleteProject,
   deleteObjective,
   freezeObjectiveAfterReestimate,
   publishObjective,
@@ -37,6 +38,7 @@ const requiredTextSchema = z.string().trim().min(1);
 const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
 const optionalNullableTextSchema = z.string().trim().transform((value) => value || null).nullable().optional();
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
+const projectParamsSchema = z.object({ projectId: z.string().min(1) });
 const trialReviewParamsSchema = objectiveParamsSchema.extend({ trialReviewId: z.string().min(1) });
 const alignmentRequestParamsSchema = objectiveParamsSchema.extend({ alignmentRequestId: z.string().min(1) });
 const applicationParamsSchema = objectiveParamsSchema.extend({ applicationId: z.string().min(1) });
@@ -242,6 +244,21 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     }
     if (outcome.status === "duplicate") {
       return reply.code(409).send({ error: "Project already exists", project: outcome.project });
+    }
+
+    return { project: outcome.project };
+  });
+
+  app.delete("/api/projects/:projectId", async (request, reply) => {
+    const params = projectParamsSchema.parse(request.params);
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const outcome = await deleteProject(params.projectId, { scope: context.scope, userId: context.user.id });
+    if (outcome.status === "notFound") {
+      return reply.code(404).send({ error: "Project not found" });
     }
 
     return { project: outcome.project };
@@ -465,6 +482,9 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
     }
     if (outcome.status === "alreadyAccepted") {
       return reply.code(409).send({ error: "Objective already includes this challenger", challengers: outcome.challengers });
+    }
+    if (outcome.status === "alreadyRecruited") {
+      return reply.code(409).send({ error: "Objective already recruited this challenger" });
     }
     if (outcome.status === "alreadyApplied") {
       return reply.code(409).send({ error: "Challenge application already exists" });

@@ -18,8 +18,11 @@ export type NotificationKind =
   | "objective.alignment.requested"
   | "objective.alignment.reviewed"
   | "objective.loot.submitted"
+  | "feedback.created"
+  | "feedback.commented"
+  | "feedback.status.changed"
   | "comment.mention.created";
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";

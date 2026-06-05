@@ -13,11 +13,13 @@ import type { ObjectiveNode } from "./types";
 
 export type ChallengeCycleFilter = "all" | string;
 export type ChallengeMemberFilter = "all" | string;
+export type ChallengeProjectFilter = "all" | "unassigned" | string;
 export type ChallengeStatusFilter = "all" | "unassigned" | "pendingReestimate" | "active" | "review" | "settled";
 
 export interface ChallengeFilters {
   cycle: ChallengeCycleFilter;
   member: ChallengeMemberFilter;
+  project: ChallengeProjectFilter;
   status: ChallengeStatusFilter;
 }
 
@@ -59,7 +61,14 @@ export function filterChallengeGroups(groups: readonly ObjectiveNode[], filters:
   return groups
     .filter((group) => filters.cycle === "all" || group.objective.cycle === filters.cycle)
     .filter((group) => filters.member === "all" || isObjectiveChallenger(group.objective, filters.member))
+    .filter((group) => challengeGroupMatchesProject(group, filters.project))
     .filter((group) => challengeGroupMatchesStatus(group, filters.status));
+}
+
+function challengeGroupMatchesProject(group: ObjectiveNode, project: ChallengeProjectFilter): boolean {
+  if (project === "all") return true;
+  const projectId = group.objective.projectId?.trim() || null;
+  return project === "unassigned" ? projectId === null : projectId === project;
 }
 
 function challengeGroupMatchesStatus(group: ObjectiveNode, status: ChallengeStatusFilter): boolean {

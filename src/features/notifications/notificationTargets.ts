@@ -9,6 +9,12 @@ const commentTargetTypeToChallengeTargetType: Record<string, ChallengeUrlTargetT
 };
 
 export function notificationTargetHref(notification: AppNotification) {
+  if (notification.targetType === "feedback" || notification.kind.startsWith("feedback.")) {
+    return notification.targetId
+      ? `/feedback/${encodeURIComponent(notification.targetId)}`
+      : notification.targetHref || "/feedback";
+  }
+
   if (notification.kind === "challenge.application.created" || notification.kind === "objective.challenge.accepted") {
     return challengePathForTarget({ id: notification.targetId, type: "objective" });
   }

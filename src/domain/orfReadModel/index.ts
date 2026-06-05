@@ -22,7 +22,15 @@ export type TaskManagementData = Pick<
   | "objectiveAlignmentRequests"
   | "pointLedger"
   | "projects"
->;
+> & {
+  pendingChallengeApplications: PendingChallengeApplication[];
+};
+
+export type PendingChallengeApplication = {
+  application: ChallengeApplication;
+  objective: Objective;
+  results: Result[];
+};
 
 export type CurrentUserAccessData = {
   user: OrfUser;
@@ -34,6 +42,7 @@ export type CurrentUserAccessData = {
 export type BountyHallItem = {
   applications: ChallengeApplication[];
   approvedApplicants: string[];
+  assignedChallengers: string[];
   challengers: string[];
   uncertaintyPoints: number;
   deadline: string;

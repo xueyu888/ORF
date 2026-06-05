@@ -36,6 +36,7 @@ export function canApplyToObjectiveChallengeEntry(
       canApplyForObjectiveChallenge(objective) &&
       !objectiveChallengeEntryClosed(objective) &&
       !isObjectiveChallenger(objective, actorUserId) &&
+      !isObjectiveAssignedChallenger(objective, actorUserId) &&
       !(objective.challengeApplications ?? []).some((application) => application.applicantUserId === actorUserId && application.status === "pending"),
   );
 }
