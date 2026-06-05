@@ -120,7 +120,7 @@ function defaultCycleLabel() {
 }
 
 function rowActionOwnsOpenMenu(openActionId: string, actionId: string) {
-  return openActionId === actionId || openActionId === `${actionId}:add`;
+  return openActionId === actionId || openActionId === `${actionId}:add` || openActionId === `${actionId}:project`;
 }
 
 function draftObjective(title: string, project: ObjectiveCreationProject): Objective {
