@@ -213,10 +213,31 @@ function filterComments(data: TaskManagementData, ids: {
   });
 }
 
+function pendingChallengeApplicationsForMember(data: TaskManagementData, memberUserId: string): TaskManagementData["pendingChallengeApplications"] {
+  const resultsByObjective = groupResultsByObjective(data.results);
+  return data.objectives
+    .flatMap((objective) => {
+      if (isObjectiveChallenger(objective, memberUserId)) return [];
+      return objective.challengeApplications
+        .filter((application) => application.status === "pending" && application.applicantUserId === memberUserId)
+        .map((application) => ({
+          application,
+          objective,
+          results: resultsByObjective.get(objective.id) ?? [],
+        }));
+    })
+    .sort((left, right) => applicationCreatedAt(right.application).localeCompare(applicationCreatedAt(left.application)));
+}
+
+function applicationCreatedAt(application: { createdAt?: string | null }) {
+  return application.createdAt ?? "";
+}
+
 export async function getMyChallengesData(memberUserId: string, includeAll = false, scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
   const data = await getTaskManagementData(scope);
   if (includeAll) return data;
 
+  const pendingChallengeApplications = pendingChallengeApplicationsForMember(data, memberUserId);
   const objectivesForMember = data.objectives.filter((objective) => isObjectiveChallenger(objective, memberUserId));
   const objectiveIds = new Set(objectivesForMember.map((objective) => objective.id));
   const resultsForMember = data.results.filter((result) => objectiveIds.has(result.objectiveId));
@@ -238,5 +259,6 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger,
+    pendingChallengeApplications,
   };
 }

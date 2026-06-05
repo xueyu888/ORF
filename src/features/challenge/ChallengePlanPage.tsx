@@ -3,6 +3,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 import { CommentPanel, type CommentReplyInput } from "./comments/CommentPanel";
 import { ChallengeToolbar } from "./components/ChallengeToolbar";
 import { ChallengeTree } from "./components/ChallengeTree";
+import { PendingChallengeApplicationsPanel } from "./components/PendingChallengeApplicationsPanel";
 import { TeamDashboard } from "./components/TeamDashboard";
 import { canShowFrontend } from "../../config/frontendVisibility";
 import { hasPermission } from "../../config/permissions";
@@ -14,7 +15,7 @@ import type { ResultDetailsInput } from "../../domain/orfResultDetails";
 import type { Objective, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
-import { useChallengeReadModelData } from "./hooks/useChallengeReadModelData";
+import { useChallengeReadModelData, type ChallengeReadModelState } from "./hooks/useChallengeReadModelData";
 import { challengeLinkForTarget, parseChallengeTargetHash, type ChallengeUrlTarget } from "./model/challengeLinks";
 import { commentCountsByTarget, commentTargetForChallengeTarget } from "./model/challengeComments";
 import { canAccessDragItem, canAccessTarget, permissionDeniedMessage, permissionKeyForChallengeAction, resourceForDragItem, resourceForTarget } from "./model/challengePermissions";
@@ -297,8 +298,11 @@ export function ChallengePlanPage() {
   const baseChallengeState = useChallengeReadModelData({ readModelInvalidations, showAll, state });
   const temporaryChildRow = childCreationTemporaryRow(childCreationSession);
   const childOverlay = childCreationSubmittedOverlay(childCreationSession);
-  const challengeState = useMemo(
-    () => applyTaskCompletionOverlays(applyTitleEditOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), titleEditOverlays), completionOverlays),
+  const challengeState = useMemo<ChallengeReadModelState>(
+    () => ({
+      ...applyTaskCompletionOverlays(applyTitleEditOverlays(applyChildCreationOverlay(baseChallengeState, childOverlay), titleEditOverlays), completionOverlays),
+      pendingChallengeApplications: baseChallengeState.pendingChallengeApplications,
+    }),
     [baseChallengeState, childOverlay, completionOverlays, titleEditOverlays],
   );
   const clearChildCreation = () => setChildCreationSession(clearChildCreationSession);
@@ -1160,6 +1164,7 @@ export function ChallengePlanPage() {
       }}
     >
       {showAll && <TeamDashboard groups={filteredGroups} />}
+      {!showAll && <PendingChallengeApplicationsPanel applications={challengeState.pendingChallengeApplications} />}
       <ChallengeToolbar
         canShowAll={canShowAllChallenges}
         cycle={cycleFilter}
