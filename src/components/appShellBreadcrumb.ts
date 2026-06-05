@@ -2,6 +2,7 @@ const titleMap: Record<string, string> = {
   dashboard: "ORF 仪表盘",
   bounties: "悬赏大厅",
   tasks: "我的挑战",
+  chat: "聊天",
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",
   feedback: "反馈",
@@ -16,6 +17,10 @@ const titleMap: Record<string, string> = {
 };
 
 export function breadcrumb(pathname: string) {
+  if (/^\/chat(?:\/[^/]+)?\/?$/.test(pathname)) {
+    return "聊天";
+  }
+
   if (/^\/feedback\/[^/]+\/?$/.test(pathname)) {
     return "反馈 / Issue";
   }

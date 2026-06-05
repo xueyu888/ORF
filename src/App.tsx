@@ -10,6 +10,7 @@ const AIEvaluationPage = lazyNamed(() => import("./pages/AIEvaluationPage"), "AI
 const AuthPage = lazyNamed(() => import("./pages/AuthPage"), "AuthPage");
 const BountyHallPage = lazyNamed(() => import("./pages/BountyHallPage"), "BountyHallPage");
 const ChallengePlanPage = lazyNamed(() => import("./pages/TasksPage"), "ChallengePlanPage");
+const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
 const DashboardPage = lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage");
 const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage");
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
@@ -35,6 +36,8 @@ export function App() {
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
         <Route path="tasks/objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
+        <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
+        <Route path="chat/:channelId" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="fantasy-ui" element={<LazyRoute><FantasyUiPreviewPage /></LazyRoute>} />
         <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />

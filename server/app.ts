@@ -11,6 +11,7 @@ import { registerSettingsRoutes } from "./routes/settingsRoutes";
 import { registerNotificationRoutes } from "./routes/notificationRoutes";
 import { registerOrfReadRoutes } from "./routes/orfReadRoutes";
 import { registerCommentRoutes } from "./routes/commentRoutes";
+import { registerChatRoutes } from "./routes/chatRoutes";
 import { registerUserRoutes } from "./routes/userRoutes";
 import { registerUserAvatarRoutes } from "./users/avatar/avatarRoutes";
 import { registerPermissionRoutes } from "./routes/permissionRoutes";
@@ -37,7 +38,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
   await app.register(multipart, {
     limits: {
-      fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES,
+      fileSize: Math.max(env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, env.CHAT_FILE_UPLOAD_MAX_BYTES),
       files: 1,
     },
   });
@@ -93,6 +94,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerOrfReadRoutes(app);
   registerSettingsRoutes(app);
   registerCommentRoutes(app);
+  registerChatRoutes(app);
   registerFeedbackRoutes(app);
   registerOrfObjectiveRoutes(app);
   registerOrfResultRoutes(app);

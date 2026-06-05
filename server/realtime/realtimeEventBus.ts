@@ -1,5 +1,5 @@
 import type { AppNotification } from "../../src/types/orf";
-import type { OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../src/types/realtime";
+import type { ChatRealtimeEvent, OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../src/types/realtime";
 
 type RealtimeSubscriber = {
   id: string;
@@ -97,6 +97,20 @@ export function publishRealtimeReadModelInvalidation(
       createdAt,
     },
   });
+}
+
+export function publishRealtimeChatEvent(teamId: string, recipientUserIds: string[], event: Omit<ChatRealtimeEvent, "createdAt" | "id" | "kind"> & Partial<Pick<ChatRealtimeEvent, "createdAt" | "id">>) {
+  const createdAt = event.createdAt ?? nowIso();
+  const id = event.id ?? makeEventId("chat-event");
+  const payload: ChatRealtimeEvent = {
+    ...event,
+    id,
+    kind: "chat.event",
+    createdAt,
+  };
+  for (const userId of Array.from(new Set(recipientUserIds))) {
+    publishRealtimeEventToUser(teamId, userId, payload);
+  }
 }
 
 export function publishRealtimeEventToUser(teamId: string, userId: string, event: RealtimeEvent) {

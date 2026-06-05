@@ -246,6 +246,34 @@
       "when": 1780860000000,
       "tag": "0034_result_detail_single_source",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1780940000000,
+      "tag": "0035_orf_native_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1781020000000,
+      "tag": "0036_chat_message_collections",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1781021000000,
+      "tag": "0037_backfill_chat_member_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1781022000000,
+      "tag": "0038_mattermost_chat_import_mappings",
+      "breakpoints": true
     }
   ]
 }

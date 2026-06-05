@@ -24,6 +24,7 @@ const envSchema = z.object({
   OBJECT_STORAGE_SECRET_KEY: z.string().trim().min(1).default("orf-dev-minio-secret"),
   OBJECT_STORAGE_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
   OBJECT_STORAGE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
+  CHAT_FILE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 

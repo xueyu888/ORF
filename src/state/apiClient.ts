@@ -1,4 +1,18 @@
-import type { AppNotification, CommentAttachment, CommentTargetType, OrfState, OrfUser } from "../types/orf";
+import type {
+  AppNotification,
+  ChatAttachment,
+  ChatBootstrap,
+  ChatChannel,
+  ChatChannelType,
+  ChatMessage,
+  ChatSearchResult,
+  ChatThread,
+  ChatUser,
+  CommentAttachment,
+  CommentTargetType,
+  OrfState,
+  OrfUser,
+} from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
@@ -30,6 +44,15 @@ export type CommentAttachmentUploadResponse = {
   attachment: CommentAttachment;
   markdown: string;
 };
+export type ChatBootstrapResponse = ChatBootstrap;
+export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
+export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
+export type ChatNullableChannelResponse = { status?: "ok"; channel: ChatChannel | null };
+export type ChatMessageResponse = { status?: "ok"; message: ChatMessage };
+export type ChatThreadResponse = { status?: "ok"; thread: ChatThread };
+export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
+export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
+export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
 export type VisualBackgroundSwitchOrder = "sequential" | "random";
@@ -77,6 +100,8 @@ type ApiEnvelope<T> = {
   data: T;
 };
 
+export const API_AUTHENTICATION_EXPIRED_EVENT = "orf:api-authentication-expired";
+
 export class ApiError extends Error {
   status: number;
   path: string;
@@ -90,6 +115,10 @@ export class ApiError extends Error {
 }
 
 function apiErrorMessage(payload: unknown, status: number, path: string) {
+  if (status === 401 && !path.startsWith("/api/auth/")) {
+    return "登录已失效，请重新登录";
+  }
+
   if (payload && typeof payload === "object" && "error" in payload) {
     const error = (payload as { error?: unknown }).error;
     if (typeof error === "string" && error.trim()) {
@@ -102,6 +131,14 @@ function apiErrorMessage(payload: unknown, status: number, path: string) {
   }
 
   return `API ${status}: ${path}`;
+}
+
+function emitAuthenticationExpired(path: string, status: number) {
+  if (status !== 401 || path.startsWith("/api/auth/") || typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new CustomEvent(API_AUTHENTICATION_EXPIRED_EVENT, { detail: { path } }));
 }
 
 async function readErrorPayload(response: Response) {
@@ -127,6 +164,7 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const payload = await readErrorPayload(response);
+    emitAuthenticationExpired(path, response.status);
     throw new ApiError(response.status, path, apiErrorMessage(payload, response.status, path));
   }
 
@@ -188,6 +226,192 @@ export async function uploadCommentAttachment(input: { file: File; targetId: str
 export async function getCommentMentionableUsers(input: { targetId: string; targetType: CommentTargetType }) {
   const query = new URLSearchParams({ targetId: input.targetId, targetType: input.targetType });
   return apiJson<CommentMentionableUsersResponse>(`/api/comments/mentionable-users?${query.toString()}`);
+}
+
+export async function getChatBootstrap() {
+  return apiJson<ChatBootstrapResponse>("/api/chat/bootstrap");
+}
+
+export async function getChatMessages(input: { before?: string; channelId: string; limit?: number }) {
+  const query = new URLSearchParams();
+  if (input.before) query.set("before", input.before);
+  if (input.limit) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<ChatMessagesResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/messages${suffix}`);
+}
+
+export async function createChatChannel(input: {
+  displayName: string;
+  header?: string;
+  memberUserIds?: string[];
+  name?: string;
+  purpose?: string;
+  type: "public" | "private";
+}) {
+  return apiJson<ChatChannelResponse>("/api/chat/channels", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function openChatConversation(userIds: string[]) {
+  return apiJson<ChatChannelResponse>("/api/chat/direct", {
+    method: "POST",
+    body: JSON.stringify({ userIds }),
+  });
+}
+
+export async function updateChatChannelRequest(
+  channelId: string,
+  input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">> & {
+    favorite?: boolean;
+    muted?: boolean;
+    name?: string;
+  },
+) {
+  return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function archiveChatChannelRequest(channelId: string) {
+  return apiJson<{ status?: "ok"; channelId: string }>(`/api/chat/channels/${encodeURIComponent(channelId)}`, { method: "DELETE" });
+}
+
+export async function addChatChannelMembersRequest(channelId: string, userIds: string[]) {
+  return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/members`, {
+    method: "POST",
+    body: JSON.stringify({ userIds }),
+  });
+}
+
+export async function removeChatChannelMemberRequest(channelId: string, userId: string) {
+  return apiJson<ChatNullableChannelResponse>(
+    `/api/chat/channels/${encodeURIComponent(channelId)}/members/${encodeURIComponent(userId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function sendChatMessageRequest(input: {
+  attachmentIds?: string[];
+  body: string;
+  channelId: string;
+  parentMessageId?: string | null;
+  rootMessageId?: string | null;
+}) {
+  return apiJson<ChatMessageResponse & ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({
+      body: input.body,
+      attachmentIds: input.attachmentIds ?? [],
+      parentMessageId: input.parentMessageId ?? null,
+      rootMessageId: input.rootMessageId ?? null,
+    }),
+  });
+}
+
+export async function updateChatMessageRequest(input: { body: string; channelId: string; messageId: string }) {
+  return apiJson<ChatMessageResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ body: input.body }),
+    },
+  );
+}
+
+export async function deleteChatMessageRequest(input: { channelId: string; messageId: string }) {
+  return apiJson<ChatMessageResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function setChatReactionRequest(input: { channelId: string; emojiName: string; messageId: string; reacting: boolean }) {
+  const path = `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}/reactions`;
+  if (input.reacting) {
+    return apiJson<ChatMessageResponse>(path, {
+      method: "POST",
+      body: JSON.stringify({ emojiName: input.emojiName }),
+    });
+  }
+  return apiJson<ChatMessageResponse>(`${path}/${encodeURIComponent(input.emojiName)}`, { method: "DELETE" });
+}
+
+export async function setChatMessagePinRequest(input: { channelId: string; messageId: string; pinned: boolean }) {
+  return apiJson<ChatMessageResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}/pin`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ pinned: input.pinned }),
+    },
+  );
+}
+
+export async function setChatMessageSavedRequest(input: { channelId: string; messageId: string; saved: boolean }) {
+  return apiJson<ChatMessageResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}/save`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ saved: input.saved }),
+    },
+  );
+}
+
+export async function markChatChannelReadRequest(channelId: string) {
+  return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/read`, { method: "PATCH" });
+}
+
+export async function setChatChannelUnreadRequest(input: { channelId: string; messageId?: string }) {
+  return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/unread`, {
+    method: "PATCH",
+    body: JSON.stringify({ messageId: input.messageId ?? null }),
+  });
+}
+
+export async function publishChatTypingRequest(channelId: string) {
+  return apiJson<{ status?: "ok"; ok: true }>(`/api/chat/channels/${encodeURIComponent(channelId)}/typing`, { method: "POST" });
+}
+
+export async function getChatThread(rootMessageId: string) {
+  return apiJson<ChatThreadResponse>(`/api/chat/threads/${encodeURIComponent(rootMessageId)}`);
+}
+
+export async function setChatThreadFollowRequest(rootMessageId: string, following: boolean) {
+  return apiJson<ChatThreadResponse>(`/api/chat/threads/${encodeURIComponent(rootMessageId)}/follow`, {
+    method: "PATCH",
+    body: JSON.stringify({ following }),
+  });
+}
+
+export async function uploadChatAttachment(input: { channelId: string; file: File }) {
+  const formData = new FormData();
+  formData.set("channelId", input.channelId);
+  formData.set("file", input.file);
+  return apiJson<ChatAttachmentUploadResponse>("/api/chat/attachments", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function getChatMentionableUsers(channelId: string) {
+  return apiJson<ChatMentionableUsersResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/mentionable-users`);
+}
+
+export async function searchChat(input: { channelId?: string; q: string; type?: ChatChannelType }) {
+  const query = new URLSearchParams({ q: input.q });
+  if (input.channelId) query.set("channelId", input.channelId);
+  if (input.type) query.set("type", input.type);
+  return apiJson<ChatSearchResponse>(`/api/chat/search?${query.toString()}`);
+}
+
+export async function getPinnedChatMessages(channelId: string) {
+  return apiJson<ChatSearchResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/pins`);
+}
+
+export async function getSavedChatMessages() {
+  return apiJson<ChatSearchResponse>("/api/chat/saved");
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
