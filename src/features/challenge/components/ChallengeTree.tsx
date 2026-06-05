@@ -283,6 +283,7 @@ function ProjectHeader({
   return (
     <div className="orf-project-header">
       <div className="orf-project-heading min-w-0">
+        <FolderKanban className="orf-project-heading-icon h-4 w-4" aria-hidden="true" />
         <h2 className="orf-project-title">{project.name}</h2>
         <span className="orf-project-count">{project.objectiveCount} 目标</span>
       </div>
@@ -342,12 +343,12 @@ type ProjectAccentStyle = CSSProperties & {
 
 const projectAccentPalette = {
   projects: [
-    { accent: "47, 156, 137", deep: "22, 111, 99", soft: "232, 250, 246" },
-    { accent: "216, 139, 42", deep: "141, 89, 25", soft: "255, 246, 229" },
-    { accent: "98, 91, 185", deep: "71, 59, 142", soft: "242, 239, 255" },
-    { accent: "50, 132, 206", deep: "31, 91, 150", soft: "232, 244, 255" },
+    { accent: "47, 140, 195", deep: "38, 74, 112", soft: "219, 235, 244" },
+    { accent: "185, 138, 56", deep: "96, 78, 52", soft: "238, 226, 204" },
+    { accent: "69, 184, 191", deep: "43, 103, 118", soft: "218, 238, 235" },
+    { accent: "168, 139, 221", deep: "82, 75, 132", soft: "231, 224, 242" },
   ],
-  unassigned: { accent: "100, 116, 139", deep: "71, 85, 105", soft: "244, 247, 251" },
+  unassigned: { accent: "111, 126, 146", deep: "74, 86, 105", soft: "232, 237, 243" },
 } as const;
 
 function ObjectivePanel({
