@@ -1,21 +1,8 @@
-import type { AppNotification, BountySource, ChallengeApplication, CommentAttachment, CommentTargetType, Objective, OrfState, OrfUser, Result } from "../types/orf";
+import type { AppNotification, CommentAttachment, CommentTargetType, OrfState, OrfUser } from "../types/orf";
+import type { BountyHallData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
-
-export type TaskManagementData = Pick<
-  OrfState,
-  | "objectives"
-  | "results"
-  | "tasks"
-  | "evidence"
-  | "feedback"
-  | "comments"
-  | "objectiveLoot"
-  | "objectiveTrialReviews"
-  | "objectiveAlignmentRequests"
-  | "pointLedger"
-  | "permissionRules"
->;
+export type { BountyHallData, BountyHallItem, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
@@ -43,31 +30,6 @@ export type CommentAttachmentUploadResponse = {
   attachment: CommentAttachment;
   markdown: string;
 };
-export type BountyHallItem = {
-  applications: ChallengeApplication[];
-  approvedApplicants: string[];
-  challengers: string[];
-  uncertaintyPoints: number;
-  deadline: string;
-  definer: string;
-  difficultyRank: number;
-  hasCurrentApplication: boolean;
-  isCurrentChallenger: boolean;
-  isRecruitment: boolean;
-  objective: Objective;
-  pendingApplications: ChallengeApplication[];
-  result: Result | null;
-  results: Result[];
-  source: BountySource;
-};
-export type BountyHallData = {
-  publicItems: BountyHallItem[];
-  recruitmentItems: BountyHallItem[];
-  availableItems: BountyHallItem[];
-  objectiveOptions: Objective[];
-  contribution: { points: number };
-};
-export type MyChallengesScope = "mine" | "all";
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
 export type VisualBackgroundSwitchOrder = "sequential" | "random";

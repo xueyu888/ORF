@@ -2,11 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAdminContext, requireApiUser } from "../auth/accessPolicy";
 import {
-  getBountyHallData,
-  getMyChallengesData,
   getOrfStateSnapshot,
   getTaskManagementData,
-} from "../repositories/orfRepository";
+} from "../readModels/orfTaskManagementReadModel";
+import { getBountyHallData, getMyChallengesData } from "../readModels/orfChallengeReadModels";
 import { getDefaultRuntimeScopeForUser } from "../repositories/runtimeScope";
 
 const myChallengesQuerySchema = z.object({

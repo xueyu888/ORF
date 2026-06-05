@@ -10,15 +10,17 @@
 
 | 方法     | 路径                                                                         | 说明                                                                                                                                               |
 | -------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/api/tasks-page`                                                            | 管理员返回当前默认作用域内目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据                                      |
+| `GET`    | `/api/tasks-page`                                                            | 管理员返回当前默认作用域内项目、目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据                                |
 | `GET`    | `/api/bounties`                                                              | 所有已通过用户返回悬赏大厅发现数据；角色只影响申请 / 接受动作能否写入，管理员不能因为无挑战权限而拿到空列表                                        |
 | `GET`    | `/api/events`                                                                | 已登录 active 用户的 SSE 实时事件流；`notification.created` 投递个人通知，`system.broadcast` 投递作用域横幅广播                                    |
 | `GET`    | `/api/my-challenges`                                                         | 返回当前用户已参与的挑战目标                                                                                                                       |
+| `POST`   | `/api/projects`                                                              | 指挥官创建轻量项目并返回 `{ project }`；项目只用于目标聚合展示，不是权限或生命周期边界                                                            |
 | `POST`   | `/api/objectives`                                                            | 挑战页按 Enter 或标题输入框失焦快速创建候选目标，默认 `flowStatus=candidate`                                                                       |
 | `PATCH`  | `/api/objectives/:objectiveId`                                               | 指挥官更新目标标题或截止日期                                                                                                                       |
+| `PATCH`  | `/api/objectives/:objectiveId/project`                                       | 指挥官更新目标项目归属；`projectId` 可为空，表示移出项目                                                                                           |
 | `PATCH`  | `/api/objectives/:objectiveId/publish`                                       | 指挥官发布目标，进入 `open`                                                                                                                        |
 | `POST`   | `/api/objectives/:objectiveId/recruitments`                                  | 指挥官征召 active 普通成员，进入 `recruiting`                                                                                                      |
-| `POST`   | `/api/objectives/:objectiveId/challenge-applications`                        | active 普通成员填写 `reason` 申请挑战，进入 `applying`                                                                                             |
+| `POST`   | `/api/objectives/:objectiveId/challenge-applications`                        | active 普通成员填写 `reason` 申请挑战；`open/applying` 进入 `applying`，`recruiting/reestimating` 保持原流转状态                                  |
 | `PATCH`  | `/api/objectives/:objectiveId/challenge-applications/:applicationId/approve` | 指挥官通过申请，写入挑战者并进入 `reestimating`                                                                                                    |
 | `PATCH`  | `/api/objectives/:objectiveId/challenge-applications/:applicationId/reject`  | 指挥官拒绝申请                                                                                                                                     |
 | `PATCH`  | `/api/objectives/:objectiveId/challenge`                                     | 被征召成员接受，写入挑战者并进入 `reestimating`                                                                                                    |
@@ -53,6 +55,8 @@
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/settled/closed` 返回 409。
 
+项目归属 API 只改变目标聚合展示。`Project.name` 是项目名称事实源，`Objective.projectId` 是目标项目归属事实源且可为空；无项目目标是合法状态。创建目标时可以传入 `projectId`，也可以省略或传空；传入不存在或不属于当前默认作用域的项目必须返回 400。`PATCH /api/objectives/:objectiveId/project` 只允许指挥官调用，可以把目标放入项目、移动到其他项目或移出项目，不能改变目标生命周期、挑战者、指标、任务或积分。
+
 `POST /api/objectives` 对应挑战页 temporary 目标标题输入框的 Enter 或失焦快速创建动作。创建请求发起后，前端先让本地 temporary 目标退出标题编辑态并留在原位；`POST` 成功返回的真实目标必须足以立即替换本地 temporary 目标，任务管理数据刷新只负责后续同步和撤掉覆盖层，不能成为创建成功 UI 的前置条件。创建成功后的真实目标继续保持同一套目标面板结构，但缺失指标和行动项时前端不渲染伪子行；前端从目标行 `+` 选择新增指标或新增行动项后，才通过 `POST /api/results` / `POST /api/tasks` 创建对应实体，返回的真实实体用于替换本次创建的 temporary 行。`POST /api/tasks/:taskId/checklist` 必须返回创建出来的 `TaskChecklistItem`，前端用真实子任务 id 替换 temporary 子任务，不能靠标题匹配。指标、任务和子任务创建成功后都使用一次性创建覆盖层桥接到 `/api/my-challenges` 刷新 materialize，不能在页面级刷新延迟时短暂回到旧列表。任务管理接口按 `createdAt desc, id desc` 返回目标源数据；挑战页在业务排序键相同时保留该源顺序，并且不能把目标标题作为列表排序键。由于 API 源顺序可能和本地 temporary 目标插入顺序不同，前端在提交目标时保留一次性的邻居锚点；`POST` 成功返回的真实目标可以作为页面级临时覆盖层连续替换 temporary 目标，任务管理数据刷新包含同一目标后撤掉覆盖层，但排序锚点继续保留到用户切换筛选或目标业务排序键变化。创建失败时，前端回到目标标题编辑态并保留用户输入。
 
 任务和子任务完成状态接口只表达执行进度写入，不触发指标验收、目标提交、结算或积分。前端可以在挑战页展示层使用短生命周期完成状态覆盖层即时反馈点击；后端返回的任务管理数据仍是完成状态的持久化事实源，刷新数据包含同一任务或子任务完成状态后前端撤销覆盖层。
@@ -73,7 +77,8 @@
 
 | 集合                    | 用途                                                                                      |
 | ----------------------- | ----------------------------------------------------------------------------------------- |
-| `objectives`            | 页面根节点，也是挑战对象；可携带可空 `projectId` / `projectName` 作为前端项目分组展示字段 |
+| `projects`              | 轻量项目注册表；管理员读模型返回当前作用域项目，成员读模型只返回与可见目标相关的项目      |
+| `objectives`            | 页面根节点，也是挑战对象；可携带可空 `projectId` 作为前端项目分组字段                     |
 | `results`               | 目标下的指标                                                                              |
 | `tasks`                 | 目标下的任务和子任务                                                                      |
 | `evidence`              | 证据                                                                                      |
@@ -90,7 +95,7 @@ ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只�
 
 `GET /api/bounties` 对所有已通过用户返回 `publicItems`，包含 `flowStatus in (open, applying, recruiting, reestimating)` 的公开大厅目标。`publicItems` 是大厅主列表，必须带上 `applications`、`pendingApplications`、`approvedApplicants`、`challengers`、`isCurrentChallenger`、`hasCurrentApplication` 和目标的 `publishedAt`，用于公开展示申请理由、申请人、已通过挑战者头像和发布到大厅时间。`availableItems` 只表示当前仍可发起申请的目标；`recruitmentItems` 表示当前 active 普通成员自己待接受的征召。指挥官/管理员读取同一接口时仍能看到大厅目标；前端可以完整显示申请 / 接受操作入口，但所有申请 / 接受动作接口必须返回 403 或等价 forbidden，不能把管理员写入 `challengerUserIds`、`assignedChallengerUserIds` 或申请记录。
 
-申请挑战只接受 active 普通成员在 `open/applying/recruiting` 发起，且 body 必须包含 trim 后非空的 `reason`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
+申请挑战只接受 active 普通成员在 `open/applying/recruiting/reestimating` 发起，且 body 必须包含 trim 后非空的 `reason`；`reestimating` 目标收到新申请后仍保持 `reestimating`，不能回退到 `applying`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
 
 ## 状态字段
 

@@ -16,7 +16,7 @@ import {
 } from "../domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { taskIdsForObjective } from "../domain/orfWorkItems";
-import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfState, Result, Task, TaskStatus } from "../types/orf";
+import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfProject, OrfState, Result, Task, TaskStatus } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
 type Placement = "before" | "after";
@@ -242,8 +242,9 @@ const pruneCascadeTargets = (state: OrfState, targets: CascadeTargets): OrfState
   objectiveAlignmentRequests: state.objectiveAlignmentRequests.filter((request) => !targets.objectiveIds.has(request.objectiveId)),
 });
 
-const emptyBusinessState = (): OrfState => ({
+export const emptyBusinessState = (): OrfState => ({
   ...cloneState(initialOrfState),
+  projects: [],
   objectives: [],
   results: [],
   feedback: [],
@@ -292,6 +293,7 @@ export const normalizeState = (state: OrfState): OrfState => {
     ...state,
     users: normalizedUsers,
     currentUserId: state.currentUserId ?? initialOrfState.currentUserId,
+    projects: (state.projects ?? []).map((project) => normalizeProject(project)).filter((project): project is OrfProject => Boolean(project)),
     comments: (state.comments ?? []).map((thread) => ({
       ...thread,
       messages: (thread.messages ?? []).map((message) => ({ ...message, attachments: message.attachments ?? [] })),
@@ -305,6 +307,19 @@ export const normalizeState = (state: OrfState): OrfState => {
     pointLedger: state.pointLedger ?? [],
   };
 };
+
+function normalizeProject(project: OrfProject): OrfProject | null {
+  const id = project.id?.trim();
+  const name = project.name?.trim();
+  if (!id || !name) return null;
+  return {
+    ...project,
+    id,
+    name,
+    createdAt: project.createdAt ?? currentDate(),
+    updatedAt: project.updatedAt ?? project.createdAt ?? currentDate(),
+  };
+}
 
 function normalizeObjective(objective: Objective, results: LegacyResult[], tasks: Task[], userIdByName: Map<string, string>, userNameById: Map<string, string>): Objective {
   const objectiveResults = results.filter((result) => result.objectiveId === objective.id);
@@ -329,7 +344,6 @@ function normalizeObjective(objective: Objective, results: LegacyResult[], tasks
   return {
     ...objective,
     projectId: objective.projectId?.trim() || null,
-    projectName: objective.projectName?.trim() || null,
     stage: objective.stage ?? "orfReestimate",
     flowStatus: inferFlowStatus(objective, participants.challengerUserIds, participants.assignedChallengerUserIds, challengeApplications),
     finalDueAt:
@@ -388,7 +402,20 @@ export class OrfFlowStore {
     return normalizeState(emptyBusinessState());
   }
 
-  createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt" | "projectId" | "projectName">>): OrfState {
+  createProject(state: OrfState, input: Pick<OrfProject, "name">): OrfState {
+    const name = input.name.trim();
+    if (!name) return state;
+    const now = currentDate();
+    const project: OrfProject = {
+      id: makeId("project"),
+      name,
+      createdAt: now,
+      updatedAt: now,
+    };
+    return { ...state, projects: [project, ...state.projects] };
+  }
+
+  createObjective(state: OrfState, input: Pick<Objective, "title" | "whyItMatters" | "cycle" | "boundary"> & Partial<Pick<Objective, "finalDueAt" | "projectId">>): OrfState {
     const id = makeId("obj");
     const now = currentDate();
     const objective = {
@@ -397,7 +424,6 @@ export class OrfFlowStore {
       description: input.whyItMatters,
       whyItMatters: input.whyItMatters,
       projectId: input.projectId?.trim() || null,
-      projectName: input.projectName?.trim() || null,
       cycle: input.cycle,
       stage: objectiveLifecycleInitialState.stage,
       flowStatus: objectiveLifecycleInitialState.flowStatus,
@@ -630,6 +656,19 @@ export class OrfFlowStore {
       comments: state.comments.map((thread) =>
         thread.targetType === "objective" && thread.targetId === objectiveId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
       ),
+    };
+  }
+
+  updateObjectiveProject(state: OrfState, objectiveId: string, projectId: string | null): OrfState {
+    const nextProjectId = projectId?.trim() || null;
+    if (nextProjectId && !state.projects.some((project) => project.id === nextProjectId)) {
+      return state;
+    }
+
+    const now = currentDate();
+    return {
+      ...state,
+      objectives: state.objectives.map((objective) => (objective.id === objectiveId ? { ...objective, projectId: nextProjectId, updatedAt: now } : objective)),
     };
   }
 

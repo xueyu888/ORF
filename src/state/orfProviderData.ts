@@ -1,6 +1,6 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import { apiJson, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
-import { normalizeState } from "./OrfFlowStore";
+import { normalizeState } from "./orfStateSnapshot";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
 import type { CommentThread, OrfState, UserRole } from "../types/orf";
 
@@ -22,6 +22,7 @@ interface OrfDataStateOptions {
 export function mergeTaskManagementData(state: OrfState, data: TaskManagementData): OrfState {
   return normalizeState({
     ...state,
+    projects: data.projects ?? state.projects ?? [],
     objectives: data.objectives,
     results: data.results,
     tasks: data.tasks,

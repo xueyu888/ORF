@@ -140,7 +140,7 @@ export const objectiveFlowPolicy = {
     compatibleStages: reestimateStage,
     challengeSortRank: 3,
     canPublish: false,
-    canApplyForChallenge: false,
+    canApplyForChallenge: true,
     canReviewChallengeApplications: true,
     canRecruitChallengers: true,
     canAcceptChallenge: true,

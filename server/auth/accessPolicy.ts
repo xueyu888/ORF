@@ -15,7 +15,7 @@ import {
   resolveObjectiveIdForWorkItem,
   resolveRuntimeScopeForFeedback,
   resolveRuntimeScopeForWorkItem,
-} from "../repositories/orfRepository";
+} from "../access/orfTargetAccess";
 import { getDefaultRuntimeScopeForUser, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 
 export type AuthenticatedOrfUser = NonNullable<Awaited<ReturnType<typeof getAuthenticatedOrfUser>>>;

@@ -3,6 +3,7 @@ import type { Result, Task, TaskChecklistItem } from "../../../types/orf";
 import type { DragDropController, DragItem, DropPlacement, DropTarget } from "./types";
 
 type DropTargetMatch =
+  | { type: "project"; projectId: string | null }
   | { type: "bounty"; bountyId: string }
   | { type: "objectiveActions"; objectiveId: string }
   | { type: "action"; actionId: string }
@@ -13,6 +14,11 @@ export function bountyDropTargetForEvent(dragItem: DragItem | null, bounty: Resu
   if (!dragItem) return null;
   if (dragItem.type === "bounty") return { type: "bounty", bountyId: bounty.id, objectiveId: bounty.objectiveId, placement: dropPlacementFromEvent(event) };
   return null;
+}
+
+export function projectDropTargetForEvent(dragItem: DragItem | null, projectId: string | null): DropTarget | null {
+  if (dragItem?.type !== "objective") return null;
+  return { type: "project", projectId };
 }
 
 export function objectiveActionsDropTargetForEvent(dragItem: DragItem | null, objectiveId: string): DropTarget | null {
@@ -40,6 +46,10 @@ export function subActionDropTargetForEvent(dragItem: DragItem | null, action: T
 }
 
 export function canDropItem(dragItem: DragItem, target: DropTarget) {
+  if (dragItem.type === "objective") {
+    return target.type === "project" && target.projectId !== dragItem.projectId;
+  }
+
   if (dragItem.type === "bounty") {
     return target.type === "bounty" && target.objectiveId === dragItem.objectiveId && target.bountyId !== dragItem.id;
   }
@@ -77,6 +87,10 @@ export function dropTargetClass(target: DropTarget | null, matches: DropTargetMa
   if (!target) return undefined;
 
   for (const match of matches) {
+    if (target.type === "project" && match.type === "project" && target.projectId === match.projectId) {
+      return "orf-drop-target-inside";
+    }
+
     if (target.type === "bounty" && match.type === "bounty" && target.bountyId === match.bountyId) {
       return target.placement === "before" ? "orf-drop-target-before" : "orf-drop-target-after";
     }

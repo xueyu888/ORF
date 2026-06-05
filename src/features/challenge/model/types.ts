@@ -21,11 +21,13 @@ export type ChallengeCommentTarget = {
 };
 
 export type DragItem =
+  | { type: "objective"; id: string; projectId: string | null }
   | { type: "bounty"; id: string; objectiveId: string }
   | { type: "action"; id: string; objectiveId: string }
   | { type: "subAction"; id: string; actionId: string };
 
 export type DropTarget =
+  | { type: "project"; projectId: string | null }
   | { type: "bounty"; bountyId: string; objectiveId: string; placement: DropPlacement }
   | { type: "objectiveActions"; objectiveId: string }
   | { type: "action"; actionId: string; objectiveId: string; placement: DropPlacement }
