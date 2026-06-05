@@ -6851,6 +6851,11 @@ body[data-dragging-floating="true"] {
   gap: 2px;
 }
 
+.orf-objective-readonly-pill {
+  grid-template-columns: minmax(120px, 1fr);
+  padding-right: 11px;
+}
+
 .orf-objective-application-pill button {
   display: inline-flex;
   height: 22px;

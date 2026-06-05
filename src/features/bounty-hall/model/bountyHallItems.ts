@@ -59,6 +59,7 @@ export function searchableBountyText(item: BountyItem) {
     item.objective.description,
     item.objective.successDefinition,
     item.definer,
+    ...item.assignedChallengers,
     ...item.challengers,
     ...item.applications.flatMap((application) => [application.applicant, application.reason]),
     ...item.results.flatMap((result) => [result.title, resultDetailText(result)]),

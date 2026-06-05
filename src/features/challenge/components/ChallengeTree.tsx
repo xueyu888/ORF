@@ -351,6 +351,7 @@ function ObjectivePanel({
   const canCreateAction = !isDraftObjective && handlers.canMutateWorkItems(group.objective.id);
   const metricTemporaryRow = activeTemporaryChild?.kind === "metric" ? activeTemporaryChild : null;
   const actionTemporaryRow = activeTemporaryChild?.kind === "action" ? activeTemporaryChild : null;
+  const assignedChallengers = group.objective.assignedChallengers.filter((name) => !group.challengers.includes(name));
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const objectiveAlignmentRequests = (handlers.alignmentRequests ?? []).filter((request) => request.objectiveId === group.objective.id);
   const openAlignmentRequests = objectiveAlignmentRequests.filter(isOpenObjectiveAlignmentRequest);
@@ -501,6 +502,20 @@ function ObjectivePanel({
                 <button type="button" className="orf-objective-application-reject" onClick={() => void handlers.onRejectApplication(group.objective.id, application.id)}>
                   拒绝
                 </button>
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {assignedChallengers.length > 0 && (
+        <div className="orf-objective-admin-strip">
+          <span className="orf-objective-admin-strip-label">待响应征召</span>
+          {assignedChallengers.map((name) => (
+            <span key={name} className="orf-objective-application-pill orf-objective-readonly-pill">
+              <span className="orf-objective-application-main">
+                <span className="font-semibold orf-text-primary">{name}</span>
+                <span className="orf-objective-application-reason">已征召，等待接受</span>
               </span>
             </span>
           ))}

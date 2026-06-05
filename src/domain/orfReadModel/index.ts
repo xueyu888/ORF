@@ -42,6 +42,7 @@ export type CurrentUserAccessData = {
 export type BountyHallItem = {
   applications: ChallengeApplication[];
   approvedApplicants: string[];
+  assignedChallengers: string[];
   challengers: string[];
   uncertaintyPoints: number;
   deadline: string;

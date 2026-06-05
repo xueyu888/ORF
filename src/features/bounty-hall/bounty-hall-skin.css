@@ -685,6 +685,16 @@
   align-items: center;
 }
 
+.bounty-avatar-stack[data-variant="recruitment"] .bounty-avatar {
+  opacity: 0.78;
+  filter: saturate(0.72);
+}
+
+.bounty-avatar-stack[data-variant="recruitment"] .bounty-avatar[data-current-user="true"] {
+  opacity: 1;
+  filter: none;
+}
+
 .bounty-avatar {
   display: inline-flex;
   position: relative;

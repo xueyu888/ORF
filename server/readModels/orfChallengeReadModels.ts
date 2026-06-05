@@ -111,11 +111,13 @@ function bountyHallItemFromObjective(input: {
   const applications = input.objective.challengeApplications ?? [];
   const pendingApplications = applications.filter((application) => application.status === "pending");
   const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
+  const assignedChallengers = uniqueParticipantNames(input.objective.assignedChallengers ?? []);
   const challengers = uniqueParticipantNames(input.objective.challengers ?? []);
 
   return {
     applications,
     approvedApplicants,
+    assignedChallengers,
     challengers,
     uncertaintyPoints: objectiveBasePointsForResults(input.results),
     deadline: input.objective.finalDueAt,
