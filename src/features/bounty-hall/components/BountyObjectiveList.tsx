@@ -1,6 +1,7 @@
 import { ShieldAlert } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
+import { resultDetailPreviewText } from "../../../domain/orfResultDetails";
 import { remainingTime } from "../../challenge/model/challengeDates";
 import { BountyBadge } from "../BountyHallSkin";
 import { bountyPointsLabel, highestDifficultyLabel, publishedDateLabel, resultCountLabel } from "../model/bountyHallItems";
@@ -173,7 +174,7 @@ function ResultPreview({ item }: { item: BountyItem }) {
         {item.results.length > 0 ? (
           item.results.map((result) => (
             <div key={result.id} className="bounty-result-preview-item">
-              {result.metricRequirement ?? result.title}
+              {resultDetailPreviewText(result) || result.title}
             </div>
           ))
         ) : (

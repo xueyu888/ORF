@@ -10,6 +10,7 @@ import { useOrf } from "../../state/OrfProvider";
 import { resolveObjectiveDeadlineEditState, type ObjectiveDeadlineEditState } from "../../domain/orfDeadline";
 import { isObjectiveChallenger } from "../../domain/orfObjectiveParticipants";
 import { objectiveLifecycleInitialState } from "../../domain/orfLifecycle";
+import type { ResultDetailsInput } from "../../domain/orfResultDetails";
 import type { Objective, OrfState, UncertaintyLevel } from "../../types/orf";
 import { localDateString } from "../../utils/date";
 import { applyListItemAnchor, createListItemAnchor, listContainsAnchoredItem, type ListItemAnchor } from "../interaction/listItemAnchor";
@@ -208,6 +209,7 @@ export function ChallengePlanPage() {
     updateObjectiveFinalDueAt,
     setObjectiveProject,
     updateObjectiveTitle,
+    updateResultDetails,
     updateResultTitle,
     updateResultUncertaintyLevel,
     updateTaskChecklistItem,
@@ -940,6 +942,12 @@ export function ChallengePlanPage() {
     return updateResultUncertaintyLevel(target.id, uncertaintyLevel);
   };
 
+  const saveMetricDetails = async (target: ChallengeTarget, details: ResultDetailsInput) => {
+    if (target.type !== "bounty") return false;
+    if (!requireTargetPermission(target, "edit")) return false;
+    return updateResultDetails(target.id, details);
+  };
+
   const deleteTarget = (target: ChallengeTarget) => {
     if (target.type === "objective" && target.id === draftObjectiveId) {
       const cancelled = cancelObjectiveCreationSession(objectiveCreationSession);
@@ -1226,6 +1234,7 @@ export function ChallengePlanPage() {
           onSetObjectiveProject: setObjectiveProject,
           onUnavailableObjectiveDeadline: notifyUnavailableObjectiveDeadline,
           onUnavailableMetricEdit: notifyUnavailableMetricEdit,
+          onSaveMetricDetails: saveMetricDetails,
           onSaveMetricDifficulty: saveMetricDifficulty,
           onSaveTitle: saveTitle,
           onSubActionDoneChange: setSubActionDone,

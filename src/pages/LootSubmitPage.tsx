@@ -28,12 +28,14 @@ import {
   objectiveChallengerTargets,
   type ContributionMemberTarget,
 } from "../domain/orfObjectiveParticipants";
+import { resultDetailEntries } from "../domain/orfResultDetails";
 import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
   LootResultClaim,
   LootResultClaimStatus,
   ObjectiveTrialReviewStatus,
+  Result,
   ResultAcceptedResult,
 } from "../types/orf";
 
@@ -56,6 +58,22 @@ const resultReviewOptions: Array<{
 
 const CONTRIBUTION_PERCENT_TOTAL = 100;
 const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
+
+function ResultDetailsSummary({ result }: { result: Result }) {
+  const entries = resultDetailEntries(result);
+  if (entries.length === 0) return null;
+
+  return (
+    <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-xs">
+      {entries.map((entry) => (
+        <div key={entry.key} className="grid gap-1">
+          <div className="font-semibold orf-text-muted">{entry.label}</div>
+          <div className="whitespace-pre-wrap leading-5 orf-text-secondary">{entry.value}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function LootSubmitPage() {
   const { objectiveId } = useParams();
@@ -565,6 +583,7 @@ export function LootSubmitPage() {
                     <div className="text-sm font-semibold orf-text-primary">
                       {result.title}
                     </div>
+                    <ResultDetailsSummary result={result} />
                     <select
                       className="orf-input px-3 py-2 text-sm"
                       value={resultReviews[result.id] ?? "completed"}
@@ -841,6 +860,7 @@ export function LootSubmitPage() {
                     <div className="text-sm font-semibold orf-text-primary">
                       {result.title}
                     </div>
+                    <ResultDetailsSummary result={result} />
                     <select
                       className="orf-input px-3 py-2 text-sm"
                       value={claims[result.id]?.claim ?? "completed"}

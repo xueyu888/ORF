@@ -16,6 +16,7 @@ import {
 } from "../domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../domain/orfSettlement";
 import { taskIdsForObjective } from "../domain/orfWorkItems";
+import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import type { ChallengeApplication, CommentStatus, CommentTargetType, Feedback, FeedbackStatus, Objective, OrfProject, OrfState, Result, Task, TaskStatus } from "../types/orf";
 import { addCalendarDays, localDateString } from "../utils/date";
 
@@ -462,13 +463,13 @@ export class OrfFlowStore {
       id,
       objectiveId: input.objectiveId,
       title: input.title,
-      description: input.description ?? "由 ORF Flow 规划创建的指标。",
+      description: input.description?.trim() ?? "",
       metricName: input.metricName,
-      metricRequirement: input.metricRequirement ?? `${input.metricName}：写清统计对象和完成标准后进入执行。`,
+      metricRequirement: input.metricRequirement?.trim() || undefined,
       statisticalObject: input.statisticalObject ?? "指挥官确认的标准样本集和线上反馈样本",
-      completionStandard: input.completionStandard ?? "完成标准清楚，并有战利品说明支撑",
-      sampleSet: input.sampleSet ?? "指挥官确认的标准样本集",
-      measurementScope: input.measurementScope ?? "固定测试环境下统计系统侧链路表现",
+      completionStandard: input.completionStandard?.trim() || undefined,
+      sampleSet: input.sampleSet?.trim() || undefined,
+      measurementScope: input.measurementScope?.trim() || undefined,
       uncertaintyLevel: input.uncertaintyLevel,
       baseline: input.baseline ?? 0,
       current: input.current ?? 0,
@@ -683,6 +684,26 @@ export class OrfFlowStore {
       results: state.results.map((result) => (result.id === resultId ? { ...result, title: nextTitle, updatedAt: currentDate() } : result)),
       comments: state.comments.map((thread) =>
         thread.targetType === "result" && thread.targetId === resultId ? { ...thread, targetTitle: nextTitle, updatedAt: currentTime() } : thread,
+      ),
+    };
+  }
+
+  updateResultDetails(state: OrfState, resultId: string, details: ResultDetailsInput): OrfState {
+    const now = currentDate();
+    return {
+      ...state,
+      results: state.results.map((result) =>
+        result.id === resultId
+          ? {
+              ...result,
+              description: details.description.trim(),
+              metricRequirement: details.metricRequirement.trim() || undefined,
+              completionStandard: details.completionStandard.trim() || undefined,
+              sampleSet: details.sampleSet.trim() || undefined,
+              measurementScope: details.measurementScope.trim() || undefined,
+              updatedAt: now,
+            }
+          : result,
       ),
     };
   }

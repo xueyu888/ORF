@@ -24,6 +24,7 @@ import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
+import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
@@ -104,6 +105,7 @@ interface OrfContextValue {
   updateObjectiveTitle: (objectiveId: string, title: string) => Promise<boolean>;
   updateObjectiveFinalDueAt: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   updateResultTitle: (resultId: string, title: string) => Promise<boolean>;
+  updateResultDetails: (resultId: string, details: ResultDetailsInput) => Promise<boolean>;
   updateResultUncertaintyLevel: (resultId: string, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   updateTaskTitle: (taskId: string, title: string) => Promise<boolean>;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => Promise<boolean>;

@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, UserPlus, type LucideIcon } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
 import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
@@ -17,6 +17,14 @@ import {
 } from "../../../domain/orfAlignment";
 import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
 import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
+import {
+  normalizeResultDetails,
+  normalizeResultDetailsInput,
+  resultDetailEntries,
+  resultDetailFields,
+  resultDetailsEqual,
+  type ResultDetailsInput,
+} from "../../../domain/orfResultDetails";
 import { uncertaintyLevelOptions } from "../../../domain/orfSettlement";
 import type {
   ObjectiveAlignmentRequest,
@@ -96,6 +104,7 @@ type RowHandlers = {
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCreateProject: (name: string) => Promise<OrfProject | null>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
+  onSaveMetricDetails: (target: ChallengeTarget, details: ResultDetailsInput) => Promise<boolean>;
   onSetObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
   onUnavailableObjectiveDeadline: (objective: ObjectiveNode["objective"]) => void;
   onSaveMetricDifficulty: (target: ChallengeTarget, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
@@ -827,7 +836,7 @@ function MetricRow({
   const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : bountyStatusLabel[bounty!.status];
 
   return (
-    <div className="relative">
+    <div className="orf-result-row-frame relative" data-details-open={rowActive ? "true" : undefined}>
       <div
         className={clsx(
           "orf-result-row orf-challenge-row orf-challenge-row-bounty orf-row-depth-1 group relative grid items-center px-5",
@@ -902,6 +911,137 @@ function MetricRow({
         <TimeValue icon={Clock3} value={bounty ? bounty.updatedAt || "未设置" : "未设置"} />
         <ProgressValue value={bounty ? bounty.progress : 0} />
         {scope === "mine" ? <EmptySlot /> : null}
+      </div>
+      {bounty && (
+        <MetricDetailsBlock
+          access={handlers.metricEditAccess(bounty.result.objectiveId)}
+          onSave={(details) => handlers.onSaveMetricDetails(target, details)}
+          onUnavailable={() => handlers.onUnavailableMetricEdit(bounty.result.objectiveId)}
+          result={bounty.result}
+        />
+      )}
+    </div>
+  );
+}
+
+function MetricDetailsBlock({
+  access,
+  onSave,
+  onUnavailable,
+  result,
+}: {
+  access: MetricEditAccess;
+  onSave: (details: ResultDetailsInput) => Promise<boolean>;
+  onUnavailable: () => void;
+  result: BountyNode["result"];
+}) {
+  const persistedDetails = useMemo(
+    () => normalizeResultDetails(result),
+    [result.description, result.metricName, result.metricRequirement, result.completionStandard, result.sampleSet, result.measurementScope],
+  );
+  const entries = useMemo(
+    () => resultDetailEntries(result),
+    [result.description, result.metricName, result.metricRequirement, result.completionStandard, result.sampleSet, result.measurementScope],
+  );
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<ResultDetailsInput>(persistedDetails);
+
+  useEffect(() => {
+    setEditing(false);
+    setSaving(false);
+    setDraft(persistedDetails);
+  }, [result.id]);
+
+  useEffect(() => {
+    if (!editing) setDraft(persistedDetails);
+  }, [editing, persistedDetails]);
+
+  const beginEdit = () => {
+    if (saving) return;
+    if (access.status !== "allowed") {
+      onUnavailable();
+      return;
+    }
+    setDraft(persistedDetails);
+    setEditing(true);
+  };
+
+  const saveDetails = async () => {
+    if (saving) return;
+    const nextDetails = normalizeResultDetailsInput(draft);
+    if (resultDetailsEqual(nextDetails, persistedDetails)) {
+      setEditing(false);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const saved = await onSave(nextDetails);
+      if (saved) setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className={clsx("orf-result-details-shell", editing && "orf-result-details-shell-editing")} data-no-row-edit="true">
+      <div className="orf-result-details-inner">
+        {editing ? (
+          <form
+            className="orf-result-details-editor"
+            onDoubleClick={(event) => event.stopPropagation()}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveDetails();
+            }}
+          >
+            <div className="orf-result-details-editor-fields">
+              {resultDetailFields.map((field) => (
+                <label key={field.key} className="orf-result-details-editor-field">
+                  <span>{field.label}</span>
+                  <textarea
+                    aria-label={`编辑指标详情${field.label}`}
+                    disabled={saving}
+                    onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
+                    rows={field.key === "description" ? 2 : 3}
+                    value={draft[field.key]}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="orf-result-details-editor-actions">
+              <button disabled={saving} type="button" onClick={() => setEditing(false)}>
+                取消
+              </button>
+              <button disabled={saving} type="submit">
+                保存
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div
+            className={clsx("orf-result-details-view", entries.length === 0 && "orf-result-details-empty")}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              beginEdit();
+            }}
+            tabIndex={0}
+          >
+            {entries.length > 0 ? (
+              <div className="orf-result-details-list">
+                {entries.map((entry) => (
+                  <div key={entry.key} className="orf-result-details-item">
+                    <span>{entry.label}</span>
+                    <p>{entry.value}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="orf-result-details-placeholder">未填写指标详情，双击编辑</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

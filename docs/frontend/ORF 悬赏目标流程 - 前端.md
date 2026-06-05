@@ -80,7 +80,7 @@
 | `Objective.flowStatus` | 候选、申请、征召、重估、冻结、验收和结算状态 |
 | `Objective.publishedAt` | 指挥官发布到悬赏大厅的日期；大厅显示和发布时间排序使用该字段 |
 | `Objective.finalDueAt` | 剩余时间、排序和按时结算判断 |
-| `Result[]` | 目标下的指标清单、最高难度和目标总分来源；`uncertaintyLevel` 未设置时该指标积分仍为待校准；指标不拥有独立截止日期 |
+| `Result[]` | 目标下的指标清单、指标详情、最高难度和目标总分来源；`description`、`metricRequirement`、`completionStandard`、`sampleSet`、`measurementScope` 是指标详情事实源；`uncertaintyLevel` 未设置时该指标积分仍为待校准；指标不拥有独立截止日期 |
 | `ObjectiveLoot[]` | 战利品提交和验收展示 |
 | `PointLedgerEntry[]` | 统计页积分来源 |
 | `BountyHallData.publicItems` | 大厅公开列表，包含 `open/applying/recruiting/reestimating` 目标 |
@@ -105,6 +105,7 @@
 | `PATCH /api/objectives/:objectiveId/challenge-applications/:applicationId/reject` | 指挥官拒绝申请 |
 | `PATCH /api/objectives/:objectiveId/publish` | 指挥官发布候选目标 |
 | `PATCH /api/objectives/:objectiveId/freeze` | 指挥官完成重估并冻结 |
+| `PATCH /api/results/:resultId/details` | 指挥官或重估期内挑战者编辑指标详情 |
 | `PATCH /api/results/:resultId/uncertainty` | 指挥官或重估期内挑战者校准指标积分等级 |
 | `POST /api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
 | `POST /api/objectives/:objectiveId/review` | 指挥官验收并结算 |

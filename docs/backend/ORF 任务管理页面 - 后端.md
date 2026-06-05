@@ -32,7 +32,11 @@
 | `POST`   | `/api/objectives/:objectiveId/contribution-reviews`                          | 已关闭的旧匿名互评接口，返回 `410`，原始互评只提交到本地结算服务                                                                                   |
 | `POST`   | `/api/objectives/:objectiveId/review`                                        | 指挥官验收指标并结算，进入 `settled`                                                                                                               |
 | `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许 `Objective.challengerUserIds` 中的正式挑战者在未过期 `reestimating` 阶段创建 |
-| `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题、难度、信心和同目标排序；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
+| `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
+| `PATCH`  | `/api/results/:resultId/details`                                             | 更新指标详情字段：`description`、`metricRequirement`、`completionStandard`、`sampleSet`、`measurementScope`；权限和生命周期锁与指标标题编辑一致 |
+| `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标难度和积分映射 |
+| `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
+| `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
 | `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`；新反馈不接收目标或指标绑定                                                        |
 | `PATCH`  | `/api/feedback/:feedbackId/status`                                           | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行                                                                                               |
 | `POST`   | `/api/tasks`                                                                 | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务                                                                                  |
@@ -179,6 +183,8 @@ type ObjectiveFlowStatus =
 - `pointLedger`
 
 `Result.uncertaintyScore` 是指标积分事实源，由 `Result.uncertaintyLevel` 映射写入。指标可以先创建为待校准，但 `reestimating -> frozen` 前，后端必须校验目标下每个指标都已设置积分等级；`Objective.objectiveBasePoints` 只从这些指标积分汇总得到，不作为目标创建或发布接口的输入字段。
+
+`Result.description`、`Result.metricRequirement`、`Result.completionStandard`、`Result.sampleSet`、`Result.measurementScope` 是指标详情事实源。评论只保存讨论记录，不承载指标详情定义；战利品提交和验收读取同一组 `Result` 字段作为只读上下文。
 
 前端排行榜只读取公开 `pointLedger`，不自行计算个人贡献比例。普通成员和管理员都可以看到公开积分榜；匿名互评原始数据不通过该读模型返回。
 

@@ -6822,6 +6822,151 @@ body[data-dragging-floating="true"] {
   box-shadow: 0 1px 0 rgba(142, 111, 62, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
+.orf-result-details-shell {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin: -2px 20px 0 76px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    grid-template-rows 160ms ease,
+    margin 160ms ease,
+    opacity 140ms ease,
+    transform 140ms ease,
+    visibility 140ms ease;
+  visibility: hidden;
+}
+
+.orf-result-row-frame:hover .orf-result-details-shell,
+.orf-result-row-frame:focus-within .orf-result-details-shell,
+.orf-result-row-frame[data-details-open="true"] .orf-result-details-shell,
+.orf-result-details-shell-editing {
+  grid-template-rows: 1fr;
+  margin-bottom: 8px;
+  opacity: 1;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.orf-result-details-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.orf-result-details-view,
+.orf-result-details-editor {
+  border-left: 2px solid rgba(69, 181, 196, 0.44);
+  background:
+    linear-gradient(90deg, rgba(232, 249, 248, 0.72), rgba(255, 252, 244, 0.58));
+  color: #475467;
+  padding: 9px 12px 10px;
+}
+
+.orf-result-details-view {
+  cursor: text;
+  outline: none;
+}
+
+.orf-result-details-view:focus-visible {
+  box-shadow: 0 0 0 2px rgba(69, 181, 196, 0.28);
+}
+
+.orf-result-details-list {
+  display: grid;
+  gap: 8px;
+}
+
+.orf-result-details-item {
+  display: grid;
+  gap: 3px;
+}
+
+.orf-result-details-item span,
+.orf-result-details-editor-field span {
+  color: #667085;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.orf-result-details-item p,
+.orf-result-details-placeholder {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.orf-result-details-placeholder {
+  color: #98a2b3;
+  font-style: italic;
+}
+
+.orf-result-details-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.orf-result-details-editor-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.orf-result-details-editor-field {
+  display: grid;
+  gap: 4px;
+}
+
+.orf-result-details-editor-field textarea {
+  min-height: 56px;
+  resize: vertical;
+  border: 1px solid rgba(126, 151, 178, 0.34);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #26364a;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 7px 9px;
+}
+
+.orf-result-details-editor-field textarea:focus {
+  border-color: rgba(69, 181, 196, 0.62);
+  box-shadow: 0 0 0 2px rgba(69, 181, 196, 0.18);
+  outline: none;
+}
+
+.orf-result-details-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.orf-result-details-editor-actions button {
+  min-height: 28px;
+  border: 1px solid rgba(126, 151, 178, 0.28);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #344054;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 0 12px;
+}
+
+.orf-result-details-editor-actions button[type="submit"] {
+  border-color: rgba(32, 141, 128, 0.3);
+  background: linear-gradient(180deg, rgba(224, 251, 247, 0.92), rgba(202, 243, 237, 0.82));
+  color: #0b766c;
+}
+
+.orf-result-details-editor-actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .orf-task-row,
 .orf-subtask-row {
   margin: 1px 10px;
@@ -6921,6 +7066,11 @@ body[data-dragging-floating="true"] {
 .orf-challenge-workbench .orf-result-row {
   min-height: 44px;
   margin: 2px 8px;
+}
+
+.orf-challenge-workbench .orf-result-details-shell {
+  margin-right: 18px;
+  margin-left: 72px;
 }
 
 .orf-challenge-workbench .orf-task-row {

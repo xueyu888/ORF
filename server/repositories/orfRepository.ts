@@ -66,6 +66,7 @@ import {
 } from "../../src/domain/orfLifecycle";
 import { objectiveChallengeEntryClosed as objectiveClosedForChallengeEntry } from "../../src/domain/orfChallengeEntry";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
+import type { ResultDetailKey } from "../../src/domain/orfResultDetails";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -676,6 +677,10 @@ export interface CreateResultInput {
   metricName: string;
   actorId?: string | null;
   description?: string;
+  metricRequirement?: string | null;
+  completionStandard?: string | null;
+  sampleSet?: string | null;
+  measurementScope?: string | null;
   baseline?: number;
   current?: number;
   target?: number;
@@ -842,13 +847,13 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
       teamId: objective.teamId,
       objectiveId: objective.id,
       title,
-      description: input.description?.trim() || "由 ORF Flow 规划创建的指标。",
+      description: input.description?.trim() ?? "",
       metricName,
-      metricRequirement: `${metricName}：写清统计对象和完成标准后进入执行。`,
+      metricRequirement: nullableTrimmedText(input.metricRequirement),
       statisticalObject: null,
-      completionStandard: null,
-      sampleSet: null,
-      measurementScope: null,
+      completionStandard: nullableTrimmedText(input.completionStandard),
+      sampleSet: nullableTrimmedText(input.sampleSet),
+      measurementScope: nullableTrimmedText(input.measurementScope),
       uncertaintyLevel: input.uncertaintyLevel ?? null,
       baseline: input.baseline ?? 0,
       current: input.current ?? 0,
@@ -3297,6 +3302,66 @@ export async function updateResultTitle(resultId: string, title: string, actorId
   }
 
   publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
+}
+
+export async function updateResultDetails(
+  resultId: string,
+  input: Partial<Record<ResultDetailKey, string | null | undefined>>,
+  actorId?: string | null,
+): Promise<boolean> {
+  const detailUpdates: Partial<Pick<typeof results.$inferInsert, ResultDetailKey>> = {};
+  if ("description" in input) {
+    detailUpdates.description = input.description?.trim() ?? "";
+  }
+  if ("metricRequirement" in input) {
+    detailUpdates.metricRequirement = nullableTrimmedText(input.metricRequirement);
+  }
+  if ("completionStandard" in input) {
+    detailUpdates.completionStandard = nullableTrimmedText(input.completionStandard);
+  }
+  if ("sampleSet" in input) {
+    detailUpdates.sampleSet = nullableTrimmedText(input.sampleSet);
+  }
+  if ("measurementScope" in input) {
+    detailUpdates.measurementScope = nullableTrimmedText(input.measurementScope);
+  }
+
+  if (Object.keys(detailUpdates).length === 0) {
+    return false;
+  }
+
+  const updatedResult = await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
+      return null;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ ...detailUpdates, updatedAt: today(), updatedBy: actorId ?? null })
+      .where(eq(results.id, resultId))
+      .returning({ id: results.id });
+    return updated.length > 0 ? { teamId: target.teamId } : null;
+  });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId ?? undefined,
     models: ["taskManagement", "bountyHall"],
     reason: "result.changed",
     target: { id: resultId, type: "result" },
