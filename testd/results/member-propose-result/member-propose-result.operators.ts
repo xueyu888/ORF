@@ -53,7 +53,6 @@ export const memberProposeResultOperators = {
           targetResultPresent(requiredProposalTarget(params, "target"), {
             name: requiredString(params, "memberName"),
             resultTitle: requiredString(params, "title"),
-            metricName: requiredString(params, "metricName"),
           }),
         )
         .toBe(true);
@@ -83,7 +82,6 @@ export const memberProposeResultOperators = {
       expect(result).toMatchObject({
         objectiveId: target.objective.id,
         title: requiredString(params, "title"),
-        metricName: requiredString(params, "metricName"),
         source: requiredString(params, "source"),
         definer: requiredString(params, "definer"),
       });
@@ -178,7 +176,7 @@ function requiredCreatedResult(params: StepParams, key: string): MemberProposedR
     typeof (value as MemberProposedResult).id !== "string" ||
     typeof (value as MemberProposedResult).objectiveId !== "string" ||
     typeof (value as MemberProposedResult).title !== "string" ||
-    typeof (value as MemberProposedResult).metricName !== "string"
+    typeof (value as MemberProposedResult).detail !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是提出的指标`);
   }

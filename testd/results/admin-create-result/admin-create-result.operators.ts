@@ -44,7 +44,6 @@ export const adminCreateResultOperators = {
       await expect
         .poll(() => targetResultPresent(requiredResultTarget(params, "target"), {
           resultTitle: requiredString(params, "title"),
-          metricName: requiredString(params, "metricName"),
         }))
         .toBe(true);
     },
@@ -73,7 +72,6 @@ export const adminCreateResultOperators = {
       expect(result).toMatchObject({
         objectiveId: target.objective.id,
         title: requiredString(params, "title"),
-        metricName: requiredString(params, "metricName"),
         source: requiredString(params, "source"),
       });
     },
@@ -165,7 +163,7 @@ function requiredCreatedResult(params: StepParams, key: string): AdminCreatedRes
     typeof (value as AdminCreatedResult).id !== "string" ||
     typeof (value as AdminCreatedResult).objectiveId !== "string" ||
     typeof (value as AdminCreatedResult).title !== "string" ||
-    typeof (value as AdminCreatedResult).metricName !== "string"
+    typeof (value as AdminCreatedResult).detail !== "string"
   ) {
     throw new Error(`参数 ${key} 必须是新增的指标`);
   }

@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
 import type { ObjectiveFlowStatus, OrfStage } from "../../../../src/types/orf";
+import { resultDetailIncludesMetricName, testResultDetail } from "../../../_operators/result-detail.helpers";
 import {
   deleteTestObjectives,
   testObjectiveAbsent,
@@ -83,13 +84,7 @@ export async function createLootForbiddenResult(
     teamId: objective.teamId,
     objectiveId: objective.id,
     title: fixture.title,
-    description: "用于成员提交战利品反向测试的前置指标。",
-    metricName: fixture.metricName,
-    metricRequirement: `${fixture.metricName}：用于成员提交战利品反向测试。`,
-    statisticalObject: null,
-    completionStandard: null,
-    sampleSet: null,
-    measurementScope: null,
+    detail: testResultDetail(fixture.metricName, "用于成员提交战利品反向测试。"),
     uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
@@ -182,7 +177,7 @@ export async function lootForbiddenTargetsMatchFixtures(
 
 export async function lootForbiddenResultPresent(target: LootTarget, result: LootPrerequisiteResult) {
   const row = await readTargetResult(target.objective.id, result.title);
-  return !!row && row.id === result.id && row.metricName === result.metricName;
+  return !!row && row.id === result.id && resultDetailIncludesMetricName(row.detail, result.metricName);
 }
 
 export async function lootForbiddenResultsPresent(items: ReadonlyArray<{
@@ -289,7 +284,7 @@ async function readTargetResult(objectiveId: string, title: string) {
       id: results.id,
       objectiveId: results.objectiveId,
       title: results.title,
-      metricName: results.metricName,
+      detail: results.detail,
     })
     .from(results)
     .where(and(eq(results.objectiveId, objectiveId), eq(results.title, title)))

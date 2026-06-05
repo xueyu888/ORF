@@ -64,12 +64,11 @@ export async function targetResultAbsent(target: MemberProposeResultTarget, titl
 
 export async function targetResultPresent(
   target: MemberProposeResultTarget,
-  expected: Pick<MemberProposeResultCaseData, "name" | "resultTitle" | "metricName">,
+  expected: Pick<MemberProposeResultCaseData, "name" | "resultTitle">,
 ) {
   const row = await readTargetResult(target.objective.id, expected.resultTitle);
   return (
     !!row &&
-    row.metricName === expected.metricName &&
     row.source === "memberProposed" &&
     row.definer === expected.name &&
     row.objectiveId === target.objective.id
@@ -114,7 +113,7 @@ export function createdResultFromResponse(body: unknown): MemberProposedResult {
     typeof result.id !== "string" ||
     typeof result.objectiveId !== "string" ||
     typeof result.title !== "string" ||
-    typeof result.metricName !== "string"
+    typeof result.detail !== "string"
   ) {
     throw new Error("新增指标接口响应 result 结构不完整");
   }
@@ -123,7 +122,7 @@ export function createdResultFromResponse(body: unknown): MemberProposedResult {
     id: result.id,
     objectiveId: result.objectiveId,
     title: result.title,
-    metricName: result.metricName,
+    detail: result.detail,
     source: typeof result.source === "string" ? (result.source as MemberProposedResult["source"]) : undefined,
     definer: typeof result.definer === "string" ? result.definer : undefined,
   };
@@ -135,7 +134,7 @@ async function readTargetResult(objectiveId: string, title: string) {
       id: results.id,
       objectiveId: results.objectiveId,
       title: results.title,
-      metricName: results.metricName,
+      detail: results.detail,
       source: results.source,
       definer: results.definer,
     })

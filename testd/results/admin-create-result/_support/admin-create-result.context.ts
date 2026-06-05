@@ -14,7 +14,6 @@ export type AdminCreateResultCaseData = {
   objectiveId: string;
   objectiveTitle: string;
   resultTitle: string;
-  metricName: string;
 };
 
 export type AdminCreateResultTarget = {
@@ -29,7 +28,7 @@ export type AdminCreatedResult = {
   id: string;
   objectiveId: string;
   title: string;
-  metricName: string;
+  detail: string;
   source?: BountySource;
   definer?: string;
 };

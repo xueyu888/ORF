@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectives, results } from "../../../../server/db/schema";
+import { resultDetailIncludesMetricName, testResultDetail } from "../../../_operators/result-detail.helpers";
 import type {
   AdminFreezeObjectiveCaseData,
   AdminFreezeObjectiveTarget,
@@ -58,13 +59,7 @@ export async function createFreezePrerequisiteResult(
     teamId: objective.teamId,
     objectiveId: objective.id,
     title: input.freezeResultTitle,
-    description: "用于管理员冻结目标测试的前置指标。",
-    metricName: input.freezeMetricName,
-    metricRequirement: `${input.freezeMetricName}：用于冻结目标测试。`,
-    statisticalObject: null,
-    completionStandard: null,
-    sampleSet: null,
-    measurementScope: null,
+    detail: testResultDetail(input.freezeMetricName, "用于冻结目标测试。"),
     uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
@@ -107,7 +102,7 @@ export async function targetResultPresent(target: AdminFreezeObjectiveTarget, re
   return (
     !!row &&
     row.id === result.id &&
-    row.metricName === result.metricName &&
+    resultDetailIncludesMetricName(row.detail, result.metricName) &&
     !!row.uncertaintyLevel &&
     typeof row.uncertaintyScore === "number" &&
     row.uncertaintyScore > 0
@@ -171,7 +166,7 @@ async function readTargetResult(objectiveId: string, title: string) {
       id: results.id,
       objectiveId: results.objectiveId,
       title: results.title,
-      metricName: results.metricName,
+      detail: results.detail,
       uncertaintyLevel: results.uncertaintyLevel,
       uncertaintyScore: results.uncertaintyScore,
     })

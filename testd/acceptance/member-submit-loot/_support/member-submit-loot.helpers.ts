@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { notifications, objectiveLoot, objectives, results } from "../../../../server/db/schema";
 import { readTestUserIdByNameInTeam, requiredTestUserIdByNameInTeam } from "../../../_operators/common.helpers";
+import { resultDetailIncludesMetricName, testResultDetail } from "../../../_operators/result-detail.helpers";
 import type {
   LootPrerequisiteResult,
   LootTarget,
@@ -80,13 +81,7 @@ export async function createLootPrerequisiteResult(
     teamId: objective.teamId,
     objectiveId: objective.id,
     title: input.resultTitle,
-    description: "用于成员提交战利品测试的前置指标。",
-    metricName: input.metricName,
-    metricRequirement: `${input.metricName}：用于成员提交战利品测试。`,
-    statisticalObject: null,
-    completionStandard: null,
-    sampleSet: null,
-    measurementScope: null,
+    detail: testResultDetail(input.metricName, "用于成员提交战利品测试。"),
     uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
@@ -160,7 +155,7 @@ export async function testLootAbsent(body: string) {
 
 export async function targetResultPresent(target: LootTarget, result: LootPrerequisiteResult) {
   const row = await readTargetResult(target.objective.id, result.title);
-  return !!row && row.id === result.id && row.metricName === result.metricName;
+  return !!row && row.id === result.id && resultDetailIncludesMetricName(row.detail, result.metricName);
 }
 
 export async function targetLootPresent(target: LootTarget, expected: { lootBody: string; selfTestReportBody: string }) {
@@ -213,7 +208,7 @@ async function readTargetResult(objectiveId: string, title: string) {
       id: results.id,
       objectiveId: results.objectiveId,
       title: results.title,
-      metricName: results.metricName,
+      detail: results.detail,
     })
     .from(results)
     .where(and(eq(results.objectiveId, objectiveId), eq(results.title, title)))

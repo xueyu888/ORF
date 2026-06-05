@@ -3,6 +3,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
 import { objectiveLoot, objectives, pointLedger, results } from "../../../../server/db/schema";
 import type { LootResultClaim, ObjectiveFlowStatus, OrfStage, ResultAcceptedResult } from "../../../../src/types/orf";
+import { resultDetailIncludesMetricName, testResultDetail } from "../../../_operators/result-detail.helpers";
 import {
   deleteTestObjectives,
   testObjectiveAbsent,
@@ -131,13 +132,7 @@ export async function createReviewLootForbiddenResult(
     teamId: objective.teamId,
     objectiveId: objective.id,
     title: fixture.title,
-    description: "用于管理员验收战利品反向测试的前置指标。",
-    metricName: fixture.metricName,
-    metricRequirement: `${fixture.metricName}：用于管理员验收战利品反向测试。`,
-    statisticalObject: null,
-    completionStandard: null,
-    sampleSet: null,
-    measurementScope: null,
+    detail: testResultDetail(fixture.metricName, "用于管理员验收战利品反向测试。"),
     uncertaintyLevel: "进阶",
     baseline: 0,
     current: 0,
@@ -300,7 +295,7 @@ export async function reviewLootForbiddenResultPresent(
     !!row &&
     row.id === result.id &&
     row.objectiveId === target.objective.id &&
-    row.metricName === result.metricName &&
+    resultDetailIncludesMetricName(row.detail, result.metricName) &&
     row.uncertaintyScore === result.points
   );
 }
@@ -493,7 +488,7 @@ async function readResultByTitle(title: string) {
       id: results.id,
       objectiveId: results.objectiveId,
       title: results.title,
-      metricName: results.metricName,
+      detail: results.detail,
       uncertaintyScore: results.uncertaintyScore,
       acceptedResult: results.acceptedResult,
     })

@@ -14,7 +14,6 @@ export type MemberProposeResultCaseData = {
   objectiveId: string;
   objectiveTitle: string;
   resultTitle: string;
-  metricName: string;
 };
 
 export type MemberProposeResultTarget = {
@@ -30,7 +29,7 @@ export type MemberProposedResult = {
   id: string;
   objectiveId: string;
   title: string;
-  metricName: string;
+  detail: string;
   source?: BountySource;
   definer?: string;
 };

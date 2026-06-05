@@ -15,7 +15,6 @@ export const adminCreateResultCase = {
     objectiveId: "obj-testd-admin-create-result",
     objectiveTitle: "E2E-ADMIN-CREATE-RESULT: 目标前置",
     resultTitle: "E2E-RESULT-CREATE: 管理员新增指标",
-    metricName: "E2E-RESULT-CREATE: 管理员新增指标",
   },
 
   B: {
@@ -353,14 +352,13 @@ export const adminCreateResultCase = {
       {
         source: { caseStepId: "S1-2", method: "api" },
         id: "created_result.matches",
-        title: "新增指标结果中的指标 应属于本用例目标，标题、衡量指标和来源正确",
+        title: "新增指标结果中的指标 应属于本用例目标，标题和来源正确",
         object: "api.result_create_response",
         operator: "matches",
         params: {
           resultFrom: "runtime.createdResult",
           targetFrom: "runtime.resultTarget",
           titleFrom: "data.resultTitle",
-          metricNameFrom: "data.metricName",
           source: "managerDefined",
         },
       },
@@ -370,7 +368,7 @@ export const adminCreateResultCase = {
         title: "本用例指标目标 应存在 标题为 `E2E-RESULT-CREATE: 管理员新增指标`、来源为 `managerDefined` 的指标",
         object: "db.result_target",
         operator: "result_present",
-        params: { targetFrom: "runtime.resultTarget", titleFrom: "data.resultTitle", metricNameFrom: "data.metricName" },
+        params: { targetFrom: "runtime.resultTarget", titleFrom: "data.resultTitle" },
       },
       {
         source: { caseStepId: "S1-4", method: "playwright" },
