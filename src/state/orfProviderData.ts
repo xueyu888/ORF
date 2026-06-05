@@ -1,8 +1,8 @@
 import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, useState } from "react";
-import { apiJson, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
+import { apiJson, getCurrentUserAccess, type CurrentUserAccessData, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState } from "./orfStateSnapshot";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
-import type { CommentThread, OrfState, UserRole } from "../types/orf";
+import type { CommentThread, OrfState, OrfUser, UserRole } from "../types/orf";
 
 const ONLINE_ACTIVITY_THROTTLE_MS = 60_000;
 
@@ -15,6 +15,7 @@ interface OrfDataStateOptions {
   currentUserRole: UserRole | null;
   isApproved: boolean;
   isAuthenticated: boolean;
+  loadTaskManagementData: boolean;
   refreshNotifications: () => Promise<void>;
   setState: Dispatch<SetStateAction<OrfState>>;
 }
@@ -33,8 +34,20 @@ export function mergeTaskManagementData(state: OrfState, data: TaskManagementDat
     objectiveTrialReviews: data.objectiveTrialReviews ?? state.objectiveTrialReviews ?? [],
     objectiveAlignmentRequests: data.objectiveAlignmentRequests ?? state.objectiveAlignmentRequests ?? [],
     pointLedger: data.pointLedger ?? state.pointLedger ?? [],
-    permissionRules: data.permissionRules,
   });
+}
+
+function mergeCurrentUser(users: OrfUser[], user: OrfUser) {
+  return [...users.filter((item) => item.id !== user.id && item.email.toLowerCase() !== user.email.toLowerCase()), user];
+}
+
+export function mergeCurrentUserAccess(state: OrfState, data: CurrentUserAccessData): OrfState {
+  return {
+    ...state,
+    users: mergeCurrentUser(state.users, data.user),
+    currentUserId: data.user.id,
+    permissionRules: data.permissionRules,
+  };
 }
 
 export function mergePermissionRules(state: OrfState, data: PermissionRulesResponse): OrfState {
@@ -79,6 +92,7 @@ export function useOrfDataState({
   currentUserRole,
   isApproved,
   isAuthenticated,
+  loadTaskManagementData,
   refreshNotifications,
   setState,
 }: OrfDataStateOptions) {
@@ -91,6 +105,18 @@ export function useOrfDataState({
     },
     [setState],
   );
+
+  const applyCurrentUserAccess = useCallback(
+    (data: CurrentUserAccessData) => {
+      setState((current) => mergeCurrentUserAccess(current, data));
+    },
+    [setState],
+  );
+
+  const refreshCurrentUserAccess = useCallback(async () => {
+    const data = await getCurrentUserAccess();
+    applyCurrentUserAccess(data);
+  }, [applyCurrentUserAccess]);
 
   const refreshTaskManagementData = useCallback(async () => {
     const data = await apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole));
@@ -139,36 +165,42 @@ export function useOrfDataState({
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
       clearNotifications();
+      setDataReady(false);
       return;
     }
 
     let cancelled = false;
     setDataReady(false);
 
-    void apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
+    const markReady = () => {
+      if (!cancelled) {
+        setDataReady(true);
+      }
+    };
+
+    const accessLoad = getCurrentUserAccess()
       .then((data) => {
         if (!cancelled) {
-          applyTaskManagementData(data);
+          applyCurrentUserAccess(data);
         }
       })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) {
-          setDataReady(true);
-        }
-      });
+      .catch(() => undefined);
+
+    const taskManagementLoad = loadTaskManagementData
+      ? apiJson<TaskManagementData>(taskManagementPathForRole(currentUserRole))
+          .then((data) => {
+            if (!cancelled) {
+              applyTaskManagementData(data);
+            }
+          })
+          .catch(() => undefined)
+      : Promise.resolve();
+
+    void Promise.allSettled([accessLoad, taskManagementLoad]).finally(markReady);
 
     void refreshNotifications().catch(() => undefined);
 
-    if (shouldFetchAdminCollections(currentUserRole)) {
-      void apiJson<PermissionRulesResponse>("/api/permissions")
-        .then((data) => {
-          if (!cancelled) {
-            applyPermissionRules(data);
-          }
-        })
-        .catch(() => undefined);
-
+    if (loadTaskManagementData && shouldFetchAdminCollections(currentUserRole)) {
       void apiJson<UsersResponse>("/api/users")
         .then((data) => {
           if (!cancelled) {
@@ -181,7 +213,18 @@ export function useOrfDataState({
     return () => {
       cancelled = true;
     };
-  }, [applyPermissionRules, applyTaskManagementData, applyUsers, authReady, clearNotifications, currentUserRole, isAuthenticated, isApproved, refreshNotifications]);
+  }, [
+    applyCurrentUserAccess,
+    applyTaskManagementData,
+    applyUsers,
+    authReady,
+    clearNotifications,
+    currentUserRole,
+    isAuthenticated,
+    isApproved,
+    loadTaskManagementData,
+    refreshNotifications,
+  ]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
@@ -240,6 +283,7 @@ export function useOrfDataState({
     applyCommentThread,
     applyRemovedCommentThread,
     dataReady,
+    refreshCurrentUserAccess,
     refreshPermissionRules,
     refreshTaskManagementData,
     refreshUsers,

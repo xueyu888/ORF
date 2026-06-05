@@ -238,6 +238,5 @@ export async function getMyChallengesData(memberUserId: string, includeAll = fal
     objectiveTrialReviews: data.objectiveTrialReviews.filter((item) => objectiveIds.has(item.objectiveId)),
     objectiveAlignmentRequests: data.objectiveAlignmentRequests.filter((item) => objectiveIds.has(item.objectiveId)),
     pointLedger: data.pointLedger,
-    permissionRules: data.permissionRules,
   };
 }

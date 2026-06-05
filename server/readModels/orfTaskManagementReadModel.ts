@@ -165,7 +165,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     ? await db.select().from(objectiveAlignmentRequests).where(eq(objectiveAlignmentRequests.teamId, storageScopeId))
     : await db.select().from(objectiveAlignmentRequests);
   const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
-  const scopeRows = storageScopeId ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)) : await db.select({ id: teams.id }).from(teams);
   const resultIds = resultRows.map((result) => result.id);
   const taskIds = taskRows.map((task) => task.id);
   const feedbackIssueIds = feedbackRows.map((item) => item.id);
@@ -174,7 +173,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
   const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
-  const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
   const { userIdByName, userNameById } = await getUserMapsForStorageScope(storageScopeId);
 
   const checklistByTask = new Map<string, Task["checklist"]>();
@@ -357,7 +355,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     objectiveTrialReviews: objectiveTrialReviewItems,
     objectiveAlignmentRequests: objectiveAlignmentRequestItems,
     pointLedger: pointLedgerItems,
-    permissionRules,
   };
 }
 
@@ -368,11 +365,13 @@ export async function getOrfStateSnapshot(scope: TaskManagementDataScope = {}): 
     ? await db.select({ id: teams.id }).from(teams).where(eq(teams.id, storageScopeId)).limit(1)
     : await db.select({ id: teams.id }).from(teams).limit(1);
   const scopeUsers = scopeRow ? await getScopedUsers(runtimeScope(scopeRow.id)) : initialOrfState.users;
+  const permissionRules = scopeRow ? await getPermissionRulesForScope(runtimeScope(scopeRow.id)) : initialOrfState.permissionRules;
 
   return {
     ...data,
     users: scopeUsers,
     currentUserId: scopeUsers[0]?.id ?? initialOrfState.currentUserId,
+    permissionRules,
     decisions: [],
     evalRuns: [],
     scenarios: [],
