@@ -6384,24 +6384,41 @@ body[data-dragging-floating="true"] {
   padding-left: 3px;
 }
 
-.orf-project-add-button {
+.orf-project-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.orf-project-add-button,
+.orf-project-delete-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 28px;
   height: 28px;
-  border: 1px solid rgba(var(--orf-project-accent, 80, 138, 190), 0.34);
-  background:
-    linear-gradient(180deg, rgba(var(--orf-project-accent, 80, 138, 190), 0.92), rgba(var(--orf-project-accent-deep, 43, 82, 128), 0.98));
-  color: #fff8df;
   clip-path: var(--orf-control-cut);
   line-height: 1;
-  box-shadow: inset 0 0 0 1px rgba(255, 226, 160, 0.32);
   transition:
     transform 160ms ease;
 }
 
-.orf-project-add-button:hover {
+.orf-project-add-button {
+  border: 1px solid rgba(var(--orf-project-accent, 80, 138, 190), 0.34);
+  background:
+    linear-gradient(180deg, rgba(var(--orf-project-accent, 80, 138, 190), 0.92), rgba(var(--orf-project-accent-deep, 43, 82, 128), 0.98));
+  color: #fff8df;
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 160, 0.32);
+}
+
+.orf-project-delete-button {
+  border: 1px solid rgba(191, 83, 83, 0.28);
+  background: rgba(255, 248, 244, 0.8);
+  color: var(--orf-danger-text);
+}
+
+.orf-project-add-button:hover,
+.orf-project-delete-button:hover {
   transform: translateY(-1px);
 }
 
@@ -7523,7 +7540,7 @@ body[data-dragging-floating="true"] {
     white-space: nowrap;
   }
 
-  .orf-project-add-button {
+  .orf-project-header-actions {
     justify-self: end;
   }
 

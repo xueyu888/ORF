@@ -833,6 +833,46 @@ export async function createProject(input: CreateProjectInput, context: { scope:
   return { status: "ok" as const, project };
 }
 
+export async function deleteProject(projectId: string, context: { scope: RuntimeScope; userId: string }) {
+  const nextProjectId = projectId.trim();
+  if (!nextProjectId) return { status: "notFound" as const };
+
+  const storageScopeId = runtimeScopeStorageId(context.scope);
+  const deletedProject = await db.transaction(async (tx) => {
+    const [project] = await tx
+      .select({
+        id: projects.id,
+        name: projects.name,
+        createdAt: projects.createdAt,
+        updatedAt: projects.updatedAt,
+      })
+      .from(projects)
+      .where(and(eq(projects.id, nextProjectId), eq(projects.teamId, storageScopeId)))
+      .limit(1)
+      .for("update");
+    if (!project) return null;
+
+    await tx
+      .update(objectives)
+      .set({ projectId: null, updatedAt: today(), updatedBy: context.userId })
+      .where(and(eq(objectives.teamId, storageScopeId), eq(objectives.projectId, nextProjectId)));
+    await tx.delete(projects).where(and(eq(projects.id, nextProjectId), eq(projects.teamId, storageScopeId)));
+    return project;
+  });
+
+  if (!deletedProject) return { status: "notFound" as const };
+
+  publishOrfDataInvalidation({
+    actorUserId: context.userId,
+    models: ["taskManagement"],
+    reason: "project.changed",
+    target: { id: nextProjectId, type: "project" },
+    teamId: storageScopeId,
+  });
+
+  return { status: "deleted" as const, project: deletedProject };
+}
+
 export async function createObjective(input: CreateObjectiveInput, context: { scope: RuntimeScope; userId: string }): Promise<Objective | null> {
   const id = makeId("obj");
   const now = today();

@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, UserPlus, type LucideIcon } from "lucide-react";
+import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, Trash2, UserPlus, type LucideIcon } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -102,6 +102,7 @@ type RowHandlers = {
   onRecruitObjective: (objectiveId: string) => void;
   onRejectApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
   onCreateProject: (name: string) => Promise<OrfProject | null>;
+  onDeleteProject: (projectId: string) => Promise<boolean>;
   onSaveObjectiveDeadline: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   onSaveMetricDetails: (target: ChallengeTarget, details: ResultDetailsInput) => Promise<boolean>;
   onSetObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
@@ -155,7 +156,9 @@ export function ChallengeTree({
         >
           <ProjectHeader
             canCreateObjective={handlers.canCreateObjective}
+            canManageProjects={handlers.canManageProjects}
             onAddObjective={handlers.onAddObjective}
+            onDeleteProject={handlers.onDeleteProject}
             project={project}
           />
           <div className="orf-project-body grid gap-3">
@@ -256,30 +259,57 @@ function ProjectNavigator({
 
 function ProjectHeader({
   canCreateObjective,
+  canManageProjects,
   onAddObjective,
+  onDeleteProject,
   project,
 }: {
   canCreateObjective: boolean;
+  canManageProjects: boolean;
   onAddObjective: (projectId: string | null) => void;
+  onDeleteProject: (projectId: string) => Promise<boolean>;
   project: ObjectiveProjectGroup;
 }) {
+  const handleDeleteProject = () => {
+    if (!project.projectId || project.isUnassigned) return;
+    const message =
+      project.objectiveCount > 0
+        ? `删除项目「${project.name}」？项目下 ${project.objectiveCount} 个目标不会删除，会移到“未归属目标”。`
+        : `删除项目「${project.name}」？`;
+    if (!window.confirm(message)) return;
+    void onDeleteProject(project.projectId);
+  };
+
   return (
     <div className="orf-project-header">
       <div className="orf-project-heading min-w-0">
         <h2 className="orf-project-title">{project.name}</h2>
         <span className="orf-project-count">{project.objectiveCount} 目标</span>
       </div>
-      {canCreateObjective && (
-        <button
-          aria-label={project.isUnassigned ? "新增未归属目标" : `在${project.name}中新增目标`}
-          className="orf-project-add-button"
-          title={project.isUnassigned ? "新增未归属目标" : "新增目标"}
-          type="button"
-          onClick={() => onAddObjective(project.projectId)}
-        >
-          <Plus className="h-4 w-4" aria-hidden="true" />
-        </button>
-      )}
+      <div className="orf-project-header-actions">
+        {canManageProjects && !project.isUnassigned && project.projectId && (
+          <button
+            aria-label={`删除项目${project.name}`}
+            className="orf-project-delete-button"
+            title="删除项目"
+            type="button"
+            onClick={handleDeleteProject}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+        {canCreateObjective && (
+          <button
+            aria-label={project.isUnassigned ? "新增未归属目标" : `在${project.name}中新增目标`}
+            className="orf-project-add-button"
+            title={project.isUnassigned ? "新增未归属目标" : "新增目标"}
+            type="button"
+            onClick={() => onAddObjective(project.projectId)}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
