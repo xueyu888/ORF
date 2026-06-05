@@ -1,8 +1,6 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { TaskManagementData } from "../../src/domain/orfReadModel";
-import { objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
-import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../../src/domain/orfSettlement";
 import type {
   CommentAttachment,
   CommentThread,
@@ -14,12 +12,9 @@ import type {
   OrfProject,
   ObjectiveTrialReview,
   OrfState,
-  PointLedgerEntry,
   Result,
   Task,
-  UncertaintyLevel,
 } from "../../src/types/orf";
-import { addCalendarDays } from "../../src/utils/date";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -38,14 +33,24 @@ import {
   resultTrendPoints,
   taskChecklistItems,
   tasks,
-  teamMembers,
   teams,
-  users,
 } from "../db/schema";
 import { getPermissionRulesForScope } from "../repositories/permissionRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { getScopedUsers } from "../repositories/userRepository";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
+import {
+  getUserMapsForStorageScope,
+  groupEvidenceIdsByResult,
+  groupResultTrends,
+  groupResultsByObjective,
+  groupTaskIdsByObjective,
+  mapObjectiveRows,
+  mapPointLedgerRows,
+  mapResultRows,
+  nameForUserId,
+  optional,
+} from "./orfReadModelMappers";
 
 export type TaskManagementDataScope = {
   scope?: RuntimeScope | null;
@@ -54,14 +59,6 @@ export type TaskManagementDataScope = {
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
 type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
-
-function optional<T>(value: T | null): T | undefined {
-  return value ?? undefined;
-}
-
-function addDays(value: string, days: number) {
-  return addCalendarDays(value, days, value);
-}
 
 function commentAttachmentContentUrl(id: string) {
   return `/api/comments/attachments/${encodeURIComponent(id)}/content`;
@@ -135,28 +132,6 @@ async function getCommentRows(scope: TaskManagementDataScope = {}): Promise<[Com
   }
 }
 
-function nameForUserId(userNameById: Map<string, string>, userId: string | null | undefined, fallback = "") {
-  return userId ? userNameById.get(userId) ?? fallback : fallback;
-}
-
-async function getUserMapsForScope(storageScopeId: string | null | undefined) {
-  const rows = storageScopeId
-    ? await db
-        .select({ id: users.id, name: users.name })
-        .from(teamMembers)
-        .innerJoin(users, eq(teamMembers.userId, users.id))
-        .where(eq(teamMembers.teamId, storageScopeId))
-    : await db.select({ id: users.id, name: users.name }).from(users);
-  return {
-    userIdByName: new Map(rows.map((member) => [member.name, member.id])),
-    userNameById: new Map(rows.map((member) => [member.id, member.name])),
-  };
-}
-
-function uncertaintyScore(level: UncertaintyLevel | null) {
-  return uncertaintyScoreFor(level);
-}
-
 async function getResultTrendRows(resultIds: string[]) {
   if (resultIds.length === 0) return [];
   return db.select().from(resultTrendPoints).where(inArray(resultTrendPoints.resultId, resultIds));
@@ -200,7 +175,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
   const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const permissionRules = scopeRows[0] ? await getPermissionRulesForScope(runtimeScope(scopeRows[0].id)) : initialOrfState.permissionRules;
-  const { userIdByName, userNameById } = await getUserMapsForScope(storageScopeId);
+  const { userIdByName, userNameById } = await getUserMapsForStorageScope(storageScopeId);
 
   const checklistByTask = new Map<string, Task["checklist"]>();
   for (const item of checklistRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
@@ -209,12 +184,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     checklistByTask.set(item.taskId, list);
   }
 
-  const trendByResult = new Map<string, Result["trend"]>();
-  for (const point of trendRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
-    const list = trendByResult.get(point.resultId) ?? [];
-    list.push({ date: point.date, value: point.value });
-    trendByResult.set(point.resultId, list);
-  }
+  const trendByResult = groupResultTrends(trendRows);
 
   const causeCategoriesByFeedback = new Map<string, string[]>();
   for (const item of causeRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
@@ -298,91 +268,19 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     activity: [],
   }));
 
-  const resultItems: Result[] = orderedResultRows.map((result) => ({
-    id: result.id,
-    objectiveId: result.objectiveId,
-    title: result.title,
-    description: result.description,
-    metricName: result.metricName,
-    metricRequirement: optional(result.metricRequirement),
-    statisticalObject: optional(result.statisticalObject),
-    completionStandard: optional(result.completionStandard),
-    sampleSet: optional(result.sampleSet),
-    measurementScope: optional(result.measurementScope),
-    uncertaintyLevel: optional(result.uncertaintyLevel),
-    baseline: result.baseline,
-    current: result.current,
-    target: result.target,
-    unit: result.unit,
-    direction: result.direction,
-    status: result.status,
-    confidence: result.confidence,
-    source: result.source,
-    definer: nameForUserId(userNameById, result.definerUserId, result.definer),
-    definerUserId: optional(result.definerUserId),
-    uncertaintyScore: result.uncertaintyScore ?? uncertaintyScore(result.uncertaintyLevel),
-    acceptedResult: result.acceptedResult ?? "unreviewed",
-    evidenceIds: evidenceItems.filter((item) => item.linkedResultId === result.id).map((item) => item.id),
-    trend: trendByResult.get(result.id) ?? [],
-    reviewCadence: result.reviewCadence,
-    createdAt: result.createdAt,
-    updatedAt: result.updatedAt,
-  }));
+  const resultItems: Result[] = mapResultRows({
+    evidenceIdsByResult: groupEvidenceIdsByResult(evidenceRows),
+    resultRows: orderedResultRows,
+    trendByResult,
+    userNameById,
+  });
 
-  const objectiveItems: Objective[] = objectiveRows.map((objective) => {
-    const objectiveResults = resultItems.filter((result) => result.objectiveId === objective.id);
-    const objectiveBasePoints = objectiveBasePointsForResults(objectiveResults);
-    const participants = objectiveParticipantSnapshot({
-      challengerUserIds: objective.challengerUserIds,
-      challengerNames: objective.challengers ?? [],
-      assignedChallengerUserIds: objective.assignedChallengerUserIds,
-      assignedChallengerNames: objective.assignedChallengers ?? [],
-      userIdByName,
-      userNameById,
-    });
-    const challengeApplications = (objective.challengeApplications ?? []).map((application) => {
-      const applicantUserId = application.applicantUserId ?? userIdByName.get(application.applicant) ?? null;
-      return {
-        ...application,
-        applicant: nameForUserId(userNameById, applicantUserId, application.applicant),
-        applicantUserId,
-      };
-    });
-
-    return {
-      id: objective.id,
-      title: objective.title,
-      description: objective.description,
-      whyItMatters: objective.whyItMatters,
-      projectId: objective.projectId,
-      cycle: objective.cycle,
-      stage: objective.stage,
-      flowStatus: objective.flowStatus,
-      status: objective.status,
-      confidence: objective.confidence,
-      progress: Math.max(0, Math.min(100, Math.round(objective.progress))),
-      boundary: objective.boundary,
-      successDefinition: objective.successDefinition,
-      resultIds: objectiveResults.map((result) => result.id),
-      taskIds: taskItems.filter((task) => task.linkedObjectiveId === objective.id).map((task) => task.id),
-      finalDueAt: objective.finalDueAt || addDays(objective.updatedAt, 14),
-      challengers: participants.challengers,
-      challengerUserIds: participants.challengerUserIds,
-      assignedChallengers: participants.assignedChallengers,
-      assignedChallengerUserIds: participants.assignedChallengerUserIds,
-      challengeApplications,
-      acceptedAt: objective.acceptedAt,
-      confirmationDueAt: objective.confirmationDueAt,
-      confirmedAt: objective.confirmedAt,
-      lootSubmittedAt: objective.lootSubmittedAt,
-      acceptedResult: objective.acceptedResult,
-      completionMultiplier: objective.completionMultiplier,
-      objectiveBasePoints,
-      objectiveSettlementPoints: objective.objectiveSettlementPoints,
-      publishedAt: objective.publishedAt,
-      createdAt: objective.createdAt,
-      updatedAt: objective.updatedAt,
-    };
+  const objectiveItems: Objective[] = mapObjectiveRows({
+    objectiveRows,
+    resultsByObjective: groupResultsByObjective(resultItems),
+    taskIdsByObjective: groupTaskIdsByObjective(taskItems),
+    userIdByName,
+    userNameById,
   });
   const objectiveLootItems: ObjectiveLoot[] = objectiveLootRows
     .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt))
@@ -432,17 +330,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
       reviewedByUserId: optional(item.reviewedByUserId),
       reviewedAt: item.reviewedAt,
     }));
-  const pointLedgerItems: PointLedgerEntry[] = pointLedgerRows
-    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-    .map((item) => ({
-      id: item.id,
-      objectiveId: item.objectiveId,
-      userId: item.userId,
-      memberName: nameForUserId(userNameById, item.userId, item.memberName),
-      points: item.points,
-      reason: item.reason,
-      createdAt: item.createdAt,
-    }));
+  const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows, userNameById });
   const commentItems: CommentThread[] = [...commentThreadRows]
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
     .map((thread) => ({

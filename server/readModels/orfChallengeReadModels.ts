@@ -1,3 +1,4 @@
+import { desc, eq, inArray } from "drizzle-orm";
 import type { BountyHallData, BountyHallItem, TaskManagementData } from "../../src/domain/orfReadModel";
 import { objectiveChallengeEntryClosed } from "../../src/domain/orfChallengeEntry";
 import {
@@ -11,8 +12,28 @@ import {
   uniqueParticipantNames,
 } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults } from "../../src/domain/orfSettlement";
-import type { Objective, Result, UncertaintyLevel, UserRole } from "../../src/types/orf";
+import type { Objective, PointLedgerEntry, Result, UncertaintyLevel, UserRole } from "../../src/types/orf";
+import { db } from "../db/client";
+import {
+  evidence,
+  objectives,
+  pointLedger,
+  results,
+  resultTrendPoints,
+  tasks,
+} from "../db/schema";
+import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { getTaskManagementData, type TaskManagementDataScope } from "./orfTaskManagementReadModel";
+import {
+  getUserMapsForStorageScope,
+  groupEvidenceIdsByResult,
+  groupResultTrends,
+  groupResultsByObjective,
+  groupTaskIdsByObjective,
+  mapObjectiveRows,
+  mapPointLedgerRows,
+  mapResultRows,
+} from "./orfReadModelMappers";
 
 const difficultyRanks: Record<UncertaintyLevel, number> = {
   入门: 1,
@@ -45,52 +66,122 @@ function objectiveAvailableForBountyApplication(objective: Objective) {
   return canApplyForObjectiveChallenge(objective) && !objectiveChallengeEntryClosed(objective);
 }
 
-function contributionSummaryFor(data: TaskManagementData, memberUserId: string) {
-  const ledgerPoints = data.pointLedger
-    .filter((entry) => entry.userId === memberUserId)
+function scopedStorageId(scope: TaskManagementDataScope = {}) {
+  return scope.scope ? runtimeScopeStorageId(scope.scope).trim() : "";
+}
+
+async function getBountyHallSourceRows(scope: TaskManagementDataScope = {}) {
+  const storageScopeId = scopedStorageId(scope);
+  const objectiveRows = storageScopeId
+    ? await db.select().from(objectives).where(eq(objectives.teamId, storageScopeId)).orderBy(desc(objectives.createdAt), desc(objectives.id))
+    : await db.select().from(objectives).orderBy(desc(objectives.createdAt), desc(objectives.id));
+  const resultRows = storageScopeId ? await db.select().from(results).where(eq(results.teamId, storageScopeId)) : await db.select().from(results);
+  const pointLedgerRows = storageScopeId ? await db.select().from(pointLedger).where(eq(pointLedger.teamId, storageScopeId)) : await db.select().from(pointLedger);
+  const taskRows = storageScopeId
+    ? await db
+        .select({ id: tasks.id, linkedObjectiveId: tasks.linkedObjectiveId, sortOrder: tasks.sortOrder })
+        .from(tasks)
+        .where(eq(tasks.teamId, storageScopeId))
+    : await db.select({ id: tasks.id, linkedObjectiveId: tasks.linkedObjectiveId, sortOrder: tasks.sortOrder }).from(tasks);
+  const resultIds = resultRows.map((result) => result.id);
+  const trendRows = resultIds.length > 0 ? await db.select().from(resultTrendPoints).where(inArray(resultTrendPoints.resultId, resultIds)) : [];
+  const evidenceRows =
+    resultIds.length > 0
+      ? await db.select({ id: evidence.id, linkedResultId: evidence.linkedResultId }).from(evidence).where(inArray(evidence.linkedResultId, resultIds))
+      : [];
+
+  return {
+    evidenceRows,
+    objectiveRows,
+    pointLedgerRows,
+    resultRows,
+    storageScopeId,
+    taskRows,
+    trendRows,
+  };
+}
+
+function bountyHallItemFromObjective(input: {
+  canUseChallengeActions: boolean;
+  objective: Objective;
+  results: Result[];
+  viewerId: string;
+}) {
+  const result = input.results[0];
+  const applications = input.objective.challengeApplications ?? [];
+  const pendingApplications = applications.filter((application) => application.status === "pending");
+  const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
+  const challengers = uniqueParticipantNames(input.objective.challengers ?? []);
+
+  return {
+    applications,
+    approvedApplicants,
+    challengers,
+    uncertaintyPoints: objectiveBasePointsForResults(input.results),
+    deadline: input.objective.finalDueAt,
+    definer: result?.definer ?? "",
+    difficultyRank: input.results.length > 0 ? Math.max(...input.results.map(resultDifficultyRank)) : 0,
+    hasCurrentApplication: input.canUseChallengeActions && pendingApplications.some((application) => application.applicantUserId === input.viewerId),
+    isCurrentChallenger: input.canUseChallengeActions && isObjectiveChallenger(input.objective, input.viewerId),
+    isRecruitment: input.canUseChallengeActions && isObjectiveAssignedChallenger(input.objective, input.viewerId) && canAcceptObjectiveChallengeByFlow(input.objective),
+    objective: input.objective,
+    pendingApplications,
+    result: result ?? null,
+    results: input.results,
+    source: result?.source ?? "managerDefined",
+  } satisfies BountyHallItem;
+}
+
+function bountyContributionSummary(input: {
+  memberUserId: string;
+  objectives: Objective[];
+  pointLedger: PointLedgerEntry[];
+}) {
+  const ledgerPoints = input.pointLedger
+    .filter((entry) => entry.userId === input.memberUserId)
     .reduce((sum, entry) => sum + entry.points, 0);
   if (ledgerPoints > 0) {
     return { points: ledgerPoints };
   }
 
   return {
-    points: data.objectives.reduce((sum, objective) => {
-      if (!isObjectiveChallenger(objective, memberUserId)) return sum;
+    points: input.objectives.reduce((sum, objective) => {
+      if (!isObjectiveChallenger(objective, input.memberUserId)) return sum;
       return sum + (objective.objectiveSettlementPoints ?? 0);
     }, 0),
   };
 }
 
 export async function getBountyHallData(viewer: { id: string; name: string; role: UserRole }, scope: TaskManagementDataScope = {}): Promise<BountyHallData> {
-  const data = await getTaskManagementData(scope);
+  const rows = await getBountyHallSourceRows(scope);
+  const { userIdByName, userNameById } = await getUserMapsForStorageScope(rows.storageScopeId);
+  const resultItems = mapResultRows({
+    evidenceIdsByResult: groupEvidenceIdsByResult(rows.evidenceRows),
+    resultRows: rows.resultRows,
+    trendByResult: groupResultTrends(rows.trendRows),
+    userNameById,
+  });
+  const resultsByObjective = groupResultsByObjective(resultItems);
+  const taskIdsByObjective = groupTaskIdsByObjective([...rows.taskRows].sort((left, right) => left.sortOrder - right.sortOrder));
+  const objectiveItems = mapObjectiveRows({
+    objectiveRows: rows.objectiveRows,
+    resultsByObjective,
+    taskIdsByObjective,
+    userIdByName,
+    userNameById,
+  });
+  const pointLedgerItems = mapPointLedgerRows({ pointLedgerRows: rows.pointLedgerRows, userNameById });
   const canUseChallengeActions = viewer.role === "member";
-  const items = data.objectives.flatMap((objective) => {
-    const objectiveResults = data.results.filter((result) => result.objectiveId === objective.id);
-    const result = objectiveResults[0];
-    const isRecruitment = canUseChallengeActions && isObjectiveAssignedChallenger(objective, viewer.id) && canAcceptObjectiveChallengeByFlow(objective);
-    if (!objectiveVisibleInBountyHall(objective) && !isRecruitment) return [];
-
-    const applications = objective.challengeApplications ?? [];
-    const pendingApplications = applications.filter((application) => application.status === "pending");
-    const approvedApplicants = applications.filter((application) => application.status === "approved").map((application) => application.applicant);
-    const challengers = uniqueParticipantNames(objective.challengers ?? []);
-    return [{
-      applications,
-      approvedApplicants,
-      challengers,
-      uncertaintyPoints: objectiveBasePointsForResults(objectiveResults),
-      deadline: objective.finalDueAt,
-      definer: result?.definer ?? "",
-      difficultyRank: objectiveResults.length > 0 ? Math.max(...objectiveResults.map(resultDifficultyRank)) : 0,
-      hasCurrentApplication: canUseChallengeActions && pendingApplications.some((application) => application.applicantUserId === viewer.id),
-      isCurrentChallenger: canUseChallengeActions && isObjectiveChallenger(objective, viewer.id),
-      isRecruitment,
+  const items = objectiveItems.flatMap((objective) => {
+    const objectiveResults = resultsByObjective.get(objective.id) ?? [];
+    const item = bountyHallItemFromObjective({
+      canUseChallengeActions,
       objective,
-      pendingApplications,
-      result: result ?? null,
       results: objectiveResults,
-      source: result?.source ?? "managerDefined",
-    }];
+      viewerId: viewer.id,
+    });
+    if (!objectiveVisibleInBountyHall(objective) && !item.isRecruitment) return [];
+    return [item];
   }).sort(compareBountyItems);
 
   const availableItems = items.filter((item) => !item.isRecruitment && objectiveAvailableForBountyApplication(item.objective));
@@ -100,8 +191,8 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
     publicItems: items,
     recruitmentItems: items.filter((item) => item.isRecruitment),
     availableItems,
-    objectiveOptions: data.objectives.filter((objective) => objectiveOptionIds.has(objective.id)),
-    contribution: contributionSummaryFor(data, viewer.id),
+    objectiveOptions: objectiveItems.filter((objective) => objectiveOptionIds.has(objective.id)),
+    contribution: bountyContributionSummary({ memberUserId: viewer.id, objectives: objectiveItems, pointLedger: pointLedgerItems }),
   };
 }
 

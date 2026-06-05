@@ -26,26 +26,8 @@
   isolation: isolate;
   align-content: start;
   min-height: calc(100vh - 144px);
-  padding: clamp(18px, 2vw, 24px);
-  border: 1px solid rgba(255, 236, 184, 0.34);
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 246, 219, 0.22), rgba(245, 221, 178, 0.1)),
-    rgba(255, 239, 206, 0.1);
-  box-shadow: 0 28px 70px rgba(30, 42, 58, 0.14), inset 0 1px 0 rgba(255, 250, 235, 0.18);
+  padding: 0;
   color: var(--bh-ink);
-}
-
-.bounty-hall-page::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background:
-    linear-gradient(120deg, rgba(90, 180, 205, 0.12) 0%, transparent 28%),
-    linear-gradient(260deg, rgba(255, 220, 145, 0.18) 0%, transparent 34%);
-  content: "";
-  pointer-events: none;
 }
 
 .bounty-hall-page button,
@@ -2128,7 +2110,6 @@
 @media (max-width: 720px) {
   .bounty-hall-page {
     min-height: calc(100vh - 108px);
-    padding: 16px;
   }
 
   .bounty-cycle-pill {
