@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import pg from "pg";
 import { createPgPoolConfig } from "./db-connection.mjs";
@@ -11,6 +12,30 @@ const extraArgs = process.argv.slice(2);
 const requestedSuite = process.env.TESTD_SUITE;
 const inferredSuite = requestedSuite ?? inferSuiteFromArgs(extraArgs);
 const suites = inferredSuite ? suitesFor(inferredSuite) : ["isolated", "permissions", "settings"];
+const outputTailLimit = 1024 * 1024;
+const defaultNetworkRetryDivisors = [2, 4, 8];
+const networkFailurePatterns = [
+  {
+    reason: "PostgreSQL 连接超时",
+    pattern: /Connection terminated due to connection timeout/i,
+  },
+  {
+    reason: "TCP 建连超时",
+    pattern: /\b(?:ETIMEDOUT|ESOCKETTIMEDOUT|ENETUNREACH|EHOSTUNREACH)\b/i,
+  },
+  {
+    reason: "TCP 连接被重置",
+    pattern: /\bECONNRESET\b|socket hang up/i,
+  },
+  {
+    reason: "PostgreSQL 连接意外中断",
+    pattern: /Connection terminated unexpectedly/i,
+  },
+  {
+    reason: "Playwright worker 异常退出",
+    pattern: /worker process exited unexpectedly.*signal=SIGTRAP/is,
+  },
+];
 let currentChild;
 let currentChildExited = true;
 let terminating = false;
@@ -48,21 +73,78 @@ if (!process.exitCode) {
       break;
     }
 
-    const exitCode = await runPlaywright(suite, extraArgs);
+    const exitCode = await runSuiteWithNetworkRetry(suite, extraArgs);
     if (terminating) {
       process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
       break;
     }
     if (exitCode !== 0) {
       process.exitCode = exitCode;
-      await runPostFailureRecoveryPass(suite, extraArgs, exitCode);
       break;
     }
   }
 }
 
-function runPlaywright(suite, args, extraEnv = {}) {
+async function runSuiteWithNetworkRetry(suite, args) {
+  const attempts = buildNetworkRetryAttempts(suite, args);
+
+  for (const [attemptIndex, attempt] of attempts.entries()) {
+    if (attempt.retryIndex > 0) {
+      console.error(
+        `TestD 网络降级重试 ${attempt.retryIndex}/${attempts.length - 1}: suite=${suite} ${describeAttempt(attempt)}`,
+      );
+    }
+
+    const result = await runPlaywrightAttempt(suite, attempt.args, attempt.env);
+    if (result.exitCode === 0) {
+      return 0;
+    }
+    if (terminating) {
+      return signalExitCode(terminationSignal ?? "SIGINT");
+    }
+
+    const networkFailure = detectNetworkEntryFailure(result.outputTail);
+    const nextAttempt = attempts[attemptIndex + 1];
+    if (networkFailure && nextAttempt && isRecoveryPassAllowed(attempt.args)) {
+      console.error(`TestD 检测到 ${suite} suite 可能遇到数据库公网入口建连抖动: ${networkFailure.reason}`);
+      const recoveryResult = await runPostFailureRecoveryPass(suite, attempt.args, result.exitCode, {
+        preserveOriginalExitCode: false,
+      });
+      if (terminating) {
+        return signalExitCode(terminationSignal ?? "SIGINT");
+      }
+      if (!recoveryResult.completed) {
+        return recoveryResult.exitCode;
+      }
+
+      const delayMs = networkRetryDelayMs();
+      console.error(
+        `TestD 已完成本轮清理，将在 ${delayMs}ms 后用更低并发重跑整个 ${suite} suite: ${describeAttempt(nextAttempt)}`,
+      );
+      await sleep(delayMs);
+      continue;
+    }
+
+    const recoveryResult = await runPostFailureRecoveryPass(suite, attempt.args, result.exitCode, {
+      preserveOriginalExitCode: false,
+    });
+    if (terminating) {
+      return signalExitCode(terminationSignal ?? "SIGINT");
+    }
+    return recoveryResult.completed || recoveryResult.skipped ? result.exitCode : recoveryResult.exitCode;
+  }
+
+  return 1;
+}
+
+async function runPlaywright(suite, args, extraEnv = {}) {
+  const result = await runPlaywrightAttempt(suite, args, extraEnv);
+  return result.exitCode;
+}
+
+function runPlaywrightAttempt(suite, args, extraEnv = {}) {
   return new Promise((resolve, reject) => {
+    let outputTail = "";
     const child = spawn(
       process.execPath,
       ["scripts/with-public-ca.mjs", "playwright", "test", ...args],
@@ -74,22 +156,30 @@ function runPlaywright(suite, args, extraEnv = {}) {
           TESTD_SUITE: suite,
           ...extraEnv,
         },
-        stdio: "inherit",
+        stdio: ["inherit", "pipe", "pipe"],
       },
     );
     currentChild = child;
     currentChildExited = false;
 
+    child.stdout?.on("data", (chunk) => {
+      process.stdout.write(chunk);
+      outputTail = appendOutputTail(outputTail, chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      process.stderr.write(chunk);
+      outputTail = appendOutputTail(outputTail, chunk);
+    });
     child.on("error", reject);
     child.on("exit", (code, signal) => {
       currentChildExited = true;
       currentChild = undefined;
       if (signal) {
         console.error(`testd ${suite} suite exited by signal ${signal}`);
-        resolve(signalExitCode(signal));
+        resolve({ exitCode: signalExitCode(signal), outputTail });
         return;
       }
-      resolve(code ?? 1);
+      resolve({ exitCode: code ?? 1, outputTail });
     });
   });
 }
@@ -119,33 +209,42 @@ function ensureTestdConfigFileExists() {
 
 function runRecoveryPass(suite, args, reason) {
   const recoveryRunId = createTestdRunId();
-  console.error(`TestD recovery ${reason} pass 启动: suite=${suite} TESTD_RUN_ID=${recoveryRunId}`);
+  const recoveryWorkers = positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1);
+  console.error(
+    `TestD recovery ${reason} pass 启动: suite=${suite} TESTD_RUN_ID=${recoveryRunId} workers=${recoveryWorkers}`,
+  );
   return runPlaywright(suite, recoveryArgs(args), {
     TESTD_RECOVERY_ONLY: "1",
     TESTD_RUN_ID: recoveryRunId,
+    TESTD_DATABASE_POOL_MAX: "1",
   });
 }
 
-async function runPostFailureRecoveryPass(suite, args, originalExitCode) {
+async function runPostFailureRecoveryPass(suite, args, originalExitCode, options = {}) {
   if (terminating || !isRecoveryPassAllowed(args)) {
-    return;
+    return { completed: false, skipped: true, exitCode: originalExitCode };
   }
 
   console.error(`TestD 检测到 ${suite} suite 失败，开始补清理本轮异常退出留下的 recovery case...`);
   const recoveryExitCode = await runRecoveryPass(suite, args, "post-failure");
   if (terminating) {
     process.exitCode = signalExitCode(terminationSignal ?? "SIGINT");
-    return;
+    return { completed: false, skipped: false, exitCode: process.exitCode };
   }
 
   if (recoveryExitCode !== 0) {
     process.exitCode = recoveryExitCode;
     console.error(`TestD post-failure recovery 清理失败，保留退出码 ${recoveryExitCode}。`);
-    return;
+    return { completed: false, skipped: false, exitCode: recoveryExitCode };
   }
 
-  process.exitCode = originalExitCode;
-  console.error(`TestD post-failure recovery 已完成；保留原始测试失败退出码 ${originalExitCode}。`);
+  if (options.preserveOriginalExitCode !== false) {
+    process.exitCode = originalExitCode;
+    console.error(`TestD post-failure recovery 已完成；保留原始测试失败退出码 ${originalExitCode}。`);
+  } else {
+    console.error("TestD post-failure recovery 已完成；本轮失败留下的 recovery case 已补清理。");
+  }
+  return { completed: true, skipped: false, exitCode: originalExitCode };
 }
 
 function createTestdRunId() {
@@ -164,7 +263,7 @@ function recoveryArgs(args) {
     }
     output.push(arg);
   }
-  return output;
+  return withWorkerArg(output, positiveIntegerEnv("TESTD_RECOVERY_WORKERS", 1));
 }
 
 function isTimeoutArg(arg) {
@@ -174,6 +273,154 @@ function isTimeoutArg(arg) {
     arg === "--global-timeout" ||
     arg.startsWith("--global-timeout=")
   );
+}
+
+function buildNetworkRetryAttempts(suite, args) {
+  const currentWorkers = explicitWorkerCount(args) ?? (isSerialSuite(suite) ? 1 : defaultPlaywrightWorkerCount());
+  const attempts = [
+    {
+      retryIndex: 0,
+      args,
+      env: {},
+      workers: currentWorkers,
+      runId: testdRunId,
+    },
+  ];
+
+  if (process.env.TESTD_NETWORK_RETRY === "0" || !isRecoveryPassAllowed(args)) {
+    return attempts;
+  }
+
+  const maxRetries = nonNegativeIntegerEnv("TESTD_NETWORK_RETRY_MAX", 3);
+  if (maxRetries === 0) {
+    return attempts;
+  }
+
+  if (currentWorkers !== undefined && currentWorkers <= 1) {
+    return attempts;
+  }
+
+  const retryWorkers = networkRetryWorkers(currentWorkers)
+    .filter((workers) => currentWorkers === undefined || workers < currentWorkers)
+    .slice(0, maxRetries);
+
+  for (const [index, workers] of retryWorkers.entries()) {
+    const runId = createTestdRunId();
+    attempts.push({
+      retryIndex: index + 1,
+      args: withWorkerArg(args, workers),
+      env: {
+        TESTD_RUN_ID: runId,
+        TESTD_DATABASE_POOL_MAX: "1",
+      },
+      workers,
+      runId,
+    });
+  }
+
+  return attempts;
+}
+
+function isSerialSuite(suite) {
+  return suite === "permissions" || suite === "settings";
+}
+
+function networkRetryWorkers(currentWorkers) {
+  const raw = process.env.TESTD_NETWORK_RETRY_WORKERS;
+  const candidates = raw ? raw.split(",").map((part) => Number.parseInt(part.trim(), 10)) : workerFractions(currentWorkers);
+  const unique = [];
+  for (const value of candidates) {
+    if (Number.isInteger(value) && value > 0 && !unique.includes(value)) {
+      unique.push(value);
+    }
+  }
+  return unique;
+}
+
+function workerFractions(currentWorkers) {
+  return defaultNetworkRetryDivisors.map((divisor) => Math.max(1, Math.floor(currentWorkers / divisor)));
+}
+
+function defaultPlaywrightWorkerCount() {
+  return Math.max(1, Math.floor(logicalCpuCount() / 2));
+}
+
+function logicalCpuCount() {
+  if (typeof os.availableParallelism === "function") {
+    return os.availableParallelism();
+  }
+  return os.cpus().length || 1;
+}
+
+function explicitWorkerCount(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--workers") {
+      const value = Number.parseInt(args[index + 1] ?? "", 10);
+      return Number.isInteger(value) && value > 0 ? value : undefined;
+    }
+    if (arg.startsWith("--workers=")) {
+      const value = Number.parseInt(arg.slice("--workers=".length), 10);
+      return Number.isInteger(value) && value > 0 ? value : undefined;
+    }
+  }
+  return undefined;
+}
+
+function withWorkerArg(args, workers) {
+  const output = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--workers") {
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--workers=")) {
+      continue;
+    }
+    output.push(arg);
+  }
+  output.push(`--workers=${workers}`);
+  return output;
+}
+
+function describeAttempt(attempt) {
+  const workers = attempt.workers === undefined ? "默认 workers" : `--workers=${attempt.workers}`;
+  const pool = attempt.retryIndex > 0 ? "TESTD_DATABASE_POOL_MAX=1" : "当前 pool 设置";
+  return `${workers}, ${pool}, TESTD_RUN_ID=${attempt.runId}`;
+}
+
+function detectNetworkEntryFailure(output) {
+  const normalizedOutput = stripAnsi(output);
+  for (const item of networkFailurePatterns) {
+    if (item.pattern.test(normalizedOutput)) {
+      return { reason: item.reason };
+    }
+  }
+  return undefined;
+}
+
+function appendOutputTail(current, chunk) {
+  const next = current + chunk.toString("utf8");
+  return next.length > outputTailLimit ? next.slice(next.length - outputTailLimit) : next;
+}
+
+function stripAnsi(value) {
+  return value.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
+function networkRetryDelayMs() {
+  const maxDelayMs = nonNegativeIntegerEnv("TESTD_NETWORK_RETRY_JITTER_MS", 500);
+  if (maxDelayMs === 0) {
+    return 0;
+  }
+
+  const minDelayMs = Math.min(50, maxDelayMs);
+  return minDelayMs + Math.floor(Math.random() * (maxDelayMs - minDelayMs + 1));
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function handleTerminationSignal(signal) {
@@ -284,6 +531,11 @@ async function hasPendingRecoveryCases() {
 function positiveIntegerEnv(name, fallback) {
   const value = Number.parseInt(process.env[name] ?? "", 10);
   return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+function nonNegativeIntegerEnv(name, fallback) {
+  const value = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isInteger(value) && value >= 0 ? value : fallback;
 }
 
 function inferSuiteFromArgs(args) {
