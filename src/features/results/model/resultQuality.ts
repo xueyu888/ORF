@@ -20,7 +20,7 @@ export function buildResultQualityChecks(input: ResultQualityInput): ResultQuali
   return [
     {
       label: "可度量",
-      passed: hasText(result.metricName) && hasFiniteNumber(result.baseline) && hasFiniteNumber(result.current) && hasFiniteNumber(result.target),
+      passed: hasText(result.title) && hasFiniteNumber(result.baseline) && hasFiniteNumber(result.current) && hasFiniteNumber(result.target),
     },
     {
       label: "有目标战利品入口",
@@ -32,17 +32,11 @@ export function buildResultQualityChecks(input: ResultQualityInput): ResultQuali
     },
     {
       label: "口径清楚",
-      passed: [
-        details.metricRequirement,
-        result.statisticalObject,
-        details.completionStandard,
-        details.sampleSet,
-        details.measurementScope,
-      ].every(hasText),
+      passed: hasText(details.detail),
     },
     {
       label: "无模糊词",
-      passed: !containsVagueTerms([result.title, details.description, details.metricRequirement, details.completionStandard].join(" ")),
+      passed: !containsVagueTerms([result.title, details.detail].join(" ")),
     },
   ];
 }

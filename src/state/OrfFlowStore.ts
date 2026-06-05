@@ -456,20 +456,14 @@ export class OrfFlowStore {
     return { ...state, objectives: [objective, ...state.objectives] };
   }
 
-  createResult(state: OrfState, input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">): OrfState {
+  createResult(state: OrfState, input: Partial<Result> & Pick<Result, "objectiveId" | "title">): OrfState {
     const id = makeId("res");
     const now = currentDate();
     const result: Result = {
       id,
       objectiveId: input.objectiveId,
       title: input.title,
-      description: input.description?.trim() ?? "",
-      metricName: input.metricName,
-      metricRequirement: input.metricRequirement?.trim() || undefined,
-      statisticalObject: input.statisticalObject ?? "指挥官确认的标准样本集和线上反馈样本",
-      completionStandard: input.completionStandard?.trim() || undefined,
-      sampleSet: input.sampleSet?.trim() || undefined,
-      measurementScope: input.measurementScope?.trim() || undefined,
+      detail: input.detail?.trim() ?? "",
       uncertaintyLevel: input.uncertaintyLevel,
       baseline: input.baseline ?? 0,
       current: input.current ?? 0,
@@ -696,11 +690,7 @@ export class OrfFlowStore {
         result.id === resultId
           ? {
               ...result,
-              description: details.description.trim(),
-              metricRequirement: details.metricRequirement.trim() || undefined,
-              completionStandard: details.completionStandard.trim() || undefined,
-              sampleSet: details.sampleSet.trim() || undefined,
-              measurementScope: details.measurementScope.trim() || undefined,
+              detail: details.detail.trim(),
               updatedAt: now,
             }
           : result,

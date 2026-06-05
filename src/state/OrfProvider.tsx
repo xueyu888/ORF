@@ -87,7 +87,7 @@ interface OrfContextValue {
   createObjective: (input: CreateObjectiveInput) => Promise<Objective | null>;
   createProject: (input: { name: string }) => Promise<OrfState["projects"][number] | null>;
   setObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
-  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<Result | null>;
+  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;

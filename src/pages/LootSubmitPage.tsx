@@ -28,7 +28,7 @@ import {
   objectiveChallengerTargets,
   type ContributionMemberTarget,
 } from "../domain/orfObjectiveParticipants";
-import { resultDetailEntries } from "../domain/orfResultDetails";
+import { resultDetailText } from "../domain/orfResultDetails";
 import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
@@ -60,17 +60,12 @@ const CONTRIBUTION_PERCENT_TOTAL = 100;
 const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
 
 function ResultDetailsSummary({ result }: { result: Result }) {
-  const entries = resultDetailEntries(result);
-  if (entries.length === 0) return null;
+  const detail = resultDetailText(result);
+  if (!detail) return null;
 
   return (
-    <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-xs">
-      {entries.map((entry) => (
-        <div key={entry.key} className="grid gap-1">
-          <div className="font-semibold orf-text-muted">{entry.label}</div>
-          <div className="whitespace-pre-wrap leading-5 orf-text-secondary">{entry.value}</div>
-        </div>
-      ))}
+    <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs whitespace-pre-wrap leading-5 orf-text-secondary">
+      {detail}
     </div>
   );
 }

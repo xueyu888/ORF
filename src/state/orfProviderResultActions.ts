@@ -28,7 +28,7 @@ export function useOrfProviderResultActions({
 }: ResultActionOptions) {
   return useMemo(
     () => ({
-      createResult: async (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => {
+      createResult: async (input: Partial<Result> & Pick<Result, "objectiveId" | "title">) => {
         const payload = {
           ...input,
           source: input.source ?? "managerDefined",
@@ -81,7 +81,7 @@ export function useOrfProviderResultActions({
         try {
           await apiRequest(`/api/results/${encodeURIComponent(resultId)}/details`, {
             method: "PATCH",
-            body: JSON.stringify(details),
+            body: JSON.stringify({ detail: details.detail }),
           });
           await refreshTaskManagementData();
           notify("指标详情已更新");

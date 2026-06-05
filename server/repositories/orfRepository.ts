@@ -66,7 +66,6 @@ import {
 } from "../../src/domain/orfLifecycle";
 import { objectiveChallengeEntryClosed as objectiveClosedForChallengeEntry } from "../../src/domain/orfChallengeEntry";
 import { validateObjectiveDeadlineChange } from "../../src/domain/orfDeadline";
-import type { ResultDetailKey } from "../../src/domain/orfResultDetails";
 import { db } from "../db/client";
 import {
   commentAttachments,
@@ -674,13 +673,8 @@ async function notifyMentionedUsersOfComment(input: {
 export interface CreateResultInput {
   objectiveId: string;
   title: string;
-  metricName: string;
   actorId?: string | null;
-  description?: string;
-  metricRequirement?: string | null;
-  completionStandard?: string | null;
-  sampleSet?: string | null;
-  measurementScope?: string | null;
+  detail?: string | null;
   baseline?: number;
   current?: number;
   target?: number;
@@ -814,8 +808,7 @@ export interface CreateChecklistItemInput {
 
 export async function createResult(input: CreateResultInput): Promise<Result | null> {
   const title = input.title.trim();
-  const metricName = input.metricName.trim();
-  if (!title || !metricName) {
+  if (!title) {
     return null;
   }
 
@@ -847,13 +840,7 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
       teamId: objective.teamId,
       objectiveId: objective.id,
       title,
-      description: input.description?.trim() ?? "",
-      metricName,
-      metricRequirement: nullableTrimmedText(input.metricRequirement),
-      statisticalObject: null,
-      completionStandard: nullableTrimmedText(input.completionStandard),
-      sampleSet: nullableTrimmedText(input.sampleSet),
-      measurementScope: nullableTrimmedText(input.measurementScope),
+      detail: input.detail?.trim() ?? "",
       uncertaintyLevel: input.uncertaintyLevel ?? null,
       baseline: input.baseline ?? 0,
       current: input.current ?? 0,
@@ -3312,30 +3299,10 @@ export async function updateResultTitle(resultId: string, title: string, actorId
 
 export async function updateResultDetails(
   resultId: string,
-  input: Partial<Record<ResultDetailKey, string | null | undefined>>,
+  detail: string | null | undefined,
   actorId?: string | null,
 ): Promise<boolean> {
-  const detailUpdates: Partial<Pick<typeof results.$inferInsert, ResultDetailKey>> = {};
-  if ("description" in input) {
-    detailUpdates.description = input.description?.trim() ?? "";
-  }
-  if ("metricRequirement" in input) {
-    detailUpdates.metricRequirement = nullableTrimmedText(input.metricRequirement);
-  }
-  if ("completionStandard" in input) {
-    detailUpdates.completionStandard = nullableTrimmedText(input.completionStandard);
-  }
-  if ("sampleSet" in input) {
-    detailUpdates.sampleSet = nullableTrimmedText(input.sampleSet);
-  }
-  if ("measurementScope" in input) {
-    detailUpdates.measurementScope = nullableTrimmedText(input.measurementScope);
-  }
-
-  if (Object.keys(detailUpdates).length === 0) {
-    return false;
-  }
-
+  const nextDetail = detail?.trim() ?? "";
   const updatedResult = await db.transaction(async (tx) => {
     const [target] = await tx
       .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
@@ -3350,7 +3317,7 @@ export async function updateResultDetails(
 
     const updated = await tx
       .update(results)
-      .set({ ...detailUpdates, updatedAt: today(), updatedBy: actorId ?? null })
+      .set({ detail: nextDetail, updatedAt: today(), updatedBy: actorId ?? null })
       .where(eq(results.id, resultId))
       .returning({ id: results.id });
     return updated.length > 0 ? { teamId: target.teamId } : null;

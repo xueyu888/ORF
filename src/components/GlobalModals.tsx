@@ -126,7 +126,6 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
   const { state, createResult, closeModal, notify } = useOrf();
   const [selectedObjectiveId, setSelectedObjectiveId] = useState(objectiveId ?? state.objectives[0]?.id ?? "");
   const [title, setTitle] = useState("");
-  const [metricName, setMetricName] = useState("");
   const [uncertaintyLevel, setUncertaintyLevel] = useState<UncertaintyLevel | "">("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -136,7 +135,7 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
         className="grid gap-4"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (hasBlankRequiredValues([selectedObjectiveId, title, metricName, uncertaintyLevel])) {
+          if (hasBlankRequiredValues([selectedObjectiveId, title, uncertaintyLevel])) {
             notify("请填写所有必填字段");
             return;
           }
@@ -144,7 +143,7 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
           setSubmitting(true);
           try {
             const selectedUncertaintyLevel = uncertaintyLevel as UncertaintyLevel;
-            const ok = await createResult({ objectiveId: selectedObjectiveId, title: title.trim(), metricName: metricName.trim(), uncertaintyLevel: selectedUncertaintyLevel, source });
+            const ok = await createResult({ objectiveId: selectedObjectiveId, title: title.trim(), uncertaintyLevel: selectedUncertaintyLevel, source });
             if (ok) closeModal();
           } finally {
             setSubmitting(false);
@@ -153,7 +152,6 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
       >
         <Field label="所属目标"><select className="orf-input px-3 py-2" required value={selectedObjectiveId} onChange={(event) => setSelectedObjectiveId(event.target.value)}>{state.objectives.map((objective) => <option key={objective.id} value={objective.id}>{objective.title}</option>)}</select></Field>
         <Field label="指标标题"><input className="orf-input px-3 py-2" required value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
-        <Field label="衡量指标"><input className="orf-input px-3 py-2" required value={metricName} onChange={(event) => setMetricName(event.target.value)} /></Field>
         <Field label="积分等级">
           <select className="orf-input px-3 py-2" required value={uncertaintyLevel} onChange={(event) => setUncertaintyLevel(event.target.value as UncertaintyLevel | "")}>
             <option value="">请选择积分等级</option>

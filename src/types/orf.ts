@@ -209,13 +209,7 @@ export interface Result {
   id: string;
   objectiveId: string;
   title: string;
-  description: string;
-  metricName: string;
-  metricRequirement?: string;
-  statisticalObject?: string;
-  completionStandard?: string;
-  sampleSet?: string;
-  measurementScope?: string;
+  detail: string;
   uncertaintyLevel?: UncertaintyLevel;
   baseline: number;
   current: number;

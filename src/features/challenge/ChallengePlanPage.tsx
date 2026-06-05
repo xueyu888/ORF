@@ -859,7 +859,6 @@ export function ChallengePlanPage() {
       void createResult({
         objectiveId: row.objectiveId,
         title: value,
-        metricName: value,
         source: row.source ?? "managerDefined",
         definer: currentUser?.name ?? currentMember,
       }).then((result) => {

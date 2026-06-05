@@ -20,8 +20,7 @@ import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, sho
 import {
   normalizeResultDetails,
   normalizeResultDetailsInput,
-  resultDetailEntries,
-  resultDetailFields,
+  resultDetailText,
   resultDetailsEqual,
   type ResultDetailsInput,
 } from "../../../domain/orfResultDetails";
@@ -937,12 +936,9 @@ function MetricDetailsBlock({
 }) {
   const persistedDetails = useMemo(
     () => normalizeResultDetails(result),
-    [result.description, result.metricName, result.metricRequirement, result.completionStandard, result.sampleSet, result.measurementScope],
+    [result.detail],
   );
-  const entries = useMemo(
-    () => resultDetailEntries(result),
-    [result.description, result.metricName, result.metricRequirement, result.completionStandard, result.sampleSet, result.measurementScope],
-  );
+  const detail = resultDetailText(result);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<ResultDetailsInput>(persistedDetails);
@@ -996,20 +992,14 @@ function MetricDetailsBlock({
               void saveDetails();
             }}
           >
-            <div className="orf-result-details-editor-fields">
-              {resultDetailFields.map((field) => (
-                <label key={field.key} className="orf-result-details-editor-field">
-                  <span>{field.label}</span>
-                  <textarea
-                    aria-label={`编辑指标详情${field.label}`}
-                    disabled={saving}
-                    onChange={(event) => setDraft((current) => ({ ...current, [field.key]: event.target.value }))}
-                    rows={field.key === "description" ? 2 : 3}
-                    value={draft[field.key]}
-                  />
-                </label>
-              ))}
-            </div>
+            <textarea
+              aria-label="编辑指标详情"
+              className="orf-result-details-textarea"
+              disabled={saving}
+              onChange={(event) => setDraft({ detail: event.target.value })}
+              rows={4}
+              value={draft.detail}
+            />
             <div className="orf-result-details-editor-actions">
               <button disabled={saving} type="button" onClick={() => setEditing(false)}>
                 取消
@@ -1021,22 +1011,15 @@ function MetricDetailsBlock({
           </form>
         ) : (
           <div
-            className={clsx("orf-result-details-view", entries.length === 0 && "orf-result-details-empty")}
+            className={clsx("orf-result-details-view", !detail && "orf-result-details-empty")}
             onDoubleClick={(event) => {
               event.stopPropagation();
               beginEdit();
             }}
             tabIndex={0}
           >
-            {entries.length > 0 ? (
-              <div className="orf-result-details-list">
-                {entries.map((entry) => (
-                  <div key={entry.key} className="orf-result-details-item">
-                    <span>{entry.label}</span>
-                    <p>{entry.value}</p>
-                  </div>
-                ))}
-              </div>
+            {detail ? (
+              <p className="orf-result-details-text">{detail}</p>
             ) : (
               <p className="orf-result-details-placeholder">未填写指标详情，双击编辑</p>
             )}

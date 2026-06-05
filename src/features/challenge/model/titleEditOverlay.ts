@@ -64,7 +64,7 @@ function applyTitleEditOverlay(state: OrfState, overlay: TitleEditOverlay): OrfS
   if (overlay.type === "metric") {
     return {
       ...state,
-      results: state.results.map((result) => (result.id === overlay.resultId ? { ...result, title: overlay.title, metricName: overlay.title } : result)),
+      results: state.results.map((result) => (result.id === overlay.resultId ? { ...result, title: overlay.title } : result)),
     };
   }
 

@@ -36,12 +36,7 @@ const placementSchema = z.enum(["before", "after"]);
 const createResultBodySchema = z.object({
   objectiveId: requiredTextSchema,
   title: requiredTextSchema,
-  metricName: requiredTextSchema,
-  description: optionalTextSchema,
-  metricRequirement: detailTextSchema,
-  completionStandard: detailTextSchema,
-  sampleSet: detailTextSchema,
-  measurementScope: detailTextSchema,
+  detail: detailTextSchema,
   baseline: z.number().optional(),
   current: z.number().optional(),
   target: z.number().optional(),
@@ -54,12 +49,8 @@ const createResultBodySchema = z.object({
 const updateResultConfidenceBodySchema = z.object({ confidence: z.number().int().min(0).max(100) });
 const updateResultUncertaintyBodySchema = z.object({ uncertaintyLevel: uncertaintyLevelSchema });
 const updateResultDetailsBodySchema = z.object({
-  description: detailTextSchema,
-  metricRequirement: detailTextSchema,
-  completionStandard: detailTextSchema,
-  sampleSet: detailTextSchema,
-  measurementScope: detailTextSchema,
-}).refine((body) => Object.values(body).some((value) => value !== undefined), { message: "No result detail fields to update" });
+  detail: detailTextSchema,
+}).refine((body) => "detail" in body, { message: "No result detail field to update" });
 const resultUpdateProposalBodySchema = z.object({
   title: z.string().trim().min(1),
   reason: z.string().trim().min(1),
@@ -170,7 +161,7 @@ export function registerOrfResultRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const updated = await updateResultDetails(params.resultId, body, context.user.id);
+    const updated = await updateResultDetails(params.resultId, body.detail, context.user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Result not found" });

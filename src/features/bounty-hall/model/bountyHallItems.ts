@@ -1,5 +1,5 @@
 import { canApplyForObjectiveChallenge } from "../../../domain/orfLifecycle";
-import { resultDetailEntries } from "../../../domain/orfResultDetails";
+import { resultDetailText } from "../../../domain/orfResultDetails";
 import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import type { UncertaintyLevel } from "../../../types/orf";
 import type { BountyItem, DifficultyFilter, HallTab, SortKey } from "./bountyHallTypes";
@@ -61,7 +61,7 @@ export function searchableBountyText(item: BountyItem) {
     item.definer,
     ...item.challengers,
     ...item.applications.flatMap((application) => [application.applicant, application.reason]),
-    ...item.results.flatMap((result) => [result.title, ...resultDetailEntries(result).map((entry) => entry.value)]),
+    ...item.results.flatMap((result) => [result.title, resultDetailText(result)]),
   ]
     .filter(Boolean)
     .join(" ")
