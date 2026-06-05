@@ -11,6 +11,11 @@ export const permissionDefinitions = [
   { key: "challengeApplication.review", label: "处理挑战申请", category: "挑战", location: "挑战申请确认" },
   { key: "settlement.review", label: "验收或结算", category: "结算", location: "奖励结算" },
   { key: "comment.manage", label: "管理所有评论", category: "评论", location: "评论组件" },
+  { key: "chat.read", label: "查看聊天", category: "聊天", location: "聊天中心" },
+  { key: "chat.write", label: "发送聊天消息", category: "聊天", location: "聊天中心消息输入框" },
+  { key: "chat.channel.create", label: "创建私有频道", category: "聊天", location: "聊天中心频道创建入口" },
+  { key: "chat.channel.manage", label: "管理聊天频道", category: "聊天", location: "聊天中心频道设置和归档入口" },
+  { key: "chat.member.manage", label: "管理聊天成员", category: "聊天", location: "聊天中心成员面板" },
 ] as const;
 
 export type PermissionKey = (typeof permissionDefinitions)[number]["key"];

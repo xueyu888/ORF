@@ -1,6 +1,6 @@
-import type { AppNotification, NotificationKind } from "./orf";
+import type { AppNotification, ChatChannel, ChatMessage, NotificationKind } from "./orf";
 
-export type RealtimeEventKind = "notification.created" | "system.broadcast" | "orf.read-model.invalidated";
+export type RealtimeEventKind = "notification.created" | "system.broadcast" | "orf.read-model.invalidated" | "chat.event";
 
 export type SystemBroadcastTone = "bounty";
 export type OrfReadModel = "taskManagement" | "bountyHall" | "users" | "permissions" | "notifications" | "settings";
@@ -34,6 +34,18 @@ export type OrfReadModelInvalidationTargetType =
   | "permission"
   | "notification"
   | "setting";
+
+export type ChatRealtimeEventType =
+  | "channel.created"
+  | "channel.updated"
+  | "channel.archived"
+  | "member.changed"
+  | "message.created"
+  | "message.updated"
+  | "message.deleted"
+  | "reaction.changed"
+  | "read.changed"
+  | "typing";
 
 export interface SystemBroadcast {
   id: string;
@@ -78,4 +90,22 @@ export interface OrfReadModelInvalidatedRealtimeEvent {
   invalidation: OrfReadModelInvalidation;
 }
 
-export type RealtimeEvent = NotificationRealtimeEvent | SystemBroadcastRealtimeEvent | OrfReadModelInvalidatedRealtimeEvent;
+export interface ChatRealtimeEvent {
+  id: string;
+  kind: "chat.event";
+  createdAt: string;
+  eventType: ChatRealtimeEventType;
+  channelId: string;
+  actorUserId?: string | null;
+  channel?: ChatChannel;
+  message?: ChatMessage;
+  messageId?: string;
+  rootMessageId?: string | null;
+  typing?: {
+    userId: string;
+    userName: string;
+    expiresAt: string;
+  };
+}
+
+export type RealtimeEvent = NotificationRealtimeEvent | SystemBroadcastRealtimeEvent | OrfReadModelInvalidatedRealtimeEvent | ChatRealtimeEvent;

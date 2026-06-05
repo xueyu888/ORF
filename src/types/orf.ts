@@ -21,8 +21,11 @@ export type NotificationKind =
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
-  | "comment.mention.created";
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback";
+  | "comment.mention.created"
+  | "chat.direct.created"
+  | "chat.mention.created"
+  | "chat.thread.updated";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "chat";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -34,6 +37,8 @@ export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
 export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance";
 export type ObjectiveAlignmentRequestStatus = "requested" | "scheduled" | "completed" | "needsWork" | "cancelled";
+export type ChatChannelType = "public" | "private" | "direct" | "group";
+export type ChatMemberRole = "owner" | "admin" | "member";
 
 export interface OrfUser {
   id: string;
@@ -374,6 +379,113 @@ export interface CommentThread {
   createdAt: string;
   updatedAt: string;
   messages: CommentMessage[];
+}
+
+export interface ChatUser {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  status: UserStatus;
+  avatarUrl?: string | null;
+  lastOnlineAt?: string | null;
+}
+
+export interface ChatChannelMember {
+  userId: string;
+  role: ChatMemberRole;
+  favorite: boolean;
+  muted: boolean;
+  manuallyUnread: boolean;
+  joinedAt: string;
+  lastViewedAt?: string | null;
+  lastReadAt?: string | null;
+  lastReadMessageId?: string | null;
+}
+
+export interface ChatChannel {
+  id: string;
+  type: ChatChannelType;
+  name?: string | null;
+  displayName: string;
+  purpose: string;
+  header: string;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string | null;
+  memberCount: number;
+  members: ChatChannelMember[];
+  unreadCount: number;
+  mentionCount: number;
+  threadUnreadCount: number;
+  lastMessageAt?: string | null;
+  lastMessagePreview?: string | null;
+}
+
+export interface ChatReaction {
+  emojiName: string;
+  count: number;
+  reactedByCurrentUser: boolean;
+  userIds: string[];
+}
+
+export interface ChatAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  contentUrl: string;
+  width?: number | null;
+  height?: number | null;
+  createdAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  channelId: string;
+  authorUserId: string;
+  authorName: string;
+  authorAvatarUrl?: string | null;
+  body: string;
+  rootMessageId?: string | null;
+  parentMessageId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
+  pinnedAt?: string | null;
+  pinnedBy?: string | null;
+  replyCount: number;
+  lastReplyAt?: string | null;
+  savedByCurrentUser: boolean;
+  attachments: ChatAttachment[];
+  reactions: ChatReaction[];
+}
+
+export interface ChatThread {
+  rootMessage: ChatMessage;
+  replies: ChatMessage[];
+  following: boolean;
+}
+
+export interface ChatSearchResult {
+  channel: ChatChannel;
+  message: ChatMessage;
+}
+
+export interface ChatBootstrap {
+  channels: ChatChannel[];
+  users: ChatUser[];
+  permissions: {
+    canCreatePrivateChannel: boolean;
+    canCreatePublicChannel: boolean;
+    canManageAnyChannel: boolean;
+    canManageAnyMembers: boolean;
+    canRead: boolean;
+    canWrite: boolean;
+  };
 }
 
 export interface OrfState {

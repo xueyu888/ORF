@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { getUserPreferences } from "./apiClient";
+import { API_AUTHENTICATION_EXPIRED_EVENT, getUserPreferences } from "./apiClient";
 import { shouldLoadInitialTaskManagementReadModel } from "./orfDataLoading";
 import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
@@ -275,6 +275,16 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refreshAuthSession();
   }, [refreshAuthSession]);
+
+  useEffect(() => {
+    const handleAuthenticationExpired = () => {
+      setAuthUserId(null);
+      notify("登录已失效，请重新登录。");
+    };
+
+    window.addEventListener(API_AUTHENTICATION_EXPIRED_EVENT, handleAuthenticationExpired);
+    return () => window.removeEventListener(API_AUTHENTICATION_EXPIRED_EVENT, handleAuthenticationExpired);
+  }, [notify, setAuthUserId]);
 
   const taskManagementInvalidationKey = useMemo(
     () => readModelInvalidationKey(readModelInvalidations, "taskManagement"),

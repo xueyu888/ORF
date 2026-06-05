@@ -155,7 +155,7 @@ function normalizeInitialState(state: LegacyInitialState): OrfState {
 }
 
 const defaultPermissionRules: OrfState["permissionRules"] = [
-  { role: "member", permissions: [] },
+  { role: "member", permissions: ["chat.read", "chat.write", "chat.channel.create"] },
 ];
 
 const confidenceTrend = [

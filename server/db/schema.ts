@@ -28,6 +28,8 @@ export const feedbackStatusEnum = pgEnum("feedback_status", ["Open", "Closed"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "member", "readonly", "supervisor"]);
 export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask", "feedback"]);
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
+export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct", "group"]);
+export const chatMemberRoleEnum = pgEnum("chat_member_role", ["owner", "admin", "member"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -455,5 +457,211 @@ export const commentAttachments = pgTable(
     message: index("comment_attachments_message_idx").on(table.messageId),
     pendingByCreator: index("comment_attachments_pending_creator_idx").on(table.createdBy, table.targetType, table.targetId, table.expiresAt),
     teamTarget: index("comment_attachments_team_target_idx").on(table.teamId, table.targetType, table.targetId),
+  }),
+);
+
+export const chatChannels = pgTable(
+  "chat_channels",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    type: chatChannelTypeEnum("type").notNull(),
+    name: text("name"),
+    displayName: text("display_name").notNull(),
+    purpose: text("purpose").notNull().default(""),
+    header: text("header").notNull().default(""),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    archivedBy: uuid("archived_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    archivedAt: timestamp("archived_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    teamType: index("chat_channels_team_type_idx").on(table.teamId, table.type),
+    teamUpdated: index("chat_channels_team_updated_idx").on(table.teamId, table.updatedAt),
+    teamNameUnique: uniqueIndex("chat_channels_team_name_unique").on(table.teamId, table.name),
+  }),
+);
+
+export const chatChannelMembers = pgTable(
+  "chat_channel_members",
+  {
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: chatMemberRoleEnum("role").notNull().default("member"),
+    favorite: boolean("favorite").notNull().default(false),
+    muted: boolean("muted").notNull().default(false),
+    manuallyUnread: boolean("manually_unread").notNull().default(false),
+    lastViewedAt: timestamp("last_viewed_at", { mode: "string", withTimezone: true }),
+    lastReadAt: timestamp("last_read_at", { mode: "string", withTimezone: true }),
+    lastReadMessageId: text("last_read_message_id"),
+    joinedAt: timestamp("joined_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.channelId, table.userId] }),
+    user: index("chat_channel_members_user_idx").on(table.userId),
+  }),
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    rootMessageId: text("root_message_id"),
+    parentMessageId: text("parent_message_id"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    editedAt: timestamp("edited_at", { mode: "string", withTimezone: true }),
+    deletedAt: timestamp("deleted_at", { mode: "string", withTimezone: true }),
+    deletedBy: uuid("deleted_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => ({
+    channelCreated: index("chat_messages_channel_created_idx").on(table.channelId, table.createdAt),
+    rootCreated: index("chat_messages_root_created_idx").on(table.rootMessageId, table.createdAt),
+    teamCreated: index("chat_messages_team_created_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const chatMessageReactions = pgTable(
+  "chat_message_reactions",
+  {
+    messageId: text("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emojiName: text("emoji_name").notNull(),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.messageId, table.userId, table.emojiName] }),
+    user: index("chat_message_reactions_user_idx").on(table.userId),
+  }),
+);
+
+export const chatMessagePins = pgTable(
+  "chat_message_pins",
+  {
+    messageId: text("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    pinnedBy: uuid("pinned_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    pinnedAt: timestamp("pinned_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.messageId] }),
+    channelPinnedAt: index("chat_message_pins_channel_pinned_at_idx").on(table.channelId, table.pinnedAt),
+    pinnedBy: index("chat_message_pins_pinned_by_idx").on(table.pinnedBy),
+  }),
+);
+
+export const chatMessageSaves = pgTable(
+  "chat_message_saves",
+  {
+    messageId: text("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    savedAt: timestamp("saved_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.messageId, table.userId] }),
+    userSavedAt: index("chat_message_saves_user_saved_at_idx").on(table.userId, table.savedAt),
+  }),
+);
+
+export const chatThreadFollows = pgTable(
+  "chat_thread_follows",
+  {
+    rootMessageId: text("root_message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    following: boolean("following").notNull().default(true),
+    lastViewedAt: timestamp("last_viewed_at", { mode: "string", withTimezone: true }),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.rootMessageId, table.userId] }),
+    user: index("chat_thread_follows_user_idx").on(table.userId),
+  }),
+);
+
+export const chatAttachments = pgTable(
+  "chat_attachments",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => chatChannels.id, { onDelete: "cascade" }),
+    messageId: text("message_id").references(() => chatMessages.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull(),
+    fileName: text("file_name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: integer("file_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    attachedAt: timestamp("attached_at", { mode: "string", withTimezone: true }),
+    expiresAt: timestamp("expires_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    message: index("chat_attachments_message_idx").on(table.messageId),
+    pendingByCreator: index("chat_attachments_pending_creator_idx").on(table.createdBy, table.channelId, table.expiresAt),
+    teamChannel: index("chat_attachments_team_channel_idx").on(table.teamId, table.channelId),
+  }),
+);
+
+export const chatImportMappings = pgTable(
+  "chat_import_mappings",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    sourceSystem: text("source_system").notNull(),
+    sourceKind: text("source_kind").notNull(),
+    sourceId: text("source_id").notNull(),
+    targetTable: text("target_table").notNull(),
+    targetId: text("target_id").notNull(),
+    targetSecondaryId: text("target_secondary_id"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    importedAt: timestamp("imported_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.sourceSystem, table.sourceKind, table.sourceId] }),
+    target: index("chat_import_mappings_target_idx").on(table.teamId, table.targetTable, table.targetId),
   }),
 );
