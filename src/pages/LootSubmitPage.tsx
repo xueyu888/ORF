@@ -28,12 +28,14 @@ import {
   objectiveChallengerTargets,
   type ContributionMemberTarget,
 } from "../domain/orfObjectiveParticipants";
+import { resultDetailText } from "../domain/orfResultDetails";
 import { objectiveAcceptedResultFromReviews } from "../domain/orfSettlement";
 import type {
   ContributionAllocation,
   LootResultClaim,
   LootResultClaimStatus,
   ObjectiveTrialReviewStatus,
+  Result,
   ResultAcceptedResult,
 } from "../types/orf";
 
@@ -56,6 +58,17 @@ const resultReviewOptions: Array<{
 
 const CONTRIBUTION_PERCENT_TOTAL = 100;
 const CONTRIBUTION_PERCENT_TOLERANCE = 0.01;
+
+function ResultDetailsSummary({ result }: { result: Result }) {
+  const detail = resultDetailText(result);
+  if (!detail) return null;
+
+  return (
+    <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs whitespace-pre-wrap leading-5 orf-text-secondary">
+      {detail}
+    </div>
+  );
+}
 
 export function LootSubmitPage() {
   const { objectiveId } = useParams();
@@ -565,6 +578,7 @@ export function LootSubmitPage() {
                     <div className="text-sm font-semibold orf-text-primary">
                       {result.title}
                     </div>
+                    <ResultDetailsSummary result={result} />
                     <select
                       className="orf-input px-3 py-2 text-sm"
                       value={resultReviews[result.id] ?? "completed"}
@@ -841,6 +855,7 @@ export function LootSubmitPage() {
                     <div className="text-sm font-semibold orf-text-primary">
                       {result.title}
                     </div>
+                    <ResultDetailsSummary result={result} />
                     <select
                       className="orf-input px-3 py-2 text-sm"
                       value={claims[result.id]?.claim ?? "completed"}

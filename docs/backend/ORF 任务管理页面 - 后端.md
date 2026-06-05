@@ -10,7 +10,8 @@
 
 | 方法     | 路径                                                                         | 说明                                                                                                                                               |
 | -------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/api/tasks-page`                                                            | 管理员返回当前默认作用域内项目、目标、指标、任务、评论、战利品、积分流水和权限；普通成员只返回 `my-challenges` 数据                                |
+| `GET`    | `/api/me/access`                                                             | 返回当前用户、当前作用域权限规则和当前用户可执行权限；Provider 全局权限判断使用该轻量读模型                                                        |
+| `GET`    | `/api/tasks-page`                                                            | 管理员返回当前默认作用域内项目、目标、指标、任务、评论、战利品和积分流水；普通成员只返回 `my-challenges` 数据                                      |
 | `GET`    | `/api/bounties`                                                              | 所有已通过用户返回悬赏大厅发现数据；角色只影响申请 / 接受动作能否写入，管理员不能因为无挑战权限而拿到空列表                                        |
 | `GET`    | `/api/events`                                                                | 已登录 active 用户的 SSE 实时事件流；`notification.created` 投递个人通知，`system.broadcast` 投递作用域横幅广播                                    |
 | `GET`    | `/api/my-challenges`                                                         | 返回当前用户已参与的挑战目标                                                                                                                       |
@@ -31,7 +32,11 @@
 | `POST`   | `/api/objectives/:objectiveId/contribution-reviews`                          | 已关闭的旧匿名互评接口，返回 `410`，原始互评只提交到本地结算服务                                                                                   |
 | `POST`   | `/api/objectives/:objectiveId/review`                                        | 指挥官验收指标并结算，进入 `settled`                                                                                                               |
 | `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许 `Objective.challengerUserIds` 中的正式挑战者在未过期 `reestimating` 阶段创建 |
-| `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题、难度、信心和同目标排序；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
+| `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
+| `PATCH`  | `/api/results/:resultId/details`                                             | 更新指标详情字段：`detail`；权限和生命周期锁与指标标题编辑一致 |
+| `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标难度和积分映射 |
+| `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
+| `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
 | `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`；新反馈不接收目标或指标绑定                                                        |
 | `PATCH`  | `/api/feedback/:feedbackId/status`                                           | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行                                                                                               |
 | `POST`   | `/api/tasks`                                                                 | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务                                                                                  |
@@ -87,9 +92,8 @@
 | `objectiveLoot`         | 结构化战利品提交记录                                                                      |
 | `objectiveTrialReviews` | 目标试验收请求和指挥官反馈                                                                |
 | `pointLedger`           | 验收结算后的成员积分流水                                                                  |
-| `permissionRules`       | 前端操作权限                                                                              |
 
-ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只进入本地结算服务。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
+任务管理读模型不返回 `permissionRules`；当前用户权限由 `/api/me/access` 单独返回。ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只进入本地结算服务。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
 
 `PATCH /api/objectives/:objectiveId/publish` 是候选目标进入悬赏大厅的唯一发布动作，必须写入 `Objective.publishedAt`，并为当前作用域 active 用户创建 `objective.published` 系统通知；持久化通知遵守“触发人不接收自己消息”的原则。通知写入后，后端还会通过 `/api/events` 发送 `system.broadcast`，让当前作用域所有在线 active 用户即时看到横幅并刷新大厅。后续申请、征召、审核、重估、编辑和冻结只能更新对应业务字段或 `updatedAt`，不能覆盖 `publishedAt`。
 
@@ -179,6 +183,8 @@ type ObjectiveFlowStatus =
 - `pointLedger`
 
 `Result.uncertaintyScore` 是指标积分事实源，由 `Result.uncertaintyLevel` 映射写入。指标可以先创建为待校准，但 `reestimating -> frozen` 前，后端必须校验目标下每个指标都已设置积分等级；`Objective.objectiveBasePoints` 只从这些指标积分汇总得到，不作为目标创建或发布接口的输入字段。
+
+`Result.detail` 是指标详情唯一事实源。评论只保存讨论记录，不承载指标详情定义；战利品提交和验收读取同一个 `Result.detail` 字段作为只读上下文。
 
 前端排行榜只读取公开 `pointLedger`，不自行计算个人贡献比例。普通成员和管理员都可以看到公开积分榜；匿名互评原始数据不通过该读模型返回。
 

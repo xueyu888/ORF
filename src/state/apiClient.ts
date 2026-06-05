@@ -1,8 +1,8 @@
 import type { AppNotification, CommentAttachment, CommentTargetType, OrfState, OrfUser } from "../types/orf";
-import type { BountyHallData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
+import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
-export type { BountyHallData, BountyHallItem, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
+export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
 export type UsersResponse = Pick<OrfState, "users">;
@@ -139,6 +139,10 @@ export async function apiRequest(path: string, init?: RequestInit): Promise<void
 
 export async function getBountyHallData() {
   return apiJson<BountyHallData>("/api/bounties");
+}
+
+export async function getCurrentUserAccess() {
+  return apiJson<CurrentUserAccessData>("/api/me/access");
 }
 
 export async function getMyChallengesData(scope: MyChallengesScope) {

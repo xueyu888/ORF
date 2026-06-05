@@ -227,12 +227,10 @@ export function useOrfProviderObjectiveActions({
             method: "POST",
             body: JSON.stringify({ reason: applicationReason }),
           });
-          await refreshTaskManagementData();
           notify("挑战申请已提交，等待指挥官确认");
           return true;
         } catch (error) {
           notify(bountyMutationFailureMessage(error, "申请挑战失败"));
-          void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
       },
@@ -249,12 +247,10 @@ export function useOrfProviderObjectiveActions({
 
         try {
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/challenge`, { method: "PATCH" });
-          await refreshTaskManagementData();
           notify("已接受挑战");
           return true;
         } catch (error) {
           notify(bountyMutationFailureMessage(error, "接受挑战失败"));
-          void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
       },

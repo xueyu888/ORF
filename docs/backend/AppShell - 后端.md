@@ -22,7 +22,7 @@ AppShell 没有独立业务模型，也不拥有页面数据计算规则。
 | 任务管理数据 | `/api/tasks-page` |
 | 系统消息 | `/api/notifications`、`/api/notifications/:notificationId/read`、`/api/notifications/read-all` |
 | 成员管理数据 | `/api/users` |
-| 权限规则 | `/api/permissions` |
+| 当前用户权限 | `/api/me/access` |
 
 ## 3. 说明
 

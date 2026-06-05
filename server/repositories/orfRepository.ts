@@ -673,9 +673,8 @@ async function notifyMentionedUsersOfComment(input: {
 export interface CreateResultInput {
   objectiveId: string;
   title: string;
-  metricName: string;
   actorId?: string | null;
-  description?: string;
+  detail?: string | null;
   baseline?: number;
   current?: number;
   target?: number;
@@ -809,8 +808,7 @@ export interface CreateChecklistItemInput {
 
 export async function createResult(input: CreateResultInput): Promise<Result | null> {
   const title = input.title.trim();
-  const metricName = input.metricName.trim();
-  if (!title || !metricName) {
+  if (!title) {
     return null;
   }
 
@@ -842,13 +840,7 @@ export async function createResult(input: CreateResultInput): Promise<Result | n
       teamId: objective.teamId,
       objectiveId: objective.id,
       title,
-      description: input.description?.trim() || "由 ORF Flow 规划创建的指标。",
-      metricName,
-      metricRequirement: `${metricName}：写清统计对象和完成标准后进入执行。`,
-      statisticalObject: null,
-      completionStandard: null,
-      sampleSet: null,
-      measurementScope: null,
+      detail: input.detail?.trim() ?? "",
       uncertaintyLevel: input.uncertaintyLevel ?? null,
       baseline: input.baseline ?? 0,
       current: input.current ?? 0,
@@ -3297,6 +3289,46 @@ export async function updateResultTitle(resultId: string, title: string, actorId
   }
 
   publishOrfDataInvalidation({
+    models: ["taskManagement", "bountyHall"],
+    reason: "result.changed",
+    target: { id: resultId, type: "result" },
+    teamId: updatedResult.teamId,
+  });
+  return true;
+}
+
+export async function updateResultDetails(
+  resultId: string,
+  detail: string | null | undefined,
+  actorId?: string | null,
+): Promise<boolean> {
+  const nextDetail = detail?.trim() ?? "";
+  const updatedResult = await db.transaction(async (tx) => {
+    const [target] = await tx
+      .select({ flowStatus: objectives.flowStatus, teamId: results.teamId })
+      .from(results)
+      .innerJoin(objectives, eq(objectives.id, results.objectiveId))
+      .where(eq(results.id, resultId))
+      .limit(1)
+      .for("update");
+    if (!target || !canMutateObjectiveResultsByFlow(target)) {
+      return null;
+    }
+
+    const updated = await tx
+      .update(results)
+      .set({ detail: nextDetail, updatedAt: today(), updatedBy: actorId ?? null })
+      .where(eq(results.id, resultId))
+      .returning({ id: results.id });
+    return updated.length > 0 ? { teamId: target.teamId } : null;
+  });
+
+  if (!updatedResult) {
+    return false;
+  }
+
+  publishOrfDataInvalidation({
+    actorUserId: actorId ?? undefined,
     models: ["taskManagement", "bountyHall"],
     reason: "result.changed",
     target: { id: resultId, type: "result" },

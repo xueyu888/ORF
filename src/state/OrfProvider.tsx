@@ -1,5 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { getUserPreferences } from "./apiClient";
+import { shouldLoadInitialTaskManagementReadModel } from "./orfDataLoading";
 import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
@@ -22,6 +24,7 @@ import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
+import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
@@ -84,7 +87,7 @@ interface OrfContextValue {
   createObjective: (input: CreateObjectiveInput) => Promise<Objective | null>;
   createProject: (input: { name: string }) => Promise<OrfState["projects"][number] | null>;
   setObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
-  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => Promise<Result | null>;
+  createResult: (input: Partial<Result> & Pick<Result, "objectiveId" | "title">) => Promise<Result | null>;
   publishObjective: (objectiveId: string) => Promise<boolean>;
   recruitObjectiveChallengers: (objectiveId: string, members: string[]) => Promise<boolean>;
   approveChallengeApplication: (objectiveId: string, applicationId: string) => Promise<boolean>;
@@ -102,6 +105,7 @@ interface OrfContextValue {
   updateObjectiveTitle: (objectiveId: string, title: string) => Promise<boolean>;
   updateObjectiveFinalDueAt: (objectiveId: string, finalDueAt: string) => Promise<boolean>;
   updateResultTitle: (resultId: string, title: string) => Promise<boolean>;
+  updateResultDetails: (resultId: string, details: ResultDetailsInput) => Promise<boolean>;
   updateResultUncertaintyLevel: (resultId: string, uncertaintyLevel: UncertaintyLevel) => Promise<boolean>;
   updateTaskTitle: (taskId: string, title: string) => Promise<boolean>;
   updateTaskChecklistItemLabel: (taskId: string, itemId: string, label: string) => Promise<boolean>;
@@ -158,6 +162,7 @@ function loadInitialState() {
 export { authFailureMessage } from "./orfProviderAuth";
 
 export function OrfProvider({ children }: { children: ReactNode }) {
+  const location = useLocation();
   const [state, setState] = useState(loadInitialState);
   const { authenticateWithPassword, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
   const [toastEnabled, setToastEnabled] = useState(true);
@@ -178,6 +183,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = currentUser !== null;
   const isApproved = currentUser?.status === "active";
   const isAdmin = currentUser?.role === "admin";
+  const loadTaskManagementData = shouldLoadInitialTaskManagementReadModel(location.pathname);
   const {
     clearAllNotifications,
     clearNotifications,
@@ -193,6 +199,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     applyCommentThread,
     applyRemovedCommentThread,
     dataReady,
+    refreshCurrentUserAccess,
     refreshPermissionRules,
     refreshTaskManagementData,
     refreshUsers,
@@ -203,6 +210,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     currentUserRole,
     isApproved,
     isAuthenticated,
+    loadTaskManagementData,
     refreshNotifications,
     setState,
   });
@@ -282,9 +290,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    if (!taskManagementInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
+    if (!taskManagementInvalidationKey || !authReady || !isAuthenticated || !isApproved || !loadTaskManagementData) return;
     void refreshTaskManagementData().catch(() => undefined);
-  }, [authReady, isApproved, isAuthenticated, refreshTaskManagementData, taskManagementInvalidationKey]);
+  }, [authReady, isApproved, isAuthenticated, loadTaskManagementData, refreshTaskManagementData, taskManagementInvalidationKey]);
 
   useEffect(() => {
     if (!usersInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
@@ -292,9 +300,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   }, [authReady, isAdmin, isApproved, isAuthenticated, refreshUsers, usersInvalidationKey]);
 
   useEffect(() => {
-    if (!permissionsInvalidationKey || !authReady || !isAuthenticated || !isApproved || !isAdmin) return;
-    void refreshPermissionRules().catch(() => undefined);
-  }, [authReady, isAdmin, isApproved, isAuthenticated, permissionsInvalidationKey, refreshPermissionRules]);
+    if (!permissionsInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;
+    void refreshCurrentUserAccess().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, permissionsInvalidationKey, refreshCurrentUserAccess]);
 
   useEffect(() => {
     if (!notificationsInvalidationKey || !authReady || !isAuthenticated || !isApproved) return;

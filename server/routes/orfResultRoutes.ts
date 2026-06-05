@@ -19,6 +19,7 @@ import {
   moveResult,
   proposeResultUpdate,
   updateResultConfidence,
+  updateResultDetails,
   updateResultTitle,
   updateResultUncertaintyLevel,
 } from "../repositories/orfRepository";
@@ -28,14 +29,14 @@ const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "
 const bountySourceSchema = z.enum(["managerDefined", "memberProposed"]);
 const requiredTextSchema = z.string().trim().min(1);
 const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
+const detailTextSchema = z.string().trim().nullable().optional();
 const titleBodySchema = z.object({ title: requiredTextSchema });
 const resultParamsSchema = z.object({ resultId: z.string().min(1) });
 const placementSchema = z.enum(["before", "after"]);
 const createResultBodySchema = z.object({
   objectiveId: requiredTextSchema,
   title: requiredTextSchema,
-  metricName: requiredTextSchema,
-  description: optionalTextSchema,
+  detail: detailTextSchema,
   baseline: z.number().optional(),
   current: z.number().optional(),
   target: z.number().optional(),
@@ -47,6 +48,9 @@ const createResultBodySchema = z.object({
 });
 const updateResultConfidenceBodySchema = z.object({ confidence: z.number().int().min(0).max(100) });
 const updateResultUncertaintyBodySchema = z.object({ uncertaintyLevel: uncertaintyLevelSchema });
+const updateResultDetailsBodySchema = z.object({
+  detail: detailTextSchema,
+}).refine((body) => "detail" in body, { message: "No result detail field to update" });
 const resultUpdateProposalBodySchema = z.object({
   title: z.string().trim().min(1),
   reason: z.string().trim().min(1),
@@ -138,6 +142,26 @@ export function registerOrfResultRoutes(app: FastifyInstance) {
     }
 
     const updated = await updateResultTitle(params.resultId, body.title, context.user.id);
+
+    if (!updated) {
+      return reply.code(404).send({ error: "Result not found" });
+    }
+
+    return { ok: true };
+  });
+
+  app.patch("/api/results/:resultId/details", async (request, reply) => {
+    const params = resultParamsSchema.parse(request.params);
+    const body = updateResultDetailsBodySchema.parse(request.body);
+    const context = await requireResultEditContext(request, reply, params.resultId);
+    if (!context) {
+      return reply;
+    }
+    if (!(await requireResultUnlocked(reply, params.resultId))) {
+      return reply;
+    }
+
+    const updated = await updateResultDetails(params.resultId, body.detail, context.user.id);
 
     if (!updated) {
       return reply.code(404).send({ error: "Result not found" });

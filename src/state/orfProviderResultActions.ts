@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { hasPermission } from "../config/permissions";
 import { isObjectiveReestimateWindowOpen } from "../domain/orfLifecycle";
 import { isObjectiveChallenger } from "../domain/orfObjectiveParticipants";
+import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import { apiJson, apiRequest } from "./apiClient";
 import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import type { OrfState, OrfUser, Result, UncertaintyLevel } from "../types/orf";
@@ -27,7 +28,7 @@ export function useOrfProviderResultActions({
 }: ResultActionOptions) {
   return useMemo(
     () => ({
-      createResult: async (input: Partial<Result> & Pick<Result, "objectiveId" | "title" | "metricName">) => {
+      createResult: async (input: Partial<Result> & Pick<Result, "objectiveId" | "title">) => {
         const payload = {
           ...input,
           source: input.source ?? "managerDefined",
@@ -72,6 +73,21 @@ export function useOrfProviderResultActions({
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "指标更新失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      updateResultDetails: async (resultId: string, details: ResultDetailsInput) => {
+        try {
+          await apiRequest(`/api/results/${encodeURIComponent(resultId)}/details`, {
+            method: "PATCH",
+            body: JSON.stringify({ detail: details.detail }),
+          });
+          await refreshTaskManagementData();
+          notify("指标详情已更新");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "指标详情更新失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

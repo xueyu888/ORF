@@ -418,13 +418,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-eval-coverage",
       objectiveId: "obj-engineering",
       title: "核心 AI 场景评估集覆盖率达到 90%",
-      description: "覆盖权限问答、合同审查、工单创建、知识库搜索和成本分析场景。",
-      metricName: "评估覆盖率",
-      metricRequirement: "评估覆盖率：核心 AI 场景中，有标准样本和期望答案的场景占比达到 90% 及以上。",
-      statisticalObject: "权限问答、合同审查、工单创建、知识库搜索、成本分析 5 类核心 AI 场景",
-      completionStandard: "每类场景至少有 20 条标准问题，且整体覆盖率达到 90% 及以上。",
-      sampleSet: "指挥官确认的标准问题集；每题标注正确文本片段、期望答案和失败分类。",
-      measurementScope: "只统计已进入 nightly eval 的场景，不把临时人工验证计入覆盖率。",
+      detail: `说明：覆盖权限问答、合同审查、工单创建、知识库搜索和成本分析场景。
+
+要求：评估覆盖率：核心 AI 场景中，有标准样本和期望答案的场景占比达到 90% 及以上。
+
+统计对象：权限问答、合同审查、工单创建、知识库搜索、成本分析 5 类核心 AI 场景
+
+完成标准：每类场景至少有 20 条标准问题，且整体覆盖率达到 90% 及以上。
+
+样本集：指挥官确认的标准问题集；每题标注正确文本片段、期望答案和失败分类。
+
+测量范围：只统计已进入 nightly eval 的场景，不把临时人工验证计入覆盖率。`,
       uncertaintyLevel: "进阶",
       baseline: 35,
       current: 62,
@@ -449,13 +453,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-rag-recall",
       objectiveId: "obj-engineering",
       title: "RAG 检索 Recall@5 达到 85%",
-      description: "核心知识库问题的前 5 条检索结果应包含正确来源。",
-      metricName: "检索 Recall@5",
-      metricRequirement: "检索 Recall@5：标准问题集中，正确文本片段出现在前 5 条检索结果中的占比达到 85% 及以上。",
-      statisticalObject: "一期标准知识库问题集的检索请求，单知识库不超过 10GB、10000 个文件。",
-      completionStandard: "Top5 命中率达到 85% 及以上；正确文本片段由指挥官提前标注。",
-      sampleSet: "权限、合同、工单、知识库搜索四类标准问题集，标注正确文本片段和期望答案。",
-      measurementScope: "固定 embedding、reranker 和索引版本；只统计检索与重排链路，不统计模型生成耗时。",
+      detail: `说明：核心知识库问题的前 5 条检索结果应包含正确来源。
+
+要求：检索 Recall@5：标准问题集中，正确文本片段出现在前 5 条检索结果中的占比达到 85% 及以上。
+
+统计对象：一期标准知识库问题集的检索请求，单知识库不超过 10GB、10000 个文件。
+
+完成标准：Top5 命中率达到 85% 及以上；正确文本片段由指挥官提前标注。
+
+样本集：权限、合同、工单、知识库搜索四类标准问题集，标注正确文本片段和期望答案。
+
+测量范围：固定 embedding、reranker 和索引版本；只统计检索与重排链路，不统计模型生成耗时。`,
       uncertaintyLevel: "破局",
       baseline: 58,
       current: 76,
@@ -477,13 +485,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-hallucination",
       objectiveId: "obj-engineering",
       title: "线上幻觉率降低到 3% 以下",
-      description: "权限、合同和成本问答场景的错误断言比例必须持续下降。",
-      metricName: "幻觉率",
-      metricRequirement: "幻觉率：标准评估集中，模型回答包含无依据或错误断言的占比降低到 3% 以下。",
-      statisticalObject: "权限、合同、成本问答场景的带引用回答。",
-      completionStandard: "固定评估集中幻觉率低于 3%，且高影响线上失败样本已进入回归集。",
-      sampleSet: "标准问题集和线上高影响失败样本；每题标注期望答案、引用依据和错误判定原因。",
-      measurementScope: "固定模型、参数、上下文长度和输出长度；引用缺失或无法支撑关键结论计为失败。",
+      detail: `说明：权限、合同和成本问答场景的错误断言比例必须持续下降。
+
+要求：幻觉率：标准评估集中，模型回答包含无依据或错误断言的占比降低到 3% 以下。
+
+统计对象：权限、合同、成本问答场景的带引用回答。
+
+完成标准：固定评估集中幻觉率低于 3%，且高影响线上失败样本已进入回归集。
+
+样本集：标准问题集和线上高影响失败样本；每题标注期望答案、引用依据和错误判定原因。
+
+测量范围：固定模型、参数、上下文长度和输出长度；引用缺失或无法支撑关键结论计为失败。`,
       uncertaintyLevel: "破局",
       baseline: 11,
       current: 6.5,
@@ -505,13 +517,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-tool-success",
       objectiveId: "obj-engineering",
       title: "Agent 工具调用成功率达到 96%",
-      description: "Agent 调用工单、权限和审计工具时应稳定完成且避免重复提交。",
-      metricName: "工具调用成功率",
-      metricRequirement: "工具调用成功率：Agent 调用工单、权限和审计工具后，返回成功且没有重复副作用的占比达到 96% 及以上。",
-      statisticalObject: "工单创建、权限查询、审计检索三类 Agent 工具调用。",
-      completionStandard: "成功率达到 96% 及以上；重复提交、漏传参数、错误工具选择均计为失败。",
-      sampleSet: "工具调用标准场景集和最近 7 天线上失败样本。",
-      measurementScope: "固定工具 schema 和权限上下文；只统计系统侧工具选择、参数组装和执行结果。",
+      detail: `说明：Agent 调用工单、权限和审计工具时应稳定完成且避免重复提交。
+
+要求：工具调用成功率：Agent 调用工单、权限和审计工具后，返回成功且没有重复副作用的占比达到 96% 及以上。
+
+统计对象：工单创建、权限查询、审计检索三类 Agent 工具调用。
+
+完成标准：成功率达到 96% 及以上；重复提交、漏传参数、错误工具选择均计为失败。
+
+样本集：工具调用标准场景集和最近 7 天线上失败样本。
+
+测量范围：固定工具 schema 和权限上下文；只统计系统侧工具选择、参数组装和执行结果。`,
       uncertaintyLevel: "进阶",
       baseline: 81,
       current: 91,
@@ -533,13 +549,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-latency",
       objectiveId: "obj-engineering",
       title: "P95 响应时延控制在 3 秒以内",
-      description: "核心问答链路在 P95 下保持 3 秒以内，避免长上下文拖慢体验。",
-      metricName: "P95 时延",
-      metricRequirement: "P95 时延：核心问答链路 95% 的请求耗时不超过 3 秒。",
-      statisticalObject: "固定测试环境下的权限问答、知识库搜索和成本查询请求。",
-      completionStandard: "P95 总耗时不超过 3 秒；如模型侧耗时异常，必须单独记录模型耗时和系统侧耗时。",
-      sampleSet: "覆盖 PDF、DOCX、HTML、TXT、MD 来源的标准查询集。",
-      measurementScope: "固定模型、参数、上下文长度和输出长度；分别记录检索、重排、引用组装和模型生成耗时。",
+      detail: `说明：核心问答链路在 P95 下保持 3 秒以内，避免长上下文拖慢体验。
+
+要求：P95 时延：核心问答链路 95% 的请求耗时不超过 3 秒。
+
+统计对象：固定测试环境下的权限问答、知识库搜索和成本查询请求。
+
+完成标准：P95 总耗时不超过 3 秒；如模型侧耗时异常，必须单独记录模型耗时和系统侧耗时。
+
+样本集：覆盖 PDF、DOCX、HTML、TXT、MD 来源的标准查询集。
+
+测量范围：固定模型、参数、上下文长度和输出长度；分别记录检索、重排、引用组装和模型生成耗时。`,
       uncertaintyLevel: "破局",
       baseline: 6.8,
       current: 4.2,
@@ -561,8 +581,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-feedback-inbox",
       objectiveId: "obj-feedback-loop",
       title: "每周 100% 核心失败案例进入反馈收件箱",
-      description: "核心线上失败必须被结构化记录。",
-      metricName: "收件箱捕获率",
+      detail: `说明：核心线上失败必须被结构化记录。`,
       baseline: 42,
       current: 86,
       target: 100,
@@ -578,8 +597,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-feedback-classified",
       objectiveId: "obj-feedback-loop",
       title: "80% 反馈能完成原因分类",
-      description: "每条反馈应有可追踪的原因分类，支撑趋势分析。",
-      metricName: "反馈分类率",
+      detail: `说明：每条反馈应有可追踪的原因分类，支撑趋势分析。`,
       baseline: 30,
       current: 72,
       target: 80,
@@ -595,8 +613,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-high-risk-action",
       objectiveId: "obj-feedback-loop",
       title: "高风险反馈在 48 小时内形成调整动作",
-      description: "高影响反馈必须在 48 小时内完成责任人确认、讨论推进或关闭判断。",
-      metricName: "高风险动作 SLA",
+      detail: `说明：高影响反馈必须在 48 小时内完成责任人确认、讨论推进或关闭判断。`,
       baseline: 24,
       current: 68,
       target: 90,
@@ -612,8 +629,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-eval-refresh",
       objectiveId: "obj-feedback-loop",
       title: "每两周更新一次评估集和回归用例",
-      description: "把真实失败案例沉淀到评估集和回归用例。",
-      metricName: "评估集刷新节奏",
+      detail: `说明：把真实失败案例沉淀到评估集和回归用例。`,
       baseline: 0,
       current: 1,
       target: 1,
@@ -629,8 +645,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-cost",
       objectiveId: "obj-cost-quality",
       title: "单次请求平均成本降低 35%",
-      description: "通过上下文裁剪、缓存和路由降低平均请求成本。",
-      metricName: "单次请求平均成本",
+      detail: `说明：通过上下文裁剪、缓存和路由降低平均请求成本。`,
       baseline: 0.058,
       current: 0.038,
       target: 0.026,
@@ -651,8 +666,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-cost-observability",
       objectiveId: "obj-cost-quality",
       title: "高成本链路 100% 可观测",
-      description: "高成本链路需要能追踪 prompt、model、RAG 和工具调用消耗。",
-      metricName: "成本可观测链路",
+      detail: `说明：高成本链路需要能追踪 prompt、model、RAG 和工具调用消耗。`,
       baseline: 20,
       current: 70,
       target: 100,
@@ -668,8 +682,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-token-redundancy",
       objectiveId: "obj-cost-quality",
       title: "Prompt token 冗余降低 25%",
-      description: "减少重复上下文、无效系统指令和过长检索片段。",
-      metricName: "Token 冗余",
+      detail: `说明：减少重复上下文、无效系统指令和过长检索片段。`,
       baseline: 100,
       current: 82,
       target: 75,
@@ -688,8 +701,7 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-cache-hit",
       objectiveId: "obj-cost-quality",
       title: "缓存命中率达到 40%",
-      description: "对重复高频查询和稳定知识问答引入缓存策略。",
-      metricName: "缓存命中率",
+      detail: `说明：对重复高频查询和稳定知识问答引入缓存策略。`,
       baseline: 4,
       current: 18,
       target: 40,
@@ -707,13 +719,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-citation-coverage",
       objectiveId: "obj-bounty-answer-citations",
       title: "高价值回答引用覆盖率达到 92%",
-      description: "权限、合同和知识库问答的关键结论必须附带可核验引用。",
-      metricName: "引用覆盖率",
-      metricRequirement: "高价值回答中，关键结论带正确引用的占比达到 92% 及以上。",
-      statisticalObject: "权限、合同、知识库问答三类高价值问题。",
-      completionStandard: "固定评估集引用覆盖率达到 92%，且引用能支撑关键结论。",
-      sampleSet: "120 条高价值问答样本，标注期望引用来源。",
-      measurementScope: "只统计需要引用的事实型回答，不统计开放讨论。",
+      detail: `说明：权限、合同和知识库问答的关键结论必须附带可核验引用。
+
+要求：高价值回答中，关键结论带正确引用的占比达到 92% 及以上。
+
+统计对象：权限、合同、知识库问答三类高价值问题。
+
+完成标准：固定评估集引用覆盖率达到 92%，且引用能支撑关键结论。
+
+样本集：120 条高价值问答样本，标注期望引用来源。
+
+测量范围：只统计需要引用的事实型回答，不统计开放讨论。`,
       uncertaintyLevel: "破局",
       baseline: 54,
       current: 61,
@@ -732,13 +748,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-citation-error",
       objectiveId: "obj-bounty-answer-citations",
       title: "错误引用率降低到 2% 以下",
-      description: "减少引用存在但无法支撑结论的情况。",
-      metricName: "错误引用率",
-      metricRequirement: "引用无法支撑关键结论的回答占比低于 2%。",
-      statisticalObject: "带引用回答的人工抽检样本。",
-      completionStandard: "连续两周抽检错误引用率低于 2%。",
-      sampleSet: "每周 80 条带引用回答抽检样本。",
-      measurementScope: "只统计系统生成引用，不统计用户上传内容错误。",
+      detail: `说明：减少引用存在但无法支撑结论的情况。
+
+要求：引用无法支撑关键结论的回答占比低于 2%。
+
+统计对象：带引用回答的人工抽检样本。
+
+完成标准：连续两周抽检错误引用率低于 2%。
+
+样本集：每周 80 条带引用回答抽检样本。
+
+测量范围：只统计系统生成引用，不统计用户上传内容错误。`,
       uncertaintyLevel: "进阶",
       baseline: 9,
       current: 7,
@@ -757,13 +777,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-agent-retry-idempotency",
       objectiveId: "obj-bounty-agent-retry",
       title: "工具重试幂等覆盖率达到 100%",
-      description: "关键工具调用必须带幂等键并能识别重复提交。",
-      metricName: "幂等覆盖率",
-      metricRequirement: "工单、权限、审计工具的重试链路 100% 具备幂等保护。",
-      statisticalObject: "Agent 工具调用链路中的写操作。",
-      completionStandard: "重试、超时和网络抖动场景均不会产生重复副作用。",
-      sampleSet: "工具调用回归用例和最近 14 天失败日志。",
-      measurementScope: "只统计写操作工具，不统计只读查询。",
+      detail: `说明：关键工具调用必须带幂等键并能识别重复提交。
+
+要求：工单、权限、审计工具的重试链路 100% 具备幂等保护。
+
+统计对象：Agent 工具调用链路中的写操作。
+
+完成标准：重试、超时和网络抖动场景均不会产生重复副作用。
+
+样本集：工具调用回归用例和最近 14 天失败日志。
+
+测量范围：只统计写操作工具，不统计只读查询。`,
       uncertaintyLevel: "渡劫",
       baseline: 35,
       current: 48,
@@ -782,13 +806,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-agent-fallback",
       objectiveId: "obj-bounty-agent-retry",
       title: "工具失败可解释降级率达到 95%",
-      description: "工具失败时给出明确原因、下一步动作和人工接管入口。",
-      metricName: "可解释降级率",
-      metricRequirement: "工具失败后，95% 场景能给出可解释降级结果。",
-      statisticalObject: "工单、权限和审计工具调用失败样本。",
-      completionStandard: "失败不静默吞掉，降级信息能被日志和用户界面同时追踪。",
-      sampleSet: "工具调用失败回归集。",
-      measurementScope: "只统计系统可检测失败，不统计第三方系统长时间不可用。",
+      detail: `说明：工具失败时给出明确原因、下一步动作和人工接管入口。
+
+要求：工具失败后，95% 场景能给出可解释降级结果。
+
+统计对象：工单、权限和审计工具调用失败样本。
+
+完成标准：失败不静默吞掉，降级信息能被日志和用户界面同时追踪。
+
+样本集：工具调用失败回归集。
+
+测量范围：只统计系统可检测失败，不统计第三方系统长时间不可用。`,
       uncertaintyLevel: "破局",
       baseline: 22,
       current: 37,
@@ -807,13 +835,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-eval-automation",
       objectiveId: "obj-bounty-eval-dataset",
       title: "高风险评估样本自动入库率达到 85%",
-      description: "线上失败和人工复盘样本能自动转入待审核评估池。",
-      metricName: "自动入库率",
-      metricRequirement: "高风险样本自动进入待审核评估池的比例达到 85% 及以上。",
-      statisticalObject: "线上高风险失败样本和人工复盘样本。",
-      completionStandard: "入库样本包含问题、答案、期望依据和失败分类。",
-      sampleSet: "最近 30 天失败样本。",
-      measurementScope: "只统计高风险标签样本，不统计普通用户反馈。",
+      detail: `说明：线上失败和人工复盘样本能自动转入待审核评估池。
+
+要求：高风险样本自动进入待审核评估池的比例达到 85% 及以上。
+
+统计对象：线上高风险失败样本和人工复盘样本。
+
+完成标准：入库样本包含问题、答案、期望依据和失败分类。
+
+样本集：最近 30 天失败样本。
+
+测量范围：只统计高风险标签样本，不统计普通用户反馈。`,
       uncertaintyLevel: "破局",
       baseline: 18,
       current: 29,
@@ -832,13 +864,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-dataset-growth",
       objectiveId: "obj-bounty-eval-dataset",
       title: "新增 300 条高风险评估样本",
-      description: "补齐权限、成本、检索边界和工具失败样本。",
-      metricName: "新增样本数",
-      metricRequirement: "新增 300 条已标注高风险评估样本。",
-      statisticalObject: "通过审核并进入 nightly eval 的样本。",
-      completionStandard: "样本具备期望答案、引用依据和失败分类。",
-      sampleSet: "线上日志、用户反馈和人工复盘记录。",
-      measurementScope: "只统计进入评估系统的样本，不统计草稿。",
+      detail: `说明：补齐权限、成本、检索边界和工具失败样本。
+
+要求：新增 300 条已标注高风险评估样本。
+
+统计对象：通过审核并进入 nightly eval 的样本。
+
+完成标准：样本具备期望答案、引用依据和失败分类。
+
+样本集：线上日志、用户反馈和人工复盘记录。
+
+测量范围：只统计进入评估系统的样本，不统计草稿。`,
       uncertaintyLevel: "进阶",
       baseline: 0,
       current: 46,
@@ -857,13 +893,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-cost-routing",
       objectiveId: "obj-bounty-cost-routing",
       title: "低风险请求自动路由覆盖率达到 70%",
-      description: "低风险请求自动进入低成本模型或缓存路径。",
-      metricName: "低风险路由覆盖率",
-      metricRequirement: "70% 低风险请求能自动走低成本路径。",
-      statisticalObject: "已打低风险标签的问答请求。",
-      completionStandard: "低成本路径质量不低于基线 98%。",
-      sampleSet: "低风险问答请求和对应质量抽检。",
-      measurementScope: "只统计低风险请求，不统计合同审查等高风险场景。",
+      detail: `说明：低风险请求自动进入低成本模型或缓存路径。
+
+要求：70% 低风险请求能自动走低成本路径。
+
+统计对象：已打低风险标签的问答请求。
+
+完成标准：低成本路径质量不低于基线 98%。
+
+样本集：低风险问答请求和对应质量抽检。
+
+测量范围：只统计低风险请求，不统计合同审查等高风险场景。`,
       uncertaintyLevel: "渡劫",
       baseline: 0,
       current: 8,
@@ -882,13 +922,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-bounty-cache-reuse",
       objectiveId: "obj-bounty-cost-routing",
       title: "稳定问题缓存复用率达到 45%",
-      description: "对重复、低风险、答案稳定的问题启用缓存复用。",
-      metricName: "缓存复用率",
-      metricRequirement: "稳定问题缓存复用率达到 45%。",
-      statisticalObject: "低风险重复问答请求。",
-      completionStandard: "缓存复用不引入过期答案，高风险请求不走缓存。",
-      sampleSet: "最近 14 天重复问答请求。",
-      measurementScope: "只统计可缓存问题，不统计动态权限和合同条款解释。",
+      detail: `说明：对重复、低风险、答案稳定的问题启用缓存复用。
+
+要求：稳定问题缓存复用率达到 45%。
+
+统计对象：低风险重复问答请求。
+
+完成标准：缓存复用不引入过期答案，高风险请求不走缓存。
+
+样本集：最近 14 天重复问答请求。
+
+测量范围：只统计可缓存问题，不统计动态权限和合同条款解释。`,
       uncertaintyLevel: "进阶",
       baseline: 5,
       current: 13,
@@ -907,13 +951,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-demo-evidence-pack-integrity",
       objectiveId: "obj-demo-frozen-evidence-pack",
       title: "关键失败类型证据完整率达到 100%",
-      description: "每个关键失败类型都需要具备日志样本、复现步骤和人工判定说明。",
-      metricName: "证据完整率",
-      metricRequirement: "关键失败类型中，证据包字段完整的比例达到 100%。",
-      statisticalObject: "最近 30 天生产 Agent 工具调用失败类型。",
-      completionStandard: "每个失败类型至少 1 条可复现样本，且日志、步骤、判定说明齐全。",
-      sampleSet: "生产日志、错误工单和人工复盘记录。",
-      measurementScope: "只统计 P1/P2 级 Agent 工具失败。",
+      detail: `说明：每个关键失败类型都需要具备日志样本、复现步骤和人工判定说明。
+
+要求：关键失败类型中，证据包字段完整的比例达到 100%。
+
+统计对象：最近 30 天生产 Agent 工具调用失败类型。
+
+完成标准：每个失败类型至少 1 条可复现样本，且日志、步骤、判定说明齐全。
+
+样本集：生产日志、错误工单和人工复盘记录。
+
+测量范围：只统计 P1/P2 级 Agent 工具失败。`,
       uncertaintyLevel: "进阶",
       baseline: 35,
       current: 72,
@@ -932,13 +980,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-demo-replay-script",
       objectiveId: "obj-demo-frozen-evidence-pack",
       title: "复现脚本覆盖 8 类失败路径",
-      description: "每类失败路径都应有可运行的复现脚本和预期输出。",
-      metricName: "复现脚本覆盖数",
-      metricRequirement: "复现脚本覆盖 8 类关键 Agent 失败路径。",
-      statisticalObject: "生产 Agent 的工具选择、参数组装、权限校验和重试路径。",
-      completionStandard: "8 类失败路径都能在本地或 CI 环境复现。",
-      sampleSet: "P1/P2 失败复盘列表。",
-      measurementScope: "只统计已经被指挥官确认为关键的失败路径。",
+      detail: `说明：每类失败路径都应有可运行的复现脚本和预期输出。
+
+要求：复现脚本覆盖 8 类关键 Agent 失败路径。
+
+统计对象：生产 Agent 的工具选择、参数组装、权限校验和重试路径。
+
+完成标准：8 类失败路径都能在本地或 CI 环境复现。
+
+样本集：P1/P2 失败复盘列表。
+
+测量范围：只统计已经被指挥官确认为关键的失败路径。`,
       uncertaintyLevel: "破局",
       baseline: 1,
       current: 5,
@@ -957,13 +1009,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-demo-review-citation-pass",
       objectiveId: "obj-demo-submitted-peer-review",
       title: "引用覆盖回归集通过率达到 95%",
-      description: "核心引用场景回归集需要稳定通过。",
-      metricName: "引用覆盖通过率",
-      metricRequirement: "引用覆盖回归集通过率达到 95% 及以上。",
-      statisticalObject: "120 条高价值引用问答回归样本。",
-      completionStandard: "回归集通过率达到 95%，失败样本全部有原因分类。",
-      sampleSet: "指挥官确认的引用质量回归集。",
-      measurementScope: "只统计需要引用的事实型回答。",
+      detail: `说明：核心引用场景回归集需要稳定通过。
+
+要求：引用覆盖回归集通过率达到 95% 及以上。
+
+统计对象：120 条高价值引用问答回归样本。
+
+完成标准：回归集通过率达到 95%，失败样本全部有原因分类。
+
+样本集：指挥官确认的引用质量回归集。
+
+测量范围：只统计需要引用的事实型回答。`,
       uncertaintyLevel: "破局",
       baseline: 70,
       current: 96,
@@ -982,13 +1038,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-demo-review-regression-pass",
       objectiveId: "obj-demo-submitted-peer-review",
       title: "错误引用回归样本全部修复",
-      description: "已知错误引用样本必须全部修复并进入回归。",
-      metricName: "错误引用修复率",
-      metricRequirement: "错误引用回归样本修复率达到 100%。",
-      statisticalObject: "上一轮验收发现的错误引用样本。",
-      completionStandard: "所有错误引用样本修复，且新增回归断言。",
-      sampleSet: "错误引用复盘清单。",
-      measurementScope: "只统计已确认的错误引用样本。",
+      detail: `说明：已知错误引用样本必须全部修复并进入回归。
+
+要求：错误引用回归样本修复率达到 100%。
+
+统计对象：上一轮验收发现的错误引用样本。
+
+完成标准：所有错误引用样本修复，且新增回归断言。
+
+样本集：错误引用复盘清单。
+
+测量范围：只统计已确认的错误引用样本。`,
       uncertaintyLevel: "进阶",
       baseline: 40,
       current: 100,
@@ -1008,13 +1068,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-demo-routing-coverage",
       objectiveId: "obj-demo-settled-routing-quality",
       title: "低风险请求自动路由覆盖率达到 72%",
-      description: "低风险请求自动进入低成本模型或缓存路径。",
-      metricName: "低风险路由覆盖率",
-      metricRequirement: "低风险请求自动路由覆盖率达到 70% 及以上。",
-      statisticalObject: "最近 7 天低风险问答请求。",
-      completionStandard: "覆盖率达到 70%，且路由结果可追踪。",
-      sampleSet: "低风险请求抽样和路由日志。",
-      measurementScope: "不统计高风险合同、权限和审计请求。",
+      detail: `说明：低风险请求自动进入低成本模型或缓存路径。
+
+要求：低风险请求自动路由覆盖率达到 70% 及以上。
+
+统计对象：最近 7 天低风险问答请求。
+
+完成标准：覆盖率达到 70%，且路由结果可追踪。
+
+样本集：低风险请求抽样和路由日志。
+
+测量范围：不统计高风险合同、权限和审计请求。`,
       uncertaintyLevel: "进阶",
       baseline: 18,
       current: 72,
@@ -1034,13 +1098,17 @@ const legacyInitialOrfState: LegacyInitialState = {
       id: "res-demo-routing-quality",
       objectiveId: "obj-demo-settled-routing-quality",
       title: "低成本路径质量不低于基线 98%",
-      description: "路由到低成本路径后，答案质量仍需保持稳定。",
-      metricName: "质量保持率",
-      metricRequirement: "低成本路径质量保持率不低于高质量路径基线的 98%。",
-      statisticalObject: "低风险请求质量抽检样本。",
-      completionStandard: "质量保持率达到 98%，无 P1/P2 误路由。",
-      sampleSet: "人工抽检样本和自动评估样本。",
-      measurementScope: "只统计低风险路径，不统计人工升级后的请求。",
+      detail: `说明：路由到低成本路径后，答案质量仍需保持稳定。
+
+要求：低成本路径质量保持率不低于高质量路径基线的 98%。
+
+统计对象：低风险请求质量抽检样本。
+
+完成标准：质量保持率达到 98%，无 P1/P2 误路由。
+
+样本集：人工抽检样本和自动评估样本。
+
+测量范围：只统计低风险路径，不统计人工升级后的请求。`,
       uncertaintyLevel: "进阶",
       baseline: 98,
       current: 98.6,

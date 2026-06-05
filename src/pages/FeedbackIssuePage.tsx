@@ -1,16 +1,19 @@
-import { ArrowLeft, CheckCircle2, CircleDot, MessageSquare, Reply, RotateCcw, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleDot, MessageSquare, Pencil, Reply, RotateCcw, XCircle } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../components/ImagePreviewDialog";
 import { UserAvatar } from "../components/UserAvatar";
+import { hasPermission } from "../config/permissions";
 import { BountyBadge, BountyButton, BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
 import {
   CommentBodyText,
   CommentComposer,
+  CommentInlineEditor,
   type CommentDraft,
   type CommentDraftMode,
   type CommentMentionUser,
+  commentDraftFromStoredBody,
   emptyCommentDraft,
   serializeCommentDraft,
 } from "../features/challenge/comments/CommentPanel";
@@ -26,7 +29,7 @@ import {
   nextFeedbackIssueStatus,
 } from "../features/feedback/model/feedbackIssue";
 import { useOrf } from "../state/OrfProvider";
-import type { CommentMessage, CommentThread, Feedback, Impact } from "../types/orf";
+import type { CommentMessage, CommentThread, Feedback, Impact, OrfUser } from "../types/orf";
 import { impactLabel } from "../utils/labels";
 
 type FeedbackCommentEntry = {
@@ -41,24 +44,34 @@ export function FeedbackIssuePage() {
     currentUser,
     loadCommentMentionableUsers,
     state,
+    updateCommentMessage,
     updateFeedbackStatus,
     uploadCommentAttachment,
   } = useOrf();
   const feedback = state.feedback.find((item) => item.id === feedbackId) ?? null;
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
   const [draftMode, setDraftMode] = useState<CommentDraftMode>({ type: "default" });
+  const [editState, setEditState] = useState<{ draft: CommentDraft; messageId: string; threadId: string } | null>(null);
   const [imagePreview, setImagePreview] = useState<ImagePreview | null>(null);
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
   const threads = useMemo(() => feedback ? feedbackIssueThreads(state.comments, feedback.id) : [], [feedback, state.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canChangeState = feedback ? canManageFeedbackStatus(feedback, currentUser) : false;
+  const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
 
   useEffect(() => {
     setDraft(emptyCommentDraft());
     setDraftMode({ type: "default" });
+    setEditState(null);
     setImagePreview(null);
   }, [feedbackId]);
+
+  useEffect(() => {
+    if (editState && !entries.some((entry) => entry.message.id === editState.messageId)) {
+      setEditState(null);
+    }
+  }, [editState, entries]);
 
   useEffect(() => {
     if (!feedback) {
@@ -118,6 +131,7 @@ export function FeedbackIssuePage() {
   };
 
   const startReply = (message: CommentMessage) => {
+    setEditState(null);
     setDraft(emptyCommentDraft());
     setDraftMode({
       type: "reply",
@@ -125,6 +139,26 @@ export function FeedbackIssuePage() {
       targetAuthor: message.author,
       targetMessageId: message.id,
     });
+  };
+  const startEdit = (entry: FeedbackCommentEntry) => {
+    setDraft(emptyCommentDraft());
+    setDraftMode({ type: "default" });
+    setEditState({
+      draft: commentDraftFromStoredBody(entry.message.body, mentionUsersById),
+      messageId: entry.message.id,
+      threadId: entry.thread.id,
+    });
+  };
+  const updateEditDraft = (messageId: string, draft: CommentDraft) => {
+    setEditState((current) => (current?.messageId === messageId ? { ...current, draft } : current));
+  };
+  const submitEdit = (event: FormEvent, messageId: string) => {
+    event.preventDefault();
+    if (!editState || editState.messageId !== messageId) return;
+    const body = serializeCommentDraft(editState.draft).trim();
+    if (!body) return;
+    updateCommentMessage(editState.threadId, editState.messageId, body);
+    setEditState(null);
   };
 
   const issueOpen = isFeedbackIssueOpen(feedback);
@@ -171,19 +205,39 @@ export function FeedbackIssuePage() {
                   <div className="feedback-issue-comment-header">
                     <strong>{message.author}</strong>
                     <time dateTime={message.createdAt} title={commentTimeDisplay(message.createdAt).title}>{commentTimeDisplay(message.createdAt).label}</time>
+                    {canManageFeedbackComment(message, currentUser, canManageAllComments) && (
+                      <button type="button" className="feedback-issue-reply-action" onClick={() => startEdit({ message, thread })}>
+                        <Pencil aria-hidden="true" />
+                        编辑
+                      </button>
+                    )}
                     <button type="button" className="feedback-issue-reply-action" onClick={() => startReply(message)}>
                       <Reply aria-hidden="true" />
                       回复
                     </button>
                   </div>
                   <div className="feedback-issue-comment-body">
-                    {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
-                    <CommentBodyText
-                      attachments={message.attachments ?? []}
-                      body={message.body}
-                      mentionUsersById={mentionUsersById}
-                      onOpenImage={setImagePreview}
-                    />
+                    {editState?.messageId === message.id ? (
+                      <CommentInlineEditor
+                        currentUserId={currentUser?.id ?? ""}
+                        draft={editState.draft}
+                        mentionableUsers={mentionableUsers}
+                        onCancel={() => setEditState(null)}
+                        onDraftChange={(draft) => updateEditDraft(message.id, draft)}
+                        onSubmit={(event) => submitEdit(event, message.id)}
+                        onUploadAttachment={(file) => uploadCommentAttachment({ file, targetId: feedback.id, targetType: "feedback" })}
+                      />
+                    ) : (
+                      <>
+                        {message.replyToAuthor && <span className="orf-comment-reply-prefix">回复{message.replyToAuthor}: </span>}
+                        <CommentBodyText
+                          attachments={message.attachments ?? []}
+                          body={message.body}
+                          mentionUsersById={mentionUsersById}
+                          onOpenImage={setImagePreview}
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               </article>
@@ -294,6 +348,12 @@ function feedbackCommentEntries(threads: readonly CommentThread[]): FeedbackComm
   return threads
     .flatMap((thread) => thread.messages.map((message) => ({ message, thread })))
     .sort((left, right) => left.message.createdAt.localeCompare(right.message.createdAt));
+}
+
+function canManageFeedbackComment(message: CommentMessage, currentUser: OrfUser | null, canManageAllComments: boolean) {
+  if (canManageAllComments) return true;
+  if (!currentUser) return false;
+  return message.authorUserId ? message.authorUserId === currentUser.id : message.author === currentUser.name;
 }
 
 function causeTone(value: string) {

@@ -1,3 +1,4 @@
+import { normalizeResultDetails } from "../../../domain/orfResultDetails";
 import type { Objective, Result } from "../../../types/orf";
 
 export interface ResultQualityCheck {
@@ -14,11 +15,12 @@ const vagueTerms = ["尽量", "大概", "较好", "明显", "适当", "若干", 
 
 export function buildResultQualityChecks(input: ResultQualityInput): ResultQualityCheck[] {
   const { objective, result } = input;
+  const details = normalizeResultDetails(result);
 
   return [
     {
       label: "可度量",
-      passed: hasText(result.metricName) && hasFiniteNumber(result.baseline) && hasFiniteNumber(result.current) && hasFiniteNumber(result.target),
+      passed: hasText(result.title) && hasFiniteNumber(result.baseline) && hasFiniteNumber(result.current) && hasFiniteNumber(result.target),
     },
     {
       label: "有目标战利品入口",
@@ -30,17 +32,11 @@ export function buildResultQualityChecks(input: ResultQualityInput): ResultQuali
     },
     {
       label: "口径清楚",
-      passed: [
-        result.metricRequirement,
-        result.statisticalObject,
-        result.completionStandard,
-        result.sampleSet,
-        result.measurementScope,
-      ].every(hasText),
+      passed: hasText(details.detail),
     },
     {
       label: "无模糊词",
-      passed: !containsVagueTerms([result.title, result.description, result.metricRequirement, result.completionStandard].join(" ")),
+      passed: !containsVagueTerms([result.title, details.detail].join(" ")),
     },
   ];
 }

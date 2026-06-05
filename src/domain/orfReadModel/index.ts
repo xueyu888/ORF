@@ -3,8 +3,11 @@ import type {
   ChallengeApplication,
   Objective,
   OrfState,
+  OrfUser,
+  PermissionRule,
   Result,
 } from "../../types/orf";
+import type { PermissionKey } from "../../config/permissions";
 
 export type TaskManagementData = Pick<
   OrfState,
@@ -18,9 +21,15 @@ export type TaskManagementData = Pick<
   | "objectiveTrialReviews"
   | "objectiveAlignmentRequests"
   | "pointLedger"
-  | "permissionRules"
   | "projects"
 >;
+
+export type CurrentUserAccessData = {
+  user: OrfUser;
+  permissionRules: PermissionRule[];
+  permissions: PermissionKey[];
+  capabilities: Record<PermissionKey, boolean>;
+};
 
 export type BountyHallItem = {
   applications: ChallengeApplication[];

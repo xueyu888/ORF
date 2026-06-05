@@ -14,6 +14,7 @@ import { registerCommentRoutes } from "./routes/commentRoutes";
 import { registerUserRoutes } from "./routes/userRoutes";
 import { registerUserAvatarRoutes } from "./users/avatar/avatarRoutes";
 import { registerPermissionRoutes } from "./routes/permissionRoutes";
+import { registerCurrentUserAccessRoutes } from "./routes/currentUserAccessRoutes";
 import { registerRealtimeRoutes } from "./routes/realtimeRoutes";
 import { registerFeedbackRoutes } from "./routes/feedbackRoutes";
 import { registerOrfResultRoutes } from "./routes/orfResultRoutes";
@@ -88,6 +89,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   registerRealtimeRoutes(app);
   registerNotificationRoutes(app);
+  registerCurrentUserAccessRoutes(app);
   registerOrfReadRoutes(app);
   registerSettingsRoutes(app);
   registerCommentRoutes(app);
