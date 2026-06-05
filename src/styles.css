@@ -6319,13 +6319,13 @@ body[data-dragging-floating="true"] {
   display: grid;
   gap: 0;
   overflow: hidden;
-  border: 1px solid rgba(126, 151, 178, 0.2);
-  border-radius: 10px;
-  background: rgba(255, 251, 239, 0.42);
+  border: 1px solid rgba(255, 251, 239, 0.42);
+  border-radius: 12px;
+  background: rgba(238, 228, 208, 0.46);
   padding: 0;
   scroll-margin-top: 86px;
-  box-shadow: none;
-  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 30px rgba(31, 49, 74, 0.08);
+  backdrop-filter: blur(10px) saturate(1.02);
 }
 
 .orf-project-section::before {
@@ -6343,9 +6343,8 @@ body[data-dragging-floating="true"] {
   gap: 8px;
   min-height: 40px;
   border: 0;
-  border-bottom: 1px solid rgba(126, 151, 178, 0.16);
   border-radius: 0;
-  background: rgba(255, 251, 239, 0.22);
+  background: transparent;
   padding: 7px 10px 7px 12px;
   box-shadow: none;
   transition:
@@ -6354,7 +6353,7 @@ body[data-dragging-floating="true"] {
 
 .orf-project-header:hover,
 .orf-project-header:focus-within {
-  background: rgba(255, 251, 239, 0.4);
+  background: rgba(255, 251, 239, 0.24);
   box-shadow: none;
 }
 
@@ -6403,8 +6402,8 @@ body[data-dragging-floating="true"] {
 .orf-project-body {
   position: relative;
   display: grid;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 8px 8px 10px;
   z-index: 1;
 }
 
@@ -7062,17 +7061,15 @@ body[data-dragging-floating="true"] {
 .orf-task-row:hover,
 .orf-subtask-row:hover,
 .orf-row-active {
-  background:
-    linear-gradient(90deg, rgba(82, 215, 246, 0.13) 0%, rgba(255, 248, 232, 0.86) 42%, rgba(255, 248, 232, 0.5) 100%),
-    var(--orf-bg-row-hover);
-  box-shadow: inset 3px 0 0 rgba(82, 215, 246, 0.78), 0 10px 24px rgba(98, 77, 48, 0.1);
+  background: rgba(255, 255, 255, 0.32);
+  box-shadow: none;
 }
 
 .orf-result-row,
 .orf-task-row,
 .orf-subtask-row {
-  border-radius: var(--orf-radius-control);
-  border: 1px solid transparent;
+  border: 0;
+  border-radius: 0;
   transition:
     background 140ms ease,
     box-shadow 140ms ease,
@@ -7082,24 +7079,13 @@ body[data-dragging-floating="true"] {
 .orf-result-row::before,
 .orf-task-row::before,
 .orf-subtask-row::before {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 4px;
-  width: 2px;
-  border-radius: 999px;
-  content: "";
-  background: linear-gradient(180deg, transparent, rgba(183, 139, 72, 0.34), transparent);
-  opacity: 0;
-  transition: opacity 140ms ease;
+  display: none;
 }
 
 .orf-result-row {
-  margin: 2px 10px;
-  background:
-    linear-gradient(90deg, rgba(255, 252, 244, 0.84), rgba(247, 236, 215, 0.72));
-  border-color: rgba(183, 139, 72, 0.14);
-  box-shadow: 0 1px 0 rgba(142, 111, 62, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  margin: 0 10px;
+  background: transparent;
+  box-shadow: none;
 }
 
 .orf-result-details-shell {
@@ -7194,8 +7180,9 @@ body[data-dragging-floating="true"] {
 
 .orf-task-row,
 .orf-subtask-row {
-  margin: 1px 10px;
+  margin: 0 10px;
   color: var(--orf-text-secondary);
+  box-shadow: none;
 }
 
 .orf-subtask-row {
@@ -7255,15 +7242,15 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-challenge-workbench .orf-objective-panel {
-  border: 1px solid rgba(126, 151, 178, 0.18);
-  border-radius: 8px;
-  background: rgba(255, 251, 239, 0.34);
-  box-shadow: none;
+  border: 1px solid rgba(255, 251, 239, 0.52);
+  border-radius: 10px;
+  background: rgba(255, 251, 239, 0.58);
+  box-shadow: 0 8px 18px rgba(31, 49, 74, 0.06);
 }
 
 .orf-challenge-workbench .orf-objective-panel:hover {
-  box-shadow: none;
-  transform: none;
+  box-shadow: 0 10px 22px rgba(31, 49, 74, 0.08);
+  transform: translateY(-1px);
 }
 
 .orf-challenge-workbench .orf-objective-panel::before {
@@ -7275,29 +7262,28 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-challenge-workbench .orf-objective-panel-editable {
-  background: rgba(255, 251, 239, 0.34);
+  background: rgba(255, 251, 239, 0.58);
 }
 
 .orf-challenge-workbench .orf-objective-panel-editable .orf-objective-header,
 .orf-challenge-workbench .orf-objective-panel-frozen .orf-objective-header {
-  background: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .orf-challenge-workbench .orf-objective-body {
   background: transparent;
-  padding: 1px 0 6px;
+  padding: 0 0 6px;
 }
 
 .orf-challenge-workbench .orf-result-row {
-  background: rgba(255, 251, 239, 0.42);
-  border-color: rgba(126, 151, 178, 0.14);
+  background: transparent;
   box-shadow: none;
 }
 
 .orf-challenge-workbench .orf-task-row,
 .orf-challenge-workbench .orf-subtask-row {
-  background: rgba(255, 251, 239, 0.28);
-  border-color: rgba(126, 151, 178, 0.12);
+  background: transparent;
+  box-shadow: none;
 }
 
 .orf-challenge-workbench .orf-challenge-row {
@@ -7336,7 +7322,7 @@ body[data-dragging-floating="true"] {
 
 .orf-challenge-workbench .orf-result-row {
   min-height: 44px;
-  margin: 2px 8px;
+  margin: 0 8px;
 }
 
 .orf-challenge-workbench .orf-result-details-shell {
@@ -7346,12 +7332,12 @@ body[data-dragging-floating="true"] {
 
 .orf-challenge-workbench .orf-task-row {
   min-height: 36px;
-  margin: 1px 8px;
+  margin: 0 8px;
 }
 
 .orf-challenge-workbench .orf-subtask-row {
   min-height: 32px;
-  margin: 1px 8px;
+  margin: 0 8px;
 }
 
 .orf-challenge-workbench .orf-objective-title {
