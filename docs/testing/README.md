@@ -70,7 +70,9 @@ npm run testd:permissions
 npm run testd:settings
 ```
 
-`npm run testd` 会为三段套件复用同一个 `TESTD_RUN_ID`；单独运行某个 suite 时，Playwright 配置会为本次运行生成 `TESTD_RUN_ID`。testd 会把邮箱、ID、标题、文件名等测试资源派生为运行内独占值。默认测试连接池为后端 `DATABASE_POOL_MAX=15`、testd 直连 `TESTD_DATABASE_POOL_MAX=2`。
+`npm run testd` 会为三段套件复用同一个 `TESTD_RUN_ID`；单独运行某个 suite 时，Playwright 配置会为本次运行生成 `TESTD_RUN_ID`。testd 会把邮箱、ID、标题、文件名等测试资源派生为运行内独占值。[.env.example](../../.env.example) 建议测试环境使用后端 `DATABASE_POOL_MAX=30`、testd 直连 `TESTD_DATABASE_POOL_MAX=5`，并将数据库连接和查询超时设为 30000ms；实际运行以当前 `.env` 或进程环境变量为准。
+
+`npm run testd` 启动 Playwright 前会检查 [testd/testd.config.ts](../../testd/testd.config.ts)；如果该文件不存在，会从 [testd/testd.config.ts.example](../../testd/testd.config.ts.example) 初始化一份本地配置，不会覆盖已经存在的本地配置。
 
 `npm run testd` 会在正式测试前执行 recovery-only pass，补清理 PostgreSQL recovery ledger 中属于当前收集用例的旧运行残留。如果 Playwright worker 因 `SIGTRAP` 等进程级异常退出，当前用例进程已经无法继续执行 `finally` 中的 Clean；此时外层 run script 会在仍持有 TestD 全局锁时追加一次 post-failure recovery-only pass，用新的 `TESTD_RUN_ID` claim 本轮失败运行的未完成记录并补跑对应 `Clean`，然后保留原始测试失败退出码。recovery-only pass 会保留路径、suite、project、worker 等收集范围参数，但不会继承 `--timeout` 或 `--global-timeout` 这类可能再次中断清理的运行限制。
 

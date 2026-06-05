@@ -131,35 +131,49 @@ async function memberBusinessReferencesAbsent(input: { teamId: string; memberNam
     return false;
   }
 
-  const [resultRef, taskRef, feedbackRef, lootRef, ledgerRef] = await Promise.all([
-    db
-      .select({ id: results.id })
-      .from(results)
-      .where(and(eq(results.teamId, input.teamId), eq(results.definer, input.memberName)))
-      .limit(1),
-    db
-      .select({ id: tasks.id })
-      .from(tasks)
-      .where(and(eq(tasks.teamId, input.teamId), eq(tasks.assignee, input.memberName)))
-      .limit(1),
-    db
-      .select({ id: feedback.id })
-      .from(feedback)
-      .where(and(eq(feedback.teamId, input.teamId), eq(feedback.owner, input.memberName)))
-      .limit(1),
-    db
-      .select({ id: objectiveLoot.id })
-      .from(objectiveLoot)
-      .where(and(eq(objectiveLoot.teamId, input.teamId), eq(objectiveLoot.submittedBy, input.memberName)))
-      .limit(1),
-    db
-      .select({ id: pointLedger.id })
-      .from(pointLedger)
-      .where(and(eq(pointLedger.teamId, input.teamId), eq(pointLedger.memberName, input.memberName)))
-      .limit(1),
-  ]);
+  const resultRef = await db
+    .select({ id: results.id })
+    .from(results)
+    .where(and(eq(results.teamId, input.teamId), eq(results.definer, input.memberName)))
+    .limit(1);
+  if (resultRef.length > 0) {
+    return false;
+  }
 
-  return [resultRef, taskRef, feedbackRef, lootRef, ledgerRef].every((rows) => rows.length === 0);
+  const taskRef = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.teamId, input.teamId), eq(tasks.assignee, input.memberName)))
+    .limit(1);
+  if (taskRef.length > 0) {
+    return false;
+  }
+
+  const feedbackRef = await db
+    .select({ id: feedback.id })
+    .from(feedback)
+    .where(and(eq(feedback.teamId, input.teamId), eq(feedback.owner, input.memberName)))
+    .limit(1);
+  if (feedbackRef.length > 0) {
+    return false;
+  }
+
+  const lootRef = await db
+    .select({ id: objectiveLoot.id })
+    .from(objectiveLoot)
+    .where(and(eq(objectiveLoot.teamId, input.teamId), eq(objectiveLoot.submittedBy, input.memberName)))
+    .limit(1);
+  if (lootRef.length > 0) {
+    return false;
+  }
+
+  const ledgerRef = await db
+    .select({ id: pointLedger.id })
+    .from(pointLedger)
+    .where(and(eq(pointLedger.teamId, input.teamId), eq(pointLedger.memberName, input.memberName)))
+    .limit(1);
+
+  return ledgerRef.length === 0;
 }
 
 async function deleteMemberBusinessReferences(memberName: string) {
@@ -218,13 +232,11 @@ async function deleteMemberBusinessReferences(memberName: string) {
     }
   }
 
-  await Promise.all([
-    db.delete(results).where(eq(results.definer, memberName)),
-    db.delete(tasks).where(eq(tasks.assignee, memberName)),
-    db.delete(feedback).where(eq(feedback.owner, memberName)),
-    db.delete(objectiveLoot).where(eq(objectiveLoot.submittedBy, memberName)),
-    db.delete(pointLedger).where(eq(pointLedger.memberName, memberName)),
-  ]);
+  await db.delete(results).where(eq(results.definer, memberName));
+  await db.delete(tasks).where(eq(tasks.assignee, memberName));
+  await db.delete(feedback).where(eq(feedback.owner, memberName));
+  await db.delete(objectiveLoot).where(eq(objectiveLoot.submittedBy, memberName));
+  await db.delete(pointLedger).where(eq(pointLedger.memberName, memberName));
 }
 
 function removeMemberName(members: readonly string[], memberName: string) {
