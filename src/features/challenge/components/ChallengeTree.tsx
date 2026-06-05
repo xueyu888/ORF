@@ -327,12 +327,13 @@ function ObjectivePanel({
 }) {
   const target: ChallengeTarget = { type: "objective", id: group.objective.id, title: group.objective.title };
   const [objectiveElement, setObjectiveElement] = useState<HTMLElement | null>(null);
-  const [projectPickerOpen, setProjectPickerOpen] = useState(false);
   const complete = objectiveComplete(group.objective);
   const actionId = `objective:${group.objective.id}`;
+  const projectPickerActionId = objectiveProjectPickerActionId(group.objective.id);
   const anchorId = `objective:${group.objective.id}`;
   const rowActive = handlers.activeActionId === actionId || isRowActionOpen(handlers.openActionId, actionId);
   const hasOpenRowMenu = objectivePanelHasOpenRowMenu(group, handlers.openActionId);
+  const projectPickerOpen = handlers.openActionId === projectPickerActionId;
   const isDraftObjective = group.objective.id === handlers.draftObjectiveId;
   const isEditingTarget = isSameTarget(handlers.editingTarget, target);
   const draftObjectiveIsSubmitting = isDraftObjective && !isEditingTarget;
@@ -385,7 +386,7 @@ function ObjectivePanel({
             id: "move-objective-project",
             icon: FolderKanban,
             label: "移动到项目",
-            onAction: () => setProjectPickerOpen(true),
+            onAction: () => projectPickerActionId,
           },
         ]
       : [];
@@ -445,7 +446,10 @@ function ObjectivePanel({
               onCreateProject={handlers.onCreateProject}
               onSetObjectiveProject={handlers.onSetObjectiveProject}
               open={projectPickerOpen}
-              onOpenChange={setProjectPickerOpen}
+              onOpenChange={(open) => {
+                handlers.onActiveActionChange(actionId);
+                handlers.onOpenActionChange(open ? projectPickerActionId : null);
+              }}
               projectId={group.objective.projectId ?? null}
               projects={projects}
             />
@@ -598,7 +602,11 @@ function objectivePanelHasOpenRowMenu(group: ObjectiveNode, openActionId: string
 }
 
 function isRowActionOpen(openActionId: string | null, actionId: string) {
-  return openActionId === actionId || openActionId === `${actionId}:add`;
+  return openActionId === actionId || openActionId === `${actionId}:add` || openActionId === `${actionId}:project`;
+}
+
+function objectiveProjectPickerActionId(objectiveId: string) {
+  return `objective:${objectiveId}:project`;
 }
 
 type AlignmentAction = {
@@ -656,23 +664,21 @@ function ObjectiveProjectPicker({
   onCreateProject,
   onOpenChange,
   onSetObjectiveProject,
-  open: controlledOpen,
+  open,
   projectId,
   projects,
 }: {
   objectiveId: string;
   onCreateProject: (name: string) => Promise<OrfProject | null>;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange: (open: boolean) => void;
   onSetObjectiveProject: (objectiveId: string, projectId: string | null) => Promise<boolean>;
-  open?: boolean;
+  open: boolean;
   projectId: string | null;
   projects: OrfProject[];
 }) {
-  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [saving, setSaving] = useState(false);
-  const open = controlledOpen ?? uncontrolledOpen;
-  const setOpen = onOpenChange ?? setUncontrolledOpen;
+  const setOpen = onOpenChange;
   const projectName = projects.find((project) => project.id === projectId)?.name ?? unassignedObjectiveProjectName;
 
   const setProject = async (nextProjectId: string | null) => {
@@ -703,7 +709,7 @@ function ObjectiveProjectPicker({
   };
 
   return (
-    <span className="orf-objective-project-picker" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
+    <span className="orf-objective-project-picker" data-challenge-row-actions="true" data-no-row-edit="true" onPointerDown={(event) => event.stopPropagation()}>
       <button className="orf-objective-project-trigger" type="button" aria-label={`移动到项目，当前：${projectName}`} title={`移动到项目，当前：${projectName}`} onClick={() => setOpen(!open)}>
         <FolderKanban className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

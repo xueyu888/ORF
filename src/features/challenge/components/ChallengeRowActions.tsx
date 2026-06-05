@@ -21,7 +21,7 @@ export type ChallengeRowMenuItem = {
   icon: LucideIcon;
   id: string;
   label: string;
-  onAction: () => void;
+  onAction: () => string | null | void;
   tone?: "default" | "danger";
 };
 
@@ -153,8 +153,8 @@ export function ChallengeRowActions({
                     item.tone === "danger" ? "text-[#d92d20]" : "text-[#344054]",
                   )}
                   onClick={() => {
-                    item.onAction();
-                    onOpenActionChange(null);
+                    const nextOpenActionId = item.onAction();
+                    onOpenActionChange(nextOpenActionId === undefined ? null : nextOpenActionId);
                   }}
                 >
                   <Icon className="h-4 w-4" />
