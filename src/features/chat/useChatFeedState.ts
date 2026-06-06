@@ -465,6 +465,14 @@ export function useChatFeedState({
     }
   }, [hasNewerMessages, loadLatestMessages, requestScrollToLatest]);
 
+  const syncLatestMessagesIfFollowing = useCallback(() => {
+    const channelId = activeChannelIdRef.current;
+    if (!channelId) return;
+    const snapshot = feedCacheRef.current.get(channelId);
+    if (snapshot?.hasNewerMessages || !isMessageScrollNearLatest()) return;
+    void loadLatestMessages("auto");
+  }, [isMessageScrollNearLatest, loadLatestMessages]);
+
   return {
     applyMessageToFeed,
     applyRealtimeMessageToFeed,
@@ -484,6 +492,7 @@ export function useChatFeedState({
     pendingNewMessageCount,
     prefetchChannelMessages,
     requestScrollToLatest,
+    syncLatestMessagesIfFollowing,
     unreadAnchor,
   };
 }

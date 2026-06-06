@@ -177,6 +177,7 @@ export function ChatPage() {
     pendingNewMessageCount,
     prefetchChannelMessages,
     requestScrollToLatest,
+    syncLatestMessagesIfFollowing,
     unreadAnchor,
   } = useChatFeedState({
     activeChannel,
@@ -274,20 +275,28 @@ export function ChatPage() {
     setDraftChannelIds(storedDraftChannelIds(channels));
   }, [channels]);
 
-  useChatRealtimeEvents((payload) => {
-    if (payload.channel) applyChannel(payload.channel);
-    if (payload.eventType === "channel.archived") {
-      setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-      if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
-    }
-    if (payload.eventType === "member.changed" && payload.channel) {
-      applyChannel(payload.channel);
-    }
-    if (payload.message) {
-      applyRealtimeMessageToFeed(payload.message, applyMessageEffects);
-    }
-    if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
-  });
+  const handleRealtimeConnectionRestored = useCallback(() => {
+    void refreshBootstrap();
+    syncLatestMessagesIfFollowing();
+  }, [refreshBootstrap, syncLatestMessagesIfFollowing]);
+
+  useChatRealtimeEvents(
+    (payload) => {
+      if (payload.channel) applyChannel(payload.channel);
+      if (payload.eventType === "channel.archived") {
+        setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
+        if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
+      }
+      if (payload.eventType === "member.changed" && payload.channel) {
+        applyChannel(payload.channel);
+      }
+      if (payload.message) {
+        applyRealtimeMessageToFeed(payload.message, applyMessageEffects);
+      }
+      if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
+    },
+    { onConnectionRestored: handleRealtimeConnectionRestored },
+  );
 
   const handleSendMessage = useCallback(
     async ({ attachments, channelId, draft, parentMessageId, rootMessageId }: ChatSendInput) => {
