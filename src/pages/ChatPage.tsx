@@ -725,6 +725,7 @@ export function ChatPage() {
               onLoadLatest={loadLatestOrScroll}
               onLoadOlder={loadOlderMessages}
               onMarkUnread={markMessageUnread}
+              onOpenThreadInbox={() => void loadThreadSummaries()}
               onPin={handlePinMessage}
               onReaction={handleReaction}
               onRemovePending={handleRemovePendingMessage}

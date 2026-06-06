@@ -1,4 +1,4 @@
-import { CheckCheck, ChevronDown, Loader2 } from "lucide-react";
+import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
 import type { RefObject } from "react";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatDay } from "./chatFormat";
@@ -28,6 +28,7 @@ type ChatMessageFeedProps = {
   onLoadLatest: () => void;
   onLoadOlder: () => void;
   onMarkUnread: (message: ChatMessage) => void;
+  onOpenThreadInbox: () => void;
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemovePending: (message: ChatMessage) => void;
@@ -70,6 +71,7 @@ export function ChatMessageFeed({
   onLoadLatest,
   onLoadOlder,
   onMarkUnread,
+  onOpenThreadInbox,
   onPin,
   onReaction,
   onRemovePending,
@@ -114,6 +116,7 @@ export function ChatMessageFeed({
           onJumpUnread={onJumpUnread}
           onLoadOlder={onLoadOlder}
           onMarkUnread={onMarkUnread}
+          onOpenThreadInbox={onOpenThreadInbox}
           onPin={onPin}
           onReaction={onReaction}
           onRemovePending={onRemovePending}
@@ -161,6 +164,7 @@ function MessageList({
   onJumpUnread,
   onLoadOlder,
   onMarkUnread,
+  onOpenThreadInbox,
   onPin,
   onReaction,
   onRemovePending,
@@ -180,6 +184,8 @@ function MessageList({
   const unreadTarget = resolveUnreadJumpTarget({ currentUserId, hasOlderMessages, messages, unreadAnchor });
   const unreadDividerIndex = unreadTarget?.dividerIndex ?? -1;
   const unreadMessageId = unreadTarget?.messageId ?? null;
+  const threadUnreadCount = unreadAnchor?.threadUnreadCount ?? 0;
+  const showThreadUnreadOnly = !unreadTarget && threadUnreadCount > 0;
   return (
     <div className="orf-chat-message-list">
       {unreadTarget && (
@@ -187,6 +193,18 @@ function MessageList({
           <button className="orf-chat-unread-jump" type="button" onClick={() => onJumpUnread(unreadTarget.jumpTarget)}>
             <ChevronDown className="h-4 w-4" />
             跳到未读
+          </button>
+          <button className="orf-chat-unread-clear" type="button" onClick={onClearUnread}>
+            <CheckCheck className="h-4 w-4" />
+            标记已读
+          </button>
+        </div>
+      )}
+      {showThreadUnreadOnly && (
+        <div className="orf-chat-unread-controls">
+          <button className="orf-chat-unread-jump" type="button" onClick={onOpenThreadInbox}>
+            <Reply className="h-4 w-4" />
+            {threadUnreadCount} 条话题未读
           </button>
           <button className="orf-chat-unread-clear" type="button" onClick={onClearUnread}>
             <CheckCheck className="h-4 w-4" />
