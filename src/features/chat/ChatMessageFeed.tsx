@@ -2,6 +2,7 @@ import { ChevronDown, Loader2 } from "lucide-react";
 import type { RefObject } from "react";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatDay } from "./chatFormat";
+import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import type { UnreadAnchor } from "./chatModels";
 import { ChatMessageItem } from "./ChatMessageItem";
 
@@ -166,6 +167,7 @@ function MessageList({
         const day = formatDay(message.createdAt);
         const showDay = day !== lastDay;
         lastDay = day;
+        const compact = !showDay && unreadDividerIndex !== index && shouldCompactChatMessage(messages[index - 1], message);
         return (
           <div key={message.id}>
             {showDay && <div className="orf-chat-day-divider"><span>{day}</span></div>}
@@ -176,6 +178,7 @@ function MessageList({
             )}
             <ChatMessageItem
               canPin={canPin}
+              compact={compact}
               currentUserId={currentUserId}
               firstUnread={unreadMessageId === message.id}
               focused={focusMessageId === message.id}

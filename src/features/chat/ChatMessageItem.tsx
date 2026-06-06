@@ -10,6 +10,7 @@ import { displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName
 
 type ChatMessageItemProps = {
   canPin?: boolean;
+  compact?: boolean;
   currentUserId?: string;
   firstUnread?: boolean;
   focused?: boolean;
@@ -58,6 +59,7 @@ function AttachmentGrid({
 export function ChatMessageItem({
   onAttachmentPreview,
   canPin,
+  compact,
   currentUserId,
   firstUnread,
   focused,
@@ -83,24 +85,39 @@ export function ChatMessageItem({
 
   return (
     <article
-      className={clsx("orf-chat-message", message.pinnedAt && "orf-chat-message-pinned", focused && "orf-chat-message-focused")}
+      className={clsx(
+        "orf-chat-message",
+        compact && "orf-chat-message-compact",
+        message.pinnedAt && "orf-chat-message-pinned",
+        focused && "orf-chat-message-focused",
+      )}
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
     >
-      <Avatar avatarUrl={message.authorAvatarUrl} name={message.authorName} size="md" />
+      {compact ? (
+        <div className="orf-chat-message-compact-time">{formatTime(message.createdAt)}</div>
+      ) : (
+        <Avatar avatarUrl={message.authorAvatarUrl} name={message.authorName} size="md" />
+      )}
       <div className="orf-chat-message-body">
-        <div className="orf-chat-message-meta">
-          <strong>{message.authorName}</strong>
-          <span>{formatTime(message.createdAt)}</span>
-          {message.pinnedAt && (
-            <span className="orf-chat-message-pin-label">
-              <Pin className="h-3 w-3" />
-              已固定
-            </span>
-          )}
-          {message.editedAt && !message.deletedAt && <em>已编辑</em>}
-        </div>
+        {(!compact || message.pinnedAt || message.editedAt) && (
+          <div className="orf-chat-message-meta">
+            {!compact && (
+              <>
+                <strong>{message.authorName}</strong>
+                <span>{formatTime(message.createdAt)}</span>
+              </>
+            )}
+            {message.pinnedAt && (
+              <span className="orf-chat-message-pin-label">
+                <Pin className="h-3 w-3" />
+                已固定
+              </span>
+            )}
+            {message.editedAt && !message.deletedAt && <em>已编辑</em>}
+          </div>
+        )}
         {message.deletedAt ? (
           <div className="orf-chat-message-deleted">消息已删除</div>
         ) : (

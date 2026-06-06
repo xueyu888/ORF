@@ -20,6 +20,7 @@ import { ChatMessageItem } from "./ChatMessageItem";
 import { scrollChatFeedToLatest, scrollChatFeedToMessage } from "./chatFeedScroll";
 import { formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
+import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import type { ChatDraft } from "./chatModels";
 import { formatPresence, isChatUserOnline } from "./chatPresence";
 
@@ -289,25 +290,29 @@ function ThreadPanel({
         {thread.following ? "取消关注话题" : "关注话题"}
       </button>
       <div className="orf-chat-thread-replies">
-        {thread.replies.map((reply) => (
-          <ChatMessageItem
-            canPin={canPin}
-            currentUserId={currentUserId}
-            key={reply.id}
-            focused={focusMessageId === reply.id}
-            message={reply}
-            onAttachmentPreview={onAttachmentPreview}
-            onCopyLink={onCopyLink}
-            onDelete={onDelete}
-            onEdit={onEdit}
-            onMarkUnread={onMarkUnread}
-            onPin={onPin}
-            onReaction={onReaction}
-            onSave={onSave}
-            onThread={() => undefined}
-            usersById={usersById}
-          />
-        ))}
+        {thread.replies.map((reply, index) => {
+          const compact = shouldCompactChatMessage(thread.replies[index - 1], reply);
+          return (
+            <ChatMessageItem
+              canPin={canPin}
+              compact={compact}
+              currentUserId={currentUserId}
+              key={reply.id}
+              focused={focusMessageId === reply.id}
+              message={reply}
+              onAttachmentPreview={onAttachmentPreview}
+              onCopyLink={onCopyLink}
+              onDelete={onDelete}
+              onEdit={onEdit}
+              onMarkUnread={onMarkUnread}
+              onPin={onPin}
+              onReaction={onReaction}
+              onSave={onSave}
+              onThread={() => undefined}
+              usersById={usersById}
+            />
+          );
+        })}
       </div>
       <ChatComposer
         channelId={thread.rootMessage.channelId}
