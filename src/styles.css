@@ -1974,6 +1974,22 @@ button:disabled {
   font-weight: 900;
 }
 
+.orf-settings-background-owner {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  background: rgba(33, 48, 71, 0.78);
+  color: #ffffff;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .orf-settings-background-actions {
   grid-column: 2;
   display: flex;
@@ -1994,6 +2010,141 @@ button:disabled {
 
 .orf-settings-selected-text span {
   color: #dc3b32;
+}
+
+.orf-background-share-toggle {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(47, 67, 92, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+  color: #2f435c;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.orf-background-share-toggle input {
+  height: 18px;
+  width: 18px;
+  accent-color: var(--orf-accent);
+}
+
+.orf-appshell-slot-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.orf-appshell-slot-tab {
+  min-height: 38px;
+  border: 1px solid rgba(47, 67, 92, 0.16);
+  background: rgba(255, 255, 255, 0.68);
+  color: #2f435c;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.orf-appshell-slot-tab-active {
+  border-color: rgba(69, 214, 244, 0.78);
+  background: linear-gradient(180deg, #1594d2, #0873b7);
+  color: #ffffff;
+}
+
+.orf-personal-background-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 14px;
+  align-items: start;
+}
+
+.orf-personal-background-current {
+  border: 1px solid rgba(47, 67, 92, 0.14);
+  background: rgba(255, 255, 255, 0.58);
+  padding: 14px;
+}
+
+.orf-background-placement-editor {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.orf-background-placement-preview {
+  position: relative;
+  aspect-ratio: 16 / 7;
+  min-height: 150px;
+  overflow: hidden;
+  border: 1px solid rgba(47, 67, 92, 0.18);
+  background:
+    linear-gradient(135deg, rgba(69, 214, 244, 0.12), rgba(255, 226, 160, 0.18)),
+    rgba(255, 255, 255, 0.58);
+  cursor: grab;
+}
+
+.orf-background-placement-preview:active {
+  cursor: grabbing;
+}
+
+.orf-background-placement-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform-origin: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.orf-background-placement-empty {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: #60758d;
+}
+
+.orf-background-placement-handle {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  height: 30px;
+  width: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 226, 160, 0.58);
+  background: rgba(33, 48, 71, 0.86);
+  color: #ffffff;
+}
+
+.orf-background-placement-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) 34px;
+  align-items: center;
+  gap: 10px;
+  color: #2f435c;
+}
+
+.orf-background-placement-toolbar input[type="range"] {
+  width: 100%;
+  accent-color: var(--orf-accent);
+}
+
+.orf-background-placement-reset {
+  display: inline-flex;
+  height: 34px;
+  width: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(47, 67, 92, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+  color: #2f435c;
+}
+
+.orf-background-placement-reset:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .orf-settings-placeholder {
@@ -2933,7 +3084,6 @@ button:disabled {
 }
 
 .orf-app-shell {
-  --orf-app-chrome-bg-image: none;
   position: relative;
   isolation: isolate;
   min-width: 1180px;
@@ -3029,40 +3179,56 @@ button:disabled {
 }
 
 .orf-topbar {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   height: var(--orf-topbar-height);
   border-bottom: 1px solid rgba(125, 211, 252, 0.12);
-  background:
-    linear-gradient(90deg, rgba(15, 23, 42, 0.88) 0%, rgba(25, 48, 70, 0.78) 52%, rgba(17, 24, 39, 0.86) 100%),
-    var(--orf-app-chrome-bg-image);
-  background-position:
-    center,
-    center top;
-  background-repeat:
-    no-repeat,
-    no-repeat;
-  background-size:
-    cover,
-    cover;
+  background: rgba(15, 23, 42, 0.86);
   backdrop-filter: blur(16px) saturate(1.08);
   box-shadow: 0 14px 30px rgba(10, 18, 32, 0.14);
 }
 
+.orf-topbar-background-image,
+.orf-main-background-image {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+  transform-origin: center;
+}
+
+.orf-main-background-image {
+  z-index: -1;
+}
+
+.orf-topbar::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+  background: linear-gradient(90deg, rgba(15, 23, 42, 0.88) 0%, rgba(25, 48, 70, 0.78) 52%, rgba(17, 24, 39, 0.86) 100%);
+  pointer-events: none;
+}
+
+.orf-topbar > *:not(.orf-topbar-background-image) {
+  position: relative;
+  z-index: 2;
+}
+
 .orf-app-shell[data-bounty-hall="true"] .orf-topbar {
   border-bottom-color: rgba(162, 217, 238, 0.22);
-  background:
-    linear-gradient(90deg, rgba(22, 35, 58, 0.88) 0%, rgba(38, 79, 111, 0.66) 48%, rgba(34, 42, 68, 0.78) 100%),
-    var(--orf-app-chrome-bg-image);
-  background-position:
-    center,
-    center;
-  background-repeat:
-    no-repeat,
-    no-repeat;
-  background-size:
-    cover,
-    cover;
+  background: rgba(22, 35, 58, 0.84);
   backdrop-filter: blur(16px) saturate(1.08);
   box-shadow: 0 14px 30px rgba(15, 35, 58, 0.13);
+}
+
+.orf-app-shell[data-bounty-hall="true"] .orf-topbar::before {
+  background: linear-gradient(90deg, rgba(22, 35, 58, 0.88) 0%, rgba(38, 79, 111, 0.66) 48%, rgba(34, 42, 68, 0.78) 100%);
 }
 
 .orf-topbar-title.orf-text-primary {
@@ -4548,6 +4714,7 @@ button:disabled {
   position: relative;
   z-index: 3;
   isolation: isolate;
+  overflow: hidden;
   min-height: calc(100vh - var(--orf-topbar-height));
   background: transparent;
   color: var(--orf-text-primary);
@@ -4562,20 +4729,16 @@ button:disabled {
   background:
     linear-gradient(90deg, rgba(237, 243, 247, 0.2) 0%, rgba(237, 243, 247, 0.08) 44%, rgba(237, 243, 247, 0.18) 100%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(237, 243, 247, 0.1) 38%, rgba(237, 243, 247, 0.22) 100%),
-    var(--orf-app-chrome-bg-image),
     var(--orf-bg-page);
   background-position:
     center,
     center,
-    center top,
     center;
   background-repeat:
     no-repeat,
     no-repeat,
-    no-repeat,
     repeat;
   background-size:
-    cover,
     cover,
     cover,
     auto;

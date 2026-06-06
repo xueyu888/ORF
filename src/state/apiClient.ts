@@ -16,8 +16,8 @@ import type {
   OrfUser,
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
-import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
-export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+import type { AppShellBackgroundSlot, VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+export type { AppShellBackgroundSlot, VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
 export type PermissionRulesResponse = Pick<OrfState, "permissionRules">;
@@ -60,12 +60,18 @@ export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
 export type VisualBackgroundSwitchOrder = "sequential" | "random";
+export type VisualBackgroundPlacement = {
+  positionX: number;
+  positionY: number;
+  scale: number;
+};
 export type VisualBackgroundConfig = {
   mode: VisualBackgroundMode;
   fixedBackgroundId: string | null;
   switchTrigger: VisualBackgroundSwitchTrigger;
   switchOrder: VisualBackgroundSwitchOrder;
   switchIntervalMinutes: number;
+  placement: VisualBackgroundPlacement;
 };
 export type VisualBackgroundImage = {
   id: string;
@@ -77,25 +83,48 @@ export type VisualBackgroundImage = {
   fileSize: number;
   isDefault: boolean;
   createdAt?: string;
+  ownerId?: string;
+  ownerName?: string;
+  shared?: boolean;
+  ownedByCurrentUser?: boolean;
 };
 export type VisualBackgroundsData = {
   scene: VisualBackgroundScene;
+  slot?: AppShellBackgroundSlot;
   config: VisualBackgroundConfig;
   list: VisualBackgroundImage[];
+};
+export type AppShellBackgroundsData = VisualBackgroundsData & {
+  scene: "app_background";
+  slot: AppShellBackgroundSlot;
 };
 export type UserPreferences = {
   userId: string;
   defaultLandingPath: string | null;
   sidebarCollapsed: boolean | null;
   appBackground: VisualBackgroundConfig | null;
+  appShellBackgrounds: Record<AppShellBackgroundSlot, VisualBackgroundConfig | null>;
+  personalBackgroundsShared: boolean;
+  personalBackgroundAccessGrants: string[];
+  personalBackgroundResources: Array<{
+    createdAt: string;
+    fileName: string;
+    fileSize: number;
+    mimeType: string;
+    objectKey: string;
+  }>;
   notificationDisplay: {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "appBackground">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "appBackground" | "personalBackgroundsShared">> & {
+  appShellBackgrounds?: Partial<Record<AppShellBackgroundSlot, VisualBackgroundConfig | null>>;
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
-export type PersonalBackgroundsData = VisualBackgroundsData & {
+export type PersonalBackgroundsData = {
+  scene: "app_background";
+  slots: Record<AppShellBackgroundSlot, AppShellBackgroundsData>;
+  list: VisualBackgroundImage[];
   preferences: UserPreferences;
 };
 type ApiEnvelope<T> = {
@@ -451,6 +480,11 @@ export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
   return response.data;
 }
 
+export async function getAppShellBackgrounds(slot: AppShellBackgroundSlot) {
+  const response = await apiJson<ApiEnvelope<AppShellBackgroundsData>>(`/api/settings/visual/app-shell-backgrounds?slot=${encodeURIComponent(slot)}`);
+  return response.data;
+}
+
 export async function uploadVisualBackground(scene: VisualBackgroundScene, file: File) {
   const formData = new FormData();
   formData.set("scene", scene);
@@ -476,6 +510,17 @@ export async function saveVisualBackgroundConfig(scene: VisualBackgroundScene, c
     method: "PUT",
     body: JSON.stringify({ scene, config }),
   });
+  return response.data;
+}
+
+export async function saveAppShellBackgroundConfig(slot: AppShellBackgroundSlot, config: VisualBackgroundConfig) {
+  const response = await apiJson<ApiEnvelope<{ slot: AppShellBackgroundSlot; scene: "app_background"; config: VisualBackgroundConfig }>>(
+    "/api/settings/visual/app-shell-background-config",
+    {
+      method: "PUT",
+      body: JSON.stringify({ slot, config }),
+    },
+  );
   return response.data;
 }
 
