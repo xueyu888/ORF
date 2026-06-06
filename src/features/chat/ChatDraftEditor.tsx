@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { AtSign, Bold, Code, Italic, Link as LinkIcon, Quote } from "lucide-react";
+import { AtSign, Bold, Code, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Strikethrough } from "lucide-react";
 import { type ClipboardEventHandler, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
@@ -326,7 +326,11 @@ export function ChatDraftEditor({
       <div className="orf-chat-composer-toolbar">
         <button type="button" onClick={() => applyMarkdownMode("bold")} title="加粗 Ctrl/Cmd+B"><Bold className="h-4 w-4" /></button>
         <button type="button" onClick={() => applyMarkdownMode("italic")} title="斜体 Ctrl/Cmd+I"><Italic className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("strike")} title="删除线 Ctrl/Cmd+Shift+X"><Strikethrough className="h-4 w-4" /></button>
         <button type="button" onClick={() => applyMarkdownMode("code")} title="代码 Ctrl/Cmd+Alt+C"><Code className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("heading")} title="标题 Ctrl/Cmd+Alt+H"><Heading3 className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("unorderedList")} title="无序列表 Shift+Alt+8"><List className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("orderedList")} title="有序列表 Shift+Alt+7"><ListOrdered className="h-4 w-4" /></button>
         <button type="button" onClick={() => applyMarkdownMode("quote")} title="引用 Shift+Alt+9"><Quote className="h-4 w-4" /></button>
         <button type="button" onClick={() => applyMarkdownMode("link")} title="链接 Ctrl/Cmd+K"><LinkIcon className="h-4 w-4" /></button>
         {toolbarControls}
