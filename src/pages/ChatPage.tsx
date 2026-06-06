@@ -13,6 +13,7 @@ import {
   type ChatSendInput,
   currentMembership,
   hasStoredDraftForChannel,
+  selectChatFeedPrefetchChannelIds,
   serializeDraft,
   sortChannels,
   storedDraftChannelIds,
@@ -187,6 +188,25 @@ export function ChatPage() {
     onThreadTarget: requestThreadTarget,
     requestedMessageId: focusMessageId,
   });
+  const feedPrefetchChannelIds = useMemo(
+    () => selectChatFeedPrefetchChannelIds({
+      activeChannelId: activeChannel?.id,
+      channels,
+      currentUserId: currentUser?.id,
+    }),
+    [activeChannel?.id, channels, currentUser?.id],
+  );
+  const feedPrefetchChannelKey = feedPrefetchChannelIds.join("\n");
+
+  useEffect(() => {
+    if (!feedPrefetchChannelKey) return undefined;
+    const timers = feedPrefetchChannelKey.split("\n").map((channelId, index) => window.setTimeout(() => {
+      void prefetchChannelMessages(channelId);
+    }, index * 80));
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [feedPrefetchChannelKey, prefetchChannelMessages]);
 
   const applyMessageEffects = useCallback((message: ChatMessage) => {
     applyThreadMessage(message);

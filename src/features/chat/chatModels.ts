@@ -125,6 +125,37 @@ export function sortUnreadChannels(channels: ChatChannel[]) {
   });
 }
 
+export function selectChatFeedPrefetchChannelIds({
+  activeChannelId,
+  channels,
+  currentUserId,
+  limit = 8,
+}: {
+  activeChannelId?: string | null;
+  channels: ChatChannel[];
+  currentUserId?: string;
+  limit?: number;
+}) {
+  return [...channels]
+    .sort((left, right) => {
+      if (Boolean(activeChannelId && left.id === activeChannelId) !== Boolean(activeChannelId && right.id === activeChannelId)) {
+        return left.id === activeChannelId ? -1 : 1;
+      }
+      if (isUnreadChannel(left, currentUserId) !== isUnreadChannel(right, currentUserId)) {
+        return isUnreadChannel(left, currentUserId) ? -1 : 1;
+      }
+      const leftFavorite = Boolean(currentMembership(left, currentUserId)?.favorite);
+      const rightFavorite = Boolean(currentMembership(right, currentUserId)?.favorite);
+      if (leftFavorite !== rightFavorite) return leftFavorite ? -1 : 1;
+      if ((left.type === "direct" || left.type === "group") !== (right.type === "direct" || right.type === "group")) {
+        return left.type === "direct" || left.type === "group" ? -1 : 1;
+      }
+      return (right.lastMessageAt ?? right.updatedAt).localeCompare(left.lastMessageAt ?? left.updatedAt);
+    })
+    .slice(0, Math.max(0, limit))
+    .map((channel) => channel.id);
+}
+
 export function upsertMessage(messages: ChatMessage[], next: ChatMessage) {
   const found = messages.some((message) => message.id === next.id);
   const updated = found ? messages.map((message) => (message.id === next.id ? next : message)) : [...messages, next];
