@@ -9325,11 +9325,66 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-message-text {
+  position: relative;
   overflow-wrap: anywhere;
   color: var(--orf-text-primary);
   font-size: 14px;
   line-height: 1.58;
   white-space: normal;
+}
+
+.orf-chat-message-text-wrap {
+  min-width: 0;
+}
+
+.orf-chat-message-text-overflow .orf-chat-message-text {
+  overflow: hidden;
+}
+
+.orf-chat-message-text-overflow:not(.orf-chat-message-text-expanded) .orf-chat-message-text::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 64px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(248, 251, 253, 0.98));
+  content: "";
+  pointer-events: none;
+}
+
+.orf-chat-message:hover .orf-chat-message-text-overflow:not(.orf-chat-message-text-expanded) .orf-chat-message-text::after,
+.orf-chat-message:focus-within .orf-chat-message-text-overflow:not(.orf-chat-message-text-expanded) .orf-chat-message-text::after,
+.orf-chat-message-focused .orf-chat-message-text-overflow:not(.orf-chat-message-text-expanded) .orf-chat-message-text::after {
+  background: linear-gradient(180deg, rgba(238, 247, 250, 0), rgba(238, 247, 250, 0.98));
+}
+
+.orf-chat-message-pinned .orf-chat-message-text-overflow:not(.orf-chat-message-text-expanded) .orf-chat-message-text::after {
+  background: linear-gradient(180deg, rgba(255, 248, 235, 0), rgba(255, 248, 235, 0.98));
+}
+
+.orf-chat-message-show-more {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
+  color: var(--orf-accent-text);
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orf-chat-message-show-more:hover,
+.orf-chat-message-show-more:focus-visible {
+  background: var(--orf-accent-soft);
+}
+
+.orf-chat-message-show-more:focus-visible {
+  outline: 1px solid var(--orf-accent-border);
+  outline-offset: 1px;
 }
 
 @media (hover: none) {

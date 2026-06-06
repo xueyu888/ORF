@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
@@ -36,6 +36,8 @@ type ChatMessageItemProps = {
   reactionPickerSignal?: number;
   usersById: Map<string, ChatUser>;
 };
+
+const chatMessageCollapsedTextMaxHeightPx = 560;
 
 function isInteractiveMessageTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest([
@@ -80,6 +82,75 @@ function reactionSummaryLabel(
   return overflowCount > 0
     ? `${reactionLabel}，${reaction.count} 人：${visibleNames} 等 ${overflowCount} 人`
     : `${reactionLabel}，${reaction.count} 人：${visibleNames}`;
+}
+
+function CollapsibleMessageText({ body, usersById }: { body: string; usersById: Map<string, ChatUser> }) {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [body]);
+
+  useEffect(() => {
+    const element = contentRef.current;
+    if (!element) return undefined;
+
+    let frame: number | null = null;
+    const checkOverflow = () => {
+      frame = null;
+      setOverflowing(element.scrollHeight > chatMessageCollapsedTextMaxHeightPx + 1);
+    };
+    const scheduleCheck = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(checkOverflow);
+    };
+
+    scheduleCheck();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", scheduleCheck);
+      return () => {
+        if (frame !== null) window.cancelAnimationFrame(frame);
+        window.removeEventListener("resize", scheduleCheck);
+      };
+    }
+
+    const resizeObserver = new ResizeObserver(scheduleCheck);
+    resizeObserver.observe(element);
+    window.addEventListener("resize", scheduleCheck);
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", scheduleCheck);
+    };
+  }, [body]);
+
+  return (
+    <div className={clsx("orf-chat-message-text-wrap", overflowing && "orf-chat-message-text-overflow", expanded && "orf-chat-message-text-expanded")}>
+      <div
+        className="orf-chat-message-text"
+        ref={contentRef}
+        style={overflowing && !expanded ? { maxHeight: chatMessageCollapsedTextMaxHeightPx } : undefined}
+      >
+        <ChatMarkdown body={body} usersById={usersById} />
+      </div>
+      {overflowing && (
+        <button
+          type="button"
+          className="orf-chat-message-show-more"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {expanded ? "收起" : "展开完整消息"}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function AttachmentGrid({
@@ -387,7 +458,7 @@ export function ChatMessageItem({
           </div>
         ) : (
           <>
-            <div className="orf-chat-message-text"><ChatMarkdown body={message.body} usersById={usersById} /></div>
+            <CollapsibleMessageText body={message.body} usersById={usersById} />
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             {deliveryStatus && (
               <div className="orf-chat-delivery-status" role={deliveryStatus === "failed" ? "alert" : "status"}>
