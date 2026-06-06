@@ -27,6 +27,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Avatar, Button, IconButton } from "../components/ui";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatMessageItem } from "../features/chat/ChatMessageItem";
+import { isChatFeedNearLatest, scrollChatFeedToLatest, scrollChatFeedToMessage, scrollChatFeedToUnread } from "../features/chat/chatFeedScroll";
 import { formatDay, formatFileSize, formatTime } from "../features/chat/chatFormat";
 import { ChatMarkdown } from "../features/chat/chatMarkdown";
 import {
@@ -212,9 +213,7 @@ export function ChatPage() {
   }, []);
 
   const isMessageScrollNearLatest = useCallback(() => {
-    const element = messageScrollRef.current;
-    if (!element) return true;
-    return element.scrollHeight - element.scrollTop - element.clientHeight < 160;
+    return isChatFeedNearLatest(messageScrollRef.current);
   }, []);
 
   const handleMessageScroll = useCallback(() => {
@@ -431,7 +430,7 @@ export function ChatPage() {
     const requestedMessageId = searchParams.get("message");
     if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return;
     window.setTimeout(() => {
-      document.getElementById(`chat-message-${requestedMessageId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "smooth", block: "center" });
       setSearchParams((params) => {
         params.delete("message");
         return params;
@@ -444,9 +443,7 @@ export function ChatPage() {
     if (!behavior || messagesLoading) return;
     pendingLatestScrollRef.current = null;
     window.requestAnimationFrame(() => {
-      const element = messageScrollRef.current;
-      if (!element) return;
-      element.scrollTo({ top: element.scrollHeight, behavior });
+      scrollChatFeedToLatest(messageScrollRef.current, behavior);
     });
   }, [activeChannel?.id, messages, messagesLoading]);
 
@@ -676,14 +673,7 @@ export function ChatPage() {
   }, [notify]);
 
   const handleJumpToUnread = useCallback(() => {
-    const messageScroll = messageScrollRef.current;
-    const target =
-      messageScroll?.querySelector<HTMLElement>("#orf-chat-unread-divider") ??
-      messageScroll?.querySelector<HTMLElement>("[data-chat-unread-message='true']");
-    if (!messageScroll || !target) return;
-    const stickyButtonOffset = 48;
-    const nextTop = target.offsetTop - stickyButtonOffset;
-    messageScroll.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" });
+    scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" });
   }, []);
 
   const handleReaction = useCallback(
@@ -1544,14 +1534,9 @@ function ThreadPanel({
       const element = threadPanelRef.current;
       if (!element) return;
       if (focusMessageId) {
-        const target = Array.from(element.querySelectorAll<HTMLElement>("[data-chat-message-id]"))
-          .find((node) => node.dataset.chatMessageId === focusMessageId);
-        if (target) {
-          element.scrollTo({ top: Math.max(0, target.offsetTop - 20), behavior: "smooth" });
-          return;
-        }
+        if (scrollChatFeedToMessage(element, focusMessageId, { behavior: "smooth", offset: 20 })) return;
       }
-      element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+      scrollChatFeedToLatest(element, "smooth");
     });
   }, [focusMessageId, thread.replies.length, thread.rootMessage.id]);
 
