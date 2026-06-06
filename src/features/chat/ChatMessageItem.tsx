@@ -1,21 +1,26 @@
 import { clsx } from "clsx";
 import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Pin, Reply, Smile, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import { displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName } from "./chatReactions";
+import { ChatDraftEditor } from "./ChatDraftEditor";
+import { draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
 
 type ChatMessageItemProps = {
   canPin?: boolean;
   compact?: boolean;
   currentUserId?: string;
+  editing?: boolean;
   firstUnread?: boolean;
   focused?: boolean;
+  mentionableUsers: ChatUser[];
   message: ChatMessage;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
@@ -23,6 +28,7 @@ type ChatMessageItemProps = {
   onPin?: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onSave?: (message: ChatMessage) => void;
+  onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onThread: (rootMessageId: string) => void;
   usersById: Map<string, ChatUser>;
 };
@@ -61,9 +67,12 @@ export function ChatMessageItem({
   canPin,
   compact,
   currentUserId,
+  editing,
   firstUnread,
   focused,
+  mentionableUsers,
   message,
+  onCancelEdit,
   onCopyLink,
   onDelete,
   onEdit,
@@ -71,16 +80,39 @@ export function ChatMessageItem({
   onPin,
   onReaction,
   onSave,
+  onSaveEdit,
   onThread,
   usersById,
 }: ChatMessageItemProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [editDraft, setEditDraft] = useState<ChatDraft>(() => draftFromStoredBody(message.body, usersById));
+  const [editSaving, setEditSaving] = useState(false);
   const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
   const canMutate = message.authorUserId === currentUserId && !message.deletedAt;
+
+  useEffect(() => {
+    if (!editing) return;
+    setEditDraft(draftFromStoredBody(message.body, usersById));
+    setEditSaving(false);
+  }, [editing, message.body, message.id, usersById]);
+
   const selectReaction = (emojiName: string) => {
     const reactionName = preferredReactionName(message.reactions.map((reaction) => reaction.emojiName), emojiName);
     setEmojiOpen(false);
     onReaction(message, reactionName);
+  };
+  const saveEdit = async (draft: ChatDraft) => {
+    const body = serializeDraft(draft);
+    if (!body.trim()) return false;
+    setEditSaving(true);
+    try {
+      await onSaveEdit(message, body);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   return (
@@ -120,6 +152,26 @@ export function ChatMessageItem({
         )}
         {message.deletedAt ? (
           <div className="orf-chat-message-deleted">消息已删除</div>
+        ) : editing && canMutate ? (
+          <div className="orf-chat-inline-edit">
+            <ChatDraftEditor
+              className="orf-chat-inline-edit-box"
+              draft={editDraft}
+              mentionableUsers={mentionableUsers}
+              onChange={setEditDraft}
+              onSubmit={saveEdit}
+              placeholder="编辑消息..."
+              resetKey={message.id}
+              rows={4}
+              submitDisabled={editSaving || !editDraft.text.trim()}
+            />
+            <div className="orf-chat-inline-edit-actions">
+              <button type="button" onClick={onCancelEdit}>取消</button>
+              <button disabled={editSaving || !editDraft.text.trim()} type="button" onClick={() => void saveEdit(editDraft)}>
+                {editSaving ? "保存中" : "保存"}
+              </button>
+            </div>
+          </div>
         ) : (
           <>
             <div className="orf-chat-message-text"><ChatMarkdown body={message.body} usersById={usersById} /></div>
@@ -155,7 +207,7 @@ export function ChatMessageItem({
           </>
         )}
       </div>
-      {!message.deletedAt && (
+      {!message.deletedAt && !editing && (
         <div className="orf-chat-message-actions">
           {onSave && (
             <IconButton

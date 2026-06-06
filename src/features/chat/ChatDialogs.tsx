@@ -3,8 +3,6 @@ import { useState } from "react";
 import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
-import type { ChatDraft } from "./chatModels";
-import { ChatDraftEditor } from "./ChatDraftEditor";
 import { ChatUserPicker } from "./ChatUserPicker";
 
 export function ChannelModal({
@@ -108,44 +106,6 @@ export function ConversationModal({
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
           <Button disabled={selected.length === 0 || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>
-        </footer>
-      </div>
-    </div>
-  );
-}
-
-export function EditMessageDialog({
-  draft,
-  mentionableUsers,
-  onClose,
-  onSave,
-}: {
-  draft: ChatDraft;
-  mentionableUsers: ChatUser[];
-  onClose: () => void;
-  onSave: (draft: ChatDraft) => void;
-}) {
-  const [localDraft, setLocalDraft] = useState(draft);
-  const save = () => onSave(localDraft);
-  return (
-    <div className="orf-chat-modal-backdrop" onMouseDown={onClose}>
-      <div className="orf-chat-modal orf-chat-edit-modal" onMouseDown={(event) => event.stopPropagation()}>
-        <header><h2>编辑消息</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
-        <ChatDraftEditor
-          className="orf-chat-edit-box"
-          draft={localDraft}
-          mentionableUsers={mentionableUsers}
-          onChange={setLocalDraft}
-          onSubmit={() => {
-            save();
-            return true;
-          }}
-          placeholder="编辑消息..."
-          rows={6}
-        />
-        <footer>
-          <Button onClick={onClose} variant="secondary">取消</Button>
-          <Button onClick={save}>保存</Button>
         </footer>
       </div>
     </div>

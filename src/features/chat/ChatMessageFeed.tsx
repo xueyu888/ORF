@@ -9,13 +9,16 @@ import { ChatMessageItem } from "./ChatMessageItem";
 type ChatMessageFeedProps = {
   canPin: boolean;
   currentUserId?: string;
+  editingMessageId?: string | null;
   focusMessageId: string | null;
   hasNewerMessages: boolean;
   hasOlderMessages: boolean;
   loadingMessages: boolean;
   loadingOlderMessages: boolean;
+  mentionableUsers: ChatUser[];
   messages: ChatMessage[];
   onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
@@ -26,6 +29,7 @@ type ChatMessageFeedProps = {
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onSave: (message: ChatMessage) => void;
+  onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onScroll: () => void;
   onThread: (rootMessageId: string) => void;
   pendingNewMessageCount: number;
@@ -42,13 +46,16 @@ type MessageListProps = Omit<
 export function ChatMessageFeed({
   canPin,
   currentUserId,
+  editingMessageId,
   focusMessageId,
   hasNewerMessages,
   hasOlderMessages,
   loadingMessages,
   loadingOlderMessages,
+  mentionableUsers,
   messages,
   onAttachmentPreview,
+  onCancelEdit,
   onCopyLink,
   onDelete,
   onEdit,
@@ -59,6 +66,7 @@ export function ChatMessageFeed({
   onPin,
   onReaction,
   onSave,
+  onSaveEdit,
   onScroll,
   onThread,
   pendingNewMessageCount,
@@ -80,11 +88,14 @@ export function ChatMessageFeed({
         <MessageList
           canPin={canPin}
           currentUserId={currentUserId}
+          editingMessageId={editingMessageId}
           focusMessageId={focusMessageId}
           hasOlderMessages={hasOlderMessages}
           loadingOlderMessages={loadingOlderMessages}
+          mentionableUsers={mentionableUsers}
           messages={messages}
           onAttachmentPreview={onAttachmentPreview}
+          onCancelEdit={onCancelEdit}
           onCopyLink={onCopyLink}
           onDelete={onDelete}
           onEdit={onEdit}
@@ -94,6 +105,7 @@ export function ChatMessageFeed({
           onPin={onPin}
           onReaction={onReaction}
           onSave={onSave}
+          onSaveEdit={onSaveEdit}
           onThread={onThread}
           unreadAnchor={unreadAnchor}
           usersById={usersById}
@@ -119,11 +131,14 @@ function MessageList({
   onAttachmentPreview,
   canPin,
   currentUserId,
+  editingMessageId,
   focusMessageId,
   hasOlderMessages,
   loadingOlderMessages,
+  mentionableUsers,
   messages,
   onCopyLink,
+  onCancelEdit,
   onDelete,
   onEdit,
   onJumpUnread,
@@ -132,6 +147,7 @@ function MessageList({
   onPin,
   onReaction,
   onSave,
+  onSaveEdit,
   onThread,
   usersById,
   unreadAnchor,
@@ -174,10 +190,13 @@ function MessageList({
               canPin={canPin}
               compact={compact}
               currentUserId={currentUserId}
+              editing={editingMessageId === message.id}
               firstUnread={unreadMessageId === message.id}
               focused={focusMessageId === message.id}
+              mentionableUsers={mentionableUsers}
               message={message}
               onAttachmentPreview={onAttachmentPreview}
+              onCancelEdit={onCancelEdit}
               onCopyLink={onCopyLink}
               onDelete={onDelete}
               onEdit={onEdit}
@@ -185,6 +204,7 @@ function MessageList({
               onPin={onPin}
               onReaction={onReaction}
               onSave={onSave}
+              onSaveEdit={onSaveEdit}
               onThread={onThread}
               usersById={usersById}
             />

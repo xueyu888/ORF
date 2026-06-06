@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
-import { AttachmentPreview, ChannelModal, ConversationModal, EditMessageDialog } from "../features/chat/ChatDialogs";
+import { AttachmentPreview, ChannelModal, ConversationModal } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
@@ -12,7 +12,6 @@ import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import {
   type ChatDraft,
   currentMembership,
-  draftFromStoredBody,
   hasStoredDraftForChannel,
   serializeDraft,
   sortChannels,
@@ -277,13 +276,17 @@ export function ChatPage() {
   );
 
   const handleEditMessage = useCallback(
-    async (body: string) => {
-      if (!activeChannel || !editingMessage) return;
-      const response = await updateChatMessageRequest({ channelId: activeChannel.id, messageId: editingMessage.id, body });
-      applyMessage(response.message);
-      setEditingMessage(null);
+    async (message: ChatMessage, body: string) => {
+      try {
+        const response = await updateChatMessageRequest({ channelId: message.channelId, messageId: message.id, body });
+        applyMessage(response.message);
+        setEditingMessage(null);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "编辑消息失败");
+        throw error;
+      }
     },
-    [activeChannel, applyMessage, editingMessage],
+    [applyMessage, notify],
   );
 
   const handleDeleteMessage = useCallback(
@@ -405,13 +408,16 @@ export function ChatPage() {
             <ChatMessageFeed
               canPin={canManageActiveChannel}
               currentUserId={currentUser?.id}
+              editingMessageId={editingMessage?.id ?? null}
               focusMessageId={focusMessageId}
               hasNewerMessages={hasNewerMessages}
               hasOlderMessages={hasOlderMessages}
               loadingMessages={messagesLoading}
               loadingOlderMessages={olderMessagesLoading}
+              mentionableUsers={activeMentionableUsers}
               messages={messages}
               onAttachmentPreview={setAttachmentPreview}
+              onCancelEdit={() => setEditingMessage(null)}
               onCopyLink={handleCopyMessageLink}
               onDelete={handleDeleteMessage}
               onEdit={setEditingMessage}
@@ -422,6 +428,7 @@ export function ChatPage() {
               onPin={handlePinMessage}
               onReaction={handleReaction}
               onSave={handleSaveMessage}
+              onSaveEdit={handleEditMessage}
               onScroll={handleMessageScroll}
               onThread={openThread}
               pendingNewMessageCount={pendingNewMessageCount}
@@ -450,12 +457,14 @@ export function ChatPage() {
           canManage={canManageActiveChannel}
           channel={activeChannel}
           currentUserId={currentUser?.id}
+          editingMessageId={editingMessage?.id ?? null}
           onDraftStateChange={handleDraftStateChange}
           onAddMembers={async (userIds) => {
             const response = await addChatChannelMembersRequest(activeChannel.id, userIds);
             applyChannel(response.channel);
           }}
           onClose={closePanel}
+          onCancelEdit={() => setEditingMessage(null)}
           collectionLoading={collectionLoading}
           collectionResults={collectionResults}
           threadSummaries={threadSummaries}
@@ -475,6 +484,7 @@ export function ChatPage() {
           }}
           onSearch={searchMessages}
           onSave={handleSaveMessage}
+          onSaveEdit={handleEditMessage}
           onUpdateChannel={async (input) => {
             const response = await updateChatChannelRequest(activeChannel.id, input);
             applyChannel(response.channel);
@@ -533,14 +543,6 @@ export function ChatPage() {
             setModal(null);
           }}
           users={bootstrap.users}
-        />
-      )}
-      {editingMessage && (
-        <EditMessageDialog
-          draft={draftFromStoredBody(editingMessage.body, usersById)}
-          mentionableUsers={activeMentionableUsers}
-          onClose={() => setEditingMessage(null)}
-          onSave={(draft) => handleEditMessage(serializeDraft(draft))}
         />
       )}
       {attachmentPreview && <AttachmentPreview attachment={attachmentPreview} onClose={() => setAttachmentPreview(null)} />}

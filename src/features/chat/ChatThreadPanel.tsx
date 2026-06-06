@@ -10,8 +10,10 @@ import type { ChatDraft } from "./chatModels";
 type ChatThreadPanelProps = {
   canPin: boolean;
   currentUserId?: string;
+  editingMessageId?: string | null;
   focusMessageId: string | null;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
@@ -20,6 +22,7 @@ type ChatThreadPanelProps = {
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onSave: (message: ChatMessage) => void;
+  onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onSend: (
     draft: ChatDraft,
     attachments: ChatAttachment[],
@@ -37,7 +40,9 @@ export function ChatThreadPanel({
   onAttachmentPreview,
   canPin,
   currentUserId,
+  editingMessageId,
   focusMessageId,
+  onCancelEdit,
   onCopyLink,
   onDelete,
   onDraftStateChange,
@@ -46,6 +51,7 @@ export function ChatThreadPanel({
   onPin,
   onReaction,
   onSave,
+  onSaveEdit,
   onSend,
   onToggleFollow,
   onTyping,
@@ -71,9 +77,12 @@ export function ChatThreadPanel({
       <ChatMessageItem
         canPin={canPin}
         currentUserId={currentUserId}
+        editing={editingMessageId === thread.rootMessage.id}
         focused={focusMessageId === thread.rootMessage.id}
+        mentionableUsers={users}
         message={thread.rootMessage}
         onAttachmentPreview={onAttachmentPreview}
+        onCancelEdit={onCancelEdit}
         onCopyLink={onCopyLink}
         onDelete={onDelete}
         onEdit={onEdit}
@@ -81,6 +90,7 @@ export function ChatThreadPanel({
         onPin={onPin}
         onReaction={onReaction}
         onSave={onSave}
+        onSaveEdit={onSaveEdit}
         onThread={() => undefined}
         usersById={usersById}
       />
@@ -96,10 +106,13 @@ export function ChatThreadPanel({
               canPin={canPin}
               compact={compact}
               currentUserId={currentUserId}
+              editing={editingMessageId === reply.id}
               key={reply.id}
               focused={focusMessageId === reply.id}
+              mentionableUsers={users}
               message={reply}
               onAttachmentPreview={onAttachmentPreview}
+              onCancelEdit={onCancelEdit}
               onCopyLink={onCopyLink}
               onDelete={onDelete}
               onEdit={onEdit}
@@ -107,6 +120,7 @@ export function ChatThreadPanel({
               onPin={onPin}
               onReaction={onReaction}
               onSave={onSave}
+              onSaveEdit={onSaveEdit}
               onThread={() => undefined}
               usersById={usersById}
             />

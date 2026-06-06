@@ -17,8 +17,10 @@ type ChatRightPanelProps = {
   collectionLoading: boolean;
   collectionResults: ChatSearchResult[];
   currentUserId?: string;
+  editingMessageId?: string | null;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
+  onCancelEdit: () => void;
   onClose: () => void;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
@@ -31,6 +33,7 @@ type ChatRightPanelProps = {
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemoveMember: (userId: string) => Promise<void>;
   onSave: (message: ChatMessage) => void;
+  onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
   onSendThreadReply: (
     draft: ChatDraft,
@@ -78,8 +81,10 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           <ChatThreadPanel
             canPin={props.canManage}
             currentUserId={props.currentUserId}
+            editingMessageId={props.editingMessageId}
             focusMessageId={props.threadFocusMessageId}
             onAttachmentPreview={props.onAttachmentPreview}
+            onCancelEdit={props.onCancelEdit}
             onCopyLink={props.onCopyLink}
             onDelete={props.onDelete}
             onDraftStateChange={props.onDraftStateChange}
@@ -88,6 +93,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onPin={props.onPin}
             onReaction={props.onReaction}
             onSave={props.onSave}
+            onSaveEdit={props.onSaveEdit}
             onSend={props.onSendThreadReply}
             onToggleFollow={props.onToggleFollow}
             onTyping={props.onTyping}
