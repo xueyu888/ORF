@@ -33,6 +33,7 @@ import {
   upsertMessage,
 } from "../features/chat/chatModels";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
+import { useChatTypingState } from "../features/chat/useChatTypingState";
 import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
@@ -48,7 +49,6 @@ import {
   getSavedChatMessages,
   markChatChannelReadRequest,
   openChatConversation,
-  publishChatTypingRequest,
   removeChatChannelMemberRequest,
   searchChat,
   sendChatMessageRequest,
@@ -62,12 +62,6 @@ import {
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../types/orf";
-
-type TypingState = {
-  expiresAt: string;
-  userId: string;
-  userName: string;
-};
 
 type PendingThreadTarget = {
   focusMessageId: string;
@@ -103,12 +97,10 @@ export function ChatPage() {
   const [threadSummaries, setThreadSummaries] = useState<ChatThreadSummary[]>([]);
   const [threadSummariesLoading, setThreadSummariesLoading] = useState(false);
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
-  const [typingByUser, setTypingByUser] = useState<Map<string, TypingState>>(new Map());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
   const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
-  const lastTypingSentAtRef = useRef(0);
   const activeChannelIdRef = useRef<string | null>(null);
   const currentUserIdRef = useRef<string | undefined>(undefined);
   const contextRequestKeyRef = useRef<string | null>(null);
@@ -125,6 +117,10 @@ export function ChatPage() {
     return (bootstrap?.users ?? []).filter((user) => memberIds.has(user.id));
   }, [activeChannel, bootstrap?.users]);
   const myMembership = currentMembership(activeChannel, currentUser?.id);
+  const { applyTypingEvent, publishTyping, typingByUser } = useChatTypingState({
+    activeChannelId: activeChannel?.id,
+    currentUserId: currentUser?.id,
+  });
   const canManageActiveChannel =
     Boolean(bootstrap?.permissions.canManageAnyChannel || bootstrap?.permissions.canManageAnyMembers) ||
     myMembership?.role === "owner" ||
@@ -248,7 +244,6 @@ export function ChatPage() {
   useEffect(() => {
     if (!activeChannel) return undefined;
     let cancelled = false;
-    lastTypingSentAtRef.current = 0;
     const channelId = activeChannel.id;
     const anchor = buildUnreadAnchor(activeChannel, currentUser?.id);
     const cachedFeed = feedCacheRef.current.get(channelId);
@@ -299,14 +294,6 @@ export function ChatPage() {
       rememberActiveFeedScroll(channelId);
     };
   }, [activeChannel?.id, applyChannel, currentUser?.id, notify, rememberActiveFeedScroll, requestScrollToLatest, restoreFeedScroll]);
-
-  const handleTyping = useCallback(() => {
-    if (!activeChannel) return;
-    const currentTime = Date.now();
-    if (currentTime - lastTypingSentAtRef.current < 2500) return;
-    lastTypingSentAtRef.current = currentTime;
-    void publishChatTypingRequest(activeChannel.id).catch(() => undefined);
-  }, [activeChannel]);
 
   useEffect(() => {
     const requestedMessageId = searchParams.get("message");
@@ -454,28 +441,8 @@ export function ChatPage() {
         setPendingNewMessageCount((count) => count + 1);
       }
     }
-    if (payload.eventType === "typing" && payload.channelId === activeChannelId && payload.typing && payload.typing.userId !== currentUserId) {
-      setTypingByUser((items) => {
-        const next = new Map(items);
-        next.set(payload.typing!.userId, payload.typing!);
-        return next;
-      });
-    }
+    if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
   });
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const now = Date.now();
-      setTypingByUser((items) => {
-        const next = new Map(items);
-        for (const [userId, typing] of next) {
-          if (new Date(typing.expiresAt).getTime() <= now) next.delete(userId);
-        }
-        return next;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const openThread = useCallback(
     async (rootMessageId: string, focusMessageId?: string | null) => {
@@ -833,7 +800,7 @@ export function ChatPage() {
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
               onSend={handleSendMessage}
-              onTyping={handleTyping}
+              onTyping={publishTyping}
             />
           </>
         ) : (
@@ -891,7 +858,7 @@ export function ChatPage() {
           users={activeMentionableUsers}
           usersById={usersById}
           onSendThreadReply={handleSendMessage}
-          onTyping={handleTyping}
+          onTyping={publishTyping}
           onToggleFollow={async (following) => {
             if (!thread) return;
             const response = await setChatThreadFollowRequest(thread.rootMessage.id, following);
