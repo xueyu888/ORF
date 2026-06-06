@@ -196,6 +196,11 @@ export function useChatPanelState({
     });
   }, [activePanel]);
 
+  const reconcileThreadFollow = useCallback((rootMessageId: string, following: boolean) => {
+    if (following) return;
+    setThreadSummaries((items) => items.filter((item) => item.rootMessage.id !== rootMessageId));
+  }, []);
+
   const markThreadSummaryViewed = useCallback((rootMessageId: string) => {
     setThreadSummaries((items) => items.map((item) => (
       item.rootMessage.id === rootMessageId ? { ...item, unreadCount: 0, lastViewedAt: new Date().toISOString() } : item
@@ -244,6 +249,7 @@ export function useChatPanelState({
     markThreadSummaryViewed,
     reconcilePinnedCollection,
     reconcileSavedCollection,
+    reconcileThreadFollow,
     searchLoading,
     searchMessages,
     searchPerformed,

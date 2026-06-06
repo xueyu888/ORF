@@ -115,6 +115,7 @@ export function ChatPage() {
     markThreadSummaryViewed,
     reconcilePinnedCollection,
     reconcileSavedCollection,
+    reconcileThreadFollow,
     searchLoading,
     searchMessages,
     searchPerformed,
@@ -817,6 +818,7 @@ export function ChatPage() {
             const response = await setChatThreadFollowRequest(thread.rootMessage.id, following);
             if (response.channel) applyChannel(response.channel);
             setThread(response.thread);
+            reconcileThreadFollow(thread.rootMessage.id, response.thread.following);
           }}
           onAttachmentPreview={setAttachmentPreview}
           onReaction={handleReaction}
