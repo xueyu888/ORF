@@ -8,6 +8,9 @@ import {
 import type { ChatChannel, ChatMessage } from "../../types/orf";
 import {
   isChatFeedNearLatest,
+  isChatFeedNearOldest,
+  readChatFeedScrollAnchor,
+  restoreChatFeedScrollAnchor,
   scrollChatFeedToLatest,
   scrollChatFeedToMessage,
   scrollChatFeedToUnread,
@@ -63,6 +66,7 @@ export function useChatFeedState({
   const contextRequestKeyRef = useRef<string | null>(null);
   const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
+  const olderLoadInFlightRef = useRef(false);
   const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
   const activeChannelId = activeChannel?.id ?? null;
   activeChannelIdRef.current = activeChannelId;
@@ -90,11 +94,6 @@ export function useChatFeedState({
   const isMessageScrollNearLatest = useCallback(() => {
     return isChatFeedNearLatest(messageScrollRef.current);
   }, []);
-
-  const handleMessageScroll = useCallback(() => {
-    rememberActiveFeedScroll();
-    if (isMessageScrollNearLatest()) setPendingNewMessageCount(0);
-  }, [isMessageScrollNearLatest, rememberActiveFeedScroll]);
 
   const applyMessageToFeed = useCallback((message: ChatMessage) => {
     if (activeChannelIdRef.current === message.channelId) {
@@ -164,6 +163,7 @@ export function useChatFeedState({
     );
     setUnreadAnchor(anchor);
     setPendingNewMessageCount(0);
+    olderLoadInFlightRef.current = false;
     setMessages(cachedFeed?.messages ?? []);
     setHasNewerMessages(cachedFeed?.hasNewerMessages ?? false);
     setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
@@ -287,20 +287,23 @@ export function useChatFeedState({
   useEffect(() => {
     const behavior = pendingLatestScrollRef.current;
     if (!behavior || messagesLoading) return;
-    pendingLatestScrollRef.current = null;
     window.requestAnimationFrame(() => {
       scrollChatFeedToLatest(messageScrollRef.current, behavior);
+      pendingLatestScrollRef.current = null;
     });
   }, [activeChannelId, messages, messagesLoading]);
 
   const loadOlderMessages = useCallback(async () => {
-    if (!activeChannelId || messages.length === 0 || olderMessagesLoading || !hasOlderMessages) return;
+    if (!activeChannelId || messages.length === 0 || olderLoadInFlightRef.current || pendingLatestScrollRef.current || !hasOlderMessages) return;
     const scrollElement = messageScrollRef.current;
     const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
     const previousScrollTop = scrollElement?.scrollTop ?? 0;
+    const scrollAnchor = readChatFeedScrollAnchor(scrollElement);
+    olderLoadInFlightRef.current = true;
     setOlderMessagesLoading(true);
     try {
       const response = await getChatMessages({ channelId: activeChannelId, before: messages[0].createdAt, limit: chatMessagePageSize });
+      if (activeChannelIdRef.current !== activeChannelId) return;
       setMessages((items) => {
         const snapshot = prependOlderFeedMessages(
           feedCacheRef.current.get(activeChannelId) ?? createFeedSnapshot({ messages: items, scrollTop: previousScrollTop }),
@@ -314,6 +317,10 @@ export function useChatFeedState({
       window.requestAnimationFrame(() => {
         const element = messageScrollRef.current;
         if (!element) return;
+        if (restoreChatFeedScrollAnchor(element, scrollAnchor)) {
+          feedCacheRef.current.set(activeChannelId, rememberFeedScroll(feedCacheRef.current.get(activeChannelId), element.scrollTop));
+          return;
+        }
         const nextTop = element.scrollHeight - previousScrollHeight + previousScrollTop;
         element.scrollTop = Math.max(0, nextTop);
         feedCacheRef.current.set(activeChannelId, rememberFeedScroll(feedCacheRef.current.get(activeChannelId), element.scrollTop));
@@ -321,9 +328,16 @@ export function useChatFeedState({
     } catch (error) {
       notify(error instanceof Error ? error.message : "加载更早消息失败");
     } finally {
+      olderLoadInFlightRef.current = false;
       setOlderMessagesLoading(false);
     }
-  }, [activeChannelId, hasOlderMessages, messages, notify, olderMessagesLoading]);
+  }, [activeChannelId, hasOlderMessages, messages, notify]);
+
+  const handleMessageScroll = useCallback(() => {
+    rememberActiveFeedScroll();
+    if (isMessageScrollNearLatest()) setPendingNewMessageCount(0);
+    if (!pendingLatestScrollRef.current && isChatFeedNearOldest(messageScrollRef.current)) void loadOlderMessages();
+  }, [isMessageScrollNearLatest, loadOlderMessages, rememberActiveFeedScroll]);
 
   const markActiveChannelUnread = useCallback(async () => {
     if (!activeChannelId) return;

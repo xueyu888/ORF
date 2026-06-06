@@ -1,4 +1,5 @@
 const chatFeedLatestThresholdPx = 160;
+const chatFeedOldestThresholdPx = 220;
 const chatFeedUnreadOffsetPx = 48;
 
 type ChatFeedScrollOptions = {
@@ -7,9 +8,19 @@ type ChatFeedScrollOptions = {
   offset?: number;
 };
 
+export type ChatFeedScrollAnchor = {
+  messageId: string;
+  offsetTop: number;
+};
+
 export function isChatFeedNearLatest(element: HTMLElement | null, threshold = chatFeedLatestThresholdPx) {
   if (!element) return true;
   return element.scrollHeight - element.scrollTop - element.clientHeight < threshold;
+}
+
+export function isChatFeedNearOldest(element: HTMLElement | null, threshold = chatFeedOldestThresholdPx) {
+  if (!element) return false;
+  return element.scrollTop < threshold;
 }
 
 export function scrollChatFeedToLatest(element: HTMLElement | null, behavior: ScrollBehavior = "smooth") {
@@ -35,6 +46,32 @@ export function scrollChatFeedToUnread(element: HTMLElement | null, options: Cha
     element.querySelector<HTMLElement>("#orf-chat-unread-divider") ??
     element.querySelector<HTMLElement>("[data-chat-unread-message='true']");
   return scrollChatFeedToElement(element, target, { offset: chatFeedUnreadOffsetPx, ...options });
+}
+
+export function readChatFeedScrollAnchor(element: HTMLElement | null): ChatFeedScrollAnchor | null {
+  if (!element) return null;
+  const elementRect = element.getBoundingClientRect();
+  const messages = Array.from(element.querySelectorAll<HTMLElement>("[data-chat-message-id]"));
+  for (const message of messages) {
+    const rect = message.getBoundingClientRect();
+    if (rect.bottom >= elementRect.top) {
+      const messageId = message.dataset.chatMessageId;
+      return messageId ? { messageId, offsetTop: rect.top - elementRect.top } : null;
+    }
+  }
+  return null;
+}
+
+export function restoreChatFeedScrollAnchor(element: HTMLElement | null, anchor: ChatFeedScrollAnchor | null) {
+  if (!element || !anchor) return false;
+  const target = Array.from(element.querySelectorAll<HTMLElement>("[data-chat-message-id]"))
+    .find((item) => item.dataset.chatMessageId === anchor.messageId) ?? null;
+  if (!target) return false;
+  const elementRect = element.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const targetTop = element.scrollTop + targetRect.top - elementRect.top;
+  element.scrollTop = Math.max(0, targetTop - anchor.offsetTop);
+  return true;
 }
 
 function scrollChatFeedToElement(

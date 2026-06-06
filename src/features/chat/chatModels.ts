@@ -30,6 +30,7 @@ export type ChatFeedSnapshot = {
 };
 
 export const chatMessagePageSize = 80;
+export const chatFeedWindowMessageLimit = chatMessagePageSize * 4;
 export const emptyDraft: ChatDraft = { mentions: [], text: "" };
 
 export function chatDraftStorageKey(channelId: string, rootMessageId?: string | null) {
@@ -117,6 +118,26 @@ export function upsertChannelMessage(messages: ChatMessage[], next: ChatMessage)
   return !next.rootMessageId || messages.some((message) => message.id === next.id) ? upsertMessage(messages, next) : messages;
 }
 
+function trimFeedWindow(messages: ChatMessage[], direction: "older" | "newer", limit = chatFeedWindowMessageLimit) {
+  if (messages.length <= limit) {
+    return { droppedNewer: false, droppedOlder: false, messages };
+  }
+
+  if (direction === "older") {
+    return {
+      droppedNewer: true,
+      droppedOlder: false,
+      messages: messages.slice(0, limit),
+    };
+  }
+
+  return {
+    droppedNewer: false,
+    droppedOlder: true,
+    messages: messages.slice(-limit),
+  };
+}
+
 export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedSnapshot {
   return {
     hasNewerMessages: input?.hasNewerMessages ?? false,
@@ -148,17 +169,28 @@ export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message
   const messageExists = current.messages.some((item) => item.id === message.id);
   if (!messageExists && (message.rootMessageId || current.hasNewerMessages)) return current;
   const messages = upsertChannelMessage(current.messages, message);
-  return messages === current.messages ? current : { ...current, messages };
+  if (messages === current.messages) return current;
+  const trimmed = trimFeedWindow(messages, "newer");
+  return {
+    ...current,
+    hasOlderMessages: current.hasOlderMessages || trimmed.droppedOlder,
+    messages: trimmed.messages,
+  };
 }
 
 export function prependOlderFeedMessages(snapshot: ChatFeedSnapshot | undefined, olderMessages: ChatMessage[], pageSize = chatMessagePageSize) {
   const current = snapshot ?? createFeedSnapshot();
   const byId = new Map<string, ChatMessage>();
   for (const message of [...olderMessages, ...current.messages]) byId.set(message.id, message);
+  const trimmed = trimFeedWindow(
+    Array.from(byId.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+    "older",
+  );
   return {
     ...current,
     hasOlderMessages: olderMessages.length >= pageSize,
-    messages: Array.from(byId.values()).sort((left, right) => left.createdAt.localeCompare(right.createdAt)),
+    hasNewerMessages: current.hasNewerMessages || trimmed.droppedNewer,
+    messages: trimmed.messages,
   };
 }
 
