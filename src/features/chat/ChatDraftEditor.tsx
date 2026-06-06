@@ -20,11 +20,13 @@ type ChatDraftEditorToolbarState = {
 };
 
 type ChatDraftEditorProps = {
+  autoFocus?: boolean;
   className?: string;
   disabled?: boolean;
   draft: ChatDraft;
   mentionableUsers: ChatUser[];
   onChange: (draft: ChatDraft) => void;
+  onEditLatest?: () => void;
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
   onReactToLatest?: () => void;
   onReplyToLatest?: () => void;
@@ -81,11 +83,13 @@ function markdownShortcutModeFor(event: KeyboardEvent<HTMLTextAreaElement>): Cha
 }
 
 export function ChatDraftEditor({
+  autoFocus,
   className,
   disabled,
   draft,
   mentionableUsers,
   onChange,
+  onEditLatest,
   onPaste,
   onReactToLatest,
   onReplyToLatest,
@@ -139,6 +143,17 @@ export function ChatDraftEditor({
       textAreaRef.current?.focus();
     });
   }, [disabled, focusSignal]);
+
+  useEffect(() => {
+    if (!autoFocus || disabled) return;
+    window.requestAnimationFrame(() => {
+      const textarea = textAreaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      const cursor = textarea.value.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  }, [autoFocus, disabled, resetKey]);
 
   useLayoutEffect(() => {
     resizeDraftTextarea(textAreaRef.current);
@@ -296,6 +311,19 @@ export function ChatDraftEditor({
     }
     if (event.key === "ArrowUp" && !event.shiftKey) {
       const textarea = textAreaRef.current;
+      if (
+        onEditLatest &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey &&
+        !draft.text.trim() &&
+        textarea?.selectionStart === 0
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        onEditLatest();
+        return;
+      }
       const canRecall = textarea?.selectionStart === 0 && (history.cursorIndex !== null || !draft.text.trim());
       if (canRecall) {
         const recalled = recallComposerHistory(history, draft, "older");

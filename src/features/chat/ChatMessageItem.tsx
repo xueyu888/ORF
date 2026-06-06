@@ -215,6 +215,7 @@ export function ChatMessageItem({
         ) : editing && canMutate ? (
           <div className="orf-chat-inline-edit">
             <ChatDraftEditor
+              autoFocus
               className="orf-chat-inline-edit-box"
               draft={editDraft}
               mentionableUsers={mentionableUsers}

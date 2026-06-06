@@ -504,6 +504,22 @@ export function ChatPage() {
     }
   }, [messages, openThread]);
 
+  const handleEditLatestOwnMessage = useCallback(() => {
+    const latestOwnRootMessage = [...messages]
+      .reverse()
+      .find((message) => (
+        !message.rootMessageId &&
+        !message.deletedAt &&
+        !chatMessageDeliveryStatus(message) &&
+        message.authorUserId === currentUser?.id
+      ));
+    if (!latestOwnRootMessage) {
+      return;
+    }
+    requestScrollToLatest("auto");
+    setEditingMessage(latestOwnRootMessage);
+  }, [currentUser?.id, messages, requestScrollToLatest]);
+
   const handleReactToLatestMessage = useCallback(() => {
     const latestRootMessage = [...messages]
       .reverse()
@@ -729,6 +745,7 @@ export function ChatPage() {
               disabled={!bootstrap.permissions.canWrite}
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
+              onEditLatest={handleEditLatestOwnMessage}
               onReactToLatest={handleReactToLatestMessage}
               onReplyToLatest={handleReplyToLatestMessage}
               onSend={handleSendMessage}
