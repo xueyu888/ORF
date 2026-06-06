@@ -53,6 +53,21 @@ function wrapInlineMarkdown(
 ): ChatMarkdownShortcutResult {
   const selection = normalizeSelection(draft.text, selectionStart, selectionEnd);
   const selected = draft.text.slice(selection.start, selection.end);
+  const surroundingStart = selection.start - before.length;
+  const surroundingEnd = selection.end + after.length;
+  if (
+    surroundingStart >= 0 &&
+    draft.text.slice(surroundingStart, selection.start) === before &&
+    draft.text.slice(selection.end, surroundingEnd) === after
+  ) {
+    const text = `${draft.text.slice(0, surroundingStart)}${selected}${draft.text.slice(surroundingEnd)}`;
+    return createMarkdownResult(draft, text, surroundingStart, surroundingStart + selected.length);
+  }
+  if (selected.startsWith(before) && selected.endsWith(after) && selected.length >= before.length + after.length) {
+    const unwrapped = selected.slice(before.length, selected.length - after.length);
+    const text = `${draft.text.slice(0, selection.start)}${unwrapped}${draft.text.slice(selection.end)}`;
+    return createMarkdownResult(draft, text, selection.start, selection.start + unwrapped.length);
+  }
   const text = `${draft.text.slice(0, selection.start)}${before}${selected}${after}${draft.text.slice(selection.end)}`;
   const nextSelectionStart = selection.start + before.length;
   return createMarkdownResult(draft, text, nextSelectionStart, nextSelectionStart + selected.length);
