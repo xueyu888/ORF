@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { AtSign, Bold, Code, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Smile, Strikethrough } from "lucide-react";
-import { type ClipboardEventHandler, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ClipboardEventHandler, type ComponentType, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
@@ -42,7 +42,108 @@ type ChatDraftEditorProps = {
   toolbarEnd?: (state: ChatDraftEditorToolbarState) => ReactNode;
 };
 
+type ChatMarkdownShortcutCombo = {
+  alt?: boolean;
+  code?: string;
+  key?: string;
+  primary?: boolean;
+  shift?: boolean;
+};
+
+type ChatMarkdownCommand = {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  mode: ChatMarkdownMode;
+  shortcuts: ChatMarkdownShortcutCombo[];
+  shortcutText: string;
+};
+
 const chatDraftEditorMaxHeight = 220;
+
+const chatMarkdownCommands: ChatMarkdownCommand[] = [
+  {
+    icon: Bold,
+    label: "加粗",
+    mode: "bold",
+    shortcuts: [{ key: "b", primary: true }],
+    shortcutText: "Ctrl/Cmd+B",
+  },
+  {
+    icon: Italic,
+    label: "斜体",
+    mode: "italic",
+    shortcuts: [{ key: "i", primary: true }],
+    shortcutText: "Ctrl/Cmd+I",
+  },
+  {
+    icon: Strikethrough,
+    label: "删除线",
+    mode: "strike",
+    shortcuts: [
+      { alt: true, key: "x", shift: true },
+      { key: "x", primary: true, shift: true },
+    ],
+    shortcutText: "Shift+Alt+X / Ctrl/Cmd+Shift+X",
+  },
+  {
+    icon: Code,
+    label: "代码",
+    mode: "code",
+    shortcuts: [{ alt: true, key: "c", primary: true }],
+    shortcutText: "Ctrl/Cmd+Alt+C",
+  },
+  {
+    icon: Heading3,
+    label: "标题",
+    mode: "heading",
+    shortcuts: [
+      { alt: true, key: "h", primary: true },
+      { alt: true, key: "h", shift: true },
+      { key: "h", primary: true, shift: true },
+    ],
+    shortcutText: "Ctrl/Cmd+Alt+H / Shift+Alt+H / Ctrl/Cmd+Shift+H",
+  },
+  {
+    icon: List,
+    label: "无序列表",
+    mode: "unorderedList",
+    shortcuts: [
+      { alt: true, code: "Digit8", shift: true },
+      { code: "Digit8", primary: true, shift: true },
+    ],
+    shortcutText: "Shift+Alt+8 / Ctrl/Cmd+Shift+8",
+  },
+  {
+    icon: ListOrdered,
+    label: "有序列表",
+    mode: "orderedList",
+    shortcuts: [
+      { alt: true, code: "Digit7", shift: true },
+      { code: "Digit7", primary: true, shift: true },
+    ],
+    shortcutText: "Shift+Alt+7 / Ctrl/Cmd+Shift+7",
+  },
+  {
+    icon: Quote,
+    label: "引用",
+    mode: "quote",
+    shortcuts: [
+      { alt: true, code: "Digit9", shift: true },
+      { code: "Digit9", primary: true, shift: true },
+    ],
+    shortcutText: "Shift+Alt+9 / Ctrl/Cmd+Shift+9",
+  },
+  {
+    icon: LinkIcon,
+    label: "链接",
+    mode: "link",
+    shortcuts: [
+      { key: "k", primary: true },
+      { alt: true, key: "k", primary: true },
+    ],
+    shortcutText: "Ctrl/Cmd+K / Ctrl/Cmd+Alt+K",
+  },
+];
 
 function resizeDraftTextarea(element: HTMLTextAreaElement | null) {
   if (!element) return;
@@ -52,32 +153,22 @@ function resizeDraftTextarea(element: HTMLTextAreaElement | null) {
   element.style.overflowY = element.scrollHeight > chatDraftEditorMaxHeight ? "auto" : "hidden";
 }
 
+function matchesMarkdownShortcut(event: KeyboardEvent<HTMLTextAreaElement>, shortcut: ChatMarkdownShortcutCombo) {
+  const primary = event.ctrlKey || event.metaKey;
+  if (primary !== Boolean(shortcut.primary)) return false;
+  if (event.altKey !== Boolean(shortcut.alt)) return false;
+  if (event.shiftKey !== Boolean(shortcut.shift)) return false;
+  if (shortcut.code && event.code !== shortcut.code) return false;
+  if (shortcut.key && event.key.toLowerCase() !== shortcut.key) return false;
+  return true;
+}
+
 function markdownShortcutModeFor(event: KeyboardEvent<HTMLTextAreaElement>): ChatMarkdownMode | null {
   if (event.nativeEvent.isComposing) return null;
-  const key = event.key.toLowerCase();
-  const code = event.code;
-  const primary = event.ctrlKey || event.metaKey;
-  if (primary && !event.altKey && !event.shiftKey) {
-    if (key === "b") return "bold";
-    if (key === "i") return "italic";
-    if (key === "k") return "link";
-  }
-  if (primary && event.altKey && !event.shiftKey) {
-    if (key === "c") return "code";
-    if (key === "h") return "heading";
-    if (key === "k") return "link";
-  }
-  if (!primary && event.altKey && event.shiftKey) {
-    if (code === "Digit7") return "orderedList";
-    if (code === "Digit8") return "unorderedList";
-    if (code === "Digit9") return "quote";
-    if (key === "h") return "heading";
-    if (key === "x") return "strike";
-  }
-  if (primary && event.shiftKey && !event.altKey) {
-    if (code === "Digit7") return "orderedList";
-    if (code === "Digit8") return "unorderedList";
-    if (key === "x") return "strike";
+  for (const command of chatMarkdownCommands) {
+    if (command.shortcuts.some((shortcut) => matchesMarkdownShortcut(event, shortcut))) {
+      return command.mode;
+    }
   }
   return null;
 }
@@ -431,15 +522,14 @@ export function ChatDraftEditor({
         </div>
       )}
       <div className="orf-chat-composer-toolbar">
-        <button type="button" onClick={() => applyMarkdownMode("bold")} title="加粗 Ctrl/Cmd+B"><Bold className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("italic")} title="斜体 Ctrl/Cmd+I"><Italic className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("strike")} title="删除线 Ctrl/Cmd+Shift+X"><Strikethrough className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("code")} title="代码 Ctrl/Cmd+Alt+C"><Code className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("heading")} title="标题 Ctrl/Cmd+Alt+H"><Heading3 className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("unorderedList")} title="无序列表 Shift+Alt+8"><List className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("orderedList")} title="有序列表 Shift+Alt+7"><ListOrdered className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("quote")} title="引用 Shift+Alt+9"><Quote className="h-4 w-4" /></button>
-        <button type="button" onClick={() => applyMarkdownMode("link")} title="链接 Ctrl/Cmd+K"><LinkIcon className="h-4 w-4" /></button>
+        {chatMarkdownCommands.map((command) => {
+          const Icon = command.icon;
+          return (
+            <button type="button" key={command.mode} onClick={() => applyMarkdownMode(command.mode)} title={`${command.label} ${command.shortcutText}`}>
+              <Icon className="h-4 w-4" />
+            </button>
+          );
+        })}
         <span className="orf-chat-composer-emoji-anchor" ref={emojiAnchorRef}>
           <button type="button" onClick={() => setEmojiOpen((open) => !open)} title="表情 Ctrl/Cmd+Alt+E 或 Ctrl/Cmd+Shift+E">
             <Smile className="h-4 w-4" />
