@@ -33,6 +33,7 @@ type ChatMessageItemProps = {
   onSave?: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
+  reactionPickerSignal?: number;
   usersById: Map<string, ChatUser>;
 };
 
@@ -111,6 +112,7 @@ export function ChatMessageItem({
   onSave,
   onSaveEdit,
   onThread,
+  reactionPickerSignal,
   usersById,
 }: ChatMessageItemProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
@@ -131,6 +133,11 @@ export function ChatMessageItem({
     setEditDraft(draftFromStoredBody(message.body, usersById));
     setEditSaving(false);
   }, [editing, message.body, message.id, usersById]);
+
+  useEffect(() => {
+    if (!reactionPickerSignal || !canUseServerActions || editing) return;
+    setEmojiOpen(true);
+  }, [canUseServerActions, editing, reactionPickerSignal]);
 
   const selectReaction = (emojiName: string) => {
     const reactionName = preferredReactionName(message.reactions.map((reaction) => reaction.emojiName), emojiName);

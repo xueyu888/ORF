@@ -64,6 +64,10 @@ export function ChatPage() {
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null);
+  const [reactionPickerRequest, setReactionPickerRequest] = useState<{ messageId: string | null; signal: number }>({
+    messageId: null,
+    signal: 0,
+  });
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
@@ -500,6 +504,23 @@ export function ChatPage() {
     }
   }, [messages, openThread]);
 
+  const handleReactToLatestMessage = useCallback(() => {
+    const latestRootMessage = [...messages]
+      .reverse()
+      .find((message) => !message.rootMessageId && !message.deletedAt && !chatMessageDeliveryStatus(message));
+    if (!latestRootMessage) {
+      notify("当前没有可添加表情的消息");
+      return;
+    }
+    requestScrollToLatest("auto");
+    window.requestAnimationFrame(() => {
+      setReactionPickerRequest((current) => ({
+        messageId: latestRootMessage.id,
+        signal: current.signal + 1,
+      }));
+    });
+  }, [messages, notify, requestScrollToLatest]);
+
   const handleEditMessage = useCallback(
     async (message: ChatMessage, body: string) => {
       try {
@@ -696,6 +717,8 @@ export function ChatPage() {
               onScroll={handleMessageScroll}
               onThread={openThread}
               pendingNewMessageCount={pendingNewMessageCount}
+              reactionPickerMessageId={reactionPickerRequest.messageId}
+              reactionPickerSignal={reactionPickerRequest.signal}
               scrollRef={messageScrollRef}
               unreadAnchor={unreadAnchor?.channelId === activeChannel.id ? unreadAnchor : null}
               usersById={usersById}
@@ -706,6 +729,7 @@ export function ChatPage() {
               disabled={!bootstrap.permissions.canWrite}
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
+              onReactToLatest={handleReactToLatestMessage}
               onReplyToLatest={handleReplyToLatestMessage}
               onSend={handleSendMessage}
               onTyping={publishTyping}

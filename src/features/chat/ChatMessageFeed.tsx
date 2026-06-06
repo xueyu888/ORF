@@ -37,6 +37,8 @@ type ChatMessageFeedProps = {
   onScroll: () => void;
   onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
   pendingNewMessageCount: number;
+  reactionPickerMessageId: string | null;
+  reactionPickerSignal: number;
   scrollRef: RefObject<HTMLDivElement | null>;
   unreadAnchor: UnreadAnchor | null;
   usersById: Map<string, ChatUser>;
@@ -77,6 +79,8 @@ export function ChatMessageFeed({
   onScroll,
   onThread,
   pendingNewMessageCount,
+  reactionPickerMessageId,
+  reactionPickerSignal,
   scrollRef,
   unreadAnchor,
   usersById,
@@ -117,6 +121,8 @@ export function ChatMessageFeed({
           onSave={onSave}
           onSaveEdit={onSaveEdit}
           onThread={onThread}
+          reactionPickerMessageId={reactionPickerMessageId}
+          reactionPickerSignal={reactionPickerSignal}
           unreadAnchor={unreadAnchor}
           usersById={usersById}
         />
@@ -162,6 +168,8 @@ function MessageList({
   onSave,
   onSaveEdit,
   onThread,
+  reactionPickerMessageId,
+  reactionPickerSignal,
   usersById,
   unreadAnchor,
 }: MessageListProps) {
@@ -227,6 +235,7 @@ function MessageList({
               onSave={onSave}
               onSaveEdit={onSaveEdit}
               onThread={onThread}
+              reactionPickerSignal={reactionPickerMessageId === message.id ? reactionPickerSignal : undefined}
               usersById={usersById}
             />
           </div>

@@ -38,6 +38,7 @@ type ChatComposerProps = {
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
+  onReactToLatest?: () => void;
   onReplyToLatest?: () => void;
   onSend: ChatSendHandler;
   onTyping?: (channelId: string) => void;
@@ -51,6 +52,7 @@ export function ChatComposer({
   focusSignal,
   mentionableUsers,
   onDraftStateChange,
+  onReactToLatest,
   onReplyToLatest,
   onSend,
   onTyping,
@@ -243,6 +245,7 @@ export function ChatComposer({
         mentionableUsers={mentionableUsers}
         onChange={setDraft}
         onPaste={handlePaste}
+        onReactToLatest={!rootMessageId ? onReactToLatest : undefined}
         onReplyToLatest={!rootMessageId && attachmentItems.length === 0 ? onReplyToLatest : undefined}
         onSubmit={submit}
         onTyping={() => onTyping?.(channelId)}
