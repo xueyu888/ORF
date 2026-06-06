@@ -25,7 +25,7 @@ export function isChatFeedNearOldest(element: HTMLElement | null, threshold = ch
 
 export function scrollChatFeedToLatest(element: HTMLElement | null, behavior: ScrollBehavior = "smooth") {
   if (!element) return false;
-  element.scrollTo({ top: element.scrollHeight, behavior });
+  setChatFeedScrollTop(element, element.scrollHeight, behavior);
   return true;
 }
 
@@ -89,6 +89,20 @@ function scrollChatFeedToElement(
   const nextTop = block === "center"
     ? targetTop - (element.clientHeight / 2) + (targetRect.height / 2)
     : targetTop - offset;
-  element.scrollTo({ top: Math.max(0, nextTop), behavior });
+  setChatFeedScrollTop(element, Math.max(0, nextTop), behavior);
   return true;
+}
+
+function setChatFeedScrollTop(element: HTMLElement, top: number, behavior: ScrollBehavior) {
+  if (behavior === "auto") {
+    const previousScrollBehavior = element.style.scrollBehavior;
+    element.style.scrollBehavior = "auto";
+    element.scrollTop = top;
+    element.scrollTo({ top, behavior: "auto" });
+    window.requestAnimationFrame(() => {
+      element.style.scrollBehavior = previousScrollBehavior;
+    });
+    return;
+  }
+  element.scrollTo({ top, behavior });
 }

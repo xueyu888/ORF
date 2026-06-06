@@ -325,7 +325,7 @@ export function useChatFeedState({
   useEffect(() => {
     if (!pendingUnreadScrollRef.current || messagesLoading) return undefined;
     const timer = window.setTimeout(() => {
-      scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" });
+      scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" });
       pendingUnreadScrollRef.current = false;
     }, 120);
     return () => window.clearTimeout(timer);
@@ -422,10 +422,10 @@ export function useChatFeedState({
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
     if (!target.contextRequired) {
-      if (scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" })) return;
+      if (scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" })) return;
       if (
         target.messageId &&
-        scrollChatFeedToMessage(messageScrollRef.current, target.messageId, { behavior: "smooth", block: "start", offset: 48 })
+        scrollChatFeedToMessage(messageScrollRef.current, target.messageId, { behavior: "auto", block: "start", offset: 48 })
       ) {
         return;
       }
