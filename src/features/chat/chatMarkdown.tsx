@@ -2,6 +2,12 @@ import { useState, type ReactNode } from "react";
 import type { ChatUser } from "../../types/orf";
 
 type MarkdownListItem = { checked: boolean | null; text: string };
+type MarkdownTableAlignment = "center" | "left" | "right" | null;
+type MarkdownTable = {
+  alignments: MarkdownTableAlignment[];
+  headers: string[];
+  rows: string[][];
+};
 
 type MarkdownBlock =
   | { kind: "code"; content: string; key: string; language: string | null }
@@ -9,7 +15,8 @@ type MarkdownBlock =
   | { kind: "heading"; key: string; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
   | { kind: "list"; items: MarkdownListItem[]; key: string; ordered: boolean }
   | { kind: "paragraph"; lines: string[]; key: string }
-  | { kind: "quote"; lines: string[]; key: string };
+  | { kind: "quote"; lines: string[]; key: string }
+  | { kind: "table"; key: string; table: MarkdownTable };
 
 type ChatMarkdownProps = {
   body: string;
@@ -57,6 +64,75 @@ function parseIndentedCodeLine(line: string) {
   if (line.startsWith("\t")) return line.slice(1);
   if (line.startsWith("    ")) return line.slice(4);
   return null;
+}
+
+function splitMarkdownTableRow(line: string) {
+  let source = line.trim();
+  if (source.startsWith("|")) source = source.slice(1);
+  if (source.endsWith("|") && !source.endsWith("\\|")) source = source.slice(0, -1);
+
+  const cells: string[] = [];
+  let cell = "";
+  let escaped = false;
+  for (const character of source) {
+    if (escaped) {
+      cell += character;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (character === "|") {
+      cells.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    cell += character;
+  }
+  if (escaped) cell += "\\";
+  cells.push(cell.trim());
+  return cells;
+}
+
+function tableAlignmentForDelimiter(cell: string): MarkdownTableAlignment | undefined {
+  const delimiter = cell.trim();
+  if (!/^:?-{3,}:?$/.test(delimiter)) return undefined;
+  if (delimiter.startsWith(":") && delimiter.endsWith(":")) return "center";
+  if (delimiter.endsWith(":")) return "right";
+  if (delimiter.startsWith(":")) return "left";
+  return null;
+}
+
+function parseMarkdownTable(lines: string[], startIndex: number): { nextIndex: number; table: MarkdownTable } | null {
+  const headerLine = lines[startIndex] ?? "";
+  const delimiterLine = lines[startIndex + 1] ?? "";
+  if (!headerLine.includes("|") || !delimiterLine.includes("|")) return null;
+  const headers = splitMarkdownTableRow(headerLine);
+  const delimiterCells = splitMarkdownTableRow(delimiterLine);
+  if (headers.length < 2 || delimiterCells.length !== headers.length) return null;
+  const alignments = delimiterCells.map(tableAlignmentForDelimiter);
+  if (alignments.some((alignment) => alignment === undefined)) return null;
+
+  const rows: string[][] = [];
+  let index = startIndex + 2;
+  while (index < lines.length) {
+    const line = lines[index] ?? "";
+    if (!line.trim() || !line.includes("|")) break;
+    const cells = splitMarkdownTableRow(line);
+    rows.push(headers.map((_, cellIndex) => cells[cellIndex] ?? ""));
+    index += 1;
+  }
+
+  return {
+    nextIndex: index,
+    table: {
+      alignments: alignments as MarkdownTableAlignment[],
+      headers,
+      rows,
+    },
+  };
 }
 
 function safeDecodeURIComponent(value: string) {
@@ -150,6 +226,14 @@ function parseMarkdownBlocks(body: string): MarkdownBlock[] {
       continue;
     }
 
+    const table = parseMarkdownTable(lines, index);
+    if (table) {
+      blocks.push({ kind: "table", key: `table:${keyIndex}`, table: table.table });
+      keyIndex += 1;
+      index = table.nextIndex;
+      continue;
+    }
+
     const paragraphLines: string[] = [];
     while (index < lines.length) {
       const nextLine = lines[index] ?? "";
@@ -160,6 +244,7 @@ function parseMarkdownBlocks(body: string): MarkdownBlock[] {
         parseListItem(nextLine) ||
         parseHeading(nextLine) ||
         isDividerLine(nextLine) ||
+        parseMarkdownTable(lines, index) ||
         parseIndentedCodeLine(nextLine) !== null
       ) break;
       paragraphLines.push(nextLine);
@@ -293,6 +378,34 @@ export function ChatMarkdown({ body, compact = false, usersById }: ChatMarkdownP
                 </li>
               ))}
             </ListTag>
+          );
+        }
+        if (block.kind === "table") {
+          return (
+            <div className="orf-chat-markdown-table-wrap" key={block.key}>
+              <table className="orf-chat-markdown-table">
+                <thead>
+                  <tr>
+                    {block.table.headers.map((header, columnIndex) => (
+                      <th key={`${block.key}:head:${columnIndex}`} style={{ textAlign: block.table.alignments[columnIndex] ?? "left" }}>
+                        {renderInlineFragments(header, usersById, `${block.key}:head:${columnIndex}`)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {block.table.rows.map((row, rowIndex) => (
+                    <tr key={`${block.key}:row:${rowIndex}`}>
+                      {block.table.headers.map((_, columnIndex) => (
+                        <td key={`${block.key}:cell:${rowIndex}:${columnIndex}`} style={{ textAlign: block.table.alignments[columnIndex] ?? "left" }}>
+                          {renderInlineFragments(row[columnIndex] ?? "", usersById, `${block.key}:cell:${rowIndex}:${columnIndex}`)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           );
         }
         return (

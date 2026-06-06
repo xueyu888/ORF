@@ -9383,6 +9383,46 @@ a.orf-row-loot-action,
   accent-color: var(--orf-accent);
 }
 
+.orf-chat-markdown-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 6px 0;
+  border: 1px solid var(--orf-border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.orf-chat-markdown-table {
+  width: 100%;
+  min-width: max-content;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.orf-chat-markdown-table th,
+.orf-chat-markdown-table td {
+  min-width: 92px;
+  border-right: 1px solid var(--orf-border);
+  border-bottom: 1px solid var(--orf-border);
+  padding: 6px 8px;
+  vertical-align: top;
+}
+
+.orf-chat-markdown-table th:last-child,
+.orf-chat-markdown-table td:last-child {
+  border-right: 0;
+}
+
+.orf-chat-markdown-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.orf-chat-markdown-table th {
+  background: rgba(232, 240, 244, 0.92);
+  color: var(--orf-text-primary);
+  font-weight: 850;
+}
+
 .orf-chat-markdown-code-block {
   max-width: 100%;
   overflow-x: auto;
