@@ -49,6 +49,7 @@ import {
   draftFromStoredBody,
   emptyDraft,
   hasStoredDraftForChannel,
+  isUnreadChannel,
   mentionLabel,
   mentionRangeFor,
   parseStoredDraft,
@@ -59,6 +60,7 @@ import {
   serializeDraft,
   shouldFollowIncomingMessage,
   sortChannels,
+  sortUnreadChannels,
   storedDraftChannelIds,
   upsertChannel,
   upsertMessage,
@@ -936,10 +938,13 @@ function ChatSidebar({
   users: ChatUser[];
 }) {
   const filteredChannels = channels.filter((channel) => channel.displayName.toLowerCase().includes(query.trim().toLowerCase()));
-  const favorites = filteredChannels.filter((channel) => currentMembership(channel, currentUserId)?.favorite);
-  const publicChannels = filteredChannels.filter((channel) => channel.type === "public");
-  const privateChannels = filteredChannels.filter((channel) => channel.type === "private");
-  const conversations = filteredChannels.filter((channel) => channel.type === "direct" || channel.type === "group");
+  const unreadChannels = sortUnreadChannels(filteredChannels.filter((channel) => isUnreadChannel(channel, currentUserId)));
+  const unreadChannelIds = new Set(unreadChannels.map((channel) => channel.id));
+  const regularChannels = unreadChannelIds.size > 0 ? filteredChannels.filter((channel) => !unreadChannelIds.has(channel.id)) : filteredChannels;
+  const favorites = regularChannels.filter((channel) => currentMembership(channel, currentUserId)?.favorite);
+  const publicChannels = regularChannels.filter((channel) => channel.type === "public");
+  const privateChannels = regularChannels.filter((channel) => channel.type === "private");
+  const conversations = regularChannels.filter((channel) => channel.type === "direct" || channel.type === "group");
 
   return (
     <aside className="orf-chat-sidebar">
@@ -959,6 +964,7 @@ function ChatSidebar({
         新建私聊/群聊
       </button>
       <div className="orf-chat-channel-groups">
+        <ChannelGroup title="未读" channels={unreadChannels} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
         <ChannelGroup title="收藏" channels={favorites} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
         <ChannelGroup title="公开频道" channels={publicChannels} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
         <ChannelGroup title="私有频道" channels={privateChannels} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />

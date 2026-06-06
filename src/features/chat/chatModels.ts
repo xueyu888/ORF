@@ -91,6 +91,21 @@ export function upsertChannel(channels: ChatChannel[], next: ChatChannel, curren
   return sortChannels(found ? channels.map((channel) => (channel.id === next.id ? next : channel)) : [next, ...channels], currentUserId);
 }
 
+export function isUnreadChannel(channel: ChatChannel, currentUserId?: string) {
+  const membership = currentMembership(channel, currentUserId);
+  return channel.unreadCount > 0 || channel.mentionCount > 0 || channel.threadUnreadCount > 0 || Boolean(membership?.manuallyUnread);
+}
+
+export function sortUnreadChannels(channels: ChatChannel[]) {
+  return [...channels].sort((left, right) => {
+    if (Boolean(left.mentionCount) !== Boolean(right.mentionCount)) return left.mentionCount ? -1 : 1;
+    const leftUnread = left.unreadCount + left.threadUnreadCount;
+    const rightUnread = right.unreadCount + right.threadUnreadCount;
+    if (leftUnread !== rightUnread) return rightUnread - leftUnread;
+    return (right.lastMessageAt ?? right.updatedAt).localeCompare(left.lastMessageAt ?? left.updatedAt);
+  });
+}
+
 export function upsertMessage(messages: ChatMessage[], next: ChatMessage) {
   const found = messages.some((message) => message.id === next.id);
   const updated = found ? messages.map((message) => (message.id === next.id ? next : message)) : [...messages, next];
