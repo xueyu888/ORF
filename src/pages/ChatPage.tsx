@@ -20,7 +20,6 @@ import {
   Loader2,
   Lock,
   MessageSquare,
-  MoreHorizontal,
   Paperclip,
   Pin,
   Plus,
@@ -632,6 +631,17 @@ export function ChatPage() {
     }
   }, [activeChannel?.id, applyChannel, currentUser?.id]);
 
+  const handleCopyMessageLink = useCallback(async (message: ChatMessage) => {
+    const targetMessageId = message.rootMessageId ?? message.id;
+    const url = `${window.location.origin}/chat/${encodeURIComponent(message.channelId)}?message=${encodeURIComponent(targetMessageId)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      notify("已复制消息链接");
+    } catch {
+      notify(url);
+    }
+  }, [notify]);
+
   const handleJumpToUnread = useCallback(() => {
     const messageScroll = messageScrollRef.current;
     const target =
@@ -828,6 +838,7 @@ export function ChatPage() {
                   loadingOlderMessages={olderMessagesLoading}
                   messages={messages}
                   onDelete={handleDeleteMessage}
+                  onCopyLink={handleCopyMessageLink}
                   onEdit={setEditingMessage}
                   onImage={setImagePreview}
                   onJumpUnread={handleJumpToUnread}
@@ -924,6 +935,7 @@ export function ChatPage() {
           onEdit={setEditingMessage}
           onMarkUnread={handleMarkMessageUnread}
           onDelete={handleDeleteMessage}
+          onCopyLink={handleCopyMessageLink}
         />
       )}
       {modal === "channel" && (
@@ -1151,6 +1163,7 @@ function MessageList({
   hasOlderMessages,
   loadingOlderMessages,
   messages,
+  onCopyLink,
   onDelete,
   onEdit,
   onImage,
@@ -1170,6 +1183,7 @@ function MessageList({
   hasOlderMessages: boolean;
   loadingOlderMessages: boolean;
   messages: ChatMessage[];
+  onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
   onImage: (attachment: ChatAttachment) => void;
@@ -1228,6 +1242,7 @@ function MessageList({
               firstUnread={unreadMessageId === message.id}
               focused={focusMessageId === message.id}
               message={message}
+              onCopyLink={onCopyLink}
               onDelete={onDelete}
               onEdit={onEdit}
               onImage={onImage}
@@ -1251,6 +1266,7 @@ function MessageItem({
   firstUnread,
   focused,
   message,
+  onCopyLink,
   onDelete,
   onEdit,
   onImage,
@@ -1266,6 +1282,7 @@ function MessageItem({
   firstUnread?: boolean;
   focused?: boolean;
   message: ChatMessage;
+  onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
   onImage: (attachment: ChatAttachment) => void;
@@ -1356,9 +1373,9 @@ function MessageItem({
             />
           )}
           {onMarkUnread && <IconButton icon={EyeOff} label="从这里标记未读" onClick={() => onMarkUnread(message)} />}
+          <IconButton icon={LinkIcon} label="复制消息链接" onClick={() => onCopyLink(message)} />
           {canMutate && <IconButton icon={Edit3} label="编辑消息" onClick={() => onEdit(message)} />}
           {canMutate && <IconButton icon={Trash2} label="删除消息" onClick={() => onDelete(message)} />}
-          <IconButton icon={MoreHorizontal} label="更多" />
         </div>
       )}
     </article>
@@ -1640,6 +1657,7 @@ function ChatRightPanel(props: {
   currentUserId?: string;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onClose: () => void;
+  onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
@@ -1688,6 +1706,7 @@ function ChatRightPanel(props: {
           <ThreadPanel
             canPin={props.canManage}
             currentUserId={props.currentUserId}
+            onCopyLink={props.onCopyLink}
             onDelete={props.onDelete}
             onDraftStateChange={props.onDraftStateChange}
             onEdit={props.onEdit}
@@ -1814,6 +1833,7 @@ function ThreadInboxPanel({
 function ThreadPanel({
   canPin,
   currentUserId,
+  onCopyLink,
   onDelete,
   onDraftStateChange,
   onEdit,
@@ -1831,6 +1851,7 @@ function ThreadPanel({
 }: {
   canPin: boolean;
   currentUserId?: string;
+  onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
@@ -1862,6 +1883,7 @@ function ThreadPanel({
         canPin={canPin}
         currentUserId={currentUserId}
         message={thread.rootMessage}
+        onCopyLink={onCopyLink}
         onDelete={onDelete}
         onEdit={onEdit}
         onImage={onImage}
@@ -1883,6 +1905,7 @@ function ThreadPanel({
             currentUserId={currentUserId}
             key={reply.id}
             message={reply}
+            onCopyLink={onCopyLink}
             onDelete={onDelete}
             onEdit={onEdit}
             onImage={onImage}
