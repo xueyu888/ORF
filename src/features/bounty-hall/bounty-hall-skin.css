@@ -1061,6 +1061,42 @@
   padding: 0 16px;
 }
 
+.bounty-select-label .bounty-select-menu {
+  display: flex;
+  width: 100%;
+}
+
+.bounty-select-label .orf-fantasy-select-trigger {
+  width: 100%;
+  min-height: 48px;
+  justify-content: flex-start;
+  gap: 10px;
+  border: 1px solid var(--bh-glass-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(232, 221, 201, 0.58), rgba(211, 199, 178, 0.36)),
+    var(--bh-glass-bg);
+  box-shadow: var(--bh-glass-shadow);
+  clip-path: none;
+  color: #173767;
+  font-weight: 900;
+  padding: 0 16px;
+}
+
+.bounty-select-label .orf-fantasy-select-trigger::before {
+  display: none;
+}
+
+.bounty-select-label .orf-fantasy-select-value {
+  flex: 1 1 auto;
+}
+
+.bounty-select-label .orf-fantasy-select-chevron {
+  margin-left: auto;
+  color: #36546d;
+  opacity: 0.8;
+}
+
 .bounty-action,
 .bounty-link-button,
 .bounty-clear-button {
@@ -2258,6 +2294,7 @@
 .orf-workbench-surface .bounty-hall-tabs,
 .orf-workbench-surface .bounty-search-box,
 .orf-workbench-surface .bounty-select-label select,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger,
 .orf-workbench-surface .feedback-issue-toolbar {
   border: 1px solid var(--bh-glass-line);
   background:
@@ -2364,12 +2401,24 @@
   font-size: 11px;
 }
 
-.orf-workbench-surface .bounty-select-label select {
+.orf-workbench-surface .bounty-select-label select,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger {
   min-height: 42px;
   border-radius: 10px;
   color: #26364a;
   font-size: 13px;
   padding: 0 12px;
+}
+
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger:hover,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger:focus-visible,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-menu-open .orf-fantasy-select-trigger {
+  border-color: rgba(255, 255, 255, 0.48);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.44), rgba(235, 249, 255, 0.24)),
+    rgba(255, 255, 255, 0.22);
+  box-shadow: 0 12px 26px rgba(31, 49, 74, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.54);
+  transform: none;
 }
 
 .orf-workbench-surface .bounty-hall-tabs {

@@ -1,8 +1,10 @@
 import { clsx } from "clsx";
 import { Leaf, Search, X, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { Children, isValidElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
+import { FantasySelectMenu, type FantasySelectOption } from "../../components/FantasySelectMenu";
 import "./bounty-hall-skin.css";
 
 type ButtonVariant = "primary" | "secondary" | "blue" | "dark" | "ghost" | "danger";
@@ -147,14 +149,48 @@ export function BountySelect({
   onChange: (value: string) => void;
   value: string;
 }) {
+  const options = bountySelectOptionsFromChildren(children);
+
   return (
-    <label className="bounty-select-label">
+    <div className="bounty-select-label">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {children}
-      </select>
-    </label>
+      <FantasySelectMenu
+        ariaLabel={label}
+        className="bounty-select-menu"
+        onChange={onChange}
+        options={options}
+        value={value}
+        variant="filter"
+      />
+    </div>
   );
+}
+
+function bountySelectOptionsFromChildren(children: ReactNode): Array<FantasySelectOption<string>> {
+  return Children.toArray(children).flatMap((child) => {
+    if (!isValidElement(child)) return [];
+
+    const props = (child as ReactElement<{
+      children?: ReactNode;
+      disabled?: boolean;
+      label?: string;
+      value?: number | string;
+    }>).props;
+    const label = props.label ?? bountySelectOptionText(props.children);
+    const value = props.value === undefined ? label : String(props.value);
+
+    return [{ disabled: props.disabled, label, value }];
+  });
+}
+
+function bountySelectOptionText(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === "boolean") return "";
+  if (typeof node === "number" || typeof node === "string") return String(node);
+  if (Array.isArray(node)) return node.map(bountySelectOptionText).join("");
+  if (isValidElement(node)) {
+    return bountySelectOptionText((node as ReactElement<{ children?: ReactNode }>).props.children);
+  }
+  return "";
 }
 
 export function BountyDialog({
