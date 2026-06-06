@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getChatThread } from "../../state/apiClient";
 import type { ChatMessage, ChatThread } from "../../types/orf";
 import { upsertMessage } from "./chatModels";
@@ -14,21 +14,27 @@ export function useChatThreadState({ notify, onActivateThreadPanel }: UseChatThr
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
   const [pendingThreadTarget, setPendingThreadTarget] = useState<ChatFeedThreadTarget | null>(null);
+  const threadRequestIdRef = useRef(0);
 
   const openThread = useCallback(
     async (rootMessageId: string, focusMessageId?: string | null) => {
+      const requestId = threadRequestIdRef.current + 1;
+      threadRequestIdRef.current = requestId;
       onActivateThreadPanel();
       setThreadFocusMessageId(focusMessageId ?? null);
+      setThread((item) => item?.rootMessage.id === rootMessageId ? item : null);
       setThreadLoading(true);
       try {
         const response = await getChatThread(rootMessageId);
+        if (threadRequestIdRef.current !== requestId) return;
         setThread(response.thread);
       } catch (error) {
+        if (threadRequestIdRef.current !== requestId) return;
         setThread(null);
         setThreadFocusMessageId(null);
         notify(error instanceof Error ? error.message : "加载线程失败");
       } finally {
-        setThreadLoading(false);
+        if (threadRequestIdRef.current === requestId) setThreadLoading(false);
       }
     },
     [notify, onActivateThreadPanel],
