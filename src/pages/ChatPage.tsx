@@ -20,10 +20,10 @@ import {
   sortChannels,
   storedDraftChannelIds,
   upsertChannel,
-  upsertMessage,
 } from "../features/chat/chatModels";
-import { type ChatFeedThreadTarget, useChatFeedState } from "../features/chat/useChatFeedState";
+import { useChatFeedState } from "../features/chat/useChatFeedState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
+import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
 import {
   addChatChannelMembersRequest,
@@ -31,7 +31,6 @@ import {
   createChatChannel,
   deleteChatMessageRequest,
   getChatBootstrap,
-  getChatThread,
   getChatThreads,
   getPinnedChatMessages,
   getSavedChatMessages,
@@ -47,7 +46,7 @@ import {
   updateChatMessageRequest,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../types/orf";
+import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThreadSummary, ChatUser } from "../types/orf";
 
 export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
@@ -57,10 +56,6 @@ export function ChatPage() {
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
-  const [thread, setThread] = useState<ChatThread | null>(null);
-  const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
-  const [threadLoading, setThreadLoading] = useState(false);
-  const [pendingThreadTarget, setPendingThreadTarget] = useState<ChatFeedThreadTarget | null>(null);
   const [loading, setLoading] = useState(true);
   const [channelQuery, setChannelQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -96,6 +91,24 @@ export function ChatPage() {
   const applyChannel = useCallback((channel: ChatChannel) => {
     setChannels((items) => upsertChannel(items, channel, currentUser?.id));
   }, [currentUser?.id]);
+
+  const activateThreadPanel = useCallback(() => {
+    setActivePanel("thread");
+  }, []);
+
+  const {
+    appendThreadReply,
+    applyThreadMessage,
+    openThread,
+    requestThreadTarget,
+    setThread,
+    thread,
+    threadFocusMessageId,
+    threadLoading,
+  } = useChatThreadState({
+    notify,
+    onActivateThreadPanel: activateThreadPanel,
+  });
 
   const consumeRequestedMessage = useCallback(() => {
     setSearchParams((params) => {
@@ -137,24 +150,12 @@ export function ChatPage() {
     onChannelUpdate: applyChannel,
     onRequestedMessageConsumed: consumeRequestedMessage,
     onRequestedMessageRedirect: redirectRequestedMessage,
-    onThreadTarget: setPendingThreadTarget,
+    onThreadTarget: requestThreadTarget,
     requestedMessageId: focusMessageId,
   });
 
   const applyMessageEffects = useCallback((message: ChatMessage) => {
-    setThread((item) => {
-      if (!item) return item;
-      const isOpenRoot = item.rootMessage.id === message.id;
-      const isOpenReply = message.rootMessageId === item.rootMessage.id;
-      if (!isOpenRoot && !isOpenReply) return item;
-      return {
-        ...item,
-        rootMessage: isOpenRoot ? message : item.rootMessage,
-        replies: isOpenReply
-          ? upsertMessage(item.replies, message).filter((reply) => reply.rootMessageId === item.rootMessage.id)
-          : item.replies,
-      };
-    });
+    applyThreadMessage(message);
     setThreadSummaries((items) => applyThreadSummaryMessage(
       items,
       message,
@@ -163,7 +164,7 @@ export function ChatPage() {
     ));
     setSearchResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
     setCollectionResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
-  }, [activePanel, currentUser?.id, thread?.rootMessage.id]);
+  }, [activePanel, applyThreadMessage, currentUser?.id, thread?.rootMessage.id]);
 
   const applyMessage = useCallback((message: ChatMessage) => {
     applyMessageToFeed(message);
@@ -231,31 +232,6 @@ export function ChatPage() {
     if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
   });
 
-  const openThread = useCallback(
-    async (rootMessageId: string, focusMessageId?: string | null) => {
-      setActivePanel("thread");
-      setThreadFocusMessageId(focusMessageId ?? null);
-      setThreadLoading(true);
-      try {
-        const response = await getChatThread(rootMessageId);
-        setThread(response.thread);
-      } catch (error) {
-        setThread(null);
-        setThreadFocusMessageId(null);
-        notify(error instanceof Error ? error.message : "加载线程失败");
-      } finally {
-        setThreadLoading(false);
-      }
-    },
-    [notify],
-  );
-
-  useEffect(() => {
-    if (!pendingThreadTarget) return;
-    void openThread(pendingThreadTarget.rootMessageId, pendingThreadTarget.focusMessageId);
-    setPendingThreadTarget(null);
-  }, [openThread, pendingThreadTarget]);
-
   const handleSendMessage = useCallback(
     async (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => {
       if (!activeChannel) return;
@@ -268,7 +244,7 @@ export function ChatPage() {
       });
       applyChannel(response.channel);
       if (rootMessageId) {
-        setThread((item) => item ? { ...item, replies: upsertMessage(item.replies, response.message) } : item);
+        appendThreadReply(response.message);
       } else {
         if (hasNewerMessages) {
           await loadLatestMessages("smooth");
@@ -278,7 +254,7 @@ export function ChatPage() {
         }
       }
     },
-    [activeChannel, applyChannel, applyMessage, hasNewerMessages, loadLatestMessages, requestScrollToLatest],
+    [activeChannel, appendThreadReply, applyChannel, applyMessage, hasNewerMessages, loadLatestMessages, requestScrollToLatest],
   );
 
   const handleEditMessage = useCallback(
