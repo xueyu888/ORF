@@ -147,7 +147,6 @@ export function ChatThreadPanel({
         onRetryPending={onRetryPending}
         onSave={onSave}
         onSaveEdit={onSaveEdit}
-        onThread={() => undefined}
         reactionPickerSignal={reactionPickerRequest.messageId === thread.rootMessage.id ? reactionPickerRequest.signal : undefined}
         usersById={usersById}
       />
@@ -180,7 +179,6 @@ export function ChatThreadPanel({
               onRetryPending={onRetryPending}
               onSave={onSave}
               onSaveEdit={onSaveEdit}
-              onThread={() => undefined}
               reactionPickerSignal={reactionPickerRequest.messageId === reply.id ? reactionPickerRequest.signal : undefined}
               usersById={usersById}
             />

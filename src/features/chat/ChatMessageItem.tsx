@@ -32,7 +32,7 @@ type ChatMessageItemProps = {
   onRetryPending?: (message: ChatMessage) => void;
   onSave?: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
-  onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
+  onThread?: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
   reactionPickerSignal?: number;
   usersById: Map<string, ChatUser>;
 };
@@ -158,12 +158,14 @@ export function ChatMessageItem({
     }
   };
   const handleOpenThreadClick = (event: MouseEvent<HTMLElement>) => {
+    if (!onThread) return;
     if (editing || message.deletedAt || deliveryStatus) return;
     if (isInteractiveMessageTarget(event.target) || hasSelectedMessageText(event.currentTarget)) return;
     onThread(message.rootMessageId ?? message.id);
   };
   const handleOpenThreadKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
+    if (!onThread) return;
     if (editing || message.deletedAt || deliveryStatus || isInteractiveMessageTarget(event.target)) return;
     event.preventDefault();
     onThread(message.rootMessageId ?? message.id);
@@ -183,9 +185,9 @@ export function ChatMessageItem({
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
-      onClick={handleOpenThreadClick}
-      onKeyDown={handleOpenThreadKeyDown}
-      tabIndex={!editing && !message.deletedAt && !deliveryStatus ? 0 : undefined}
+      onClick={onThread ? handleOpenThreadClick : undefined}
+      onKeyDown={onThread ? handleOpenThreadKeyDown : undefined}
+      tabIndex={onThread && !editing && !message.deletedAt && !deliveryStatus ? 0 : undefined}
     >
       {compact ? (
         <div className="orf-chat-message-compact-time" title={formatDateTime(message.createdAt)}>{formatTime(message.createdAt)}</div>
@@ -279,7 +281,7 @@ export function ChatMessageItem({
                   </button>
                 );
               })}
-              {!message.rootMessageId && message.replyCount > 0 && (
+              {onThread && !message.rootMessageId && message.replyCount > 0 && (
                 <button type="button" className="orf-chat-thread-summary" onClick={() => onThread(message.id)}>
                   <Reply className="h-3.5 w-3.5" />
                   {message.replyCount} 条回复
@@ -308,7 +310,7 @@ export function ChatMessageItem({
             <IconButton icon={Smile} label="添加反应" onClick={() => setEmojiOpen((open) => !open)} />
             {emojiOpen && <ChatReactionPicker anchorRef={emojiAnchorRef} onClose={() => setEmojiOpen(false)} onSelect={selectReaction} />}
           </div>
-          {!message.rootMessageId && (
+          {onThread && !message.rootMessageId && (
             <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id, { focusComposer: true })} />
           )}
           {onSave && (
