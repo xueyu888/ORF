@@ -54,7 +54,7 @@ export function FeedbackInboxPage() {
   };
 
   return (
-    <div className="bounty-hall-page feedback-issue-page">
+    <div className="bounty-hall-page orf-workbench-surface feedback-issue-page">
       <header className="feedback-issue-header">
         <div className="feedback-issue-title-block">
           <span className="bounty-page-eyebrow">REPORT / TEAM ISSUE BOARD</span>
