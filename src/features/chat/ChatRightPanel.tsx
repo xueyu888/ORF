@@ -1,7 +1,5 @@
 import { clsx } from "clsx";
 import {
-  Bell,
-  BellOff,
   Bookmark,
   FileText,
   Image as ImageIcon,
@@ -12,17 +10,14 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Avatar, Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatChannel, ChatChannelType, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../../types/orf";
-import { ChatComposer } from "./ChatComposer";
-import { ChatMessageItem } from "./ChatMessageItem";
-import { scrollChatFeedToLatest, scrollChatFeedToMessage } from "./chatFeedScroll";
 import { formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
-import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import type { ChatDraft } from "./chatModels";
 import { formatPresence, isChatUserOnline } from "./chatPresence";
+import { ChatThreadPanel } from "./ChatThreadPanel";
 
 export type ActivePanel = "thread" | "threads" | "info" | "search" | "pins" | "saved" | null;
 export type ChatSearchScope = "all" | "current";
@@ -87,7 +82,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       </div>
       {props.activePanel === "thread" && (
         props.thread ? (
-          <ThreadPanel
+          <ChatThreadPanel
             canPin={props.canManage}
             currentUserId={props.currentUserId}
             focusMessageId={props.threadFocusMessageId}
@@ -211,118 +206,6 @@ function ThreadInboxPanel({
           </small>
         </button>
       ))}
-    </div>
-  );
-}
-
-function ThreadPanel({
-  onAttachmentPreview,
-  canPin,
-  currentUserId,
-  focusMessageId,
-  onCopyLink,
-  onDelete,
-  onDraftStateChange,
-  onEdit,
-  onMarkUnread,
-  onPin,
-  onReaction,
-  onSave,
-  onSend,
-  onToggleFollow,
-  onTyping,
-  thread,
-  users,
-  usersById,
-}: {
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
-  canPin: boolean;
-  currentUserId?: string;
-  focusMessageId: string | null;
-  onCopyLink: (message: ChatMessage) => void;
-  onDelete: (message: ChatMessage) => void;
-  onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
-  onEdit: (message: ChatMessage) => void;
-  onMarkUnread: (message: ChatMessage) => void;
-  onPin: (message: ChatMessage) => void;
-  onReaction: (message: ChatMessage, emojiName: string) => void;
-  onSave: (message: ChatMessage) => void;
-  onSend: (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => Promise<void>;
-  onToggleFollow: (following: boolean) => void;
-  onTyping: () => void;
-  thread: ChatThread;
-  users: ChatUser[];
-  usersById: Map<string, ChatUser>;
-}) {
-  const threadPanelRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    window.requestAnimationFrame(() => {
-      const element = threadPanelRef.current;
-      if (!element) return;
-      if (focusMessageId) {
-        if (scrollChatFeedToMessage(element, focusMessageId, { behavior: "smooth", offset: 20 })) return;
-      }
-      scrollChatFeedToLatest(element, "smooth");
-    });
-  }, [focusMessageId, thread.replies.length, thread.rootMessage.id]);
-
-  return (
-    <div className="orf-chat-thread-panel" ref={threadPanelRef}>
-      <ChatMessageItem
-        canPin={canPin}
-        currentUserId={currentUserId}
-        focused={focusMessageId === thread.rootMessage.id}
-        message={thread.rootMessage}
-        onAttachmentPreview={onAttachmentPreview}
-        onCopyLink={onCopyLink}
-        onDelete={onDelete}
-        onEdit={onEdit}
-        onMarkUnread={onMarkUnread}
-        onPin={onPin}
-        onReaction={onReaction}
-        onSave={onSave}
-        onThread={() => undefined}
-        usersById={usersById}
-      />
-      <button type="button" className="orf-chat-follow-button" onClick={() => onToggleFollow(!thread.following)}>
-        {thread.following ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-        {thread.following ? "取消关注话题" : "关注话题"}
-      </button>
-      <div className="orf-chat-thread-replies">
-        {thread.replies.map((reply, index) => {
-          const compact = shouldCompactChatMessage(thread.replies[index - 1], reply);
-          return (
-            <ChatMessageItem
-              canPin={canPin}
-              compact={compact}
-              currentUserId={currentUserId}
-              key={reply.id}
-              focused={focusMessageId === reply.id}
-              message={reply}
-              onAttachmentPreview={onAttachmentPreview}
-              onCopyLink={onCopyLink}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onMarkUnread={onMarkUnread}
-              onPin={onPin}
-              onReaction={onReaction}
-              onSave={onSave}
-              onThread={() => undefined}
-              usersById={usersById}
-            />
-          );
-        })}
-      </div>
-      <ChatComposer
-        channelId={thread.rootMessage.channelId}
-        mentionableUsers={users}
-        onDraftStateChange={onDraftStateChange}
-        onSend={onSend}
-        onTyping={onTyping}
-        parentMessageId={thread.replies.at(-1)?.id ?? thread.rootMessage.id}
-        rootMessageId={thread.rootMessage.id}
-      />
     </div>
   );
 }
