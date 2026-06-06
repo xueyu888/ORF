@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   getChatMessageContext,
   getChatMessages,
@@ -53,6 +53,30 @@ type UseChatFeedStateInput = {
   onThreadTarget: (target: ChatFeedThreadTarget) => void;
   requestedMessageId: string | null;
 };
+
+function runChatFeedScrollIntent(tryScroll: () => boolean, onDone: () => void, attempts = 4) {
+  let cancelled = false;
+  let frame: number | null = null;
+  let remainingAttempts = Math.max(1, attempts);
+
+  const run = () => {
+    if (cancelled) return;
+    const scrolled = tryScroll();
+    remainingAttempts -= 1;
+    if (scrolled || remainingAttempts <= 0) {
+      onDone();
+      return;
+    }
+    frame = window.requestAnimationFrame(run);
+  };
+
+  run();
+
+  return () => {
+    cancelled = true;
+    if (frame !== null) window.cancelAnimationFrame(frame);
+  };
+}
 
 export function useChatFeedState({
   activeChannel,
@@ -498,24 +522,24 @@ export function useChatFeedState({
     requestedMessageId,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return undefined;
-    const timer = window.setTimeout(() => {
-      setFollowingLatest(false);
-      scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "smooth", block: "center" });
-      onRequestedMessageConsumed();
-    }, 120);
-    return () => window.clearTimeout(timer);
+    setFollowingLatest(false);
+    return runChatFeedScrollIntent(
+      () => scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "smooth", block: "center" }),
+      onRequestedMessageConsumed,
+    );
   }, [messages, onRequestedMessageConsumed, requestedMessageId, setFollowingLatest]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pendingUnreadScrollRef.current || messagesLoading) return undefined;
-    const timer = window.setTimeout(() => {
-      setFollowingLatest(false);
-      scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" });
-      pendingUnreadScrollRef.current = false;
-    }, 120);
-    return () => window.clearTimeout(timer);
+    setFollowingLatest(false);
+    return runChatFeedScrollIntent(
+      () => scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" }),
+      () => {
+        pendingUnreadScrollRef.current = false;
+      },
+    );
   }, [messages, messagesLoading, setFollowingLatest]);
 
   const loadOlderMessages = useCallback(async () => {

@@ -1,4 +1,4 @@
-import { type RefObject, useCallback, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { isChatFeedNearLatest, scrollChatFeedToLatest } from "./chatFeedScroll";
 
 type UseChatLatestScrollStickinessInput<T extends HTMLElement> = {
@@ -45,7 +45,7 @@ export function useChatLatestScrollStickiness<T extends HTMLElement>({
     return nearLatest;
   }, [scrollRef]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const behavior = pendingLatestScrollRef.current;
     if (!behavior || disabled) return undefined;
     let cancelled = false;
