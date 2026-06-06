@@ -1,4 +1,3 @@
-import { createHash, randomUUID } from "node:crypto";
 import type { Readable } from "node:stream";
 import type {
   ChatAttachment,
@@ -6,7 +5,6 @@ import type {
   ChatChannel,
   ChatChannelMember,
   ChatChannelType,
-  ChatMemberRole,
   ChatMessageContext,
   ChatMessage,
   ChatReaction,
@@ -14,266 +12,46 @@ import type {
   ChatThread,
   ChatThreadSummary,
   ChatUser,
-  UserRole,
-  UserStatus,
 } from "../../src/types/orf";
 import { pool } from "../db/client";
 import { env } from "../env";
 import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
 import { objectStorage } from "../storage/objectStorage";
-import { avatarUrlForUser, getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
+import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { createNotifications } from "./notificationRepository";
-import type { RuntimeScope } from "./runtimeScope";
-import { runtimeScopeStorageId } from "./runtimeScope";
+import {
+  CHAT_ATTACHMENT_TTL_MS,
+  DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME,
+  DEFAULT_PUBLIC_CHANNEL_NAME,
+  type AttachmentRow,
+  type ChannelMemberRow,
+  type ChannelRow,
+  type ChatActor,
+  type MessageCollectionRow,
+  type MessageRow,
+  type Outcome,
+  type ReactionRow,
+  type UserRow,
+  chatAttachmentContentUrl,
+  displayNameForChannel,
+  extractMentionUserIds,
+  iso,
+  makeChatAttachmentId,
+  makeId,
+  normalizeChannelName,
+  normalizeMimeType,
+  nowIso,
+  ok,
+  previewText,
+  safePathSegment,
+  stableConversationName,
+  storageTeamId,
+  toChannelMember,
+  toChatAttachment,
+  toChatUser,
+} from "./chatRepositoryModel";
 
-export type ChatActor = {
-  canCreatePrivateChannel: boolean;
-  canCreatePublicChannel: boolean;
-  canManageAnyChannel: boolean;
-  canManageAnyMembers: boolean;
-  canRead: boolean;
-  canWrite: boolean;
-  id: string;
-  name: string;
-  role: UserRole;
-  scope: RuntimeScope;
-};
-
-type Outcome<T> =
-  | ({ status: "ok" } & T)
-  | { status: "notFound" }
-  | { status: "forbidden" }
-  | { status: "invalid" }
-  | { status: "conflict" }
-  | { status: "tooLarge" };
-
-type ChannelRow = {
-  archived_at: Date | string | null;
-  archived_by: string | null;
-  created_at: Date | string;
-  created_by: string | null;
-  display_name: string;
-  header: string;
-  id: string;
-  name: string | null;
-  purpose: string;
-  type: ChatChannelType;
-  updated_at: Date | string;
-};
-
-type ChannelMemberRow = {
-  channel_id: string;
-  favorite: boolean;
-  joined_at: Date | string;
-  last_read_at: Date | string | null;
-  last_read_message_id: string | null;
-  last_viewed_at: Date | string | null;
-  manually_unread: boolean;
-  muted: boolean;
-  role: ChatMemberRole;
-  user_id: string;
-};
-
-type MessageRow = {
-  author_avatar_object_key: string | null;
-  author_avatar_updated_at: Date | string | null;
-  author_name: string;
-  author_user_id: string;
-  body: string;
-  channel_id: string;
-  created_at: Date | string;
-  deleted_at: Date | string | null;
-  deleted_by: string | null;
-  edited_at: Date | string | null;
-  id: string;
-  parent_message_id: string | null;
-  root_message_id: string | null;
-  updated_at: Date | string;
-};
-
-type AttachmentRow = {
-  created_at: Date | string;
-  file_name: string;
-  file_size: number;
-  height: number | null;
-  id: string;
-  message_id: string | null;
-  mime_type: string;
-  object_key: string;
-  width: number | null;
-};
-
-type ReactionRow = {
-  emoji_name: string;
-  message_id: string;
-  user_id: string;
-};
-
-type MessageCollectionRow = {
-  message_id: string;
-  pinned_at: Date | string | null;
-  pinned_by: string | null;
-  saved_at: Date | string | null;
-};
-
-type UserRow = {
-  avatar_object_key: string | null;
-  avatar_updated_at: Date | string | null;
-  email: string | null;
-  id: string;
-  last_online_at: Date | string | null;
-  name: string;
-  role: string;
-  status: UserStatus | null;
-};
-
-const DEFAULT_PUBLIC_CHANNEL_NAME = "orf-town-square";
-const DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME = "ORF 全员频道";
-const CHAT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
-const CHAT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
-
-let idCounter = 0;
-let lastNowMs = 0;
-
-function nowIso() {
-  const nextNowMs = Math.max(Date.now(), lastNowMs + 1);
-  lastNowMs = nextNowMs;
-  return new Date(nextNowMs).toISOString();
-}
-
-function iso(value: Date | string | null | undefined) {
-  if (!value) return null;
-  return value instanceof Date ? value.toISOString() : value;
-}
-
-function nextCounter() {
-  idCounter = (idCounter + 1) % Number.MAX_SAFE_INTEGER;
-  return idCounter.toString(36);
-}
-
-function makeId(prefix: string) {
-  return `${prefix}-${Date.now()}-${nextCounter()}-${randomUUID()}`;
-}
-
-function makeChatAttachmentId() {
-  return `chatt_${Date.now()}_${nextCounter()}_${randomUUID()}`;
-}
-
-function storageTeamId(actor: ChatActor) {
-  return runtimeScopeStorageId(actor.scope);
-}
-
-function normalizeTeamRole(role: string): UserRole {
-  return role === "admin" ? "admin" : "member";
-}
-
-function toChatUser(row: UserRow): ChatUser {
-  return {
-    id: row.id,
-    name: row.name,
-    email: row.email ?? "",
-    role: normalizeTeamRole(row.role),
-    status: row.status ?? "active",
-    avatarUrl: avatarUrlForUser({
-      id: row.id,
-      avatarObjectKey: row.avatar_object_key,
-      avatarUpdatedAt: iso(row.avatar_updated_at),
-    }),
-    lastOnlineAt: iso(row.last_online_at),
-  };
-}
-
-function safePathSegment(value: string) {
-  return value.trim().replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "file";
-}
-
-function normalizeMimeType(value: string) {
-  return value.split(";")[0]?.trim().toLowerCase() || "application/octet-stream";
-}
-
-function normalizeChannelName(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/['"`]/g, "")
-    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-}
-
-function stableConversationName(prefix: string, userIds: string[]) {
-  const digest = createHash("sha1").update(userIds.slice().sort().join(":")).digest("hex").slice(0, 24);
-  return `${prefix}-${digest}`;
-}
-
-function chatAttachmentContentUrl(id: string) {
-  return `/api/chat/attachments/${encodeURIComponent(id)}/content`;
-}
-
-function toChatAttachment(row: AttachmentRow): ChatAttachment {
-  return {
-    id: row.id,
-    fileName: row.file_name,
-    mimeType: row.mime_type,
-    fileSize: row.file_size,
-    contentUrl: chatAttachmentContentUrl(row.id),
-    width: row.width,
-    height: row.height,
-    createdAt: iso(row.created_at) ?? nowIso(),
-  };
-}
-
-function toChannelMember(row: ChannelMemberRow): ChatChannelMember {
-  return {
-    userId: row.user_id,
-    role: row.role,
-    favorite: row.favorite,
-    muted: row.muted,
-    manuallyUnread: row.manually_unread,
-    joinedAt: iso(row.joined_at) ?? nowIso(),
-    lastViewedAt: iso(row.last_viewed_at),
-    lastReadAt: iso(row.last_read_at),
-    lastReadMessageId: row.last_read_message_id,
-  };
-}
-
-function displayNameForChannel(row: ChannelRow, members: ChatChannelMember[], usersById: Map<string, ChatUser>, actor: ChatActor) {
-  if (row.type !== "direct" && row.type !== "group") {
-    return row.display_name;
-  }
-
-  const others = members
-    .map((member) => usersById.get(member.userId))
-    .filter((user): user is ChatUser => user !== undefined && user.id !== actor.id)
-    .map((user) => user.name);
-  if (others.length > 0) {
-    return others.join(", ");
-  }
-  return row.type === "direct" ? `${actor.name} 的私聊` : row.display_name;
-}
-
-function extractMentionUserIds(body: string) {
-  const ids = new Set<string>();
-  let match: RegExpExecArray | null;
-  CHAT_MENTION_TOKEN_PATTERN.lastIndex = 0;
-  while ((match = CHAT_MENTION_TOKEN_PATTERN.exec(body)) !== null) {
-    const rawUserId = match[2] ? decodeURIComponent(match[2]) : "";
-    if (rawUserId.trim()) ids.add(rawUserId.trim());
-  }
-  return Array.from(ids);
-}
-
-function previewText(body: string) {
-  return body
-    .replace(CHAT_MENTION_TOKEN_PATTERN, (_match, label) => `@${String(label).trim() || "成员"}`)
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 160);
-}
-
-function ok<T>(payload: T): Outcome<T> {
-  return { status: "ok", ...payload };
-}
+export type { ChatActor } from "./chatRepositoryModel";
 
 async function ensureDefaultPublicChannel(teamId: string) {
   const now = nowIso();
