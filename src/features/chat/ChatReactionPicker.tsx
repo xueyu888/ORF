@@ -1,5 +1,5 @@
 import { Search } from "lucide-react";
-import { type CSSProperties, type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type RefObject, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { searchChatReactionOptions } from "./chatReactions";
 
@@ -16,6 +16,7 @@ type PopoverPosition = {
 
 export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactionPickerProps) {
   const [query, setQuery] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(0);
   const [position, setPosition] = useState<PopoverPosition | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -47,6 +48,46 @@ export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactio
     inputRef.current?.focus();
   }, []);
 
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [query]);
+
+  useEffect(() => {
+    setSelectedIndex((index) => Math.min(index, Math.max(0, options.length - 1)));
+  }, [options.length]);
+
+  const moveSelection = (delta: number) => {
+    if (options.length === 0) return;
+    setSelectedIndex((index) => (index + delta + options.length) % options.length);
+  };
+
+  const handlePickerKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      moveSelection(1);
+      return;
+    }
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveSelection(-1);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveSelection(6);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveSelection(-6);
+      return;
+    }
+    if (event.key === "Enter" && options.length > 0) {
+      event.preventDefault();
+      onSelect(options[selectedIndex]?.emojiName ?? options[0].emojiName);
+    }
+  };
+
   useLayoutEffect(() => {
     updatePosition();
     window.addEventListener("resize", updatePosition);
@@ -68,7 +109,7 @@ export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactio
         onClose();
       }
     };
-    const closeOnEscape = (event: KeyboardEvent) => {
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
       }
@@ -88,7 +129,7 @@ export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactio
   };
 
   return createPortal(
-    <div className="orf-chat-emoji-popover" ref={panelRef} role="dialog" aria-label="添加反应" style={style}>
+    <div className="orf-chat-emoji-popover" ref={panelRef} role="dialog" aria-label="添加反应" style={style} onKeyDown={handlePickerKeyDown}>
       <label className="orf-chat-emoji-search">
         <Search className="h-3.5 w-3.5" />
         <input
@@ -100,13 +141,15 @@ export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactio
       </label>
       <div className="orf-chat-emoji-grid">
         {options.length > 0 ? (
-          options.map((option) => (
+          options.map((option, index) => (
             <button
               type="button"
-              className="orf-chat-emoji-option"
+              className={selectedIndex === index ? "orf-chat-emoji-option orf-chat-emoji-option-active" : "orf-chat-emoji-option"}
               key={option.emojiName}
               title={option.label}
               aria-label={option.label}
+              aria-selected={selectedIndex === index}
+              onMouseEnter={() => setSelectedIndex(index)}
               onClick={() => onSelect(option.emojiName)}
             >
               {option.symbol}

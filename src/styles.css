@@ -9772,6 +9772,7 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-emoji-option:hover,
+.orf-chat-emoji-option-active,
 .orf-chat-emoji-option:focus-visible {
   background: var(--orf-accent-soft);
   outline: 0;
