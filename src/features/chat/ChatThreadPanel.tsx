@@ -121,69 +121,71 @@ export function ChatThreadPanel({
   }, [currentUserId, focusMessageId, thread.replies, thread.replies.length, thread.rootMessage.id]);
 
   return (
-    <div
-      className="orf-chat-thread-panel"
-      ref={threadPanelRef}
-      onScroll={() => {
-        wasNearLatestRef.current = isChatFeedNearLatest(threadPanelRef.current);
-      }}
-    >
-      <ChatMessageItem
-        canPin={canPin}
-        currentUserId={currentUserId}
-        editing={editingMessageId === thread.rootMessage.id}
-        focused={focusMessageId === thread.rootMessage.id}
-        mentionableUsers={users}
-        message={thread.rootMessage}
-        onAttachmentPreview={onAttachmentPreview}
-        onCancelEdit={onCancelEdit}
-        onCopyLink={onCopyLink}
-        onDelete={onDelete}
-        onEdit={onEdit}
-        onMarkUnread={onMarkUnread}
-        onPin={onPin}
-        onReaction={onReaction}
-        onRemovePending={onRemovePending}
-        onRetryPending={onRetryPending}
-        onSave={onSave}
-        onSaveEdit={onSaveEdit}
-        reactionPickerSignal={reactionPickerRequest.messageId === thread.rootMessage.id ? reactionPickerRequest.signal : undefined}
-        usersById={usersById}
-      />
-      <button type="button" className="orf-chat-follow-button" onClick={() => onToggleFollow(!thread.following)}>
-        {thread.following ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
-        {thread.following ? "取消关注话题" : "关注话题"}
-      </button>
-      <div className="orf-chat-thread-replies">
-        {thread.replies.map((reply, index) => {
-          const compact = shouldCompactChatMessage(thread.replies[index - 1], reply);
-          return (
-            <ChatMessageItem
-              canPin={canPin}
-              compact={compact}
-              currentUserId={currentUserId}
-              editing={editingMessageId === reply.id}
-              key={reply.id}
-              focused={focusMessageId === reply.id}
-              mentionableUsers={users}
-              message={reply}
-              onAttachmentPreview={onAttachmentPreview}
-              onCancelEdit={onCancelEdit}
-              onCopyLink={onCopyLink}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onMarkUnread={onMarkUnread}
-              onPin={onPin}
-              onReaction={onReaction}
-              onRemovePending={onRemovePending}
-              onRetryPending={onRetryPending}
-              onSave={onSave}
-              onSaveEdit={onSaveEdit}
-              reactionPickerSignal={reactionPickerRequest.messageId === reply.id ? reactionPickerRequest.signal : undefined}
-              usersById={usersById}
-            />
-          );
-        })}
+    <div className="orf-chat-thread-panel">
+      <div
+        className="orf-chat-thread-scroll"
+        ref={threadPanelRef}
+        onScroll={() => {
+          wasNearLatestRef.current = isChatFeedNearLatest(threadPanelRef.current);
+        }}
+      >
+        <ChatMessageItem
+          canPin={canPin}
+          currentUserId={currentUserId}
+          editing={editingMessageId === thread.rootMessage.id}
+          focused={focusMessageId === thread.rootMessage.id}
+          mentionableUsers={users}
+          message={thread.rootMessage}
+          onAttachmentPreview={onAttachmentPreview}
+          onCancelEdit={onCancelEdit}
+          onCopyLink={onCopyLink}
+          onDelete={onDelete}
+          onEdit={onEdit}
+          onMarkUnread={onMarkUnread}
+          onPin={onPin}
+          onReaction={onReaction}
+          onRemovePending={onRemovePending}
+          onRetryPending={onRetryPending}
+          onSave={onSave}
+          onSaveEdit={onSaveEdit}
+          reactionPickerSignal={reactionPickerRequest.messageId === thread.rootMessage.id ? reactionPickerRequest.signal : undefined}
+          usersById={usersById}
+        />
+        <button type="button" className="orf-chat-follow-button" onClick={() => onToggleFollow(!thread.following)}>
+          {thread.following ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+          {thread.following ? "取消关注话题" : "关注话题"}
+        </button>
+        <div className="orf-chat-thread-replies">
+          {thread.replies.map((reply, index) => {
+            const compact = shouldCompactChatMessage(thread.replies[index - 1], reply);
+            return (
+              <ChatMessageItem
+                canPin={canPin}
+                compact={compact}
+                currentUserId={currentUserId}
+                editing={editingMessageId === reply.id}
+                key={reply.id}
+                focused={focusMessageId === reply.id}
+                mentionableUsers={users}
+                message={reply}
+                onAttachmentPreview={onAttachmentPreview}
+                onCancelEdit={onCancelEdit}
+                onCopyLink={onCopyLink}
+                onDelete={onDelete}
+                onEdit={onEdit}
+                onMarkUnread={onMarkUnread}
+                onPin={onPin}
+                onReaction={onReaction}
+                onRemovePending={onRemovePending}
+                onRetryPending={onRetryPending}
+                onSave={onSave}
+                onSaveEdit={onSaveEdit}
+                reactionPickerSignal={reactionPickerRequest.messageId === reply.id ? reactionPickerRequest.signal : undefined}
+                usersById={usersById}
+              />
+            );
+          })}
+        </div>
       </div>
       <ChatComposer
         channelId={thread.rootMessage.channelId}

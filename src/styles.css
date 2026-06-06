@@ -10106,7 +10106,6 @@ button.orf-chat-image-attachment {
   justify-content: space-between;
 }
 
-.orf-chat-thread-panel,
 .orf-chat-info-panel,
 .orf-chat-search-panel,
 .orf-chat-collection-panel,
@@ -10127,8 +10126,24 @@ button.orf-chat-image-attachment {
 
 .orf-chat-thread-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(120px, 1fr) auto;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+.orf-chat-thread-scroll {
+  display: grid;
+  min-height: 0;
+  align-content: start;
   gap: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+}
+
+.orf-chat-thread-panel > .orf-chat-composer {
+  border-top: 1px solid var(--orf-border);
+  padding: 10px 12px 12px;
 }
 
 .orf-chat-thread-panel .orf-chat-message {
