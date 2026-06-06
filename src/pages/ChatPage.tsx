@@ -10,6 +10,7 @@ import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import {
+  chatMessageDeliveryStatus,
   chatMessagePendingSend,
   createPendingChatMessage,
   findMatchingPendingChatMessage,
@@ -490,6 +491,15 @@ export function ChatPage() {
     [removePendingMessageFromFeed, removeThreadPendingMessage],
   );
 
+  const handleReplyToLatestMessage = useCallback(() => {
+    const latestRootMessage = [...messages]
+      .reverse()
+      .find((message) => !message.rootMessageId && !message.deletedAt && !chatMessageDeliveryStatus(message));
+    if (latestRootMessage) {
+      void openThread(latestRootMessage.id, { focusComposer: true });
+    }
+  }, [messages, openThread]);
+
   const handleEditMessage = useCallback(
     async (message: ChatMessage, body: string) => {
       try {
@@ -696,6 +706,7 @@ export function ChatPage() {
               disabled={!bootstrap.permissions.canWrite}
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
+              onReplyToLatest={handleReplyToLatestMessage}
               onSend={handleSendMessage}
               onTyping={publishTyping}
             />

@@ -26,6 +26,7 @@ type ChatDraftEditorProps = {
   mentionableUsers: ChatUser[];
   onChange: (draft: ChatDraft) => void;
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
+  onReplyToLatest?: () => void;
   onSubmit?: (draft: ChatDraft) => Promise<boolean | void> | boolean | void;
   onTyping?: () => void;
   placeholder?: string;
@@ -85,6 +86,7 @@ export function ChatDraftEditor({
   mentionableUsers,
   onChange,
   onPaste,
+  onReplyToLatest,
   onSubmit,
   onTyping,
   placeholder,
@@ -265,6 +267,14 @@ export function ChatDraftEditor({
           next.focus();
           next.setSelectionRange(cursor, cursor);
         }, 0);
+        return;
+      }
+    }
+    if (event.key === "ArrowUp" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !draft.text.trim()) {
+      if (onReplyToLatest) {
+        event.preventDefault();
+        event.stopPropagation();
+        onReplyToLatest();
         return;
       }
     }

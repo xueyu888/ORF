@@ -38,6 +38,7 @@ type ChatComposerProps = {
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
+  onReplyToLatest?: () => void;
   onSend: ChatSendHandler;
   onTyping?: (channelId: string) => void;
   parentMessageId?: string | null;
@@ -50,6 +51,7 @@ export function ChatComposer({
   focusSignal,
   mentionableUsers,
   onDraftStateChange,
+  onReplyToLatest,
   onSend,
   onTyping,
   rootMessageId,
@@ -241,6 +243,7 @@ export function ChatComposer({
         mentionableUsers={mentionableUsers}
         onChange={setDraft}
         onPaste={handlePaste}
+        onReplyToLatest={!rootMessageId && attachmentItems.length === 0 ? onReplyToLatest : undefined}
         onSubmit={submit}
         onTyping={() => onTyping?.(channelId)}
         placeholder={disabled ? "当前没有发送权限" : rootMessageId ? "回复该话题..." : "发送消息..."}
