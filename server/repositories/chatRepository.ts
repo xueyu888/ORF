@@ -413,6 +413,7 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
         WHERE m.channel_id = ANY($1::text[])
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
+          AND m.root_message_id IS NULL
           AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
         GROUP BY m.channel_id
       `,
@@ -426,6 +427,7 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
         WHERE m.channel_id = ANY($1::text[])
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
+          AND m.root_message_id IS NULL
           AND m.body LIKE $3
           AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
         GROUP BY m.channel_id
@@ -1734,7 +1736,9 @@ export async function markChatChannelRead(channelId: string, actor: ChatActor): 
     `
       SELECT id
       FROM chat_messages
-      WHERE channel_id = $1 AND deleted_at IS NULL
+      WHERE channel_id = $1
+        AND root_message_id IS NULL
+        AND deleted_at IS NULL
       ORDER BY created_at DESC
       LIMIT 1
     `,
@@ -1770,18 +1774,21 @@ export async function setChatChannelUnread(
   if (input.messageId) {
     const message = await getRawMessage(actor, input.messageId);
     if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
+    const rootMessage = message.root_message_id ? await getRawMessage(actor, message.root_message_id) : message;
+    if (!rootMessage || rootMessage.channel_id !== input.channelId || rootMessage.root_message_id !== null) return { status: "notFound" };
     const { rows } = await pool.query<{ created_at: Date | string; id: string }>(
       `
         SELECT id, created_at
         FROM chat_messages
         WHERE team_id = $1
           AND channel_id = $2
+          AND root_message_id IS NULL
           AND deleted_at IS NULL
           AND created_at < $3
         ORDER BY created_at DESC
         LIMIT 1
       `,
-      [storageTeamId(actor), input.channelId, message.created_at],
+      [storageTeamId(actor), input.channelId, rootMessage.created_at],
     );
     await pool.query(
       `
