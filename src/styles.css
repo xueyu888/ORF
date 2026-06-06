@@ -9688,6 +9688,22 @@ button.orf-chat-image-attachment {
   font-weight: 700;
 }
 
+.orf-chat-search-filters {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+
+.orf-chat-search-filters .orf-chat-segmented {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.orf-chat-search-filters .orf-chat-segmented button {
+  min-width: max-content;
+  padding-inline: 10px;
+}
+
 .orf-chat-search-results {
   display: grid;
   gap: 8px;

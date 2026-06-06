@@ -103,10 +103,12 @@ import {
   uploadChatAttachment,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../types/orf";
+import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatChannelType, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../types/orf";
 import type { ChatRealtimeEvent } from "../types/realtime";
 
 type ActivePanel = "thread" | "threads" | "info" | "search" | "pins" | "saved" | null;
+type ChatSearchScope = "all" | "current";
+type ChatSearchTypeFilter = ChatChannelType | "all";
 
 type TypingState = {
   expiresAt: string;
@@ -233,7 +235,10 @@ export function ChatPage() {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
-  const [query, setQuery] = useState("");
+  const [channelQuery, setChannelQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchScope, setSearchScope] = useState<ChatSearchScope>("all");
+  const [searchType, setSearchType] = useState<ChatSearchTypeFilter>("all");
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
   const [searchResults, setSearchResults] = useState<ChatSearchResult[]>([]);
   const [collectionResults, setCollectionResults] = useState<ChatSearchResult[]>([]);
@@ -732,16 +737,23 @@ export function ChatPage() {
   }, [notify]);
 
   const handleSearch = useCallback(
-    async (value = query) => {
+    async (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => {
+      const value = input?.query ?? searchQuery;
+      const scope = input?.scope ?? searchScope;
+      const type = input?.type ?? searchType;
       if (!value.trim()) {
         setSearchResults([]);
         return;
       }
       setActivePanel("search");
-      const response = await searchChat({ q: value });
+      const response = await searchChat({
+        q: value,
+        channelId: scope === "current" ? activeChannel?.id : undefined,
+        type: type === "all" ? undefined : type,
+      });
       setSearchResults(response.results);
     },
-    [query],
+    [activeChannel?.id, searchQuery, searchScope, searchType],
   );
 
   if (loading) {
@@ -767,8 +779,8 @@ export function ChatPage() {
         onCreateChannel={() => setModal("channel")}
         onOpenChannel={(channelId) => navigate(`/chat/${encodeURIComponent(channelId)}`)}
         onOpenConversation={() => setModal("conversation")}
-        query={query}
-        setQuery={setQuery}
+        query={channelQuery}
+        setQuery={setChannelQuery}
         users={bootstrap.users}
       />
       <section className="orf-chat-main">
@@ -865,19 +877,19 @@ export function ChatPage() {
           }}
           onClose={() => setActivePanel(null)}
           collectionLoading={collectionLoading}
-              collectionResults={collectionResults}
-              threadSummaries={threadSummaries}
-              threadSummariesLoading={threadSummariesLoading}
-              onOpenResult={(result) => {
-                navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.rootMessageId ?? result.message.id)}`);
-              }}
-              onOpenThreadSummary={(summary) => {
-                navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
-                setThreadSummaries((items) => items.map((item) => (
-                  item.rootMessage.id === summary.rootMessage.id ? { ...item, unreadCount: 0, lastViewedAt: new Date().toISOString() } : item
-                )));
-                void openThread(summary.rootMessage.id);
-              }}
+          collectionResults={collectionResults}
+          threadSummaries={threadSummaries}
+          threadSummariesLoading={threadSummariesLoading}
+          onOpenResult={(result) => {
+            navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.rootMessageId ?? result.message.id)}`);
+          }}
+          onOpenThreadSummary={(summary) => {
+            navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
+            setThreadSummaries((items) => items.map((item) => (
+              item.rootMessage.id === summary.rootMessage.id ? { ...item, unreadCount: 0, lastViewedAt: new Date().toISOString() } : item
+            )));
+            void openThread(summary.rootMessage.id);
+          }}
           onPin={handlePinMessage}
           onRemoveMember={async (userId) => {
             const response = await removeChatChannelMemberRequest(activeChannel.id, userId);
@@ -889,9 +901,13 @@ export function ChatPage() {
             const response = await updateChatChannelRequest(activeChannel.id, input);
             applyChannel(response.channel);
           }}
-          searchQuery={query}
+          searchQuery={searchQuery}
+          searchScope={searchScope}
           searchResults={searchResults}
-          setSearchQuery={setQuery}
+          searchType={searchType}
+          setSearchQuery={setSearchQuery}
+          setSearchScope={setSearchScope}
+          setSearchType={setSearchType}
           thread={thread}
           threadLoading={threadLoading}
           users={activeMentionableUsers}
@@ -1635,14 +1651,18 @@ function ChatRightPanel(props: {
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemoveMember: (userId: string) => Promise<void>;
   onSave: (message: ChatMessage) => void;
-  onSearch: (query?: string) => Promise<void>;
+  onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
   onSendThreadReply: (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => Promise<void>;
   onToggleFollow: (following: boolean) => void;
   onTyping: () => void;
   onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;
   searchQuery: string;
+  searchScope: ChatSearchScope;
   searchResults: ChatSearchResult[];
+  searchType: ChatSearchTypeFilter;
   setSearchQuery: (value: string) => void;
+  setSearchScope: (value: ChatSearchScope) => void;
+  setSearchType: (value: ChatSearchTypeFilter) => void;
   thread: ChatThread | null;
   threadLoading: boolean;
   threadSummaries: ChatThreadSummary[];
@@ -1695,8 +1715,12 @@ function ChatRightPanel(props: {
           onOpenResult={props.onOpenResult}
           onSearch={props.onSearch}
           query={props.searchQuery}
+          searchScope={props.searchScope}
+          searchType={props.searchType}
           results={props.searchResults}
           setQuery={props.setSearchQuery}
+          setSearchScope={props.setSearchScope}
+          setSearchType={props.setSearchType}
           usersById={props.usersById}
         />
       )}
@@ -1938,22 +1962,63 @@ function SearchPanel({
   onSearch,
   query,
   results,
+  searchScope,
+  searchType,
   setQuery,
+  setSearchScope,
+  setSearchType,
   usersById,
 }: {
   onOpenResult: (result: ChatSearchResult) => void;
-  onSearch: (query?: string) => Promise<void>;
+  onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
   query: string;
   results: ChatSearchResult[];
+  searchScope: ChatSearchScope;
+  searchType: ChatSearchTypeFilter;
   setQuery: (value: string) => void;
+  setSearchScope: (value: ChatSearchScope) => void;
+  setSearchType: (value: ChatSearchTypeFilter) => void;
   usersById: Map<string, ChatUser>;
 }) {
+  const applyScope = (scope: ChatSearchScope) => {
+    setSearchScope(scope);
+    if (query.trim()) void onSearch({ query, scope, type: searchType });
+  };
+  const applyType = (type: ChatSearchTypeFilter) => {
+    setSearchType(type);
+    if (query.trim()) void onSearch({ query, scope: searchScope, type });
+  };
+
   return (
     <div className="orf-chat-search-panel">
-      <form onSubmit={(event) => { event.preventDefault(); void onSearch(query); }}>
+      <form onSubmit={(event) => { event.preventDefault(); void onSearch({ query }); }}>
         <Search className="h-4 w-4" />
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索可见范围内的消息" />
       </form>
+      <div className="orf-chat-search-filters">
+        <div className="orf-chat-segmented">
+          <button type="button" className={searchScope === "all" ? "active" : ""} onClick={() => applyScope("all")}>全部可见</button>
+          <button type="button" className={searchScope === "current" ? "active" : ""} onClick={() => applyScope("current")}>当前频道</button>
+        </div>
+        <div className="orf-chat-segmented">
+          {[
+            ["all", "全部"],
+            ["public", "公开"],
+            ["private", "私有"],
+            ["direct", "私信"],
+            ["group", "群聊"],
+          ].map(([value, label]) => (
+            <button
+              type="button"
+              className={searchType === value ? "active" : ""}
+              key={value}
+              onClick={() => applyType(value as ChatSearchTypeFilter)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="orf-chat-search-results">
         {results.map((result) => (
           <button type="button" key={result.message.id} onClick={() => onOpenResult(result)}>
