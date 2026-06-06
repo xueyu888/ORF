@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChatThread } from "../../state/apiClient";
-import type { ChatMessage, ChatThread } from "../../types/orf";
+import type { ChatChannel, ChatMessage, ChatThread } from "../../types/orf";
 import { upsertMessage } from "./chatModels";
 import type { ChatFeedThreadTarget } from "./useChatFeedState";
 
 type UseChatThreadStateInput = {
   notify: (message: string) => void;
   onActivateThreadPanel: () => void;
+  onChannelUpdate: (channel: ChatChannel) => void;
 };
 
 export type ChatOpenThreadOptions = {
@@ -14,7 +15,7 @@ export type ChatOpenThreadOptions = {
   focusMessageId?: string | null;
 };
 
-export function useChatThreadState({ notify, onActivateThreadPanel }: UseChatThreadStateInput) {
+export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpdate }: UseChatThreadStateInput) {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
   const [threadComposerFocusSignal, setThreadComposerFocusSignal] = useState(0);
@@ -36,6 +37,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel }: UseChatThr
       try {
         const response = await getChatThread(rootMessageId);
         if (threadRequestIdRef.current !== requestId) return;
+        if (response.channel) onChannelUpdate(response.channel);
         setThread(response.thread);
       } catch (error) {
         if (threadRequestIdRef.current !== requestId) return;
@@ -46,7 +48,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel }: UseChatThr
         if (threadRequestIdRef.current === requestId) setThreadLoading(false);
       }
     },
-    [notify, onActivateThreadPanel],
+    [notify, onActivateThreadPanel, onChannelUpdate],
   );
 
   useEffect(() => {

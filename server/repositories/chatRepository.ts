@@ -771,7 +771,7 @@ export async function getChatUnreadContext(
   return getChatMessageContext({ channelId: input.channelId, limit: input.limit, messageId: targetMessageId }, actor);
 }
 
-export async function getChatThread(rootMessageId: string, actor: ChatActor): Promise<Outcome<{ thread: ChatThread }>> {
+export async function getChatThread(rootMessageId: string, actor: ChatActor): Promise<Outcome<{ channel: ChatChannel; thread: ChatThread }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const root = await getRawMessage(actor, rootMessageId);
   if (!root || root.root_message_id !== null) return { status: "notFound" };
@@ -809,7 +809,16 @@ export async function getChatThread(rootMessageId: string, actor: ChatActor): Pr
     `,
     [rootMessageId, actor.id, now],
   );
+  const updatedChannel = await getVisibleChannel(actor, root.channel_id);
+  if (!updatedChannel) return { status: "notFound" };
+  publishRealtimeChatEvent(storageTeamId(actor), [actor.id], {
+    eventType: "read.changed",
+    channelId: updatedChannel.id,
+    actorUserId: actor.id,
+    channel: updatedChannel,
+  });
   return ok({
+    channel: updatedChannel,
     thread: {
       rootMessage,
       replies: messages.filter((message) => message.rootMessageId === rootMessageId),

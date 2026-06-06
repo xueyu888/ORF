@@ -136,6 +136,7 @@ export function ChatPage() {
   } = useChatThreadState({
     notify,
     onActivateThreadPanel: activateThreadPanel,
+    onChannelUpdate: applyChannel,
   });
 
   const threadChannel = useMemo(() => {
@@ -630,6 +631,7 @@ export function ChatPage() {
           onToggleFollow={async (following) => {
             if (!thread) return;
             const response = await setChatThreadFollowRequest(thread.rootMessage.id, following);
+            if (response.channel) applyChannel(response.channel);
             setThread(response.thread);
           }}
           onAttachmentPreview={setAttachmentPreview}
