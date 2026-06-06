@@ -22,6 +22,7 @@ import {
   chatMessagePageSize,
   createFeedSnapshot,
   currentMembership,
+  isFreshFeedSnapshot,
   prependOlderFeedMessages,
   rememberFeedScroll,
   replaceFeedMessages,
@@ -68,6 +69,7 @@ export function useChatFeedState({
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const olderLoadInFlightRef = useRef(false);
   const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
+  const prefetchRequestsRef = useRef(new Map<string, Promise<boolean>>());
   const activeChannelId = activeChannel?.id ?? null;
   activeChannelIdRef.current = activeChannelId;
   currentUserIdRef.current = currentUserId;
@@ -95,6 +97,14 @@ export function useChatFeedState({
     return isChatFeedNearLatest(messageScrollRef.current);
   }, []);
 
+  const applySnapshotToActiveFeed = useCallback((channelId: string, snapshot: ReturnType<typeof createFeedSnapshot>) => {
+    if (activeChannelIdRef.current !== channelId) return false;
+    setMessages(snapshot.messages);
+    setHasNewerMessages(snapshot.hasNewerMessages);
+    setHasOlderMessages(snapshot.hasOlderMessages);
+    return true;
+  }, []);
+
   const applyMessageToFeed = useCallback((message: ChatMessage) => {
     if (activeChannelIdRef.current === message.channelId) {
       setMessages((items) => {
@@ -117,16 +127,38 @@ export function useChatFeedState({
       const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
       const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
       feedCacheRef.current.set(channelId, snapshot);
-      setMessages(snapshot.messages);
-      setHasNewerMessages(snapshot.hasNewerMessages);
-      setHasOlderMessages(snapshot.hasOlderMessages);
-      requestScrollToLatest(behavior);
+      if (applySnapshotToActiveFeed(channelId, snapshot)) {
+        requestScrollToLatest(behavior);
+      }
     } catch (error) {
-      notify(error instanceof Error ? error.message : "加载最新消息失败");
+      if (activeChannelIdRef.current === channelId) {
+        notify(error instanceof Error ? error.message : "加载最新消息失败");
+      }
     } finally {
-      setMessagesLoading(false);
+      if (activeChannelIdRef.current === channelId) setMessagesLoading(false);
     }
-  }, [notify, requestScrollToLatest]);
+  }, [applySnapshotToActiveFeed, notify, requestScrollToLatest]);
+
+  const prefetchChannelMessages = useCallback((channelId: string) => {
+    if (feedCacheRef.current.has(channelId)) return Promise.resolve(true);
+    const existingRequest = prefetchRequestsRef.current.get(channelId);
+    if (existingRequest) return existingRequest;
+
+    const request = getChatMessages({ channelId, limit: chatMessagePageSize })
+      .then((response) => {
+        const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
+        feedCacheRef.current.set(channelId, snapshot);
+        applySnapshotToActiveFeed(channelId, snapshot);
+        return true;
+      })
+      .catch(() => false)
+      .finally(() => {
+        prefetchRequestsRef.current.delete(channelId);
+      });
+
+    prefetchRequestsRef.current.set(channelId, request);
+    return request;
+  }, [applySnapshotToActiveFeed]);
 
   const applyRealtimeMessageToFeed = useCallback((message: ChatMessage, applyMessageEffects: (message: ChatMessage) => void) => {
     const activeMessageChannelId = activeChannelIdRef.current;
@@ -169,7 +201,10 @@ export function useChatFeedState({
     setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
     setMessagesLoading(!cachedFeed || Boolean(requestedMessageId && !cachedHasRequestedMessage));
     if (cachedFeed) restoreFeedScroll(cachedFeed.scrollTop);
-    if (!requestedMessageId) {
+    if (!requestedMessageId && isFreshFeedSnapshot(cachedFeed)) {
+      setMessagesLoading(false);
+      if (!anchor) requestScrollToLatest("auto");
+    } else if (!requestedMessageId) {
       void getChatMessages({ channelId, limit: chatMessagePageSize })
         .then((response) => {
           if (cancelled) return;
@@ -399,6 +434,7 @@ export function useChatFeedState({
     messagesLoading,
     olderMessagesLoading,
     pendingNewMessageCount,
+    prefetchChannelMessages,
     requestScrollToLatest,
     unreadAnchor,
   };

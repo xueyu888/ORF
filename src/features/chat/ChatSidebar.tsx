@@ -13,6 +13,7 @@ type ChatSidebarProps = {
   onCreateChannel: () => void;
   onOpenChannel: (channelId: string) => void;
   onOpenConversation: () => void;
+  onPreviewChannel: (channelId: string) => void;
   query: string;
   setQuery: (value: string) => void;
   users: ChatUser[];
@@ -26,6 +27,7 @@ export function ChatSidebar({
   onCreateChannel,
   onOpenChannel,
   onOpenConversation,
+  onPreviewChannel,
   query,
   setQuery,
   users,
@@ -38,6 +40,13 @@ export function ChatSidebar({
   const publicChannels = regularChannels.filter((channel) => channel.type === "public");
   const privateChannels = regularChannels.filter((channel) => channel.type === "private");
   const conversations = regularChannels.filter((channel) => channel.type === "direct" || channel.type === "group");
+  const channelGroups: Array<{ channels: ChatChannel[]; title: string }> = [
+    { title: "未读", channels: unreadChannels },
+    { title: "收藏", channels: favorites },
+    { title: "公开频道", channels: publicChannels },
+    { title: "私有频道", channels: privateChannels },
+    { title: "私信", channels: conversations },
+  ];
 
   return (
     <aside className="orf-chat-sidebar">
@@ -57,11 +66,18 @@ export function ChatSidebar({
         新建私聊/群聊
       </button>
       <div className="orf-chat-channel-groups">
-        <ChannelGroup title="未读" channels={unreadChannels} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
-        <ChannelGroup title="收藏" channels={favorites} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
-        <ChannelGroup title="公开频道" channels={publicChannels} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
-        <ChannelGroup title="私有频道" channels={privateChannels} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
-        <ChannelGroup title="私信" channels={conversations} activeChannelId={activeChannelId} currentUserId={currentUserId} draftChannelIds={draftChannelIds} onOpenChannel={onOpenChannel} />
+        {channelGroups.map((group) => (
+          <ChannelGroup
+            activeChannelId={activeChannelId}
+            channels={group.channels}
+            currentUserId={currentUserId}
+            draftChannelIds={draftChannelIds}
+            key={group.title}
+            onOpenChannel={onOpenChannel}
+            onPreviewChannel={onPreviewChannel}
+            title={group.title}
+          />
+        ))}
       </div>
     </aside>
   );
@@ -73,6 +89,7 @@ function ChannelGroup({
   currentUserId,
   draftChannelIds,
   onOpenChannel,
+  onPreviewChannel,
   title,
 }: {
   activeChannelId: string | null;
@@ -80,6 +97,7 @@ function ChannelGroup({
   currentUserId?: string;
   draftChannelIds: Set<string>;
   onOpenChannel: (channelId: string) => void;
+  onPreviewChannel: (channelId: string) => void;
   title: string;
 }) {
   if (channels.length === 0) return null;
@@ -103,6 +121,8 @@ function ChannelGroup({
               membership?.muted && "orf-chat-channel-item-muted",
             )}
             key={channel.id}
+            onFocus={() => onPreviewChannel(channel.id)}
+            onMouseEnter={() => onPreviewChannel(channel.id)}
             onClick={() => onOpenChannel(channel.id)}
           >
             <Icon className="h-4 w-4" />

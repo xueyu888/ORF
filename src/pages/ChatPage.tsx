@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { AttachmentPreview, ChannelModal, ConversationModal, EditMessageDialog } from "../features/chat/ChatDialogs";
@@ -56,6 +56,7 @@ export function ChatPage() {
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
+  const channelOpenRequestIdRef = useRef(0);
   const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
   const focusMessageId = searchParams.get("message");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
@@ -155,6 +156,7 @@ export function ChatPage() {
     messagesLoading,
     olderMessagesLoading,
     pendingNewMessageCount,
+    prefetchChannelMessages,
     requestScrollToLatest,
     unreadAnchor,
   } = useChatFeedState({
@@ -196,6 +198,16 @@ export function ChatPage() {
       return next;
     });
   }, []);
+
+  const handleOpenChannel = useCallback((channelId: string) => {
+    if (channelId === activeChannel?.id) return;
+    const requestId = channelOpenRequestIdRef.current + 1;
+    channelOpenRequestIdRef.current = requestId;
+    void prefetchChannelMessages(channelId).finally(() => {
+      if (channelOpenRequestIdRef.current !== requestId) return;
+      navigate(`/chat/${encodeURIComponent(channelId)}`);
+    });
+  }, [activeChannel?.id, navigate, prefetchChannelMessages]);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,8 +367,9 @@ export function ChatPage() {
         currentUserId={currentUser?.id}
         draftChannelIds={draftChannelIds}
         onCreateChannel={() => setModal("channel")}
-        onOpenChannel={(channelId) => navigate(`/chat/${encodeURIComponent(channelId)}`)}
+        onOpenChannel={handleOpenChannel}
         onOpenConversation={() => setModal("conversation")}
+        onPreviewChannel={(channelId) => void prefetchChannelMessages(channelId)}
         query={channelQuery}
         setQuery={setChannelQuery}
         users={bootstrap.users}

@@ -31,6 +31,7 @@ export type ChatFeedSnapshot = {
 
 export const chatMessagePageSize = 80;
 export const chatFeedWindowMessageLimit = chatMessagePageSize * 4;
+export const chatFeedFreshSnapshotMs = 5_000;
 export const emptyDraft: ChatDraft = { mentions: [], text: "" };
 
 export function chatDraftStorageKey(channelId: string, rootMessageId?: string | null) {
@@ -161,6 +162,12 @@ export function replaceFeedMessages(
     scrollTop: snapshot?.scrollTop ?? 0,
     syncedAt: new Date().toISOString(),
   });
+}
+
+export function isFreshFeedSnapshot(snapshot: ChatFeedSnapshot | undefined, now = Date.now()) {
+  if (!snapshot?.syncedAt) return false;
+  const syncedAt = Date.parse(snapshot.syncedAt);
+  return Number.isFinite(syncedAt) && now - syncedAt <= chatFeedFreshSnapshotMs;
 }
 
 export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message: ChatMessage) {
