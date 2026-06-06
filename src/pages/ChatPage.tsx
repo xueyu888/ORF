@@ -39,6 +39,7 @@ import { Avatar, Button, IconButton } from "../components/ui";
 import {
   type ChatDraft,
   type UnreadAnchor,
+  applyThreadSummaryMessage,
   applyFeedMessage,
   buildUnreadAnchor,
   chatDraftStorageKey,
@@ -333,12 +334,15 @@ export function ChatPage() {
           : item.replies,
       };
     });
-    setThreadSummaries((items) => items.map((summary) => (
-      summary.rootMessage.id === message.id ? { ...summary, rootMessage: message } : summary
-    )));
+    setThreadSummaries((items) => applyThreadSummaryMessage(
+      items,
+      message,
+      currentUser?.id,
+      activePanel === "thread" ? thread?.rootMessage.id : null,
+    ));
     setSearchResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
     setCollectionResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
-  }, []);
+  }, [activePanel, currentUser?.id, thread?.rootMessage.id]);
 
   const refreshBootstrap = useCallback(async () => {
     const data = await getChatBootstrap();

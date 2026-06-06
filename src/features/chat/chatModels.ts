@@ -1,4 +1,4 @@
-import type { ChatChannel, ChatMessage, ChatUser } from "../../types/orf";
+import type { ChatChannel, ChatMessage, ChatThreadSummary, ChatUser } from "../../types/orf";
 
 export type DraftMention = {
   end: number;
@@ -178,6 +178,31 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
 
 export function shouldFollowIncomingMessage(message: ChatMessage, currentUserId: string | undefined, nearLatest: boolean) {
   return !message.rootMessageId && (message.authorUserId === currentUserId || nearLatest);
+}
+
+export function applyThreadSummaryMessage(
+  summaries: ChatThreadSummary[],
+  message: ChatMessage,
+  currentUserId: string | undefined,
+  activeRootMessageId?: string | null,
+) {
+  return summaries.map((summary) => {
+    if (summary.rootMessage.id === message.id) return { ...summary, rootMessage: message };
+    if (summary.rootMessage.id !== message.rootMessageId) return summary;
+    const alreadyViewingThread = activeRootMessageId === summary.rootMessage.id;
+    const fromCurrentUser = message.authorUserId === currentUserId;
+    const isNewerReply = !summary.rootMessage.lastReplyAt || summary.rootMessage.lastReplyAt < message.createdAt;
+    const lastReplyAt = isNewerReply ? message.createdAt : summary.rootMessage.lastReplyAt;
+    return {
+      ...summary,
+      rootMessage: {
+        ...summary.rootMessage,
+        lastReplyAt,
+        replyCount: isNewerReply ? summary.rootMessage.replyCount + 1 : summary.rootMessage.replyCount,
+      },
+      unreadCount: isNewerReply && !fromCurrentUser && !alreadyViewingThread ? summary.unreadCount + 1 : summary.unreadCount,
+    };
+  });
 }
 
 export function mentionLabel(value: string) {
