@@ -9453,18 +9453,28 @@ a.orf-row-loot-action,
   position: absolute;
   top: 6px;
   right: 8px;
-  display: none;
+  z-index: 12;
+  display: flex;
   gap: 2px;
   border: 1px solid var(--orf-border);
   border-radius: var(--orf-radius-control);
   background: rgba(255, 255, 255, 0.96);
+  opacity: 0;
   padding: 2px;
+  pointer-events: none;
   box-shadow: var(--orf-shadow-card);
+  transform: translateY(-2px);
+  transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+  visibility: hidden;
 }
 
 .orf-chat-message:hover .orf-chat-message-actions,
-.orf-chat-message:focus-within .orf-chat-message-actions {
-  display: flex;
+.orf-chat-message:focus-within .orf-chat-message-actions,
+.orf-chat-message-actions-open .orf-chat-message-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
 }
 
 .orf-chat-message-actions .orf-control {
@@ -9965,14 +9975,17 @@ button.orf-chat-image-attachment {
   position: absolute;
   top: 6px;
   right: 6px;
-  display: none;
   margin-top: 0;
   box-shadow: var(--orf-shadow-card);
 }
 
 .orf-chat-thread-panel .orf-chat-message:hover .orf-chat-message-actions,
-.orf-chat-thread-panel .orf-chat-message:focus-within .orf-chat-message-actions {
-  display: flex;
+.orf-chat-thread-panel .orf-chat-message:focus-within .orf-chat-message-actions,
+.orf-chat-thread-panel .orf-chat-message-actions-open .orf-chat-message-actions {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
 }
 
 .orf-chat-thread-replies {

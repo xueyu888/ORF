@@ -162,6 +162,7 @@ export function ChatMessageItem({
         compact && "orf-chat-message-compact",
         message.pinnedAt && "orf-chat-message-pinned",
         focused && "orf-chat-message-focused",
+        emojiOpen && "orf-chat-message-actions-open",
       )}
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
