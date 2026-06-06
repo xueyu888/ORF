@@ -291,6 +291,33 @@ function splitAutolinkTrailingText(value: string) {
   };
 }
 
+function renderSystemMentionFragments(text: string, keyPrefix: string) {
+  const nodes: ReactNode[] = [];
+  const pattern = /(^|[^A-Za-z0-9_@.])@(all|channel|here)\b/g;
+  let index = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    const prefix = match[1] ?? "";
+    const mention = match[2] ?? "";
+    const mentionStart = match.index + prefix.length;
+    if (mentionStart > index) nodes.push(<span key={`${keyPrefix}:text:${index}`}>{text.slice(index, mentionStart)}</span>);
+    nodes.push(
+      <span className="orf-chat-mention-token orf-chat-system-mention-token" key={`${keyPrefix}:system-mention:${mentionStart}`}>
+        @{mention}
+      </span>,
+    );
+    index = mentionStart + mention.length + 1;
+  }
+
+  if (index < text.length) nodes.push(<span key={`${keyPrefix}:text:${index}`}>{text.slice(index)}</span>);
+  return nodes;
+}
+
+function appendPlainText(nodes: ReactNode[], text: string, keyPrefix: string) {
+  nodes.push(...renderSystemMentionFragments(text, keyPrefix));
+}
+
 function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, keyPrefix: string) {
   const nodes: ReactNode[] = [];
   const pattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|\[([^\]\n]+)\]\((https?:\/\/[^)\s<]+)\)|(https?:\/\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
@@ -298,7 +325,7 @@ function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, k
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(body)) !== null) {
-    if (match.index > index) nodes.push(<span key={`${keyPrefix}:text:${index}`}>{body.slice(index, match.index)}</span>);
+    if (match.index > index) appendPlainText(nodes, body.slice(index, match.index), `${keyPrefix}:plain:${index}`);
     if (match[2]) {
       const userId = safeDecodeURIComponent(match[2]);
       const user = usersById.get(userId);
@@ -337,7 +364,7 @@ function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, k
     index = pattern.lastIndex;
   }
 
-  if (index < body.length) nodes.push(<span key={`${keyPrefix}:text:${index}`}>{body.slice(index)}</span>);
+  if (index < body.length) appendPlainText(nodes, body.slice(index), `${keyPrefix}:plain:${index}`);
   return nodes;
 }
 
