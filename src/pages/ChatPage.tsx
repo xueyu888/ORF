@@ -32,6 +32,7 @@ import {
   upsertChannel,
   upsertMessage,
 } from "../features/chat/chatModels";
+import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
@@ -61,7 +62,6 @@ import {
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../types/orf";
-import type { ChatRealtimeEvent } from "../types/realtime";
 
 type TypingState = {
   expiresAt: string;
@@ -73,15 +73,6 @@ type PendingThreadTarget = {
   focusMessageId: string;
   rootMessageId: string;
 };
-
-function parseRealtimeEvent(raw: string): ChatRealtimeEvent | null {
-  try {
-    const event = JSON.parse(raw) as ChatRealtimeEvent;
-    return event.kind === "chat.event" ? event : null;
-  } catch {
-    return null;
-  }
-}
 
 export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
@@ -433,55 +424,44 @@ export function ChatPage() {
     requestScrollToLatestRef.current = requestScrollToLatest;
   }, [applyChannel, applyMessage, isMessageScrollNearLatest, loadLatestMessages, navigate, requestScrollToLatest]);
 
-  useEffect(() => {
-    if (typeof EventSource === "undefined") return undefined;
-    const source = new EventSource("/api/events", { withCredentials: true });
-    const handleChatEvent = (event: MessageEvent<string>) => {
-      const payload = parseRealtimeEvent(event.data);
-      if (!payload) return;
-      const activeChannelId = activeChannelIdRef.current;
-      const currentUserId = currentUserIdRef.current;
-      if (payload.channel) applyChannelRef.current(payload.channel);
-      if (payload.eventType === "channel.archived") {
-        setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-        if (payload.channelId === activeChannelId) navigateRef.current("/chat", { replace: true });
-      }
-      if (payload.eventType === "member.changed" && payload.channel) {
-        applyChannelRef.current(payload.channel);
-      }
-      if (payload.message) {
-        const isActiveMessage = payload.message.channelId === activeChannelId;
-        const currentFeed = isActiveMessage ? feedCacheRef.current.get(payload.message.channelId) : undefined;
-        const shouldFollowLatest = shouldFollowIncomingMessage(
-          payload.message,
-          currentUserId,
-          isActiveMessage && !currentFeed?.hasNewerMessages && isMessageScrollNearLatestRef.current(),
-        );
-        applyMessageRef.current(payload.message);
-        if (isActiveMessage && shouldFollowLatest) {
-          if (currentFeed?.hasNewerMessages) {
-            void loadLatestMessagesRef.current("smooth");
-          } else {
-            requestScrollToLatestRef.current("smooth");
-          }
-        } else if (isActiveMessage && !payload.message.rootMessageId) {
-          setPendingNewMessageCount((count) => count + 1);
+  useChatRealtimeEvents((payload) => {
+    const activeChannelId = activeChannelIdRef.current;
+    const currentUserId = currentUserIdRef.current;
+    if (payload.channel) applyChannelRef.current(payload.channel);
+    if (payload.eventType === "channel.archived") {
+      setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
+      if (payload.channelId === activeChannelId) navigateRef.current("/chat", { replace: true });
+    }
+    if (payload.eventType === "member.changed" && payload.channel) {
+      applyChannelRef.current(payload.channel);
+    }
+    if (payload.message) {
+      const isActiveMessage = payload.message.channelId === activeChannelId;
+      const currentFeed = isActiveMessage ? feedCacheRef.current.get(payload.message.channelId) : undefined;
+      const shouldFollowLatest = shouldFollowIncomingMessage(
+        payload.message,
+        currentUserId,
+        isActiveMessage && !currentFeed?.hasNewerMessages && isMessageScrollNearLatestRef.current(),
+      );
+      applyMessageRef.current(payload.message);
+      if (isActiveMessage && shouldFollowLatest) {
+        if (currentFeed?.hasNewerMessages) {
+          void loadLatestMessagesRef.current("smooth");
+        } else {
+          requestScrollToLatestRef.current("smooth");
         }
+      } else if (isActiveMessage && !payload.message.rootMessageId) {
+        setPendingNewMessageCount((count) => count + 1);
       }
-      if (payload.eventType === "typing" && payload.channelId === activeChannelId && payload.typing && payload.typing.userId !== currentUserId) {
-        setTypingByUser((items) => {
-          const next = new Map(items);
-          next.set(payload.typing!.userId, payload.typing!);
-          return next;
-        });
-      }
-    };
-    source.addEventListener("chat.event", handleChatEvent);
-    return () => {
-      source.removeEventListener("chat.event", handleChatEvent);
-      source.close();
-    };
-  }, []);
+    }
+    if (payload.eventType === "typing" && payload.channelId === activeChannelId && payload.typing && payload.typing.userId !== currentUserId) {
+      setTypingByUser((items) => {
+        const next = new Map(items);
+        next.set(payload.typing!.userId, payload.typing!);
+        return next;
+      });
+    }
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => {
