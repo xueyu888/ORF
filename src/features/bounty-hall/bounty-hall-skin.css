@@ -1061,6 +1061,42 @@
   padding: 0 16px;
 }
 
+.bounty-select-label .bounty-select-menu {
+  display: flex;
+  width: 100%;
+}
+
+.bounty-select-label .orf-fantasy-select-trigger {
+  width: 100%;
+  min-height: 48px;
+  justify-content: flex-start;
+  gap: 10px;
+  border: 1px solid var(--bh-glass-line);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(232, 221, 201, 0.58), rgba(211, 199, 178, 0.36)),
+    var(--bh-glass-bg);
+  box-shadow: var(--bh-glass-shadow);
+  clip-path: none;
+  color: #173767;
+  font-weight: 900;
+  padding: 0 16px;
+}
+
+.bounty-select-label .orf-fantasy-select-trigger::before {
+  display: none;
+}
+
+.bounty-select-label .orf-fantasy-select-value {
+  flex: 1 1 auto;
+}
+
+.bounty-select-label .orf-fantasy-select-chevron {
+  margin-left: auto;
+  color: #36546d;
+  opacity: 0.8;
+}
+
 .bounty-action,
 .bounty-link-button,
 .bounty-clear-button {
@@ -2224,5 +2260,543 @@
   .bounty-clear-button,
   .bounty-icon-button {
     transition: none;
+  }
+}
+
+/* Shared workbench surface used by bounty hall and feedback inbox. */
+.orf-workbench-surface {
+  --bh-deep: #16253a;
+  --bh-ink: #26364a;
+  --bh-muted: #64748b;
+  --bh-paper: rgba(255, 255, 255, 0.18);
+  --bh-paper-2: rgba(245, 251, 255, 0.2);
+  --bh-line: rgba(255, 255, 255, 0.28);
+  --bh-gold: #b98a38;
+  --bh-gold-2: #d7b65a;
+  --bh-blue: #245f92;
+  --bh-blue-2: #2f8cc3;
+  --bh-teal: #2f9ca8;
+  --bh-green: #4a9e65;
+  --bh-pink: #8f75cb;
+  --bh-glass-bg: rgba(255, 255, 255, 0.16);
+  --bh-glass-bg-strong: rgba(255, 255, 255, 0.24);
+  --bh-glass-bg-soft: rgba(255, 255, 255, 0.12);
+  --bh-glass-line: rgba(255, 255, 255, 0.34);
+  --bh-glass-shadow: 0 14px 32px rgba(31, 49, 74, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  --bh-row-hover: rgba(255, 255, 255, 0.14);
+  --bh-row-active: rgba(219, 234, 254, 0.24);
+  color: var(--bh-ink);
+  font-size: 13px;
+}
+
+.orf-workbench-surface .bounty-overview-band,
+.orf-workbench-surface .bounty-list-table,
+.orf-workbench-surface .bounty-hall-tabs,
+.orf-workbench-surface .bounty-search-box,
+.orf-workbench-surface .bounty-select-label select,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger,
+.orf-workbench-surface .feedback-issue-toolbar {
+  border: 1px solid var(--bh-glass-line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(235, 249, 255, 0.16)),
+    var(--bh-glass-bg);
+  box-shadow: var(--bh-glass-shadow);
+  backdrop-filter: blur(18px) saturate(1.14);
+}
+
+.orf-workbench-surface .bounty-overview-band {
+  min-height: 54px;
+  border-radius: 12px;
+  gap: 10px;
+  padding: 6px 8px;
+}
+
+.orf-workbench-surface .bounty-cycle-pill {
+  min-height: 38px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  color: #245f92;
+  font-size: 14px;
+  padding: 0 14px;
+}
+
+.orf-workbench-surface .bounty-cycle-pill svg {
+  color: #2f8cc3;
+}
+
+.orf-workbench-surface .bounty-stat-grid {
+  gap: 7px;
+}
+
+.orf-workbench-surface .bounty-stat-card {
+  min-height: 38px;
+  border-color: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  padding: 0 10px;
+}
+
+.orf-workbench-surface .bounty-stat-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(219, 234, 254, 0.22);
+}
+
+.orf-workbench-surface .bounty-stat-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.orf-workbench-surface .bounty-stat-copy span {
+  color: #526376;
+  font-size: 11px;
+}
+
+.orf-workbench-surface .bounty-stat-copy strong {
+  color: #173767;
+  font-size: 19px;
+}
+
+.orf-workbench-surface .bounty-toolbar {
+  grid-template-columns: minmax(280px, 1fr) auto;
+  gap: 10px;
+}
+
+.orf-workbench-surface .bounty-toolbar-panel,
+.orf-workbench-surface .feedback-issue-toolbar {
+  min-width: 0;
+}
+
+.orf-workbench-surface .feedback-issue-toolbar {
+  border-radius: 12px;
+  padding: 8px;
+}
+
+.orf-workbench-surface .bounty-search-box {
+  min-height: 42px;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 0 12px;
+}
+
+.orf-workbench-surface .bounty-search-box svg {
+  width: 16px;
+  height: 16px;
+  color: #2f8cc3;
+}
+
+.orf-workbench-surface .bounty-search-box input {
+  color: #26364a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.orf-workbench-surface .bounty-select-label {
+  min-width: 142px;
+  gap: 4px;
+  color: #64748b;
+  font-size: 11px;
+}
+
+.orf-workbench-surface .bounty-select-label select,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger {
+  min-height: 42px;
+  border-radius: 10px;
+  color: #26364a;
+  font-size: 13px;
+  padding: 0 12px;
+}
+
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger:hover,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-trigger:focus-visible,
+.orf-workbench-surface .bounty-select-label .orf-fantasy-select-menu-open .orf-fantasy-select-trigger {
+  border-color: rgba(255, 255, 255, 0.48);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.44), rgba(235, 249, 255, 0.24)),
+    rgba(255, 255, 255, 0.22);
+  box-shadow: 0 12px 26px rgba(31, 49, 74, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.54);
+  transform: none;
+}
+
+.orf-workbench-surface .bounty-hall-tabs {
+  border-radius: 12px;
+  padding: 3px;
+}
+
+.orf-workbench-surface .bounty-hall-tab,
+.orf-workbench-surface .feedback-issue-state-button {
+  min-height: 30px;
+  border-radius: 9px;
+  color: #64748b;
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+.orf-workbench-surface .bounty-hall-tab[data-active="true"],
+.orf-workbench-surface .feedback-issue-state-button[data-active="true"] {
+  border-color: rgba(255, 255, 255, 0.32);
+  background:
+    linear-gradient(180deg, rgba(219, 234, 254, 0.36), rgba(235, 249, 255, 0.16)),
+    rgba(255, 255, 255, 0.14);
+  box-shadow: 0 8px 18px rgba(31, 49, 74, 0.055), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  color: #245f92;
+}
+
+.orf-workbench-surface .bounty-hall-tab strong,
+.orf-workbench-surface .feedback-issue-state-button strong {
+  min-width: 22px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.18);
+  color: #355776;
+  font-size: 11px;
+  line-height: 20px;
+}
+
+.orf-workbench-surface .bounty-list-summary {
+  min-height: 30px;
+}
+
+.orf-workbench-surface .bounty-list-count,
+.orf-workbench-surface .feedback-issue-match-count {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.orf-workbench-surface .bounty-clear-button,
+.orf-workbench-surface .feedback-reset-button {
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(219, 234, 254, 0.26), rgba(235, 249, 255, 0.12)),
+    rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 18px rgba(31, 49, 74, 0.055), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  color: #245f92;
+  font-size: 13px;
+  padding: 0 12px;
+}
+
+.orf-workbench-surface .bounty-list-table {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+.orf-workbench-surface .bounty-list-head,
+.orf-workbench-surface .bounty-list-row {
+  grid-template-columns:
+    108px
+    minmax(260px, 1fr)
+    minmax(134px, 0.74fr)
+    minmax(142px, 0.78fr)
+    92px
+    100px
+    104px;
+  gap: 10px;
+}
+
+.orf-workbench-surface .bounty-list-head {
+  min-height: 36px;
+  border-bottom-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
+  color: #64748b;
+  font-size: 11px;
+  padding: 0 12px;
+}
+
+.orf-workbench-surface .bounty-list-row {
+  min-height: 58px;
+  background: transparent;
+  padding: 8px 12px;
+  transition:
+    background 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.14s ease;
+}
+
+.orf-workbench-surface .bounty-list-row:hover {
+  background: var(--bh-row-hover);
+  box-shadow: inset 3px 0 0 rgba(69, 165, 196, 0.32);
+  transform: translateY(-1px);
+}
+
+.orf-workbench-surface .bounty-list-row + .bounty-list-row {
+  border-top-color: rgba(255, 255, 255, 0.22);
+}
+
+.orf-workbench-surface .bounty-list-row[data-linked-target="true"] {
+  background: var(--bh-row-active);
+  box-shadow: inset 3px 0 0 rgba(69, 165, 196, 0.6), 0 10px 24px rgba(31, 49, 74, 0.08);
+}
+
+.orf-workbench-surface .bounty-list-row-priority {
+  background:
+    linear-gradient(90deg, rgba(88, 164, 196, 0.18), rgba(255, 255, 255, 0.08) 54%),
+    rgba(255, 255, 255, 0.1);
+  box-shadow: inset 3px 0 0 rgba(69, 165, 196, 0.62);
+}
+
+.orf-workbench-surface .bounty-row-title {
+  gap: 4px;
+}
+
+.orf-workbench-surface .bounty-row-title h3,
+.orf-workbench-surface .feedback-issue-row-title-line h2 {
+  color: #26364a;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.orf-workbench-surface .bounty-row-revealed p,
+.orf-workbench-surface .feedback-issue-preview {
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.orf-workbench-surface .bounty-row-definer,
+.orf-workbench-surface .bounty-row-published,
+.orf-workbench-surface .feedback-issue-meta {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.orf-workbench-surface .bounty-row-time {
+  color: #245f92;
+  font-size: 13px;
+}
+
+.orf-workbench-surface .bounty-badge,
+.orf-workbench-surface .bounty-result-summary,
+.orf-workbench-surface .bounty-avatar-more,
+.orf-workbench-surface .bounty-applicant-more,
+.orf-workbench-surface .bounty-applicant-pill {
+  min-height: 22px;
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.16);
+  color: #526376;
+  font-size: 11px;
+  padding: 0 8px;
+}
+
+.orf-workbench-surface .bounty-badge-accent {
+  background: rgba(202, 229, 225, 0.34);
+  color: #2e6f82;
+}
+
+.orf-workbench-surface .bounty-badge-gold {
+  background: rgba(239, 211, 122, 0.22);
+  color: #7a5a20;
+}
+
+.orf-workbench-surface .bounty-badge-warning {
+  background: rgba(219, 234, 254, 0.24);
+  color: #375876;
+}
+
+.orf-workbench-surface .bounty-badge-success {
+  background: rgba(211, 226, 192, 0.28);
+  color: #557d3d;
+}
+
+.orf-workbench-surface .bounty-badge-danger {
+  background: rgba(232, 204, 198, 0.34);
+  color: #9b4448;
+}
+
+.orf-workbench-surface .bounty-avatar {
+  width: 24px;
+  height: 24px;
+  border-color: rgba(246, 252, 255, 0.88);
+  box-shadow: 0 4px 9px rgba(37, 55, 74, 0.12);
+}
+
+.orf-workbench-surface .bounty-row-actions {
+  gap: 6px;
+}
+
+.orf-workbench-surface .bounty-row-actions .bounty-action,
+.orf-workbench-surface .bounty-action-note {
+  min-height: 30px;
+  min-width: 84px;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 0 10px;
+}
+
+.orf-workbench-surface .bounty-action,
+.orf-workbench-surface .bounty-link-button {
+  min-height: 34px;
+  border-radius: 999px;
+  font-size: 13px;
+  padding: 0 14px;
+}
+
+.orf-workbench-surface .bounty-action-primary,
+.orf-workbench-surface .bounty-action-blue {
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background:
+    linear-gradient(180deg, rgba(219, 234, 254, 0.42), rgba(235, 249, 255, 0.18)),
+    rgba(255, 255, 255, 0.16);
+  box-shadow: 0 8px 18px rgba(31, 49, 74, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  color: #245f92;
+  text-shadow: none;
+}
+
+.orf-workbench-surface .bounty-action-secondary,
+.orf-workbench-surface .bounty-link-button,
+.orf-workbench-surface .bounty-action-note {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  color: #526376;
+}
+
+.orf-workbench-surface .feedback-issue-page,
+.orf-workbench-surface.feedback-issue-page {
+  gap: 12px;
+}
+
+.orf-workbench-surface .feedback-issue-header {
+  min-height: 54px;
+  align-items: center;
+}
+
+.orf-workbench-surface .bounty-page-eyebrow {
+  min-height: 24px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #64748b;
+  font-size: 11px;
+  padding: 0 10px;
+}
+
+.orf-workbench-surface .bounty-page-title {
+  margin-top: 6px;
+  color: #26364a;
+  font-family: inherit;
+  font-size: 28px;
+  line-height: 1.1;
+  text-shadow: none;
+}
+
+.orf-workbench-surface .feedback-issue-title-block p {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.orf-workbench-surface .feedback-issue-list-head {
+  min-height: 42px;
+  border-bottom-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.12);
+  padding: 0 12px;
+}
+
+.orf-workbench-surface .feedback-issue-row {
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  border-top-color: rgba(255, 255, 255, 0.22);
+  background: transparent;
+  padding: 10px 12px;
+  transition:
+    background 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.14s ease;
+}
+
+.orf-workbench-surface .feedback-issue-row:hover {
+  background: var(--bh-row-hover);
+  box-shadow: inset 3px 0 0 rgba(69, 165, 196, 0.32);
+  transform: translateY(-1px);
+}
+
+.orf-workbench-surface .feedback-issue-row-icon {
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.orf-workbench-surface .feedback-issue-row-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.orf-workbench-surface .feedback-issue-row-main {
+  gap: 5px;
+}
+
+.orf-workbench-surface .feedback-issue-row-title-line {
+  gap: 6px;
+}
+
+.orf-workbench-surface .feedback-issue-labels {
+  gap: 5px;
+}
+
+.orf-workbench-surface .feedback-issue-meta {
+  gap: 5px 9px;
+}
+
+.orf-workbench-surface .feedback-issue-meta span + span::before {
+  color: rgba(100, 116, 139, 0.58);
+}
+
+@media (max-width: 920px) {
+  .orf-workbench-surface .bounty-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .orf-workbench-surface .bounty-toolbar-controls {
+    justify-content: flex-start;
+  }
+
+  .orf-workbench-surface .bounty-list-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    min-height: 0;
+    padding: 12px;
+    transform: none;
+  }
+
+  .orf-workbench-surface .bounty-list-row:hover,
+  .orf-workbench-surface .feedback-issue-row:hover {
+    transform: none;
+  }
+
+  .orf-workbench-surface .bounty-list-row > [data-label]::before {
+    flex-basis: 72px;
+    color: #64748b;
+    line-height: 24px;
+  }
+}
+
+@media (max-width: 720px) {
+  .orf-workbench-surface .bounty-overview-band,
+  .orf-workbench-surface .feedback-issue-header,
+  .orf-workbench-surface .feedback-issue-list-head {
+    align-items: stretch;
+  }
+
+  .orf-workbench-surface .bounty-stat-card {
+    min-height: 44px;
+  }
+
+  .orf-workbench-surface .bounty-action,
+  .orf-workbench-surface .bounty-link-button,
+  .orf-workbench-surface .bounty-row-actions .bounty-action,
+  .orf-workbench-surface .bounty-action-note {
+    width: 100%;
+  }
+
+  .orf-workbench-surface .feedback-issue-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .orf-workbench-surface .feedback-issue-state-button {
+    padding: 0 6px;
   }
 }

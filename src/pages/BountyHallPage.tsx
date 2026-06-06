@@ -187,7 +187,7 @@ export function BountyHallPage() {
   };
 
   return (
-    <div className="bounty-hall-page grid gap-5">
+    <div className="bounty-hall-page orf-workbench-surface grid gap-4">
       <BountyOverview
         availableCount={availableBounties.length}
         publicCount={hallItems.length}
