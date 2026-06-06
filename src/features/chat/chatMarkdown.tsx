@@ -336,14 +336,14 @@ function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, k
       );
     } else if (match[4]) {
       nodes.push(
-        <a href={match[4]} key={`${keyPrefix}:md-link:${match.index}`} target="_blank" rel="noreferrer">
+        <a href={match[4]} key={`${keyPrefix}:md-link:${match.index}`} target="_blank" rel="noreferrer noopener">
           {match[3]}
         </a>,
       );
     } else if (match[5]) {
       const { trailingText, url } = splitAutolinkTrailingText(match[5]);
       nodes.push(
-        <a href={url} key={`${keyPrefix}:link:${match.index}`} target="_blank" rel="noreferrer">
+        <a href={url} key={`${keyPrefix}:link:${match.index}`} target="_blank" rel="noreferrer noopener">
           {url}
         </a>,
       );
