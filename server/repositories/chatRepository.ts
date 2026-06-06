@@ -19,6 +19,7 @@ import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from 
 import { pool } from "../db/client";
 import { env } from "../env";
 import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
+import { readImageMetadata } from "../storage/images";
 import { objectStorage } from "../storage/objectStorage";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { createNotifications } from "./notificationRepository";
@@ -1873,6 +1874,9 @@ export async function uploadChatAttachment(
   const expiresAt = new Date(Date.now() + CHAT_ATTACHMENT_TTL_MS).toISOString();
   const fileName = input.fileName.trim().slice(0, 240);
   const mimeType = normalizeMimeType(input.mimeType);
+  const imageMetadata = mimeType.startsWith("image/") ? readImageMetadata(input.body) : null;
+  const imageWidth = imageMetadata?.width ?? null;
+  const imageHeight = imageMetadata?.height ?? null;
   const objectKey = `chat/${safePathSegment(storageTeamId(actor))}/${safePathSegment(input.channelId)}/${id}/${safePathSegment(fileName)}`;
 
   await objectStorage.putObject({
@@ -1886,9 +1890,22 @@ export async function uploadChatAttachment(
     await pool.query(
       `
         INSERT INTO chat_attachments (id, team_id, channel_id, message_id, object_key, file_name, mime_type, file_size, width, height, created_by, created_at, expires_at)
-        VALUES ($1, $2, $3, null, $4, $5, $6, $7, null, null, $8, $9, $10)
+        VALUES ($1, $2, $3, null, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       `,
-      [id, storageTeamId(actor), input.channelId, objectKey, fileName, mimeType, input.body.byteLength, actor.id, now, expiresAt],
+      [
+        id,
+        storageTeamId(actor),
+        input.channelId,
+        objectKey,
+        fileName,
+        mimeType,
+        input.body.byteLength,
+        imageWidth,
+        imageHeight,
+        actor.id,
+        now,
+        expiresAt,
+      ],
     );
   } catch (error) {
     await objectStorage.deleteObject(objectKey).catch(() => undefined);
@@ -1902,8 +1919,8 @@ export async function uploadChatAttachment(
       mimeType,
       fileSize: input.body.byteLength,
       contentUrl: chatAttachmentContentUrl(id),
-      width: null,
-      height: null,
+      width: imageWidth,
+      height: imageHeight,
       createdAt: now,
     },
   });

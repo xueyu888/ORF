@@ -61,6 +61,10 @@ function webpMetadata(buffer: Buffer): ImageMetadata | null {
   return { extension: "webp", mimeType: "image/webp" };
 }
 
+export function readImageMetadata(buffer: Buffer): ImageMetadata | null {
+  return pngMetadata(buffer) ?? jpegMetadata(buffer) ?? gifMetadata(buffer) ?? webpMetadata(buffer);
+}
+
 export function validateImageUpload(input: { buffer: Buffer; contentType: string }): ImageValidationResult {
   if (input.buffer.byteLength > env.OBJECT_STORAGE_UPLOAD_MAX_BYTES) {
     return { status: "tooLarge" };
@@ -71,7 +75,7 @@ export function validateImageUpload(input: { buffer: Buffer; contentType: string
     return { status: "unsupported" };
   }
 
-  const detected = pngMetadata(input.buffer) ?? jpegMetadata(input.buffer) ?? gifMetadata(input.buffer) ?? webpMetadata(input.buffer);
+  const detected = readImageMetadata(input.buffer);
   if (!detected || detected.mimeType !== declaredType) {
     return { status: "unsupported" };
   }

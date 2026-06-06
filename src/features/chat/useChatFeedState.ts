@@ -80,12 +80,14 @@ export function useChatFeedState({
   const olderLoadInFlightRef = useRef(false);
   const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
   const pendingUnreadScrollRef = useRef(false);
+  const shouldStickToLatestRef = useRef(true);
   const prefetchRequestsRef = useRef(new Map<string, Promise<boolean>>());
   const activeChannelId = activeChannel?.id ?? null;
   activeChannelIdRef.current = activeChannelId;
   currentUserIdRef.current = currentUserId;
 
   const requestScrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
+    shouldStickToLatestRef.current = true;
     pendingLatestScrollRef.current = behavior;
     setPendingNewMessageCount(0);
   }, []);
@@ -290,7 +292,7 @@ export function useChatFeedState({
     const shouldFollowLatest = shouldFollowIncomingMessage(
       message,
       currentUserIdRef.current,
-      isActiveMessage && !currentFeed?.hasNewerMessages && isMessageScrollNearLatest(),
+      isActiveMessage && !currentFeed?.hasNewerMessages && (shouldStickToLatestRef.current || isMessageScrollNearLatest()),
     );
     applyMessageToFeed(message);
     applyMessageEffects(message);
@@ -317,6 +319,7 @@ export function useChatFeedState({
       requestedMessageId &&
       cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
     );
+    shouldStickToLatestRef.current = !shouldOpenMainUnread && !requestedMessageId;
     setUnreadAnchor(anchor);
     setPendingNewMessageCount(0);
     olderLoadInFlightRef.current = false;
@@ -482,6 +485,7 @@ export function useChatFeedState({
   useEffect(() => {
     if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return undefined;
     const timer = window.setTimeout(() => {
+      shouldStickToLatestRef.current = false;
       scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "smooth", block: "center" });
       onRequestedMessageConsumed();
     }, 120);
@@ -491,6 +495,7 @@ export function useChatFeedState({
   useEffect(() => {
     if (!pendingUnreadScrollRef.current || messagesLoading) return undefined;
     const timer = window.setTimeout(() => {
+      shouldStickToLatestRef.current = false;
       scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" });
       pendingUnreadScrollRef.current = false;
     }, 120);
@@ -501,6 +506,7 @@ export function useChatFeedState({
     const behavior = pendingLatestScrollRef.current;
     if (!behavior || messagesLoading) return;
     let cancelled = false;
+    let clearTimer: number | null = null;
     let remainingAttempts = behavior === "auto" ? 3 : 1;
     const scrollLatest = () => {
       if (cancelled) return;
@@ -511,17 +517,59 @@ export function useChatFeedState({
         return;
       }
       if (pendingLatestScrollRef.current === behavior) {
-        pendingLatestScrollRef.current = null;
+        if (behavior === "smooth") {
+          clearTimer = window.setTimeout(() => {
+            if (pendingLatestScrollRef.current === behavior) pendingLatestScrollRef.current = null;
+          }, 360);
+        } else {
+          pendingLatestScrollRef.current = null;
+        }
       }
     };
     window.requestAnimationFrame(scrollLatest);
     return () => {
       cancelled = true;
+      if (clearTimer !== null) window.clearTimeout(clearTimer);
     };
   }, [activeChannelId, messages, messagesLoading]);
 
+  useEffect(() => {
+    const element = messageScrollRef.current;
+    if (!element || typeof ResizeObserver === "undefined" || typeof MutationObserver === "undefined") return undefined;
+
+    let observedContent: Element | null = null;
+    let frame: number | null = null;
+    const resizeObserver = new ResizeObserver(() => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (messagesLoading) return;
+        if (!pendingLatestScrollRef.current && !shouldStickToLatestRef.current) return;
+        if (scrollChatFeedToLatest(element, "auto")) {
+          rememberActiveFeedScroll(activeChannelIdRef.current);
+        }
+      });
+    });
+    const observeMessageList = () => {
+      const content = element.querySelector(".orf-chat-message-list");
+      if (content === observedContent) return;
+      if (observedContent) resizeObserver.unobserve(observedContent);
+      observedContent = content;
+      if (observedContent) resizeObserver.observe(observedContent);
+    };
+    observeMessageList();
+    const mutationObserver = new MutationObserver(observeMessageList);
+    mutationObserver.observe(element, { childList: true });
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      mutationObserver.disconnect();
+      resizeObserver.disconnect();
+    };
+  }, [activeChannelId, messagesLoading, rememberActiveFeedScroll]);
+
   const loadOlderMessages = useCallback(async () => {
     if (!activeChannelId || messages.length === 0 || olderLoadInFlightRef.current || pendingLatestScrollRef.current || !hasOlderMessages) return;
+    shouldStickToLatestRef.current = false;
     const scrollElement = messageScrollRef.current;
     const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
     const previousScrollTop = scrollElement?.scrollTop ?? 0;
@@ -563,7 +611,13 @@ export function useChatFeedState({
 
   const handleMessageScroll = useCallback(() => {
     rememberActiveFeedScroll();
-    if (isMessageScrollNearLatest()) setPendingNewMessageCount(0);
+    const nearLatest = isMessageScrollNearLatest();
+    if (pendingLatestScrollRef.current) {
+      if (nearLatest) setPendingNewMessageCount(0);
+      return;
+    }
+    shouldStickToLatestRef.current = nearLatest;
+    if (nearLatest) setPendingNewMessageCount(0);
     if (!pendingLatestScrollRef.current && isChatFeedNearOldest(messageScrollRef.current)) void loadOlderMessages();
   }, [isMessageScrollNearLatest, loadOlderMessages, rememberActiveFeedScroll]);
 
@@ -617,6 +671,7 @@ export function useChatFeedState({
   const jumpToUnread = useCallback(async (target: ChatUnreadJumpTarget) => {
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
+    shouldStickToLatestRef.current = false;
     if (!target.contextRequired) {
       if (scrollChatFeedToUnread(messageScrollRef.current, { behavior: "auto" })) return;
       if (
@@ -665,7 +720,7 @@ export function useChatFeedState({
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
     const snapshot = feedCacheRef.current.get(channelId);
-    if (snapshot?.hasNewerMessages || !isMessageScrollNearLatest()) return;
+    if (snapshot?.hasNewerMessages || (!shouldStickToLatestRef.current && !isMessageScrollNearLatest())) return;
     void loadLatestMessages("auto");
   }, [isMessageScrollNearLatest, loadLatestMessages]);
 

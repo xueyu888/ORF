@@ -61,6 +61,10 @@ function hasSelectedMessageText(container: HTMLElement) {
   );
 }
 
+function imageDimension(value?: number | null) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 function AttachmentGrid({
   attachments,
   onAttachmentPreview,
@@ -75,7 +79,13 @@ function AttachmentGrid({
         const isImage = attachment.mimeType.startsWith("image/");
         return isImage ? (
           <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment)}>
-            <img src={attachment.contentUrl} alt={attachment.fileName} loading="lazy" />
+            <img
+              src={attachment.contentUrl}
+              alt={attachment.fileName}
+              height={imageDimension(attachment.height)}
+              loading="lazy"
+              width={imageDimension(attachment.width)}
+            />
             <span>{attachment.fileName}</span>
           </button>
         ) : (
