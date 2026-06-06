@@ -237,6 +237,24 @@ export function ChatDraftEditor({
         return;
       }
     }
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      const recalled = recallComposerHistory(history, draft, event.key === "ArrowUp" ? "older" : "newer");
+      if (recalled) {
+        event.preventDefault();
+        event.stopPropagation();
+        onChange(recalled.draft);
+        setHistory(recalled.history);
+        setMentionRange(null);
+        window.setTimeout(() => {
+          const next = textAreaRef.current;
+          if (!next) return;
+          const cursor = event.key === "ArrowUp" ? 0 : next.value.length;
+          next.focus();
+          next.setSelectionRange(cursor, cursor);
+        }, 0);
+        return;
+      }
+    }
     if (event.key === "ArrowUp" && !event.shiftKey) {
       const textarea = textAreaRef.current;
       const canRecall = textarea?.selectionStart === 0 && (history.cursorIndex !== null || !draft.text.trim());
