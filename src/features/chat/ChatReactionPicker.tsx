@@ -5,8 +5,11 @@ import { searchChatReactionOptions } from "./chatReactions";
 
 type ChatReactionPickerProps = {
   anchorRef: RefObject<HTMLElement | null>;
+  emptyLabel?: string;
+  label?: string;
   onClose: () => void;
   onSelect: (emojiName: string) => void;
+  searchPlaceholder?: string;
 };
 
 type PopoverPosition = {
@@ -14,7 +17,14 @@ type PopoverPosition = {
   top: number;
 };
 
-export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactionPickerProps) {
+export function ChatReactionPicker({
+  anchorRef,
+  emptyLabel = "没有匹配反应",
+  label = "添加反应",
+  onClose,
+  onSelect,
+  searchPlaceholder = "搜索反应",
+}: ChatReactionPickerProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [position, setPosition] = useState<PopoverPosition | null>(null);
@@ -129,13 +139,13 @@ export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactio
   };
 
   return createPortal(
-    <div className="orf-chat-emoji-popover" ref={panelRef} role="dialog" aria-label="添加反应" style={style} onKeyDown={handlePickerKeyDown}>
+    <div className="orf-chat-emoji-popover" ref={panelRef} role="dialog" aria-label={label} style={style} onKeyDown={handlePickerKeyDown}>
       <label className="orf-chat-emoji-search">
         <Search className="h-3.5 w-3.5" />
         <input
           ref={inputRef}
           value={query}
-          placeholder="搜索反应"
+          placeholder={searchPlaceholder}
           onChange={(event) => setQuery(event.target.value)}
         />
       </label>
@@ -156,7 +166,7 @@ export function ChatReactionPicker({ anchorRef, onClose, onSelect }: ChatReactio
             </button>
           ))
         ) : (
-          <div className="orf-chat-emoji-empty">没有匹配反应</div>
+          <div className="orf-chat-emoji-empty">{emptyLabel}</div>
         )}
       </div>
     </div>,

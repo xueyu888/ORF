@@ -1,16 +1,18 @@
 import { clsx } from "clsx";
-import { AtSign, Bold, Code, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Strikethrough } from "lucide-react";
+import { AtSign, Bold, Code, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Smile, Strikethrough } from "lucide-react";
 import { type ClipboardEventHandler, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
 import { applyChatMarkdownShortcut, type ChatMarkdownMode } from "./chatMarkdownShortcutModel";
+import { ChatReactionPicker } from "./ChatReactionPicker";
 import {
   type ChatDraft,
   mentionLabel,
   mentionRangeFor,
   reconcileMentions,
 } from "./chatModels";
+import { displayChatReactionEmoji } from "./chatReactions";
 
 type ChatDraftEditorToolbarState = {
   submit: () => void;
@@ -97,7 +99,9 @@ export function ChatDraftEditor({
   const [mentionRange, setMentionRange] = useState<ReturnType<typeof mentionRangeFor>>(null);
   const [selectedMention, setSelectedMention] = useState(0);
   const [history, setHistory] = useState(emptyComposerHistory);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const emojiAnchorRef = useRef<HTMLSpanElement | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const submittingRef = useRef(false);
   const mentionUsers = useMemo(() => {
@@ -120,6 +124,10 @@ export function ChatDraftEditor({
   useEffect(() => {
     if (!draft.text) setMentionRange(null);
   }, [draft.text]);
+
+  useEffect(() => {
+    if (disabled) setEmojiOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     if (focusSignal === undefined || disabled) return;
@@ -172,6 +180,11 @@ export function ChatDraftEditor({
       textarea.focus();
       textarea.setSelectionRange(start + text.length, start + text.length);
     }, 0);
+  };
+
+  const insertEmoji = (emojiName: string) => {
+    setEmojiOpen(false);
+    insertTextAtSelection(displayChatReactionEmoji(emojiName));
   };
 
   const insertMention = (user: ChatUser) => {
@@ -303,6 +316,17 @@ export function ChatDraftEditor({
       applyMarkdownMode(markdownMode);
       return;
     }
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      ((event.altKey && !event.shiftKey) || (!event.altKey && event.shiftKey)) &&
+      event.key.toLowerCase() === "e" &&
+      !event.nativeEvent.isComposing
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      setEmojiOpen((open) => !open);
+      return;
+    }
     if (event.key === "Enter" && event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
       const textarea = textAreaRef.current;
       if (!textarea) return;
@@ -362,6 +386,21 @@ export function ChatDraftEditor({
         <button type="button" onClick={() => applyMarkdownMode("orderedList")} title="有序列表 Shift+Alt+7"><ListOrdered className="h-4 w-4" /></button>
         <button type="button" onClick={() => applyMarkdownMode("quote")} title="引用 Shift+Alt+9"><Quote className="h-4 w-4" /></button>
         <button type="button" onClick={() => applyMarkdownMode("link")} title="链接 Ctrl/Cmd+K"><LinkIcon className="h-4 w-4" /></button>
+        <span className="orf-chat-composer-emoji-anchor" ref={emojiAnchorRef}>
+          <button type="button" onClick={() => setEmojiOpen((open) => !open)} title="表情 Ctrl/Cmd+Alt+E 或 Ctrl/Cmd+Shift+E">
+            <Smile className="h-4 w-4" />
+          </button>
+          {emojiOpen && (
+            <ChatReactionPicker
+              anchorRef={emojiAnchorRef}
+              emptyLabel="没有匹配表情"
+              label="插入表情"
+              onClose={() => setEmojiOpen(false)}
+              onSelect={insertEmoji}
+              searchPlaceholder="搜索表情"
+            />
+          )}
+        </span>
         {toolbarControls}
         <button type="button" onClick={() => insertTextAtSelection("@")} title="提及成员 @"><AtSign className="h-4 w-4" /></button>
         <span className="orf-chat-composer-spacer" />
