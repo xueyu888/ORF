@@ -248,7 +248,7 @@ export function ChatComposer({
         onChange={setDraft}
         onEditLatest={attachmentItems.length === 0 ? onEditLatest : undefined}
         onPaste={handlePaste}
-        onReactToLatest={!rootMessageId ? onReactToLatest : undefined}
+        onReactToLatest={onReactToLatest}
         onReplyToLatest={!rootMessageId && attachmentItems.length === 0 ? onReplyToLatest : undefined}
         onSubmit={submit}
         onTyping={() => onTyping?.(channelId)}

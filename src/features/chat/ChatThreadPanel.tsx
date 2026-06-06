@@ -1,5 +1,5 @@
 import { Bell, BellOff } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { ChatAttachment, ChatMessage, ChatThread, ChatUser } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
@@ -64,6 +64,10 @@ export function ChatThreadPanel({
   const previousThreadIdRef = useRef<string | null>(null);
   const previousReplyCountRef = useRef(0);
   const wasNearLatestRef = useRef(true);
+  const [reactionPickerRequest, setReactionPickerRequest] = useState<{ messageId: string | null; signal: number }>({
+    messageId: null,
+    signal: 0,
+  });
   const editLatestOwnThreadMessage = useCallback(() => {
     const latestOwnMessage = [thread.rootMessage, ...thread.replies]
       .reverse()
@@ -76,6 +80,19 @@ export function ChatThreadPanel({
       onEdit(latestOwnMessage);
     }
   }, [currentUserId, onEdit, thread.replies, thread.rootMessage]);
+  const reactToLatestThreadMessage = useCallback(() => {
+    const latestMessage = [thread.rootMessage, ...thread.replies]
+      .reverse()
+      .find((message) => !message.deletedAt && !chatMessageDeliveryStatus(message));
+    if (!latestMessage) return;
+    scrollChatFeedToMessage(threadPanelRef.current, latestMessage.id, { behavior: "auto", block: "center" });
+    window.requestAnimationFrame(() => {
+      setReactionPickerRequest((current) => ({
+        messageId: latestMessage.id,
+        signal: current.signal + 1,
+      }));
+    });
+  }, [thread.replies, thread.rootMessage]);
 
   useLayoutEffect(() => {
     const previousThreadId = previousThreadIdRef.current;
@@ -131,6 +148,7 @@ export function ChatThreadPanel({
         onSave={onSave}
         onSaveEdit={onSaveEdit}
         onThread={() => undefined}
+        reactionPickerSignal={reactionPickerRequest.messageId === thread.rootMessage.id ? reactionPickerRequest.signal : undefined}
         usersById={usersById}
       />
       <button type="button" className="orf-chat-follow-button" onClick={() => onToggleFollow(!thread.following)}>
@@ -163,6 +181,7 @@ export function ChatThreadPanel({
               onSave={onSave}
               onSaveEdit={onSaveEdit}
               onThread={() => undefined}
+              reactionPickerSignal={reactionPickerRequest.messageId === reply.id ? reactionPickerRequest.signal : undefined}
               usersById={usersById}
             />
           );
@@ -174,6 +193,7 @@ export function ChatThreadPanel({
         mentionableUsers={users}
         onDraftStateChange={onDraftStateChange}
         onEditLatest={editLatestOwnThreadMessage}
+        onReactToLatest={reactToLatestThreadMessage}
         onSend={onSend}
         onTyping={onTyping}
         parentMessageId={thread.replies.at(-1)?.id ?? thread.rootMessage.id}
