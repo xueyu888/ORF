@@ -65,6 +65,23 @@ function imageDimension(value?: number | null) {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+function reactionSummaryLabel(
+  reaction: ChatMessage["reactions"][number],
+  reactionLabel: string,
+  usersById: Map<string, ChatUser>,
+) {
+  const names = reaction.userIds
+    .map((userId) => usersById.get(userId)?.name)
+    .filter((name): name is string => Boolean(name));
+  if (names.length === 0) return `${reactionLabel}，${reaction.count} 人`;
+  const visibleNames = names.slice(0, 5).join("、");
+  const hiddenCount = Math.max(0, reaction.count - names.length);
+  const overflowCount = Math.max(0, names.length - 5) + hiddenCount;
+  return overflowCount > 0
+    ? `${reactionLabel}，${reaction.count} 人：${visibleNames} 等 ${overflowCount} 人`
+    : `${reactionLabel}，${reaction.count} 人：${visibleNames}`;
+}
+
 function AttachmentGrid({
   attachments,
   onAttachmentPreview,
@@ -400,13 +417,14 @@ export function ChatMessageItem({
             <div className="orf-chat-reaction-row">
               {message.reactions.map((reaction) => {
                 const reactionLabel = labelChatReactionEmoji(reaction.emojiName);
+                const summaryLabel = reactionSummaryLabel(reaction, reactionLabel, usersById);
                 return (
                   <button
                     type="button"
                     className={clsx("orf-chat-reaction", reaction.reactedByCurrentUser && "orf-chat-reaction-active")}
                     key={reaction.emojiName}
-                    title={reactionLabel}
-                    aria-label={`${reactionLabel}，${reaction.count} 人`}
+                    title={summaryLabel}
+                    aria-label={summaryLabel}
                     onClick={() => onReaction(message, reaction.emojiName)}
                   >
                     <span className="orf-chat-reaction-symbol" aria-hidden="true">{displayChatReactionEmoji(reaction.emojiName)}</span>
