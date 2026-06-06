@@ -33,9 +33,10 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Avatar, Button, IconButton } from "../components/ui";
+import { ChatMarkdown } from "../features/chat/chatMarkdown";
 import {
   type ChatDraft,
   type UnreadAnchor,
@@ -146,59 +147,6 @@ function channelIcon(channel: ChatChannel) {
   if (channel.type === "public") return Hash;
   if (channel.type === "private") return Lock;
   return MessageSquare;
-}
-
-function renderTextFragments(body: string, usersById: Map<string, ChatUser>) {
-  const nodes: ReactNode[] = [];
-  const lines = body.split("\n");
-  lines.forEach((line, lineIndex) => {
-    const quote = line.startsWith("> ");
-    nodes.push(
-      quote ? (
-        <blockquote className="orf-chat-markdown-quote" key={`line:${lineIndex}`}>
-          {renderInlineFragments(line.slice(2), usersById, lineIndex)}
-        </blockquote>
-      ) : (
-        <span key={`line:${lineIndex}`}>{renderInlineFragments(line, usersById, lineIndex)}</span>
-      ),
-    );
-    if (lineIndex < lines.length - 1) nodes.push(<br key={`br:${lineIndex}`} />);
-  });
-  return nodes;
-}
-
-function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, lineIndex = 0) {
-  const nodes: ReactNode[] = [];
-  const pattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|(https?:\/\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|_([^_\n]+)_/g;
-  let index = 0;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(body)) !== null) {
-    if (match.index > index) nodes.push(<span key={`text:${lineIndex}:${index}`}>{body.slice(index, match.index)}</span>);
-    if (match[2]) {
-      const userId = decodeURIComponent(match[2]);
-      const user = usersById.get(userId);
-      nodes.push(
-        <span className="orf-chat-mention-token" key={`mention:${lineIndex}:${match.index}`} title={user?.email || user?.name || match[1]}>
-          @{user?.name ?? match[1]}
-        </span>,
-      );
-    } else if (match[3]) {
-      nodes.push(
-        <a href={match[3]} key={`link:${lineIndex}:${match.index}`} target="_blank" rel="noreferrer">
-          {match[3]}
-        </a>,
-      );
-    } else if (match[4]) {
-      nodes.push(<code key={`code:${lineIndex}:${match.index}`}>{match[4]}</code>);
-    } else if (match[5]) {
-      nodes.push(<strong key={`bold:${lineIndex}:${match.index}`}>{match[5]}</strong>);
-    } else if (match[6]) {
-      nodes.push(<em key={`italic:${lineIndex}:${match.index}`}>{match[6]}</em>);
-    }
-    index = pattern.lastIndex;
-  }
-  if (index < body.length) nodes.push(<span key={`text:${lineIndex}:${index}`}>{body.slice(index)}</span>);
-  return nodes;
 }
 
 function parseRealtimeEvent(raw: string): ChatRealtimeEvent | null {
@@ -1464,7 +1412,7 @@ function MessageItem({
           <div className="orf-chat-message-deleted">消息已删除</div>
         ) : (
           <>
-            <div className="orf-chat-message-text">{renderTextFragments(message.body, usersById)}</div>
+            <div className="orf-chat-message-text"><ChatMarkdown body={message.body} usersById={usersById} /></div>
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             <div className="orf-chat-reaction-row">
               {message.reactions.map((reaction) => (
@@ -2042,7 +1990,7 @@ function ThreadInboxPanel({
           {summary.unreadCount > 0 && <strong>{summary.unreadCount}</strong>}
           <b>{summary.rootMessage.authorName}</b>
           <div className="orf-chat-thread-inbox-body">
-            {summary.rootMessage.body.trim() ? renderTextFragments(summary.rootMessage.body, usersById) : "附件话题"}
+            {summary.rootMessage.body.trim() ? <ChatMarkdown compact body={summary.rootMessage.body} usersById={usersById} /> : "附件话题"}
           </div>
           <small>
             {summary.rootMessage.replyCount} 条回复
@@ -2199,7 +2147,7 @@ function CollectionPanel({
                 <span>{result.channel.displayName}</span>
                 <strong>{result.message.authorName}</strong>
                 <small>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
-                <div className="orf-chat-collection-body">{renderTextFragments(result.message.body, usersById)}</div>
+                <div className="orf-chat-collection-body"><ChatMarkdown compact body={result.message.body} usersById={usersById} /></div>
               </button>
               <IconButton
                 className={result.message.savedByCurrentUser ? "orf-chat-message-action-active" : ""}
@@ -2296,7 +2244,7 @@ function SearchResultPreview({ message, usersById }: { message: ChatMessage; use
   return (
     <>
       <div className="orf-chat-search-result-body">
-        {message.body.trim() ? renderTextFragments(message.body, usersById) : <span className="orf-chat-search-attachment-only">附件消息</span>}
+        {message.body.trim() ? <ChatMarkdown compact body={message.body} usersById={usersById} /> : <span className="orf-chat-search-attachment-only">附件消息</span>}
       </div>
       {message.attachments.length > 0 && (
         <div className="orf-chat-search-attachments">

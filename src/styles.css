@@ -9182,7 +9182,7 @@ a.orf-row-loot-action,
   color: var(--orf-text-primary);
   font-size: 14px;
   line-height: 1.58;
-  white-space: pre-wrap;
+  white-space: normal;
 }
 
 .orf-chat-message-text a {
@@ -9191,7 +9191,10 @@ a.orf-row-loot-action,
   text-underline-offset: 2px;
 }
 
-.orf-chat-message-text code {
+.orf-chat-message-text code,
+.orf-chat-search-result-body code,
+.orf-chat-collection-body code,
+.orf-chat-thread-inbox-body code {
   border: 1px solid var(--orf-border);
   border-radius: 4px;
   background: var(--orf-bg-muted);
@@ -9201,12 +9204,37 @@ a.orf-row-loot-action,
   font-size: 0.92em;
 }
 
-.orf-chat-message-text strong {
+.orf-chat-message-text strong,
+.orf-chat-search-result-body strong,
+.orf-chat-collection-body strong,
+.orf-chat-thread-inbox-body strong {
   font-weight: 850;
 }
 
-.orf-chat-message-text em {
+.orf-chat-message-text em,
+.orf-chat-search-result-body em,
+.orf-chat-collection-body em,
+.orf-chat-thread-inbox-body em {
   color: var(--orf-text-secondary);
+}
+
+.orf-chat-message-text del,
+.orf-chat-search-result-body del,
+.orf-chat-collection-body del,
+.orf-chat-thread-inbox-body del {
+  color: var(--orf-text-muted);
+}
+
+.orf-chat-markdown-paragraph {
+  display: block;
+}
+
+.orf-chat-markdown-paragraph + .orf-chat-markdown-paragraph,
+.orf-chat-markdown-paragraph + .orf-chat-markdown-list,
+.orf-chat-markdown-list + .orf-chat-markdown-paragraph,
+.orf-chat-markdown-code-block + .orf-chat-markdown-paragraph,
+.orf-chat-markdown-paragraph + .orf-chat-markdown-code-block {
+  margin-top: 6px;
 }
 
 .orf-chat-markdown-quote {
@@ -9214,6 +9242,34 @@ a.orf-row-loot-action,
   border-left: 3px solid var(--orf-accent-border);
   color: var(--orf-text-secondary);
   padding: 3px 0 3px 10px;
+}
+
+.orf-chat-markdown-list {
+  margin: 4px 0 4px 20px;
+  padding: 0;
+}
+
+.orf-chat-markdown-list li {
+  padding-left: 2px;
+}
+
+.orf-chat-markdown-code-block {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 6px 0;
+  border: 1px solid var(--orf-border);
+  border-radius: 6px;
+  background: rgba(241, 246, 248, 0.82);
+  padding: 10px 12px;
+}
+
+.orf-chat-markdown-code-block code,
+.orf-chat-message-text .orf-chat-markdown-code-block code {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  white-space: pre;
 }
 
 .orf-chat-mention-token {
