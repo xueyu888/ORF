@@ -21,6 +21,14 @@ function clampCursor(cursor: number, text: string) {
   return Math.max(0, Math.min(text.length, cursor));
 }
 
+export function isChatMarkdownCaretInFencedCodeBlock(text: string, cursor: number) {
+  const beforeCaret = text.slice(0, clampCursor(cursor, text));
+  const fencePattern = /(^|\n)[ \t]{0,3}```[^\n]*(?=\n|$)/g;
+  let inside = false;
+  while (fencePattern.exec(beforeCaret)) inside = !inside;
+  return inside;
+}
+
 function normalizeSelection(text: string, selectionStart: number, selectionEnd: number) {
   const start = clampCursor(Math.min(selectionStart, selectionEnd), text);
   const end = clampCursor(Math.max(selectionStart, selectionEnd), text);

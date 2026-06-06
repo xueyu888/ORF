@@ -4,7 +4,11 @@ import { type ClipboardEventHandler, type ComponentType, type KeyboardEvent, typ
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
-import { applyChatMarkdownShortcut, type ChatMarkdownMode } from "./chatMarkdownShortcutModel";
+import {
+  applyChatMarkdownShortcut,
+  isChatMarkdownCaretInFencedCodeBlock,
+  type ChatMarkdownMode,
+} from "./chatMarkdownShortcutModel";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import {
   type ChatDraft,
@@ -458,6 +462,7 @@ export function ChatDraftEditor({
     if (markdownMode) {
       event.preventDefault();
       event.stopPropagation();
+      if (isChatMarkdownCaretInFencedCodeBlock(draft.text, event.currentTarget.selectionStart)) return;
       applyMarkdownMode(markdownMode);
       return;
     }
