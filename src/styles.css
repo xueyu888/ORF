@@ -9306,11 +9306,43 @@ a.orf-row-loot-action,
   display: block;
 }
 
+.orf-chat-markdown-heading {
+  margin: 6px 0 4px;
+  color: var(--orf-text-primary);
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.orf-chat-markdown-heading-1 {
+  font-size: 18px;
+}
+
+.orf-chat-markdown-heading-2 {
+  font-size: 16px;
+}
+
+.orf-chat-markdown-heading-3,
+.orf-chat-markdown-heading-4,
+.orf-chat-markdown-heading-5,
+.orf-chat-markdown-heading-6 {
+  font-size: 14px;
+}
+
+.orf-chat-markdown-divider {
+  height: 1px;
+  margin: 8px 0;
+  border: 0;
+  background: var(--orf-border);
+}
+
 .orf-chat-markdown-paragraph + .orf-chat-markdown-paragraph,
 .orf-chat-markdown-paragraph + .orf-chat-markdown-list,
 .orf-chat-markdown-list + .orf-chat-markdown-paragraph,
 .orf-chat-markdown-code-block + .orf-chat-markdown-paragraph,
-.orf-chat-markdown-paragraph + .orf-chat-markdown-code-block {
+.orf-chat-markdown-paragraph + .orf-chat-markdown-code-block,
+.orf-chat-markdown-heading + .orf-chat-markdown-paragraph,
+.orf-chat-markdown-list + .orf-chat-markdown-code-block,
+.orf-chat-markdown-code-block + .orf-chat-markdown-list {
   margin-top: 6px;
 }
 
@@ -9330,6 +9362,19 @@ a.orf-row-loot-action,
   padding-left: 2px;
 }
 
+.orf-chat-markdown-task-item {
+  list-style: none;
+  margin-left: -18px;
+}
+
+.orf-chat-markdown-task-item input {
+  width: 14px;
+  height: 14px;
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+  accent-color: var(--orf-accent);
+}
+
 .orf-chat-markdown-code-block {
   max-width: 100%;
   overflow-x: auto;
@@ -9337,16 +9382,47 @@ a.orf-row-loot-action,
   border: 1px solid var(--orf-border);
   border-radius: 6px;
   background: rgba(241, 246, 248, 0.82);
-  padding: 10px 12px;
+  padding: 0;
 }
 
 .orf-chat-markdown-code-block code,
 .orf-chat-message-text .orf-chat-markdown-code-block code {
+  display: block;
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: 0;
+  padding: 10px 12px;
   white-space: pre;
+}
+
+.orf-chat-markdown-code-header {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--orf-border);
+  background: rgba(232, 240, 244, 0.92);
+  padding: 5px 8px;
+  color: var(--orf-text-muted);
+  font-family: var(--orf-font-body);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.orf-chat-markdown-code-header button {
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
+  color: var(--orf-accent-text);
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.orf-chat-markdown-code-header button:hover {
+  background: var(--orf-accent-soft);
 }
 
 .orf-chat-mention-token {
