@@ -266,6 +266,31 @@ function renderLineBreakJoined(lines: string[], usersById: Map<string, ChatUser>
   return nodes;
 }
 
+function splitAutolinkTrailingText(value: string) {
+  let end = value.length;
+  while (end > 0) {
+    const character = value[end - 1] ?? "";
+    const url = value.slice(0, end);
+    if (/[,.;:!?，。；：！？]$/.test(character)) {
+      end -= 1;
+      continue;
+    }
+    if (character === ")" && (url.match(/\)/g)?.length ?? 0) > (url.match(/\(/g)?.length ?? 0)) {
+      end -= 1;
+      continue;
+    }
+    if (character === "]" && (url.match(/\]/g)?.length ?? 0) > (url.match(/\[/g)?.length ?? 0)) {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return {
+    trailingText: value.slice(end),
+    url: value.slice(0, end),
+  };
+}
+
 function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, keyPrefix: string) {
   const nodes: ReactNode[] = [];
   const pattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|\[([^\]\n]+)\]\((https?:\/\/[^)\s<]+)\)|(https?:\/\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
@@ -289,11 +314,13 @@ function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, k
         </a>,
       );
     } else if (match[5]) {
+      const { trailingText, url } = splitAutolinkTrailingText(match[5]);
       nodes.push(
-        <a href={match[5]} key={`${keyPrefix}:link:${match.index}`} target="_blank" rel="noreferrer">
-          {match[5]}
+        <a href={url} key={`${keyPrefix}:link:${match.index}`} target="_blank" rel="noreferrer">
+          {url}
         </a>,
       );
+      if (trailingText) nodes.push(<span key={`${keyPrefix}:link-trailing:${match.index}`}>{trailingText}</span>);
     } else if (match[6]) {
       nodes.push(<code key={`${keyPrefix}:code:${match.index}`}>{match[6]}</code>);
     } else if (match[7]) {
