@@ -11,6 +11,7 @@ import type {
   ChatReaction,
   ChatSearchResult,
   ChatThread,
+  ChatThreadSummary,
   ChatUser,
   UserRole,
   UserStatus,
@@ -940,6 +941,122 @@ export async function getChatThread(rootMessageId: string, actor: ChatActor): Pr
       replies: messages.filter((message) => message.rootMessageId === rootMessageId),
       following: followRows[0]?.following ?? true,
     },
+  });
+}
+
+export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threads: ChatThreadSummary[] }>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const teamId = storageTeamId(actor);
+  await preparePublicChannels(teamId);
+
+  type ThreadSummaryRow = MessageRow & {
+    channel_archived_at: Date | string | null;
+    channel_created_at: Date | string;
+    channel_created_by: string | null;
+    channel_display_name: string;
+    channel_header: string;
+    channel_name: string | null;
+    channel_purpose: string;
+    channel_type: ChatChannelType;
+    channel_updated_at: Date | string;
+    following: boolean;
+    thread_last_viewed_at: Date | string | null;
+    thread_unread_count: number;
+  };
+  const { rows } = await pool.query<ThreadSummaryRow>(
+    `
+      SELECT root.id, root.channel_id, root.author_user_id, u.name AS author_name,
+             u.avatar_object_key AS author_avatar_object_key, u.avatar_updated_at AS author_avatar_updated_at,
+             root.body, root.root_message_id, root.parent_message_id,
+             root.created_at, root.updated_at, root.edited_at, root.deleted_at, root.deleted_by,
+             c.type AS channel_type, c.name AS channel_name, c.display_name AS channel_display_name,
+             c.purpose AS channel_purpose, c.header AS channel_header, c.created_by AS channel_created_by,
+             c.created_at AS channel_created_at, c.updated_at AS channel_updated_at, c.archived_at AS channel_archived_at,
+             f.following, f.last_viewed_at AS thread_last_viewed_at,
+             COALESCE(unread.count, 0)::int AS thread_unread_count
+      FROM chat_thread_follows f
+      INNER JOIN chat_messages root ON root.id = f.root_message_id
+        AND root.team_id = $1
+        AND root.root_message_id IS NULL
+        AND root.deleted_at IS NULL
+      INNER JOIN chat_channels c ON c.id = root.channel_id
+        AND c.team_id = $1
+        AND c.archived_at IS NULL
+      INNER JOIN chat_channel_members cm ON cm.channel_id = c.id AND cm.user_id = $2
+      INNER JOIN users u ON u.id = root.author_user_id
+      LEFT JOIN LATERAL (
+        SELECT count(*) AS count
+        FROM chat_messages reply
+        WHERE reply.team_id = $1
+          AND reply.root_message_id = root.id
+          AND reply.deleted_at IS NULL
+          AND reply.author_user_id <> $2
+          AND (f.last_viewed_at IS NULL OR reply.created_at > f.last_viewed_at)
+      ) unread ON true
+      LEFT JOIN LATERAL (
+        SELECT max(created_at) AS last_reply_at
+        FROM chat_messages reply
+        WHERE reply.team_id = $1
+          AND reply.root_message_id = root.id
+          AND reply.deleted_at IS NULL
+      ) latest_reply ON true
+      WHERE f.user_id = $2
+        AND f.following = true
+      ORDER BY COALESCE(unread.count, 0) > 0 DESC,
+               COALESCE(latest_reply.last_reply_at, root.created_at) DESC
+      LIMIT 100
+    `,
+    [teamId, actor.id],
+  );
+
+  const messageRows = rows.map((row) => ({
+    id: row.id,
+    channel_id: row.channel_id,
+    author_user_id: row.author_user_id,
+    author_name: row.author_name,
+    author_avatar_object_key: row.author_avatar_object_key,
+    author_avatar_updated_at: row.author_avatar_updated_at,
+    body: row.body,
+    root_message_id: row.root_message_id,
+    parent_message_id: row.parent_message_id,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    edited_at: row.edited_at,
+    deleted_at: row.deleted_at,
+    deleted_by: row.deleted_by,
+  }));
+  const channelRows = rows.map((row) => ({
+    id: row.channel_id,
+    type: row.channel_type,
+    name: row.channel_name,
+    display_name: row.channel_display_name,
+    purpose: row.channel_purpose,
+    header: row.channel_header,
+    created_by: row.channel_created_by,
+    archived_by: null,
+    created_at: row.channel_created_at,
+    updated_at: row.channel_updated_at,
+    archived_at: row.channel_archived_at,
+  }));
+  const [messages, channels] = await Promise.all([
+    buildMessages(messageRows, actor),
+    buildChannels(channelRows, actor),
+  ]);
+  const messagesById = new Map(messages.map((message) => [message.id, message]));
+  const channelsById = new Map(channels.map((channel) => [channel.id, channel]));
+
+  return ok({
+    threads: rows.flatMap((row) => {
+      const rootMessage = messagesById.get(row.id);
+      const channel = channelsById.get(row.channel_id);
+      return rootMessage && channel ? [{
+        channel,
+        following: row.following,
+        lastViewedAt: iso(row.thread_last_viewed_at),
+        rootMessage,
+        unreadCount: Number(row.thread_unread_count),
+      }] : [];
+    }),
   });
 }
 

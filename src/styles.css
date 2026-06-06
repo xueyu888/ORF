@@ -9559,7 +9559,8 @@ button.orf-chat-image-attachment {
 .orf-chat-thread-panel,
 .orf-chat-info-panel,
 .orf-chat-search-panel,
-.orf-chat-collection-panel {
+.orf-chat-collection-panel,
+.orf-chat-thread-inbox {
   min-height: 0;
   overflow-y: auto;
   padding: 12px;
@@ -9600,6 +9601,91 @@ button.orf-chat-image-attachment {
 .orf-chat-thread-replies {
   display: grid;
   gap: 2px;
+}
+
+.orf-chat-thread-inbox {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.orf-chat-thread-inbox-sync {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 6px;
+  margin: 0 auto 4px;
+  border: 1px solid var(--orf-accent-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--orf-accent-text);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orf-chat-thread-inbox button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  border: 1px solid var(--orf-border);
+  border-radius: var(--orf-radius-card);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--orf-text-secondary);
+  padding: 10px;
+  text-align: left;
+}
+
+.orf-chat-thread-inbox button:hover {
+  border-color: var(--orf-accent-border);
+  background: var(--orf-accent-soft);
+}
+
+.orf-chat-thread-inbox button > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--orf-accent-text);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-chat-thread-inbox button > strong {
+  display: inline-flex;
+  min-width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--orf-accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.orf-chat-thread-inbox button > b,
+.orf-chat-thread-inbox button > small,
+.orf-chat-thread-inbox-body {
+  grid-column: 1 / -1;
+}
+
+.orf-chat-thread-inbox button > b {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+}
+
+.orf-chat-thread-inbox-body {
+  overflow-wrap: anywhere;
+  color: var(--orf-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.orf-chat-thread-inbox button > small {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .orf-chat-search-results {

@@ -84,6 +84,7 @@ import {
   getChatMentionableUsers,
   getChatMessages,
   getChatThread,
+  getChatThreads,
   getPinnedChatMessages,
   getSavedChatMessages,
   markChatChannelReadRequest,
@@ -102,10 +103,10 @@ import {
   uploadChatAttachment,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatUser } from "../types/orf";
+import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../types/orf";
 import type { ChatRealtimeEvent } from "../types/realtime";
 
-type ActivePanel = "thread" | "info" | "search" | "pins" | "saved" | null;
+type ActivePanel = "thread" | "threads" | "info" | "search" | "pins" | "saved" | null;
 
 type TypingState = {
   expiresAt: string;
@@ -237,6 +238,8 @@ export function ChatPage() {
   const [searchResults, setSearchResults] = useState<ChatSearchResult[]>([]);
   const [collectionResults, setCollectionResults] = useState<ChatSearchResult[]>([]);
   const [collectionLoading, setCollectionLoading] = useState(false);
+  const [threadSummaries, setThreadSummaries] = useState<ChatThreadSummary[]>([]);
+  const [threadSummariesLoading, setThreadSummariesLoading] = useState(false);
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [typingByUser, setTypingByUser] = useState<Map<string, TypingState>>(new Map());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
@@ -310,13 +313,22 @@ export function ChatPage() {
       const snapshot = applyFeedMessage(feedCacheRef.current.get(message.channelId), message);
       if (snapshot) feedCacheRef.current.set(message.channelId, snapshot);
     }
-    setThread((item) => item ? {
-      ...item,
-      rootMessage: item.rootMessage.id === message.id ? message : item.rootMessage,
-      replies: item.replies.some((reply) => reply.id === message.id)
-        ? upsertMessage(item.replies, message).filter((reply) => reply.rootMessageId === item.rootMessage.id)
-        : item.replies,
-    } : item);
+    setThread((item) => {
+      if (!item) return item;
+      const isOpenRoot = item.rootMessage.id === message.id;
+      const isOpenReply = message.rootMessageId === item.rootMessage.id;
+      if (!isOpenRoot && !isOpenReply) return item;
+      return {
+        ...item,
+        rootMessage: isOpenRoot ? message : item.rootMessage,
+        replies: isOpenReply
+          ? upsertMessage(item.replies, message).filter((reply) => reply.rootMessageId === item.rootMessage.id)
+          : item.replies,
+      };
+    });
+    setThreadSummaries((items) => items.map((summary) => (
+      summary.rootMessage.id === message.id ? { ...summary, rootMessage: message } : summary
+    )));
     setSearchResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
     setCollectionResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
   }, []);
@@ -706,6 +718,19 @@ export function ChatPage() {
     }
   }, [notify]);
 
+  const loadThreadSummaries = useCallback(async () => {
+    setActivePanel("threads");
+    setThreadSummariesLoading(true);
+    try {
+      const response = await getChatThreads();
+      setThreadSummaries(response.threads);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "加载话题收件箱失败");
+    } finally {
+      setThreadSummariesLoading(false);
+    }
+  }, [notify]);
+
   const handleSearch = useCallback(
     async (value = query) => {
       if (!value.trim()) {
@@ -763,6 +788,7 @@ export function ChatPage() {
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
               onSearch={() => setActivePanel(activePanel === "search" ? null : "search")}
+              onThreads={() => void loadThreadSummaries()}
               onToggleFavorite={async () => {
                 const response = await updateChatChannelRequest(activeChannel.id, { favorite: !myMembership?.favorite });
                 applyChannel(response.channel);
@@ -839,10 +865,19 @@ export function ChatPage() {
           }}
           onClose={() => setActivePanel(null)}
           collectionLoading={collectionLoading}
-          collectionResults={collectionResults}
-          onOpenResult={(result) => {
-            navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.rootMessageId ?? result.message.id)}`);
-          }}
+              collectionResults={collectionResults}
+              threadSummaries={threadSummaries}
+              threadSummariesLoading={threadSummariesLoading}
+              onOpenResult={(result) => {
+                navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.rootMessageId ?? result.message.id)}`);
+              }}
+              onOpenThreadSummary={(summary) => {
+                navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
+                setThreadSummaries((items) => items.map((item) => (
+                  item.rootMessage.id === summary.rootMessage.id ? { ...item, unreadCount: 0, lastViewedAt: new Date().toISOString() } : item
+                )));
+                void openThread(summary.rootMessage.id);
+              }}
           onPin={handlePinMessage}
           onRemoveMember={async (userId) => {
             const response = await removeChatChannelMemberRequest(activeChannel.id, userId);
@@ -1033,6 +1068,7 @@ function ChatHeader({
   onPins,
   onSaved,
   onSearch,
+  onThreads,
   onToggleFavorite,
   onToggleMuted,
   usersById,
@@ -1046,6 +1082,7 @@ function ChatHeader({
   onPins: () => void;
   onSaved: () => void;
   onSearch: () => void;
+  onThreads: () => void;
   onToggleFavorite: () => void;
   onToggleMuted: () => void;
   usersById: Map<string, ChatUser>;
@@ -1080,6 +1117,7 @@ function ChatHeader({
         />
         <IconButton icon={Pin} label="固定消息" onClick={onPins} />
         <IconButton icon={Bookmark} label="已保存消息" onClick={onSaved} />
+        <IconButton icon={Reply} label="话题收件箱" onClick={onThreads} />
         <IconButton icon={Search} label="搜索消息" onClick={onSearch} />
         <IconButton icon={Info} label="频道信息" onClick={onInfo} />
         {canManage && channel.type !== "direct" && channel.type !== "group" && channel.name !== "orf-town-square" && (
@@ -1592,6 +1630,7 @@ function ChatRightPanel(props: {
   onImage: (attachment: ChatAttachment) => void;
   onMarkUnread: (message: ChatMessage) => void;
   onOpenResult: (result: ChatSearchResult) => void;
+  onOpenThreadSummary: (summary: ChatThreadSummary) => void;
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onRemoveMember: (userId: string) => Promise<void>;
@@ -1606,11 +1645,14 @@ function ChatRightPanel(props: {
   setSearchQuery: (value: string) => void;
   thread: ChatThread | null;
   threadLoading: boolean;
+  threadSummaries: ChatThreadSummary[];
+  threadSummariesLoading: boolean;
   users: ChatUser[];
   usersById: Map<string, ChatUser>;
 }) {
   const title =
     props.activePanel === "thread" ? "话题"
+      : props.activePanel === "threads" ? "话题收件箱"
       : props.activePanel === "search" ? "搜索"
         : props.activePanel === "pins" ? "固定消息"
           : props.activePanel === "saved" ? "已保存"
@@ -1658,6 +1700,14 @@ function ChatRightPanel(props: {
           usersById={props.usersById}
         />
       )}
+      {props.activePanel === "threads" && (
+        <ThreadInboxPanel
+          loading={props.threadSummariesLoading}
+          onOpenThread={props.onOpenThreadSummary}
+          summaries={props.threadSummaries}
+          usersById={props.usersById}
+        />
+      )}
       {(props.activePanel === "pins" || props.activePanel === "saved") && (
         <CollectionPanel
           kind={props.activePanel}
@@ -1681,6 +1731,59 @@ function ChatRightPanel(props: {
         />
       )}
     </aside>
+  );
+}
+
+function ThreadInboxPanel({
+  loading,
+  onOpenThread,
+  summaries,
+  usersById,
+}: {
+  loading: boolean;
+  onOpenThread: (summary: ChatThreadSummary) => void;
+  summaries: ChatThreadSummary[];
+  usersById: Map<string, ChatUser>;
+}) {
+  if (loading && summaries.length === 0) {
+    return (
+      <div className="orf-chat-panel-loading">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>正在加载话题收件箱</span>
+      </div>
+    );
+  }
+  if (summaries.length === 0) {
+    return (
+      <div className="orf-chat-panel-loading">
+        <Reply className="h-5 w-5" />
+        <span>暂无关注的话题</span>
+      </div>
+    );
+  }
+  return (
+    <div className="orf-chat-thread-inbox">
+      {loading && (
+        <div className="orf-chat-thread-inbox-sync">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          同步话题
+        </div>
+      )}
+      {summaries.map((summary) => (
+        <button type="button" key={summary.rootMessage.id} onClick={() => onOpenThread(summary)}>
+          <span>{summary.channel.displayName}</span>
+          {summary.unreadCount > 0 && <strong>{summary.unreadCount}</strong>}
+          <b>{summary.rootMessage.authorName}</b>
+          <div className="orf-chat-thread-inbox-body">
+            {summary.rootMessage.body.trim() ? renderTextFragments(summary.rootMessage.body, usersById) : "附件话题"}
+          </div>
+          <small>
+            {summary.rootMessage.replyCount} 条回复
+            {summary.rootMessage.lastReplyAt ? ` · 最近 ${formatTime(summary.rootMessage.lastReplyAt)}` : ""}
+          </small>
+        </button>
+      ))}
+    </div>
   );
 }
 

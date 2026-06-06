@@ -14,6 +14,7 @@ import {
   getChatThread,
   listChatMentionableUsers,
   listChatMessages,
+  listChatThreads,
   listPinnedChatMessages,
   listSavedChatMessages,
   markChatChannelRead,
@@ -319,6 +320,12 @@ export function registerChatRoutes(app: FastifyInstance) {
     const params = messageParamsSchema.parse(request.params);
     const body = saveBodySchema.parse(request.body);
     return sendOutcome(reply, await setChatMessageSaved({ ...params, saved: body.saved }, actor));
+  });
+
+  app.get("/api/chat/threads", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    return sendOutcome(reply, await listChatThreads(actor));
   });
 
   app.get("/api/chat/threads/:rootMessageId", async (request, reply) => {

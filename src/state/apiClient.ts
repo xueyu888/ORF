@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ChatSearchResult,
   ChatThread,
+  ChatThreadSummary,
   ChatUser,
   CommentAttachment,
   CommentTargetType,
@@ -50,6 +51,7 @@ export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
 export type ChatNullableChannelResponse = { status?: "ok"; channel: ChatChannel | null };
 export type ChatMessageResponse = { status?: "ok"; message: ChatMessage };
 export type ChatThreadResponse = { status?: "ok"; thread: ChatThread };
+export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] };
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
@@ -376,6 +378,10 @@ export async function publishChatTypingRequest(channelId: string) {
 
 export async function getChatThread(rootMessageId: string) {
   return apiJson<ChatThreadResponse>(`/api/chat/threads/${encodeURIComponent(rootMessageId)}`);
+}
+
+export async function getChatThreads() {
+  return apiJson<ChatThreadsResponse>("/api/chat/threads");
 }
 
 export async function setChatThreadFollowRequest(rootMessageId: string, following: boolean) {

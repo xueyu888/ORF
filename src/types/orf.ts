@@ -470,6 +470,14 @@ export interface ChatThread {
   following: boolean;
 }
 
+export interface ChatThreadSummary {
+  channel: ChatChannel;
+  following: boolean;
+  lastViewedAt?: string | null;
+  rootMessage: ChatMessage;
+  unreadCount: number;
+}
+
 export interface ChatSearchResult {
   channel: ChatChannel;
   message: ChatMessage;
