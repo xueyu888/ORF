@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
-import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
@@ -119,8 +119,10 @@ export function ChatMessageItem({
   const [moreOpen, setMoreOpen] = useState(false);
   const [editDraft, setEditDraft] = useState<ChatDraft>(() => draftFromStoredBody(message.body, usersById));
   const [editSaving, setEditSaving] = useState(false);
+  const moreMenuId = useId();
   const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuInitialFocusRef = useRef<"first" | "last" | null>(null);
   const deliveryStatus = chatMessageDeliveryStatus(message);
   const canMutate = !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
   const canUseServerActions = !deliveryStatus && !message.deletedAt;
@@ -149,6 +151,17 @@ export function ChatMessageItem({
     };
     document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const timer = window.setTimeout(() => {
+      const menuItems = moreMenuItems();
+      const targetIndex = moreMenuInitialFocusRef.current === "last" ? menuItems.length - 1 : 0;
+      moreMenuInitialFocusRef.current = null;
+      menuItems[targetIndex]?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [moreOpen]);
 
   useEffect(() => {
@@ -196,13 +209,86 @@ export function ChatMessageItem({
     setMoreOpen(false);
     action();
   };
-  const handleMoreKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopPropagation();
-    setMoreOpen(false);
+  const moreMenuItems = () => (
+    Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? [])
+      .filter((item) => !item.disabled)
+  );
+  const focusMoreMenuItem = (index: number) => {
+    const items = moreMenuItems();
+    if (items.length === 0) return;
+    const nextIndex = (index + items.length) % items.length;
+    items[nextIndex]?.focus();
   };
-  const hasMoreActions = Boolean((canPin && onPin) || onMarkUnread || canMutate);
+  const focusMoreButton = () => {
+    const button = moreMenuRef.current?.querySelector<HTMLButtonElement>(".orf-chat-message-more-trigger");
+    window.setTimeout(() => button?.focus(), 0);
+  };
+  const openMoreMenu = (initialFocus: "first" | "last" = "first") => {
+    moreMenuInitialFocusRef.current = initialFocus;
+    setMoreOpen(true);
+  };
+  const closeMoreMenu = (restoreButtonFocus = false) => {
+    moreMenuInitialFocusRef.current = null;
+    setMoreOpen(false);
+    if (restoreButtonFocus) focusMoreButton();
+  };
+  const toggleMoreMenu = () => {
+    if (moreOpen) {
+      closeMoreMenu();
+      return;
+    }
+    openMoreMenu("first");
+  };
+  const handleMoreKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const items = moreMenuItems();
+    const currentIndex = items.findIndex((item) => item === target);
+    if (event.key === "Escape") {
+      if (!moreOpen) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeMoreMenu(true);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!moreOpen) {
+        openMoreMenu("first");
+        return;
+      }
+      focusMoreMenuItem(currentIndex >= 0 ? currentIndex + 1 : 0);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!moreOpen) {
+        openMoreMenu("last");
+        return;
+      }
+      focusMoreMenuItem(currentIndex >= 0 ? currentIndex - 1 : items.length - 1);
+      return;
+    }
+    if (moreOpen && event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMoreMenuItem(0);
+      return;
+    }
+    if (moreOpen && event.key === "End") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMoreMenuItem(items.length - 1);
+      return;
+    }
+    if (moreOpen && target?.getAttribute("role") === "menuitem" && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      event.stopPropagation();
+      target.click();
+    }
+  };
+  const hasMoreActions = Boolean(onCopyLink || (canPin && onPin) || onMarkUnread || canMutate);
 
   return (
     <article
@@ -357,12 +443,23 @@ export function ChatMessageItem({
               onClick={() => onSave(message)}
             />
           )}
-          <IconButton icon={LinkIcon} label="复制消息链接" onClick={() => onCopyLink(message)} />
           {hasMoreActions && (
             <div className="orf-chat-message-more-anchor" ref={moreMenuRef} onKeyDown={handleMoreKeyDown}>
-              <IconButton icon={MoreHorizontal} label="更多操作" onClick={() => setMoreOpen((open) => !open)} />
+              <IconButton
+                aria-controls={moreOpen ? moreMenuId : undefined}
+                aria-expanded={moreOpen}
+                aria-haspopup="menu"
+                className="orf-chat-message-more-trigger"
+                icon={MoreHorizontal}
+                label="更多操作"
+                onClick={toggleMoreMenu}
+              />
               {moreOpen && (
-                <div className="orf-chat-message-more-menu" role="menu">
+                <div className="orf-chat-message-more-menu" id={moreMenuId} role="menu">
+                  <button type="button" role="menuitem" onClick={() => handleMoreAction(() => onCopyLink(message))}>
+                    <LinkIcon className="h-3.5 w-3.5" />
+                    复制消息链接
+                  </button>
                   {canPin && onPin && (
                     <button
                       type="button"

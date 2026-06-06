@@ -9644,16 +9644,22 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-message-more-menu button:hover,
+.orf-chat-message-more-menu button:focus-visible,
 .orf-chat-message-more-active {
   background: var(--orf-accent-soft) !important;
   color: var(--orf-accent-text) !important;
+}
+
+.orf-chat-message-more-menu button:focus-visible {
+  outline: 0;
 }
 
 .orf-chat-message-more-danger {
   color: var(--orf-danger-text) !important;
 }
 
-.orf-chat-message-more-danger:hover {
+.orf-chat-message-more-danger:hover,
+.orf-chat-message-more-danger:focus-visible {
   background: var(--orf-danger-bg) !important;
   color: var(--orf-danger-text) !important;
 }
