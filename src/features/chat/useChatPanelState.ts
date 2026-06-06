@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getChatThreads,
   getPinnedChatMessages,
@@ -40,6 +40,8 @@ export function useChatPanelState({
   const collectionRequestIdRef = useRef(0);
   const searchRequestIdRef = useRef(0);
   const threadSummariesRequestIdRef = useRef(0);
+  const pinnedCollectionChannelIdRef = useRef<string | null>(null);
+  const currentSearchChannelIdRef = useRef<string | null>(null);
 
   const closePanel = useCallback(() => setActivePanel(null), []);
 
@@ -61,9 +63,11 @@ export function useChatPanelState({
 
   const loadPinnedMessages = useCallback(async () => {
     if (!activeChannelId) return;
+    pinnedCollectionChannelIdRef.current = activeChannelId;
     const requestId = collectionRequestIdRef.current + 1;
     collectionRequestIdRef.current = requestId;
     setActivePanel("pins");
+    setCollectionResults([]);
     setCollectionLoading(true);
     try {
       const response = await getPinnedChatMessages(activeChannelId);
@@ -79,6 +83,7 @@ export function useChatPanelState({
   }, [activeChannelId, notify]);
 
   const loadSavedMessages = useCallback(async () => {
+    pinnedCollectionChannelIdRef.current = null;
     const requestId = collectionRequestIdRef.current + 1;
     collectionRequestIdRef.current = requestId;
     setActivePanel("saved");
@@ -122,12 +127,25 @@ export function useChatPanelState({
       const requestId = searchRequestIdRef.current + 1;
       searchRequestIdRef.current = requestId;
       setActivePanel("search");
-      if (!value.trim()) {
+      if (scope === "current" && !activeChannelId) {
+        currentSearchChannelIdRef.current = null;
         setSearchResults([]);
         setSearchPerformed(false);
         setSearchLoading(false);
         return;
       }
+      if (!value.trim()) {
+        currentSearchChannelIdRef.current = scope === "current" ? activeChannelId ?? null : null;
+        setSearchResults([]);
+        setSearchPerformed(false);
+        setSearchLoading(false);
+        return;
+      }
+      if (scope === "current") {
+        setSearchResults([]);
+        setSearchPerformed(false);
+      }
+      currentSearchChannelIdRef.current = scope === "current" ? activeChannelId ?? null : null;
       setSearchLoading(true);
       try {
         const response = await searchChat({
@@ -183,6 +201,35 @@ export function useChatPanelState({
       item.rootMessage.id === rootMessageId ? { ...item, unreadCount: 0, lastViewedAt: new Date().toISOString() } : item
     )));
   }, []);
+
+  useEffect(() => {
+    if (activePanel !== "pins") return;
+    const channelId = activeChannelId ?? null;
+    if (pinnedCollectionChannelIdRef.current === channelId) return;
+    if (activeChannelId) {
+      void loadPinnedMessages();
+      return;
+    }
+    pinnedCollectionChannelIdRef.current = null;
+    collectionRequestIdRef.current += 1;
+    setCollectionResults([]);
+    setCollectionLoading(false);
+  }, [activeChannelId, activePanel, loadPinnedMessages]);
+
+  useEffect(() => {
+    if (activePanel !== "search" || searchScope !== "current") return;
+    const channelId = activeChannelId ?? null;
+    if (currentSearchChannelIdRef.current === channelId) return;
+    if (activeChannelId && searchQuery.trim()) {
+      void searchMessages({ query: searchQuery, scope: "current", type: searchType });
+      return;
+    }
+    currentSearchChannelIdRef.current = channelId;
+    searchRequestIdRef.current += 1;
+    setSearchResults([]);
+    setSearchPerformed(false);
+    setSearchLoading(false);
+  }, [activeChannelId, activePanel, searchMessages, searchQuery, searchScope, searchType]);
 
   return {
     activateThreadPanel,
