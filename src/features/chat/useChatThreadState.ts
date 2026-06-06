@@ -22,23 +22,47 @@ export type ChatOpenThreadOptions = {
   focusMessageId?: string | null;
 };
 
+function chatThreadContainsMessage(thread: ChatThread, messageId: string | null | undefined) {
+  if (!messageId) return true;
+  return thread.rootMessage.id === messageId || thread.replies.some((reply) => reply.id === messageId);
+}
+
 export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpdate }: UseChatThreadStateInput) {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
   const [threadComposerFocusSignal, setThreadComposerFocusSignal] = useState(0);
   const [threadLoading, setThreadLoading] = useState(false);
   const [pendingThreadTarget, setPendingThreadTarget] = useState<ChatFeedThreadTarget | null>(null);
+  const loadingThreadRootIdRef = useRef<string | null>(null);
+  const threadRef = useRef<ChatThread | null>(null);
   const threadRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    threadRef.current = thread;
+  }, [thread]);
 
   const openThread = useCallback(
     async (rootMessageId: string, options: ChatOpenThreadOptions = {}) => {
-      const requestId = threadRequestIdRef.current + 1;
-      threadRequestIdRef.current = requestId;
       onActivateThreadPanel();
       setThreadFocusMessageId(options.focusMessageId ?? null);
       if (options.focusComposer) {
         setThreadComposerFocusSignal((signal) => signal + 1);
       }
+      const currentThread = threadRef.current;
+      if (
+        currentThread?.rootMessage.id === rootMessageId &&
+        chatThreadContainsMessage(currentThread, options.focusMessageId)
+      ) {
+        setThreadLoading(false);
+        return;
+      }
+      if (loadingThreadRootIdRef.current === rootMessageId) {
+        setThreadLoading(true);
+        return;
+      }
+      const requestId = threadRequestIdRef.current + 1;
+      threadRequestIdRef.current = requestId;
+      loadingThreadRootIdRef.current = rootMessageId;
       setThread((item) => item?.rootMessage.id === rootMessageId ? item : null);
       setThreadLoading(true);
       try {
@@ -52,7 +76,10 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
         setThreadFocusMessageId(null);
         notify(error instanceof Error ? error.message : "加载线程失败");
       } finally {
-        if (threadRequestIdRef.current === requestId) setThreadLoading(false);
+        if (threadRequestIdRef.current === requestId) {
+          loadingThreadRootIdRef.current = null;
+          setThreadLoading(false);
+        }
       }
     },
     [notify, onActivateThreadPanel, onChannelUpdate],
