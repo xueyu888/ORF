@@ -1,12 +1,11 @@
-import { clsx } from "clsx";
 import { Download, FileText, X } from "lucide-react";
 import { useState } from "react";
-import { Avatar, Button, IconButton } from "../../components/ui";
+import { Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
 import type { ChatDraft } from "./chatModels";
-import { formatPresence, isChatUserOnline } from "./chatPresence";
 import { ChatDraftEditor } from "./ChatDraftEditor";
+import { ChatUserPicker } from "./ChatUserPicker";
 
 export function ChannelModal({
   canCreatePublic,
@@ -27,6 +26,10 @@ export function ChannelModal({
   const [header, setHeader] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const selectableUsers = users.filter((user) => user.id !== currentUserId);
+  const toggleSelected = (userId: string) => {
+    setSelected((items) => items.includes(userId) ? items.filter((id) => id !== userId) : [...items, userId]);
+  };
   const submit = async () => {
     setSaving(true);
     try {
@@ -47,18 +50,14 @@ export function ChannelModal({
         <label>说明<input value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
         <label>标题<input value={header} onChange={(event) => setHeader(event.target.value)} /></label>
         {type === "private" && (
-          <div className="orf-chat-modal-users">
-            {users.map((user) => (
-              <button className={selected.includes(user.id) ? "selected" : ""} key={user.id} type="button" onClick={() => setSelected((items) => items.includes(user.id) ? items.filter((id) => id !== user.id) : [...items, user.id])}>
-                <span className="orf-chat-member-avatar">
-                  <Avatar avatarUrl={user.avatarUrl} name={user.name} size="sm" />
-                  <i className={clsx("orf-chat-presence-dot", isChatUserOnline(user, currentUserId) && "orf-chat-presence-online")} />
-                </span>
-                <span>{user.name}</span>
-                <small>{formatPresence(user, currentUserId)}</small>
-              </button>
-            ))}
-          </div>
+          <ChatUserPicker
+            currentUserId={currentUserId}
+            emptyLabel="没有可添加成员"
+            onToggleUser={toggleSelected}
+            placeholder="查找成员"
+            selectedUserIds={selected}
+            users={selectableUsers}
+          />
         )}
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
@@ -80,10 +79,12 @@ export function ConversationModal({
   onOpen: (userIds: string[]) => Promise<void>;
   users: ChatUser[];
 }) {
-  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const candidates = users.filter((user) => user.id !== currentUserId && (user.name.includes(query) || user.email.includes(query)));
+  const candidates = users.filter((user) => user.id !== currentUserId);
+  const toggleSelected = (userId: string) => {
+    setSelected((items) => items.includes(userId) ? items.filter((id) => id !== userId) : [...items, userId]);
+  };
   const submit = async () => {
     setSaving(true);
     try {
@@ -96,19 +97,14 @@ export function ConversationModal({
     <div className="orf-chat-modal-backdrop" onMouseDown={onClose}>
       <div className="orf-chat-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header><h2>新建私聊/群聊</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
-        <label>查找成员<input value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-        <div className="orf-chat-modal-users">
-          {candidates.map((user) => (
-            <button className={selected.includes(user.id) ? "selected" : ""} key={user.id} type="button" onClick={() => setSelected((items) => items.includes(user.id) ? items.filter((id) => id !== user.id) : [...items, user.id])}>
-              <span className="orf-chat-member-avatar">
-                <Avatar avatarUrl={user.avatarUrl} name={user.name} size="sm" />
-                <i className={clsx("orf-chat-presence-dot", isChatUserOnline(user, currentUserId) && "orf-chat-presence-online")} />
-              </span>
-              <span>{user.name}</span>
-              <small>{formatPresence(user, currentUserId)}</small>
-            </button>
-          ))}
-        </div>
+        <ChatUserPicker
+          currentUserId={currentUserId}
+          emptyLabel="没有可私聊成员"
+          onToggleUser={toggleSelected}
+          placeholder="查找成员"
+          selectedUserIds={selected}
+          users={candidates}
+        />
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
           <Button disabled={selected.length === 0 || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>

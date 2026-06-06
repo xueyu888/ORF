@@ -10058,14 +10058,13 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-member-list,
-.orf-chat-member-picker {
+.orf-chat-user-picker-list {
   display: grid;
   gap: 6px;
 }
 
 .orf-chat-member-list > div,
-.orf-chat-member-picker button,
-.orf-chat-modal-users button {
+.orf-chat-user-picker-list button {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
@@ -10105,8 +10104,7 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-member-list span:not(.orf-chat-member-avatar),
-.orf-chat-member-picker span:not(.orf-chat-member-avatar),
-.orf-chat-modal-users span:not(.orf-chat-member-avatar) {
+.orf-chat-user-picker-list span:not(.orf-chat-member-avatar) {
   overflow: hidden;
   color: var(--orf-text-primary);
   text-overflow: ellipsis;
@@ -10114,7 +10112,7 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-member-list small,
-.orf-chat-modal-users small {
+.orf-chat-user-picker-list small {
   color: var(--orf-text-muted);
   font-size: 11px;
 }
@@ -10127,8 +10125,7 @@ button.orf-chat-image-attachment {
   font-weight: 800;
 }
 
-.orf-chat-member-selected,
-.orf-chat-modal-users .selected {
+.orf-chat-user-picker-list .selected {
   border-color: var(--orf-accent-border) !important;
   background: var(--orf-accent-soft) !important;
 }
@@ -10228,13 +10225,47 @@ button.orf-chat-image-attachment {
   color: var(--orf-accent-text);
 }
 
-.orf-chat-modal-users {
+.orf-chat-user-picker {
+  display: grid;
+  min-height: 0;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.orf-chat-info-user-picker {
+  padding: 0;
+}
+
+.orf-chat-user-picker-search {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--orf-border);
+  border-radius: var(--orf-radius-control);
+  background: #fff;
+  color: var(--orf-text-muted);
+  padding: 0 10px;
+}
+
+.orf-chat-user-picker-search input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--orf-text-primary);
+  padding: 0;
+  font-size: 13px;
+}
+
+.orf-chat-user-picker-list {
   display: grid;
   min-height: 180px;
   max-height: 320px;
   gap: 6px;
   overflow-y: auto;
-  padding: 12px 14px;
 }
 
 .orf-chat-attachment-preview-panel {

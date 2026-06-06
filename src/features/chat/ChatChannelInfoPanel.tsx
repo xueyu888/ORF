@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Avatar, Button } from "../../components/ui";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { formatPresence, isChatUserOnline } from "./chatPresence";
+import { ChatUserPicker } from "./ChatUserPicker";
 
 type ChatChannelInfoPanelProps = {
   canManage: boolean;
@@ -90,23 +91,15 @@ export function ChatChannelInfoPanel({
           <label>添加成员</label>
           {candidates.length > 0 ? (
             <>
-              <div className="orf-chat-member-picker">
-                {candidates.slice(0, 10).map((user) => (
-                  <button
-                    className={selectedUserIds.includes(user.id) ? "orf-chat-member-selected" : ""}
-                    key={user.id}
-                    type="button"
-                    onClick={() => toggleSelectedUser(user.id)}
-                  >
-                    <span className="orf-chat-member-avatar">
-                      <Avatar avatarUrl={user.avatarUrl} name={user.name} size="sm" />
-                      <i className={clsx("orf-chat-presence-dot", isChatUserOnline(user, currentUserId) && "orf-chat-presence-online")} />
-                    </span>
-                    <span>{user.name}</span>
-                    <small>{formatPresence(user, currentUserId)}</small>
-                  </button>
-                ))}
-              </div>
+              <ChatUserPicker
+                className="orf-chat-info-user-picker"
+                currentUserId={currentUserId}
+                emptyLabel="没有可添加成员"
+                onToggleUser={toggleSelectedUser}
+                placeholder="查找成员"
+                selectedUserIds={selectedUserIds}
+                users={candidates}
+              />
               <Button disabled={selectedUserIds.length === 0} onClick={() => void addSelectedMembers()} variant="secondary">
                 添加成员
               </Button>
