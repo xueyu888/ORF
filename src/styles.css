@@ -9229,6 +9229,14 @@ a.orf-row-loot-action,
   background: rgba(22, 133, 169, 0.08);
 }
 
+.orf-chat-message-threadable {
+  cursor: pointer;
+}
+
+.orf-chat-message-threadable :is(button, a, input, textarea, select, label, [role="button"]) {
+  cursor: revert;
+}
+
 .orf-chat-message:focus-visible {
   outline: 1px solid var(--orf-accent-border);
   outline-offset: -1px;

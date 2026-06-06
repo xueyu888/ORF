@@ -176,6 +176,7 @@ export function ChatMessageItem({
       className={clsx(
         "orf-chat-message",
         compact && "orf-chat-message-compact",
+        onThread && "orf-chat-message-threadable",
         message.pinnedAt && "orf-chat-message-pinned",
         focused && "orf-chat-message-focused",
         emojiOpen && "orf-chat-message-actions-open",
