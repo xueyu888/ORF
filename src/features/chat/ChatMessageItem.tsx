@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Pin, Reply, Smile, Trash2 } from "lucide-react";
-import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize, formatTime } from "./chatFormat";
@@ -148,6 +148,12 @@ export function ChatMessageItem({
     if (isInteractiveMessageTarget(event.target) || hasSelectedMessageText(event.currentTarget)) return;
     onThread(message.rootMessageId ?? message.id);
   };
+  const handleOpenThreadKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (editing || message.deletedAt || isInteractiveMessageTarget(event.target)) return;
+    event.preventDefault();
+    onThread(message.rootMessageId ?? message.id);
+  };
 
   return (
     <article
@@ -161,6 +167,8 @@ export function ChatMessageItem({
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
       onClick={handleOpenThreadClick}
+      onKeyDown={handleOpenThreadKeyDown}
+      tabIndex={!editing && !message.deletedAt ? 0 : undefined}
     >
       {compact ? (
         <div className="orf-chat-message-compact-time">{formatTime(message.createdAt)}</div>
