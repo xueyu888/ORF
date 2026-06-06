@@ -127,17 +127,21 @@ export function ChatComposer({
     }
   };
 
-  const uploadFiles = async (files: File[]) => {
+  const uploadFiles = (files: File[]) => {
     if (disabled) return;
     if (files.length === 0) return;
-    setError("");
-    const uploads = files.slice(0, 10).map((file) => ({ file, item: createAttachmentDraftItem(file) }));
+    const filesToUpload = files.slice(0, 10);
+    setError(files.length > filesToUpload.length ? "一次最多添加 10 个附件，已忽略多余文件" : "");
+    const uploads = filesToUpload.map((file) => ({ file, item: createAttachmentDraftItem(file) }));
     updateAttachmentItemsForDraftKey(draftStorageKey, (items) => [...items, ...uploads.map((upload) => upload.item)]);
     const uploadChannelId = channelId;
     const uploadDraftStorageKey = draftStorageKey;
-    for (const upload of uploads) {
-      await uploadDraftAttachment(upload.item.clientId, upload.file, uploadChannelId, uploadDraftStorageKey);
-    }
+    void Promise.all(uploads.map((upload) => uploadDraftAttachment(
+      upload.item.clientId,
+      upload.file,
+      uploadChannelId,
+      uploadDraftStorageKey,
+    )));
   };
 
   const retryUpload = (item: ChatAttachmentDraftItem) => {
@@ -147,8 +151,8 @@ export function ChatComposer({
     void uploadDraftAttachment(item.clientId, item.file, channelId, draftStorageKey);
   };
 
-  const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
-    await uploadFiles(Array.from(event.target.files ?? []));
+  const handleFiles = (event: ChangeEvent<HTMLInputElement>) => {
+    uploadFiles(Array.from(event.target.files ?? []));
     event.target.value = "";
   };
 
@@ -156,7 +160,7 @@ export function ChatComposer({
     const files = Array.from(event.clipboardData.files ?? []).filter((file) => file.size > 0);
     if (files.length === 0) return;
     event.preventDefault();
-    void uploadFiles(files);
+    uploadFiles(files);
   };
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
@@ -173,7 +177,7 @@ export function ChatComposer({
     if (files.length === 0) return;
     event.preventDefault();
     setDraggingFiles(false);
-    void uploadFiles(files);
+    uploadFiles(files);
   };
 
   const submit = async (nextDraft: ChatDraft) => {
@@ -256,7 +260,7 @@ export function ChatComposer({
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
-            <input multiple hidden ref={fileRef} type="file" onChange={(event) => void handleFiles(event)} />
+            <input multiple hidden ref={fileRef} type="file" onChange={handleFiles} />
           </>
         )}
       />
