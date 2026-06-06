@@ -102,6 +102,78 @@ function wrapCodeMarkdown(draft: ChatDraft, selectionStart: number, selectionEnd
   return createMarkdownResult(draft, text, nextSelectionStart, nextSelectionStart + selected.length);
 }
 
+function findWordEnd(text: string, start: number) {
+  const match = text.slice(start).match(/\s/);
+  return match?.index === undefined ? text.length : start + match.index;
+}
+
+function findWordStart(text: string, start: number) {
+  const before = text.slice(0, start);
+  const match = before.match(/\s\S*$/);
+  return match?.index === undefined ? 0 : match.index + 1;
+}
+
+function applyLinkMarkdown(draft: ChatDraft, selectionStart: number, selectionEnd: number): ChatMarkdownShortcutResult {
+  const selection = normalizeSelection(draft.text, selectionStart, selectionEnd);
+  const placeholderUrl = "https://";
+  const delimiterStart = "[";
+  const delimiterEnd = `](${placeholderUrl})`;
+  const urlOffsetAfterLabel = delimiterStart.length + 2;
+  const prefix = draft.text.slice(0, selection.start);
+  const selected = draft.text.slice(selection.start, selection.end);
+  const suffix = draft.text.slice(selection.end);
+
+  if (prefix.endsWith(delimiterStart) && suffix.startsWith(delimiterEnd)) {
+    const text = `${prefix.slice(0, -delimiterStart.length)}${selected}${suffix.slice(delimiterEnd.length)}`;
+    return createMarkdownResult(draft, text, selection.start - delimiterStart.length, selection.end - delimiterStart.length);
+  }
+
+  if (!draft.text) {
+    const text = `${delimiterStart}${delimiterEnd}`;
+    return createMarkdownResult(draft, text, delimiterStart.length, delimiterStart.length);
+  }
+
+  if (selection.start < selection.end) {
+    const text = `${prefix}${delimiterStart}${selected}${delimiterEnd}${suffix}`;
+    const urlStart = selection.end + urlOffsetAfterLabel;
+    return createMarkdownResult(draft, text, urlStart, urlStart + placeholderUrl.length);
+  }
+
+  const spaceBefore = selection.start > 0 && /\s/.test(draft.text.charAt(selection.start - 1));
+  const spaceAfter = selection.end < draft.text.length && /\s/.test(draft.text.charAt(selection.end));
+  const cursorBeforeWord = (selection.start !== 0 && spaceBefore && !spaceAfter) || (selection.start === 0 && !spaceAfter);
+  const cursorAfterWord = (selection.end !== draft.text.length && spaceAfter && !spaceBefore) || (selection.end === draft.text.length && !spaceBefore);
+
+  if (cursorBeforeWord) {
+    const wordEnd = findWordEnd(draft.text, selection.start);
+    const word = draft.text.slice(selection.start, wordEnd);
+    const text = `${prefix}${delimiterStart}${word}${delimiterEnd}${draft.text.slice(wordEnd)}`;
+    const urlStart = selection.start + word.length + urlOffsetAfterLabel;
+    return createMarkdownResult(draft, text, urlStart, urlStart + placeholderUrl.length);
+  }
+
+  if (cursorAfterWord && selection.start === draft.text.length) {
+    const text = `${draft.text} ${delimiterStart}${delimiterEnd}`;
+    const labelStart = selection.start + 1 + delimiterStart.length;
+    return createMarkdownResult(draft, text, labelStart, labelStart);
+  }
+
+  if (cursorAfterWord) {
+    const wordStart = findWordStart(draft.text, selection.start);
+    const word = draft.text.slice(wordStart, selection.start);
+    const text = `${draft.text.slice(0, wordStart)}${delimiterStart}${word}${delimiterEnd}${suffix}`;
+    const urlStart = selection.start + urlOffsetAfterLabel;
+    return createMarkdownResult(draft, text, urlStart, urlStart + placeholderUrl.length);
+  }
+
+  const wordStart = findWordStart(draft.text, selection.start);
+  const wordEnd = findWordEnd(draft.text, selection.start);
+  const word = draft.text.slice(wordStart, wordEnd);
+  const text = `${draft.text.slice(0, wordStart)}${delimiterStart}${word}${delimiterEnd}${draft.text.slice(wordEnd)}`;
+  const urlStart = wordEnd + urlOffsetAfterLabel;
+  return createMarkdownResult(draft, text, urlStart, urlStart + placeholderUrl.length);
+}
+
 type LineMarkdownMode = Extract<ChatMarkdownMode, "heading" | "orderedList" | "quote" | "unorderedList">;
 
 type LineMarkdownEdit = {
@@ -210,7 +282,7 @@ export function applyChatMarkdownShortcut({
   if (mode === "bold") return wrapInlineMarkdown(draft, selectionStart, selectionEnd, "**");
   if (mode === "code") return wrapCodeMarkdown(draft, selectionStart, selectionEnd);
   if (mode === "italic") return wrapInlineMarkdown(draft, selectionStart, selectionEnd, "_");
-  if (mode === "link") return wrapInlineMarkdown(draft, selectionStart, selectionEnd, "[", "](https://)");
+  if (mode === "link") return applyLinkMarkdown(draft, selectionStart, selectionEnd);
   if (mode === "strike") return wrapInlineMarkdown(draft, selectionStart, selectionEnd, "~~");
   return applyLineMarkdown(draft, selectionStart, selectionEnd, mode);
 }
