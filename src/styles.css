@@ -9574,7 +9574,8 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-message:hover .orf-chat-message-actions,
-.orf-chat-message:focus-within .orf-chat-message-actions,
+.orf-chat-message:focus-visible .orf-chat-message-actions,
+.orf-chat-message:focus-within:not(:focus) .orf-chat-message-actions,
 .orf-chat-message-actions-open .orf-chat-message-actions {
   opacity: 1;
   pointer-events: auto;
@@ -10143,7 +10144,8 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-thread-panel .orf-chat-message:hover .orf-chat-message-actions,
-.orf-chat-thread-panel .orf-chat-message:focus-within .orf-chat-message-actions,
+.orf-chat-thread-panel .orf-chat-message:focus-visible .orf-chat-message-actions,
+.orf-chat-thread-panel .orf-chat-message:focus-within:not(:focus) .orf-chat-message-actions,
 .orf-chat-thread-panel .orf-chat-message-actions-open .orf-chat-message-actions {
   opacity: 1;
   pointer-events: auto;
