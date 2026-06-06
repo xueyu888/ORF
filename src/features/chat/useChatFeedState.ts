@@ -64,6 +64,7 @@ export function useChatFeedState({
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
+  const [feedChannelId, setFeedChannelId] = useState<string | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
   const currentUserIdRef = useRef<string | undefined>(undefined);
   const contextRequestKeyRef = useRef<string | null>(null);
@@ -102,6 +103,7 @@ export function useChatFeedState({
 
   const applySnapshotToActiveFeed = useCallback((channelId: string, snapshot: ReturnType<typeof createFeedSnapshot>) => {
     if (activeChannelIdRef.current !== channelId) return false;
+    setFeedChannelId(channelId);
     setMessages(snapshot.messages);
     setHasNewerMessages(snapshot.hasNewerMessages);
     setHasOlderMessages(snapshot.hasOlderMessages);
@@ -110,6 +112,7 @@ export function useChatFeedState({
 
   const applyMessageToFeed = useCallback((message: ChatMessage) => {
     if (activeChannelIdRef.current === message.channelId) {
+      setFeedChannelId(message.channelId);
       setMessages((items) => {
         const snapshot = applyFeedMessage(feedCacheRef.current.get(message.channelId) ?? createFeedSnapshot({ messages: items }), message);
         if (!snapshot) return items;
@@ -199,6 +202,7 @@ export function useChatFeedState({
     setUnreadAnchor(anchor);
     setPendingNewMessageCount(0);
     olderLoadInFlightRef.current = false;
+    setFeedChannelId(channelId);
     setMessages(cachedFeed?.messages ?? []);
     setHasNewerMessages(cachedFeed?.hasNewerMessages ?? false);
     setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
@@ -217,6 +221,7 @@ export function useChatFeedState({
             response.messages,
           );
           feedCacheRef.current.set(channelId, snapshot);
+          setFeedChannelId(channelId);
           setMessages(response.messages);
           setHasNewerMessages(snapshot.hasNewerMessages);
           setHasOlderMessages(snapshot.hasOlderMessages);
@@ -279,6 +284,7 @@ export function useChatFeedState({
           },
         );
         feedCacheRef.current.set(activeChannelId, snapshot);
+        setFeedChannelId(activeChannelId);
         setMessages(snapshot.messages);
         setHasNewerMessages(snapshot.hasNewerMessages);
         setHasOlderMessages(snapshot.hasOlderMessages);
@@ -357,6 +363,7 @@ export function useChatFeedState({
           response.messages,
         );
         feedCacheRef.current.set(activeChannelId, snapshot);
+        setFeedChannelId(activeChannelId);
         setHasNewerMessages(snapshot.hasNewerMessages);
         setHasOlderMessages(snapshot.hasOlderMessages);
         return snapshot.messages;
@@ -473,12 +480,35 @@ export function useChatFeedState({
     void loadLatestMessages("auto");
   }, [isMessageScrollNearLatest, loadLatestMessages]);
 
+  const activeFeedSnapshot = activeChannelId ? feedCacheRef.current.get(activeChannelId) : undefined;
+  const activeFeedIsState = Boolean(activeChannelId) && feedChannelId === activeChannelId;
+  const displayedMessages = !activeChannelId
+    ? []
+    : activeFeedIsState
+      ? messages
+      : activeFeedSnapshot?.messages ?? [];
+  const displayedHasNewerMessages = !activeChannelId
+    ? false
+    : activeFeedIsState
+      ? hasNewerMessages
+      : activeFeedSnapshot?.hasNewerMessages ?? false;
+  const displayedHasOlderMessages = !activeChannelId
+    ? false
+    : activeFeedIsState
+      ? hasOlderMessages
+      : activeFeedSnapshot?.hasOlderMessages ?? false;
+  const displayedMessagesLoading = !activeChannelId
+    ? false
+    : activeFeedIsState
+      ? messagesLoading
+      : !activeFeedSnapshot || !isFreshFeedSnapshot(activeFeedSnapshot);
+
   return {
     applyMessageToFeed,
     applyRealtimeMessageToFeed,
     handleMessageScroll,
-    hasNewerMessages,
-    hasOlderMessages,
+    hasNewerMessages: displayedHasNewerMessages,
+    hasOlderMessages: displayedHasOlderMessages,
     jumpToUnread,
     loadLatestMessages,
     loadLatestOrScroll,
@@ -486,8 +516,8 @@ export function useChatFeedState({
     markActiveChannelUnread,
     markMessageUnread,
     messageScrollRef,
-    messages,
-    messagesLoading,
+    messages: displayedMessages,
+    messagesLoading: displayedMessagesLoading,
     olderMessagesLoading,
     pendingNewMessageCount,
     prefetchChannelMessages,
