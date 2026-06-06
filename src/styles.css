@@ -9938,7 +9938,8 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-composer-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   min-height: 38px;
   align-items: center;
   gap: 2px;
@@ -9946,10 +9947,32 @@ button.orf-chat-image-attachment {
   padding: 4px 6px;
 }
 
+.orf-chat-composer-format-actions,
+.orf-chat-composer-end-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.orf-chat-composer-format-actions {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.orf-chat-composer-format-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.orf-chat-composer-end-actions {
+  justify-content: flex-end;
+}
+
 .orf-chat-composer-toolbar button {
   display: inline-flex;
   width: 30px;
   height: 30px;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   border: 0;
@@ -9965,10 +9988,7 @@ button.orf-chat-image-attachment {
 
 .orf-chat-composer-emoji-anchor {
   display: inline-flex;
-}
-
-.orf-chat-composer-spacer {
-  flex: 1;
+  flex: 0 0 auto;
 }
 
 .orf-chat-send-button {

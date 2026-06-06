@@ -527,33 +527,36 @@ export function ChatDraftEditor({
         </div>
       )}
       <div className="orf-chat-composer-toolbar">
-        {chatMarkdownCommands.map((command) => {
-          const Icon = command.icon;
-          return (
-            <button type="button" key={command.mode} onClick={() => applyMarkdownMode(command.mode)} title={`${command.label} ${command.shortcutText}`}>
-              <Icon className="h-4 w-4" />
+        <span className="orf-chat-composer-format-actions">
+          {chatMarkdownCommands.map((command) => {
+            const Icon = command.icon;
+            return (
+              <button type="button" key={command.mode} onClick={() => applyMarkdownMode(command.mode)} title={`${command.label} ${command.shortcutText}`}>
+                <Icon className="h-4 w-4" />
+              </button>
+            );
+          })}
+          <span className="orf-chat-composer-emoji-anchor" ref={emojiAnchorRef}>
+            <button type="button" onClick={() => setEmojiOpen((open) => !open)} title="表情 Ctrl/Cmd+Alt+E 或 Ctrl/Cmd+Shift+E">
+              <Smile className="h-4 w-4" />
             </button>
-          );
-        })}
-        <span className="orf-chat-composer-emoji-anchor" ref={emojiAnchorRef}>
-          <button type="button" onClick={() => setEmojiOpen((open) => !open)} title="表情 Ctrl/Cmd+Alt+E 或 Ctrl/Cmd+Shift+E">
-            <Smile className="h-4 w-4" />
-          </button>
-          {emojiOpen && (
-            <ChatReactionPicker
-              anchorRef={emojiAnchorRef}
-              emptyLabel="没有匹配表情"
-              label="插入表情"
-              onClose={() => setEmojiOpen(false)}
-              onSelect={insertEmoji}
-              searchPlaceholder="搜索表情"
-            />
-          )}
+            {emojiOpen && (
+              <ChatReactionPicker
+                anchorRef={emojiAnchorRef}
+                emptyLabel="没有匹配表情"
+                label="插入表情"
+                onClose={() => setEmojiOpen(false)}
+                onSelect={insertEmoji}
+                searchPlaceholder="搜索表情"
+              />
+            )}
+          </span>
+          {toolbarControls}
+          <button type="button" onClick={() => insertTextAtSelection("@")} title="提及成员 @"><AtSign className="h-4 w-4" /></button>
         </span>
-        {toolbarControls}
-        <button type="button" onClick={() => insertTextAtSelection("@")} title="提及成员 @"><AtSign className="h-4 w-4" /></button>
-        <span className="orf-chat-composer-spacer" />
-        {toolbarEnd?.({ submit: () => void submit(), submitting })}
+        <span className="orf-chat-composer-end-actions">
+          {toolbarEnd?.({ submit: () => void submit(), submitting })}
+        </span>
       </div>
     </div>
   );
