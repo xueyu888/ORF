@@ -9277,6 +9277,18 @@ a.orf-row-loot-action,
   min-width: 0;
 }
 
+.orf-chat-message-avatar {
+  position: relative;
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+}
+
+.orf-chat-message-avatar .orf-chat-presence-dot {
+  width: 11px;
+  height: 11px;
+}
+
 .orf-chat-message-compact-time {
   display: flex;
   justify-content: flex-end;

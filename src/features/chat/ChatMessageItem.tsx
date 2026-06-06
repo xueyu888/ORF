@@ -5,6 +5,7 @@ import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
+import { formatPresence, isChatUserOnline } from "./chatPresence";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import { canonicalChatReactionName, displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
@@ -82,6 +83,28 @@ function reactionSummaryLabel(
   return overflowCount > 0
     ? `${reactionLabel}，${reaction.count} 人：${visibleNames} 等 ${overflowCount} 人`
     : `${reactionLabel}，${reaction.count} 人：${visibleNames}`;
+}
+
+function MessageAuthorAvatar({
+  currentUserId,
+  message,
+  usersById,
+}: {
+  currentUserId?: string;
+  message: ChatMessage;
+  usersById: Map<string, ChatUser>;
+}) {
+  const author = usersById.get(message.authorUserId);
+  const presence = formatPresence(author, currentUserId);
+  return (
+    <span className="orf-chat-message-avatar" title={`${message.authorName} · ${presence}`}>
+      <Avatar avatarUrl={message.authorAvatarUrl} name={message.authorName} size="md" />
+      <i
+        aria-label={presence}
+        className={clsx("orf-chat-presence-dot", isChatUserOnline(author, currentUserId) && "orf-chat-presence-online")}
+      />
+    </span>
+  );
 }
 
 function CollapsibleMessageText({ body, usersById }: { body: string; usersById: Map<string, ChatUser> }) {
@@ -412,7 +435,7 @@ export function ChatMessageItem({
       {compact ? (
         <div className="orf-chat-message-compact-time" title={formatDateTime(message.createdAt)}>{formatTime(message.createdAt)}</div>
       ) : (
-        <Avatar avatarUrl={message.authorAvatarUrl} name={message.authorName} size="md" />
+        <MessageAuthorAvatar currentUserId={currentUserId} message={message} usersById={usersById} />
       )}
       <div className="orf-chat-message-body">
         {(!compact || message.pinnedAt || message.editedAt) && (
