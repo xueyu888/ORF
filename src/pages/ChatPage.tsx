@@ -10,7 +10,7 @@ import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import {
-  type ChatDraft,
+  type ChatSendInput,
   currentMembership,
   hasStoredDraftForChannel,
   serializeDraft,
@@ -251,10 +251,9 @@ export function ChatPage() {
   });
 
   const handleSendMessage = useCallback(
-    async (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => {
-      if (!activeChannel) return;
+    async ({ attachments, channelId, draft, parentMessageId, rootMessageId }: ChatSendInput) => {
       const response = await sendChatMessageRequest({
-        channelId: activeChannel.id,
+        channelId,
         body: serializeDraft(draft),
         attachmentIds: attachments.map((attachment) => attachment.id),
         rootMessageId,
@@ -262,17 +261,20 @@ export function ChatPage() {
       });
       applyChannel(response.channel);
       if (rootMessageId) {
+        applyMessage(response.message);
         appendThreadReply(response.message);
-      } else {
+      } else if (activeChannel?.id === channelId) {
         if (hasNewerMessages) {
           await loadLatestMessages("smooth");
         } else {
           applyMessage(response.message);
           requestScrollToLatest("smooth");
         }
+      } else {
+        applyMessage(response.message);
       }
     },
-    [activeChannel, appendThreadReply, applyChannel, applyMessage, hasNewerMessages, loadLatestMessages, requestScrollToLatest],
+    [activeChannel?.id, appendThreadReply, applyChannel, applyMessage, hasNewerMessages, loadLatestMessages, requestScrollToLatest],
   );
 
   const handleEditMessage = useCallback(

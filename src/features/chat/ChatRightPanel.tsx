@@ -3,7 +3,7 @@ import { IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
 import { ChatCollectionPanel } from "./ChatCollectionPanel";
-import type { ChatDraft } from "./chatModels";
+import type { ChatSendHandler } from "./chatModels";
 import type { ActivePanel, ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { ChatSearchPanel } from "./ChatSearchPanel";
 import { ChatThreadInboxPanel } from "./ChatThreadInboxPanel";
@@ -35,12 +35,7 @@ type ChatRightPanelProps = {
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
-  onSendThreadReply: (
-    draft: ChatDraft,
-    attachments: ChatAttachment[],
-    rootMessageId?: string | null,
-    parentMessageId?: string | null,
-  ) => Promise<void>;
+  onSendThreadReply: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: () => void;
   onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;

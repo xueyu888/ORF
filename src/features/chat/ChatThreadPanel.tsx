@@ -5,7 +5,7 @@ import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
 import { scrollChatFeedToLatest, scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
-import type { ChatDraft } from "./chatModels";
+import type { ChatSendHandler } from "./chatModels";
 
 type ChatThreadPanelProps = {
   canPin: boolean;
@@ -23,12 +23,7 @@ type ChatThreadPanelProps = {
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
-  onSend: (
-    draft: ChatDraft,
-    attachments: ChatAttachment[],
-    rootMessageId?: string | null,
-    parentMessageId?: string | null,
-  ) => Promise<void>;
+  onSend: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
   onTyping: () => void;
   thread: ChatThread;

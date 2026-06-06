@@ -1,4 +1,4 @@
-import type { ChatChannel, ChatMessage, ChatThreadSummary, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatChannel, ChatMessage, ChatThreadSummary, ChatUser } from "../../types/orf";
 
 export type DraftMention = {
   end: number;
@@ -11,6 +11,16 @@ export type ChatDraft = {
   mentions: DraftMention[];
   text: string;
 };
+
+export type ChatSendInput = {
+  attachments: ChatAttachment[];
+  channelId: string;
+  draft: ChatDraft;
+  parentMessageId?: string | null;
+  rootMessageId?: string | null;
+};
+
+export type ChatSendHandler = (input: ChatSendInput) => Promise<void>;
 
 export type UnreadAnchor = {
   channelId: string;
@@ -125,6 +135,23 @@ export function upsertChannelMessage(messages: ChatMessage[], next: ChatMessage)
   return !next.rootMessageId || messages.some((message) => message.id === next.id) ? upsertMessage(messages, next) : messages;
 }
 
+export function applyThreadReplyToRootMessage(messages: ChatMessage[], reply: ChatMessage) {
+  if (!reply.rootMessageId || reply.deletedAt) return messages;
+  let changed = false;
+  const nextMessages = messages.map((message) => {
+    if (message.id !== reply.rootMessageId) return message;
+    const isNewerReply = !message.lastReplyAt || message.lastReplyAt < reply.createdAt;
+    if (!isNewerReply) return message;
+    changed = true;
+    return {
+      ...message,
+      lastReplyAt: reply.createdAt,
+      replyCount: message.replyCount + 1,
+    };
+  });
+  return changed ? nextMessages : messages;
+}
+
 function trimFeedWindow(messages: ChatMessage[], direction: "older" | "newer", limit = chatFeedWindowMessageLimit) {
   if (messages.length <= limit) {
     return { droppedNewer: false, droppedOlder: false, messages };
@@ -179,8 +206,12 @@ export function isFreshFeedSnapshot(snapshot: ChatFeedSnapshot | undefined, now 
 export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message: ChatMessage) {
   if (!snapshot && message.rootMessageId) return undefined;
   const current = snapshot ?? createFeedSnapshot({ messages: [] });
+  if (message.rootMessageId) {
+    const messages = applyThreadReplyToRootMessage(current.messages, message);
+    return messages === current.messages ? current : { ...current, messages };
+  }
   const messageExists = current.messages.some((item) => item.id === message.id);
-  if (!messageExists && (message.rootMessageId || current.hasNewerMessages)) return current;
+  if (!messageExists && current.hasNewerMessages) return current;
   const messages = upsertChannelMessage(current.messages, message);
   if (messages === current.messages) return current;
   const trimmed = trimFeedWindow(messages, "newer");

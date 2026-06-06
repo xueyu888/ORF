@@ -22,6 +22,7 @@ import {
 } from "./chatComposerModel";
 import {
   type ChatDraft,
+  type ChatSendHandler,
   chatDraftStorageKey,
   emptyDraft,
   hasStoredDraftForChannel,
@@ -34,7 +35,7 @@ type ChatComposerProps = {
   disabled?: boolean;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
-  onSend: (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => Promise<void>;
+  onSend: ChatSendHandler;
   onTyping?: () => void;
   parentMessageId?: string | null;
   rootMessageId?: string | null;
@@ -135,7 +136,13 @@ export function ChatComposer({
     }
     setError("");
     try {
-      await onSend(nextDraft, uploadedAttachments, rootMessageId, parentMessageId);
+      await onSend({
+        attachments: uploadedAttachments,
+        channelId,
+        draft: nextDraft,
+        parentMessageId,
+        rootMessageId,
+      });
       setDraft(emptyDraft);
       setAttachmentItems([]);
       return true;
