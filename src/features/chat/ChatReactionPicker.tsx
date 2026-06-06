@@ -72,28 +72,39 @@ export function ChatReactionPicker({
   };
 
   const handlePickerKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+      return;
+    }
     if (event.key === "ArrowRight") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(1);
       return;
     }
     if (event.key === "ArrowLeft") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(-1);
       return;
     }
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(6);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      event.stopPropagation();
       moveSelection(-6);
       return;
     }
     if (event.key === "Enter" && options.length > 0) {
       event.preventDefault();
+      event.stopPropagation();
       onSelect(options[selectedIndex]?.emojiName ?? options[0].emojiName);
     }
   };
