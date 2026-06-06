@@ -1,11 +1,11 @@
 import { Bell, BellOff } from "lucide-react";
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { ChatAttachment, ChatMessage, ChatThread, ChatUser } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
 import { isChatFeedNearLatest, scrollChatFeedToLatest, scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
-import type { ChatSendHandler } from "./chatModels";
+import { chatMessageDeliveryStatus, type ChatSendHandler } from "./chatModels";
 
 type ChatThreadPanelProps = {
   canPin: boolean;
@@ -64,6 +64,18 @@ export function ChatThreadPanel({
   const previousThreadIdRef = useRef<string | null>(null);
   const previousReplyCountRef = useRef(0);
   const wasNearLatestRef = useRef(true);
+  const editLatestOwnThreadMessage = useCallback(() => {
+    const latestOwnMessage = [thread.rootMessage, ...thread.replies]
+      .reverse()
+      .find((message) => (
+        message.authorUserId === currentUserId &&
+        !message.deletedAt &&
+        !chatMessageDeliveryStatus(message)
+      ));
+    if (latestOwnMessage) {
+      onEdit(latestOwnMessage);
+    }
+  }, [currentUserId, onEdit, thread.replies, thread.rootMessage]);
 
   useLayoutEffect(() => {
     const previousThreadId = previousThreadIdRef.current;
@@ -161,6 +173,7 @@ export function ChatThreadPanel({
         focusSignal={composerFocusSignal}
         mentionableUsers={users}
         onDraftStateChange={onDraftStateChange}
+        onEditLatest={editLatestOwnThreadMessage}
         onSend={onSend}
         onTyping={onTyping}
         parentMessageId={thread.replies.at(-1)?.id ?? thread.rootMessage.id}

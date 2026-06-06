@@ -246,7 +246,7 @@ export function ChatComposer({
         focusSignal={focusSignal}
         mentionableUsers={mentionableUsers}
         onChange={setDraft}
-        onEditLatest={!rootMessageId && attachmentItems.length === 0 ? onEditLatest : undefined}
+        onEditLatest={attachmentItems.length === 0 ? onEditLatest : undefined}
         onPaste={handlePaste}
         onReactToLatest={!rootMessageId ? onReactToLatest : undefined}
         onReplyToLatest={!rootMessageId && attachmentItems.length === 0 ? onReplyToLatest : undefined}
