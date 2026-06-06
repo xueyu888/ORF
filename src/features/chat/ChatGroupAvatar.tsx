@@ -33,7 +33,6 @@ export function ChatGroupAvatar({ channel, className, currentUserId, usersById }
           <UsersRound aria-hidden="true" />
         </span>
       )}
-      {channel.memberCount > 3 && <span className="orf-chat-group-avatar-count">{channel.memberCount}</span>}
     </span>
   );
 }

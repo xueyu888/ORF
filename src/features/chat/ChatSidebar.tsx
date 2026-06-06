@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { IconButton } from "../../components/ui";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
-import { channelIcon } from "./chatChannelPresentation";
 import { ChatGroupAvatar } from "./ChatGroupAvatar";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 
@@ -50,14 +49,14 @@ export function ChatSidebar({
     ? regularChannels.filter((channel) => !favoriteChannelIds.has(channel.id))
     : regularChannels;
   const publicChannels = uncategorizedChannels.filter((channel) => channel.type === "public");
-  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private");
-  const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct" || channel.type === "group");
+  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private" || channel.type === "group");
+  const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct");
   const channelGroups: Array<{ channels: ChatChannel[]; title: string }> = [
     { title: "未读", channels: unreadChannels },
     { title: "收藏", channels: favorites },
     { title: "公开频道", channels: publicChannels },
     { title: "私有频道", channels: privateChannels },
-    { title: "私信/群聊", channels: conversations },
+    { title: "私信", channels: conversations },
   ];
 
   return (
@@ -143,10 +142,9 @@ function ChannelGroup({
         )}
       </div>
       {channels.map((channel) => {
-        const Icon = channelIcon(channel);
         const membership = currentMembership(channel, currentUserId);
         const directPeer = directChannelPeer(channel, currentUserId, usersById);
-        const isGroupConversation = channel.type === "group";
+        const isChannel = channel.type !== "direct";
         const hasUnreadBadge = channel.mentionCount > 0 || channel.unreadCount > 0 || channel.threadUnreadCount > 0;
         const hasDraft = draftChannelIds.has(channel.id);
         return (
@@ -155,7 +153,7 @@ function ChannelGroup({
             className={clsx(
               "orf-chat-channel-item",
               channel.id === activeChannelId && "orf-chat-channel-item-active",
-              (directPeer || isGroupConversation) && "orf-chat-channel-item-conversation",
+              (directPeer || isChannel) && "orf-chat-channel-item-conversation",
               membership?.muted && "orf-chat-channel-item-muted",
             )}
             key={channel.id}
@@ -165,10 +163,8 @@ function ChannelGroup({
           >
             {directPeer ? (
               <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} name={directPeer.name} size="sm" user={directPeer} />
-            ) : isGroupConversation ? (
-              <ChatGroupAvatar channel={channel} className="orf-chat-channel-avatar" currentUserId={currentUserId} usersById={usersById} />
             ) : (
-              <Icon className="h-4 w-4" />
+              <ChatGroupAvatar channel={channel} className="orf-chat-channel-avatar" currentUserId={currentUserId} usersById={usersById} />
             )}
             <span className="truncate">{channel.displayName}</span>
             {hasUnreadBadge ? (

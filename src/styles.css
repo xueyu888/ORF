@@ -4880,18 +4880,6 @@ button:disabled {
     0 10px 22px rgba(3, 105, 161, 0.14);
 }
 
-.orf-sidebar-link-active::before {
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  width: 3px;
-  border-radius: 999px;
-  content: "";
-  background: linear-gradient(180deg, #67e8f9 0%, #38bdf8 58%, #facc15 100%);
-  box-shadow: 0 0 16px rgba(103, 232, 249, 0.62);
-}
-
 .orf-sidebar-link-inactive {
   color: var(--orf-sidebar-link-text);
 }
@@ -9028,26 +9016,6 @@ a.orf-row-loot-action,
   width: 15px;
   height: 15px;
   stroke-width: 2.5;
-}
-
-.orf-chat-group-avatar-count {
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  display: inline-flex;
-  min-width: 14px;
-  height: 14px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 3px;
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  border-radius: 999px;
-  background: #0f7891;
-  color: #fff;
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1;
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.18);
 }
 
 .orf-chat-channel-item:hover {
