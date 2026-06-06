@@ -120,6 +120,11 @@ type TypingState = {
   userName: string;
 };
 
+type PendingThreadTarget = {
+  focusMessageId: string;
+  rootMessageId: string;
+};
+
 const reactionEmojis = ["👍", "👀", "✅", "❤️", "🔥", "🎉", "😂", "😮", "🙏"];
 
 function formatTime(value: string) {
@@ -234,7 +239,9 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [thread, setThread] = useState<ChatThread | null>(null);
+  const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
+  const [pendingThreadTarget, setPendingThreadTarget] = useState<PendingThreadTarget | null>(null);
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
@@ -488,6 +495,7 @@ export function ChatPage() {
         setHasNewerMessages(snapshot.hasNewerMessages);
         setHasOlderMessages(snapshot.hasOlderMessages);
         if (response.targetMessageId !== requestedMessageId) {
+          setPendingThreadTarget({ focusMessageId: requestedMessageId, rootMessageId: response.targetMessageId });
           setSearchParams((params) => {
             params.set("message", response.targetMessageId);
             return params;
@@ -591,14 +599,16 @@ export function ChatPage() {
   }, []);
 
   const openThread = useCallback(
-    async (rootMessageId: string) => {
+    async (rootMessageId: string, focusMessageId?: string | null) => {
       setActivePanel("thread");
+      setThreadFocusMessageId(focusMessageId ?? null);
       setThreadLoading(true);
       try {
         const response = await getChatThread(rootMessageId);
         setThread(response.thread);
       } catch (error) {
         setThread(null);
+        setThreadFocusMessageId(null);
         notify(error instanceof Error ? error.message : "加载线程失败");
       } finally {
         setThreadLoading(false);
@@ -606,6 +616,12 @@ export function ChatPage() {
     },
     [notify],
   );
+
+  useEffect(() => {
+    if (!pendingThreadTarget) return;
+    void openThread(pendingThreadTarget.rootMessageId, pendingThreadTarget.focusMessageId);
+    setPendingThreadTarget(null);
+  }, [openThread, pendingThreadTarget]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!activeChannel || messages.length === 0 || olderMessagesLoading || !hasOlderMessages) return;
@@ -731,8 +747,7 @@ export function ChatPage() {
   }, [activeChannel?.id, applyChannel, currentUser?.id]);
 
   const handleCopyMessageLink = useCallback(async (message: ChatMessage) => {
-    const targetMessageId = message.rootMessageId ?? message.id;
-    const url = `${window.location.origin}/chat/${encodeURIComponent(message.channelId)}?message=${encodeURIComponent(targetMessageId)}`;
+    const url = `${window.location.origin}/chat/${encodeURIComponent(message.channelId)}?message=${encodeURIComponent(message.id)}`;
     try {
       await navigator.clipboard.writeText(url);
       notify("已复制消息链接");
@@ -1005,7 +1020,7 @@ export function ChatPage() {
           threadSummaries={threadSummaries}
           threadSummariesLoading={threadSummariesLoading}
           onOpenResult={(result) => {
-            navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.rootMessageId ?? result.message.id)}`);
+            navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.id)}`);
           }}
           onOpenThreadSummary={(summary) => {
             navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
@@ -1033,6 +1048,7 @@ export function ChatPage() {
           setSearchScope={setSearchScope}
           setSearchType={setSearchType}
           thread={thread}
+          threadFocusMessageId={threadFocusMessageId}
           threadLoading={threadLoading}
           users={activeMentionableUsers}
           usersById={usersById}
@@ -1412,6 +1428,7 @@ function MessageItem({
   return (
     <article
       className={clsx("orf-chat-message", message.pinnedAt && "orf-chat-message-pinned", focused && "orf-chat-message-focused")}
+      data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
     >
@@ -1872,6 +1889,7 @@ function ChatRightPanel(props: {
   setSearchScope: (value: ChatSearchScope) => void;
   setSearchType: (value: ChatSearchTypeFilter) => void;
   thread: ChatThread | null;
+  threadFocusMessageId: string | null;
   threadLoading: boolean;
   threadSummaries: ChatThreadSummary[];
   threadSummariesLoading: boolean;
@@ -1908,6 +1926,7 @@ function ChatRightPanel(props: {
             onSend={props.onSendThreadReply}
             onToggleFollow={props.onToggleFollow}
             onTyping={props.onTyping}
+            focusMessageId={props.threadFocusMessageId}
             thread={props.thread}
             users={props.users}
             usersById={props.usersById}
@@ -2024,6 +2043,7 @@ function ThreadPanel({
   onAttachmentPreview,
   canPin,
   currentUserId,
+  focusMessageId,
   onCopyLink,
   onDelete,
   onDraftStateChange,
@@ -2042,6 +2062,7 @@ function ThreadPanel({
   onAttachmentPreview: (attachment: ChatAttachment) => void;
   canPin: boolean;
   currentUserId?: string;
+  focusMessageId: string | null;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
@@ -2063,15 +2084,24 @@ function ThreadPanel({
     window.requestAnimationFrame(() => {
       const element = threadPanelRef.current;
       if (!element) return;
+      if (focusMessageId) {
+        const target = Array.from(element.querySelectorAll<HTMLElement>("[data-chat-message-id]"))
+          .find((node) => node.dataset.chatMessageId === focusMessageId);
+        if (target) {
+          element.scrollTo({ top: Math.max(0, target.offsetTop - 20), behavior: "smooth" });
+          return;
+        }
+      }
       element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
     });
-  }, [thread.replies.length]);
+  }, [focusMessageId, thread.replies.length, thread.rootMessage.id]);
 
   return (
     <div className="orf-chat-thread-panel" ref={threadPanelRef}>
       <MessageItem
         canPin={canPin}
         currentUserId={currentUserId}
+        focused={focusMessageId === thread.rootMessage.id}
         message={thread.rootMessage}
         onCopyLink={onCopyLink}
         onDelete={onDelete}
@@ -2094,6 +2124,7 @@ function ThreadPanel({
             canPin={canPin}
             currentUserId={currentUserId}
             key={reply.id}
+            focused={focusMessageId === reply.id}
             message={reply}
             onCopyLink={onCopyLink}
             onDelete={onDelete}
