@@ -813,6 +813,17 @@ function assertChannelMembershipBoundary(input: {
   }
 }
 
+function invalidConversationMemberReason(channel: MattermostChannel, memberRows: { role: string; userId: string }[]) {
+  const type = mattermostTypeToOrf(channel.type);
+  if (type === "direct" && memberRows.length !== 2) {
+    return `direct channel requires exactly 2 mapped ORF members, got ${memberRows.length}`;
+  }
+  if (type === "group" && memberRows.length < 3) {
+    return `group channel requires at least 3 mapped ORF members, got ${memberRows.length}`;
+  }
+  return null;
+}
+
 async function getPublicTeamMemberUserIds(input: {
   channel: MattermostChannel;
   cache: Map<string, string[]>;
@@ -1261,6 +1272,11 @@ async function main() {
     const memberRows = memberRowsForChannel({ channel, fallbackUser, matches, members, orfUsers, publicTeamMemberUserIds });
     if (memberRows.length === 0) {
       console.warn(`WARN: skipping channel without mapped members: ${channel.display_name || channel.name || channel.id}`);
+      continue;
+    }
+    const invalidConversationReason = invalidConversationMemberReason(channel, memberRows);
+    if (invalidConversationReason) {
+      console.warn(`WARN: skipping channel with invalid ORF conversation members: ${channel.display_name || channel.name || channel.id} (${invalidConversationReason})`);
       continue;
     }
     assertChannelMembershipBoundary({ channel, memberRows, orfUsers });

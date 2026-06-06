@@ -1,16 +1,18 @@
 import { useEffect, useRef } from "react";
 import type { AppNotification } from "../../types/orf";
-import type { OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../types/realtime";
+import type { ChatRealtimeEvent, OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../types/realtime";
 
 type RealtimeEventOptions = {
   enabled: boolean;
   onBroadcast: (broadcast: SystemBroadcast) => void;
+  onChatEvent?: (event: ChatRealtimeEvent) => void;
   onReadModelInvalidation: (invalidation: OrfReadModelInvalidation) => void;
   onNotification: (notification: AppNotification) => void;
 };
 
-export function useRealtimeEvents({ enabled, onBroadcast, onNotification, onReadModelInvalidation }: RealtimeEventOptions) {
+export function useRealtimeEvents({ enabled, onBroadcast, onChatEvent, onNotification, onReadModelInvalidation }: RealtimeEventOptions) {
   const onBroadcastRef = useRef(onBroadcast);
+  const onChatEventRef = useRef(onChatEvent);
   const onNotificationRef = useRef(onNotification);
   const onReadModelInvalidationRef = useRef(onReadModelInvalidation);
 
@@ -21,6 +23,10 @@ export function useRealtimeEvents({ enabled, onBroadcast, onNotification, onRead
   useEffect(() => {
     onNotificationRef.current = onNotification;
   }, [onNotification]);
+
+  useEffect(() => {
+    onChatEventRef.current = onChatEvent;
+  }, [onChatEvent]);
 
   useEffect(() => {
     onReadModelInvalidationRef.current = onReadModelInvalidation;
@@ -44,6 +50,12 @@ export function useRealtimeEvents({ enabled, onBroadcast, onNotification, onRead
         onBroadcastRef.current(payload.broadcast);
       }
     };
+    const handleChatEvent = (event: MessageEvent<string>) => {
+      const payload = parseRealtimeEvent(event.data);
+      if (payload?.kind === "chat.event") {
+        onChatEventRef.current?.(payload);
+      }
+    };
     const handleReadModelInvalidation = (event: MessageEvent<string>) => {
       const payload = parseRealtimeEvent(event.data);
       if (payload?.kind === "orf.read-model.invalidated") {
@@ -53,10 +65,12 @@ export function useRealtimeEvents({ enabled, onBroadcast, onNotification, onRead
 
     source.addEventListener("notification.created", handleNotification);
     source.addEventListener("system.broadcast", handleBroadcast);
+    source.addEventListener("chat.event", handleChatEvent);
     source.addEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
     return () => {
       source.removeEventListener("notification.created", handleNotification);
       source.removeEventListener("system.broadcast", handleBroadcast);
+      source.removeEventListener("chat.event", handleChatEvent);
       source.removeEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
       source.close();
     };

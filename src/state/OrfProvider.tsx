@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { API_AUTHENTICATION_EXPIRED_EVENT, getUserPreferences } from "./apiClient";
+import { API_AUTHENTICATION_EXPIRED_EVENT, getChatUnreadSummary, getUserPreferences } from "./apiClient";
 import { shouldLoadInitialTaskManagementReadModel } from "./orfDataLoading";
 import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
@@ -26,7 +26,7 @@ import { readModelInvalidationKey } from "../features/realtime/readModelInvalida
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
-import type { OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
+import type { ChatRealtimeEvent, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
   CommentStatus,
   CommentTargetType,
@@ -42,6 +42,7 @@ import type {
   BountySource,
   ContributionAllocation,
   AppNotification,
+  ChatUnreadSummary,
   UncertaintyLevel,
   UserRole,
 } from "../types/orf";
@@ -59,6 +60,14 @@ interface ToastMessage {
   message: string;
 }
 
+const emptyChatUnreadSummary: ChatUnreadSummary = {
+  mentionCount: 0,
+  messageUnreadCount: 0,
+  threadUnreadCount: 0,
+  totalUnreadCount: 0,
+  unreadChannelCount: 0,
+};
+
 interface OrfContextValue {
   state: OrfState;
   currentUser: OrfUser | null;
@@ -72,6 +81,7 @@ interface OrfContextValue {
   notifications: AppNotification[];
   readModelInvalidations: OrfReadModelInvalidation[];
   systemBroadcasts: SystemBroadcast[];
+  chatUnreadSummary: ChatUnreadSummary;
   unreadNotificationCount: number;
   openModal: (modal: ModalState) => void;
   closeModal: () => void;
@@ -79,6 +89,7 @@ interface OrfContextValue {
   removeToast: (id: string) => void;
   dismissSystemBroadcast: (id: string) => void;
   resetState: () => void;
+  refreshChatUnreadSummary: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
   markNotificationRead: (notificationId: string) => Promise<boolean>;
   markAllNotificationsRead: () => Promise<boolean>;
@@ -171,6 +182,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [readModelInvalidations, setReadModelInvalidations] = useState<OrfReadModelInvalidation[]>([]);
   const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
+  const [chatUnreadSummary, setChatUnreadSummary] = useState<ChatUnreadSummary>(emptyChatUnreadSummary);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
       return;
@@ -257,20 +269,35 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const receiveReadModelInvalidation = useCallback((invalidation: OrfReadModelInvalidation) => {
     setReadModelInvalidations((items) => [invalidation, ...items.filter((item) => item.id !== invalidation.id)].slice(0, 64));
   }, []);
+  const refreshChatUnreadSummary = useCallback(async () => {
+    const summary = await getChatUnreadSummary();
+    setChatUnreadSummary(summary);
+  }, []);
+  const receiveRealtimeChatEvent = useCallback((event: ChatRealtimeEvent) => {
+    if (event.eventType === "typing") return;
+    void refreshChatUnreadSummary().catch(() => undefined);
+  }, [refreshChatUnreadSummary]);
 
   useRealtimeEvents({
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
+    onChatEvent: receiveRealtimeChatEvent,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
   });
 
   useEffect(() => {
     if (!isAuthenticated || !isApproved) {
+      setChatUnreadSummary(emptyChatUnreadSummary);
       setReadModelInvalidations([]);
       setSystemBroadcasts([]);
     }
   }, [isApproved, isAuthenticated]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) return;
+    void refreshChatUnreadSummary().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, refreshChatUnreadSummary]);
 
   useEffect(() => {
     void refreshAuthSession();
@@ -381,6 +408,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       notifications,
       readModelInvalidations,
       systemBroadcasts,
+      chatUnreadSummary,
       unreadNotificationCount,
       openModal: setModal,
       closeModal: () => setModal({ type: null }),
@@ -392,6 +420,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
           .then(() => notify("数据已从后端重新加载"))
           .catch((error) => notify(businessMutationFailureMessage(error, "重新加载数据失败")));
       },
+      refreshChatUnreadSummary,
       refreshNotifications,
       markNotificationRead,
       markAllNotificationsRead,
@@ -406,6 +435,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     }),
     [
       authReady,
+      chatUnreadSummary,
       commentActions,
       currentUser,
       dismissSystemBroadcast,
@@ -423,6 +453,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       readModelInvalidations,
       resultActions,
       feedbackActions,
+      refreshChatUnreadSummary,
       refreshNotifications,
       refreshTaskManagementData,
       systemBroadcasts,

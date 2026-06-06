@@ -503,6 +503,14 @@ export interface ChatBootstrap {
   };
 }
 
+export interface ChatUnreadSummary {
+  mentionCount: number;
+  messageUnreadCount: number;
+  threadUnreadCount: number;
+  totalUnreadCount: number;
+  unreadChannelCount: number;
+}
+
 export interface OrfState {
   users: OrfUser[];
   currentUserId: string;

@@ -9,6 +9,7 @@ import type {
   ChatSearchResult,
   ChatThread,
   ChatThreadSummary,
+  ChatUnreadSummary,
   ChatUser,
   CommentAttachment,
   CommentTargetType,
@@ -47,6 +48,7 @@ export type CommentAttachmentUploadResponse = {
   markdown: string;
 };
 export type ChatBootstrapResponse = ChatBootstrap;
+export type ChatUnreadSummaryResponse = ChatUnreadSummary;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
 export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
 export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
@@ -447,6 +449,10 @@ export async function getPinnedChatMessages(channelId: string) {
 
 export async function getSavedChatMessages() {
   return apiJson<ChatSearchResponse>("/api/chat/saved");
+}
+
+export async function getChatUnreadSummary() {
+  return apiJson<ChatUnreadSummaryResponse>("/api/chat/unread-summary");
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {

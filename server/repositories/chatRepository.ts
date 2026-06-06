@@ -11,6 +11,7 @@ import type {
   ChatSearchResult,
   ChatThread,
   ChatThreadSummary,
+  ChatUnreadSummary,
   ChatUser,
 } from "../../src/types/orf";
 import type { ChatRealtimeEventType } from "../../src/types/realtime";
@@ -117,21 +118,67 @@ async function listActiveTeamUsers(teamId: string) {
   return rows.map(toChatUser);
 }
 
-async function listVisibleChannelRows(actor: ChatActor) {
+async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?: string } = {}) {
   const teamId = storageTeamId(actor);
   await preparePublicChannels(teamId);
+  const params = input.channelId ? [teamId, actor.id, input.channelId] : [teamId, actor.id];
+  const channelFilter = input.channelId ? "AND c.id = $3" : "";
   const { rows } = await pool.query<ChannelRow>(
     `
-      SELECT c.id, c.team_id, c.type, c.name, c.display_name, c.purpose, c.header, c.created_by, c.archived_by, c.created_at, c.updated_at, c.archived_at
-      FROM chat_channels c
-      INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $2
-      WHERE c.team_id = $1
-        AND c.archived_at IS NULL
-      ORDER BY m.favorite DESC, c.type, c.updated_at DESC, lower(c.display_name)
+      WITH visible_channels AS (
+        SELECT
+          c.id,
+          c.team_id,
+          c.type,
+          c.name,
+          c.display_name,
+          c.purpose,
+          c.header,
+          c.created_by,
+          c.archived_by,
+          c.created_at,
+          c.updated_at,
+          c.archived_at,
+          m.favorite AS current_favorite,
+          (
+            SELECT count(*)::int
+            FROM chat_channel_members cm
+            WHERE cm.channel_id = c.id
+          ) AS member_count,
+          (
+            SELECT count(*)::int
+            FROM chat_messages msg
+            WHERE msg.channel_id = c.id
+          ) AS message_count
+        FROM chat_channels c
+        INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $2
+        WHERE c.team_id = $1
+          AND c.archived_at IS NULL
+          ${channelFilter}
+      ),
+      ranked_channels AS (
+        SELECT
+          *,
+          row_number() OVER (
+            PARTITION BY team_id, type, lower(display_name)
+            ORDER BY (message_count > 0) DESC, updated_at DESC, id
+          ) AS empty_duplicate_rank
+        FROM visible_channels
+      )
+      SELECT id, team_id, type, name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
+      FROM ranked_channels
+      WHERE NOT (type = 'direct' AND member_count <> 2)
+        AND NOT (type = 'group' AND member_count < 3)
+        AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
+      ORDER BY current_favorite DESC, type, updated_at DESC, lower(display_name)
     `,
-    [teamId, actor.id],
+    params,
   );
   return rows;
+}
+
+async function listVisibleChannelRows(actor: ChatActor) {
+  return loadDisplayableChannelRows(actor);
 }
 
 async function loadMembers(channelIds: string[]) {
@@ -281,20 +328,7 @@ async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<Chat
 }
 
 async function getVisibleChannel(actor: ChatActor, channelId: string): Promise<ChatChannel | null> {
-  const teamId = storageTeamId(actor);
-  await preparePublicChannels(teamId);
-  const { rows } = await pool.query<ChannelRow>(
-    `
-      SELECT c.id, c.team_id, c.type, c.name, c.display_name, c.purpose, c.header, c.created_by, c.archived_by, c.created_at, c.updated_at, c.archived_at
-      FROM chat_channels c
-      INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $3
-      WHERE c.team_id = $1
-        AND c.id = $2
-        AND c.archived_at IS NULL
-      LIMIT 1
-    `,
-    [teamId, channelId, actor.id],
-  );
+  const rows = await loadDisplayableChannelRows(actor, { channelId });
   const [channel] = await buildChannels(rows, actor);
   return channel ?? null;
 }
@@ -744,6 +778,34 @@ export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap>
       canWrite: actor.canWrite,
     },
   };
+}
+
+function summarizeChatUnread(channels: ChatChannel[]): ChatUnreadSummary {
+  const messageUnreadCount = channels.reduce((total, channel) => total + channel.unreadCount, 0);
+  const threadUnreadCount = channels.reduce((total, channel) => total + channel.threadUnreadCount, 0);
+  return {
+    mentionCount: channels.reduce((total, channel) => total + channel.mentionCount, 0),
+    messageUnreadCount,
+    threadUnreadCount,
+    totalUnreadCount: messageUnreadCount + threadUnreadCount,
+    unreadChannelCount: channels.filter((channel) => channel.unreadCount > 0 || channel.threadUnreadCount > 0).length,
+  };
+}
+
+export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnreadSummary> {
+  if (!actor.canRead) {
+    return {
+      mentionCount: 0,
+      messageUnreadCount: 0,
+      threadUnreadCount: 0,
+      totalUnreadCount: 0,
+      unreadChannelCount: 0,
+    };
+  }
+
+  const channelRows = await listVisibleChannelRows(actor);
+  const channels = await buildChannels(channelRows, actor);
+  return summarizeChatUnread(channels);
 }
 
 export async function listChatMessages(input: { before?: string; channelId: string; limit?: number }, actor: ChatActor): Promise<Outcome<{ messages: ChatMessage[] }>> {

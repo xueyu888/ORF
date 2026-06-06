@@ -13,6 +13,7 @@ import {
   getChatBootstrap,
   getChatMessageContext,
   getChatUnreadContext,
+  getChatUnreadSummary,
   getChatThread,
   listChatMentionableUsers,
   listChatMessages,
@@ -182,6 +183,12 @@ export function registerChatRoutes(app: FastifyInstance) {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     return getChatBootstrap(actor);
+  });
+
+  app.get("/api/chat/unread-summary", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    return getChatUnreadSummary(actor);
   });
 
   app.get("/api/chat/search", async (request, reply) => {

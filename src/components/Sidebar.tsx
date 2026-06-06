@@ -30,7 +30,7 @@ export function Sidebar({
   onCollapsedChange: (collapsed: boolean) => void;
   onCommand: () => void;
 }) {
-  const { currentUser, logout } = useOrf();
+  const { chatUnreadSummary, currentUser, logout } = useOrf();
   const visibleGroups = sidebarGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowFrontendPath(currentUser, item.path)) }))
     .filter((group) => group.items.length > 0);
@@ -132,7 +132,11 @@ export function Sidebar({
             <div className="orf-sidebar-group-title px-6 pb-2 uppercase">{group.title}</div>
             <div className="space-y-1">
               {group.items.map((item) => (
-                <SidebarLink key={item.path} item={item} />
+                <SidebarLink
+                  key={item.path}
+                  item={item}
+                  unreadCount={item.path === "/chat" ? chatUnreadSummary.totalUnreadCount : 0}
+                />
               ))}
             </div>
           </div>
@@ -218,15 +222,21 @@ export function Sidebar({
 function SidebarLink({
   item,
   label = item.label,
+  unreadCount = 0,
 }: {
   item: (typeof navItems)[number];
   label?: string;
+  unreadCount?: number;
 }) {
+  const visibleUnreadCount = Math.max(0, unreadCount);
+  const unreadBadgeText = visibleUnreadCount > 99 ? "99+" : String(visibleUnreadCount);
+  const ariaLabel = visibleUnreadCount > 0 ? `${label}，${visibleUnreadCount} 条未读聊天消息` : label;
+
   return (
     <NavLink
       to={item.path}
-      title={label}
-      aria-label={label}
+      title={ariaLabel}
+      aria-label={ariaLabel}
       className={({ isActive }) =>
         [
           "orf-sidebar-link flex items-center transition",
@@ -235,7 +245,12 @@ function SidebarLink({
       }
     >
       <item.icon className="orf-sidebar-icon h-4 w-4 shrink-0" />
-      <span className="orf-sidebar-label truncate">{label}</span>
+      <span className="orf-sidebar-label orf-sidebar-link-label truncate">{label}</span>
+      {visibleUnreadCount > 0 && (
+        <span className="orf-sidebar-chat-badge" aria-hidden="true">
+          {unreadBadgeText}
+        </span>
+      )}
     </NavLink>
   );
 }
