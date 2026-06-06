@@ -154,6 +154,7 @@ export function ChatPage() {
     resolveThreadPendingMessage,
     setThread,
     thread,
+    threadComposerFocusRootId,
     threadComposerFocusSignal,
     threadFocusMessageId,
     threadLoading,
@@ -842,7 +843,7 @@ export function ChatPage() {
           setSearchScope={setSearchScope}
           setSearchType={setSearchType}
           thread={thread}
-          threadComposerFocusSignal={threadComposerFocusSignal}
+          threadComposerFocusSignal={threadComposerFocusRootId === thread?.rootMessage.id ? threadComposerFocusSignal : undefined}
           threadFocusMessageId={threadFocusMessageId}
           threadLoading={threadLoading}
           users={rightPanelMentionableUsers}

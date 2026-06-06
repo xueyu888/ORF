@@ -13,7 +13,7 @@ type ChatThreadPanelProps = {
   currentUserId?: string;
   editingMessageId?: string | null;
   focusMessageId: string | null;
-  composerFocusSignal: number;
+  composerFocusSignal?: number;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
   onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;

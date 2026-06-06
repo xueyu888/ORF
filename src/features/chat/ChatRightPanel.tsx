@@ -52,7 +52,7 @@ type ChatRightPanelProps = {
   setSearchScope: (value: ChatSearchScope) => void;
   setSearchType: (value: ChatSearchTypeFilter) => void;
   thread: ChatThread | null;
-  threadComposerFocusSignal: number;
+  threadComposerFocusSignal?: number;
   threadFocusMessageId: string | null;
   threadLoading: boolean;
   threadSummaries: ChatThreadSummary[];

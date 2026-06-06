@@ -316,7 +316,8 @@ export function ChatMessageItem({
   const handleReplyToThreadDoubleClick = (event: MouseEvent<HTMLElement>) => {
     if (!onThread) return;
     if (editing || message.deletedAt || deliveryStatus) return;
-    if (isInteractiveMessageTarget(event.target) || hasSelectedMessageText(event.currentTarget)) return;
+    if (isInteractiveMessageTarget(event.target)) return;
+    event.preventDefault();
     onThread(message.rootMessageId ?? message.id, { focusComposer: true });
   };
   const handleOpenThreadKeyDown = (event: KeyboardEvent<HTMLElement>) => {

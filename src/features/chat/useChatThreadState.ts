@@ -30,6 +30,7 @@ function chatThreadContainsMessage(thread: ChatThread, messageId: string | null 
 export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpdate }: UseChatThreadStateInput) {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
+  const [threadComposerFocusRootId, setThreadComposerFocusRootId] = useState<string | null>(null);
   const [threadComposerFocusSignal, setThreadComposerFocusSignal] = useState(0);
   const [threadLoading, setThreadLoading] = useState(false);
   const [pendingThreadTarget, setPendingThreadTarget] = useState<ChatFeedThreadTarget | null>(null);
@@ -46,7 +47,10 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
       onActivateThreadPanel();
       setThreadFocusMessageId(options.focusMessageId ?? null);
       if (options.focusComposer) {
+        setThreadComposerFocusRootId(rootMessageId);
         setThreadComposerFocusSignal((signal) => signal + 1);
+      } else {
+        setThreadComposerFocusRootId(null);
       }
       const currentThread = threadRef.current;
       if (
@@ -74,6 +78,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
         if (threadRequestIdRef.current !== requestId) return;
         setThread(null);
         setThreadFocusMessageId(null);
+        setThreadComposerFocusRootId(null);
         notify(error instanceof Error ? error.message : "加载线程失败");
       } finally {
         if (threadRequestIdRef.current === requestId) {
@@ -192,6 +197,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
     resolveThreadPendingMessage,
     setThread,
     thread,
+    threadComposerFocusRootId,
     threadComposerFocusSignal,
     threadFocusMessageId,
     threadLoading,
