@@ -25,6 +25,52 @@ type UserMatch = {
 
 const sourceSystem = "mattermost";
 const permanentAttachmentExpiresAt = "9999-12-31T00:00:00.000Z";
+const archiveOrInstallerExtensions = new Set([
+  "7z",
+  "apk",
+  "appimage",
+  "bin",
+  "bz2",
+  "deb",
+  "dmg",
+  "exe",
+  "gz",
+  "ipa",
+  "iso",
+  "msi",
+  "pkg",
+  "rar",
+  "rpm",
+  "tar",
+  "tbz",
+  "tbz2",
+  "tgz",
+  "txz",
+  "xz",
+  "zip",
+]);
+const archiveOrInstallerMimeTypes = new Set([
+  "application/gzip",
+  "application/java-archive",
+  "application/msi",
+  "application/octet-stream",
+  "application/vnd.android.package-archive",
+  "application/vnd.apple.installer+xml",
+  "application/vnd.debian.binary-package",
+  "application/vnd.microsoft.portable-executable",
+  "application/x-7z-compressed",
+  "application/x-apple-diskimage",
+  "application/x-bzip2",
+  "application/x-compressed-tar",
+  "application/x-deb",
+  "application/x-ms-installer",
+  "application/x-msdownload",
+  "application/x-rar-compressed",
+  "application/x-rpm",
+  "application/x-tar",
+  "application/x-xz",
+  "application/zip",
+]);
 
 const mattermostUserSchema = z
   .object({
@@ -70,6 +116,15 @@ const mattermostChannelMemberSchema = z
   })
   .passthrough();
 type MattermostChannelMember = z.infer<typeof mattermostChannelMemberSchema>;
+
+const mattermostTeamMemberSchema = z
+  .object({
+    user_id: z.string().min(1),
+    team_id: z.string().optional(),
+    roles: z.string().default(""),
+  })
+  .passthrough();
+type MattermostTeamMember = z.infer<typeof mattermostTeamMemberSchema>;
 
 const mattermostFileInfoSchema = z
   .object({
@@ -156,6 +211,10 @@ function usage() {
     "  --overwrite-avatars   Replace existing ORF avatars when importing avatars.",
     "  --skip-reactions      Do not import Mattermost reactions.",
     "  --reupload-files      Upload files again even if an imported attachment row already exists.",
+    "",
+    "Environment:",
+    "  MATTERMOST_CHAT_IMPORT_USER_MAP      Comma-separated source=target pairs. Source is Mattermost username/id/email; target is ORF email/id/name.",
+    "  MATTERMOST_CHAT_IMPORT_IGNORE_USERS  Comma-separated Mattermost username/id/email values allowed to remain unmapped.",
   ].join("\n");
 }
 
@@ -204,6 +263,11 @@ function normalizeName(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, "");
 }
 
+function normalizeExternalId(value: string | null | undefined) {
+  const trimmed = value?.trim().toLowerCase();
+  return trimmed || null;
+}
+
 function mattermostDisplayName(user: MattermostUser) {
   return (
     user.nickname.trim() ||
@@ -235,6 +299,50 @@ function mattermostTypeToOrf(type: string): ChannelType {
 
 function normalizeMimeType(value: string | null | undefined) {
   return value?.split(";")[0]?.trim().toLowerCase() || "application/octet-stream";
+}
+
+function extensionFromFileName(fileName: string) {
+  const extension = fileName.trim().toLowerCase().split(".").pop();
+  return extension && extension !== fileName.trim().toLowerCase() ? extension : "";
+}
+
+function isImageMimeType(value: string) {
+  return normalizeMimeType(value).startsWith("image/");
+}
+
+function shouldSkipArchiveOrInstaller(fileName: string, mimeType: string) {
+  if (isImageMimeType(mimeType)) return false;
+  const extension = extensionFromFileName(fileName);
+  return archiveOrInstallerExtensions.has(extension) || archiveOrInstallerMimeTypes.has(normalizeMimeType(mimeType));
+}
+
+async function recordSkippedAttachment(
+  client: PoolClient,
+  input: {
+    channel: MattermostChannel;
+    fileInfo: MattermostFileInfo;
+    fileName: string;
+    messageId: string;
+    mimeType: string;
+    reason: string;
+    teamId: string;
+  },
+) {
+  await upsertMapping(client, {
+    teamId: input.teamId,
+    sourceKind: "skipped_attachment",
+    sourceId: input.fileInfo.id,
+    targetTable: "mattermost_skipped_files",
+    targetId: input.fileInfo.id,
+    metadata: {
+      channelId: input.channel.id,
+      fileName: input.fileName,
+      messageId: input.messageId,
+      mimeType: input.mimeType,
+      reason: input.reason,
+      size: input.fileInfo.size || 0,
+    },
+  });
 }
 
 function channelTimestamp(channel: MattermostChannel) {
@@ -277,6 +385,10 @@ class MattermostSourceClient {
 
   async getChannelMembers(channelId: string) {
     return this.getPaged(`/api/v4/channels/${encodeURIComponent(channelId)}/members`, z.array(mattermostChannelMemberSchema));
+  }
+
+  async getTeamMembers(teamId: string) {
+    return this.getPaged(`/api/v4/teams/${encodeURIComponent(teamId)}/members`, z.array(mattermostTeamMemberSchema));
   }
 
   async getPosts(channelId: string) {
@@ -423,20 +535,79 @@ function uniqueBy<T>(items: T[], key: (item: T) => string | null) {
   return new Map(Array.from(grouped.entries()).filter(([, values]) => values.length === 1).map(([value, [item]]) => [value, item]));
 }
 
+function parseDelimitedValues(value: string | undefined) {
+  return (value ?? "")
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseMattermostUserMap() {
+  const pairs = new Map<string, string>();
+  for (const item of parseDelimitedValues(process.env.MATTERMOST_CHAT_IMPORT_USER_MAP)) {
+    const separatorIndex = item.indexOf("=");
+    if (separatorIndex <= 0 || separatorIndex === item.length - 1) {
+      throw new Error("MATTERMOST_CHAT_IMPORT_USER_MAP entries must use source=target format");
+    }
+    const source = normalizeExternalId(item.slice(0, separatorIndex));
+    const target = item.slice(separatorIndex + 1).trim();
+    if (source && target) pairs.set(source, target);
+  }
+  return pairs;
+}
+
+function parseMattermostIgnoredUsers() {
+  return new Set(parseDelimitedValues(process.env.MATTERMOST_CHAT_IMPORT_IGNORE_USERS).map(normalizeExternalId).filter((value): value is string => Boolean(value)));
+}
+
+function mattermostUserKeys(user: MattermostUser) {
+  return [
+    normalizeExternalId(user.username),
+    normalizeExternalId(user.id),
+    normalizeEmail(user.email),
+  ].filter((value): value is string => Boolean(value));
+}
+
+function configuredMattermostUserValue(user: MattermostUser, values: ReadonlySet<string> | ReadonlyMap<string, unknown>) {
+  return mattermostUserKeys(user).find((key) => values.has(key));
+}
+
+function resolveConfiguredOrfUser(target: string, orfUsers: OrfUser[]) {
+  const normalizedTarget = normalizeExternalId(target);
+  const normalizedNameTarget = normalizeName(target);
+  if (!normalizedTarget && !normalizedNameTarget) return undefined;
+  return orfUsers.find((user) =>
+    normalizeExternalId(user.id) === normalizedTarget ||
+    normalizeEmail(user.email) === normalizedTarget ||
+    normalizeName(user.name) === normalizedNameTarget
+  );
+}
+
 function buildUserMatches(mattermostUsers: MattermostUser[], orfUsers: OrfUser[], fallbackUser: OrfUser) {
   const orfByEmail = uniqueBy(orfUsers, (user) => normalizeEmail(user.email));
   const orfByName = uniqueBy(orfUsers, (user) => normalizeName(user.name));
   const orfByEmailLocal = uniqueBy(orfUsers, (user) => normalizeEmail(user.email)?.split("@")[0] ?? null);
   const sourceAdminLogin = normalizeEmail(process.env.MATTERMOST_LOGIN_ID);
   const sourceAdminLoginLocal = sourceAdminLogin?.split("@")[0] ?? null;
+  const configuredUserMap = parseMattermostUserMap();
+  const ignoredUsers = parseMattermostIgnoredUsers();
   const matches = new Map<string, UserMatch>();
+  const ignoredHumans: MattermostUser[] = [];
   const unmatchedHumans: MattermostUser[] = [];
 
   for (const sourceUser of mattermostUsers) {
     let orfUser: OrfUser | undefined;
     let reason = "";
     const email = normalizeEmail(sourceUser.email);
-    if (
+    const configuredSource = configuredMattermostUserValue(sourceUser, configuredUserMap);
+    if (configuredSource) {
+      const target = configuredUserMap.get(configuredSource);
+      orfUser = target ? resolveConfiguredOrfUser(target, orfUsers) : undefined;
+      if (!orfUser) {
+        throw new Error(`MATTERMOST_CHAT_IMPORT_USER_MAP target for ${sourceUser.username || sourceUser.id} does not match an active ORF user: ${target}`);
+      }
+      reason = "configured-user-map";
+    } else if (
       sourceAdminLogin &&
       (email === sourceAdminLogin || (sourceAdminLoginLocal && sourceUser.username.toLowerCase() === sourceAdminLoginLocal))
     ) {
@@ -458,12 +629,14 @@ function buildUserMatches(mattermostUsers: MattermostUser[], orfUsers: OrfUser[]
 
     if (orfUser) {
       matches.set(sourceUser.id, { mattermostUser: sourceUser, orfUser, reason });
+    } else if (!sourceUser.is_bot && sourceUser.delete_at === 0 && configuredMattermostUserValue(sourceUser, ignoredUsers)) {
+      ignoredHumans.push(sourceUser);
     } else if (!sourceUser.is_bot && sourceUser.delete_at === 0) {
       unmatchedHumans.push(sourceUser);
     }
   }
 
-  return { matches, unmatchedHumans };
+  return { ignoredHumans, matches, unmatchedHumans };
 }
 
 function adminFallbackUser(orfUsers: OrfUser[]) {
@@ -600,7 +773,8 @@ function channelDisplayName(channel: MattermostChannel, members: MattermostChann
 function channelName(channel: MattermostChannel) {
   const type = mattermostTypeToOrf(channel.type);
   if (type === "direct" || type === "group") return `mm-${type}-${safePathSegment(channel.id)}`;
-  return normalizeChannelName(channel.name || channel.display_name || `mm-${channel.id}`);
+  const sourceName = normalizeChannelName(channel.name || channel.display_name || "channel");
+  return `mm-${sourceName}-${safePathSegment(channel.id)}`;
 }
 
 function memberRowsForChannel(input: {
@@ -609,16 +783,50 @@ function memberRowsForChannel(input: {
   matches: Map<string, UserMatch>;
   members: MattermostChannelMember[];
   orfUsers: OrfUser[];
+  publicTeamMemberUserIds?: string[];
 }) {
   const type = mattermostTypeToOrf(input.channel.type);
   const memberIds =
     type === "public"
-      ? input.orfUsers.map((user) => user.id)
+      ? (input.publicTeamMemberUserIds ?? []).map((userId) => input.matches.get(userId)?.orfUser.id).filter((id): id is string => Boolean(id))
       : input.members.map((member) => input.matches.get(member.user_id)?.orfUser.id).filter((id): id is string => Boolean(id));
   return Array.from(new Set(memberIds)).map((userId) => ({
     userId,
     role: userId === input.fallbackUser.id ? "owner" : "member",
   }));
+}
+
+function assertChannelMembershipBoundary(input: {
+  channel: MattermostChannel;
+  memberRows: { role: string; userId: string }[];
+  orfUsers: OrfUser[];
+}) {
+  const type = mattermostTypeToOrf(input.channel.type);
+  if (type === "public") return;
+  const targetMembers = new Set(input.memberRows.map((member) => member.userId));
+  const allActiveUsers = input.orfUsers.map((user) => user.id);
+  const expandsToAllActiveUsers = allActiveUsers.length > 0 && allActiveUsers.every((userId) => targetMembers.has(userId));
+  if (expandsToAllActiveUsers) {
+    throw new Error(
+      `Refusing to import non-public Mattermost channel ${input.channel.display_name || input.channel.name || input.channel.id} as visible to every active ORF user`,
+    );
+  }
+}
+
+async function getPublicTeamMemberUserIds(input: {
+  channel: MattermostChannel;
+  cache: Map<string, string[]>;
+  source: MattermostSourceClient;
+}) {
+  if (mattermostTypeToOrf(input.channel.type) !== "public") return undefined;
+  const teamId = input.channel.team_id.trim();
+  if (!teamId) return [];
+  const cached = input.cache.get(teamId);
+  if (cached) return cached;
+  const members = await input.source.getTeamMembers(teamId);
+  const userIds = members.map((member) => member.user_id);
+  input.cache.set(teamId, userIds);
+  return userIds;
 }
 
 async function insertChannel(input: {
@@ -734,6 +942,7 @@ async function insertMessages(input: {
   let importedMessages = 0;
   let importedAttachments = 0;
   let importedReactions = 0;
+  let skippedAttachments = 0;
   const channelId = targetChannelId(input.channel.id);
   const reuploadFiles = hasFlag("--reupload-files");
   const includeReactions = !hasFlag("--skip-reactions");
@@ -799,17 +1008,66 @@ async function insertMessages(input: {
       const fileName = (fileInfo.name || "file").trim().slice(0, 240);
       const mimeType = normalizeMimeType(fileInfo.mime_type);
       const objectKey = `chat/${safePathSegment(input.teamId)}/${safePathSegment(channelId)}/${attachmentId}/${safePathSegment(fileName)}`;
-      if (existing.rowCount === 0 || reuploadFiles) {
-        const file = await input.source.getFile(fileInfo.id);
-        if (file.body.byteLength > env.CHAT_FILE_UPLOAD_MAX_BYTES) {
-          throw new Error(`Mattermost file ${fileInfo.id} exceeds CHAT_FILE_UPLOAD_MAX_BYTES`);
-        }
-        await objectStorage.putObject({
-          body: file.body,
-          contentLength: file.body.byteLength,
-          contentType: normalizeMimeType(file.contentType || mimeType),
-          key: objectKey,
+      if (shouldSkipArchiveOrInstaller(fileName, mimeType)) {
+        skippedAttachments += 1;
+        await recordSkippedAttachment(input.client, {
+          channel: input.channel,
+          fileInfo,
+          fileName,
+          messageId: post.id,
+          mimeType,
+          reason: "archive-or-installer",
+          teamId: input.teamId,
         });
+        continue;
+      }
+      const maxUploadBytes = Math.min(env.CHAT_FILE_UPLOAD_MAX_BYTES, env.OBJECT_STORAGE_UPLOAD_MAX_BYTES);
+      if (!isImageMimeType(mimeType) && fileInfo.size > maxUploadBytes) {
+        skippedAttachments += 1;
+        await recordSkippedAttachment(input.client, {
+          channel: input.channel,
+          fileInfo,
+          fileName,
+          messageId: post.id,
+          mimeType,
+          reason: "oversized-non-image",
+          teamId: input.teamId,
+        });
+        continue;
+      }
+      if (existing.rowCount === 0 || reuploadFiles) {
+        try {
+          const file = await input.source.getFile(fileInfo.id);
+          if (file.body.byteLength > maxUploadBytes) {
+            if (!isImageMimeType(mimeType)) {
+              skippedAttachments += 1;
+              await recordSkippedAttachment(input.client, {
+                channel: input.channel,
+                fileInfo: { ...fileInfo, size: file.body.byteLength },
+                fileName,
+                messageId: post.id,
+                mimeType,
+                reason: "oversized-non-image",
+                teamId: input.teamId,
+              });
+              continue;
+            }
+            throw new Error(
+              `Mattermost file ${fileInfo.id} is ${file.body.byteLength} bytes, exceeding the effective upload limit ${maxUploadBytes} bytes`,
+            );
+          }
+          await objectStorage.putObject({
+            body: file.body,
+            contentLength: file.body.byteLength,
+            contentType: normalizeMimeType(file.contentType || mimeType),
+            key: objectKey,
+          });
+        } catch (error) {
+          throw new Error(
+            `Failed to import Mattermost file ${fileInfo.id} (${fileName}) from channel ${input.channel.display_name || input.channel.name || input.channel.id}, post ${post.id}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error },
+          );
+        }
       }
       await input.client.query(
         `
@@ -905,7 +1163,7 @@ async function insertMessages(input: {
     }
   }
 
-  return { importedMessages, importedAttachments, importedReactions };
+  return { importedMessages, importedAttachments, importedReactions, skippedAttachments };
 }
 
 async function main() {
@@ -926,9 +1184,15 @@ async function main() {
   console.log(`Active ORF chat users: ${orfUsers.length}`);
 
   const mattermostUsers = await source.getUsers();
-  const { matches, unmatchedHumans } = buildUserMatches(mattermostUsers, orfUsers, fallbackUser);
+  const { ignoredHumans, matches, unmatchedHumans } = buildUserMatches(mattermostUsers, orfUsers, fallbackUser);
   console.log(`Mattermost users: ${mattermostUsers.length}`);
   console.log(`Matched users: ${matches.size}`);
+  if (ignoredHumans.length > 0) {
+    console.log("Explicitly ignored active Mattermost users:");
+    for (const user of ignoredHumans) {
+      console.log(`  - ${mattermostDisplayName(user)} (${user.username || user.id})`);
+    }
+  }
   if (unmatchedHumans.length > 0) {
     console.log("Unmatched active Mattermost users:");
     for (const user of unmatchedHumans) {
@@ -968,6 +1232,8 @@ async function main() {
   let importedMessages = 0;
   let importedAttachments = 0;
   let importedReactions = 0;
+  let skippedAttachments = 0;
+  const publicTeamMembersByTeam = new Map<string, string[]>();
   try {
     await client.query("BEGIN");
     await importUserMappings(client, teamId, matches);
@@ -991,11 +1257,13 @@ async function main() {
 
   for (const channel of channels) {
     const members = await source.getChannelMembers(channel.id).catch(() => []);
-    const memberRows = memberRowsForChannel({ channel, fallbackUser, matches, members, orfUsers });
+    const publicTeamMemberUserIds = await getPublicTeamMemberUserIds({ channel, cache: publicTeamMembersByTeam, source });
+    const memberRows = memberRowsForChannel({ channel, fallbackUser, matches, members, orfUsers, publicTeamMemberUserIds });
     if (memberRows.length === 0) {
       console.warn(`WARN: skipping channel without mapped members: ${channel.display_name || channel.name || channel.id}`);
       continue;
     }
+    assertChannelMembershipBoundary({ channel, memberRows, orfUsers });
     const posts = await source.getPosts(channel.id);
     const channelClient = await pool.connect();
     try {
@@ -1023,8 +1291,9 @@ async function main() {
       importedMessages += result.importedMessages;
       importedAttachments += result.importedAttachments;
       importedReactions += result.importedReactions;
+      skippedAttachments += result.skippedAttachments;
       console.log(
-        `Imported channel ${channel.display_name || channel.name || channel.id}: messages=${result.importedMessages} attachments=${result.importedAttachments} reactions=${result.importedReactions}`,
+        `Imported channel ${channel.display_name || channel.name || channel.id}: messages=${result.importedMessages} attachments=${result.importedAttachments} skippedAttachments=${result.skippedAttachments} reactions=${result.importedReactions}`,
       );
     } catch (error) {
       await channelClient.query("ROLLBACK").catch(() => undefined);
@@ -1035,7 +1304,7 @@ async function main() {
   }
 
   console.log(
-    `Import complete: channels=${importedChannels} messages=${importedMessages} attachments=${importedAttachments} reactions=${importedReactions}`,
+    `Import complete: channels=${importedChannels} messages=${importedMessages} attachments=${importedAttachments} skippedAttachments=${skippedAttachments} reactions=${importedReactions}`,
   );
 }
 

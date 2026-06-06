@@ -297,6 +297,13 @@ async function ensurePublicChannelMemberships(teamId: string) {
       WHERE c.team_id = $1
         AND c.type = 'public'
         AND c.archived_at IS NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM chat_import_mappings im
+          WHERE im.team_id = c.team_id
+            AND im.target_table = 'chat_channels'
+            AND im.target_id = c.id
+        )
       ON CONFLICT (channel_id, user_id) DO NOTHING
     `,
     [teamId, now],
