@@ -1813,7 +1813,16 @@ export async function searchChatMessages(
       WHERE m.team_id = $1
         AND m.deleted_at IS NULL
         AND c.archived_at IS NULL
-        AND m.body ILIKE $3 ESCAPE '\\'
+        AND (
+          m.body ILIKE $3 ESCAPE '\\'
+          OR EXISTS (
+            SELECT 1
+            FROM chat_attachments a
+            WHERE a.team_id = m.team_id
+              AND a.message_id = m.id
+              AND a.file_name ILIKE $3 ESCAPE '\\'
+          )
+        )
         ${channelClause}
         ${typeClause}
       ORDER BY m.created_at DESC

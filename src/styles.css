@@ -9643,6 +9643,31 @@ button.orf-chat-image-attachment {
   line-height: 1.45;
 }
 
+.orf-chat-search-attachment-only {
+  color: var(--orf-text-muted);
+  font-weight: 700;
+}
+
+.orf-chat-search-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.orf-chat-search-attachments span {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--orf-border);
+  border-radius: 999px;
+  background: var(--orf-bg-muted);
+  color: var(--orf-text-secondary);
+  padding: 4px 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .orf-chat-search-empty {
   display: grid;
   min-height: 120px;

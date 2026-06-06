@@ -1850,12 +1850,32 @@ function SearchPanel({
           <button type="button" key={result.message.id} onClick={() => onOpenResult(result)}>
             <span>{result.channel.displayName}</span>
             <strong>{result.message.authorName}</strong>
-            <div className="orf-chat-search-result-body">{renderTextFragments(result.message.body, usersById)}</div>
+            <SearchResultPreview message={result.message} usersById={usersById} />
           </button>
         ))}
         {results.length === 0 && <div className="orf-chat-search-empty">输入关键词后搜索。</div>}
       </div>
     </div>
+  );
+}
+
+function SearchResultPreview({ message, usersById }: { message: ChatMessage; usersById: Map<string, ChatUser> }) {
+  return (
+    <>
+      <div className="orf-chat-search-result-body">
+        {message.body.trim() ? renderTextFragments(message.body, usersById) : <span className="orf-chat-search-attachment-only">附件消息</span>}
+      </div>
+      {message.attachments.length > 0 && (
+        <div className="orf-chat-search-attachments">
+          {message.attachments.slice(0, 3).map((attachment) => (
+            <span key={attachment.id}>
+              {attachment.mimeType.startsWith("image/") ? <ImageIcon className="h-3.5 w-3.5" /> : <FileText className="h-3.5 w-3.5" />}
+              {attachment.fileName}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
