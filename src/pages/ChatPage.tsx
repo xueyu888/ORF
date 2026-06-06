@@ -547,12 +547,13 @@ export function ChatPage() {
   }, [activeChannel?.id, messages, messagesLoading]);
 
   const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
-    if (!activeChannel) return;
+    const channelId = activeChannel?.id;
+    if (!channelId) return;
     setMessagesLoading(true);
     try {
-      const response = await getChatMessages({ channelId: activeChannel.id, limit: chatMessagePageSize });
-      const snapshot = replaceFeedMessages(feedCacheRef.current.get(activeChannel.id), response.messages);
-      feedCacheRef.current.set(activeChannel.id, snapshot);
+      const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
+      const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
+      feedCacheRef.current.set(channelId, snapshot);
       setMessages(snapshot.messages);
       setHasNewerMessages(snapshot.hasNewerMessages);
       setHasOlderMessages(snapshot.hasOlderMessages);
@@ -562,10 +563,11 @@ export function ChatPage() {
     } finally {
       setMessagesLoading(false);
     }
-  }, [activeChannel, notify, requestScrollToLatest]);
+  }, [activeChannel?.id, notify, requestScrollToLatest]);
 
   useEffect(() => {
-    if (!activeChannel || typeof EventSource === "undefined") return undefined;
+    const channelId = activeChannel?.id;
+    if (!channelId || typeof EventSource === "undefined") return undefined;
     const source = new EventSource("/api/events", { withCredentials: true });
     const handleChatEvent = (event: MessageEvent<string>) => {
       const payload = parseRealtimeEvent(event.data);
@@ -573,13 +575,13 @@ export function ChatPage() {
       if (payload.channel) applyChannel(payload.channel);
       if (payload.eventType === "channel.archived") {
         setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-        if (payload.channelId === activeChannel.id) navigate("/chat", { replace: true });
+        if (payload.channelId === channelId) navigate("/chat", { replace: true });
       }
       if (payload.eventType === "member.changed" && payload.channel) {
         applyChannel(payload.channel);
       }
-      if (payload.message && payload.channelId === activeChannel.id) {
-        const currentFeed = feedCacheRef.current.get(activeChannel.id);
+      if (payload.message && payload.channelId === channelId) {
+        const currentFeed = feedCacheRef.current.get(channelId);
         const shouldFollowLatest = shouldFollowIncomingMessage(
           payload.message,
           currentUser?.id,
@@ -596,7 +598,7 @@ export function ChatPage() {
           setPendingNewMessageCount((count) => count + 1);
         }
       }
-      if (payload.eventType === "typing" && payload.channelId === activeChannel.id && payload.typing && payload.typing.userId !== currentUser?.id) {
+      if (payload.eventType === "typing" && payload.channelId === channelId && payload.typing && payload.typing.userId !== currentUser?.id) {
         setTypingByUser((items) => {
           const next = new Map(items);
           next.set(payload.typing!.userId, payload.typing!);
@@ -609,7 +611,7 @@ export function ChatPage() {
       source.removeEventListener("chat.event", handleChatEvent);
       source.close();
     };
-  }, [activeChannel, applyChannel, applyMessage, currentUser?.id, isMessageScrollNearLatest, loadLatestMessages, navigate, requestScrollToLatest]);
+  }, [activeChannel?.id, applyChannel, applyMessage, currentUser?.id, isMessageScrollNearLatest, loadLatestMessages, navigate, requestScrollToLatest]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
