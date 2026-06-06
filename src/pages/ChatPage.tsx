@@ -33,7 +33,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { type ChangeEvent, type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Avatar, Button, IconButton } from "../components/ui";
 import {
@@ -68,9 +68,12 @@ import {
   type ChatAttachmentDraftItem,
   completeAttachmentDraftItem,
   createAttachmentDraftItem,
+  emptyComposerHistory,
   failedDraftAttachmentCount,
   failAttachmentDraftItem,
   hasUploadingDraftAttachments,
+  recallComposerHistory,
+  recordSentComposerDraft,
   removeAttachmentDraftItem,
   uploadedDraftAttachments,
 } from "../features/chat/chatComposerModel";
@@ -1429,7 +1432,9 @@ function ChatComposer({
   const [attachmentItems, setAttachmentItems] = useState<ChatAttachmentDraftItem[]>([]);
   const [mentionRange, setMentionRange] = useState<ReturnType<typeof mentionRangeFor>>(null);
   const [selectedMention, setSelectedMention] = useState(0);
+  const [draggingFiles, setDraggingFiles] = useState(false);
   const [error, setError] = useState("");
+  const [history, setHistory] = useState(emptyComposerHistory);
   const uploading = hasUploadingDraftAttachments(attachmentItems);
   const failedUploads = failedDraftAttachmentCount(attachmentItems);
   const draftStorageKey = useMemo(() => chatDraftStorageKey(channelId, rootMessageId), [channelId, rootMessageId]);
@@ -1452,6 +1457,8 @@ function ChatComposer({
     setError("");
     setMentionRange(null);
     setSelectedMention(0);
+    setDraggingFiles(false);
+    setHistory(emptyComposerHistory);
   }, [draftStorageKey]);
 
   useEffect(() => {
@@ -1469,6 +1476,7 @@ function ChatComposer({
     const mentions = reconcileMentions(draft.text, text, draft.mentions);
     setDraft({ text, mentions });
     setMentionRange(mentionRangeFor(text, cursor, mentions));
+    setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
     onTyping?.();
   };
 
@@ -1509,26 +1517,51 @@ function ChatComposer({
     }, 0);
   };
 
-  const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
+  const uploadFiles = async (files: File[]) => {
+    if (disabled) return;
     if (files.length === 0) return;
     setError("");
     const uploads = files.slice(0, 10).map((file) => ({ file, item: createAttachmentDraftItem(file) }));
     setAttachmentItems((items) => [...items, ...uploads.map((upload) => upload.item)]);
-    try {
-      for (const upload of uploads) {
-        try {
-          const response = await uploadChatAttachment({ channelId, file: upload.file });
-          setAttachmentItems((items) => completeAttachmentDraftItem(items, upload.item.clientId, response.attachment));
-        } catch (uploadError) {
-          const message = uploadError instanceof Error ? uploadError.message : "上传附件失败";
-          setAttachmentItems((items) => failAttachmentDraftItem(items, upload.item.clientId, message));
-          setError(message);
-        }
+    for (const upload of uploads) {
+      try {
+        const response = await uploadChatAttachment({ channelId, file: upload.file });
+        setAttachmentItems((items) => completeAttachmentDraftItem(items, upload.item.clientId, response.attachment));
+      } catch (uploadError) {
+        const message = uploadError instanceof Error ? uploadError.message : "上传附件失败";
+        setAttachmentItems((items) => failAttachmentDraftItem(items, upload.item.clientId, message));
+        setError(message);
       }
-    } finally {
-      event.target.value = "";
     }
+  };
+
+  const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
+    await uploadFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files ?? []).filter((file) => file.size > 0);
+    if (files.length === 0) return;
+    event.preventDefault();
+    void uploadFiles(files);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    if (Array.from(event.dataTransfer.types).includes("Files")) {
+      event.preventDefault();
+      setDraggingFiles(true);
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    const files = Array.from(event.dataTransfer.files ?? []).filter((file) => file.size > 0);
+    if (files.length === 0) return;
+    event.preventDefault();
+    setDraggingFiles(false);
+    void uploadFiles(files);
   };
 
   const submit = async () => {
@@ -1542,6 +1575,7 @@ function ChatComposer({
     setError("");
     try {
       await onSend(draft, uploadedAttachments, rootMessageId, parentMessageId);
+      setHistory((item) => recordSentComposerDraft(item, draft));
       setDraft(emptyDraft);
       setAttachmentItems([]);
       setMentionRange(null);
@@ -1572,6 +1606,47 @@ function ChatComposer({
         return;
       }
     }
+    if (event.key === "ArrowUp" && !event.shiftKey) {
+      const textarea = textAreaRef.current;
+      const canRecall = textarea?.selectionStart === 0 && (history.cursorIndex !== null || !draft.text.trim());
+      if (canRecall) {
+        const recalled = recallComposerHistory(history, draft, "older");
+        if (recalled) {
+          event.preventDefault();
+          setDraft(recalled.draft);
+          setHistory(recalled.history);
+          setMentionRange(null);
+          window.setTimeout(() => {
+            const next = textAreaRef.current;
+            if (!next) return;
+            next.focus();
+            next.setSelectionRange(0, 0);
+          }, 0);
+          return;
+        }
+      }
+    }
+    if (event.key === "ArrowDown" && !event.shiftKey && history.cursorIndex !== null) {
+      const textarea = textAreaRef.current;
+      const canRecall = textarea ? textarea.selectionStart === textarea.value.length : true;
+      if (canRecall) {
+        const recalled = recallComposerHistory(history, draft, "newer");
+        if (recalled) {
+          event.preventDefault();
+          setDraft(recalled.draft);
+          setHistory(recalled.history);
+          setMentionRange(null);
+          window.setTimeout(() => {
+            const next = textAreaRef.current;
+            if (!next) return;
+            next.focus();
+            const cursor = next.value.length;
+            next.setSelectionRange(cursor, cursor);
+          }, 0);
+          return;
+        }
+      }
+    }
     if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void submit();
@@ -1579,7 +1654,12 @@ function ChatComposer({
   };
 
   return (
-    <div className="orf-chat-composer">
+    <div
+      className={clsx("orf-chat-composer", draggingFiles && "orf-chat-composer-dragging")}
+      onDragLeave={() => setDraggingFiles(false)}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       {attachmentItems.length > 0 && (
         <div className="orf-chat-pending-attachments">
           {attachmentItems.map((item) => (
@@ -1601,6 +1681,7 @@ function ChatComposer({
           disabled={disabled}
           onChange={(event) => setText(event.target.value, event.target.selectionStart)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={disabled ? "当前没有发送权限" : rootMessageId ? "回复该话题..." : "发送消息..."}
           ref={textAreaRef}
           rows={3}

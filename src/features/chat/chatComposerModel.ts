@@ -1,4 +1,11 @@
 import type { ChatAttachment } from "../../types/orf";
+import type { ChatDraft } from "./chatModels";
+
+export type ChatComposerHistoryState = {
+  cursorIndex: number | null;
+  entries: ChatDraft[];
+  restoreDraft: ChatDraft | null;
+};
 
 export type ChatAttachmentDraftItem =
   | {
@@ -25,8 +32,53 @@ export type ChatAttachmentDraftItem =
       status: "uploading";
     };
 
+const CHAT_COMPOSER_HISTORY_LIMIT = 20;
+export const emptyComposerHistory: ChatComposerHistoryState = { cursorIndex: null, entries: [], restoreDraft: null };
+
 function createAttachmentClientId() {
   return globalThis.crypto?.randomUUID?.() ?? `chat-attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function cloneDraft(draft: ChatDraft): ChatDraft {
+  return { text: draft.text, mentions: draft.mentions.map((mention) => ({ ...mention })) };
+}
+
+export function recordSentComposerDraft(history: ChatComposerHistoryState, draft: ChatDraft): ChatComposerHistoryState {
+  if (!draft.text.trim()) return { ...history, cursorIndex: null, restoreDraft: null };
+  const current = cloneDraft(draft);
+  const entries = [
+    current,
+    ...history.entries.filter((entry) => entry.text !== current.text),
+  ].slice(0, CHAT_COMPOSER_HISTORY_LIMIT);
+  return { cursorIndex: null, entries, restoreDraft: null };
+}
+
+export function recallComposerHistory(
+  history: ChatComposerHistoryState,
+  currentDraft: ChatDraft,
+  direction: "older" | "newer",
+): { draft: ChatDraft; history: ChatComposerHistoryState } | null {
+  if (history.entries.length === 0) return null;
+  if (direction === "older") {
+    const nextIndex = history.cursorIndex === null ? 0 : Math.min(history.cursorIndex + 1, history.entries.length - 1);
+    const restoreDraft = history.cursorIndex === null ? cloneDraft(currentDraft) : history.restoreDraft;
+    return {
+      draft: cloneDraft(history.entries[nextIndex]),
+      history: { ...history, cursorIndex: nextIndex, restoreDraft },
+    };
+  }
+  if (history.cursorIndex === null) return null;
+  if (history.cursorIndex <= 0) {
+    return {
+      draft: cloneDraft(history.restoreDraft ?? { mentions: [], text: "" }),
+      history: { ...history, cursorIndex: null, restoreDraft: null },
+    };
+  }
+  const nextIndex = history.cursorIndex - 1;
+  return {
+    draft: cloneDraft(history.entries[nextIndex]),
+    history: { ...history, cursorIndex: nextIndex },
+  };
 }
 
 export function createAttachmentDraftItem(file: File): ChatAttachmentDraftItem {
