@@ -1,9 +1,10 @@
 import { clsx } from "clsx";
-import { AtSign, Bold, Code, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Smile, Strikethrough } from "lucide-react";
+import { AtSign, Bold, Code, Edit3, Eye, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Smile, Strikethrough } from "lucide-react";
 import { type ClipboardEventHandler, type ComponentType, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
+import { ChatMarkdown } from "./chatMarkdown";
 import {
   applyChatMarkdownShortcut,
   isChatMarkdownCaretInFencedCodeBlock,
@@ -15,6 +16,7 @@ import {
   mentionLabel,
   mentionRangeFor,
   reconcileMentions,
+  serializeDraft,
 } from "./chatModels";
 import { displayChatReactionEmoji } from "./chatReactions";
 
@@ -178,6 +180,16 @@ function markdownShortcutModeFor(event: KeyboardEvent<HTMLTextAreaElement>): Cha
   return null;
 }
 
+function matchesPreviewShortcut(event: KeyboardEvent<HTMLElement>) {
+  const primary = event.ctrlKey || event.metaKey;
+  return (
+    primary &&
+    event.key.toLowerCase() === "p" &&
+    !event.nativeEvent.isComposing &&
+    ((event.altKey && !event.shiftKey) || (!event.altKey && event.shiftKey))
+  );
+}
+
 export function ChatDraftEditor({
   autoFocus,
   className,
@@ -205,6 +217,7 @@ export function ChatDraftEditor({
   const [selectedMention, setSelectedMention] = useState(0);
   const [history, setHistory] = useState(emptyComposerHistory);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const emojiAnchorRef = useRef<HTMLSpanElement | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -217,11 +230,14 @@ export function ChatDraftEditor({
       .filter((user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
       .slice(0, 8);
   }, [mentionRange, mentionableUsers]);
+  const usersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
+  const previewBody = useMemo(() => serializeDraft(draft), [draft]);
 
   useEffect(() => {
     setMentionRange(null);
     setSelectedMention(0);
     setHistory(emptyComposerHistory);
+    setPreviewing(false);
     setSubmitting(false);
     submittingRef.current = false;
   }, [resetKey]);
@@ -232,6 +248,10 @@ export function ChatDraftEditor({
 
   useEffect(() => {
     if (disabled) setEmojiOpen(false);
+  }, [disabled]);
+
+  useEffect(() => {
+    if (disabled) setPreviewing(false);
   }, [disabled]);
 
   useEffect(() => {
@@ -265,6 +285,7 @@ export function ChatDraftEditor({
   };
 
   const applyMarkdownMode = (mode: ChatMarkdownMode) => {
+    if (previewing) return;
     const textarea = textAreaRef.current;
     if (!textarea) return;
     const result = applyChatMarkdownShortcut({
@@ -285,6 +306,7 @@ export function ChatDraftEditor({
   };
 
   const insertTextAtSelection = (text: string) => {
+    if (previewing) return;
     const textarea = textAreaRef.current;
     if (!textarea) return;
     const start = textarea.selectionStart;
@@ -339,6 +361,39 @@ export function ChatDraftEditor({
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
+    }
+  };
+
+  const focusEditor = () => {
+    window.requestAnimationFrame(() => {
+      const textarea = textAreaRef.current;
+      if (!textarea) return;
+      textarea.focus();
+      const cursor = textarea.value.length;
+      textarea.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const togglePreview = () => {
+    setMentionRange(null);
+    setEmojiOpen(false);
+    setPreviewing((value) => {
+      if (value) focusEditor();
+      return !value;
+    });
+  };
+
+  const handlePreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (matchesPreviewShortcut(event) || event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (previewing) togglePreview();
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      event.stopPropagation();
+      void submit();
     }
   };
 
@@ -413,6 +468,12 @@ export function ChatDraftEditor({
         onReactToLatest();
         return;
       }
+    }
+    if (draft.text.trim() && matchesPreviewShortcut(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePreview();
+      return;
     }
     if (event.key === "ArrowUp" && !event.shiftKey) {
       const textarea = textAreaRef.current;
@@ -509,16 +570,32 @@ export function ChatDraftEditor({
 
   return (
     <div className={clsx("orf-chat-draft-editor", className)}>
-      <textarea
-        disabled={disabled}
-        onChange={(event) => setText(event.target.value, event.target.selectionStart)}
-        onKeyDown={handleKeyDown}
-        onPaste={onPaste}
-        placeholder={placeholder}
-        ref={textAreaRef}
-        rows={rows}
-        value={draft.text}
-      />
+      {previewing ? (
+        <div
+          className="orf-chat-draft-preview"
+          onDoubleClick={togglePreview}
+          onKeyDown={handlePreviewKeyDown}
+          role="region"
+          tabIndex={0}
+        >
+          {previewBody.trim() ? (
+            <ChatMarkdown body={previewBody} usersById={usersById} />
+          ) : (
+            <span className="orf-chat-draft-preview-empty">{placeholder}</span>
+          )}
+        </div>
+      ) : (
+        <textarea
+          disabled={disabled}
+          onChange={(event) => setText(event.target.value, event.target.selectionStart)}
+          onKeyDown={handleKeyDown}
+          onPaste={onPaste}
+          placeholder={placeholder}
+          ref={textAreaRef}
+          rows={rows}
+          value={draft.text}
+        />
+      )}
       {mentionRange && (
         <div className="orf-chat-mention-menu">
           {mentionUsers.length > 0 ? mentionUsers.map((user, index) => (
@@ -541,13 +618,22 @@ export function ChatDraftEditor({
           {chatMarkdownCommands.map((command) => {
             const Icon = command.icon;
             return (
-              <button type="button" key={command.mode} onClick={() => applyMarkdownMode(command.mode)} title={`${command.label} ${command.shortcutText}`}>
+              <button disabled={previewing} type="button" key={command.mode} onClick={() => applyMarkdownMode(command.mode)} title={`${command.label} ${command.shortcutText}`}>
                 <Icon className="h-4 w-4" />
               </button>
             );
           })}
+          <button
+            className={previewing ? "orf-chat-composer-toolbar-active" : ""}
+            disabled={!draft.text.trim()}
+            type="button"
+            onClick={togglePreview}
+            title="预览 Markdown Ctrl/Cmd+Alt+P 或 Ctrl/Cmd+Shift+P"
+          >
+            {previewing ? <Edit3 className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
           <span className="orf-chat-composer-emoji-anchor" ref={emojiAnchorRef}>
-            <button type="button" onClick={() => setEmojiOpen((open) => !open)} title="表情 Ctrl/Cmd+Alt+E 或 Ctrl/Cmd+Shift+E">
+            <button disabled={previewing} type="button" onClick={() => setEmojiOpen((open) => !open)} title="表情 Ctrl/Cmd+Alt+E 或 Ctrl/Cmd+Shift+E">
               <Smile className="h-4 w-4" />
             </button>
             {emojiOpen && (
@@ -562,7 +648,7 @@ export function ChatDraftEditor({
             )}
           </span>
           {toolbarControls}
-          <button type="button" onClick={() => insertTextAtSelection("@")} title="提及成员 @"><AtSign className="h-4 w-4" /></button>
+          <button disabled={previewing} type="button" onClick={() => insertTextAtSelection("@")} title="提及成员 @"><AtSign className="h-4 w-4" /></button>
         </span>
         <span className="orf-chat-composer-end-actions">
           {toolbarEnd?.({ submit: () => void submit(), submitting })}
