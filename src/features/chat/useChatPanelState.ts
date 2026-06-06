@@ -45,6 +45,10 @@ export function useChatPanelState({
 
   const closePanel = useCallback(() => setActivePanel(null), []);
 
+  const openPanel = useCallback((panel: Exclude<ActivePanel, null>) => {
+    setActivePanel(panel);
+  }, []);
+
   const updateSearchQuery = useCallback((value: string) => {
     searchRequestIdRef.current += 1;
     setSearchQuery(value);
@@ -247,6 +251,7 @@ export function useChatPanelState({
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
+    openPanel,
     reconcilePinnedCollection,
     reconcileSavedCollection,
     reconcileThreadFollow,

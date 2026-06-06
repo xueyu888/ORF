@@ -51,6 +51,10 @@ import {
 import { useOrf } from "../state/OrfProvider";
 import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatUser } from "../types/orf";
 
+function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
+}
+
 export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -114,6 +118,7 @@ export function ChatPage() {
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
+    openPanel,
     reconcilePinnedCollection,
     reconcileSavedCollection,
     reconcileThreadFollow,
@@ -303,6 +308,19 @@ export function ChatPage() {
       navigate(`/chat/${encodeURIComponent(channelId)}`);
     });
   }, [activeChannel?.id, navigate, prefetchChannelMessages]);
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !activeChannel?.id) return;
+      if (modal || attachmentPreview || deletingMessage || editingMessage) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "f") return;
+      if (isChatGlobalShortcutEditableTarget(event.target)) return;
+      event.preventDefault();
+      openPanel("search");
+    };
+    document.addEventListener("keydown", handleSearchShortcut);
+    return () => document.removeEventListener("keydown", handleSearchShortcut);
+  }, [activeChannel?.id, attachmentPreview, deletingMessage, editingMessage, modal, openPanel]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -701,7 +719,7 @@ export function ChatPage() {
               onMarkUnread={() => void markActiveChannelUnread()}
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
-              onSearch={() => togglePanel("search")}
+              onSearch={() => openPanel("search")}
               onThreads={() => void loadThreadSummaries()}
               onToggleFavorite={async () => {
                 const response = await updateChatChannelRequest(activeChannel.id, { favorite: !myMembership?.favorite });
