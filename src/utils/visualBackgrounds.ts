@@ -1,20 +1,24 @@
-import type { VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsData } from "../state/apiClient";
+import type { AppShellBackgroundSlot, VisualBackgroundImage, VisualBackgroundScene, VisualBackgroundsData } from "../state/apiClient";
 
 const rotationStoragePrefix = "orf.visualBackgroundRotation";
 const visualBackgroundChangedEvent = "orf:visual-background-changed";
 
-function rotationStorageKey(scene: VisualBackgroundScene) {
-  return `${rotationStoragePrefix}.${scene}`;
+function backgroundRotationKey(data: Pick<VisualBackgroundsData, "scene" | "slot">) {
+  return data.slot ? `${data.scene}.${data.slot}` : data.scene;
 }
 
-function readStoredIndex(scene: VisualBackgroundScene) {
-  const rawValue = window.localStorage.getItem(rotationStorageKey(scene));
+function rotationStorageKey(data: Pick<VisualBackgroundsData, "scene" | "slot">) {
+  return `${rotationStoragePrefix}.${backgroundRotationKey(data)}`;
+}
+
+function readStoredIndex(data: Pick<VisualBackgroundsData, "scene" | "slot">) {
+  const rawValue = window.localStorage.getItem(rotationStorageKey(data));
   const parsed = rawValue ? Number.parseInt(rawValue, 10) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : -1;
 }
 
-function writeStoredIndex(scene: VisualBackgroundScene, index: number) {
-  window.localStorage.setItem(rotationStorageKey(scene), String(index));
+function writeStoredIndex(data: Pick<VisualBackgroundsData, "scene" | "slot">, index: number) {
+  window.localStorage.setItem(rotationStorageKey(data), String(index));
 }
 
 function fixedBackground(data: VisualBackgroundsData) {
@@ -30,7 +34,7 @@ function nextSwitchableIndex(data: VisualBackgroundsData) {
     return Math.floor(Math.random() * data.list.length);
   }
 
-  return (readStoredIndex(data.scene) + 1) % data.list.length;
+  return (readStoredIndex(data) + 1) % data.list.length;
 }
 
 export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgroundImage | null {
@@ -43,7 +47,7 @@ export function pickVisualBackground(data: VisualBackgroundsData): VisualBackgro
     return null;
   }
 
-  writeStoredIndex(data.scene, nextIndex);
+  writeStoredIndex(data, nextIndex);
   return data.list[nextIndex] ?? null;
 }
 
@@ -59,10 +63,14 @@ export function dispatchVisualBackgroundChanged(scene: VisualBackgroundScene) {
   window.dispatchEvent(new CustomEvent(visualBackgroundChangedEvent, { detail: { scene } }));
 }
 
-export function subscribeVisualBackgroundChanged(scene: VisualBackgroundScene, listener: () => void) {
+export function dispatchAppShellBackgroundChanged(slot?: AppShellBackgroundSlot) {
+  window.dispatchEvent(new CustomEvent(visualBackgroundChangedEvent, { detail: { scene: "app_background", slot } }));
+}
+
+export function subscribeVisualBackgroundChanged(scene: VisualBackgroundScene, listener: () => void, slot?: AppShellBackgroundSlot) {
   const handler = (event: Event) => {
-    const detail = event instanceof CustomEvent ? (event.detail as { scene?: VisualBackgroundScene } | undefined) : undefined;
-    if (detail?.scene === scene) {
+    const detail = event instanceof CustomEvent ? (event.detail as { scene?: VisualBackgroundScene; slot?: AppShellBackgroundSlot } | undefined) : undefined;
+    if (detail?.scene === scene && (!slot || !detail.slot || detail.slot === slot)) {
       listener();
     }
   };

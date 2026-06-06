@@ -6,15 +6,67 @@
         "fixedBackgroundId": null,
         "switchTrigger": "on_open",
         "switchOrder": "random",
-        "switchIntervalMinutes": 10
+        "switchIntervalMinutes": 10,
+        "placement": {
+          "positionX": 50,
+          "positionY": 50,
+          "scale": 1
+        }
       },
       "app_background": {
         "mode": "fixed",
         "fixedBackgroundId": null,
         "switchTrigger": "on_open",
         "switchOrder": "random",
-        "switchIntervalMinutes": 10
+        "switchIntervalMinutes": 10,
+        "placement": {
+          "positionX": 50,
+          "positionY": 50,
+          "scale": 1
+        }
       }
+    },
+    "appShellBackgrounds": {
+      "topbar": {
+        "mode": "fixed",
+        "fixedBackgroundId": null,
+        "switchTrigger": "on_open",
+        "switchOrder": "random",
+        "switchIntervalMinutes": 10,
+        "placement": {
+          "positionX": 50,
+          "positionY": 50,
+          "scale": 1
+        }
+      },
+      "sidebar": {
+        "mode": "fixed",
+        "fixedBackgroundId": null,
+        "switchTrigger": "on_open",
+        "switchOrder": "random",
+        "switchIntervalMinutes": 10,
+        "placement": {
+          "positionX": 50,
+          "positionY": 50,
+          "scale": 1
+        }
+      },
+      "main_content": {
+        "mode": "fixed",
+        "fixedBackgroundId": null,
+        "switchTrigger": "on_open",
+        "switchOrder": "random",
+        "switchIntervalMinutes": 10,
+        "placement": {
+          "positionX": 50,
+          "positionY": 50,
+          "scale": 1
+        }
+      }
+    },
+    "backgroundResources": {
+      "login_background": [],
+      "app_background": []
     }
   }
 }

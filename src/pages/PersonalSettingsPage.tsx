@@ -1,8 +1,9 @@
 import { clsx } from "clsx";
-import { Check, Image, Loader2, Trash2, Upload } from "lucide-react";
+import { Check, Image, Loader2, Share2, Trash2, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
+import { BackgroundPlacementEditor, normalizeBackgroundPlacement } from "../components/settings/BackgroundPlacementEditor";
 import { UserAvatar } from "../components/UserAvatar";
 import { Button, Card, Field } from "../components/ui";
 import {
@@ -10,13 +11,14 @@ import {
   getPersonalBackgrounds,
   saveUserPreferences,
   uploadPersonalBackground,
+  type AppShellBackgroundSlot,
   type PersonalBackgroundsData,
   type UserPreferences,
   type VisualBackgroundConfig,
 } from "../state/apiClient";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
-import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
+import { dispatchAppShellBackgroundChanged } from "../utils/visualBackgrounds";
 import { dispatchPersonalPreferencesChanged } from "../utils/personalPreferences";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
@@ -27,7 +29,18 @@ const defaultPersonalBackgroundConfig: VisualBackgroundConfig = {
   switchTrigger: "on_open",
   switchOrder: "random",
   switchIntervalMinutes: 10,
+  placement: {
+    positionX: 50,
+    positionY: 50,
+    scale: 1,
+  },
 };
+
+const appShellSlotOptions: Array<{ slot: AppShellBackgroundSlot; label: string }> = [
+  { slot: "topbar", label: "顶栏" },
+  { slot: "sidebar", label: "侧边栏" },
+  { slot: "main_content", label: "主内容区" },
+];
 
 const landingOptions = [
   { label: "悬赏大厅", value: "/bounties" },
@@ -43,6 +56,7 @@ export function PersonalSettingsPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [backgrounds, setBackgrounds] = useState<PersonalBackgroundsData | null>(null);
+  const [activeSlot, setActiveSlot] = useState<AppShellBackgroundSlot>("sidebar");
   const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
   const [loadStatus, setLoadStatus] = useState<RequestStatus>("idle");
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
@@ -62,7 +76,7 @@ export function PersonalSettingsPage() {
       const data = await getPersonalBackgrounds();
       setPreferences(data.preferences);
       setBackgrounds(data);
-      setSelectedBackgroundId(data.config.fixedBackgroundId);
+      setSelectedBackgroundId(data.slots[activeSlot].config.fixedBackgroundId);
       setLoadStatus("success");
     } catch (error) {
       const message = error instanceof Error ? error.message : "个人设置加载失败";
@@ -74,6 +88,12 @@ export function PersonalSettingsPage() {
   useEffect(() => {
     void loadSettings();
   }, [settingsInvalidationKey]);
+
+  useEffect(() => {
+    if (backgrounds) {
+      setSelectedBackgroundId(backgrounds.slots[activeSlot].config.fixedBackgroundId);
+    }
+  }, [activeSlot, backgrounds]);
 
   useEffect(() => {
     if (!currentUser?.avatarUrl) {
@@ -108,6 +128,27 @@ export function PersonalSettingsPage() {
     await savePreferencePatch({ sidebarCollapsed: value === "system" ? null : value === "collapsed" });
   };
 
+  const updateActiveSlotConfig = (updater: (config: VisualBackgroundConfig) => VisualBackgroundConfig) => {
+    setBackgrounds((current) => {
+      if (!current) {
+        return current;
+      }
+      const currentSlot = current.slots[activeSlot];
+      const nextConfig = updater(currentSlot.config ?? defaultPersonalBackgroundConfig);
+      return {
+        ...current,
+        slots: {
+          ...current.slots,
+          [activeSlot]: {
+            ...currentSlot,
+            config: nextConfig,
+            list: currentSlot.list.map((background) => ({ ...background, isDefault: background.id === nextConfig.fixedBackgroundId })),
+          },
+        },
+      };
+    });
+  };
+
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
@@ -126,15 +167,15 @@ export function PersonalSettingsPage() {
     try {
       const uploaded = await uploadPersonalBackground(file);
       const nextConfig = {
-        ...(backgrounds?.config ?? defaultPersonalBackgroundConfig),
+        ...(backgrounds?.slots[activeSlot].config ?? defaultPersonalBackgroundConfig),
         mode: "fixed",
         fixedBackgroundId: uploaded.id,
       } satisfies VisualBackgroundConfig;
-      const saved = await savePreferencePatch({ appBackground: nextConfig }, "个人背景已上传");
+      const saved = await savePreferencePatch({ appShellBackgrounds: { [activeSlot]: nextConfig } }, "个人背景已上传");
       if (saved) {
         await loadSettings();
         setSelectedBackgroundId(uploaded.id);
-        dispatchVisualBackgroundChanged("app_background");
+        dispatchAppShellBackgroundChanged(activeSlot);
       }
       setUploadStatus("success");
     } catch (error) {
@@ -189,27 +230,43 @@ export function PersonalSettingsPage() {
       return;
     }
     const nextConfig = {
-      ...(backgrounds?.config ?? defaultPersonalBackgroundConfig),
+      ...(backgrounds?.slots[activeSlot].config ?? defaultPersonalBackgroundConfig),
       mode: "fixed",
       fixedBackgroundId: selectedBackgroundId,
+      placement: normalizeBackgroundPlacement(backgrounds?.slots[activeSlot].config.placement),
     } satisfies VisualBackgroundConfig;
-    const saved = await savePreferencePatch({ appBackground: nextConfig }, "个人背景已更新");
+    const saved = await savePreferencePatch({ appShellBackgrounds: { [activeSlot]: nextConfig } }, "个人背景已更新");
     if (saved) {
       await loadSettings();
-      dispatchVisualBackgroundChanged("app_background");
+      dispatchAppShellBackgroundChanged(activeSlot);
+    }
+  };
+
+  const handlePlacementChange = (placement: VisualBackgroundConfig["placement"]) => {
+    updateActiveSlotConfig((config) => ({
+      ...config,
+      fixedBackgroundId: selectedBackgroundId ?? config.fixedBackgroundId,
+      placement: normalizeBackgroundPlacement(placement),
+    }));
+  };
+
+  const handleSharingChange = async (shared: boolean) => {
+    const saved = await savePreferencePatch({ personalBackgroundsShared: shared }, shared ? "已共享个人背景图" : "已关闭个人背景共享");
+    if (saved) {
+      await loadSettings();
     }
   };
 
   const handleUseSystemDefault = async () => {
-    const saved = await savePreferencePatch({ appBackground: null }, "已使用系统默认背景");
+    const saved = await savePreferencePatch({ appShellBackgrounds: { [activeSlot]: null } }, "已使用系统默认背景");
     if (saved) {
       await loadSettings();
-      dispatchVisualBackgroundChanged("app_background");
+      dispatchAppShellBackgroundChanged(activeSlot);
     }
   };
 
   const handleDeleteSelectedBackground = async () => {
-    if (!selectedBackgroundId || !isPersonalBackground(selectedBackgroundId)) {
+    if (!selectedBackgroundId || !selectedBackground?.ownedByCurrentUser) {
       return;
     }
 
@@ -218,7 +275,7 @@ export function PersonalSettingsPage() {
     try {
       await deletePersonalBackground(selectedBackgroundId);
       await loadSettings();
-      dispatchVisualBackgroundChanged("app_background");
+      dispatchAppShellBackgroundChanged();
       setSaveStatus("success");
       notify("个人背景已删除");
     } catch (error) {
@@ -235,8 +292,11 @@ export function PersonalSettingsPage() {
       : preferences.sidebarCollapsed
         ? "collapsed"
         : "expanded";
-  const selectedBackground = backgrounds?.list.find((background) => background.id === selectedBackgroundId) ?? null;
-  const canUseSelected = Boolean(selectedBackgroundId && selectedBackgroundId !== preferences?.appBackground?.fixedBackgroundId);
+  const activeSlotData = backgrounds?.slots[activeSlot] ?? null;
+  const activeConfig = activeSlotData?.config ?? defaultPersonalBackgroundConfig;
+  const selectedBackground = activeSlotData?.list.find((background) => background.id === selectedBackgroundId) ?? null;
+  const canUseSelected = Boolean(selectedBackgroundId);
+  const canDeleteSelected = Boolean(selectedBackground?.ownedByCurrentUser);
   const busy = saveStatus === "loading" || uploadStatus === "loading" || avatarStatus === "loading";
 
   return (
@@ -331,22 +391,68 @@ export function PersonalSettingsPage() {
         <Card className="orf-card-padding">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold orf-text-primary">我的 AppShell 皮肤</h2>
-              <p className="mt-1 text-sm orf-text-secondary">选择侧边栏和顶部栏使用的系统皮肤或本人上传皮肤。</p>
+              <h2 className="text-lg font-semibold orf-text-primary">我的 AppShell 背景</h2>
+              <p className="mt-1 text-sm orf-text-secondary">分别调整顶栏、侧边栏和主内容区的背景效果。</p>
             </div>
-            <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={(event) => void handleFileSelected(event)} />
-            <Button type="button" variant="secondary" disabled={busy} onClick={() => fileInputRef.current?.click()}>
-              {uploadStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              上传
-            </Button>
+            <label className="orf-background-share-toggle">
+              <Share2 className="h-4 w-4" />
+              <span>共享我的背景图</span>
+              <input
+                type="checkbox"
+                checked={preferences?.personalBackgroundsShared ?? false}
+                disabled={!preferences || busy}
+                onChange={(event) => void handleSharingChange(event.target.checked)}
+              />
+            </label>
           </div>
 
           {loadStatus === "loading" && <div className="orf-settings-background-state">加载中...</div>}
           {loadStatus === "error" && <div className="orf-settings-background-state">{errorMessage ?? "个人设置加载失败"}</div>}
-          {loadStatus === "success" && backgrounds && (
+          {loadStatus === "success" && backgrounds && activeSlotData && (
             <>
+              <div className="orf-appshell-slot-tabs" role="tablist" aria-label="AppShell 背景槽位">
+                {appShellSlotOptions.map((option) => (
+                  <button
+                    key={option.slot}
+                    type="button"
+                    className={clsx("orf-appshell-slot-tab", activeSlot === option.slot && "orf-appshell-slot-tab-active")}
+                    onClick={() => setActiveSlot(option.slot)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="orf-personal-background-layout">
+                <BackgroundPlacementEditor
+                  image={selectedBackground}
+                  placement={normalizeBackgroundPlacement(activeConfig.placement)}
+                  disabled={busy}
+                  previewClassName={`orf-background-placement-${activeSlot}`}
+                  onChange={handlePlacementChange}
+                />
+                <div className="orf-personal-background-current">
+                  <div className="orf-text-muted text-sm">当前槽位</div>
+                  <div className="orf-text-primary text-base font-semibold">{appShellSlotOptions.find((option) => option.slot === activeSlot)?.label}</div>
+                  <div className="mt-2 text-sm orf-text-secondary">
+                    {selectedBackground ? `${backgroundSourceLabel(selectedBackground)}：${selectedBackground.fileName}` : "使用系统默认背景"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                <div className="orf-text-secondary text-sm">背景资源池</div>
+                <div className="flex flex-wrap gap-2">
+                  <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={(event) => void handleFileSelected(event)} />
+                  <Button type="button" variant="secondary" disabled={busy} onClick={() => fileInputRef.current?.click()}>
+                    {uploadStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                    上传
+                  </Button>
+                </div>
+              </div>
+
               <div className="orf-settings-background-gallery" data-loading="false">
-                {backgrounds.list.map((background) => {
+                {activeSlotData.list.map((background) => {
                   const selected = selectedBackgroundId === background.id;
                   return (
                     <button
@@ -362,6 +468,9 @@ export function PersonalSettingsPage() {
                           当前
                         </span>
                       )}
+                      {background.ownerName && (
+                        <span className="orf-settings-background-owner">{background.ownerName}</span>
+                      )}
                     </button>
                   );
                 })}
@@ -371,20 +480,20 @@ export function PersonalSettingsPage() {
                 <div className="orf-settings-selected-text">
                   {errorMessage && <span>{errorMessage}</span>}
                   {!errorMessage && selectedBackground && (
-                    <span>{isPersonalBackground(selectedBackground.id) ? "个人上传" : "系统背景"}：{selectedBackground.fileName}</span>
+                    <span>{backgroundSourceLabel(selectedBackground)}：{selectedBackground.fileName}</span>
                   )}
                 </div>
                 <div className="flex flex-wrap justify-end gap-2">
-                  <Button type="button" variant="ghost" disabled={!preferences || busy || preferences.appBackground === null} onClick={() => void handleUseSystemDefault()}>
+                  <Button type="button" variant="ghost" disabled={!preferences || busy || preferences.appShellBackgrounds[activeSlot] === null} onClick={() => void handleUseSystemDefault()}>
                     使用系统默认
                   </Button>
-                  <Button type="button" variant="secondary" disabled={busy || !isPersonalBackground(selectedBackgroundId)} onClick={() => void handleDeleteSelectedBackground()}>
+                  <Button type="button" variant="secondary" disabled={busy || !canDeleteSelected} onClick={() => void handleDeleteSelectedBackground()}>
                     <Trash2 className="h-4 w-4" />
                     删除
                   </Button>
                   <Button type="button" disabled={busy || !canUseSelected} onClick={() => void handleUseSelectedBackground()}>
                     {saveStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
-                    设为我的背景
+                    保存背景效果
                   </Button>
                 </div>
               </div>
@@ -397,6 +506,12 @@ export function PersonalSettingsPage() {
   );
 }
 
-function isPersonalBackground(id: string | null | undefined) {
-  return Boolean(id?.includes("/personal/"));
+function backgroundSourceLabel(background: { ownedByCurrentUser?: boolean; ownerName?: string; id: string }) {
+  if (!background.id.includes("/personal/")) {
+    return "系统背景";
+  }
+  if (background.ownedByCurrentUser) {
+    return "我的上传";
+  }
+  return background.ownerName ? `${background.ownerName} 共享` : "成员共享";
 }
