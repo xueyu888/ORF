@@ -53,6 +53,7 @@ export type ChatUnreadJumpTarget = {
 export type ChatFeedSnapshot = {
   hasNewerMessages: boolean;
   hasOlderMessages: boolean;
+  hasScrollPosition: boolean;
   messages: ChatMessage[];
   scrollTop: number;
   syncedAt?: string;
@@ -320,6 +321,7 @@ export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedS
   return {
     hasNewerMessages: input?.hasNewerMessages ?? false,
     hasOlderMessages: input?.hasOlderMessages ?? false,
+    hasScrollPosition: input?.hasScrollPosition ?? false,
     messages: input?.messages ?? [],
     scrollTop: input?.scrollTop ?? 0,
     syncedAt: input?.syncedAt,
@@ -335,6 +337,7 @@ export function replaceFeedMessages(
   return createFeedSnapshot({
     hasNewerMessages: flags?.hasNewerMessages ?? false,
     hasOlderMessages: flags?.hasOlderMessages ?? messages.length >= pageSize,
+    hasScrollPosition: snapshot?.hasScrollPosition ?? false,
     messages,
     scrollTop: snapshot?.scrollTop ?? 0,
     syncedAt: new Date().toISOString(),
@@ -440,6 +443,7 @@ export function prependOlderFeedMessages(snapshot: ChatFeedSnapshot | undefined,
 export function rememberFeedScroll(snapshot: ChatFeedSnapshot | undefined, scrollTop: number) {
   return createFeedSnapshot({
     ...snapshot,
+    hasScrollPosition: true,
     scrollTop: Math.max(0, scrollTop),
   });
 }
