@@ -1,4 +1,4 @@
-import { ChevronDown, Loader2 } from "lucide-react";
+import { CheckCheck, ChevronDown, Loader2 } from "lucide-react";
 import type { RefObject } from "react";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatDay } from "./chatFormat";
@@ -19,6 +19,7 @@ type ChatMessageFeedProps = {
   messages: ChatMessage[];
   onAttachmentPreview: (attachment: ChatAttachment) => void;
   onCancelEdit: () => void;
+  onClearUnread: () => void;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
@@ -56,6 +57,7 @@ export function ChatMessageFeed({
   messages,
   onAttachmentPreview,
   onCancelEdit,
+  onClearUnread,
   onCopyLink,
   onDelete,
   onEdit,
@@ -96,6 +98,7 @@ export function ChatMessageFeed({
           messages={messages}
           onAttachmentPreview={onAttachmentPreview}
           onCancelEdit={onCancelEdit}
+          onClearUnread={onClearUnread}
           onCopyLink={onCopyLink}
           onDelete={onDelete}
           onEdit={onEdit}
@@ -139,6 +142,7 @@ function MessageList({
   messages,
   onCopyLink,
   onCancelEdit,
+  onClearUnread,
   onDelete,
   onEdit,
   onJumpUnread,
@@ -162,10 +166,16 @@ function MessageList({
   return (
     <div className="orf-chat-message-list">
       {unreadTarget && (
-        <button className="orf-chat-unread-jump" type="button" onClick={() => onJumpUnread(unreadTarget.jumpTarget)}>
-          <ChevronDown className="h-4 w-4" />
-          跳到未读
-        </button>
+        <div className="orf-chat-unread-controls">
+          <button className="orf-chat-unread-jump" type="button" onClick={() => onJumpUnread(unreadTarget.jumpTarget)}>
+            <ChevronDown className="h-4 w-4" />
+            跳到未读
+          </button>
+          <button className="orf-chat-unread-clear" type="button" onClick={onClearUnread}>
+            <CheckCheck className="h-4 w-4" />
+            标记已读
+          </button>
+        </div>
       )}
       {hasOlderMessages && (
         <button className="orf-chat-load-older" disabled={loadingOlderMessages} type="button" onClick={onLoadOlder}>

@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Pin, Reply, Smile, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize, formatTime } from "./chatFormat";
@@ -114,6 +114,12 @@ export function ChatMessageItem({
       setEditSaving(false);
     }
   };
+  const handleDoubleClick = (event: MouseEvent<HTMLElement>) => {
+    if (editing || message.deletedAt) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, a, input, textarea, select, [role='button']")) return;
+    onThread(message.rootMessageId ?? message.id);
+  };
 
   return (
     <article
@@ -126,6 +132,7 @@ export function ChatMessageItem({
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
+      onDoubleClick={handleDoubleClick}
     >
       {compact ? (
         <div className="orf-chat-message-compact-time">{formatTime(message.createdAt)}</div>
@@ -193,22 +200,26 @@ export function ChatMessageItem({
                   </button>
                 );
               })}
-              <div className="orf-chat-emoji-anchor" ref={emojiAnchorRef}>
-                <button type="button" className="orf-chat-mini-action" onClick={() => setEmojiOpen((open) => !open)} title="添加反应">
-                  <Smile className="h-3.5 w-3.5" />
+              {!message.rootMessageId && message.replyCount > 0 && (
+                <button type="button" className="orf-chat-thread-summary" onClick={() => onThread(message.id)}>
+                  <Reply className="h-3.5 w-3.5" />
+                  {message.replyCount} 条回复
+                  {message.lastReplyAt && <span>最后回复 {formatTime(message.lastReplyAt)}</span>}
                 </button>
-                {emojiOpen && <ChatReactionPicker anchorRef={emojiAnchorRef} onClose={() => setEmojiOpen(false)} onSelect={selectReaction} />}
-              </div>
-              <button type="button" className="orf-chat-thread-link" onClick={() => onThread(message.id)}>
-                <Reply className="h-3.5 w-3.5" />
-                {message.replyCount > 0 ? `${message.replyCount} 条回复` : "回复"}
-              </button>
+              )}
             </div>
           </>
         )}
       </div>
       {!message.deletedAt && !editing && (
         <div className="orf-chat-message-actions">
+          <div className="orf-chat-message-action-anchor" ref={emojiAnchorRef}>
+            <IconButton icon={Smile} label="添加反应" onClick={() => setEmojiOpen((open) => !open)} />
+            {emojiOpen && <ChatReactionPicker anchorRef={emojiAnchorRef} onClose={() => setEmojiOpen(false)} onSelect={selectReaction} />}
+          </div>
+          {!message.rootMessageId && (
+            <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id)} />
+          )}
           {onSave && (
             <IconButton
               className={message.savedByCurrentUser ? "orf-chat-message-action-active" : ""}

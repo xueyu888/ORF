@@ -161,6 +161,7 @@ export function ChatPage() {
   const {
     applyMessageToFeed,
     applyRealtimeMessageToFeed,
+    clearActiveChannelUnread,
     handleMessageScroll,
     hasNewerMessages,
     hasOlderMessages,
@@ -313,10 +314,10 @@ export function ChatPage() {
         appendThreadReply(response.message);
       } else if (activeChannel?.id === channelId) {
         if (hasNewerMessages) {
-          await loadLatestMessages("smooth");
+          await loadLatestMessages("auto");
         } else {
           applyMessage(response.message);
-          requestScrollToLatest("smooth");
+          requestScrollToLatest("auto");
         }
       } else {
         applyMessage(response.message);
@@ -479,6 +480,7 @@ export function ChatPage() {
               messages={messages}
               onAttachmentPreview={setAttachmentPreview}
               onCancelEdit={() => setEditingMessage(null)}
+              onClearUnread={() => void clearActiveChannelUnread()}
               onCopyLink={handleCopyMessageLink}
               onDelete={setDeletingMessage}
               onEdit={setEditingMessage}

@@ -340,10 +340,24 @@ export function useChatFeedState({
   useEffect(() => {
     const behavior = pendingLatestScrollRef.current;
     if (!behavior || messagesLoading) return;
-    window.requestAnimationFrame(() => {
+    let cancelled = false;
+    let remainingAttempts = behavior === "auto" ? 3 : 1;
+    const scrollLatest = () => {
+      if (cancelled) return;
       scrollChatFeedToLatest(messageScrollRef.current, behavior);
-      pendingLatestScrollRef.current = null;
-    });
+      remainingAttempts -= 1;
+      if (remainingAttempts > 0) {
+        window.requestAnimationFrame(scrollLatest);
+        return;
+      }
+      if (pendingLatestScrollRef.current === behavior) {
+        pendingLatestScrollRef.current = null;
+      }
+    };
+    window.requestAnimationFrame(scrollLatest);
+    return () => {
+      cancelled = true;
+    };
   }, [activeChannelId, messages, messagesLoading]);
 
   const loadOlderMessages = useCallback(async () => {
@@ -408,6 +422,22 @@ export function useChatFeedState({
       unreadCount: response.channel.unreadCount,
     });
   }, [activeChannelId, onChannelUpdate]);
+
+  const clearActiveChannelUnread = useCallback(async () => {
+    const channelId = activeChannelIdRef.current;
+    if (!channelId) return;
+    try {
+      const response = await markChatChannelReadRequest(channelId);
+      if (activeChannelIdRef.current !== channelId) return;
+      onChannelUpdate(response.channel);
+      setUnreadAnchor(null);
+      requestScrollToLatest("auto");
+    } catch (error) {
+      if (activeChannelIdRef.current === channelId) {
+        notify(error instanceof Error ? error.message : "标记已读失败");
+      }
+    }
+  }, [notify, onChannelUpdate, requestScrollToLatest]);
 
   const markMessageUnread = useCallback(async (message: ChatMessage) => {
     const response = await setChatChannelUnreadRequest({ channelId: message.channelId, messageId: message.id });
@@ -506,6 +536,7 @@ export function useChatFeedState({
   return {
     applyMessageToFeed,
     applyRealtimeMessageToFeed,
+    clearActiveChannelUnread,
     handleMessageScroll,
     hasNewerMessages: displayedHasNewerMessages,
     hasOlderMessages: displayedHasOlderMessages,

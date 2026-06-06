@@ -9027,8 +9027,19 @@ a.orf-row-loot-action,
   gap: 2px;
 }
 
+.orf-chat-unread-controls {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: inline-flex;
+  justify-self: center;
+  align-items: center;
+  gap: 8px;
+}
+
 .orf-chat-load-older,
-.orf-chat-unread-jump {
+.orf-chat-unread-jump,
+.orf-chat-unread-clear {
   justify-self: center;
   display: inline-flex;
   min-height: 30px;
@@ -9044,12 +9055,16 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-unread-jump {
-  position: sticky;
-  top: 0;
-  z-index: 6;
   border-color: var(--orf-accent-border);
   background: rgba(255, 255, 255, 0.94);
   color: var(--orf-accent-text);
+  box-shadow: var(--orf-shadow-card);
+}
+
+.orf-chat-unread-clear {
+  border-color: var(--orf-success-border);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--orf-success-text);
   box-shadow: var(--orf-shadow-card);
 }
 
@@ -9074,6 +9089,7 @@ a.orf-row-loot-action,
 
 .orf-chat-load-older:hover,
 .orf-chat-unread-jump:hover,
+.orf-chat-unread-clear:hover,
 .orf-chat-scroll-latest:hover {
   border-color: var(--orf-accent-border);
   background: var(--orf-accent-soft);
@@ -9412,9 +9428,15 @@ button.orf-chat-image-attachment {
   margin-top: 7px;
 }
 
+.orf-chat-reaction-row:not(:has(.orf-chat-reaction)):not(:has(.orf-chat-thread-summary)) {
+  height: 0;
+  margin-top: 0;
+  overflow: visible;
+}
+
 .orf-chat-reaction,
 .orf-chat-mini-action,
-.orf-chat-thread-link,
+.orf-chat-thread-summary,
 .orf-chat-follow-button {
   display: inline-flex;
   min-height: 26px;
@@ -9439,8 +9461,34 @@ button.orf-chat-image-attachment {
   text-align: center;
 }
 
-.orf-chat-emoji-anchor {
+.orf-chat-emoji-anchor,
+.orf-chat-message-action-anchor {
   position: relative;
+}
+
+.orf-chat-thread-summary {
+  border-color: var(--orf-accent-border);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--orf-accent-text);
+  font-weight: 800;
+}
+
+.orf-chat-thread-summary span {
+  color: var(--orf-text-muted);
+  font-weight: 700;
+}
+
+.orf-chat-message:hover .orf-chat-reaction-row:has(.orf-chat-thread-summary),
+.orf-chat-message:focus-within .orf-chat-reaction-row:has(.orf-chat-thread-summary) {
+  height: auto;
+  margin-top: 7px;
+}
+
+@media (hover: none) {
+  .orf-chat-reaction-row:not(:has(.orf-chat-reaction)):has(.orf-chat-thread-summary) {
+    height: auto;
+    margin-top: 7px;
+  }
 }
 
 .orf-chat-emoji-popover {
