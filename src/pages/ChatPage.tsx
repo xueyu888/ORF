@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { AttachmentPreview, ChannelModal, ConversationModal, EditMessageDialog } from "../features/chat/ChatDialogs";
@@ -10,28 +10,19 @@ import type { ActivePanel, ChatSearchScope, ChatSearchTypeFilter } from "../feat
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
-import { isChatFeedNearLatest, scrollChatFeedToLatest, scrollChatFeedToMessage, scrollChatFeedToUnread } from "../features/chat/chatFeedScroll";
 import {
   type ChatDraft,
-  type UnreadAnchor,
   applyThreadSummaryMessage,
-  applyFeedMessage,
-  buildUnreadAnchor,
-  chatMessagePageSize,
-  createFeedSnapshot,
   currentMembership,
   draftFromStoredBody,
   hasStoredDraftForChannel,
-  prependOlderFeedMessages,
-  rememberFeedScroll,
-  replaceFeedMessages,
   serializeDraft,
-  shouldFollowIncomingMessage,
   sortChannels,
   storedDraftChannelIds,
   upsertChannel,
   upsertMessage,
 } from "../features/chat/chatModels";
+import { type ChatFeedThreadTarget, useChatFeedState } from "../features/chat/useChatFeedState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
 import {
@@ -40,19 +31,14 @@ import {
   createChatChannel,
   deleteChatMessageRequest,
   getChatBootstrap,
-  getChatMentionableUsers,
-  getChatMessageContext,
-  getChatMessages,
   getChatThread,
   getChatThreads,
   getPinnedChatMessages,
   getSavedChatMessages,
-  markChatChannelReadRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
   searchChat,
   sendChatMessageRequest,
-  setChatChannelUnreadRequest,
   setChatReactionRequest,
   setChatMessagePinRequest,
   setChatMessageSavedRequest,
@@ -63,11 +49,6 @@ import {
 import { useOrf } from "../state/OrfProvider";
 import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../types/orf";
 
-type PendingThreadTarget = {
-  focusMessageId: string;
-  rootMessageId: string;
-};
-
 export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -75,17 +56,12 @@ export function ChatPage() {
   const { currentUser, notify } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
   const [threadLoading, setThreadLoading] = useState(false);
-  const [pendingThreadTarget, setPendingThreadTarget] = useState<PendingThreadTarget | null>(null);
+  const [pendingThreadTarget, setPendingThreadTarget] = useState<ChatFeedThreadTarget | null>(null);
   const [loading, setLoading] = useState(true);
-  const [messagesLoading, setMessagesLoading] = useState(false);
-  const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
-  const [hasNewerMessages, setHasNewerMessages] = useState(false);
-  const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [channelQuery, setChannelQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchScope, setSearchScope] = useState<ChatSearchScope>("all");
@@ -99,17 +75,8 @@ export function ChatPage() {
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
-  const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
-  const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
-  const activeChannelIdRef = useRef<string | null>(null);
-  const currentUserIdRef = useRef<string | undefined>(undefined);
-  const contextRequestKeyRef = useRef<string | null>(null);
-  const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
-  const messageScrollRef = useRef<HTMLDivElement | null>(null);
-  const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
   const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
-  activeChannelIdRef.current = activeChannel?.id ?? null;
-  currentUserIdRef.current = currentUser?.id;
+  const focusMessageId = searchParams.get("message");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
     if (!activeChannel) return [];
@@ -125,53 +92,56 @@ export function ChatPage() {
     Boolean(bootstrap?.permissions.canManageAnyChannel || bootstrap?.permissions.canManageAnyMembers) ||
     myMembership?.role === "owner" ||
     myMembership?.role === "admin";
-  const focusMessageId = searchParams.get("message");
 
   const applyChannel = useCallback((channel: ChatChannel) => {
     setChannels((items) => upsertChannel(items, channel, currentUser?.id));
   }, [currentUser?.id]);
 
-  const requestScrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
-    pendingLatestScrollRef.current = behavior;
-    setPendingNewMessageCount(0);
-  }, []);
+  const consumeRequestedMessage = useCallback(() => {
+    setSearchParams((params) => {
+      params.delete("message");
+      return params;
+    }, { replace: true });
+  }, [setSearchParams]);
 
-  const rememberActiveFeedScroll = useCallback((channelId = activeChannelIdRef.current) => {
-    const element = messageScrollRef.current;
-    if (!channelId || !element) return;
-    feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element.scrollTop));
-  }, []);
+  const redirectRequestedMessage = useCallback((messageId: string) => {
+    setSearchParams((params) => {
+      params.set("message", messageId);
+      return params;
+    }, { replace: true });
+  }, [setSearchParams]);
 
-  const restoreFeedScroll = useCallback((scrollTop: number) => {
-    window.requestAnimationFrame(() => {
-      const element = messageScrollRef.current;
-      if (!element) return;
-      element.scrollTop = Math.max(0, scrollTop);
-    });
-  }, []);
+  const {
+    applyMessageToFeed,
+    applyRealtimeMessageToFeed,
+    handleMessageScroll,
+    hasNewerMessages,
+    hasOlderMessages,
+    jumpToUnread,
+    loadLatestMessages,
+    loadLatestOrScroll,
+    loadOlderMessages,
+    markActiveChannelUnread,
+    markMessageUnread,
+    messageScrollRef,
+    messages,
+    messagesLoading,
+    olderMessagesLoading,
+    pendingNewMessageCount,
+    requestScrollToLatest,
+    unreadAnchor,
+  } = useChatFeedState({
+    activeChannel,
+    currentUserId: currentUser?.id,
+    notify,
+    onChannelUpdate: applyChannel,
+    onRequestedMessageConsumed: consumeRequestedMessage,
+    onRequestedMessageRedirect: redirectRequestedMessage,
+    onThreadTarget: setPendingThreadTarget,
+    requestedMessageId: focusMessageId,
+  });
 
-  const isMessageScrollNearLatest = useCallback(() => {
-    return isChatFeedNearLatest(messageScrollRef.current);
-  }, []);
-
-  const handleMessageScroll = useCallback(() => {
-    rememberActiveFeedScroll();
-    if (isMessageScrollNearLatest()) setPendingNewMessageCount(0);
-  }, [isMessageScrollNearLatest, rememberActiveFeedScroll]);
-
-  const applyMessage = useCallback((message: ChatMessage) => {
-    if (activeChannelIdRef.current === message.channelId) {
-      setMessages((items) => {
-        const snapshot = applyFeedMessage(feedCacheRef.current.get(message.channelId) ?? createFeedSnapshot({ messages: items }), message);
-        if (!snapshot) return items;
-        feedCacheRef.current.set(message.channelId, snapshot);
-        const next = snapshot.messages;
-        return next;
-      });
-    } else {
-      const snapshot = applyFeedMessage(feedCacheRef.current.get(message.channelId), message);
-      if (snapshot) feedCacheRef.current.set(message.channelId, snapshot);
-    }
+  const applyMessageEffects = useCallback((message: ChatMessage) => {
     setThread((item) => {
       if (!item) return item;
       const isOpenRoot = item.rootMessage.id === message.id;
@@ -194,6 +164,11 @@ export function ChatPage() {
     setSearchResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
     setCollectionResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
   }, [activePanel, currentUser?.id, thread?.rootMessage.id]);
+
+  const applyMessage = useCallback((message: ChatMessage) => {
+    applyMessageToFeed(message);
+    applyMessageEffects(message);
+  }, [applyMessageEffects, applyMessageToFeed]);
 
   const refreshBootstrap = useCallback(async () => {
     const data = await getChatBootstrap();
@@ -241,205 +216,17 @@ export function ChatPage() {
     setDraftChannelIds(storedDraftChannelIds(channels));
   }, [channels]);
 
-  useEffect(() => {
-    if (!activeChannel) return undefined;
-    let cancelled = false;
-    const channelId = activeChannel.id;
-    const anchor = buildUnreadAnchor(activeChannel, currentUser?.id);
-    const cachedFeed = feedCacheRef.current.get(channelId);
-    const requestedMessageId = new URLSearchParams(window.location.search).get("message");
-    const cachedHasRequestedMessage = Boolean(
-      requestedMessageId &&
-      cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
-    );
-    setUnreadAnchor(anchor);
-    setPendingNewMessageCount(0);
-    setMessages(cachedFeed?.messages ?? []);
-    setHasNewerMessages(cachedFeed?.hasNewerMessages ?? false);
-    setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
-    setMessagesLoading(!cachedFeed || Boolean(requestedMessageId && !cachedHasRequestedMessage));
-    if (cachedFeed) restoreFeedScroll(cachedFeed.scrollTop);
-    if (!requestedMessageId) {
-      void getChatMessages({ channelId, limit: chatMessagePageSize })
-        .then((response) => {
-          if (!cancelled) {
-            const currentScrollTop = messageScrollRef.current?.scrollTop ?? cachedFeed?.scrollTop ?? 0;
-            const snapshot = replaceFeedMessages(
-              cachedFeed ? rememberFeedScroll(cachedFeed, currentScrollTop) : createFeedSnapshot({ scrollTop: currentScrollTop }),
-              response.messages,
-            );
-            feedCacheRef.current.set(channelId, snapshot);
-            setMessages(response.messages);
-            setHasNewerMessages(snapshot.hasNewerMessages);
-            setHasOlderMessages(snapshot.hasOlderMessages);
-            if (!cachedFeed && !anchor) {
-              requestScrollToLatest("auto");
-            } else if (cachedFeed) {
-              restoreFeedScroll(snapshot.scrollTop);
-            }
-          }
-        })
-        .catch((error) => notify(error instanceof Error ? error.message : "加载消息失败"))
-        .finally(() => {
-          if (!cancelled) setMessagesLoading(false);
-        });
-    } else if (cachedHasRequestedMessage) {
-      setMessagesLoading(false);
-    }
-    void markChatChannelReadRequest(channelId)
-      .then((response) => applyChannel(response.channel))
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-      rememberActiveFeedScroll(channelId);
-    };
-  }, [activeChannel?.id, applyChannel, currentUser?.id, notify, rememberActiveFeedScroll, requestScrollToLatest, restoreFeedScroll]);
-
-  useEffect(() => {
-    const requestedMessageId = searchParams.get("message");
-    const activeChannelId = activeChannel?.id;
-    if (!activeChannelId || !requestedMessageId) return undefined;
-    const targetInCurrentFeed = messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId);
-    if (targetInCurrentFeed) {
-      contextRequestKeyRef.current = null;
-      return undefined;
-    }
-
-    let cancelled = false;
-    const requestKey = `${activeChannelId}:${requestedMessageId}`;
-    if (contextRequestKeyRef.current === requestKey) return undefined;
-    contextRequestKeyRef.current = requestKey;
-    setMessagesLoading(true);
-    void getChatMessageContext({ channelId: activeChannelId, messageId: requestedMessageId, limit: chatMessagePageSize })
-      .then((response) => {
-        if (cancelled) return;
-        const snapshot = replaceFeedMessages(
-          feedCacheRef.current.get(activeChannelId),
-          response.messages,
-          chatMessagePageSize,
-          {
-            hasNewerMessages: response.hasNewerMessages,
-            hasOlderMessages: response.hasOlderMessages,
-          },
-        );
-        feedCacheRef.current.set(activeChannelId, snapshot);
-        setMessages(snapshot.messages);
-        setHasNewerMessages(snapshot.hasNewerMessages);
-        setHasOlderMessages(snapshot.hasOlderMessages);
-        if (response.targetMessageId !== requestedMessageId) {
-          setPendingThreadTarget({ focusMessageId: requestedMessageId, rootMessageId: response.targetMessageId });
-          setSearchParams((params) => {
-            params.set("message", response.targetMessageId);
-            return params;
-          }, { replace: true });
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          notify(error instanceof Error ? error.message : "加载目标消息失败");
-          setSearchParams((params) => {
-            params.delete("message");
-            return params;
-          }, { replace: true });
-        }
-      })
-      .finally(() => {
-        if (!cancelled && contextRequestKeyRef.current === requestKey) {
-          contextRequestKeyRef.current = null;
-          setMessagesLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-      if (contextRequestKeyRef.current === requestKey) contextRequestKeyRef.current = null;
-    };
-  }, [activeChannel?.id, messages, notify, searchParams, setSearchParams]);
-
-  useEffect(() => {
-    const requestedMessageId = searchParams.get("message");
-    if (!requestedMessageId || !messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId)) return;
-    window.setTimeout(() => {
-      scrollChatFeedToMessage(messageScrollRef.current, requestedMessageId, { behavior: "smooth", block: "center" });
-      setSearchParams((params) => {
-        params.delete("message");
-        return params;
-      }, { replace: true });
-    }, 120);
-  }, [messages, searchParams, setSearchParams]);
-
-  useEffect(() => {
-    const behavior = pendingLatestScrollRef.current;
-    if (!behavior || messagesLoading) return;
-    pendingLatestScrollRef.current = null;
-    window.requestAnimationFrame(() => {
-      scrollChatFeedToLatest(messageScrollRef.current, behavior);
-    });
-  }, [activeChannel?.id, messages, messagesLoading]);
-
-  const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
-    const channelId = activeChannel?.id;
-    if (!channelId) return;
-    setMessagesLoading(true);
-    try {
-      const response = await getChatMessages({ channelId, limit: chatMessagePageSize });
-      const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
-      feedCacheRef.current.set(channelId, snapshot);
-      setMessages(snapshot.messages);
-      setHasNewerMessages(snapshot.hasNewerMessages);
-      setHasOlderMessages(snapshot.hasOlderMessages);
-      requestScrollToLatest(behavior);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "加载最新消息失败");
-    } finally {
-      setMessagesLoading(false);
-    }
-  }, [activeChannel?.id, notify, requestScrollToLatest]);
-
-  const applyChannelRef = useRef(applyChannel);
-  const applyMessageRef = useRef(applyMessage);
-  const isMessageScrollNearLatestRef = useRef(isMessageScrollNearLatest);
-  const loadLatestMessagesRef = useRef(loadLatestMessages);
-  const navigateRef = useRef(navigate);
-  const requestScrollToLatestRef = useRef(requestScrollToLatest);
-
-  useEffect(() => {
-    applyChannelRef.current = applyChannel;
-    applyMessageRef.current = applyMessage;
-    isMessageScrollNearLatestRef.current = isMessageScrollNearLatest;
-    loadLatestMessagesRef.current = loadLatestMessages;
-    navigateRef.current = navigate;
-    requestScrollToLatestRef.current = requestScrollToLatest;
-  }, [applyChannel, applyMessage, isMessageScrollNearLatest, loadLatestMessages, navigate, requestScrollToLatest]);
-
   useChatRealtimeEvents((payload) => {
-    const activeChannelId = activeChannelIdRef.current;
-    const currentUserId = currentUserIdRef.current;
-    if (payload.channel) applyChannelRef.current(payload.channel);
+    if (payload.channel) applyChannel(payload.channel);
     if (payload.eventType === "channel.archived") {
       setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-      if (payload.channelId === activeChannelId) navigateRef.current("/chat", { replace: true });
+      if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
     }
     if (payload.eventType === "member.changed" && payload.channel) {
-      applyChannelRef.current(payload.channel);
+      applyChannel(payload.channel);
     }
     if (payload.message) {
-      const isActiveMessage = payload.message.channelId === activeChannelId;
-      const currentFeed = isActiveMessage ? feedCacheRef.current.get(payload.message.channelId) : undefined;
-      const shouldFollowLatest = shouldFollowIncomingMessage(
-        payload.message,
-        currentUserId,
-        isActiveMessage && !currentFeed?.hasNewerMessages && isMessageScrollNearLatestRef.current(),
-      );
-      applyMessageRef.current(payload.message);
-      if (isActiveMessage && shouldFollowLatest) {
-        if (currentFeed?.hasNewerMessages) {
-          void loadLatestMessagesRef.current("smooth");
-        } else {
-          requestScrollToLatestRef.current("smooth");
-        }
-      } else if (isActiveMessage && !payload.message.rootMessageId) {
-        setPendingNewMessageCount((count) => count + 1);
-      }
+      applyRealtimeMessageToFeed(payload.message, applyMessageEffects);
     }
     if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
   });
@@ -469,39 +256,6 @@ export function ChatPage() {
     setPendingThreadTarget(null);
   }, [openThread, pendingThreadTarget]);
 
-  const loadOlderMessages = useCallback(async () => {
-    if (!activeChannel || messages.length === 0 || olderMessagesLoading || !hasOlderMessages) return;
-    const scrollElement = messageScrollRef.current;
-    const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
-    const previousScrollTop = scrollElement?.scrollTop ?? 0;
-    setOlderMessagesLoading(true);
-    try {
-      const channelId = activeChannel.id;
-      const response = await getChatMessages({ channelId, before: messages[0].createdAt, limit: chatMessagePageSize });
-      setMessages((items) => {
-        const snapshot = prependOlderFeedMessages(
-          feedCacheRef.current.get(channelId) ?? createFeedSnapshot({ messages: items, scrollTop: previousScrollTop }),
-          response.messages,
-        );
-        feedCacheRef.current.set(channelId, snapshot);
-        setHasNewerMessages(snapshot.hasNewerMessages);
-        setHasOlderMessages(snapshot.hasOlderMessages);
-        return snapshot.messages;
-      });
-      window.requestAnimationFrame(() => {
-        const element = messageScrollRef.current;
-        if (!element) return;
-        const nextTop = element.scrollHeight - previousScrollHeight + previousScrollTop;
-        element.scrollTop = Math.max(0, nextTop);
-        feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element.scrollTop));
-      });
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "加载更早消息失败");
-    } finally {
-      setOlderMessagesLoading(false);
-    }
-  }, [activeChannel, hasOlderMessages, messages, notify, olderMessagesLoading]);
-
   const handleSendMessage = useCallback(
     async (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => {
       if (!activeChannel) return;
@@ -523,7 +277,6 @@ export function ChatPage() {
           requestScrollToLatest("smooth");
         }
       }
-      void markChatChannelReadRequest(activeChannel.id).then((read) => applyChannel(read.channel)).catch(() => undefined);
     },
     [activeChannel, applyChannel, applyMessage, hasNewerMessages, loadLatestMessages, requestScrollToLatest],
   );
@@ -547,37 +300,6 @@ export function ChatPage() {
     [activeChannel, applyMessage],
   );
 
-  const handleMarkChannelUnread = useCallback(async () => {
-    if (!activeChannel) return;
-    const response = await setChatChannelUnreadRequest({ channelId: activeChannel.id });
-    applyChannel(response.channel);
-    const member = currentMembership(response.channel, currentUser?.id);
-    setUnreadAnchor({
-      channelId: response.channel.id,
-      lastReadAt: member?.lastReadAt ?? null,
-      manuallyUnread: true,
-      mentionCount: response.channel.mentionCount,
-      threadUnreadCount: response.channel.threadUnreadCount,
-      unreadCount: response.channel.unreadCount,
-    });
-  }, [activeChannel, applyChannel, currentUser?.id]);
-
-  const handleMarkMessageUnread = useCallback(async (message: ChatMessage) => {
-    const response = await setChatChannelUnreadRequest({ channelId: message.channelId, messageId: message.id });
-    applyChannel(response.channel);
-    if (message.channelId === activeChannel?.id) {
-      const member = currentMembership(response.channel, currentUser?.id);
-      setUnreadAnchor({
-        channelId: response.channel.id,
-        lastReadAt: member?.lastReadAt ?? null,
-        manuallyUnread: true,
-        mentionCount: response.channel.mentionCount,
-        threadUnreadCount: response.channel.threadUnreadCount,
-        unreadCount: response.channel.unreadCount,
-      });
-    }
-  }, [activeChannel?.id, applyChannel, currentUser?.id]);
-
   const handleCopyMessageLink = useCallback(async (message: ChatMessage) => {
     const url = `${window.location.origin}/chat/${encodeURIComponent(message.channelId)}?message=${encodeURIComponent(message.id)}`;
     try {
@@ -587,18 +309,6 @@ export function ChatPage() {
       notify(url);
     }
   }, [notify]);
-
-  const handleJumpToUnread = useCallback(() => {
-    scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" });
-  }, []);
-
-  const handleLoadLatestMessages = useCallback(() => {
-    if (hasNewerMessages) {
-      void loadLatestMessages("smooth");
-    } else {
-      requestScrollToLatest("smooth");
-    }
-  }, [hasNewerMessages, loadLatestMessages, requestScrollToLatest]);
 
   const handleReaction = useCallback(
     async (message: ChatMessage, emojiName: string) => {
@@ -751,7 +461,7 @@ export function ChatPage() {
                 navigate("/chat", { replace: true });
               }}
               onInfo={() => setActivePanel(activePanel === "info" ? null : "info")}
-              onMarkUnread={() => void handleMarkChannelUnread()}
+              onMarkUnread={() => void markActiveChannelUnread()}
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
               onSearch={() => setActivePanel(activePanel === "search" ? null : "search")}
@@ -779,10 +489,10 @@ export function ChatPage() {
               onCopyLink={handleCopyMessageLink}
               onDelete={handleDeleteMessage}
               onEdit={setEditingMessage}
-              onJumpUnread={handleJumpToUnread}
-              onLoadLatest={handleLoadLatestMessages}
+              onJumpUnread={jumpToUnread}
+              onLoadLatest={loadLatestOrScroll}
               onLoadOlder={loadOlderMessages}
-              onMarkUnread={handleMarkMessageUnread}
+              onMarkUnread={markMessageUnread}
               onPin={handlePinMessage}
               onReaction={handleReaction}
               onSave={handleSaveMessage}
@@ -867,7 +577,7 @@ export function ChatPage() {
           onAttachmentPreview={setAttachmentPreview}
           onReaction={handleReaction}
           onEdit={setEditingMessage}
-          onMarkUnread={handleMarkMessageUnread}
+          onMarkUnread={markMessageUnread}
           onDelete={handleDeleteMessage}
           onCopyLink={handleCopyMessageLink}
         />

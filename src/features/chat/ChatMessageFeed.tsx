@@ -19,7 +19,7 @@ type ChatMessageFeedProps = {
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
-  onJumpUnread: () => void;
+  onJumpUnread: (messageId: string) => void;
   onLoadLatest: () => void;
   onLoadOlder: () => void;
   onMarkUnread: (message: ChatMessage) => void;
@@ -152,7 +152,7 @@ function MessageList({
   return (
     <div className="orf-chat-message-list">
       {unreadMessageId && (
-        <button className="orf-chat-unread-jump" type="button" onClick={onJumpUnread}>
+        <button className="orf-chat-unread-jump" type="button" onClick={() => onJumpUnread(unreadMessageId)}>
           <ChevronDown className="h-4 w-4" />
           跳到未读
         </button>
