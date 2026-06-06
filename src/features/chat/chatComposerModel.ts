@@ -11,6 +11,7 @@ export type ChatAttachmentDraftItem =
   | {
       clientId: string;
       error: string;
+      file: File;
       fileName: string;
       fileSize: number;
       mimeType: string;
@@ -26,6 +27,7 @@ export type ChatAttachmentDraftItem =
     }
   | {
       clientId: string;
+      file: File;
       fileName: string;
       fileSize: number;
       mimeType: string;
@@ -84,6 +86,7 @@ export function recallComposerHistory(
 export function createAttachmentDraftItem(file: File): ChatAttachmentDraftItem {
   return {
     clientId: createAttachmentClientId(),
+    file,
     fileName: file.name,
     fileSize: file.size,
     mimeType: file.type || "application/octet-stream",
@@ -108,14 +111,30 @@ export function completeAttachmentDraftItem(items: ChatAttachmentDraftItem[], cl
 
 export function failAttachmentDraftItem(items: ChatAttachmentDraftItem[], clientId: string, error: string) {
   return items.map((item) => (
-    item.clientId === clientId
+    item.clientId === clientId && item.status !== "uploaded"
       ? {
           clientId,
           error,
+          file: item.file,
           fileName: item.fileName,
           fileSize: item.fileSize,
           mimeType: item.mimeType,
           status: "failed" as const,
+        }
+      : item
+  ));
+}
+
+export function retryAttachmentDraftItem(items: ChatAttachmentDraftItem[], clientId: string) {
+  return items.map((item) => (
+    item.clientId === clientId && item.status === "failed"
+      ? {
+          clientId,
+          file: item.file,
+          fileName: item.fileName,
+          fileSize: item.fileSize,
+          mimeType: item.mimeType,
+          status: "uploading" as const,
         }
       : item
   ));

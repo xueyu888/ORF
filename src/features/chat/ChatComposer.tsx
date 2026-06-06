@@ -4,6 +4,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Paperclip,
+  RotateCcw,
   Send,
   X,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import {
   failAttachmentDraftItem,
   hasUploadingDraftAttachments,
   removeAttachmentDraftItem,
+  retryAttachmentDraftItem,
   uploadedDraftAttachments,
 } from "./chatComposerModel";
 import {
@@ -80,22 +82,37 @@ export function ChatComposer({
     }
   }, [channelId, draft, draftStorageKey, onDraftStateChange]);
 
+  const uploadDraftAttachment = async (clientId: string, file: File, uploadChannelId: string, uploadDraftStorageKey: string) => {
+    try {
+      const response = await uploadChatAttachment({ channelId: uploadChannelId, file });
+      if (activeDraftStorageKeyRef.current !== uploadDraftStorageKey) return;
+      setAttachmentItems((items) => completeAttachmentDraftItem(items, clientId, response.attachment));
+    } catch (uploadError) {
+      if (activeDraftStorageKeyRef.current !== uploadDraftStorageKey) return;
+      const message = uploadError instanceof Error ? uploadError.message : "上传附件失败";
+      setAttachmentItems((items) => failAttachmentDraftItem(items, clientId, message));
+      setError(message);
+    }
+  };
+
   const uploadFiles = async (files: File[]) => {
     if (disabled) return;
     if (files.length === 0) return;
     setError("");
     const uploads = files.slice(0, 10).map((file) => ({ file, item: createAttachmentDraftItem(file) }));
     setAttachmentItems((items) => [...items, ...uploads.map((upload) => upload.item)]);
+    const uploadChannelId = channelId;
+    const uploadDraftStorageKey = draftStorageKey;
     for (const upload of uploads) {
-      try {
-        const response = await uploadChatAttachment({ channelId, file: upload.file });
-        setAttachmentItems((items) => completeAttachmentDraftItem(items, upload.item.clientId, response.attachment));
-      } catch (uploadError) {
-        const message = uploadError instanceof Error ? uploadError.message : "上传附件失败";
-        setAttachmentItems((items) => failAttachmentDraftItem(items, upload.item.clientId, message));
-        setError(message);
-      }
+      await uploadDraftAttachment(upload.item.clientId, upload.file, uploadChannelId, uploadDraftStorageKey);
     }
+  };
+
+  const retryUpload = (item: ChatAttachmentDraftItem) => {
+    if (disabled || item.status !== "failed") return;
+    setError("");
+    setAttachmentItems((items) => retryAttachmentDraftItem(items, item.clientId));
+    void uploadDraftAttachment(item.clientId, item.file, channelId, draftStorageKey);
   };
 
   const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -167,6 +184,11 @@ export function ChatComposer({
               {item.fileName}
               {item.status === "failed" && <small>{item.error}</small>}
               {item.status === "uploading" && <small>上传中</small>}
+              {item.status === "failed" && (
+                <button type="button" onClick={() => retryUpload(item)} title="重试上传" aria-label="重试上传">
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button type="button" onClick={() => setAttachmentItems((items) => removeAttachmentDraftItem(items, item.clientId))}>
                 <X className="h-3.5 w-3.5" />
               </button>
