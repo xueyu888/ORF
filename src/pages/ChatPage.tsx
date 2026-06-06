@@ -273,6 +273,38 @@ export function ChatPage() {
   }, [activeChannel?.id, navigate]);
 
   useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (deletingMessage) {
+        event.preventDefault();
+        setDeletingMessage(null);
+        return;
+      }
+      if (attachmentPreview) {
+        event.preventDefault();
+        setAttachmentPreview(null);
+        return;
+      }
+      if (modal) {
+        event.preventDefault();
+        setModal(null);
+        return;
+      }
+      if (editingMessage) {
+        event.preventDefault();
+        setEditingMessage(null);
+        return;
+      }
+      if (activePanel) {
+        event.preventDefault();
+        closePanel();
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [activePanel, attachmentPreview, closePanel, deletingMessage, editingMessage, modal]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     void refreshBootstrap()

@@ -222,6 +222,8 @@ export function ChatDraftEditor({
         return;
       }
       if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
         setMentionRange(null);
         return;
       }
