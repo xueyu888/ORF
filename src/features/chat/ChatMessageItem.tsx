@@ -1,12 +1,12 @@
 import { clsx } from "clsx";
 import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Pin, Reply, Smile, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
-
-const reactionEmojis = ["👍", "👀", "✅", "❤️", "🔥", "🎉", "😂", "😮", "🙏"];
+import { ChatReactionPicker } from "./ChatReactionPicker";
+import { displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName } from "./chatReactions";
 
 type ChatMessageItemProps = {
   canPin?: boolean;
@@ -73,7 +73,13 @@ export function ChatMessageItem({
   usersById,
 }: ChatMessageItemProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
   const canMutate = message.authorUserId === currentUserId && !message.deletedAt;
+  const selectReaction = (emojiName: string) => {
+    const reactionName = preferredReactionName(message.reactions.map((reaction) => reaction.emojiName), emojiName);
+    setEmojiOpen(false);
+    onReaction(message, reactionName);
+  };
 
   return (
     <article
@@ -102,29 +108,27 @@ export function ChatMessageItem({
             <div className="orf-chat-message-text"><ChatMarkdown body={message.body} usersById={usersById} /></div>
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             <div className="orf-chat-reaction-row">
-              {message.reactions.map((reaction) => (
-                <button
-                  type="button"
-                  className={clsx("orf-chat-reaction", reaction.reactedByCurrentUser && "orf-chat-reaction-active")}
-                  key={reaction.emojiName}
-                  onClick={() => onReaction(message, reaction.emojiName)}
-                >
-                  {reaction.emojiName} <span>{reaction.count}</span>
-                </button>
-              ))}
-              <div className="orf-chat-emoji-anchor">
+              {message.reactions.map((reaction) => {
+                const reactionLabel = labelChatReactionEmoji(reaction.emojiName);
+                return (
+                  <button
+                    type="button"
+                    className={clsx("orf-chat-reaction", reaction.reactedByCurrentUser && "orf-chat-reaction-active")}
+                    key={reaction.emojiName}
+                    title={reactionLabel}
+                    aria-label={`${reactionLabel}，${reaction.count} 人`}
+                    onClick={() => onReaction(message, reaction.emojiName)}
+                  >
+                    <span className="orf-chat-reaction-symbol" aria-hidden="true">{displayChatReactionEmoji(reaction.emojiName)}</span>
+                    <span>{reaction.count}</span>
+                  </button>
+                );
+              })}
+              <div className="orf-chat-emoji-anchor" ref={emojiAnchorRef}>
                 <button type="button" className="orf-chat-mini-action" onClick={() => setEmojiOpen((open) => !open)} title="添加反应">
                   <Smile className="h-3.5 w-3.5" />
                 </button>
-                {emojiOpen && (
-                  <div className="orf-chat-emoji-popover">
-                    {reactionEmojis.map((emoji) => (
-                      <button type="button" key={emoji} onClick={() => { setEmojiOpen(false); onReaction(message, emoji); }}>
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {emojiOpen && <ChatReactionPicker anchorRef={emojiAnchorRef} onClose={() => setEmojiOpen(false)} onSelect={selectReaction} />}
               </div>
               <button type="button" className="orf-chat-thread-link" onClick={() => onThread(message.id)}>
                 <Reply className="h-3.5 w-3.5" />
