@@ -1,4 +1,4 @@
-import { Check, Clock3 } from "lucide-react";
+import { Check } from "lucide-react";
 import { clsx } from "clsx";
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
@@ -34,7 +34,6 @@ export function ChatPresenceAvatar({
         className={clsx("orf-chat-presence-badge", `orf-chat-presence-badge-${state}`)}
       >
         {state === "online" && <Check aria-hidden="true" />}
-        {state === "away" && <Clock3 aria-hidden="true" />}
       </span>
     </span>
   );

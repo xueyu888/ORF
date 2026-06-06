@@ -9461,6 +9461,28 @@ a.orf-row-loot-action,
   color: #3c2a00;
 }
 
+.orf-chat-presence-badge-away::before,
+.orf-chat-presence-badge-away::after {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  width: 1.5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  transform-origin: 50% 100%;
+}
+
+.orf-chat-presence-badge-away::before {
+  height: 42%;
+  transform: translateX(-50%) rotate(0deg);
+}
+
+.orf-chat-presence-badge-away::after {
+  height: 34%;
+  transform: translateX(-50%) rotate(90deg);
+}
+
 .orf-chat-presence-badge-offline,
 .orf-chat-presence-badge-unknown {
   background: #fff;
