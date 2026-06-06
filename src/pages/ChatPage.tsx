@@ -85,6 +85,7 @@ import {
   deleteChatMessageRequest,
   getChatBootstrap,
   getChatMentionableUsers,
+  getChatMessageContext,
   getChatMessages,
   getChatThread,
   getChatThreads,
@@ -237,6 +238,7 @@ export function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
+  const [hasNewerMessages, setHasNewerMessages] = useState(false);
   const [hasOlderMessages, setHasOlderMessages] = useState(false);
   const [channelQuery, setChannelQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -256,6 +258,7 @@ export function ChatPage() {
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
   const lastTypingSentAtRef = useRef(0);
   const activeChannelIdRef = useRef<string | null>(null);
+  const contextRequestKeyRef = useRef<string | null>(null);
   const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
@@ -397,34 +400,45 @@ export function ChatPage() {
     const channelId = activeChannel.id;
     const anchor = buildUnreadAnchor(activeChannel, currentUser?.id);
     const cachedFeed = feedCacheRef.current.get(channelId);
+    const requestedMessageId = new URLSearchParams(window.location.search).get("message");
+    const cachedHasRequestedMessage = Boolean(
+      requestedMessageId &&
+      cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
+    );
     setUnreadAnchor(anchor);
     setPendingNewMessageCount(0);
     setMessages(cachedFeed?.messages ?? []);
+    setHasNewerMessages(cachedFeed?.hasNewerMessages ?? false);
     setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
-    setMessagesLoading(!cachedFeed);
+    setMessagesLoading(!cachedFeed || Boolean(requestedMessageId && !cachedHasRequestedMessage));
     if (cachedFeed) restoreFeedScroll(cachedFeed.scrollTop);
-    void getChatMessages({ channelId, limit: chatMessagePageSize })
-      .then((response) => {
-        if (!cancelled) {
-          const currentScrollTop = messageScrollRef.current?.scrollTop ?? cachedFeed?.scrollTop ?? 0;
-          const snapshot = replaceFeedMessages(
-            cachedFeed ? rememberFeedScroll(cachedFeed, currentScrollTop) : createFeedSnapshot({ scrollTop: currentScrollTop }),
-            response.messages,
-          );
-          feedCacheRef.current.set(channelId, snapshot);
-          setMessages(response.messages);
-          setHasOlderMessages(snapshot.hasOlderMessages);
-          if (!cachedFeed && !anchor && !new URLSearchParams(window.location.search).get("message")) {
-            requestScrollToLatest("auto");
-          } else if (cachedFeed) {
-            restoreFeedScroll(snapshot.scrollTop);
+    if (!requestedMessageId) {
+      void getChatMessages({ channelId, limit: chatMessagePageSize })
+        .then((response) => {
+          if (!cancelled) {
+            const currentScrollTop = messageScrollRef.current?.scrollTop ?? cachedFeed?.scrollTop ?? 0;
+            const snapshot = replaceFeedMessages(
+              cachedFeed ? rememberFeedScroll(cachedFeed, currentScrollTop) : createFeedSnapshot({ scrollTop: currentScrollTop }),
+              response.messages,
+            );
+            feedCacheRef.current.set(channelId, snapshot);
+            setMessages(response.messages);
+            setHasNewerMessages(snapshot.hasNewerMessages);
+            setHasOlderMessages(snapshot.hasOlderMessages);
+            if (!cachedFeed && !anchor) {
+              requestScrollToLatest("auto");
+            } else if (cachedFeed) {
+              restoreFeedScroll(snapshot.scrollTop);
+            }
           }
-        }
-      })
-      .catch((error) => notify(error instanceof Error ? error.message : "加载消息失败"))
-      .finally(() => {
-        if (!cancelled) setMessagesLoading(false);
-      });
+        })
+        .catch((error) => notify(error instanceof Error ? error.message : "加载消息失败"))
+        .finally(() => {
+          if (!cancelled) setMessagesLoading(false);
+        });
+    } else if (cachedHasRequestedMessage) {
+      setMessagesLoading(false);
+    }
     void markChatChannelReadRequest(channelId)
       .then((response) => applyChannel(response.channel))
       .catch(() => undefined);
@@ -441,6 +455,65 @@ export function ChatPage() {
     lastTypingSentAtRef.current = currentTime;
     void publishChatTypingRequest(activeChannel.id).catch(() => undefined);
   }, [activeChannel]);
+
+  useEffect(() => {
+    const requestedMessageId = searchParams.get("message");
+    const activeChannelId = activeChannel?.id;
+    if (!activeChannelId || !requestedMessageId) return undefined;
+    const targetInCurrentFeed = messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId);
+    if (targetInCurrentFeed) {
+      contextRequestKeyRef.current = null;
+      return undefined;
+    }
+
+    let cancelled = false;
+    const requestKey = `${activeChannelId}:${requestedMessageId}`;
+    if (contextRequestKeyRef.current === requestKey) return undefined;
+    contextRequestKeyRef.current = requestKey;
+    setMessagesLoading(true);
+    void getChatMessageContext({ channelId: activeChannelId, messageId: requestedMessageId, limit: chatMessagePageSize })
+      .then((response) => {
+        if (cancelled) return;
+        const snapshot = replaceFeedMessages(
+          feedCacheRef.current.get(activeChannelId),
+          response.messages,
+          chatMessagePageSize,
+          {
+            hasNewerMessages: response.hasNewerMessages,
+            hasOlderMessages: response.hasOlderMessages,
+          },
+        );
+        feedCacheRef.current.set(activeChannelId, snapshot);
+        setMessages(snapshot.messages);
+        setHasNewerMessages(snapshot.hasNewerMessages);
+        setHasOlderMessages(snapshot.hasOlderMessages);
+        if (response.targetMessageId !== requestedMessageId) {
+          setSearchParams((params) => {
+            params.set("message", response.targetMessageId);
+            return params;
+          }, { replace: true });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          notify(error instanceof Error ? error.message : "加载目标消息失败");
+          setSearchParams((params) => {
+            params.delete("message");
+            return params;
+          }, { replace: true });
+        }
+      })
+      .finally(() => {
+        if (!cancelled && contextRequestKeyRef.current === requestKey) {
+          contextRequestKeyRef.current = null;
+          setMessagesLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      if (contextRequestKeyRef.current === requestKey) contextRequestKeyRef.current = null;
+    };
+  }, [activeChannel?.id, messages, notify, searchParams, setSearchParams]);
 
   useEffect(() => {
     const requestedMessageId = searchParams.get("message");
@@ -549,6 +622,7 @@ export function ChatPage() {
           response.messages,
         );
         feedCacheRef.current.set(channelId, snapshot);
+        setHasNewerMessages(snapshot.hasNewerMessages);
         setHasOlderMessages(snapshot.hasOlderMessages);
         return snapshot.messages;
       });
@@ -565,6 +639,24 @@ export function ChatPage() {
       setOlderMessagesLoading(false);
     }
   }, [activeChannel, hasOlderMessages, messages, notify, olderMessagesLoading]);
+
+  const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
+    if (!activeChannel) return;
+    setMessagesLoading(true);
+    try {
+      const response = await getChatMessages({ channelId: activeChannel.id, limit: chatMessagePageSize });
+      const snapshot = replaceFeedMessages(feedCacheRef.current.get(activeChannel.id), response.messages);
+      feedCacheRef.current.set(activeChannel.id, snapshot);
+      setMessages(snapshot.messages);
+      setHasNewerMessages(snapshot.hasNewerMessages);
+      setHasOlderMessages(snapshot.hasOlderMessages);
+      requestScrollToLatest(behavior);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "加载最新消息失败");
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [activeChannel, notify, requestScrollToLatest]);
 
   const handleSendMessage = useCallback(
     async (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => {
@@ -655,10 +747,8 @@ export function ChatPage() {
       messageScroll?.querySelector<HTMLElement>("#orf-chat-unread-divider") ??
       messageScroll?.querySelector<HTMLElement>("[data-chat-unread-message='true']");
     if (!messageScroll || !target) return;
-    const scrollRect = messageScroll.getBoundingClientRect();
-    const targetRect = target.getBoundingClientRect();
     const stickyButtonOffset = 48;
-    const nextTop = messageScroll.scrollTop + targetRect.top - scrollRect.top - stickyButtonOffset;
+    const nextTop = target.offsetTop - stickyButtonOffset;
     messageScroll.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" });
   }, []);
 
@@ -861,9 +951,25 @@ export function ChatPage() {
                 />
               )}
               {pendingNewMessageCount > 0 && (
-                <button className="orf-chat-scroll-latest" type="button" onClick={() => requestScrollToLatest("smooth")}>
+                <button
+                  className="orf-chat-scroll-latest"
+                  type="button"
+                  onClick={() => {
+                    if (hasNewerMessages) {
+                      void loadLatestMessages("smooth");
+                    } else {
+                      requestScrollToLatest("smooth");
+                    }
+                  }}
+                >
                   <ChevronDown className="h-4 w-4" />
                   {pendingNewMessageCount} 条新消息
+                </button>
+              )}
+              {hasNewerMessages && pendingNewMessageCount === 0 && (
+                <button className="orf-chat-scroll-latest" type="button" onClick={() => void loadLatestMessages("smooth")}>
+                  <ChevronDown className="h-4 w-4" />
+                  回到最新
                 </button>
               )}
             </div>

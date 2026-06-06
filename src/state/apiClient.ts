@@ -4,6 +4,7 @@ import type {
   ChatBootstrap,
   ChatChannel,
   ChatChannelType,
+  ChatMessageContext,
   ChatMessage,
   ChatSearchResult,
   ChatThread,
@@ -47,6 +48,7 @@ export type CommentAttachmentUploadResponse = {
 };
 export type ChatBootstrapResponse = ChatBootstrap;
 export type ChatMessagesResponse = { status?: "ok"; messages: ChatMessage[] };
+export type ChatMessageContextResponse = { status?: "ok" } & ChatMessageContext;
 export type ChatChannelResponse = { status?: "ok"; channel: ChatChannel };
 export type ChatNullableChannelResponse = { status?: "ok"; channel: ChatChannel | null };
 export type ChatMessageResponse = { status?: "ok"; message: ChatMessage };
@@ -240,6 +242,15 @@ export async function getChatMessages(input: { before?: string; channelId: strin
   if (input.limit) query.set("limit", String(input.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiJson<ChatMessagesResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/messages${suffix}`);
+}
+
+export async function getChatMessageContext(input: { channelId: string; limit?: number; messageId: string }) {
+  const query = new URLSearchParams();
+  if (input.limit) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<ChatMessageContextResponse>(
+    `/api/chat/channels/${encodeURIComponent(input.channelId)}/messages/${encodeURIComponent(input.messageId)}/context${suffix}`,
+  );
 }
 
 export async function createChatChannel(input: {

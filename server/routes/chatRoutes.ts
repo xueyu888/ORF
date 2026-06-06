@@ -11,6 +11,7 @@ import {
   deleteChatMessage,
   getChatAttachmentContent,
   getChatBootstrap,
+  getChatMessageContext,
   getChatThread,
   listChatMentionableUsers,
   listChatMessages,
@@ -42,6 +43,10 @@ const attachmentParamsSchema = z.object({ attachmentId: z.string().min(1) });
 
 const listMessagesQuerySchema = z.object({
   before: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(100).optional(),
+});
+
+const messageContextQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).optional(),
 });
 
@@ -274,6 +279,14 @@ export function registerChatRoutes(app: FastifyInstance) {
     const params = channelIdParamsSchema.parse(request.params);
     const body = sendMessageBodySchema.parse(request.body);
     return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor));
+  });
+
+  app.get("/api/chat/channels/:channelId/messages/:messageId/context", async (request, reply) => {
+    const actor = await chatActorFromRequest(request, reply);
+    if (!actor) return reply;
+    const params = messageParamsSchema.parse(request.params);
+    const query = messageContextQuerySchema.parse(request.query);
+    return sendOutcome(reply, await getChatMessageContext({ ...params, ...query }, actor));
   });
 
   app.patch("/api/chat/channels/:channelId/messages/:messageId", async (request, reply) => {

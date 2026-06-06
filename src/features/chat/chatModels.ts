@@ -22,6 +22,7 @@ export type UnreadAnchor = {
 };
 
 export type ChatFeedSnapshot = {
+  hasNewerMessages: boolean;
   hasOlderMessages: boolean;
   messages: ChatMessage[];
   scrollTop: number;
@@ -118,6 +119,7 @@ export function upsertChannelMessage(messages: ChatMessage[], next: ChatMessage)
 
 export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedSnapshot {
   return {
+    hasNewerMessages: input?.hasNewerMessages ?? false,
     hasOlderMessages: input?.hasOlderMessages ?? false,
     messages: input?.messages ?? [],
     scrollTop: input?.scrollTop ?? 0,
@@ -125,9 +127,15 @@ export function createFeedSnapshot(input?: Partial<ChatFeedSnapshot>): ChatFeedS
   };
 }
 
-export function replaceFeedMessages(snapshot: ChatFeedSnapshot | undefined, messages: ChatMessage[], pageSize = chatMessagePageSize) {
+export function replaceFeedMessages(
+  snapshot: ChatFeedSnapshot | undefined,
+  messages: ChatMessage[],
+  pageSize = chatMessagePageSize,
+  flags?: Partial<Pick<ChatFeedSnapshot, "hasNewerMessages" | "hasOlderMessages">>,
+) {
   return createFeedSnapshot({
-    hasOlderMessages: messages.length >= pageSize,
+    hasNewerMessages: flags?.hasNewerMessages ?? false,
+    hasOlderMessages: flags?.hasOlderMessages ?? messages.length >= pageSize,
     messages,
     scrollTop: snapshot?.scrollTop ?? 0,
     syncedAt: new Date().toISOString(),

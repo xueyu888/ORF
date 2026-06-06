@@ -483,6 +483,13 @@ export interface ChatSearchResult {
   message: ChatMessage;
 }
 
+export interface ChatMessageContext {
+  hasNewerMessages: boolean;
+  hasOlderMessages: boolean;
+  messages: ChatMessage[];
+  targetMessageId: string;
+}
+
 export interface ChatBootstrap {
   channels: ChatChannel[];
   users: ChatUser[];

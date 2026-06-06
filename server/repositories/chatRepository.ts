@@ -7,6 +7,7 @@ import type {
   ChatChannelMember,
   ChatChannelType,
   ChatMemberRole,
+  ChatMessageContext,
   ChatMessage,
   ChatReaction,
   ChatSearchResult,
@@ -895,6 +896,67 @@ export async function listChatMessages(input: { before?: string; channelId: stri
     params,
   );
   return ok({ messages: await buildMessages(rows, actor) });
+}
+
+export async function getChatMessageContext(
+  input: { channelId: string; limit?: number; messageId: string },
+  actor: ChatActor,
+): Promise<Outcome<ChatMessageContext>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const channel = await getVisibleChannel(actor, input.channelId);
+  if (!channel) return { status: "notFound" };
+
+  const target = await getRawMessage(actor, input.messageId);
+  if (!target || target.channel_id !== input.channelId) return { status: "notFound" };
+  const rootMessageId = target.root_message_id ?? target.id;
+  const root = rootMessageId === target.id ? target : await getRawMessage(actor, rootMessageId);
+  if (!root || root.channel_id !== input.channelId || root.root_message_id !== null) return { status: "notFound" };
+
+  const limit = Math.max(3, Math.min(100, input.limit ?? 60));
+  const radius = Math.max(1, Math.floor((limit - 1) / 2));
+  type RankedMessageRow = MessageRow & {
+    rn: number | string;
+    total_count: number | string;
+  };
+  const { rows } = await pool.query<RankedMessageRow>(
+    `
+      WITH ordered_roots AS (
+        SELECT m.id, m.channel_id, m.author_user_id, u.name AS author_name, u.avatar_object_key AS author_avatar_object_key,
+               u.avatar_updated_at AS author_avatar_updated_at, m.body, m.root_message_id, m.parent_message_id,
+               m.created_at, m.updated_at, m.edited_at, m.deleted_at, m.deleted_by,
+               row_number() OVER (ORDER BY m.created_at ASC, m.id ASC) AS rn,
+               count(*) OVER () AS total_count
+        FROM chat_messages m
+        INNER JOIN users u ON u.id = m.author_user_id
+        WHERE m.team_id = $1
+          AND m.channel_id = $2
+          AND m.root_message_id IS NULL
+      ),
+      target_root AS (
+        SELECT rn, total_count
+        FROM ordered_roots
+        WHERE id = $3
+        LIMIT 1
+      )
+      SELECT ordered_roots.*
+      FROM ordered_roots, target_root
+      WHERE ordered_roots.rn BETWEEN target_root.rn - $4 AND target_root.rn + $4
+      ORDER BY ordered_roots.rn ASC
+    `,
+    [storageTeamId(actor), input.channelId, rootMessageId, radius],
+  );
+  if (rows.length === 0) return { status: "notFound" };
+
+  const ranks = rows.map((row) => Number(row.rn));
+  const maxRank = Math.max(...ranks);
+  const minRank = Math.min(...ranks);
+  const totalCount = Number(rows[0]?.total_count ?? rows.length);
+  return ok({
+    hasNewerMessages: maxRank < totalCount,
+    hasOlderMessages: minRank > 1,
+    messages: await buildMessages(rows, actor),
+    targetMessageId: rootMessageId,
+  });
 }
 
 export async function getChatThread(rootMessageId: string, actor: ChatActor): Promise<Outcome<{ thread: ChatThread }>> {
