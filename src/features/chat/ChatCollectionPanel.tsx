@@ -1,7 +1,7 @@
 import { Bookmark, Loader2, Pin } from "lucide-react";
 import { IconButton } from "../../components/ui";
 import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
-import { formatDay, formatTime } from "./chatFormat";
+import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 
 type ChatCollectionPanelProps = {
@@ -30,7 +30,7 @@ export function ChatCollectionPanel({ kind, loading, onOpenResult, onSave, resul
               <button type="button" onClick={() => onOpenResult(result)}>
                 <span>{result.channel.displayName}</span>
                 <strong>{result.message.authorName}</strong>
-                <small>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
+                <small title={formatDateTime(result.message.createdAt)}>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
                 <div className="orf-chat-collection-body"><ChatMarkdown compact body={result.message.body} usersById={usersById} /></div>
               </button>
               <IconButton

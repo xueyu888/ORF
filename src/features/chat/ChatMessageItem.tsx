@@ -3,7 +3,7 @@ import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Pin, Reply, Smile,
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
-import { formatFileSize, formatTime } from "./chatFormat";
+import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import { canonicalChatReactionName, displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
@@ -172,7 +172,7 @@ export function ChatMessageItem({
       tabIndex={!editing && !message.deletedAt ? 0 : undefined}
     >
       {compact ? (
-        <div className="orf-chat-message-compact-time">{formatTime(message.createdAt)}</div>
+        <div className="orf-chat-message-compact-time" title={formatDateTime(message.createdAt)}>{formatTime(message.createdAt)}</div>
       ) : (
         <Avatar avatarUrl={message.authorAvatarUrl} name={message.authorName} size="md" />
       )}
@@ -182,7 +182,7 @@ export function ChatMessageItem({
             {!compact && (
               <>
                 <strong>{message.authorName}</strong>
-                <span>{formatTime(message.createdAt)}</span>
+                <span title={formatDateTime(message.createdAt)}>{formatTime(message.createdAt)}</span>
               </>
             )}
             {message.pinnedAt && (
@@ -241,7 +241,7 @@ export function ChatMessageItem({
                 <button type="button" className="orf-chat-thread-summary" onClick={() => onThread(message.id)}>
                   <Reply className="h-3.5 w-3.5" />
                   {message.replyCount} 条回复
-                  {message.lastReplyAt && <span>最后回复 {formatTime(message.lastReplyAt)}</span>}
+                  {message.lastReplyAt && <span title={formatDateTime(message.lastReplyAt)}>最后回复 {formatTime(message.lastReplyAt)}</span>}
                 </button>
               )}
             </div>

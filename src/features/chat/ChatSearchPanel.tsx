@@ -1,5 +1,6 @@
 import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
 import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
+import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
@@ -83,6 +84,7 @@ export function ChatSearchPanel({
           <button type="button" key={result.message.id} onClick={() => onOpenResult(result)}>
             <span>{result.channel.displayName}</span>
             <strong>{result.message.authorName}</strong>
+            <small title={formatDateTime(result.message.createdAt)}>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
             <SearchResultPreview message={result.message} usersById={usersById} />
           </button>
         ))}

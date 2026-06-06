@@ -1,6 +1,6 @@
 import { Loader2, Reply } from "lucide-react";
 import type { ChatThreadSummary, ChatUser } from "../../types/orf";
-import { formatTime } from "./chatFormat";
+import { formatDateTime, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 
 type ChatThreadInboxPanelProps = {
@@ -45,7 +45,9 @@ export function ChatThreadInboxPanel({ loading, onOpenThread, summaries, usersBy
           </div>
           <small>
             {summary.rootMessage.replyCount} 条回复
-            {summary.rootMessage.lastReplyAt ? ` · 最近 ${formatTime(summary.rootMessage.lastReplyAt)}` : ""}
+            {summary.rootMessage.lastReplyAt ? (
+              <span title={formatDateTime(summary.rootMessage.lastReplyAt)}> · 最近 {formatTime(summary.rootMessage.lastReplyAt)}</span>
+            ) : ""}
           </small>
         </button>
       ))}
