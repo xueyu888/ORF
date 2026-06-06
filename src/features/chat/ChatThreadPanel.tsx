@@ -1,9 +1,9 @@
 import { Bell, BellOff } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { ChatAttachment, ChatMessage, ChatThread, ChatUser } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
-import { scrollChatFeedToLatest, scrollChatFeedToMessage } from "./chatFeedScroll";
+import { isChatFeedNearLatest, scrollChatFeedToLatest, scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import type { ChatSendHandler } from "./chatModels";
 
@@ -55,20 +55,44 @@ export function ChatThreadPanel({
   usersById,
 }: ChatThreadPanelProps) {
   const threadPanelRef = useRef<HTMLDivElement | null>(null);
+  const previousThreadIdRef = useRef<string | null>(null);
+  const previousReplyCountRef = useRef(0);
+  const wasNearLatestRef = useRef(true);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const previousThreadId = previousThreadIdRef.current;
+    const previousReplyCount = previousReplyCountRef.current;
+    const isNewThread = previousThreadId !== thread.rootMessage.id;
+    const replyAdded = !isNewThread && thread.replies.length > previousReplyCount;
+    const lastReply = thread.replies.at(-1);
+    const shouldFollowReply = replyAdded && (wasNearLatestRef.current || lastReply?.authorUserId === currentUserId);
+
+    previousThreadIdRef.current = thread.rootMessage.id;
+    previousReplyCountRef.current = thread.replies.length;
+
+    if (!isNewThread && !focusMessageId && !shouldFollowReply) {
+      return;
+    }
+
     window.requestAnimationFrame(() => {
       const element = threadPanelRef.current;
       if (!element) return;
       if (focusMessageId) {
         if (scrollChatFeedToMessage(element, focusMessageId, { behavior: "smooth", offset: 20 })) return;
       }
-      scrollChatFeedToLatest(element, "smooth");
+      scrollChatFeedToLatest(element, isNewThread ? "auto" : "smooth");
+      wasNearLatestRef.current = true;
     });
-  }, [focusMessageId, thread.replies.length, thread.rootMessage.id]);
+  }, [currentUserId, focusMessageId, thread.replies, thread.replies.length, thread.rootMessage.id]);
 
   return (
-    <div className="orf-chat-thread-panel" ref={threadPanelRef}>
+    <div
+      className="orf-chat-thread-panel"
+      ref={threadPanelRef}
+      onScroll={() => {
+        wasNearLatestRef.current = isChatFeedNearLatest(threadPanelRef.current);
+      }}
+    >
       <ChatMessageItem
         canPin={canPin}
         currentUserId={currentUserId}
