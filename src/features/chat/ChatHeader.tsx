@@ -65,7 +65,16 @@ export function ChatHeader({
         />
         <IconButton icon={Pin} label="固定消息" onClick={onPins} />
         <IconButton icon={Bookmark} label="已保存消息" onClick={onSaved} />
-        <IconButton icon={Reply} label="话题收件箱" onClick={onThreads} />
+        <button
+          type="button"
+          className="orf-control orf-ghost-action orf-chat-header-thread-action inline-flex h-9 w-9 items-center justify-center transition"
+          title={channel.threadUnreadCount > 0 ? `话题收件箱，${channel.threadUnreadCount} 条未读` : "话题收件箱"}
+          aria-label={channel.threadUnreadCount > 0 ? `话题收件箱，${channel.threadUnreadCount} 条未读` : "话题收件箱"}
+          onClick={onThreads}
+        >
+          <Reply className="h-4 w-4" />
+          {channel.threadUnreadCount > 0 && <span>{channel.threadUnreadCount}</span>}
+        </button>
         <IconButton icon={Search} label="搜索消息" onClick={onSearch} />
         <IconButton icon={Info} label="频道信息" onClick={onInfo} />
         {canManage && channel.type !== "direct" && channel.type !== "group" && channel.name !== "orf-town-square" && (

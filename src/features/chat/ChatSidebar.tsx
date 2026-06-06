@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { CheckCheck, ChevronDown, MessageSquare, Plus, Search } from "lucide-react";
+import { CheckCheck, ChevronDown, MessageSquare, Plus, Reply, Search } from "lucide-react";
 import { IconButton } from "../../components/ui";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
@@ -134,7 +134,7 @@ function ChannelGroup({
       {channels.map((channel) => {
         const Icon = channelIcon(channel);
         const membership = currentMembership(channel, currentUserId);
-        const unread = channel.unreadCount + channel.threadUnreadCount;
+        const hasUnreadBadge = channel.mentionCount > 0 || channel.unreadCount > 0 || channel.threadUnreadCount > 0;
         const hasDraft = draftChannelIds.has(channel.id);
         return (
           <button
@@ -151,8 +151,18 @@ function ChannelGroup({
           >
             <Icon className="h-4 w-4" />
             <span className="truncate">{channel.displayName}</span>
-            {channel.mentionCount > 0 ? <strong>@{channel.mentionCount}</strong> : unread > 0 ? <b>{unread}</b> : null}
-            {hasDraft && unread === 0 && channel.mentionCount === 0 ? <em>草稿</em> : null}
+            {hasUnreadBadge ? (
+              <span className="orf-chat-channel-badges">
+                {channel.mentionCount > 0 && <strong>@{channel.mentionCount}</strong>}
+                {channel.unreadCount > 0 && <b>{channel.unreadCount}</b>}
+                {channel.threadUnreadCount > 0 && (
+                  <small className="orf-chat-channel-thread-unread" title={`${channel.threadUnreadCount} 条话题未读`}>
+                    <Reply className="h-3 w-3" />
+                    {channel.threadUnreadCount}
+                  </small>
+                )}
+              </span>
+            ) : hasDraft ? <em>草稿</em> : null}
           </button>
         );
       })}
