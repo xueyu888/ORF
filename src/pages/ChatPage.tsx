@@ -523,6 +523,7 @@ export function ChatPage() {
       {editingMessage && (
         <EditMessageDialog
           draft={draftFromStoredBody(editingMessage.body, usersById)}
+          mentionableUsers={activeMentionableUsers}
           onClose={() => setEditingMessage(null)}
           onSave={(draft) => handleEditMessage(serializeDraft(draft))}
         />

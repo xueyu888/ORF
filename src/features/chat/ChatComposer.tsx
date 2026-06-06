@@ -1,32 +1,22 @@
 import { clsx } from "clsx";
 import {
-  AtSign,
-  Bold,
-  Code,
   FileText,
   Image as ImageIcon,
-  Italic,
-  Link as LinkIcon,
   Loader2,
   Paperclip,
-  Quote,
   Send,
   X,
 } from "lucide-react";
-import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Avatar } from "../../components/ui";
+import { type ChangeEvent, type ClipboardEvent, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { uploadChatAttachment } from "../../state/apiClient";
 import type { ChatAttachment, ChatUser } from "../../types/orf";
 import {
   type ChatAttachmentDraftItem,
   completeAttachmentDraftItem,
   createAttachmentDraftItem,
-  emptyComposerHistory,
   failedDraftAttachmentCount,
   failAttachmentDraftItem,
   hasUploadingDraftAttachments,
-  recallComposerHistory,
-  recordSentComposerDraft,
   removeAttachmentDraftItem,
   uploadedDraftAttachments,
 } from "./chatComposerModel";
@@ -35,11 +25,9 @@ import {
   chatDraftStorageKey,
   emptyDraft,
   hasStoredDraftForChannel,
-  mentionLabel,
-  mentionRangeFor,
   parseStoredDraft,
-  reconcileMentions,
 } from "./chatModels";
+import { ChatDraftEditor } from "./ChatDraftEditor";
 
 type ChatComposerProps = {
   channelId: string;
@@ -64,40 +52,20 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const [draft, setDraft] = useState<ChatDraft>(emptyDraft);
   const [attachmentItems, setAttachmentItems] = useState<ChatAttachmentDraftItem[]>([]);
-  const [mentionRange, setMentionRange] = useState<ReturnType<typeof mentionRangeFor>>(null);
-  const [selectedMention, setSelectedMention] = useState(0);
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [error, setError] = useState("");
-  const [history, setHistory] = useState(emptyComposerHistory);
-  const [submitting, setSubmitting] = useState(false);
   const uploading = hasUploadingDraftAttachments(attachmentItems);
-  const busy = uploading || submitting;
   const failedUploads = failedDraftAttachmentCount(attachmentItems);
   const draftStorageKey = useMemo(() => chatDraftStorageKey(channelId, rootMessageId), [channelId, rootMessageId]);
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const activeDraftStorageKeyRef = useRef(draftStorageKey);
-  const submittingRef = useRef(false);
-  const mentionUsers = useMemo(() => {
-    if (!mentionRange) return [];
-    const query = mentionRange.query.toLowerCase();
-    return mentionableUsers
-      .filter((user) => user.status === "active")
-      .filter((user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
-      .slice(0, 8);
-  }, [mentionRange, mentionableUsers]);
 
   useEffect(() => {
     activeDraftStorageKeyRef.current = draftStorageKey;
     setDraft(parseStoredDraft(window.localStorage.getItem(draftStorageKey)));
     setAttachmentItems([]);
     setError("");
-    setMentionRange(null);
-    setSelectedMention(0);
     setDraggingFiles(false);
-    setHistory(emptyComposerHistory);
-    setSubmitting(false);
-    submittingRef.current = false;
   }, [draftStorageKey]);
 
   useEffect(() => {
@@ -110,57 +78,6 @@ export function ChatComposer({
       onDraftStateChange?.(channelId, hasStoredDraftForChannel(channelId));
     }
   }, [channelId, draft, draftStorageKey, onDraftStateChange]);
-
-  const setText = (text: string, cursor: number) => {
-    const mentions = reconcileMentions(draft.text, text, draft.mentions);
-    setDraft({ text, mentions });
-    setMentionRange(mentionRangeFor(text, cursor, mentions));
-    setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
-    onTyping?.();
-  };
-
-  const insertMarkdown = (before: string, after = before) => {
-    const textarea = textAreaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const nextText = `${draft.text.slice(0, start)}${before}${draft.text.slice(start, end)}${after}${draft.text.slice(end)}`;
-    const mentions = reconcileMentions(draft.text, nextText, draft.mentions);
-    const cursor = start + before.length;
-    setDraft({ text: nextText, mentions });
-    setMentionRange(mentionRangeFor(nextText, cursor, mentions));
-    setSelectedMention(0);
-    setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
-    onTyping?.();
-    window.setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(cursor, end + before.length);
-    }, 0);
-  };
-
-  const insertMention = (user: ChatUser) => {
-    if (!mentionRange) return;
-    const label = mentionLabel(user.name);
-    const replacement = `@${label}`;
-    const nextText = `${draft.text.slice(0, mentionRange.start)}${replacement} ${draft.text.slice(mentionRange.end)}`;
-    const nextMention = {
-      start: mentionRange.start,
-      end: mentionRange.start + replacement.length,
-      label,
-      userId: user.id,
-    };
-    const mentions = [
-      ...draft.mentions.filter((mention) => mention.end <= mentionRange.start || mention.start >= mentionRange.end),
-      nextMention,
-    ].sort((left, right) => left.start - right.start);
-    setDraft({ text: nextText, mentions });
-    setMentionRange(null);
-    window.setTimeout(() => {
-      const cursor = nextMention.end + 1;
-      textAreaRef.current?.focus();
-      textAreaRef.current?.setSelectionRange(cursor, cursor);
-    }, 0);
-  };
 
   const uploadFiles = async (files: File[]) => {
     if (disabled) return;
@@ -209,97 +126,22 @@ export function ChatComposer({
     void uploadFiles(files);
   };
 
-  const submit = async () => {
-    if (disabled || busy || submittingRef.current) return;
+  const submit = async (nextDraft: ChatDraft) => {
     const uploadedAttachments = uploadedDraftAttachments(attachmentItems);
-    if (!draft.text.trim() && uploadedAttachments.length === 0) return;
+    if (!nextDraft.text.trim() && uploadedAttachments.length === 0) return false;
     if (failedUploads > 0) {
       setError("请移除上传失败的附件后发送");
-      return;
+      return false;
     }
     setError("");
-    submittingRef.current = true;
-    setSubmitting(true);
     try {
-      await onSend(draft, uploadedAttachments, rootMessageId, parentMessageId);
-      setHistory((item) => recordSentComposerDraft(item, draft));
+      await onSend(nextDraft, uploadedAttachments, rootMessageId, parentMessageId);
       setDraft(emptyDraft);
       setAttachmentItems([]);
-      setMentionRange(null);
+      return true;
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "发送消息失败");
-    } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
-    }
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionRange && mentionUsers.length > 0) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setSelectedMention((index) => (index + 1) % mentionUsers.length);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setSelectedMention((index) => (index - 1 + mentionUsers.length) % mentionUsers.length);
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        insertMention(mentionUsers[selectedMention] ?? mentionUsers[0]);
-        return;
-      }
-      if (event.key === "Escape") {
-        setMentionRange(null);
-        return;
-      }
-    }
-    if (event.key === "ArrowUp" && !event.shiftKey) {
-      const textarea = textAreaRef.current;
-      const canRecall = textarea?.selectionStart === 0 && (history.cursorIndex !== null || !draft.text.trim());
-      if (canRecall) {
-        const recalled = recallComposerHistory(history, draft, "older");
-        if (recalled) {
-          event.preventDefault();
-          setDraft(recalled.draft);
-          setHistory(recalled.history);
-          setMentionRange(null);
-          window.setTimeout(() => {
-            const next = textAreaRef.current;
-            if (!next) return;
-            next.focus();
-            next.setSelectionRange(0, 0);
-          }, 0);
-          return;
-        }
-      }
-    }
-    if (event.key === "ArrowDown" && !event.shiftKey && history.cursorIndex !== null) {
-      const textarea = textAreaRef.current;
-      const canRecall = textarea ? textarea.selectionStart === textarea.value.length : true;
-      if (canRecall) {
-        const recalled = recallComposerHistory(history, draft, "newer");
-        if (recalled) {
-          event.preventDefault();
-          setDraft(recalled.draft);
-          setHistory(recalled.history);
-          setMentionRange(null);
-          window.setTimeout(() => {
-            const next = textAreaRef.current;
-            if (!next) return;
-            next.focus();
-            const cursor = next.value.length;
-            next.setSelectionRange(cursor, cursor);
-          }, 0);
-          return;
-        }
-      }
-    }
-    if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      void submit();
+      return false;
     }
   };
 
@@ -326,49 +168,30 @@ export function ChatComposer({
         </div>
       )}
       {error && <div className="orf-chat-composer-error">{error}</div>}
-      <div className="orf-chat-composer-box">
-        <textarea
-          disabled={disabled}
-          onChange={(event) => setText(event.target.value, event.target.selectionStart)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={disabled ? "当前没有发送权限" : rootMessageId ? "回复该话题..." : "发送消息..."}
-          ref={textAreaRef}
-          rows={3}
-          value={draft.text}
-        />
-        {mentionRange && (
-          <div className="orf-chat-mention-menu">
-            {mentionUsers.length > 0 ? mentionUsers.map((user, index) => (
-              <button
-                className={index === selectedMention ? "orf-chat-mention-option-active" : ""}
-                key={user.id}
-                type="button"
-                onClick={() => insertMention(user)}
-              >
-                <Avatar avatarUrl={user.avatarUrl} name={user.name} size="sm" />
-                <span>{user.name}</span>
-                <small>{user.email}</small>
-              </button>
-            )) : <div className="orf-chat-mention-empty">没有匹配成员</div>}
-          </div>
+      <ChatDraftEditor
+        className="orf-chat-composer-box"
+        disabled={disabled}
+        draft={draft}
+        mentionableUsers={mentionableUsers}
+        onChange={setDraft}
+        onPaste={handlePaste}
+        onSubmit={submit}
+        onTyping={onTyping}
+        placeholder={disabled ? "当前没有发送权限" : rootMessageId ? "回复该话题..." : "发送消息..."}
+        recordHistoryOnSubmit
+        resetKey={draftStorageKey}
+        submitDisabled={uploading}
+        toolbarControls={<button type="button" onClick={() => fileRef.current?.click()} title="附件"><Paperclip className="h-4 w-4" /></button>}
+        toolbarEnd={({ submit: submitDraft, submitting }) => (
+          <>
+            {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
+            <button type="button" className="orf-chat-send-button" disabled={disabled || uploading || submitting} onClick={submitDraft} title="发送">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </button>
+            <input multiple hidden ref={fileRef} type="file" onChange={(event) => void handleFiles(event)} />
+          </>
         )}
-        <div className="orf-chat-composer-toolbar">
-          <button type="button" onClick={() => insertMarkdown("**")} title="加粗"><Bold className="h-4 w-4" /></button>
-          <button type="button" onClick={() => insertMarkdown("_")} title="斜体"><Italic className="h-4 w-4" /></button>
-          <button type="button" onClick={() => insertMarkdown("`")} title="代码"><Code className="h-4 w-4" /></button>
-          <button type="button" onClick={() => insertMarkdown("> ", "")} title="引用"><Quote className="h-4 w-4" /></button>
-          <button type="button" onClick={() => insertMarkdown("[", "](https://)")} title="链接"><LinkIcon className="h-4 w-4" /></button>
-          <button type="button" onClick={() => fileRef.current?.click()} title="附件"><Paperclip className="h-4 w-4" /></button>
-          <button type="button" onClick={() => insertMarkdown("@", "")} title="提及成员"><AtSign className="h-4 w-4" /></button>
-          <span className="orf-chat-composer-spacer" />
-          {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-          <button type="button" className="orf-chat-send-button" disabled={disabled || busy} onClick={() => void submit()} title="发送">
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </button>
-          <input multiple hidden ref={fileRef} type="file" onChange={(event) => void handleFiles(event)} />
-        </div>
-      </div>
+      />
     </div>
   );
 }

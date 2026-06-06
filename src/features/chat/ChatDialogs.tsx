@@ -1,12 +1,12 @@
 import { clsx } from "clsx";
 import { Download, FileText, X } from "lucide-react";
-import { type KeyboardEvent, useState } from "react";
+import { useState } from "react";
 import { Avatar, Button, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
 import type { ChatDraft } from "./chatModels";
-import { reconcileMentions } from "./chatModels";
 import { formatPresence, isChatUserOnline } from "./chatPresence";
+import { ChatDraftEditor } from "./ChatDraftEditor";
 
 export function ChannelModal({
   canCreatePublic,
@@ -120,35 +120,31 @@ export function ConversationModal({
 
 export function EditMessageDialog({
   draft,
+  mentionableUsers,
   onClose,
   onSave,
 }: {
   draft: ChatDraft;
+  mentionableUsers: ChatUser[];
   onClose: () => void;
   onSave: (draft: ChatDraft) => void;
 }) {
   const [localDraft, setLocalDraft] = useState(draft);
   const save = () => onSave(localDraft);
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      save();
-    }
-  };
   return (
     <div className="orf-chat-modal-backdrop" onMouseDown={onClose}>
       <div className="orf-chat-modal orf-chat-edit-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header><h2>编辑消息</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
-        <textarea
-          value={localDraft.text}
-          onChange={(event) => {
-            const text = event.target.value;
-            setLocalDraft((previous) => ({
-              text,
-              mentions: reconcileMentions(previous.text, text, previous.mentions),
-            }));
+        <ChatDraftEditor
+          className="orf-chat-edit-box"
+          draft={localDraft}
+          mentionableUsers={mentionableUsers}
+          onChange={setLocalDraft}
+          onSubmit={() => {
+            save();
+            return true;
           }}
-          onKeyDown={handleKeyDown}
+          placeholder="编辑消息..."
           rows={6}
         />
         <footer>
