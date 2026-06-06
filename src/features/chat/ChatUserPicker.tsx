@@ -1,9 +1,9 @@
 import { clsx } from "clsx";
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
-import { formatPresence, isChatUserOnline } from "./chatPresence";
+import { formatPresence } from "./chatPresence";
+import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 
 type ChatUserPickerProps = {
   className?: string;
@@ -51,10 +51,7 @@ export function ChatUserPicker({
             type="button"
             onClick={() => onToggleUser(user.id)}
           >
-            <span className="orf-chat-member-avatar">
-              <Avatar avatarUrl={user.avatarUrl} name={user.name} size="sm" />
-              <i className={clsx("orf-chat-presence-dot", isChatUserOnline(user, currentUserId) && "orf-chat-presence-online")} />
-            </span>
+            <ChatPresenceAvatar className="orf-chat-member-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
             <span>{user.name}</span>
             <small>{formatPresence(user, currentUserId)}</small>
           </button>

@@ -1,11 +1,11 @@
 import { clsx } from "clsx";
 import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState } from "react";
-import { Avatar, IconButton } from "../../components/ui";
+import { IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
-import { formatPresence, isChatUserOnline } from "./chatPresence";
+import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import { canonicalChatReactionName, displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
@@ -95,15 +95,14 @@ function MessageAuthorAvatar({
   usersById: Map<string, ChatUser>;
 }) {
   const author = usersById.get(message.authorUserId);
-  const presence = formatPresence(author, currentUserId);
   return (
-    <span className="orf-chat-message-avatar" title={`${message.authorName} · ${presence}`}>
-      <Avatar avatarUrl={message.authorAvatarUrl} name={message.authorName} size="md" />
-      <i
-        aria-label={presence}
-        className={clsx("orf-chat-presence-dot", isChatUserOnline(author, currentUserId) && "orf-chat-presence-online")}
-      />
-    </span>
+    <ChatPresenceAvatar
+      avatarUrl={message.authorAvatarUrl}
+      className="orf-chat-message-avatar"
+      currentUserId={currentUserId}
+      name={message.authorName}
+      user={author}
+    />
   );
 }
 

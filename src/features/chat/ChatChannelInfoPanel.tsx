@@ -1,8 +1,8 @@
-import { clsx } from "clsx";
 import { useEffect, useState } from "react";
-import { Avatar, Button } from "../../components/ui";
+import { Button } from "../../components/ui";
 import type { ChatChannel, ChatUser } from "../../types/orf";
-import { formatPresence, isChatUserOnline } from "./chatPresence";
+import { formatPresence } from "./chatPresence";
+import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { ChatUserPicker } from "./ChatUserPicker";
 
 type ChatChannelInfoPanelProps = {
@@ -116,10 +116,7 @@ export function ChatChannelInfoPanel({
             const user = usersById.get(member.userId);
             return (
               <div key={member.userId}>
-                <span className="orf-chat-member-avatar">
-                  <Avatar avatarUrl={user?.avatarUrl} name={user?.name ?? "成员"} size="sm" />
-                  <i className={clsx("orf-chat-presence-dot", isChatUserOnline(user, currentUserId) && "orf-chat-presence-online")} />
-                </span>
+                <ChatPresenceAvatar className="orf-chat-member-avatar" currentUserId={currentUserId} name={user?.name ?? "成员"} size="sm" user={user} />
                 <span>{user?.name ?? member.userId}</span>
                 <small>{member.role} · {formatPresence(user, currentUserId)}</small>
                 {canManage && channel.type !== "public" && member.userId !== currentUserId && (

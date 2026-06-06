@@ -1,10 +1,23 @@
 import type { ChatUser } from "../../types/orf";
 
-export function isChatUserOnline(user: ChatUser | undefined, currentUserId?: string) {
-  if (!user) return false;
-  if (user.id === currentUserId) return true;
+export type ChatPresenceState = "away" | "offline" | "online" | "unknown";
+
+const chatOnlinePresenceWindowMs = 5 * 60 * 1000;
+const chatAwayPresenceWindowMs = 24 * 60 * 60 * 1000;
+
+export function chatPresenceState(user: ChatUser | undefined, currentUserId?: string): ChatPresenceState {
+  if (!user) return "unknown";
+  if (user.id === currentUserId) return "online";
   const lastOnlineAt = user.lastOnlineAt ? Date.parse(user.lastOnlineAt) : 0;
-  return Boolean(lastOnlineAt && Date.now() - lastOnlineAt < 5 * 60 * 1000);
+  if (!lastOnlineAt) return "offline";
+  const elapsedMs = Date.now() - lastOnlineAt;
+  if (elapsedMs < chatOnlinePresenceWindowMs) return "online";
+  if (elapsedMs < chatAwayPresenceWindowMs) return "away";
+  return "offline";
+}
+
+export function isChatUserOnline(user: ChatUser | undefined, currentUserId?: string) {
+  return chatPresenceState(user, currentUserId) === "online";
 }
 
 export function formatPresence(user: ChatUser | undefined, currentUserId?: string) {
@@ -16,5 +29,6 @@ export function formatPresence(user: ChatUser | undefined, currentUserId?: strin
   const minutes = Math.max(1, Math.round((Date.now() - lastOnlineAt) / 60000));
   if (minutes < 60) return `${minutes} 分钟前在线`;
   const hours = Math.round(minutes / 60);
-  return `${hours} 小时前在线`;
+  if (hours < 24) return `${hours} 小时前在线`;
+  return `${Math.round(hours / 24)} 天前在线`;
 }
