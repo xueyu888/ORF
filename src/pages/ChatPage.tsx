@@ -38,6 +38,32 @@ import { type ChangeEvent, type KeyboardEvent, type ReactNode, useCallback, useE
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Avatar, Button, IconButton } from "../components/ui";
 import {
+  type ChatDraft,
+  type UnreadAnchor,
+  applyFeedMessage,
+  buildUnreadAnchor,
+  chatDraftStorageKey,
+  chatMessagePageSize,
+  createFeedSnapshot,
+  currentMembership,
+  draftFromStoredBody,
+  emptyDraft,
+  hasStoredDraftForChannel,
+  mentionLabel,
+  mentionRangeFor,
+  parseStoredDraft,
+  prependOlderFeedMessages,
+  reconcileMentions,
+  rememberFeedScroll,
+  replaceFeedMessages,
+  serializeDraft,
+  shouldFollowIncomingMessage,
+  sortChannels,
+  storedDraftChannelIds,
+  upsertChannel,
+  upsertMessage,
+} from "../features/chat/chatModels";
+import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
   createChatChannel,
@@ -67,18 +93,6 @@ import { useOrf } from "../state/OrfProvider";
 import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatUser } from "../types/orf";
 import type { ChatRealtimeEvent } from "../types/realtime";
 
-type DraftMention = {
-  end: number;
-  label: string;
-  start: number;
-  userId: string;
-};
-
-type ChatDraft = {
-  mentions: DraftMention[];
-  text: string;
-};
-
 type ActivePanel = "thread" | "info" | "search" | "pins" | "saved" | null;
 
 type TypingState = {
@@ -87,59 +101,7 @@ type TypingState = {
   userName: string;
 };
 
-type UnreadAnchor = {
-  channelId: string;
-  lastReadAt?: string | null;
-  manuallyUnread: boolean;
-  mentionCount: number;
-  threadUnreadCount: number;
-  unreadCount: number;
-};
-
 const reactionEmojis = ["👍", "👀", "✅", "❤️", "🔥", "🎉", "😂", "😮", "🙏"];
-const emptyDraft: ChatDraft = { mentions: [], text: "" };
-
-function chatDraftStorageKey(channelId: string, rootMessageId?: string | null) {
-  return `orf.chat.draft.${channelId}.${rootMessageId ?? "root"}`;
-}
-
-function hasStoredDraftForChannel(channelId: string) {
-  if (typeof window === "undefined") return false;
-  const prefix = `orf.chat.draft.${channelId}.`;
-  for (let index = 0; index < window.localStorage.length; index += 1) {
-    const key = window.localStorage.key(index);
-    if (key?.startsWith(prefix) && parseStoredDraft(window.localStorage.getItem(key)).text.trim()) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function storedDraftChannelIds(channels: ChatChannel[]) {
-  return new Set(channels.filter((channel) => hasStoredDraftForChannel(channel.id)).map((channel) => channel.id));
-}
-
-function parseStoredDraft(raw: string | null): ChatDraft {
-  if (!raw) return emptyDraft;
-  try {
-    const draft = JSON.parse(raw) as Partial<ChatDraft>;
-    const text = typeof draft.text === "string" ? draft.text.slice(0, 20000) : "";
-    const mentions = Array.isArray(draft.mentions)
-      ? draft.mentions.filter((mention): mention is DraftMention => (
-          typeof mention === "object" &&
-          mention !== null &&
-          typeof mention.start === "number" &&
-          typeof mention.end === "number" &&
-          typeof mention.label === "string" &&
-          typeof mention.userId === "string" &&
-          text.slice(mention.start, mention.end) === `@${mention.label}`
-        ))
-      : [];
-    return { text, mentions };
-  } catch {
-    return emptyDraft;
-  }
-}
 
 function formatTime(value: string) {
   return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
@@ -160,103 +122,6 @@ function channelIcon(channel: ChatChannel) {
   if (channel.type === "public") return Hash;
   if (channel.type === "private") return Lock;
   return MessageSquare;
-}
-
-function currentMembership(channel: ChatChannel | null, userId: string | undefined) {
-  return channel?.members.find((member) => member.userId === userId) ?? null;
-}
-
-function sortChannels(channels: ChatChannel[], currentUserId?: string) {
-  return [...channels].sort((left, right) => {
-    const leftMember = currentMembership(left, currentUserId);
-    const rightMember = currentMembership(right, currentUserId);
-    if (Boolean(leftMember?.favorite) !== Boolean(rightMember?.favorite)) return leftMember?.favorite ? -1 : 1;
-    return (right.lastMessageAt ?? right.updatedAt).localeCompare(left.lastMessageAt ?? left.updatedAt);
-  });
-}
-
-function upsertChannel(channels: ChatChannel[], next: ChatChannel, currentUserId?: string) {
-  const found = channels.some((channel) => channel.id === next.id);
-  return sortChannels(found ? channels.map((channel) => (channel.id === next.id ? next : channel)) : [next, ...channels], currentUserId);
-}
-
-function upsertMessage(messages: ChatMessage[], next: ChatMessage) {
-  const found = messages.some((message) => message.id === next.id);
-  const updated = found ? messages.map((message) => (message.id === next.id ? next : message)) : [...messages, next];
-  return updated.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-}
-
-function mentionLabel(value: string) {
-  return value.replace(/[()[\]\n]/g, "").trim() || "成员";
-}
-
-function mentionToken(mention: Pick<DraftMention, "label" | "userId">) {
-  return `@[${mentionLabel(mention.label)}](orf-user:${encodeURIComponent(mention.userId)})`;
-}
-
-function serializeDraft(draft: ChatDraft) {
-  const validMentions = draft.mentions
-    .filter((mention) => draft.text.slice(mention.start, mention.end) === `@${mention.label}`)
-    .sort((left, right) => left.start - right.start);
-  let output = "";
-  let index = 0;
-  for (const mention of validMentions) {
-    if (mention.start < index) continue;
-    output += draft.text.slice(index, mention.start);
-    output += mentionToken(mention);
-    index = mention.end;
-  }
-  return output + draft.text.slice(index);
-}
-
-function draftFromStoredBody(body: string, usersById: Map<string, ChatUser>): ChatDraft {
-  const pattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
-  const mentions: DraftMention[] = [];
-  let text = "";
-  let index = 0;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(body)) !== null) {
-    text += body.slice(index, match.index);
-    const userId = decodeURIComponent(match[2] ?? "");
-    const label = mentionLabel(usersById.get(userId)?.name ?? match[1] ?? "成员");
-    const start = text.length;
-    text += `@${label}`;
-    mentions.push({ start, end: text.length, label, userId });
-    index = pattern.lastIndex;
-  }
-  text += body.slice(index);
-  return { text, mentions };
-}
-
-function mentionRangeFor(value: string, cursor: number, mentions: DraftMention[]) {
-  if (mentions.some((mention) => cursor > mention.start && cursor <= mention.end)) return null;
-  const prefix = value.slice(0, cursor);
-  const match = /(^|\s)@([^\s@]{0,32})$/.exec(prefix);
-  if (!match || match.index === undefined) return null;
-  const atIndex = prefix.lastIndexOf("@");
-  return { start: atIndex, end: cursor, query: match[2] ?? "" };
-}
-
-function reconcileMentions(previousText: string, nextText: string, mentions: DraftMention[]) {
-  if (mentions.length === 0) return mentions;
-  let prefixLength = 0;
-  while (prefixLength < previousText.length && prefixLength < nextText.length && previousText[prefixLength] === nextText[prefixLength]) {
-    prefixLength += 1;
-  }
-  let previousSuffix = previousText.length;
-  let nextSuffix = nextText.length;
-  while (previousSuffix > prefixLength && nextSuffix > prefixLength && previousText[previousSuffix - 1] === nextText[nextSuffix - 1]) {
-    previousSuffix -= 1;
-    nextSuffix -= 1;
-  }
-  const delta = nextText.length - previousText.length;
-  return mentions
-    .flatMap((mention) => {
-      if (mention.end <= prefixLength) return [mention];
-      if (mention.start >= previousSuffix) return [{ ...mention, start: mention.start + delta, end: mention.end + delta }];
-      return [];
-    })
-    .filter((mention) => nextText.slice(mention.start, mention.end) === `@${mention.label}`);
 }
 
 function renderTextFragments(body: string, usersById: Map<string, ChatUser>) {
@@ -364,9 +229,15 @@ export function ChatPage() {
   const [typingByUser, setTypingByUser] = useState<Map<string, TypingState>>(new Map());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [imagePreview, setImagePreview] = useState<ChatAttachment | null>(null);
+  const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
   const lastTypingSentAtRef = useRef(0);
-  const activeChannel = channels.find((channel) => channel.id === routeChannelId) ?? channels[0] ?? null;
+  const activeChannelIdRef = useRef<string | null>(null);
+  const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
+  const messageScrollRef = useRef<HTMLDivElement | null>(null);
+  const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
+  const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
+  activeChannelIdRef.current = activeChannel?.id ?? null;
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
     if (!activeChannel) return [];
@@ -384,8 +255,49 @@ export function ChatPage() {
     setChannels((items) => upsertChannel(items, channel, currentUser?.id));
   }, [currentUser?.id]);
 
+  const requestScrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
+    pendingLatestScrollRef.current = behavior;
+    setPendingNewMessageCount(0);
+  }, []);
+
+  const rememberActiveFeedScroll = useCallback((channelId = activeChannelIdRef.current) => {
+    const element = messageScrollRef.current;
+    if (!channelId || !element) return;
+    feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element.scrollTop));
+  }, []);
+
+  const restoreFeedScroll = useCallback((scrollTop: number) => {
+    window.requestAnimationFrame(() => {
+      const element = messageScrollRef.current;
+      if (!element) return;
+      element.scrollTop = Math.max(0, scrollTop);
+    });
+  }, []);
+
+  const isMessageScrollNearLatest = useCallback(() => {
+    const element = messageScrollRef.current;
+    if (!element) return true;
+    return element.scrollHeight - element.scrollTop - element.clientHeight < 160;
+  }, []);
+
+  const handleMessageScroll = useCallback(() => {
+    rememberActiveFeedScroll();
+    if (isMessageScrollNearLatest()) setPendingNewMessageCount(0);
+  }, [isMessageScrollNearLatest, rememberActiveFeedScroll]);
+
   const applyMessage = useCallback((message: ChatMessage) => {
-    setMessages((items) => (!message.rootMessageId || items.some((item) => item.id === message.id) ? upsertMessage(items, message) : items));
+    if (activeChannelIdRef.current === message.channelId) {
+      setMessages((items) => {
+        const snapshot = applyFeedMessage(feedCacheRef.current.get(message.channelId) ?? createFeedSnapshot({ messages: items }), message);
+        if (!snapshot) return items;
+        feedCacheRef.current.set(message.channelId, snapshot);
+        const next = snapshot.messages;
+        return next;
+      });
+    } else {
+      const snapshot = applyFeedMessage(feedCacheRef.current.get(message.channelId), message);
+      if (snapshot) feedCacheRef.current.set(message.channelId, snapshot);
+    }
     setThread((item) => item ? {
       ...item,
       rootMessage: item.rootMessage.id === message.id ? message : item.rootMessage,
@@ -420,19 +332,24 @@ export function ChatPage() {
     let cancelled = false;
     setLoading(true);
     void refreshBootstrap()
-      .then((data) => {
-        if (cancelled) return;
-        const first = routeChannelId ? data.channels.find((channel) => channel.id === routeChannelId) : data.channels[0];
-        if (!routeChannelId && first) navigate(`/chat/${encodeURIComponent(first.id)}`, { replace: true });
+      .catch((error) => {
+        if (!cancelled) notify(error instanceof Error ? error.message : "加载聊天失败");
       })
-      .catch((error) => notify(error instanceof Error ? error.message : "加载聊天失败"))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [navigate, notify, refreshBootstrap, routeChannelId]);
+  }, [notify, refreshBootstrap]);
+
+  useEffect(() => {
+    if (loading || channels.length === 0) return;
+    const routeChannelExists = routeChannelId ? channels.some((channel) => channel.id === routeChannelId) : false;
+    if (!routeChannelId || !routeChannelExists) {
+      navigate(`/chat/${encodeURIComponent(channels[0].id)}`, { replace: true });
+    }
+  }, [channels, loading, navigate, routeChannelId]);
 
   useEffect(() => {
     setDraftChannelIds(storedDraftChannelIds(channels));
@@ -442,41 +359,45 @@ export function ChatPage() {
     if (!activeChannel) return undefined;
     let cancelled = false;
     lastTypingSentAtRef.current = 0;
-    const activeMember = currentMembership(activeChannel, currentUser?.id);
-    const hasUnreadState =
-      activeChannel.unreadCount > 0 ||
-      activeChannel.mentionCount > 0 ||
-      activeChannel.threadUnreadCount > 0 ||
-      Boolean(activeMember?.manuallyUnread);
-    setUnreadAnchor(hasUnreadState ? {
-      channelId: activeChannel.id,
-      lastReadAt: activeMember?.lastReadAt ?? null,
-      manuallyUnread: Boolean(activeMember?.manuallyUnread),
-      mentionCount: activeChannel.mentionCount,
-      threadUnreadCount: activeChannel.threadUnreadCount,
-      unreadCount: activeChannel.unreadCount,
-    } : null);
-    setMessagesLoading(true);
-    setMessages([]);
-    setHasOlderMessages(false);
-    void getChatMessages({ channelId: activeChannel.id, limit: 80 })
+    const channelId = activeChannel.id;
+    const anchor = buildUnreadAnchor(activeChannel, currentUser?.id);
+    const cachedFeed = feedCacheRef.current.get(channelId);
+    setUnreadAnchor(anchor);
+    setPendingNewMessageCount(0);
+    setMessages(cachedFeed?.messages ?? []);
+    setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
+    setMessagesLoading(!cachedFeed);
+    if (cachedFeed) restoreFeedScroll(cachedFeed.scrollTop);
+    void getChatMessages({ channelId, limit: chatMessagePageSize })
       .then((response) => {
         if (!cancelled) {
+          const currentScrollTop = messageScrollRef.current?.scrollTop ?? cachedFeed?.scrollTop ?? 0;
+          const snapshot = replaceFeedMessages(
+            cachedFeed ? rememberFeedScroll(cachedFeed, currentScrollTop) : createFeedSnapshot({ scrollTop: currentScrollTop }),
+            response.messages,
+          );
+          feedCacheRef.current.set(channelId, snapshot);
           setMessages(response.messages);
-          setHasOlderMessages(response.messages.length >= 80);
+          setHasOlderMessages(snapshot.hasOlderMessages);
+          if (!cachedFeed && !anchor && !new URLSearchParams(window.location.search).get("message")) {
+            requestScrollToLatest("auto");
+          } else if (cachedFeed) {
+            restoreFeedScroll(snapshot.scrollTop);
+          }
         }
       })
       .catch((error) => notify(error instanceof Error ? error.message : "加载消息失败"))
       .finally(() => {
         if (!cancelled) setMessagesLoading(false);
       });
-    void markChatChannelReadRequest(activeChannel.id)
+    void markChatChannelReadRequest(channelId)
       .then((response) => applyChannel(response.channel))
       .catch(() => undefined);
     return () => {
       cancelled = true;
+      rememberActiveFeedScroll(channelId);
     };
-  }, [activeChannel?.id, applyChannel, currentUser?.id, notify]);
+  }, [activeChannel?.id, applyChannel, currentUser?.id, notify, rememberActiveFeedScroll, requestScrollToLatest, restoreFeedScroll]);
 
   const handleTyping = useCallback(() => {
     if (!activeChannel) return;
@@ -499,6 +420,17 @@ export function ChatPage() {
   }, [messages, searchParams, setSearchParams]);
 
   useEffect(() => {
+    const behavior = pendingLatestScrollRef.current;
+    if (!behavior || messagesLoading) return;
+    pendingLatestScrollRef.current = null;
+    window.requestAnimationFrame(() => {
+      const element = messageScrollRef.current;
+      if (!element) return;
+      element.scrollTo({ top: element.scrollHeight, behavior });
+    });
+  }, [activeChannel?.id, messages, messagesLoading]);
+
+  useEffect(() => {
     if (!activeChannel || typeof EventSource === "undefined") return undefined;
     const source = new EventSource("/api/events", { withCredentials: true });
     const handleChatEvent = (event: MessageEvent<string>) => {
@@ -513,7 +445,13 @@ export function ChatPage() {
         applyChannel(payload.channel);
       }
       if (payload.message && payload.channelId === activeChannel.id) {
+        const shouldFollowLatest = shouldFollowIncomingMessage(payload.message, currentUser?.id, isMessageScrollNearLatest());
         applyMessage(payload.message);
+        if (shouldFollowLatest) {
+          requestScrollToLatest("smooth");
+        } else if (!payload.message.rootMessageId) {
+          setPendingNewMessageCount((count) => count + 1);
+        }
       }
       if (payload.eventType === "typing" && payload.channelId === activeChannel.id && payload.typing && payload.typing.userId !== currentUser?.id) {
         setTypingByUser((items) => {
@@ -528,7 +466,7 @@ export function ChatPage() {
       source.removeEventListener("chat.event", handleChatEvent);
       source.close();
     };
-  }, [activeChannel, applyChannel, applyMessage, currentUser?.id, navigate]);
+  }, [activeChannel, applyChannel, applyMessage, currentUser?.id, isMessageScrollNearLatest, navigate, requestScrollToLatest]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -563,11 +501,29 @@ export function ChatPage() {
 
   const loadOlderMessages = useCallback(async () => {
     if (!activeChannel || messages.length === 0 || olderMessagesLoading || !hasOlderMessages) return;
+    const scrollElement = messageScrollRef.current;
+    const previousScrollHeight = scrollElement?.scrollHeight ?? 0;
+    const previousScrollTop = scrollElement?.scrollTop ?? 0;
     setOlderMessagesLoading(true);
     try {
-      const response = await getChatMessages({ channelId: activeChannel.id, before: messages[0].createdAt, limit: 80 });
-      setMessages((items) => [...response.messages, ...items]);
-      setHasOlderMessages(response.messages.length >= 80);
+      const channelId = activeChannel.id;
+      const response = await getChatMessages({ channelId, before: messages[0].createdAt, limit: chatMessagePageSize });
+      setMessages((items) => {
+        const snapshot = prependOlderFeedMessages(
+          feedCacheRef.current.get(channelId) ?? createFeedSnapshot({ messages: items, scrollTop: previousScrollTop }),
+          response.messages,
+        );
+        feedCacheRef.current.set(channelId, snapshot);
+        setHasOlderMessages(snapshot.hasOlderMessages);
+        return snapshot.messages;
+      });
+      window.requestAnimationFrame(() => {
+        const element = messageScrollRef.current;
+        if (!element) return;
+        const nextTop = element.scrollHeight - previousScrollHeight + previousScrollTop;
+        element.scrollTop = Math.max(0, nextTop);
+        feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element.scrollTop));
+      });
     } catch (error) {
       notify(error instanceof Error ? error.message : "加载更早消息失败");
     } finally {
@@ -590,10 +546,11 @@ export function ChatPage() {
         setThread((item) => item ? { ...item, replies: upsertMessage(item.replies, response.message) } : item);
       } else {
         applyMessage(response.message);
+        requestScrollToLatest("smooth");
       }
       void markChatChannelReadRequest(activeChannel.id).then((read) => applyChannel(read.channel)).catch(() => undefined);
     },
-    [activeChannel, applyChannel, applyMessage],
+    [activeChannel, applyChannel, applyMessage, requestScrollToLatest],
   );
 
   const handleEditMessage = useCallback(
@@ -647,10 +604,16 @@ export function ChatPage() {
   }, [activeChannel?.id, applyChannel, currentUser?.id]);
 
   const handleJumpToUnread = useCallback(() => {
+    const messageScroll = messageScrollRef.current;
     const target =
-      document.getElementById("orf-chat-unread-divider") ??
-      document.querySelector<HTMLElement>("[data-chat-unread-message='true']");
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+      messageScroll?.querySelector<HTMLElement>("#orf-chat-unread-divider") ??
+      messageScroll?.querySelector<HTMLElement>("[data-chat-unread-message='true']");
+    if (!messageScroll || !target) return;
+    const scrollRect = messageScroll.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const stickyButtonOffset = 48;
+    const nextTop = messageScroll.scrollTop + targetRect.top - scrollRect.top - stickyButtonOffset;
+    messageScroll.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" });
   }, []);
 
   const handleReaction = useCallback(
@@ -798,8 +761,14 @@ export function ChatPage() {
               }}
               usersById={usersById}
             />
-            <div className="orf-chat-message-scroll">
-              {messagesLoading ? (
+            <div className="orf-chat-message-scroll" ref={messageScrollRef} onScroll={handleMessageScroll}>
+              {messagesLoading && messages.length > 0 && (
+                <div className="orf-chat-message-loading-chip" role="status">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>同步消息</span>
+                </div>
+              )}
+              {messagesLoading && messages.length === 0 ? (
                 <div className="orf-chat-message-loading"><Loader2 className="h-5 w-5 animate-spin" /> 加载消息</div>
               ) : (
                 <MessageList
@@ -822,6 +791,12 @@ export function ChatPage() {
                   unreadAnchor={unreadAnchor?.channelId === activeChannel.id ? unreadAnchor : null}
                   canPin={canManageActiveChannel}
                 />
+              )}
+              {pendingNewMessageCount > 0 && (
+                <button className="orf-chat-scroll-latest" type="button" onClick={() => requestScrollToLatest("smooth")}>
+                  <ChevronDown className="h-4 w-4" />
+                  {pendingNewMessageCount} 条新消息
+                </button>
               )}
             </div>
             <TypingLine typingByUser={typingByUser} />
@@ -1153,7 +1128,7 @@ function MessageList({
   const unreadMessageId = unreadDividerIndex >= 0 ? messages[unreadDividerIndex]?.id : null;
   return (
     <div className="orf-chat-message-list">
-      {unreadAnchor && (
+      {unreadMessageId && (
         <button className="orf-chat-unread-jump" type="button" onClick={onJumpUnread}>
           <ChevronDown className="h-4 w-4" />
           跳到未读
@@ -1502,7 +1477,7 @@ function ChatComposer({
         return;
       }
     }
-    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+    if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       void submit();
     }
@@ -1718,8 +1693,18 @@ function ThreadPanel({
   users: ChatUser[];
   usersById: Map<string, ChatUser>;
 }) {
+  const threadPanelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      const element = threadPanelRef.current;
+      if (!element) return;
+      element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    });
+  }, [thread.replies.length]);
+
   return (
-    <div className="orf-chat-thread-panel">
+    <div className="orf-chat-thread-panel" ref={threadPanelRef}>
       <MessageItem
         canPin={canPin}
         currentUserId={currentUserId}
@@ -2102,6 +2087,13 @@ function EditMessageDialog({
   onSave: (draft: ChatDraft) => void;
 }) {
   const [localDraft, setLocalDraft] = useState(draft);
+  const save = () => onSave(localDraft);
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      save();
+    }
+  };
   return (
     <div className="orf-chat-modal-backdrop" onMouseDown={onClose}>
       <div className="orf-chat-modal orf-chat-edit-modal" onMouseDown={(event) => event.stopPropagation()}>
@@ -2115,11 +2107,12 @@ function EditMessageDialog({
               mentions: reconcileMentions(previous.text, text, previous.mentions),
             }));
           }}
+          onKeyDown={handleKeyDown}
           rows={6}
         />
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
-          <Button onClick={() => onSave(localDraft)}>保存</Button>
+          <Button onClick={save}>保存</Button>
         </footer>
       </div>
     </div>

@@ -68,11 +68,13 @@ export function AppShell() {
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const isBountyHall = location.pathname.startsWith("/bounties");
+  const isChatPage = location.pathname.startsWith("/chat");
 
   return (
     <div
       className="orf-app-shell flex min-h-screen"
       data-bounty-hall={isBountyHall ? "true" : "false"}
+      data-chat-page={isChatPage ? "true" : "false"}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       style={shellStyle}
     >
