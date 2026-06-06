@@ -3,9 +3,10 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { ChatAttachment, ChatMessage, ChatThread, ChatUser } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
-import { isChatFeedNearLatest, scrollChatFeedToLatest, scrollChatFeedToMessage } from "./chatFeedScroll";
+import { scrollChatFeedToMessage } from "./chatFeedScroll";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { chatMessageDeliveryStatus, type ChatSendHandler } from "./chatModels";
+import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 
 type ChatThreadPanelProps = {
   canPin: boolean;
@@ -63,10 +64,19 @@ export function ChatThreadPanel({
   const threadPanelRef = useRef<HTMLDivElement | null>(null);
   const previousThreadIdRef = useRef<string | null>(null);
   const previousReplyCountRef = useRef(0);
-  const wasNearLatestRef = useRef(true);
   const [reactionPickerRequest, setReactionPickerRequest] = useState<{ messageId: string | null; signal: number }>({
     messageId: null,
     signal: 0,
+  });
+  const {
+    handleScroll: handleThreadStickinessScroll,
+    isFollowingLatest,
+    requestScrollToLatest,
+    setFollowingLatest,
+  } = useChatLatestScrollStickiness({
+    contentSelector: "[data-chat-message-id], .orf-chat-thread-replies",
+    scrollKey: `${thread.rootMessage.id}:${thread.replies.length}:${focusMessageId ?? ""}`,
+    scrollRef: threadPanelRef,
   });
   const editLatestOwnThreadMessage = useCallback(() => {
     const latestOwnMessage = [thread.rootMessage, ...thread.replies]
@@ -100,7 +110,7 @@ export function ChatThreadPanel({
     const isNewThread = previousThreadId !== thread.rootMessage.id;
     const replyAdded = !isNewThread && thread.replies.length > previousReplyCount;
     const lastReply = thread.replies.at(-1);
-    const shouldFollowReply = replyAdded && (wasNearLatestRef.current || lastReply?.authorUserId === currentUserId);
+    const shouldFollowReply = replyAdded && (isFollowingLatest() || lastReply?.authorUserId === currentUserId);
 
     previousThreadIdRef.current = thread.rootMessage.id;
     previousReplyCountRef.current = thread.replies.length;
@@ -109,25 +119,35 @@ export function ChatThreadPanel({
       return;
     }
 
-    window.requestAnimationFrame(() => {
-      const element = threadPanelRef.current;
-      if (!element) return;
-      if (focusMessageId) {
+    if (focusMessageId) {
+      setFollowingLatest(false);
+      window.requestAnimationFrame(() => {
+        const element = threadPanelRef.current;
+        if (!element) return;
         if (scrollChatFeedToMessage(element, focusMessageId, { behavior: "smooth", offset: 20 })) return;
-      }
-      scrollChatFeedToLatest(element, isNewThread ? "auto" : "smooth");
-      wasNearLatestRef.current = true;
-    });
-  }, [currentUserId, focusMessageId, thread.replies, thread.replies.length, thread.rootMessage.id]);
+        requestScrollToLatest(isNewThread ? "auto" : "smooth");
+      });
+      return;
+    }
+
+    requestScrollToLatest(isNewThread ? "auto" : "smooth");
+  }, [
+    currentUserId,
+    focusMessageId,
+    isFollowingLatest,
+    requestScrollToLatest,
+    setFollowingLatest,
+    thread.replies,
+    thread.replies.length,
+    thread.rootMessage.id,
+  ]);
 
   return (
     <div className="orf-chat-thread-panel">
       <div
         className="orf-chat-thread-scroll"
         ref={threadPanelRef}
-        onScroll={() => {
-          wasNearLatestRef.current = isChatFeedNearLatest(threadPanelRef.current);
-        }}
+        onScroll={handleThreadStickinessScroll}
       >
         <ChatMessageItem
           canPin={canPin}
