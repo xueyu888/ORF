@@ -220,6 +220,7 @@ export function ChatDraftEditor({
   const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const emojiAnchorRef = useRef<HTMLSpanElement | null>(null);
+  const previewRef = useRef<HTMLDivElement | null>(null);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const submittingRef = useRef(false);
   const mentionUsers = useMemo(() => {
@@ -253,6 +254,13 @@ export function ChatDraftEditor({
   useEffect(() => {
     if (disabled) setPreviewing(false);
   }, [disabled]);
+
+  useEffect(() => {
+    if (!previewing || disabled) return;
+    window.requestAnimationFrame(() => {
+      previewRef.current?.focus();
+    });
+  }, [disabled, previewing]);
 
   useEffect(() => {
     if (focusSignal === undefined || disabled) return;
@@ -575,6 +583,7 @@ export function ChatDraftEditor({
           className="orf-chat-draft-preview"
           onDoubleClick={togglePreview}
           onKeyDown={handlePreviewKeyDown}
+          ref={previewRef}
           role="region"
           tabIndex={0}
         >
