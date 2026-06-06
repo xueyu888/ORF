@@ -26,6 +26,7 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState }
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Avatar, Button, IconButton } from "../components/ui";
 import { ChatComposer } from "../features/chat/ChatComposer";
+import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatMessageItem } from "../features/chat/ChatMessageItem";
 import { isChatFeedNearLatest, scrollChatFeedToLatest, scrollChatFeedToMessage, scrollChatFeedToUnread } from "../features/chat/chatFeedScroll";
 import { formatDay, formatFileSize, formatTime } from "../features/chat/chatFormat";
@@ -696,6 +697,14 @@ export function ChatPage() {
     scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" });
   }, []);
 
+  const handleLoadLatestMessages = useCallback(() => {
+    if (hasNewerMessages) {
+      void loadLatestMessages("smooth");
+    } else {
+      requestScrollToLatest("smooth");
+    }
+  }, [hasNewerMessages, loadLatestMessages, requestScrollToLatest]);
+
   const handleReaction = useCallback(
     async (message: ChatMessage, emojiName: string) => {
       if (!activeChannel) return;
@@ -862,61 +871,33 @@ export function ChatPage() {
               }}
               usersById={usersById}
             />
-            <div className="orf-chat-message-scroll" ref={messageScrollRef} onScroll={handleMessageScroll}>
-              {messagesLoading && messages.length > 0 && (
-                <div className="orf-chat-message-loading-chip" role="status">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  <span>同步消息</span>
-                </div>
-              )}
-              {messagesLoading && messages.length === 0 ? (
-                <div className="orf-chat-message-loading"><Loader2 className="h-5 w-5 animate-spin" /> 加载消息</div>
-              ) : (
-                <MessageList
-                  currentUserId={currentUser?.id}
-                  focusMessageId={focusMessageId}
-                  hasOlderMessages={hasOlderMessages}
-                  loadingOlderMessages={olderMessagesLoading}
-                  messages={messages}
-                  onDelete={handleDeleteMessage}
-                  onCopyLink={handleCopyMessageLink}
-                  onEdit={setEditingMessage}
-                  onAttachmentPreview={setAttachmentPreview}
-                  onJumpUnread={handleJumpToUnread}
-                  onLoadOlder={loadOlderMessages}
-                  onMarkUnread={handleMarkMessageUnread}
-                  onPin={handlePinMessage}
-                  onReaction={handleReaction}
-                  onSave={handleSaveMessage}
-                  onThread={openThread}
-                  usersById={usersById}
-                  unreadAnchor={unreadAnchor?.channelId === activeChannel.id ? unreadAnchor : null}
-                  canPin={canManageActiveChannel}
-                />
-              )}
-              {pendingNewMessageCount > 0 && (
-                <button
-                  className="orf-chat-scroll-latest"
-                  type="button"
-                  onClick={() => {
-                    if (hasNewerMessages) {
-                      void loadLatestMessages("smooth");
-                    } else {
-                      requestScrollToLatest("smooth");
-                    }
-                  }}
-                >
-                  <ChevronDown className="h-4 w-4" />
-                  {pendingNewMessageCount} 条新消息
-                </button>
-              )}
-              {hasNewerMessages && pendingNewMessageCount === 0 && (
-                <button className="orf-chat-scroll-latest" type="button" onClick={() => void loadLatestMessages("smooth")}>
-                  <ChevronDown className="h-4 w-4" />
-                  回到最新
-                </button>
-              )}
-            </div>
+            <ChatMessageFeed
+              canPin={canManageActiveChannel}
+              currentUserId={currentUser?.id}
+              focusMessageId={focusMessageId}
+              hasNewerMessages={hasNewerMessages}
+              hasOlderMessages={hasOlderMessages}
+              loadingMessages={messagesLoading}
+              loadingOlderMessages={olderMessagesLoading}
+              messages={messages}
+              onAttachmentPreview={setAttachmentPreview}
+              onCopyLink={handleCopyMessageLink}
+              onDelete={handleDeleteMessage}
+              onEdit={setEditingMessage}
+              onJumpUnread={handleJumpToUnread}
+              onLoadLatest={handleLoadLatestMessages}
+              onLoadOlder={loadOlderMessages}
+              onMarkUnread={handleMarkMessageUnread}
+              onPin={handlePinMessage}
+              onReaction={handleReaction}
+              onSave={handleSaveMessage}
+              onScroll={handleMessageScroll}
+              onThread={openThread}
+              pendingNewMessageCount={pendingNewMessageCount}
+              scrollRef={messageScrollRef}
+              unreadAnchor={unreadAnchor?.channelId === activeChannel.id ? unreadAnchor : null}
+              usersById={usersById}
+            />
             <TypingLine typingByUser={typingByUser} />
             <ChatComposer
               channelId={activeChannel.id}
@@ -1211,110 +1192,6 @@ function ChatHeader({
         )}
       </div>
     </header>
-  );
-}
-
-function MessageList({
-  onAttachmentPreview,
-  canPin,
-  currentUserId,
-  focusMessageId,
-  hasOlderMessages,
-  loadingOlderMessages,
-  messages,
-  onCopyLink,
-  onDelete,
-  onEdit,
-  onJumpUnread,
-  onLoadOlder,
-  onMarkUnread,
-  onPin,
-  onReaction,
-  onSave,
-  onThread,
-  usersById,
-  unreadAnchor,
-}: {
-  canPin: boolean;
-  currentUserId?: string;
-  focusMessageId: string | null;
-  hasOlderMessages: boolean;
-  loadingOlderMessages: boolean;
-  messages: ChatMessage[];
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
-  onCopyLink: (message: ChatMessage) => void;
-  onDelete: (message: ChatMessage) => void;
-  onEdit: (message: ChatMessage) => void;
-  onJumpUnread: () => void;
-  onLoadOlder: () => void;
-  onMarkUnread: (message: ChatMessage) => void;
-  onPin: (message: ChatMessage) => void;
-  onReaction: (message: ChatMessage, emojiName: string) => void;
-  onSave: (message: ChatMessage) => void;
-  onThread: (rootMessageId: string) => void;
-  usersById: Map<string, ChatUser>;
-  unreadAnchor: UnreadAnchor | null;
-}) {
-  if (messages.length === 0) {
-    return <div className="orf-chat-message-empty">这里还没有消息。</div>;
-  }
-  let lastDay = "";
-  const firstUnreadIndex = unreadAnchor
-    ? messages.findIndex((message) => {
-        if (message.deletedAt) return false;
-        if (unreadAnchor.lastReadAt && message.createdAt <= unreadAnchor.lastReadAt) return false;
-        return message.authorUserId !== currentUserId || unreadAnchor.manuallyUnread;
-      })
-    : -1;
-  const unreadDividerIndex = firstUnreadIndex >= 0 ? firstUnreadIndex : unreadAnchor?.manuallyUnread ? 0 : -1;
-  const unreadMessageId = unreadDividerIndex >= 0 ? messages[unreadDividerIndex]?.id : null;
-  return (
-    <div className="orf-chat-message-list">
-      {unreadMessageId && (
-        <button className="orf-chat-unread-jump" type="button" onClick={onJumpUnread}>
-          <ChevronDown className="h-4 w-4" />
-          跳到未读
-        </button>
-      )}
-      {hasOlderMessages && (
-        <button className="orf-chat-load-older" disabled={loadingOlderMessages} type="button" onClick={onLoadOlder}>
-          {loadingOlderMessages ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
-          加载更早消息
-        </button>
-      )}
-      {messages.map((message, index) => {
-        const day = formatDay(message.createdAt);
-        const showDay = day !== lastDay;
-        lastDay = day;
-        return (
-          <div key={message.id}>
-            {showDay && <div className="orf-chat-day-divider"><span>{day}</span></div>}
-            {unreadDividerIndex === index && (
-              <div className="orf-chat-unread-divider" id="orf-chat-unread-divider">
-                <span>新消息</span>
-              </div>
-            )}
-            <ChatMessageItem
-              canPin={canPin}
-              currentUserId={currentUserId}
-              firstUnread={unreadMessageId === message.id}
-              focused={focusMessageId === message.id}
-              message={message}
-              onCopyLink={onCopyLink}
-              onDelete={onDelete}
-              onEdit={onEdit}
-              onAttachmentPreview={onAttachmentPreview}
-              onMarkUnread={onMarkUnread}
-              onPin={onPin}
-              onReaction={onReaction}
-              onSave={onSave}
-              onThread={onThread}
-              usersById={usersById}
-            />
-          </div>
-        );
-      })}
-    </div>
   );
 }
 
