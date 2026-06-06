@@ -1,4 +1,4 @@
-import { FileText, Image as ImageIcon, Search } from "lucide-react";
+import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
 import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
 import { ChatMarkdown } from "./chatMarkdown";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
@@ -6,6 +6,7 @@ import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 type ChatSearchPanelProps = {
   onOpenResult: (result: ChatSearchResult) => void;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
+  loading: boolean;
   query: string;
   results: ChatSearchResult[];
   searchScope: ChatSearchScope;
@@ -19,6 +20,7 @@ type ChatSearchPanelProps = {
 export function ChatSearchPanel({
   onOpenResult,
   onSearch,
+  loading,
   query,
   results,
   searchScope,
@@ -68,6 +70,12 @@ export function ChatSearchPanel({
         </div>
       </div>
       <div className="orf-chat-search-results">
+        {loading && (
+          <div className="orf-chat-search-empty">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            搜索中
+          </div>
+        )}
         {results.map((result) => (
           <button type="button" key={result.message.id} onClick={() => onOpenResult(result)}>
             <span>{result.channel.displayName}</span>
@@ -75,7 +83,7 @@ export function ChatSearchPanel({
             <SearchResultPreview message={result.message} usersById={usersById} />
           </button>
         ))}
-        {results.length === 0 && <div className="orf-chat-search-empty">输入关键词后搜索。</div>}
+        {!loading && results.length === 0 && <div className="orf-chat-search-empty">输入关键词后搜索。</div>}
       </div>
     </div>
   );

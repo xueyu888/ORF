@@ -6,13 +6,11 @@ import { ChatComposer } from "../features/chat/ChatComposer";
 import { AttachmentPreview, ChannelModal, ConversationModal, EditMessageDialog } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
-import type { ActivePanel, ChatSearchScope, ChatSearchTypeFilter } from "../features/chat/chatPanelTypes";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import {
   type ChatDraft,
-  applyThreadSummaryMessage,
   currentMembership,
   draftFromStoredBody,
   hasStoredDraftForChannel,
@@ -22,6 +20,7 @@ import {
   upsertChannel,
 } from "../features/chat/chatModels";
 import { useChatFeedState } from "../features/chat/useChatFeedState";
+import { useChatPanelState } from "../features/chat/useChatPanelState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
@@ -31,12 +30,8 @@ import {
   createChatChannel,
   deleteChatMessageRequest,
   getChatBootstrap,
-  getChatThreads,
-  getPinnedChatMessages,
-  getSavedChatMessages,
   openChatConversation,
   removeChatChannelMemberRequest,
-  searchChat,
   sendChatMessageRequest,
   setChatReactionRequest,
   setChatMessagePinRequest,
@@ -46,7 +41,7 @@ import {
   updateChatMessageRequest,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThreadSummary, ChatUser } from "../types/orf";
+import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatUser } from "../types/orf";
 
 export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
@@ -55,18 +50,9 @@ export function ChatPage() {
   const { currentUser, notify } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
-  const [activePanel, setActivePanel] = useState<ActivePanel>(null);
   const [loading, setLoading] = useState(true);
   const [channelQuery, setChannelQuery] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchScope, setSearchScope] = useState<ChatSearchScope>("all");
-  const [searchType, setSearchType] = useState<ChatSearchTypeFilter>("all");
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
-  const [searchResults, setSearchResults] = useState<ChatSearchResult[]>([]);
-  const [collectionResults, setCollectionResults] = useState<ChatSearchResult[]>([]);
-  const [collectionLoading, setCollectionLoading] = useState(false);
-  const [threadSummaries, setThreadSummaries] = useState<ChatThreadSummary[]>([]);
-  const [threadSummariesLoading, setThreadSummariesLoading] = useState(false);
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
@@ -92,9 +78,36 @@ export function ChatPage() {
     setChannels((items) => upsertChannel(items, channel, currentUser?.id));
   }, [currentUser?.id]);
 
-  const activateThreadPanel = useCallback(() => {
-    setActivePanel("thread");
-  }, []);
+  const {
+    activateThreadPanel,
+    activePanel,
+    applyPanelMessage,
+    closePanel,
+    collectionLoading,
+    collectionResults,
+    loadPinnedMessages,
+    loadSavedMessages,
+    loadThreadSummaries,
+    markThreadSummaryViewed,
+    reconcilePinnedCollection,
+    reconcileSavedCollection,
+    searchLoading,
+    searchMessages,
+    searchQuery,
+    searchResults,
+    searchScope,
+    searchType,
+    setSearchQuery,
+    setSearchScope,
+    setSearchType,
+    threadSummaries,
+    threadSummariesLoading,
+    togglePanel,
+  } = useChatPanelState({
+    activeChannelId: activeChannel?.id,
+    currentUserId: currentUser?.id,
+    notify,
+  });
 
   const {
     appendThreadReply,
@@ -156,15 +169,8 @@ export function ChatPage() {
 
   const applyMessageEffects = useCallback((message: ChatMessage) => {
     applyThreadMessage(message);
-    setThreadSummaries((items) => applyThreadSummaryMessage(
-      items,
-      message,
-      currentUser?.id,
-      activePanel === "thread" ? thread?.rootMessage.id : null,
-    ));
-    setSearchResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
-    setCollectionResults((items) => items.map((result) => (result.message.id === message.id ? { ...result, message } : result)));
-  }, [activePanel, applyThreadMessage, currentUser?.id, thread?.rootMessage.id]);
+    applyPanelMessage(message, thread?.rootMessage.id);
+  }, [applyPanelMessage, applyThreadMessage, thread?.rootMessage.id]);
 
   const applyMessage = useCallback((message: ChatMessage) => {
     applyMessageToFeed(message);
@@ -309,14 +315,9 @@ export function ChatPage() {
         pinned: !message.pinnedAt,
       });
       applyMessage(response.message);
-      setCollectionResults((items) => {
-        const updated = items.map((result) => (
-          result.message.id === response.message.id ? { ...result, message: response.message } : result
-        ));
-        return activePanel === "pins" && message.pinnedAt ? updated.filter((result) => result.message.id !== message.id) : updated;
-      });
+      reconcilePinnedCollection(response.message, Boolean(message.pinnedAt));
     },
-    [activePanel, applyMessage],
+    [applyMessage, reconcilePinnedCollection],
   );
 
   const handleSaveMessage = useCallback(
@@ -327,74 +328,9 @@ export function ChatPage() {
         saved: !message.savedByCurrentUser,
       });
       applyMessage(response.message);
-      setCollectionResults((items) => {
-        const updated = items.map((result) => (
-          result.message.id === response.message.id ? { ...result, message: response.message } : result
-        ));
-        return activePanel === "saved" && message.savedByCurrentUser ? updated.filter((result) => result.message.id !== message.id) : updated;
-      });
+      reconcileSavedCollection(response.message, message.savedByCurrentUser);
     },
-    [activePanel, applyMessage],
-  );
-
-  const loadPinnedMessages = useCallback(async () => {
-    if (!activeChannel) return;
-    setActivePanel("pins");
-    setCollectionLoading(true);
-    try {
-      const response = await getPinnedChatMessages(activeChannel.id);
-      setCollectionResults(response.results);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "加载固定消息失败");
-    } finally {
-      setCollectionLoading(false);
-    }
-  }, [activeChannel, notify]);
-
-  const loadSavedMessages = useCallback(async () => {
-    setActivePanel("saved");
-    setCollectionLoading(true);
-    try {
-      const response = await getSavedChatMessages();
-      setCollectionResults(response.results);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "加载已保存消息失败");
-    } finally {
-      setCollectionLoading(false);
-    }
-  }, [notify]);
-
-  const loadThreadSummaries = useCallback(async () => {
-    setActivePanel("threads");
-    setThreadSummariesLoading(true);
-    try {
-      const response = await getChatThreads();
-      setThreadSummaries(response.threads);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "加载话题收件箱失败");
-    } finally {
-      setThreadSummariesLoading(false);
-    }
-  }, [notify]);
-
-  const handleSearch = useCallback(
-    async (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => {
-      const value = input?.query ?? searchQuery;
-      const scope = input?.scope ?? searchScope;
-      const type = input?.type ?? searchType;
-      if (!value.trim()) {
-        setSearchResults([]);
-        return;
-      }
-      setActivePanel("search");
-      const response = await searchChat({
-        q: value,
-        channelId: scope === "current" ? activeChannel?.id : undefined,
-        type: type === "all" ? undefined : type,
-      });
-      setSearchResults(response.results);
-    },
-    [activeChannel?.id, searchQuery, searchScope, searchType],
+    [applyMessage, reconcileSavedCollection],
   );
 
   if (loading) {
@@ -436,11 +372,11 @@ export function ChatPage() {
                 setChannels((items) => items.filter((channel) => channel.id !== activeChannel.id));
                 navigate("/chat", { replace: true });
               }}
-              onInfo={() => setActivePanel(activePanel === "info" ? null : "info")}
+              onInfo={() => togglePanel("info")}
               onMarkUnread={() => void markActiveChannelUnread()}
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
-              onSearch={() => setActivePanel(activePanel === "search" ? null : "search")}
+              onSearch={() => togglePanel("search")}
               onThreads={() => void loadThreadSummaries()}
               onToggleFavorite={async () => {
                 const response = await updateChatChannelRequest(activeChannel.id, { favorite: !myMembership?.favorite });
@@ -505,7 +441,7 @@ export function ChatPage() {
             const response = await addChatChannelMembersRequest(activeChannel.id, userIds);
             applyChannel(response.channel);
           }}
-          onClose={() => setActivePanel(null)}
+          onClose={closePanel}
           collectionLoading={collectionLoading}
           collectionResults={collectionResults}
           threadSummaries={threadSummaries}
@@ -515,9 +451,7 @@ export function ChatPage() {
           }}
           onOpenThreadSummary={(summary) => {
             navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
-            setThreadSummaries((items) => items.map((item) => (
-              item.rootMessage.id === summary.rootMessage.id ? { ...item, unreadCount: 0, lastViewedAt: new Date().toISOString() } : item
-            )));
+            markThreadSummaryViewed(summary.rootMessage.id);
             void openThread(summary.rootMessage.id);
           }}
           onPin={handlePinMessage}
@@ -525,12 +459,13 @@ export function ChatPage() {
             const response = await removeChatChannelMemberRequest(activeChannel.id, userId);
             if (response.channel) applyChannel(response.channel);
           }}
-          onSearch={handleSearch}
+          onSearch={searchMessages}
           onSave={handleSaveMessage}
           onUpdateChannel={async (input) => {
             const response = await updateChatChannelRequest(activeChannel.id, input);
             applyChannel(response.channel);
           }}
+          searchLoading={searchLoading}
           searchQuery={searchQuery}
           searchScope={searchScope}
           searchResults={searchResults}

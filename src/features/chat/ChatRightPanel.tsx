@@ -41,6 +41,7 @@ type ChatRightPanelProps = {
   onToggleFollow: (following: boolean) => void;
   onTyping: () => void;
   onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;
+  searchLoading: boolean;
   searchQuery: string;
   searchScope: ChatSearchScope;
   searchResults: ChatSearchResult[];
@@ -104,6 +105,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
         <ChatSearchPanel
           onOpenResult={props.onOpenResult}
           onSearch={props.onSearch}
+          loading={props.searchLoading}
           query={props.searchQuery}
           results={props.searchResults}
           searchScope={props.searchScope}
