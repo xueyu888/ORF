@@ -10154,8 +10154,15 @@ button.orf-chat-image-attachment {
   position: absolute;
   top: 6px;
   right: 6px;
+  max-width: calc(100% - 12px);
+  overflow-x: auto;
   margin-top: 0;
   box-shadow: var(--orf-shadow-card);
+  scrollbar-width: none;
+}
+
+.orf-chat-thread-panel .orf-chat-message-actions::-webkit-scrollbar {
+  display: none;
 }
 
 .orf-chat-thread-panel .orf-chat-message:hover .orf-chat-message-actions,
