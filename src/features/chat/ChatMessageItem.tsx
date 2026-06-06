@@ -6,7 +6,7 @@ import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatReactionPicker } from "./ChatReactionPicker";
-import { displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName } from "./chatReactions";
+import { canonicalChatReactionName, displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
 import { draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
 
@@ -89,6 +89,11 @@ export function ChatMessageItem({
   const [editSaving, setEditSaving] = useState(false);
   const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
   const canMutate = message.authorUserId === currentUserId && !message.deletedAt;
+  const reactedByCurrentUser = new Set(
+    message.reactions
+      .filter((reaction) => reaction.reactedByCurrentUser)
+      .map((reaction) => canonicalChatReactionName(reaction.emojiName)),
+  );
 
   useEffect(() => {
     if (!editing) return;
@@ -213,6 +218,18 @@ export function ChatMessageItem({
       </div>
       {!message.deletedAt && !editing && (
         <div className="orf-chat-message-actions">
+          {quickChatReactionOptions.map((option) => (
+            <button
+              type="button"
+              className={clsx("orf-chat-quick-reaction", reactedByCurrentUser.has(option.emojiName) && "orf-chat-message-action-active")}
+              key={option.emojiName}
+              title={option.label}
+              aria-label={option.label}
+              onClick={() => selectReaction(option.emojiName)}
+            >
+              {option.symbol}
+            </button>
+          ))}
           <div className="orf-chat-message-action-anchor" ref={emojiAnchorRef}>
             <IconButton icon={Smile} label="添加反应" onClick={() => setEmojiOpen((open) => !open)} />
             {emojiOpen && <ChatReactionPicker anchorRef={emojiAnchorRef} onClose={() => setEmojiOpen(false)} onSelect={selectReaction} />}

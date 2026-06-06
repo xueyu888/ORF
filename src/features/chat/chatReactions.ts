@@ -19,6 +19,7 @@ function defineChatReactionOption(
 export const chatReactionOptions: ChatReactionOption[] = [
   defineChatReactionOption("thumbsup", "👍", "点赞", ["like", "agree", "赞", "同意"], ["+1", "thumbs_up", "👍"]),
   defineChatReactionOption("thumbsdown", "👎", "反对", ["disagree", "不同意", "踩"], ["-1", "thumbs_down", "👎"]),
+  defineChatReactionOption("one", "1️⃣", "收到 1", ["one", "1", "收到"], ["1", "one", "1️⃣"]),
   defineChatReactionOption("eyes", "👀", "已关注", ["watch", "看", "关注"], ["👀"]),
   defineChatReactionOption("white_check_mark", "✅", "完成", ["done", "check", "完成", "确认"], ["check", "done", "✅"]),
   defineChatReactionOption("heart", "❤️", "喜欢", ["love", "喜欢", "支持"], ["❤️", "❤"]),
@@ -65,8 +66,17 @@ for (const option of chatReactionOptions) {
   }
 }
 
+export const quickChatReactionOptions = ["thumbsup", "joy", "one"].flatMap((emojiName) => {
+  const option = findChatReactionOption(emojiName);
+  return option ? [option] : [];
+});
+
 export function findChatReactionOption(value: string) {
   return reactionOptionsByToken.get(normalizeReactionToken(value)) ?? null;
+}
+
+export function canonicalChatReactionName(value: string) {
+  return findChatReactionOption(value)?.emojiName ?? value.trim();
 }
 
 export function displayChatReactionEmoji(emojiName: string) {

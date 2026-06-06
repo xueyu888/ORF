@@ -9387,6 +9387,24 @@ a.orf-row-loot-action,
   height: 28px;
 }
 
+.orf-chat-quick-reaction {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
+  padding: 0;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.orf-chat-quick-reaction:hover {
+  background: var(--orf-bg-row-hover);
+}
+
 .orf-chat-message-action-active {
   background: var(--orf-accent-soft) !important;
   color: var(--orf-accent-text) !important;
