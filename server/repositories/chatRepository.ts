@@ -983,6 +983,13 @@ export async function listChatThreads(actor: ChatActor): Promise<Outcome<{ threa
       ) latest_reply ON true
       WHERE f.user_id = $2
         AND f.following = true
+        AND EXISTS (
+          SELECT 1
+          FROM chat_messages reply
+          WHERE reply.team_id = $1
+            AND reply.root_message_id = root.id
+            AND reply.deleted_at IS NULL
+        )
       ORDER BY COALESCE(unread.count, 0) > 0 DESC,
                COALESCE(latest_reply.last_reply_at, root.created_at) DESC
       LIMIT 100
