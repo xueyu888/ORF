@@ -9142,7 +9142,9 @@ a.orf-row-loot-action,
   position: sticky;
   bottom: 14px;
   z-index: 7;
-  display: inline-flex;
+  display: flex;
+  width: max-content;
+  max-width: calc(100% - 16px);
   min-height: 32px;
   align-items: center;
   gap: 6px;
