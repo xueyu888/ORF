@@ -1,7 +1,7 @@
-import { Download, FileText, X } from "lucide-react";
+import { Download, FileText, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { Button, IconButton } from "../../components/ui";
-import type { ChatAttachment, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
 import { ChatUserPicker } from "./ChatUserPicker";
 
@@ -106,6 +106,47 @@ export function ConversationModal({
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
           <Button disabled={selected.length === 0 || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+export function DeleteMessageDialog({
+  message,
+  onCancel,
+  onConfirm,
+  submitting,
+}: {
+  message: ChatMessage;
+  onCancel: () => void;
+  onConfirm: () => void;
+  submitting: boolean;
+}) {
+  const isReply = Boolean(message.rootMessageId);
+  return (
+    <div className="orf-chat-modal-backdrop" role="presentation" onMouseDown={onCancel}>
+      <div
+        aria-labelledby="orf-chat-delete-title"
+        aria-modal="true"
+        className="orf-chat-modal orf-chat-delete-modal"
+        role="dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <h2 id="orf-chat-delete-title">{isReply ? "删除回复" : "删除消息"}</h2>
+          <IconButton icon={X} label="关闭" onClick={onCancel} />
+        </header>
+        <div className="orf-chat-delete-body">
+          <div className="orf-chat-delete-icon"><Trash2 className="h-5 w-5" /></div>
+          <div>
+            <p>{isReply ? "确认删除这条回复？" : "确认删除这条消息？"}</p>
+            {!isReply && message.replyCount > 0 && <small>这条消息下已有 {message.replyCount} 条回复，删除后主消息正文将不再展示。</small>}
+          </div>
+        </div>
+        <footer>
+          <Button disabled={submitting} onClick={onCancel} variant="secondary">取消</Button>
+          <Button disabled={submitting} onClick={onConfirm} variant="danger">{submitting ? "删除中" : "确认删除"}</Button>
         </footer>
       </div>
     </div>

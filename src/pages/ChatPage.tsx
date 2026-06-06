@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
-import { AttachmentPreview, ChannelModal, ConversationModal } from "../features/chat/ChatDialogs";
+import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
@@ -54,6 +54,8 @@ export function ChatPage() {
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
+  const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
   const channelOpenRequestIdRef = useRef(0);
   const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
@@ -69,10 +71,15 @@ export function ChatPage() {
     activeChannelId: activeChannel?.id,
     currentUserId: currentUser?.id,
   });
-  const canManageActiveChannel =
-    Boolean(bootstrap?.permissions.canManageAnyChannel || bootstrap?.permissions.canManageAnyMembers) ||
-    myMembership?.role === "owner" ||
-    myMembership?.role === "admin";
+  const canManageChannel = useCallback((channel: ChatChannel | null) => {
+    const membership = currentMembership(channel, currentUser?.id);
+    return (
+      Boolean(bootstrap?.permissions.canManageAnyChannel || bootstrap?.permissions.canManageAnyMembers) ||
+      membership?.role === "owner" ||
+      membership?.role === "admin"
+    );
+  }, [bootstrap?.permissions.canManageAnyChannel, bootstrap?.permissions.canManageAnyMembers, currentUser?.id]);
+  const canManageActiveChannel = canManageChannel(activeChannel);
 
   const applyChannel = useCallback((channel: ChatChannel) => {
     setChannels((items) => upsertChannel(items, channel, currentUser?.id));
@@ -123,6 +130,18 @@ export function ChatPage() {
     notify,
     onActivateThreadPanel: activateThreadPanel,
   });
+
+  const threadChannel = useMemo(() => {
+    if (!thread) return null;
+    return channels.find((channel) => channel.id === thread.rootMessage.channelId) ?? null;
+  }, [channels, thread]);
+  const rightPanelChannel = activePanel === "thread" && threadChannel ? threadChannel : activeChannel;
+  const rightPanelMentionableUsers = useMemo(() => {
+    if (!rightPanelChannel) return [];
+    const memberIds = new Set(rightPanelChannel.members.map((member) => member.userId));
+    return (bootstrap?.users ?? []).filter((user) => memberIds.has(user.id));
+  }, [rightPanelChannel, bootstrap?.users]);
+  const canManageRightPanelChannel = canManageChannel(rightPanelChannel);
 
   const consumeRequestedMessage = useCallback(() => {
     setSearchParams((params) => {
@@ -293,12 +312,24 @@ export function ChatPage() {
 
   const handleDeleteMessage = useCallback(
     async (message: ChatMessage) => {
-      if (!activeChannel) return;
-      const response = await deleteChatMessageRequest({ channelId: activeChannel.id, messageId: message.id });
+      const response = await deleteChatMessageRequest({ channelId: message.channelId, messageId: message.id });
       applyMessage(response.message);
     },
-    [activeChannel, applyMessage],
+    [applyMessage],
   );
+
+  const confirmDeleteMessage = useCallback(async () => {
+    if (!deletingMessage || deleteSubmitting) return;
+    setDeleteSubmitting(true);
+    try {
+      await handleDeleteMessage(deletingMessage);
+      setDeletingMessage(null);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "删除消息失败");
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }, [deleteSubmitting, deletingMessage, handleDeleteMessage, notify]);
 
   const handleCopyMessageLink = useCallback(async (message: ChatMessage) => {
     const url = `${window.location.origin}/chat/${encodeURIComponent(message.channelId)}?message=${encodeURIComponent(message.id)}`;
@@ -312,17 +343,16 @@ export function ChatPage() {
 
   const handleReaction = useCallback(
     async (message: ChatMessage, emojiName: string) => {
-      if (!activeChannel) return;
       const currentReaction = message.reactions.find((reaction) => reaction.emojiName === emojiName);
       const response = await setChatReactionRequest({
-        channelId: activeChannel.id,
+        channelId: message.channelId,
         messageId: message.id,
         emojiName,
         reacting: !currentReaction?.reactedByCurrentUser,
       });
       applyMessage(response.message);
     },
-    [activeChannel, applyMessage],
+    [applyMessage],
   );
 
   const handlePinMessage = useCallback(
@@ -421,7 +451,7 @@ export function ChatPage() {
               onAttachmentPreview={setAttachmentPreview}
               onCancelEdit={() => setEditingMessage(null)}
               onCopyLink={handleCopyMessageLink}
-              onDelete={handleDeleteMessage}
+              onDelete={setDeletingMessage}
               onEdit={setEditingMessage}
               onJumpUnread={jumpToUnread}
               onLoadLatest={loadLatestOrScroll}
@@ -456,8 +486,8 @@ export function ChatPage() {
         <ChatRightPanel
           activePanel={activePanel}
           allUsers={bootstrap.users}
-          canManage={canManageActiveChannel}
-          channel={activeChannel}
+          canManage={canManageRightPanelChannel}
+          channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
           editingMessageId={editingMessage?.id ?? null}
           onDraftStateChange={handleDraftStateChange}
@@ -503,7 +533,7 @@ export function ChatPage() {
           thread={thread}
           threadFocusMessageId={threadFocusMessageId}
           threadLoading={threadLoading}
-          users={activeMentionableUsers}
+          users={rightPanelMentionableUsers}
           usersById={usersById}
           onSendThreadReply={handleSendMessage}
           onTyping={publishTyping}
@@ -516,7 +546,7 @@ export function ChatPage() {
           onReaction={handleReaction}
           onEdit={setEditingMessage}
           onMarkUnread={markMessageUnread}
-          onDelete={handleDeleteMessage}
+          onDelete={setDeletingMessage}
           onCopyLink={handleCopyMessageLink}
         />
       )}
@@ -545,6 +575,14 @@ export function ChatPage() {
             setModal(null);
           }}
           users={bootstrap.users}
+        />
+      )}
+      {deletingMessage && (
+        <DeleteMessageDialog
+          message={deletingMessage}
+          onCancel={() => setDeletingMessage(null)}
+          onConfirm={() => void confirmDeleteMessage()}
+          submitting={deleteSubmitting}
         />
       )}
       {attachmentPreview && <AttachmentPreview attachment={attachmentPreview} onClose={() => setAttachmentPreview(null)} />}
