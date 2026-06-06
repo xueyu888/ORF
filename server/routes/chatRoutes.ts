@@ -111,6 +111,10 @@ const followThreadBodySchema = z.object({
   following: z.boolean(),
 });
 
+const markReadBodySchema = z.object({
+  includeThreads: z.boolean().optional(),
+}).optional();
+
 const channelUnreadBodySchema = z.object({
   messageId: z.string().min(1).nullable().optional(),
 });
@@ -275,7 +279,8 @@ export function registerChatRoutes(app: FastifyInstance) {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     const params = channelIdParamsSchema.parse(request.params);
-    return sendOutcome(reply, await markChatChannelRead(params.channelId, actor));
+    const body = markReadBodySchema.parse(request.body);
+    return sendOutcome(reply, await markChatChannelRead(params.channelId, actor, { includeThreads: body?.includeThreads ?? false }));
   });
 
   app.patch("/api/chat/channels/:channelId/unread", async (request, reply) => {

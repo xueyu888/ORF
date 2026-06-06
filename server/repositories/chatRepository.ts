@@ -1660,7 +1660,11 @@ export async function listSavedChatMessages(actor: ChatActor): Promise<Outcome<{
   });
 }
 
-export async function markChatChannelRead(channelId: string, actor: ChatActor): Promise<Outcome<{ channel: ChatChannel }>> {
+export async function markChatChannelRead(
+  channelId: string,
+  actor: ChatActor,
+  options: { includeThreads?: boolean } = {},
+): Promise<Outcome<{ channel: ChatChannel }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
@@ -1688,20 +1692,22 @@ export async function markChatChannelRead(channelId: string, actor: ChatActor): 
       `,
       [channelId, actor.id, readAt, rows[0]?.id ?? null],
     );
-    await client.query(
-      `
-        UPDATE chat_thread_follows f
-        SET last_viewed_at = $3, updated_at = $3
-        FROM chat_messages root
-        WHERE f.root_message_id = root.id
-          AND f.user_id = $2
-          AND root.channel_id = $1
-          AND root.team_id = $4
-          AND root.root_message_id IS NULL
-          AND root.deleted_at IS NULL
-      `,
-      [channelId, actor.id, readAt, storageTeamId(actor)],
-    );
+    if (options.includeThreads) {
+      await client.query(
+        `
+          UPDATE chat_thread_follows f
+          SET last_viewed_at = $3, updated_at = $3
+          FROM chat_messages root
+          WHERE f.root_message_id = root.id
+            AND f.user_id = $2
+            AND root.channel_id = $1
+            AND root.team_id = $4
+            AND root.root_message_id IS NULL
+            AND root.deleted_at IS NULL
+        `,
+        [channelId, actor.id, readAt, storageTeamId(actor)],
+      );
+    }
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);

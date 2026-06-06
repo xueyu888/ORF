@@ -279,7 +279,7 @@ export function ChatPage() {
       const responses = await Promise.all(
         uniqueChannelIds
           .filter((channelId) => channelId !== activeChannelId)
-          .map((channelId) => markChatChannelReadRequest(channelId)),
+          .map((channelId) => markChatChannelReadRequest(channelId, { includeThreads: true })),
       );
       applyChannels(responses.map((response) => response.channel));
       notify(`${uniqueChannelIds.length} 个频道已标记已读`);

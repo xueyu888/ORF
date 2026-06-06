@@ -387,8 +387,11 @@ export async function setChatMessageSavedRequest(input: { channelId: string; mes
   );
 }
 
-export async function markChatChannelReadRequest(channelId: string) {
-  return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/read`, { method: "PATCH" });
+export async function markChatChannelReadRequest(channelId: string, input: { includeThreads?: boolean } = {}) {
+  return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/read`, {
+    method: "PATCH",
+    body: JSON.stringify({ includeThreads: input.includeThreads ?? false }),
+  });
 }
 
 export async function setChatChannelUnreadRequest(input: { channelId: string; messageId?: string }) {

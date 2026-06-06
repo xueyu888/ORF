@@ -621,7 +621,7 @@ export function useChatFeedState({
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
     try {
-      const response = await markChatChannelReadRequest(channelId);
+      const response = await markChatChannelReadRequest(channelId, { includeThreads: true });
       if (activeChannelIdRef.current !== channelId) return;
       onChannelUpdate(response.channel);
       setUnreadAnchor(null);
