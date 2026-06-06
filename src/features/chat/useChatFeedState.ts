@@ -462,13 +462,12 @@ export function useChatFeedState({
       if (activeChannelIdRef.current !== channelId) return;
       onChannelUpdate(response.channel);
       setUnreadAnchor(null);
-      requestScrollToLatest("auto");
     } catch (error) {
       if (activeChannelIdRef.current === channelId) {
         notify(error instanceof Error ? error.message : "标记已读失败");
       }
     }
-  }, [notify, onChannelUpdate, requestScrollToLatest]);
+  }, [notify, onChannelUpdate]);
 
   const markMessageUnread = useCallback(async (message: ChatMessage) => {
     const response = await setChatChannelUnreadRequest({ channelId: message.channelId, messageId: message.id });
