@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog } from "../features/chat/ChatDialogs";
@@ -60,7 +60,6 @@ export function ChatPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
-  const channelOpenRequestIdRef = useRef(0);
   const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
   const focusMessageId = searchParams.get("message");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
@@ -270,13 +269,8 @@ export function ChatPage() {
 
   const handleOpenChannel = useCallback((channelId: string) => {
     if (channelId === activeChannel?.id) return;
-    const requestId = channelOpenRequestIdRef.current + 1;
-    channelOpenRequestIdRef.current = requestId;
-    void prefetchChannelMessages(channelId).finally(() => {
-      if (channelOpenRequestIdRef.current !== requestId) return;
-      navigate(`/chat/${encodeURIComponent(channelId)}`);
-    });
-  }, [activeChannel?.id, navigate, prefetchChannelMessages]);
+    navigate(`/chat/${encodeURIComponent(channelId)}`);
+  }, [activeChannel?.id, navigate]);
 
   useEffect(() => {
     let cancelled = false;
