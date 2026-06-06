@@ -125,10 +125,16 @@ export function ChatComposer({
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
     const nextText = `${draft.text.slice(0, start)}${before}${draft.text.slice(start, end)}${after}${draft.text.slice(end)}`;
-    setDraft({ text: nextText, mentions: reconcileMentions(draft.text, nextText, draft.mentions) });
+    const mentions = reconcileMentions(draft.text, nextText, draft.mentions);
+    const cursor = start + before.length;
+    setDraft({ text: nextText, mentions });
+    setMentionRange(mentionRangeFor(nextText, cursor, mentions));
+    setSelectedMention(0);
+    setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
+    onTyping?.();
     window.setTimeout(() => {
       textarea.focus();
-      textarea.setSelectionRange(start + before.length, end + before.length);
+      textarea.setSelectionRange(cursor, end + before.length);
     }, 0);
   };
 
