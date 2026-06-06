@@ -9,19 +9,28 @@ type UseChatThreadStateInput = {
   onActivateThreadPanel: () => void;
 };
 
+export type ChatOpenThreadOptions = {
+  focusComposer?: boolean;
+  focusMessageId?: string | null;
+};
+
 export function useChatThreadState({ notify, onActivateThreadPanel }: UseChatThreadStateInput) {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
+  const [threadComposerFocusSignal, setThreadComposerFocusSignal] = useState(0);
   const [threadLoading, setThreadLoading] = useState(false);
   const [pendingThreadTarget, setPendingThreadTarget] = useState<ChatFeedThreadTarget | null>(null);
   const threadRequestIdRef = useRef(0);
 
   const openThread = useCallback(
-    async (rootMessageId: string, focusMessageId?: string | null) => {
+    async (rootMessageId: string, options: ChatOpenThreadOptions = {}) => {
       const requestId = threadRequestIdRef.current + 1;
       threadRequestIdRef.current = requestId;
       onActivateThreadPanel();
-      setThreadFocusMessageId(focusMessageId ?? null);
+      setThreadFocusMessageId(options.focusMessageId ?? null);
+      if (options.focusComposer) {
+        setThreadComposerFocusSignal((signal) => signal + 1);
+      }
       setThread((item) => item?.rootMessage.id === rootMessageId ? item : null);
       setThreadLoading(true);
       try {
@@ -42,7 +51,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel }: UseChatThr
 
   useEffect(() => {
     if (!pendingThreadTarget) return;
-    void openThread(pendingThreadTarget.rootMessageId, pendingThreadTarget.focusMessageId);
+    void openThread(pendingThreadTarget.rootMessageId, { focusMessageId: pendingThreadTarget.focusMessageId });
     setPendingThreadTarget(null);
   }, [openThread, pendingThreadTarget]);
 
@@ -90,6 +99,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel }: UseChatThr
     requestThreadTarget: setPendingThreadTarget,
     setThread,
     thread,
+    threadComposerFocusSignal,
     threadFocusMessageId,
     threadLoading,
   };

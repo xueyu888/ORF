@@ -49,6 +49,7 @@ type ChatRightPanelProps = {
   setSearchScope: (value: ChatSearchScope) => void;
   setSearchType: (value: ChatSearchTypeFilter) => void;
   thread: ChatThread | null;
+  threadComposerFocusSignal: number;
   threadFocusMessageId: string | null;
   threadLoading: boolean;
   threadSummaries: ChatThreadSummary[];
@@ -78,6 +79,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             currentUserId={props.currentUserId}
             editingMessageId={props.editingMessageId}
             focusMessageId={props.threadFocusMessageId}
+            composerFocusSignal={props.threadComposerFocusSignal}
             onAttachmentPreview={props.onAttachmentPreview}
             onCancelEdit={props.onCancelEdit}
             onCopyLink={props.onCopyLink}

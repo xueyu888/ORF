@@ -12,6 +12,7 @@ type ChatThreadPanelProps = {
   currentUserId?: string;
   editingMessageId?: string | null;
   focusMessageId: string | null;
+  composerFocusSignal: number;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
   onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
@@ -37,6 +38,7 @@ export function ChatThreadPanel({
   currentUserId,
   editingMessageId,
   focusMessageId,
+  composerFocusSignal,
   onCancelEdit,
   onCopyLink,
   onDelete,
@@ -148,6 +150,7 @@ export function ChatThreadPanel({
       </div>
       <ChatComposer
         channelId={thread.rootMessage.channelId}
+        focusSignal={composerFocusSignal}
         mentionableUsers={users}
         onDraftStateChange={onDraftStateChange}
         onSend={onSend}

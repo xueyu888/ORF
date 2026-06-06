@@ -130,6 +130,7 @@ export function ChatPage() {
     requestThreadTarget,
     setThread,
     thread,
+    threadComposerFocusSignal,
     threadFocusMessageId,
     threadLoading,
   } = useChatThreadState({
@@ -619,6 +620,7 @@ export function ChatPage() {
           setSearchScope={setSearchScope}
           setSearchType={setSearchType}
           thread={thread}
+          threadComposerFocusSignal={threadComposerFocusSignal}
           threadFocusMessageId={threadFocusMessageId}
           threadLoading={threadLoading}
           users={rightPanelMentionableUsers}

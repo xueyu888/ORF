@@ -9,6 +9,7 @@ import { ChatReactionPicker } from "./ChatReactionPicker";
 import { canonicalChatReactionName, displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
 import { draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
+import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
 type ChatMessageItemProps = {
   canPin?: boolean;
@@ -29,7 +30,7 @@ type ChatMessageItemProps = {
   onReaction: (message: ChatMessage, emojiName: string) => void;
   onSave?: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
-  onThread: (rootMessageId: string) => void;
+  onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
   usersById: Map<string, ChatUser>;
 };
 
@@ -267,7 +268,7 @@ export function ChatMessageItem({
             {emojiOpen && <ChatReactionPicker anchorRef={emojiAnchorRef} onClose={() => setEmojiOpen(false)} onSelect={selectReaction} />}
           </div>
           {!message.rootMessageId && (
-            <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id)} />
+            <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id, { focusComposer: true })} />
           )}
           {onSave && (
             <IconButton

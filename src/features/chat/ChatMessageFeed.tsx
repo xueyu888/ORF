@@ -5,6 +5,7 @@ import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { resolveUnreadJumpTarget, type ChatUnreadJumpTarget, type UnreadAnchor } from "./chatModels";
 import { ChatMessageItem } from "./ChatMessageItem";
+import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
 type ChatMessageFeedProps = {
   canPin: boolean;
@@ -32,7 +33,7 @@ type ChatMessageFeedProps = {
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onScroll: () => void;
-  onThread: (rootMessageId: string) => void;
+  onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
   pendingNewMessageCount: number;
   scrollRef: RefObject<HTMLDivElement | null>;
   unreadAnchor: UnreadAnchor | null;

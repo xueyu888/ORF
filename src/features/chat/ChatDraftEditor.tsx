@@ -28,6 +28,7 @@ type ChatDraftEditorProps = {
   onTyping?: () => void;
   placeholder?: string;
   recordHistoryOnSubmit?: boolean;
+  focusSignal?: number;
   resetKey?: string;
   rows?: number;
   submitDisabled?: boolean;
@@ -86,6 +87,7 @@ export function ChatDraftEditor({
   onTyping,
   placeholder,
   recordHistoryOnSubmit,
+  focusSignal,
   resetKey,
   rows = 3,
   submitDisabled,
@@ -118,6 +120,13 @@ export function ChatDraftEditor({
   useEffect(() => {
     if (!draft.text) setMentionRange(null);
   }, [draft.text]);
+
+  useEffect(() => {
+    if (focusSignal === undefined || disabled) return;
+    window.requestAnimationFrame(() => {
+      textAreaRef.current?.focus();
+    });
+  }, [disabled, focusSignal]);
 
   useLayoutEffect(() => {
     resizeDraftTextarea(textAreaRef.current);

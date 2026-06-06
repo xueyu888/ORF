@@ -35,6 +35,7 @@ import { ChatDraftEditor } from "./ChatDraftEditor";
 type ChatComposerProps = {
   channelId: string;
   disabled?: boolean;
+  focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
   onSend: ChatSendHandler;
@@ -46,6 +47,7 @@ type ChatComposerProps = {
 export function ChatComposer({
   channelId,
   disabled,
+  focusSignal,
   mentionableUsers,
   onDraftStateChange,
   onSend,
@@ -231,6 +233,7 @@ export function ChatComposer({
         className="orf-chat-composer-box"
         disabled={disabled}
         draft={draft}
+        focusSignal={focusSignal}
         mentionableUsers={mentionableUsers}
         onChange={setDraft}
         onPaste={handlePaste}
