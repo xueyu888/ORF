@@ -79,7 +79,6 @@ export function useChatFeedState({
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const olderLoadInFlightRef = useRef(false);
   const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
-  const pendingRestoreScrollRef = useRef<{ channelId: string; scrollTop: number } | null>(null);
   const pendingUnreadScrollRef = useRef(false);
   const prefetchRequestsRef = useRef(new Map<string, Promise<boolean>>());
   const activeChannelId = activeChannel?.id ?? null;
@@ -87,14 +86,8 @@ export function useChatFeedState({
   currentUserIdRef.current = currentUserId;
 
   const requestScrollToLatest = useCallback((behavior: ScrollBehavior = "smooth") => {
-    pendingRestoreScrollRef.current = null;
     pendingLatestScrollRef.current = behavior;
     setPendingNewMessageCount(0);
-  }, []);
-
-  const requestRestoreCachedScroll = useCallback((channelId: string, scrollTop: number) => {
-    pendingLatestScrollRef.current = null;
-    pendingRestoreScrollRef.current = { channelId, scrollTop };
   }, []);
 
   const rememberActiveFeedScroll = useCallback((channelId = activeChannelIdRef.current) => {
@@ -381,8 +374,8 @@ export function useChatFeedState({
         });
     } else if (!requestedMessageId && isFreshFeedSnapshot(cachedFeed)) {
       setMessagesLoading(false);
-      if (cachedFeed?.hasScrollPosition) {
-        requestRestoreCachedScroll(channelId, cachedFeed.scrollTop);
+      if (cachedFeed?.hasNewerMessages) {
+        void loadLatestMessages("auto");
       } else {
         requestScrollToLatest("auto");
       }
@@ -420,7 +413,7 @@ export function useChatFeedState({
     notify,
     onChannelUpdate,
     rememberActiveFeedScroll,
-    requestRestoreCachedScroll,
+    loadLatestMessages,
     requestScrollToLatest,
     requestedMessageId,
   ]);
@@ -503,33 +496,6 @@ export function useChatFeedState({
     }, 120);
     return () => window.clearTimeout(timer);
   }, [messages, messagesLoading]);
-
-  useEffect(() => {
-    const restore = pendingRestoreScrollRef.current;
-    if (!restore || messagesLoading || restore.channelId !== activeChannelId) return undefined;
-    let cancelled = false;
-    let remainingAttempts = 3;
-    const restoreScroll = () => {
-      if (cancelled) return;
-      const element = messageScrollRef.current;
-      if (element) {
-        const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-        element.scrollTop = Math.min(restore.scrollTop, maxScrollTop);
-      }
-      remainingAttempts -= 1;
-      if (remainingAttempts > 0) {
-        window.requestAnimationFrame(restoreScroll);
-        return;
-      }
-      if (pendingRestoreScrollRef.current === restore) {
-        pendingRestoreScrollRef.current = null;
-      }
-    };
-    window.requestAnimationFrame(restoreScroll);
-    return () => {
-      cancelled = true;
-    };
-  }, [activeChannelId, messages, messagesLoading]);
 
   useEffect(() => {
     const behavior = pendingLatestScrollRef.current;
