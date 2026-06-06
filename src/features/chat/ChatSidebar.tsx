@@ -41,9 +41,13 @@ export function ChatSidebar({
   const unreadChannelIds = new Set(unreadChannels.map((channel) => channel.id));
   const regularChannels = unreadChannelIds.size > 0 ? filteredChannels.filter((channel) => !unreadChannelIds.has(channel.id)) : filteredChannels;
   const favorites = regularChannels.filter((channel) => currentMembership(channel, currentUserId)?.favorite);
-  const publicChannels = regularChannels.filter((channel) => channel.type === "public");
-  const privateChannels = regularChannels.filter((channel) => channel.type === "private");
-  const conversations = regularChannels.filter((channel) => channel.type === "direct" || channel.type === "group");
+  const favoriteChannelIds = new Set(favorites.map((channel) => channel.id));
+  const uncategorizedChannels = favoriteChannelIds.size > 0
+    ? regularChannels.filter((channel) => !favoriteChannelIds.has(channel.id))
+    : regularChannels;
+  const publicChannels = uncategorizedChannels.filter((channel) => channel.type === "public");
+  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private");
+  const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct" || channel.type === "group");
   const channelGroups: Array<{ channels: ChatChannel[]; title: string }> = [
     { title: "未读", channels: unreadChannels },
     { title: "收藏", channels: favorites },
