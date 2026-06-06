@@ -343,6 +343,7 @@ export function ChatMessageItem({
               className="orf-chat-inline-edit-box"
               draft={editDraft}
               mentionableUsers={mentionableUsers}
+              onCancel={onCancelEdit}
               onChange={setEditDraft}
               onSubmit={saveEdit}
               placeholder="编辑消息..."

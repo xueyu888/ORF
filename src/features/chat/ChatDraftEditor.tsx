@@ -29,6 +29,7 @@ type ChatDraftEditorProps = {
   disabled?: boolean;
   draft: ChatDraft;
   mentionableUsers: ChatUser[];
+  onCancel?: () => void;
   onChange: (draft: ChatDraft) => void;
   onEditLatest?: () => void;
   onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
@@ -183,6 +184,7 @@ export function ChatDraftEditor({
   disabled,
   draft,
   mentionableUsers,
+  onCancel,
   onChange,
   onEditLatest,
   onPaste,
@@ -361,6 +363,14 @@ export function ChatDraftEditor({
         event.preventDefault();
         event.stopPropagation();
         setMentionRange(null);
+        return;
+      }
+    }
+    if (event.key === "Escape" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
+      if (onCancel) {
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
         return;
       }
     }
