@@ -8851,10 +8851,41 @@ a.orf-row-loot-action,
 .orf-chat-channel-group-title {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
+  gap: 8px;
   padding: 4px 8px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.orf-chat-channel-group-title > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.orf-chat-channel-group-action {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
+  color: var(--orf-text-muted);
+}
+
+.orf-chat-channel-group-action:hover {
+  background: var(--orf-bg-row-hover);
+  color: var(--orf-accent-text);
+}
+
+.orf-chat-channel-group-action:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .orf-chat-channel-item {

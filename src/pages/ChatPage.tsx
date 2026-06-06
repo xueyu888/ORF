@@ -30,6 +30,7 @@ import {
   createChatChannel,
   deleteChatMessageRequest,
   getChatBootstrap,
+  markChatChannelReadRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
   sendChatMessageRequest,
@@ -57,6 +58,7 @@ export function ChatPage() {
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
   const channelOpenRequestIdRef = useRef(0);
   const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
@@ -84,6 +86,10 @@ export function ChatPage() {
 
   const applyChannel = useCallback((channel: ChatChannel) => {
     setChannels((items) => upsertChannel(items, channel, currentUser?.id));
+  }, [currentUser?.id]);
+
+  const applyChannels = useCallback((nextChannels: ChatChannel[]) => {
+    setChannels((items) => nextChannels.reduce((next, channel) => upsertChannel(next, channel, currentUser?.id), items));
   }, [currentUser?.id]);
 
   const {
@@ -238,6 +244,29 @@ export function ChatPage() {
       return next;
     });
   }, []);
+
+  const handleMarkUnreadChannelsRead = useCallback(async (channelIds: string[]) => {
+    const uniqueChannelIds = [...new Set(channelIds)];
+    if (uniqueChannelIds.length === 0 || markingUnreadChannelsRead) return;
+    setMarkingUnreadChannelsRead(true);
+    try {
+      const activeChannelId = activeChannel?.id ?? null;
+      if (activeChannelId && uniqueChannelIds.includes(activeChannelId)) {
+        await clearActiveChannelUnread();
+      }
+      const responses = await Promise.all(
+        uniqueChannelIds
+          .filter((channelId) => channelId !== activeChannelId)
+          .map((channelId) => markChatChannelReadRequest(channelId)),
+      );
+      applyChannels(responses.map((response) => response.channel));
+      notify(`${uniqueChannelIds.length} 个频道已标记已读`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "批量标记已读失败");
+    } finally {
+      setMarkingUnreadChannelsRead(false);
+    }
+  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify]);
 
   const handleOpenChannel = useCallback((channelId: string) => {
     if (channelId === activeChannel?.id) return;
@@ -431,7 +460,9 @@ export function ChatPage() {
         channels={channels}
         currentUserId={currentUser?.id}
         draftChannelIds={draftChannelIds}
+        markingUnreadChannelsRead={markingUnreadChannelsRead}
         onCreateChannel={() => setModal("channel")}
+        onMarkUnreadChannelsRead={handleMarkUnreadChannelsRead}
         onOpenChannel={handleOpenChannel}
         onOpenConversation={() => setModal("conversation")}
         onPreviewChannel={(channelId) => void prefetchChannelMessages(channelId)}

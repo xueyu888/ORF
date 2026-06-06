@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { ChevronDown, MessageSquare, Plus, Search } from "lucide-react";
+import { CheckCheck, ChevronDown, MessageSquare, Plus, Search } from "lucide-react";
 import { IconButton } from "../../components/ui";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
@@ -11,11 +11,13 @@ type ChatSidebarProps = {
   currentUserId?: string;
   draftChannelIds: Set<string>;
   onCreateChannel: () => void;
+  onMarkUnreadChannelsRead: (channelIds: string[]) => void;
   onOpenChannel: (channelId: string) => void;
   onOpenConversation: () => void;
   onPreviewChannel: (channelId: string) => void;
   query: string;
   setQuery: (value: string) => void;
+  markingUnreadChannelsRead: boolean;
   users: ChatUser[];
 };
 
@@ -25,11 +27,13 @@ export function ChatSidebar({
   currentUserId,
   draftChannelIds,
   onCreateChannel,
+  onMarkUnreadChannelsRead,
   onOpenChannel,
   onOpenConversation,
   onPreviewChannel,
   query,
   setQuery,
+  markingUnreadChannelsRead,
   users,
 }: ChatSidebarProps) {
   const filteredChannels = channels.filter((channel) => channel.displayName.toLowerCase().includes(query.trim().toLowerCase()));
@@ -73,6 +77,8 @@ export function ChatSidebar({
             currentUserId={currentUserId}
             draftChannelIds={draftChannelIds}
             key={group.title}
+            markingAllRead={group.title === "未读" && markingUnreadChannelsRead}
+            onMarkAllRead={group.title === "未读" ? () => onMarkUnreadChannelsRead(unreadChannels.map((channel) => channel.id)) : undefined}
             onOpenChannel={onOpenChannel}
             onPreviewChannel={onPreviewChannel}
             title={group.title}
@@ -88,6 +94,8 @@ function ChannelGroup({
   channels,
   currentUserId,
   draftChannelIds,
+  markingAllRead,
+  onMarkAllRead,
   onOpenChannel,
   onPreviewChannel,
   title,
@@ -96,6 +104,8 @@ function ChannelGroup({
   channels: ChatChannel[];
   currentUserId?: string;
   draftChannelIds: Set<string>;
+  markingAllRead?: boolean;
+  onMarkAllRead?: () => void;
   onOpenChannel: (channelId: string) => void;
   onPreviewChannel: (channelId: string) => void;
   title: string;
@@ -104,8 +114,22 @@ function ChannelGroup({
   return (
     <section className="orf-chat-channel-group">
       <div className="orf-chat-channel-group-title">
-        <ChevronDown className="h-3.5 w-3.5" />
-        {title}
+        <span>
+          <ChevronDown className="h-3.5 w-3.5" />
+          {title}
+        </span>
+        {onMarkAllRead && (
+          <button
+            type="button"
+            className="orf-chat-channel-group-action"
+            disabled={markingAllRead}
+            title="全部标记已读"
+            aria-label="全部标记已读"
+            onClick={onMarkAllRead}
+          >
+            <CheckCheck className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
       {channels.map((channel) => {
         const Icon = channelIcon(channel);

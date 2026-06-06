@@ -1542,26 +1542,51 @@ export async function markChatChannelRead(channelId: string, actor: ChatActor): 
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
-  const { rows } = await pool.query<{ id: string }>(
-    `
-      SELECT id
-      FROM chat_messages
-      WHERE channel_id = $1
-        AND root_message_id IS NULL
-        AND deleted_at IS NULL
-      ORDER BY created_at DESC
-      LIMIT 1
-    `,
-    [channelId],
-  );
-  await pool.query(
-    `
-      UPDATE chat_channel_members
-      SET last_viewed_at = $3, last_read_at = $3, last_read_message_id = $4, manually_unread = false
-      WHERE channel_id = $1 AND user_id = $2
-    `,
-    [channelId, actor.id, nowIso(), rows[0]?.id ?? null],
-  );
+  const readAt = nowIso();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<{ id: string }>(
+      `
+        SELECT id
+        FROM chat_messages
+        WHERE channel_id = $1
+          AND root_message_id IS NULL
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [channelId],
+    );
+    await client.query(
+      `
+        UPDATE chat_channel_members
+        SET last_viewed_at = $3, last_read_at = $3, last_read_message_id = $4, manually_unread = false
+        WHERE channel_id = $1 AND user_id = $2
+      `,
+      [channelId, actor.id, readAt, rows[0]?.id ?? null],
+    );
+    await client.query(
+      `
+        UPDATE chat_thread_follows f
+        SET last_viewed_at = $3, updated_at = $3
+        FROM chat_messages root
+        WHERE f.root_message_id = root.id
+          AND f.user_id = $2
+          AND root.channel_id = $1
+          AND root.team_id = $4
+          AND root.root_message_id IS NULL
+          AND root.deleted_at IS NULL
+      `,
+      [channelId, actor.id, readAt, storageTeamId(actor)],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
   const updated = await getVisibleChannel(actor, channelId);
   if (!updated) return { status: "notFound" };
   publishRealtimeChatEvent(storageTeamId(actor), [actor.id], {
