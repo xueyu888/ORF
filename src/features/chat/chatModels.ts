@@ -145,6 +145,8 @@ export function replaceFeedMessages(
 export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message: ChatMessage) {
   if (!snapshot && message.rootMessageId) return undefined;
   const current = snapshot ?? createFeedSnapshot({ messages: [] });
+  const messageExists = current.messages.some((item) => item.id === message.id);
+  if (!messageExists && (message.rootMessageId || current.hasNewerMessages)) return current;
   const messages = upsertChannelMessage(current.messages, message);
   return messages === current.messages ? current : { ...current, messages };
 }

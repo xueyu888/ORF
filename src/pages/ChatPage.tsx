@@ -546,6 +546,24 @@ export function ChatPage() {
     });
   }, [activeChannel?.id, messages, messagesLoading]);
 
+  const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
+    if (!activeChannel) return;
+    setMessagesLoading(true);
+    try {
+      const response = await getChatMessages({ channelId: activeChannel.id, limit: chatMessagePageSize });
+      const snapshot = replaceFeedMessages(feedCacheRef.current.get(activeChannel.id), response.messages);
+      feedCacheRef.current.set(activeChannel.id, snapshot);
+      setMessages(snapshot.messages);
+      setHasNewerMessages(snapshot.hasNewerMessages);
+      setHasOlderMessages(snapshot.hasOlderMessages);
+      requestScrollToLatest(behavior);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "加载最新消息失败");
+    } finally {
+      setMessagesLoading(false);
+    }
+  }, [activeChannel, notify, requestScrollToLatest]);
+
   useEffect(() => {
     if (!activeChannel || typeof EventSource === "undefined") return undefined;
     const source = new EventSource("/api/events", { withCredentials: true });
@@ -561,10 +579,19 @@ export function ChatPage() {
         applyChannel(payload.channel);
       }
       if (payload.message && payload.channelId === activeChannel.id) {
-        const shouldFollowLatest = shouldFollowIncomingMessage(payload.message, currentUser?.id, isMessageScrollNearLatest());
+        const currentFeed = feedCacheRef.current.get(activeChannel.id);
+        const shouldFollowLatest = shouldFollowIncomingMessage(
+          payload.message,
+          currentUser?.id,
+          !currentFeed?.hasNewerMessages && isMessageScrollNearLatest(),
+        );
         applyMessage(payload.message);
         if (shouldFollowLatest) {
-          requestScrollToLatest("smooth");
+          if (currentFeed?.hasNewerMessages) {
+            void loadLatestMessages("smooth");
+          } else {
+            requestScrollToLatest("smooth");
+          }
         } else if (!payload.message.rootMessageId) {
           setPendingNewMessageCount((count) => count + 1);
         }
@@ -582,7 +609,7 @@ export function ChatPage() {
       source.removeEventListener("chat.event", handleChatEvent);
       source.close();
     };
-  }, [activeChannel, applyChannel, applyMessage, currentUser?.id, isMessageScrollNearLatest, navigate, requestScrollToLatest]);
+  }, [activeChannel, applyChannel, applyMessage, currentUser?.id, isMessageScrollNearLatest, loadLatestMessages, navigate, requestScrollToLatest]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -656,24 +683,6 @@ export function ChatPage() {
     }
   }, [activeChannel, hasOlderMessages, messages, notify, olderMessagesLoading]);
 
-  const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
-    if (!activeChannel) return;
-    setMessagesLoading(true);
-    try {
-      const response = await getChatMessages({ channelId: activeChannel.id, limit: chatMessagePageSize });
-      const snapshot = replaceFeedMessages(feedCacheRef.current.get(activeChannel.id), response.messages);
-      feedCacheRef.current.set(activeChannel.id, snapshot);
-      setMessages(snapshot.messages);
-      setHasNewerMessages(snapshot.hasNewerMessages);
-      setHasOlderMessages(snapshot.hasOlderMessages);
-      requestScrollToLatest(behavior);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "加载最新消息失败");
-    } finally {
-      setMessagesLoading(false);
-    }
-  }, [activeChannel, notify, requestScrollToLatest]);
-
   const handleSendMessage = useCallback(
     async (draft: ChatDraft, attachments: ChatAttachment[], rootMessageId?: string | null, parentMessageId?: string | null) => {
       if (!activeChannel) return;
@@ -688,12 +697,16 @@ export function ChatPage() {
       if (rootMessageId) {
         setThread((item) => item ? { ...item, replies: upsertMessage(item.replies, response.message) } : item);
       } else {
-        applyMessage(response.message);
-        requestScrollToLatest("smooth");
+        if (hasNewerMessages) {
+          await loadLatestMessages("smooth");
+        } else {
+          applyMessage(response.message);
+          requestScrollToLatest("smooth");
+        }
       }
       void markChatChannelReadRequest(activeChannel.id).then((read) => applyChannel(read.channel)).catch(() => undefined);
     },
-    [activeChannel, applyChannel, applyMessage, requestScrollToLatest],
+    [activeChannel, applyChannel, applyMessage, hasNewerMessages, loadLatestMessages, requestScrollToLatest],
   );
 
   const handleEditMessage = useCallback(
