@@ -10,6 +10,9 @@ import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import {
+  chatMessagePendingSend,
+  createPendingChatMessage,
+  findMatchingPendingChatMessage,
   type ChatSendInput,
   currentMembership,
   hasStoredDraftForChannel,
@@ -129,8 +132,12 @@ export function ChatPage() {
   const {
     appendThreadReply,
     applyThreadMessage,
+    markThreadPendingMessageFailed,
+    markThreadPendingMessageSending,
     openThread,
+    removeThreadPendingMessage,
     requestThreadTarget,
+    resolveThreadPendingMessage,
     setThread,
     thread,
     threadComposerFocusSignal,
@@ -170,6 +177,7 @@ export function ChatPage() {
 
   const {
     applyMessageToFeed,
+    applyPendingMessageToFeed,
     applyRealtimeMessageToFeed,
     clearActiveChannelUnread,
     handleMessageScroll,
@@ -184,10 +192,14 @@ export function ChatPage() {
     messageScrollRef,
     messages,
     messagesLoading,
+    markPendingMessageFailedInFeed,
+    markPendingMessageSendingInFeed,
     olderMessagesLoading,
     pendingNewMessageCount,
     prefetchChannelMessages,
+    removePendingMessageFromFeed,
     requestScrollToLatest,
+    resolvePendingMessageInFeed,
     syncLatestMessagesIfFollowing,
     unreadAnchor,
   } = useChatFeedState({
@@ -341,6 +353,23 @@ export function ChatPage() {
     syncLatestMessagesIfFollowing();
   }, [refreshBootstrap, syncLatestMessagesIfFollowing]);
 
+  const resolveRealtimePendingMessage = useCallback(
+    (message: ChatMessage) => {
+      const pendingMessage = findMatchingPendingChatMessage(
+        [
+          ...messages,
+          ...(thread ? [thread.rootMessage, ...thread.replies] : []),
+        ],
+        message,
+      );
+      if (!pendingMessage) return false;
+      resolvePendingMessageInFeed(pendingMessage.id, message);
+      resolveThreadPendingMessage(pendingMessage.id, message);
+      return true;
+    },
+    [messages, resolvePendingMessageInFeed, resolveThreadPendingMessage, thread],
+  );
+
   useChatRealtimeEvents(
     (payload) => {
       if (payload.channel) applyChannel(payload.channel);
@@ -353,38 +382,112 @@ export function ChatPage() {
         if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
       }
       if (payload.message) {
-        applyRealtimeMessageToFeed(payload.message, applyMessageEffects);
+        if (!resolveRealtimePendingMessage(payload.message)) {
+          applyRealtimeMessageToFeed(payload.message, applyMessageEffects);
+        }
       }
       if (payload.eventType === "typing") applyTypingEvent(payload.channelId, payload.typing);
     },
     { onConnectionRestored: handleRealtimeConnectionRestored },
   );
 
+  const submitPendingChatMessage = useCallback(
+    (pendingMessage: ChatMessage, options: { loadLatestAfterSuccess?: boolean } = {}) => {
+      const pendingSend = chatMessagePendingSend(pendingMessage);
+      if (!pendingSend) return;
+      markPendingMessageSendingInFeed(pendingSend.channelId, pendingMessage.id);
+      markThreadPendingMessageSending(pendingMessage.id);
+      void sendChatMessageRequest(pendingSend)
+        .then((response) => {
+          applyChannel(response.channel);
+          resolvePendingMessageInFeed(pendingMessage.id, response.message);
+          resolveThreadPendingMessage(pendingMessage.id, response.message);
+          if (options.loadLatestAfterSuccess) {
+            void loadLatestMessages("auto");
+          } else if (!pendingSend.rootMessageId && activeChannel?.id === pendingSend.channelId) {
+            requestScrollToLatest("auto");
+          }
+        })
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : "发送消息失败";
+          markPendingMessageFailedInFeed(pendingSend.channelId, pendingMessage.id, message);
+          markThreadPendingMessageFailed(pendingMessage.id, message);
+        });
+    },
+    [
+      activeChannel?.id,
+      applyChannel,
+      loadLatestMessages,
+      markPendingMessageFailedInFeed,
+      markPendingMessageSendingInFeed,
+      markThreadPendingMessageFailed,
+      markThreadPendingMessageSending,
+      requestScrollToLatest,
+      resolvePendingMessageInFeed,
+      resolveThreadPendingMessage,
+    ],
+  );
+
   const handleSendMessage = useCallback(
     async ({ attachments, channelId, draft, parentMessageId, rootMessageId }: ChatSendInput) => {
-      const response = await sendChatMessageRequest({
+      if (!currentUser) {
+        notify("当前用户不可用，无法发送消息");
+        return;
+      }
+      const body = serializeDraft(draft);
+      const pendingSend = {
         channelId,
-        body: serializeDraft(draft),
+        body,
         attachmentIds: attachments.map((attachment) => attachment.id),
         rootMessageId,
         parentMessageId,
+      };
+      const pendingMessage = createPendingChatMessage({
+        attachments,
+        author: currentUser,
+        body,
+        channelId,
+        parentMessageId,
+        pendingSend,
+        rootMessageId,
       });
-      applyChannel(response.channel);
       if (rootMessageId) {
-        applyMessage(response.message);
-        appendThreadReply(response.message);
+        appendThreadReply(pendingMessage);
       } else if (activeChannel?.id === channelId) {
-        if (hasNewerMessages) {
-          await loadLatestMessages("auto");
-        } else {
-          applyMessage(response.message);
-          requestScrollToLatest("auto");
-        }
+        applyPendingMessageToFeed(pendingMessage);
+        requestScrollToLatest("auto");
       } else {
-        applyMessage(response.message);
+        applyPendingMessageToFeed(pendingMessage);
       }
+      submitPendingChatMessage(pendingMessage, {
+        loadLatestAfterSuccess: !rootMessageId && activeChannel?.id === channelId && hasNewerMessages,
+      });
     },
-    [activeChannel?.id, appendThreadReply, applyChannel, applyMessage, hasNewerMessages, loadLatestMessages, requestScrollToLatest],
+    [
+      activeChannel?.id,
+      appendThreadReply,
+      applyPendingMessageToFeed,
+      currentUser,
+      hasNewerMessages,
+      notify,
+      requestScrollToLatest,
+      submitPendingChatMessage,
+    ],
+  );
+
+  const handleRetryPendingMessage = useCallback(
+    (message: ChatMessage) => {
+      submitPendingChatMessage(message);
+    },
+    [submitPendingChatMessage],
+  );
+
+  const handleRemovePendingMessage = useCallback(
+    (message: ChatMessage) => {
+      removePendingMessageFromFeed(message.channelId, message.id);
+      removeThreadPendingMessage(message.id);
+    },
+    [removePendingMessageFromFeed, removeThreadPendingMessage],
   );
 
   const handleEditMessage = useCallback(
@@ -576,6 +679,8 @@ export function ChatPage() {
               onMarkUnread={markMessageUnread}
               onPin={handlePinMessage}
               onReaction={handleReaction}
+              onRemovePending={handleRemovePendingMessage}
+              onRetryPending={handleRetryPendingMessage}
               onSave={handleSaveMessage}
               onSaveEdit={handleEditMessage}
               onScroll={handleMessageScroll}
@@ -663,6 +768,8 @@ export function ChatPage() {
           }}
           onAttachmentPreview={setAttachmentPreview}
           onReaction={handleReaction}
+          onRemovePending={handleRemovePendingMessage}
+          onRetryPending={handleRetryPendingMessage}
           onEdit={setEditingMessage}
           onMarkUnread={markMessageUnread}
           onDelete={setDeletingMessage}

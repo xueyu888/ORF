@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChatThread } from "../../state/apiClient";
 import type { ChatChannel, ChatMessage, ChatThread } from "../../types/orf";
-import { upsertMessage } from "./chatModels";
+import {
+  markPendingChatMessageFailed,
+  markPendingChatMessageSending,
+  removeMessageById,
+  replacePendingMessage,
+  updatePendingMessageDelivery,
+  upsertMessage,
+} from "./chatModels";
 import type { ChatFeedThreadTarget } from "./useChatFeedState";
 
 type UseChatThreadStateInput = {
@@ -94,11 +101,68 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
     });
   }, []);
 
+  const resolveThreadPendingMessage = useCallback((pendingMessageId: string, message: ChatMessage) => {
+    setThread((item) => {
+      if (!item) return item;
+      const isOpenRoot = item.rootMessage.id === message.id || item.rootMessage.id === pendingMessageId;
+      const isOpenReply = message.rootMessageId === item.rootMessage.id;
+      if (!isOpenRoot && !isOpenReply) return item;
+      return {
+        ...item,
+        rootMessage: isOpenRoot ? message : item.rootMessage,
+        replies: isOpenReply ? replacePendingMessage(item.replies, pendingMessageId, message) : item.replies,
+      };
+    });
+  }, []);
+
+  const markThreadPendingMessageSending = useCallback((pendingMessageId: string) => {
+    setThread((item) => {
+      if (!item) return item;
+      return {
+        ...item,
+        rootMessage: item.rootMessage.id === pendingMessageId ? markPendingChatMessageSending(item.rootMessage) : item.rootMessage,
+        replies: updatePendingMessageDelivery(item.replies, pendingMessageId, markPendingChatMessageSending),
+      };
+    });
+  }, []);
+
+  const markThreadPendingMessageFailed = useCallback((pendingMessageId: string, error: string) => {
+    setThread((item) => {
+      if (!item) return item;
+      return {
+        ...item,
+        rootMessage: item.rootMessage.id === pendingMessageId ? markPendingChatMessageFailed(item.rootMessage, error) : item.rootMessage,
+        replies: updatePendingMessageDelivery(item.replies, pendingMessageId, (message) => markPendingChatMessageFailed(message, error)),
+      };
+    });
+  }, []);
+
+  const removeThreadPendingMessage = useCallback((pendingMessageId: string) => {
+    setThread((item) => {
+      if (!item) return item;
+      const removingReply = item.replies.some((reply) => reply.id === pendingMessageId);
+      return {
+        ...item,
+        replies: removeMessageById(item.replies, pendingMessageId),
+        rootMessage: removingReply
+          ? {
+              ...item.rootMessage,
+              replyCount: Math.max(0, item.rootMessage.replyCount - 1),
+            }
+          : item.rootMessage,
+      };
+    });
+  }, []);
+
   return {
     appendThreadReply,
     applyThreadMessage,
+    markThreadPendingMessageFailed,
+    markThreadPendingMessageSending,
     openThread,
+    removeThreadPendingMessage,
     requestThreadTarget: setPendingThreadTarget,
+    resolveThreadPendingMessage,
     setThread,
     thread,
     threadComposerFocusSignal,

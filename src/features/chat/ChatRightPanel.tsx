@@ -31,6 +31,8 @@ type ChatRightPanelProps = {
   onOpenThreadSummary: (summary: ChatThreadSummary) => void;
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
+  onRemovePending: (message: ChatMessage) => void;
+  onRetryPending: (message: ChatMessage) => void;
   onRemoveMember: (userId: string) => Promise<void>;
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
@@ -89,6 +91,8 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onMarkUnread={props.onMarkUnread}
             onPin={props.onPin}
             onReaction={props.onReaction}
+            onRemovePending={props.onRemovePending}
+            onRetryPending={props.onRetryPending}
             onSave={props.onSave}
             onSaveEdit={props.onSaveEdit}
             onSend={props.onSendThreadReply}

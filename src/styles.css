@@ -9244,6 +9244,24 @@ a.orf-row-loot-action,
   background: rgba(245, 158, 11, 0.13);
 }
 
+.orf-chat-message-pending {
+  color: var(--orf-text-secondary);
+}
+
+.orf-chat-message-pending .orf-chat-message-text,
+.orf-chat-message-pending .orf-chat-attachments {
+  opacity: 0.72;
+}
+
+.orf-chat-message-failed {
+  background: rgba(225, 29, 72, 0.06);
+}
+
+.orf-chat-message-failed:hover,
+.orf-chat-message-failed:focus-within {
+  background: rgba(225, 29, 72, 0.1);
+}
+
 .orf-chat-message-body {
   min-width: 0;
 }
@@ -9582,6 +9600,38 @@ a.orf-row-loot-action,
 .orf-chat-message-action-active {
   background: var(--orf-accent-soft) !important;
   color: var(--orf-accent-text) !important;
+}
+
+.orf-chat-delivery-status {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.orf-chat-delivery-status[role="alert"] {
+  color: var(--orf-danger-text);
+}
+
+.orf-chat-delivery-status button {
+  display: inline-flex;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--orf-danger-border);
+  border-radius: var(--orf-radius-control);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--orf-danger-text);
+  padding: 0 8px;
+}
+
+.orf-chat-delivery-status button:hover {
+  background: rgba(225, 29, 72, 0.08);
 }
 
 .orf-chat-attachments {

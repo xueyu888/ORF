@@ -24,12 +24,18 @@ import {
   chatMessagePageSize,
   createFeedSnapshot,
   currentMembership,
+  markPendingChatMessageFailed,
+  markPendingChatMessageSending,
   hasMainFeedUnread,
   isFreshFeedSnapshot,
   prependOlderFeedMessages,
   rememberFeedScroll,
+  removeMessageById,
   replaceFeedMessages,
+  replacePendingMessage,
   shouldFollowIncomingMessage,
+  updatePendingMessageDelivery,
+  upsertChannelMessage,
 } from "./chatModels";
 
 export type ChatFeedThreadTarget = {
@@ -116,6 +122,124 @@ export function useChatFeedState({
     }
     const snapshot = applyFeedMessage(feedCacheRef.current.get(message.channelId), message);
     if (snapshot) feedCacheRef.current.set(message.channelId, snapshot);
+  }, []);
+
+  const applyPendingMessageToFeed = useCallback((message: ChatMessage) => {
+    if (activeChannelIdRef.current === message.channelId) {
+      setFeedChannelId(message.channelId);
+      setHasNewerMessages(false);
+      setPendingNewMessageCount(0);
+      setMessages((items) => {
+        const current = feedCacheRef.current.get(message.channelId) ?? createFeedSnapshot({ messages: items });
+        const snapshot = {
+          ...current,
+          hasNewerMessages: false,
+          messages: upsertChannelMessage(items, message),
+        };
+        feedCacheRef.current.set(message.channelId, snapshot);
+        return snapshot.messages;
+      });
+      return;
+    }
+    const current = feedCacheRef.current.get(message.channelId) ?? createFeedSnapshot();
+    feedCacheRef.current.set(message.channelId, {
+      ...current,
+      hasNewerMessages: false,
+      messages: upsertChannelMessage(current.messages, message),
+    });
+  }, []);
+
+  const resolvePendingMessageInFeed = useCallback((pendingMessageId: string, message: ChatMessage) => {
+    if (activeChannelIdRef.current === message.channelId) {
+      setFeedChannelId(message.channelId);
+      setMessages((items) => {
+        const messagesWithoutPending = removeMessageById(items, pendingMessageId);
+        const snapshot = applyFeedMessage(
+          {
+            ...(feedCacheRef.current.get(message.channelId) ?? createFeedSnapshot({ messages: items })),
+            messages: message.rootMessageId ? messagesWithoutPending : replacePendingMessage(items, pendingMessageId, message),
+          },
+          message,
+        );
+        if (!snapshot) return items;
+        feedCacheRef.current.set(message.channelId, snapshot);
+        return snapshot.messages;
+      });
+      return;
+    }
+    const snapshot = feedCacheRef.current.get(message.channelId);
+    const messagesWithoutPending = removeMessageById(snapshot?.messages ?? [], pendingMessageId);
+    const nextSnapshot = applyFeedMessage(
+      {
+        ...(snapshot ?? createFeedSnapshot()),
+        messages: message.rootMessageId ? messagesWithoutPending : replacePendingMessage(snapshot?.messages ?? [], pendingMessageId, message),
+      },
+      message,
+    );
+    if (nextSnapshot) feedCacheRef.current.set(message.channelId, nextSnapshot);
+  }, []);
+
+  const markPendingMessageSendingInFeed = useCallback((channelId: string, pendingMessageId: string) => {
+    if (activeChannelIdRef.current === channelId) {
+      setMessages((items) => {
+        const snapshot = {
+          ...(feedCacheRef.current.get(channelId) ?? createFeedSnapshot({ messages: items })),
+          messages: updatePendingMessageDelivery(items, pendingMessageId, markPendingChatMessageSending),
+        };
+        feedCacheRef.current.set(channelId, snapshot);
+        return snapshot.messages;
+      });
+      return;
+    }
+    const snapshot = feedCacheRef.current.get(channelId);
+    if (snapshot) {
+      feedCacheRef.current.set(channelId, {
+        ...snapshot,
+        messages: updatePendingMessageDelivery(snapshot.messages, pendingMessageId, markPendingChatMessageSending),
+      });
+    }
+  }, []);
+
+  const markPendingMessageFailedInFeed = useCallback((channelId: string, pendingMessageId: string, error: string) => {
+    if (activeChannelIdRef.current === channelId) {
+      setMessages((items) => {
+        const snapshot = {
+          ...(feedCacheRef.current.get(channelId) ?? createFeedSnapshot({ messages: items })),
+          messages: updatePendingMessageDelivery(items, pendingMessageId, (message) => markPendingChatMessageFailed(message, error)),
+        };
+        feedCacheRef.current.set(channelId, snapshot);
+        return snapshot.messages;
+      });
+      return;
+    }
+    const snapshot = feedCacheRef.current.get(channelId);
+    if (snapshot) {
+      feedCacheRef.current.set(channelId, {
+        ...snapshot,
+        messages: updatePendingMessageDelivery(snapshot.messages, pendingMessageId, (message) => markPendingChatMessageFailed(message, error)),
+      });
+    }
+  }, []);
+
+  const removePendingMessageFromFeed = useCallback((channelId: string, pendingMessageId: string) => {
+    if (activeChannelIdRef.current === channelId) {
+      setMessages((items) => {
+        const snapshot = {
+          ...(feedCacheRef.current.get(channelId) ?? createFeedSnapshot({ messages: items })),
+          messages: removeMessageById(items, pendingMessageId),
+        };
+        feedCacheRef.current.set(channelId, snapshot);
+        return snapshot.messages;
+      });
+      return;
+    }
+    const snapshot = feedCacheRef.current.get(channelId);
+    if (snapshot) {
+      feedCacheRef.current.set(channelId, {
+        ...snapshot,
+        messages: removeMessageById(snapshot.messages, pendingMessageId),
+      });
+    }
   }, []);
 
   const loadLatestMessages = useCallback(async (behavior: ScrollBehavior = "smooth") => {
@@ -565,6 +689,7 @@ export function useChatFeedState({
 
   return {
     applyMessageToFeed,
+    applyPendingMessageToFeed,
     applyRealtimeMessageToFeed,
     clearActiveChannelUnread,
     handleMessageScroll,
@@ -579,10 +704,14 @@ export function useChatFeedState({
     messageScrollRef,
     messages: displayedMessages,
     messagesLoading: displayedMessagesLoading,
+    markPendingMessageFailedInFeed,
+    markPendingMessageSendingInFeed,
     olderMessagesLoading,
     pendingNewMessageCount,
     prefetchChannelMessages,
+    removePendingMessageFromFeed,
     requestScrollToLatest,
+    resolvePendingMessageInFeed,
     syncLatestMessagesIfFollowing,
     unreadAnchor,
   };

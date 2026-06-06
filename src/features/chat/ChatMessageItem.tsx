@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Pin, Reply, Smile, Trash2 } from "lucide-react";
+import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
@@ -8,7 +8,7 @@ import { ChatMarkdown } from "./chatMarkdown";
 import { ChatReactionPicker } from "./ChatReactionPicker";
 import { canonicalChatReactionName, displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
-import { draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
+import { chatMessageDeliveryStatus, draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
 type ChatMessageItemProps = {
@@ -28,6 +28,8 @@ type ChatMessageItemProps = {
   onMarkUnread?: (message: ChatMessage) => void;
   onPin?: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
+  onRemovePending?: (message: ChatMessage) => void;
+  onRetryPending?: (message: ChatMessage) => void;
   onSave?: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onThread: (rootMessageId: string, options?: ChatOpenThreadOptions) => void;
@@ -104,6 +106,8 @@ export function ChatMessageItem({
   onMarkUnread,
   onPin,
   onReaction,
+  onRemovePending,
+  onRetryPending,
   onSave,
   onSaveEdit,
   onThread,
@@ -113,7 +117,9 @@ export function ChatMessageItem({
   const [editDraft, setEditDraft] = useState<ChatDraft>(() => draftFromStoredBody(message.body, usersById));
   const [editSaving, setEditSaving] = useState(false);
   const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
-  const canMutate = message.authorUserId === currentUserId && !message.deletedAt;
+  const deliveryStatus = chatMessageDeliveryStatus(message);
+  const canMutate = !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
+  const canUseServerActions = !deliveryStatus && !message.deletedAt;
   const reactedByCurrentUser = new Set(
     message.reactions
       .filter((reaction) => reaction.reactedByCurrentUser)
@@ -145,13 +151,13 @@ export function ChatMessageItem({
     }
   };
   const handleOpenThreadClick = (event: MouseEvent<HTMLElement>) => {
-    if (editing || message.deletedAt) return;
+    if (editing || message.deletedAt || deliveryStatus) return;
     if (isInteractiveMessageTarget(event.target) || hasSelectedMessageText(event.currentTarget)) return;
     onThread(message.rootMessageId ?? message.id);
   };
   const handleOpenThreadKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
-    if (editing || message.deletedAt || isInteractiveMessageTarget(event.target)) return;
+    if (editing || message.deletedAt || deliveryStatus || isInteractiveMessageTarget(event.target)) return;
     event.preventDefault();
     onThread(message.rootMessageId ?? message.id);
   };
@@ -164,13 +170,15 @@ export function ChatMessageItem({
         message.pinnedAt && "orf-chat-message-pinned",
         focused && "orf-chat-message-focused",
         emojiOpen && "orf-chat-message-actions-open",
+        deliveryStatus === "sending" && "orf-chat-message-pending",
+        deliveryStatus === "failed" && "orf-chat-message-failed",
       )}
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
       onClick={handleOpenThreadClick}
       onKeyDown={handleOpenThreadKeyDown}
-      tabIndex={!editing && !message.deletedAt ? 0 : undefined}
+      tabIndex={!editing && !message.deletedAt && !deliveryStatus ? 0 : undefined}
     >
       {compact ? (
         <div className="orf-chat-message-compact-time" title={formatDateTime(message.createdAt)}>{formatTime(message.createdAt)}</div>
@@ -221,6 +229,31 @@ export function ChatMessageItem({
           <>
             <div className="orf-chat-message-text"><ChatMarkdown body={message.body} usersById={usersById} /></div>
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
+            {deliveryStatus && (
+              <div className="orf-chat-delivery-status" role={deliveryStatus === "failed" ? "alert" : "status"}>
+                {deliveryStatus === "sending" ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>发送中</span>
+                  </>
+                ) : (
+                  <>
+                    <span>发送失败</span>
+                    {onRetryPending && (
+                      <button type="button" onClick={() => onRetryPending(message)}>
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        重试
+                      </button>
+                    )}
+                    {onRemovePending && (
+                      <button type="button" onClick={() => onRemovePending(message)} aria-label="移除失败消息">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             <div className="orf-chat-reaction-row">
               {message.reactions.map((reaction) => {
                 const reactionLabel = labelChatReactionEmoji(reaction.emojiName);
@@ -249,7 +282,7 @@ export function ChatMessageItem({
           </>
         )}
       </div>
-      {!message.deletedAt && !editing && (
+      {canUseServerActions && !editing && (
         <div className="orf-chat-message-actions">
           {quickChatReactionOptions.map((option) => (
             <button

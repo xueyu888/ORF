@@ -21,6 +21,19 @@ export type ChatSendInput = {
 };
 
 export type ChatSendHandler = (input: ChatSendInput) => Promise<void>;
+export type ChatMessageDeliveryStatus = "failed" | "sending";
+export type ChatPendingSendPayload = {
+  attachmentIds: string[];
+  body: string;
+  channelId: string;
+  parentMessageId?: string | null;
+  rootMessageId?: string | null;
+};
+export type ChatOptimisticMessage = ChatMessage & {
+  deliveryError?: string;
+  deliveryStatus?: ChatMessageDeliveryStatus;
+  pendingSend?: ChatPendingSendPayload;
+};
 
 export type UnreadAnchor = {
   channelId: string;
@@ -160,6 +173,106 @@ export function upsertMessage(messages: ChatMessage[], next: ChatMessage) {
   const found = messages.some((message) => message.id === next.id);
   const updated = found ? messages.map((message) => (message.id === next.id ? next : message)) : [...messages, next];
   return updated.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+}
+
+export function chatMessageDeliveryStatus(message: ChatMessage): ChatMessageDeliveryStatus | null {
+  return (message as ChatOptimisticMessage).deliveryStatus ?? null;
+}
+
+export function chatMessagePendingSend(message: ChatMessage): ChatPendingSendPayload | null {
+  return (message as ChatOptimisticMessage).pendingSend ?? null;
+}
+
+export function createPendingChatMessage(input: {
+  attachments: ChatAttachment[];
+  author: ChatUser;
+  body: string;
+  channelId: string;
+  parentMessageId?: string | null;
+  pendingSend: ChatPendingSendPayload;
+  rootMessageId?: string | null;
+}): ChatOptimisticMessage {
+  const createdAt = new Date().toISOString();
+  const randomId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return {
+    id: `pending-${randomId}`,
+    channelId: input.channelId,
+    authorUserId: input.author.id,
+    authorName: input.author.name,
+    authorAvatarUrl: input.author.avatarUrl,
+    body: input.body,
+    rootMessageId: input.rootMessageId ?? null,
+    parentMessageId: input.parentMessageId ?? null,
+    createdAt,
+    updatedAt: createdAt,
+    editedAt: null,
+    deletedAt: null,
+    deletedBy: null,
+    pinnedAt: null,
+    pinnedBy: null,
+    replyCount: 0,
+    lastReplyAt: null,
+    savedByCurrentUser: false,
+    attachments: input.attachments,
+    reactions: [],
+    deliveryStatus: "sending",
+    pendingSend: input.pendingSend,
+  };
+}
+
+export function markPendingChatMessageSending(message: ChatMessage): ChatOptimisticMessage {
+  return {
+    ...(message as ChatOptimisticMessage),
+    deliveryError: undefined,
+    deliveryStatus: "sending",
+  };
+}
+
+export function markPendingChatMessageFailed(message: ChatMessage, error: string): ChatOptimisticMessage {
+  return {
+    ...(message as ChatOptimisticMessage),
+    deliveryError: error,
+    deliveryStatus: "failed",
+  };
+}
+
+export function pendingChatMessageMatchesServerMessage(pendingMessage: ChatMessage, serverMessage: ChatMessage) {
+  const pending = pendingMessage as ChatOptimisticMessage;
+  if (!pending.deliveryStatus || !pending.pendingSend) return false;
+  const pendingAttachmentIds = [...pending.pendingSend.attachmentIds].sort();
+  const serverAttachmentIds = serverMessage.attachments.map((attachment) => attachment.id).sort();
+  return (
+    pendingMessage.authorUserId === serverMessage.authorUserId &&
+    pendingMessage.channelId === serverMessage.channelId &&
+    pending.pendingSend.body === serverMessage.body &&
+    (pending.pendingSend.rootMessageId ?? null) === (serverMessage.rootMessageId ?? null) &&
+    (pending.pendingSend.parentMessageId ?? null) === (serverMessage.parentMessageId ?? null) &&
+    pendingAttachmentIds.length === serverAttachmentIds.length &&
+    pendingAttachmentIds.every((attachmentId, index) => attachmentId === serverAttachmentIds[index])
+  );
+}
+
+export function findMatchingPendingChatMessage(messages: ChatMessage[], serverMessage: ChatMessage) {
+  return messages.find((message) => pendingChatMessageMatchesServerMessage(message, serverMessage)) ?? null;
+}
+
+export function removeMessageById(messages: ChatMessage[], messageId: string) {
+  return messages.filter((message) => message.id !== messageId);
+}
+
+export function replacePendingMessage(messages: ChatMessage[], pendingMessageId: string, message: ChatMessage) {
+  return upsertMessage(removeMessageById(messages, pendingMessageId), message);
+}
+
+export function updatePendingMessageDelivery(
+  messages: ChatMessage[],
+  pendingMessageId: string,
+  updater: (message: ChatMessage) => ChatMessage,
+) {
+  return messages.map((message) => (message.id === pendingMessageId ? updater(message) : message));
 }
 
 export function upsertChannelMessage(messages: ChatMessage[], next: ChatMessage) {

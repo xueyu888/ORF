@@ -30,6 +30,8 @@ type ChatMessageFeedProps = {
   onMarkUnread: (message: ChatMessage) => void;
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
+  onRemovePending: (message: ChatMessage) => void;
+  onRetryPending: (message: ChatMessage) => void;
   onSave: (message: ChatMessage) => void;
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onScroll: () => void;
@@ -68,6 +70,8 @@ export function ChatMessageFeed({
   onMarkUnread,
   onPin,
   onReaction,
+  onRemovePending,
+  onRetryPending,
   onSave,
   onSaveEdit,
   onScroll,
@@ -108,6 +112,8 @@ export function ChatMessageFeed({
           onMarkUnread={onMarkUnread}
           onPin={onPin}
           onReaction={onReaction}
+          onRemovePending={onRemovePending}
+          onRetryPending={onRetryPending}
           onSave={onSave}
           onSaveEdit={onSaveEdit}
           onThread={onThread}
@@ -151,6 +157,8 @@ function MessageList({
   onMarkUnread,
   onPin,
   onReaction,
+  onRemovePending,
+  onRetryPending,
   onSave,
   onSaveEdit,
   onThread,
@@ -214,6 +222,8 @@ function MessageList({
               onMarkUnread={onMarkUnread}
               onPin={onPin}
               onReaction={onReaction}
+              onRemovePending={onRemovePending}
+              onRetryPending={onRetryPending}
               onSave={onSave}
               onSaveEdit={onSaveEdit}
               onThread={onThread}
