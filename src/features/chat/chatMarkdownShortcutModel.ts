@@ -77,9 +77,28 @@ function wrapCodeMarkdown(draft: ChatDraft, selectionStart: number, selectionEnd
   const selection = normalizeSelection(draft.text, selectionStart, selectionEnd);
   const selected = draft.text.slice(selection.start, selection.end);
   if (!selected.includes("\n")) return wrapInlineMarkdown(draft, selection.start, selection.end, "`");
-  const suffix = selected.endsWith("\n") ? "```" : "\n```";
-  const text = `${draft.text.slice(0, selection.start)}\`\`\`\n${selected}${suffix}${draft.text.slice(selection.end)}`;
-  const nextSelectionStart = selection.start + 4;
+
+  const codeBlockStart = "```\n";
+  const codeBlockEnd = "\n```";
+  if (selected.startsWith(codeBlockStart) && selected.endsWith(codeBlockEnd)) {
+    const unwrapped = selected.slice(codeBlockStart.length, selected.length - codeBlockEnd.length);
+    const text = `${draft.text.slice(0, selection.start)}${unwrapped}${draft.text.slice(selection.end)}`;
+    return createMarkdownResult(draft, text, selection.start, selection.start + unwrapped.length);
+  }
+
+  const surroundingStart = selection.start - codeBlockStart.length;
+  const surroundingEnd = selection.end + codeBlockEnd.length;
+  if (
+    surroundingStart >= 0 &&
+    draft.text.slice(surroundingStart, selection.start) === codeBlockStart &&
+    draft.text.slice(selection.end, surroundingEnd) === codeBlockEnd
+  ) {
+    const text = `${draft.text.slice(0, surroundingStart)}${selected}${draft.text.slice(surroundingEnd)}`;
+    return createMarkdownResult(draft, text, surroundingStart, surroundingStart + selected.length);
+  }
+
+  const text = `${draft.text.slice(0, selection.start)}${codeBlockStart}${selected}${codeBlockEnd}${draft.text.slice(selection.end)}`;
+  const nextSelectionStart = selection.start + codeBlockStart.length;
   return createMarkdownResult(draft, text, nextSelectionStart, nextSelectionStart + selected.length);
 }
 
