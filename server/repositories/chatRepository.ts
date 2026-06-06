@@ -1311,7 +1311,7 @@ export async function sendChatMessage(
 export async function updateChatMessage(
   input: { body: string; channelId: string; messageId: string },
   actor: ChatActor,
-): Promise<Outcome<{ message: ChatMessage }>> {
+): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const body = input.body.trim();
   if (!body) return { status: "invalid" };
@@ -1328,22 +1328,24 @@ export async function updateChatMessage(
     nowIso(),
   ]);
   const updated = await getMessageById(actor, input.messageId);
-  if (!updated) return { status: "notFound" };
+  const updatedChannel = await getVisibleChannel(actor, input.channelId);
+  if (!updated || !updatedChannel) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
   publishRealtimeChatEvent(storageTeamId(actor), recipients, {
     eventType: "message.updated",
     channelId: input.channelId,
     actorUserId: actor.id,
+    channel: updatedChannel,
     message: updated,
     rootMessageId: updated.rootMessageId ?? null,
   });
-  return ok({ message: updated });
+  return ok({ channel: updatedChannel, message: updated });
 }
 
 export async function deleteChatMessage(
   input: { channelId: string; messageId: string },
   actor: ChatActor,
-): Promise<Outcome<{ message: ChatMessage }>> {
+): Promise<Outcome<{ channel: ChatChannel; message: ChatMessage }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, input.channelId);
   if (!channel) return { status: "notFound" };
@@ -1359,17 +1361,19 @@ export async function deleteChatMessage(
     actor.id,
   ]);
   const updated = await getMessageById(actor, input.messageId);
-  if (!updated) return { status: "notFound" };
+  const updatedChannel = await getVisibleChannel(actor, input.channelId);
+  if (!updated || !updatedChannel) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
   publishRealtimeChatEvent(storageTeamId(actor), recipients, {
     eventType: "message.deleted",
     channelId: input.channelId,
     actorUserId: actor.id,
+    channel: updatedChannel,
     message: updated,
     messageId: input.messageId,
     rootMessageId: updated.rootMessageId ?? null,
   });
-  return ok({ message: updated });
+  return ok({ channel: updatedChannel, message: updated });
 }
 
 export async function setChatReaction(

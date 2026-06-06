@@ -387,6 +387,7 @@ export function ChatPage() {
     async (message: ChatMessage, body: string) => {
       try {
         const response = await updateChatMessageRequest({ channelId: message.channelId, messageId: message.id, body });
+        if (response.channel) applyChannel(response.channel);
         applyMessage(response.message);
         setEditingMessage(null);
       } catch (error) {
@@ -394,15 +395,16 @@ export function ChatPage() {
         throw error;
       }
     },
-    [applyMessage, notify],
+    [applyChannel, applyMessage, notify],
   );
 
   const handleDeleteMessage = useCallback(
     async (message: ChatMessage) => {
       const response = await deleteChatMessageRequest({ channelId: message.channelId, messageId: message.id });
+      if (response.channel) applyChannel(response.channel);
       applyMessage(response.message);
     },
-    [applyMessage],
+    [applyChannel, applyMessage],
   );
 
   const confirmDeleteMessage = useCallback(async () => {
