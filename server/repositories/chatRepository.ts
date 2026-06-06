@@ -1756,13 +1756,44 @@ export async function setChatChannelUnread(
       [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null],
     );
   } else {
+    const { rows: latestRows } = await pool.query<{ created_at: Date | string; id: string }>(
+      `
+        SELECT id, created_at
+        FROM chat_messages
+        WHERE team_id = $1
+          AND channel_id = $2
+          AND root_message_id IS NULL
+          AND deleted_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [storageTeamId(actor), input.channelId],
+    );
+    const latestRootMessage = latestRows[0];
+    if (!latestRootMessage) {
+      return ok({ channel });
+    }
+    const { rows } = await pool.query<{ created_at: Date | string; id: string }>(
+      `
+        SELECT id, created_at
+        FROM chat_messages
+        WHERE team_id = $1
+          AND channel_id = $2
+          AND root_message_id IS NULL
+          AND deleted_at IS NULL
+          AND created_at < $3
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [storageTeamId(actor), input.channelId, latestRootMessage.created_at],
+    );
     await pool.query(
       `
         UPDATE chat_channel_members
-        SET manually_unread = true
+        SET last_read_at = $3, last_read_message_id = $4, manually_unread = true
         WHERE channel_id = $1 AND user_id = $2
       `,
-      [input.channelId, actor.id],
+      [input.channelId, actor.id, rows[0]?.created_at ?? null, rows[0]?.id ?? null],
     );
   }
 
