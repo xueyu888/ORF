@@ -15,10 +15,16 @@ export type ChatDraft = {
 export type UnreadAnchor = {
   channelId: string;
   lastReadAt?: string | null;
+  lastReadMessageId?: string | null;
   manuallyUnread: boolean;
   mentionCount: number;
   threadUnreadCount: number;
   unreadCount: number;
+};
+
+export type ChatUnreadJumpTarget = {
+  contextRequired: boolean;
+  messageId?: string | null;
 };
 
 export type ChatFeedSnapshot = {
@@ -218,11 +224,48 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
   return hasUnreadState ? {
     channelId: channel.id,
     lastReadAt: member?.lastReadAt ?? null,
+    lastReadMessageId: member?.lastReadMessageId ?? null,
     manuallyUnread: Boolean(member?.manuallyUnread),
     mentionCount: channel.mentionCount,
     threadUnreadCount: channel.threadUnreadCount,
     unreadCount: channel.unreadCount,
   } : null;
+}
+
+export function resolveUnreadJumpTarget(input: {
+  currentUserId?: string;
+  hasOlderMessages: boolean;
+  messages: ChatMessage[];
+  unreadAnchor: UnreadAnchor | null;
+}): { dividerIndex: number; jumpTarget: ChatUnreadJumpTarget; messageId: string | null } | null {
+  const { currentUserId, hasOlderMessages, messages, unreadAnchor } = input;
+  if (!unreadAnchor || messages.length === 0) return null;
+
+  const firstUnreadIndex = messages.findIndex((message) => {
+    if (message.deletedAt) return false;
+    if (unreadAnchor.lastReadAt && message.createdAt <= unreadAnchor.lastReadAt) return false;
+    return message.authorUserId !== currentUserId || unreadAnchor.manuallyUnread;
+  });
+
+  if (firstUnreadIndex < 0) {
+    return { dividerIndex: -1, jumpTarget: { contextRequired: true }, messageId: null };
+  }
+
+  const message = messages[firstUnreadIndex];
+  const boundaryMayBeOlder =
+    hasOlderMessages &&
+    firstUnreadIndex === 0 &&
+    (!unreadAnchor.lastReadAt || message.createdAt > unreadAnchor.lastReadAt);
+
+  if (boundaryMayBeOlder) {
+    return { dividerIndex: -1, jumpTarget: { contextRequired: true }, messageId: null };
+  }
+
+  return {
+    dividerIndex: firstUnreadIndex,
+    jumpTarget: { contextRequired: false, messageId: message.id },
+    messageId: message.id,
+  };
 }
 
 export function shouldFollowIncomingMessage(message: ChatMessage, currentUserId: string | undefined, nearLatest: boolean) {

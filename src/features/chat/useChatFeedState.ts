@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getChatMessageContext,
   getChatMessages,
+  getChatUnreadContext,
   markChatChannelReadRequest,
   setChatChannelUnreadRequest,
 } from "../../state/apiClient";
@@ -19,6 +20,7 @@ import {
   type UnreadAnchor,
   applyFeedMessage,
   buildUnreadAnchor,
+  type ChatUnreadJumpTarget,
   chatMessagePageSize,
   createFeedSnapshot,
   currentMembership,
@@ -69,6 +71,7 @@ export function useChatFeedState({
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const olderLoadInFlightRef = useRef(false);
   const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
+  const pendingUnreadScrollRef = useRef(false);
   const prefetchRequestsRef = useRef(new Map<string, Promise<boolean>>());
   const activeChannelId = activeChannel?.id ?? null;
   activeChannelIdRef.current = activeChannelId;
@@ -320,6 +323,15 @@ export function useChatFeedState({
   }, [messages, onRequestedMessageConsumed, requestedMessageId]);
 
   useEffect(() => {
+    if (!pendingUnreadScrollRef.current || messagesLoading) return undefined;
+    const timer = window.setTimeout(() => {
+      scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" });
+      pendingUnreadScrollRef.current = false;
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [messages, messagesLoading]);
+
+  useEffect(() => {
     const behavior = pendingLatestScrollRef.current;
     if (!behavior || messagesLoading) return;
     window.requestAnimationFrame(() => {
@@ -382,6 +394,7 @@ export function useChatFeedState({
     setUnreadAnchor({
       channelId: response.channel.id,
       lastReadAt: member?.lastReadAt ?? null,
+      lastReadMessageId: member?.lastReadMessageId ?? null,
       manuallyUnread: true,
       mentionCount: response.channel.mentionCount,
       threadUnreadCount: response.channel.threadUnreadCount,
@@ -397,6 +410,7 @@ export function useChatFeedState({
     setUnreadAnchor({
       channelId: response.channel.id,
       lastReadAt: member?.lastReadAt ?? null,
+      lastReadMessageId: member?.lastReadMessageId ?? null,
       manuallyUnread: true,
       mentionCount: response.channel.mentionCount,
       threadUnreadCount: response.channel.threadUnreadCount,
@@ -404,10 +418,44 @@ export function useChatFeedState({
     });
   }, [onChannelUpdate]);
 
-  const jumpToUnread = useCallback((messageId?: string | null) => {
-    if (messageId && scrollChatFeedToMessage(messageScrollRef.current, messageId, { behavior: "smooth", block: "start", offset: 48 })) return;
-    scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" });
-  }, []);
+  const jumpToUnread = useCallback(async (target: ChatUnreadJumpTarget) => {
+    const channelId = activeChannelIdRef.current;
+    if (!channelId) return;
+    if (!target.contextRequired) {
+      if (scrollChatFeedToUnread(messageScrollRef.current, { behavior: "smooth" })) return;
+      if (
+        target.messageId &&
+        scrollChatFeedToMessage(messageScrollRef.current, target.messageId, { behavior: "smooth", block: "start", offset: 48 })
+      ) {
+        return;
+      }
+    }
+
+    setMessagesLoading(true);
+    try {
+      const response = await getChatUnreadContext({ anchor: unreadAnchor, channelId, limit: chatMessagePageSize });
+      if (activeChannelIdRef.current !== channelId) return;
+      const snapshot = replaceFeedMessages(
+        feedCacheRef.current.get(channelId),
+        response.messages,
+        chatMessagePageSize,
+        {
+          hasNewerMessages: response.hasNewerMessages,
+          hasOlderMessages: response.hasOlderMessages,
+        },
+      );
+      feedCacheRef.current.set(channelId, snapshot);
+      if (applySnapshotToActiveFeed(channelId, snapshot)) {
+        pendingUnreadScrollRef.current = true;
+      }
+    } catch (error) {
+      if (activeChannelIdRef.current === channelId) {
+        notify(error instanceof Error ? error.message : "加载未读消息失败");
+      }
+    } finally {
+      if (activeChannelIdRef.current === channelId) setMessagesLoading(false);
+    }
+  }, [applySnapshotToActiveFeed, notify, unreadAnchor]);
 
   const loadLatestOrScroll = useCallback(() => {
     if (hasNewerMessages) {

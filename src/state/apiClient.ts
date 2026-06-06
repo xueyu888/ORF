@@ -253,6 +253,21 @@ export async function getChatMessageContext(input: { channelId: string; limit?: 
   );
 }
 
+export async function getChatUnreadContext(input: {
+  anchor?: { lastReadAt?: string | null; manuallyUnread: boolean } | null;
+  channelId: string;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (input.limit) query.set("limit", String(input.limit));
+  if (input.anchor) {
+    query.set("lastReadAt", input.anchor.lastReadAt ?? "");
+    query.set("manuallyUnread", input.anchor.manuallyUnread ? "true" : "false");
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<ChatMessageContextResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/unread-context${suffix}`);
+}
+
 export async function createChatChannel(input: {
   displayName: string;
   header?: string;

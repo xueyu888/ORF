@@ -739,6 +739,37 @@ export async function getChatMessageContext(
   });
 }
 
+export async function getChatUnreadContext(
+  input: { anchor?: { lastReadAt?: string | null; manuallyUnread: boolean }; channelId: string; limit?: number },
+  actor: ChatActor,
+): Promise<Outcome<ChatMessageContext>> {
+  if (!actor.canRead) return { status: "forbidden" };
+  const channel = await getVisibleChannel(actor, input.channelId);
+  if (!channel) return { status: "notFound" };
+
+  const member = channel.members.find((item) => item.userId === actor.id);
+  const lastReadAt = input.anchor ? input.anchor.lastReadAt ?? null : member?.lastReadAt ?? null;
+  const manuallyUnread = input.anchor ? input.anchor.manuallyUnread : Boolean(member?.manuallyUnread);
+  const { rows } = await pool.query<{ id: string }>(
+    `
+      SELECT m.id
+      FROM chat_messages m
+      WHERE m.team_id = $1
+        AND m.channel_id = $2
+        AND m.root_message_id IS NULL
+        AND m.deleted_at IS NULL
+        AND ($3::timestamptz IS NULL OR m.created_at > $3::timestamptz)
+        AND ($4::boolean = true OR m.author_user_id <> $5::uuid)
+      ORDER BY m.created_at ASC, m.id ASC
+      LIMIT 1
+    `,
+    [storageTeamId(actor), input.channelId, lastReadAt, manuallyUnread, actor.id],
+  );
+  const targetMessageId = rows[0]?.id;
+  if (!targetMessageId) return { status: "notFound" };
+  return getChatMessageContext({ channelId: input.channelId, limit: input.limit, messageId: targetMessageId }, actor);
+}
+
 export async function getChatThread(rootMessageId: string, actor: ChatActor): Promise<Outcome<{ thread: ChatThread }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const root = await getRawMessage(actor, rootMessageId);

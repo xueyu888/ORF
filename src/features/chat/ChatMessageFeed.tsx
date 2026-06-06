@@ -3,7 +3,7 @@ import type { RefObject } from "react";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
-import type { UnreadAnchor } from "./chatModels";
+import { resolveUnreadJumpTarget, type ChatUnreadJumpTarget, type UnreadAnchor } from "./chatModels";
 import { ChatMessageItem } from "./ChatMessageItem";
 
 type ChatMessageFeedProps = {
@@ -19,7 +19,7 @@ type ChatMessageFeedProps = {
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
-  onJumpUnread: (messageId: string) => void;
+  onJumpUnread: (target: ChatUnreadJumpTarget) => void;
   onLoadLatest: () => void;
   onLoadOlder: () => void;
   onMarkUnread: (message: ChatMessage) => void;
@@ -140,19 +140,13 @@ function MessageList({
     return <div className="orf-chat-message-empty">这里还没有消息。</div>;
   }
   let lastDay = "";
-  const firstUnreadIndex = unreadAnchor
-    ? messages.findIndex((message) => {
-        if (message.deletedAt) return false;
-        if (unreadAnchor.lastReadAt && message.createdAt <= unreadAnchor.lastReadAt) return false;
-        return message.authorUserId !== currentUserId || unreadAnchor.manuallyUnread;
-      })
-    : -1;
-  const unreadDividerIndex = firstUnreadIndex >= 0 ? firstUnreadIndex : unreadAnchor?.manuallyUnread ? 0 : -1;
-  const unreadMessageId = unreadDividerIndex >= 0 ? messages[unreadDividerIndex]?.id : null;
+  const unreadTarget = resolveUnreadJumpTarget({ currentUserId, hasOlderMessages, messages, unreadAnchor });
+  const unreadDividerIndex = unreadTarget?.dividerIndex ?? -1;
+  const unreadMessageId = unreadTarget?.messageId ?? null;
   return (
     <div className="orf-chat-message-list">
-      {unreadMessageId && (
-        <button className="orf-chat-unread-jump" type="button" onClick={() => onJumpUnread(unreadMessageId)}>
+      {unreadTarget && (
+        <button className="orf-chat-unread-jump" type="button" onClick={() => onJumpUnread(unreadTarget.jumpTarget)}>
           <ChevronDown className="h-4 w-4" />
           跳到未读
         </button>
