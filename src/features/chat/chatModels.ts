@@ -253,6 +253,61 @@ export function applyFeedMessage(snapshot: ChatFeedSnapshot | undefined, message
   };
 }
 
+export function optimisticToggleChatReaction(message: ChatMessage, emojiName: string, currentUserId?: string): ChatMessage {
+  const currentReaction = message.reactions.find((reaction) => reaction.emojiName === emojiName);
+  const reacting = !currentReaction?.reactedByCurrentUser;
+  if (!currentReaction) {
+    return {
+      ...message,
+      reactions: [
+        ...message.reactions,
+        {
+          emojiName,
+          count: 1,
+          reactedByCurrentUser: true,
+          userIds: currentUserId ? [currentUserId] : [],
+        },
+      ],
+    };
+  }
+
+  const nextCount = Math.max(0, currentReaction.count + (reacting ? 1 : -1));
+  return {
+    ...message,
+    reactions: message.reactions.flatMap((reaction) => {
+      if (reaction.emojiName !== emojiName) return [reaction];
+      if (nextCount === 0) return [];
+      const userIds = currentUserId
+        ? reacting
+          ? Array.from(new Set([...reaction.userIds, currentUserId]))
+          : reaction.userIds.filter((userId) => userId !== currentUserId)
+        : reaction.userIds;
+      return [{
+        ...reaction,
+        count: nextCount,
+        reactedByCurrentUser: reacting,
+        userIds,
+      }];
+    }),
+  };
+}
+
+export function optimisticSetChatMessagePinned(message: ChatMessage, pinned: boolean, currentUserId?: string): ChatMessage {
+  const now = new Date().toISOString();
+  return {
+    ...message,
+    pinnedAt: pinned ? message.pinnedAt ?? now : null,
+    pinnedBy: pinned ? message.pinnedBy ?? currentUserId ?? null : null,
+  };
+}
+
+export function optimisticSetChatMessageSaved(message: ChatMessage, saved: boolean): ChatMessage {
+  return {
+    ...message,
+    savedByCurrentUser: saved,
+  };
+}
+
 export function prependOlderFeedMessages(snapshot: ChatFeedSnapshot | undefined, olderMessages: ChatMessage[], pageSize = chatMessagePageSize) {
   const current = snapshot ?? createFeedSnapshot();
   const byId = new Map<string, ChatMessage>();

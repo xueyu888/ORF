@@ -13,6 +13,9 @@ import {
   type ChatSendInput,
   currentMembership,
   hasStoredDraftForChannel,
+  optimisticSetChatMessagePinned,
+  optimisticSetChatMessageSaved,
+  optimisticToggleChatReaction,
   selectChatFeedPrefetchChannelIds,
   serializeDraft,
   sortChannels,
@@ -434,41 +437,62 @@ export function ChatPage() {
   const handleReaction = useCallback(
     async (message: ChatMessage, emojiName: string) => {
       const currentReaction = message.reactions.find((reaction) => reaction.emojiName === emojiName);
-      const response = await setChatReactionRequest({
-        channelId: message.channelId,
-        messageId: message.id,
-        emojiName,
-        reacting: !currentReaction?.reactedByCurrentUser,
-      });
-      applyMessage(response.message);
+      const optimisticMessage = optimisticToggleChatReaction(message, emojiName, currentUser?.id);
+      applyMessage(optimisticMessage);
+      try {
+        const response = await setChatReactionRequest({
+          channelId: message.channelId,
+          messageId: message.id,
+          emojiName,
+          reacting: !currentReaction?.reactedByCurrentUser,
+        });
+        applyMessage(response.message);
+      } catch (error) {
+        applyMessage(message);
+        notify(error instanceof Error ? error.message : "更新表情失败");
+      }
     },
-    [applyMessage],
+    [applyMessage, currentUser?.id, notify],
   );
 
   const handlePinMessage = useCallback(
     async (message: ChatMessage) => {
-      const response = await setChatMessagePinRequest({
-        channelId: message.channelId,
-        messageId: message.id,
-        pinned: !message.pinnedAt,
-      });
-      applyMessage(response.message);
-      reconcilePinnedCollection(response.message, Boolean(message.pinnedAt));
+      const pinned = !message.pinnedAt;
+      applyMessage(optimisticSetChatMessagePinned(message, pinned, currentUser?.id));
+      try {
+        const response = await setChatMessagePinRequest({
+          channelId: message.channelId,
+          messageId: message.id,
+          pinned,
+        });
+        applyMessage(response.message);
+        reconcilePinnedCollection(response.message, Boolean(message.pinnedAt));
+      } catch (error) {
+        applyMessage(message);
+        notify(error instanceof Error ? error.message : "更新固定消息失败");
+      }
     },
-    [applyMessage, reconcilePinnedCollection],
+    [applyMessage, currentUser?.id, notify, reconcilePinnedCollection],
   );
 
   const handleSaveMessage = useCallback(
     async (message: ChatMessage) => {
-      const response = await setChatMessageSavedRequest({
-        channelId: message.channelId,
-        messageId: message.id,
-        saved: !message.savedByCurrentUser,
-      });
-      applyMessage(response.message);
-      reconcileSavedCollection(response.message, message.savedByCurrentUser);
+      const saved = !message.savedByCurrentUser;
+      applyMessage(optimisticSetChatMessageSaved(message, saved));
+      try {
+        const response = await setChatMessageSavedRequest({
+          channelId: message.channelId,
+          messageId: message.id,
+          saved,
+        });
+        applyMessage(response.message);
+        reconcileSavedCollection(response.message, message.savedByCurrentUser);
+      } catch (error) {
+        applyMessage(message);
+        notify(error instanceof Error ? error.message : "更新保存消息失败");
+      }
     },
-    [applyMessage, reconcileSavedCollection],
+    [applyMessage, notify, reconcileSavedCollection],
   );
 
   if (loading) {
