@@ -9,6 +9,7 @@ type ChatSearchPanelProps = {
   loading: boolean;
   query: string;
   results: ChatSearchResult[];
+  searched: boolean;
   searchScope: ChatSearchScope;
   searchType: ChatSearchTypeFilter;
   setQuery: (value: string) => void;
@@ -23,6 +24,7 @@ export function ChatSearchPanel({
   loading,
   query,
   results,
+  searched,
   searchScope,
   searchType,
   setQuery,
@@ -83,7 +85,11 @@ export function ChatSearchPanel({
             <SearchResultPreview message={result.message} usersById={usersById} />
           </button>
         ))}
-        {!loading && results.length === 0 && <div className="orf-chat-search-empty">输入关键词后搜索。</div>}
+        {!loading && results.length === 0 && (
+          <div className="orf-chat-search-empty">
+            {!query.trim() ? "输入关键词后搜索。" : searched ? "没有匹配消息。" : "按 Enter 搜索。"}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -93,6 +93,7 @@ export function ChatPage() {
     reconcileSavedCollection,
     searchLoading,
     searchMessages,
+    searchPerformed,
     searchQuery,
     searchResults,
     searchScope,
@@ -466,6 +467,7 @@ export function ChatPage() {
             applyChannel(response.channel);
           }}
           searchLoading={searchLoading}
+          searchPerformed={searchPerformed}
           searchQuery={searchQuery}
           searchScope={searchScope}
           searchResults={searchResults}
