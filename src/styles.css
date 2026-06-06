@@ -9721,7 +9721,9 @@ button.orf-chat-image-attachment {
 .orf-chat-draft-editor textarea {
   display: block;
   width: 100%;
+  max-height: 220px;
   min-height: 76px;
+  overflow-y: hidden;
   resize: none;
   border: 0;
   outline: 0;

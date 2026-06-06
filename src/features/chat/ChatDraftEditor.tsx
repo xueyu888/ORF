@@ -1,6 +1,6 @@
 import { clsx } from "clsx";
 import { AtSign, Bold, Code, Italic, Link as LinkIcon, Quote } from "lucide-react";
-import { type ClipboardEventHandler, type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ClipboardEventHandler, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
@@ -34,6 +34,16 @@ type ChatDraftEditorProps = {
   toolbarControls?: ReactNode;
   toolbarEnd?: (state: ChatDraftEditorToolbarState) => ReactNode;
 };
+
+const chatDraftEditorMaxHeight = 220;
+
+function resizeDraftTextarea(element: HTMLTextAreaElement | null) {
+  if (!element) return;
+  element.style.height = "auto";
+  const nextHeight = Math.min(element.scrollHeight, chatDraftEditorMaxHeight);
+  element.style.height = `${nextHeight}px`;
+  element.style.overflowY = element.scrollHeight > chatDraftEditorMaxHeight ? "auto" : "hidden";
+}
 
 function markdownShortcutModeFor(event: KeyboardEvent<HTMLTextAreaElement>): ChatMarkdownMode | null {
   if (event.nativeEvent.isComposing) return null;
@@ -108,6 +118,10 @@ export function ChatDraftEditor({
   useEffect(() => {
     if (!draft.text) setMentionRange(null);
   }, [draft.text]);
+
+  useLayoutEffect(() => {
+    resizeDraftTextarea(textAreaRef.current);
+  }, [draft.text, resetKey, rows]);
 
   const setText = (text: string, cursor: number) => {
     const mentions = reconcileMentions(draft.text, text, draft.mentions);
