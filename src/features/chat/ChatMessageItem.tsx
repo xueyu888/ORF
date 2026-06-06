@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
+import { Bookmark, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { Avatar, IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
@@ -116,9 +116,11 @@ export function ChatMessageItem({
   usersById,
 }: ChatMessageItemProps) {
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [editDraft, setEditDraft] = useState<ChatDraft>(() => draftFromStoredBody(message.body, usersById));
   const [editSaving, setEditSaving] = useState(false);
   const emojiAnchorRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const deliveryStatus = chatMessageDeliveryStatus(message);
   const canMutate = !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
   const canUseServerActions = !deliveryStatus && !message.deletedAt;
@@ -138,6 +140,20 @@ export function ChatMessageItem({
     if (!reactionPickerSignal || !canUseServerActions || editing) return;
     setEmojiOpen(true);
   }, [canUseServerActions, editing, reactionPickerSignal]);
+
+  useEffect(() => {
+    if (!moreOpen) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!moreMenuRef.current?.contains(target)) setMoreOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (editing || !canUseServerActions) setMoreOpen(false);
+  }, [canUseServerActions, editing]);
 
   const selectReaction = (emojiName: string) => {
     const reactionName = preferredReactionName(message.reactions.map((reaction) => reaction.emojiName), emojiName);
@@ -176,6 +192,17 @@ export function ChatMessageItem({
     event.preventDefault();
     onThread(message.rootMessageId ?? message.id);
   };
+  const handleMoreAction = (action: () => void) => {
+    setMoreOpen(false);
+    action();
+  };
+  const handleMoreKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopPropagation();
+    setMoreOpen(false);
+  };
+  const hasMoreActions = Boolean((canPin && onPin) || onMarkUnread || canMutate);
 
   return (
     <article
@@ -186,6 +213,7 @@ export function ChatMessageItem({
         message.pinnedAt && "orf-chat-message-pinned",
         focused && "orf-chat-message-focused",
         emojiOpen && "orf-chat-message-actions-open",
+        moreOpen && "orf-chat-message-actions-open",
         deliveryStatus === "sending" && "orf-chat-message-pending",
         deliveryStatus === "failed" && "orf-chat-message-failed",
       )}
@@ -329,18 +357,45 @@ export function ChatMessageItem({
               onClick={() => onSave(message)}
             />
           )}
-          {canPin && onPin && (
-            <IconButton
-              className={message.pinnedAt ? "orf-chat-message-action-active" : ""}
-              icon={Pin}
-              label={message.pinnedAt ? "取消固定" : "固定消息"}
-              onClick={() => onPin(message)}
-            />
-          )}
-          {onMarkUnread && <IconButton icon={EyeOff} label="从这里标记未读" onClick={() => onMarkUnread(message)} />}
           <IconButton icon={LinkIcon} label="复制消息链接" onClick={() => onCopyLink(message)} />
-          {canMutate && <IconButton icon={Edit3} label="编辑消息" onClick={() => onEdit(message)} />}
-          {canMutate && <IconButton icon={Trash2} label="删除消息" onClick={() => onDelete(message)} />}
+          {hasMoreActions && (
+            <div className="orf-chat-message-more-anchor" ref={moreMenuRef} onKeyDown={handleMoreKeyDown}>
+              <IconButton icon={MoreHorizontal} label="更多操作" onClick={() => setMoreOpen((open) => !open)} />
+              {moreOpen && (
+                <div className="orf-chat-message-more-menu" role="menu">
+                  {canPin && onPin && (
+                    <button
+                      type="button"
+                      className={message.pinnedAt ? "orf-chat-message-more-active" : ""}
+                      role="menuitem"
+                      onClick={() => handleMoreAction(() => onPin(message))}
+                    >
+                      <Pin className="h-3.5 w-3.5" />
+                      {message.pinnedAt ? "取消固定" : "固定消息"}
+                    </button>
+                  )}
+                  {onMarkUnread && (
+                    <button type="button" role="menuitem" onClick={() => handleMoreAction(() => onMarkUnread(message))}>
+                      <EyeOff className="h-3.5 w-3.5" />
+                      从这里标记未读
+                    </button>
+                  )}
+                  {canMutate && (
+                    <button type="button" role="menuitem" onClick={() => handleMoreAction(() => onEdit(message))}>
+                      <Edit3 className="h-3.5 w-3.5" />
+                      编辑消息
+                    </button>
+                  )}
+                  {canMutate && (
+                    <button className="orf-chat-message-more-danger" type="button" role="menuitem" onClick={() => handleMoreAction(() => onDelete(message))}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                      删除消息
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </article>

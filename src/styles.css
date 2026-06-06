@@ -9606,6 +9606,58 @@ a.orf-row-loot-action,
   background: var(--orf-bg-row-hover);
 }
 
+.orf-chat-message-more-anchor {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.orf-chat-message-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 154px;
+  overflow: hidden;
+  border: 1px solid var(--orf-border);
+  border-radius: var(--orf-radius-control);
+  background: rgba(255, 255, 255, 0.98);
+  padding: 4px;
+  box-shadow: var(--orf-shadow-card);
+}
+
+.orf-chat-message-more-menu button {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
+  color: var(--orf-text-secondary);
+  padding: 0 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.orf-chat-message-more-menu button:hover,
+.orf-chat-message-more-active {
+  background: var(--orf-accent-soft) !important;
+  color: var(--orf-accent-text) !important;
+}
+
+.orf-chat-message-more-danger {
+  color: var(--orf-danger-text) !important;
+}
+
+.orf-chat-message-more-danger:hover {
+  background: var(--orf-danger-bg) !important;
+  color: var(--orf-danger-text) !important;
+}
+
 .orf-chat-message-action-active {
   background: var(--orf-accent-soft) !important;
   color: var(--orf-accent-text) !important;
@@ -10154,15 +10206,8 @@ button.orf-chat-image-attachment {
   position: absolute;
   top: 6px;
   right: 6px;
-  max-width: calc(100% - 12px);
-  overflow-x: auto;
   margin-top: 0;
   box-shadow: var(--orf-shadow-card);
-  scrollbar-width: none;
-}
-
-.orf-chat-thread-panel .orf-chat-message-actions::-webkit-scrollbar {
-  display: none;
 }
 
 .orf-chat-thread-panel .orf-chat-message:hover .orf-chat-message-actions,
