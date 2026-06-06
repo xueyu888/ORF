@@ -36,7 +36,7 @@ type ChatComposerProps = {
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
   onSend: ChatSendHandler;
-  onTyping?: () => void;
+  onTyping?: (channelId: string) => void;
   parentMessageId?: string | null;
   rootMessageId?: string | null;
 };
@@ -183,7 +183,7 @@ export function ChatComposer({
         onChange={setDraft}
         onPaste={handlePaste}
         onSubmit={submit}
-        onTyping={onTyping}
+        onTyping={() => onTyping?.(channelId)}
         placeholder={disabled ? "当前没有发送权限" : rootMessageId ? "回复该话题..." : "发送消息..."}
         recordHistoryOnSubmit
         resetKey={draftStorageKey}

@@ -17,10 +17,9 @@ type UseChatTypingStateInput = {
 
 export function useChatTypingState({ activeChannelId, currentUserId }: UseChatTypingStateInput) {
   const [typingByUser, setTypingByUser] = useState<Map<string, ChatTypingState>>(new Map());
-  const lastTypingSentAtRef = useRef(0);
+  const lastTypingSentAtByChannelRef = useRef(new Map<string, number>());
 
   useEffect(() => {
-    lastTypingSentAtRef.current = 0;
     setTypingByUser(new Map());
   }, [activeChannelId]);
 
@@ -38,12 +37,13 @@ export function useChatTypingState({ activeChannelId, currentUserId }: UseChatTy
     return () => window.clearInterval(timer);
   }, []);
 
-  const publishTyping = useCallback(() => {
-    if (!activeChannelId) return;
+  const publishTyping = useCallback((channelId = activeChannelId ?? undefined) => {
+    if (!channelId) return;
     const currentTime = Date.now();
-    if (currentTime - lastTypingSentAtRef.current < typingPublishThrottleMs) return;
-    lastTypingSentAtRef.current = currentTime;
-    void publishChatTypingRequest(activeChannelId).catch(() => undefined);
+    const lastTypingSentAt = lastTypingSentAtByChannelRef.current.get(channelId) ?? 0;
+    if (currentTime - lastTypingSentAt < typingPublishThrottleMs) return;
+    lastTypingSentAtByChannelRef.current.set(channelId, currentTime);
+    void publishChatTypingRequest(channelId).catch(() => undefined);
   }, [activeChannelId]);
 
   const applyTypingEvent = useCallback(

@@ -37,7 +37,7 @@ type ChatRightPanelProps = {
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
   onSendThreadReply: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
-  onTyping: () => void;
+  onTyping: (channelId: string) => void;
   onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;
   searchPerformed: boolean;
   searchLoading: boolean;

@@ -25,7 +25,7 @@ type ChatThreadPanelProps = {
   onSaveEdit: (message: ChatMessage, body: string) => Promise<void>;
   onSend: ChatSendHandler;
   onToggleFollow: (following: boolean) => void;
-  onTyping: () => void;
+  onTyping: (channelId: string) => void;
   thread: ChatThread;
   users: ChatUser[];
   usersById: Map<string, ChatUser>;
