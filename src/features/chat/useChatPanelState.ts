@@ -33,6 +33,7 @@ export function useChatPanelState({
   const [searchResults, setSearchResults] = useState<ChatSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchPerformed, setSearchPerformed] = useState(false);
+  const [searchFocusSignal, setSearchFocusSignal] = useState(0);
   const [collectionResults, setCollectionResults] = useState<ChatSearchResult[]>([]);
   const [collectionLoading, setCollectionLoading] = useState(false);
   const [threadSummaries, setThreadSummaries] = useState<ChatThreadSummary[]>([]);
@@ -45,8 +46,9 @@ export function useChatPanelState({
 
   const closePanel = useCallback(() => setActivePanel(null), []);
 
-  const openPanel = useCallback((panel: Exclude<ActivePanel, null>) => {
-    setActivePanel(panel);
+  const openSearchPanel = useCallback(() => {
+    setActivePanel("search");
+    setSearchFocusSignal((signal) => signal + 1);
   }, []);
 
   const updateSearchQuery = useCallback((value: string) => {
@@ -251,11 +253,12 @@ export function useChatPanelState({
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
-    openPanel,
+    openSearchPanel,
     reconcilePinnedCollection,
     reconcileSavedCollection,
     reconcileThreadFollow,
     searchLoading,
+    searchFocusSignal,
     searchMessages,
     searchPerformed,
     searchQuery,

@@ -118,11 +118,12 @@ export function ChatPage() {
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
-    openPanel,
+    openSearchPanel,
     reconcilePinnedCollection,
     reconcileSavedCollection,
     reconcileThreadFollow,
     searchLoading,
+    searchFocusSignal,
     searchMessages,
     searchPerformed,
     searchQuery,
@@ -316,11 +317,11 @@ export function ChatPage() {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "f") return;
       if (isChatGlobalShortcutEditableTarget(event.target)) return;
       event.preventDefault();
-      openPanel("search");
+      openSearchPanel();
     };
     document.addEventListener("keydown", handleSearchShortcut);
     return () => document.removeEventListener("keydown", handleSearchShortcut);
-  }, [activeChannel?.id, attachmentPreview, deletingMessage, editingMessage, modal, openPanel]);
+  }, [activeChannel?.id, attachmentPreview, deletingMessage, editingMessage, modal, openSearchPanel]);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -719,7 +720,7 @@ export function ChatPage() {
               onMarkUnread={() => void markActiveChannelUnread()}
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
-              onSearch={() => openPanel("search")}
+              onSearch={openSearchPanel}
               onThreads={() => void loadThreadSummaries()}
               onToggleFavorite={async () => {
                 const response = await updateChatChannelRequest(activeChannel.id, { favorite: !myMembership?.favorite });
@@ -825,6 +826,7 @@ export function ChatPage() {
             applyChannel(response.channel);
           }}
           searchLoading={searchLoading}
+          searchFocusSignal={searchFocusSignal}
           searchPerformed={searchPerformed}
           searchQuery={searchQuery}
           searchScope={searchScope}

@@ -7,6 +7,7 @@ import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
 
 type ChatSearchPanelProps = {
+  focusSignal: number;
   onOpenResult: (result: ChatSearchResult) => void;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
   loading: boolean;
@@ -22,6 +23,7 @@ type ChatSearchPanelProps = {
 };
 
 export function ChatSearchPanel({
+  focusSignal,
   onOpenResult,
   onSearch,
   loading,
@@ -42,7 +44,7 @@ export function ChatSearchPanel({
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
     });
-  }, []);
+  }, [focusSignal]);
 
   const applyScope = (scope: ChatSearchScope) => {
     setSearchScope(scope);
