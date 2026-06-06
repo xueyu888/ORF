@@ -4,6 +4,7 @@ import { type ClipboardEventHandler, type ComponentType, type KeyboardEvent, typ
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
+import { matchesChatShortcutKey } from "./chatKeyboardShortcuts";
 import { ChatMarkdown } from "./chatMarkdown";
 import {
   applyChatMarkdownShortcut,
@@ -72,14 +73,14 @@ const chatMarkdownCommands: ChatMarkdownCommand[] = [
     icon: Bold,
     label: "加粗",
     mode: "bold",
-    shortcuts: [{ key: "b", primary: true }],
+    shortcuts: [{ code: "KeyB", key: "b", primary: true }],
     shortcutText: "Ctrl/Cmd+B",
   },
   {
     icon: Italic,
     label: "斜体",
     mode: "italic",
-    shortcuts: [{ key: "i", primary: true }],
+    shortcuts: [{ code: "KeyI", key: "i", primary: true }],
     shortcutText: "Ctrl/Cmd+I",
   },
   {
@@ -87,8 +88,8 @@ const chatMarkdownCommands: ChatMarkdownCommand[] = [
     label: "删除线",
     mode: "strike",
     shortcuts: [
-      { alt: true, key: "x", shift: true },
-      { key: "x", primary: true, shift: true },
+      { alt: true, code: "KeyX", key: "x", shift: true },
+      { code: "KeyX", key: "x", primary: true, shift: true },
     ],
     shortcutText: "Shift+Alt+X / Ctrl/Cmd+Shift+X",
   },
@@ -96,7 +97,7 @@ const chatMarkdownCommands: ChatMarkdownCommand[] = [
     icon: Code,
     label: "代码",
     mode: "code",
-    shortcuts: [{ alt: true, key: "c", primary: true }],
+    shortcuts: [{ alt: true, code: "KeyC", key: "c", primary: true }],
     shortcutText: "Ctrl/Cmd+Alt+C",
   },
   {
@@ -104,9 +105,9 @@ const chatMarkdownCommands: ChatMarkdownCommand[] = [
     label: "标题",
     mode: "heading",
     shortcuts: [
-      { alt: true, key: "h", primary: true },
-      { alt: true, key: "h", shift: true },
-      { key: "h", primary: true, shift: true },
+      { alt: true, code: "KeyH", key: "h", primary: true },
+      { alt: true, code: "KeyH", key: "h", shift: true },
+      { code: "KeyH", key: "h", primary: true, shift: true },
     ],
     shortcutText: "Ctrl/Cmd+Alt+H / Shift+Alt+H / Ctrl/Cmd+Shift+H",
   },
@@ -145,8 +146,8 @@ const chatMarkdownCommands: ChatMarkdownCommand[] = [
     label: "链接",
     mode: "link",
     shortcuts: [
-      { key: "k", primary: true },
-      { alt: true, key: "k", primary: true },
+      { code: "KeyK", key: "k", primary: true },
+      { alt: true, code: "KeyK", key: "k", primary: true },
     ],
     shortcutText: "Ctrl/Cmd+K / Ctrl/Cmd+Alt+K",
   },
@@ -165,9 +166,7 @@ function matchesMarkdownShortcut(event: KeyboardEvent<HTMLTextAreaElement>, shor
   if (primary !== Boolean(shortcut.primary)) return false;
   if (event.altKey !== Boolean(shortcut.alt)) return false;
   if (event.shiftKey !== Boolean(shortcut.shift)) return false;
-  if (shortcut.code && event.code !== shortcut.code) return false;
-  if (shortcut.key && event.key.toLowerCase() !== shortcut.key) return false;
-  return true;
+  return matchesChatShortcutKey(event, shortcut);
 }
 
 function markdownShortcutModeFor(event: KeyboardEvent<HTMLTextAreaElement>): ChatMarkdownMode | null {
@@ -184,7 +183,7 @@ function matchesPreviewShortcut(event: KeyboardEvent<HTMLElement>) {
   const primary = event.ctrlKey || event.metaKey;
   return (
     primary &&
-    event.key.toLowerCase() === "p" &&
+    matchesChatShortcutKey(event, { code: "KeyP", key: "p" }) &&
     !event.nativeEvent.isComposing &&
     ((event.altKey && !event.shiftKey) || (!event.altKey && event.shiftKey))
   );
@@ -548,7 +547,7 @@ export function ChatDraftEditor({
     if (
       (event.ctrlKey || event.metaKey) &&
       ((event.altKey && !event.shiftKey) || (!event.altKey && event.shiftKey)) &&
-      event.key.toLowerCase() === "e" &&
+      matchesChatShortcutKey(event, { code: "KeyE", key: "e" }) &&
       !event.nativeEvent.isComposing
     ) {
       event.preventDefault();

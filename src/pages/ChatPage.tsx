@@ -5,6 +5,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { AttachmentPreview, ChannelModal, ConversationModal, DeleteMessageDialog } from "../features/chat/ChatDialogs";
 import { ChatHeader } from "../features/chat/ChatHeader";
+import { matchesChatShortcutKey } from "../features/chat/chatKeyboardShortcuts";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
@@ -314,7 +315,12 @@ export function ChatPage() {
     const handleSearchShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !activeChannel?.id) return;
       if (modal || attachmentPreview || deletingMessage || editingMessage) return;
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey || event.key.toLowerCase() !== "f") return;
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.altKey ||
+        event.shiftKey ||
+        !matchesChatShortcutKey(event, { code: "KeyF", key: "f" })
+      ) return;
       if (isChatGlobalShortcutEditableTarget(event.target)) return;
       event.preventDefault();
       openSearchPanel();
