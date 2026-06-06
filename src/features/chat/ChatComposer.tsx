@@ -69,12 +69,15 @@ export function ChatComposer({
   const [draggingFiles, setDraggingFiles] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState(emptyComposerHistory);
+  const [submitting, setSubmitting] = useState(false);
   const uploading = hasUploadingDraftAttachments(attachmentItems);
+  const busy = uploading || submitting;
   const failedUploads = failedDraftAttachmentCount(attachmentItems);
   const draftStorageKey = useMemo(() => chatDraftStorageKey(channelId, rootMessageId), [channelId, rootMessageId]);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
   const activeDraftStorageKeyRef = useRef(draftStorageKey);
+  const submittingRef = useRef(false);
   const mentionUsers = useMemo(() => {
     if (!mentionRange) return [];
     const query = mentionRange.query.toLowerCase();
@@ -93,6 +96,8 @@ export function ChatComposer({
     setSelectedMention(0);
     setDraggingFiles(false);
     setHistory(emptyComposerHistory);
+    setSubmitting(false);
+    submittingRef.current = false;
   }, [draftStorageKey]);
 
   useEffect(() => {
@@ -199,7 +204,7 @@ export function ChatComposer({
   };
 
   const submit = async () => {
-    if (disabled || uploading) return;
+    if (disabled || busy || submittingRef.current) return;
     const uploadedAttachments = uploadedDraftAttachments(attachmentItems);
     if (!draft.text.trim() && uploadedAttachments.length === 0) return;
     if (failedUploads > 0) {
@@ -207,6 +212,8 @@ export function ChatComposer({
       return;
     }
     setError("");
+    submittingRef.current = true;
+    setSubmitting(true);
     try {
       await onSend(draft, uploadedAttachments, rootMessageId, parentMessageId);
       setHistory((item) => recordSentComposerDraft(item, draft));
@@ -215,6 +222,9 @@ export function ChatComposer({
       setMentionRange(null);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "发送消息失败");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -347,8 +357,8 @@ export function ChatComposer({
           <button type="button" onClick={() => insertMarkdown("@", "")} title="提及成员"><AtSign className="h-4 w-4" /></button>
           <span className="orf-chat-composer-spacer" />
           {uploading && <Loader2 className="h-4 w-4 animate-spin" />}
-          <button type="button" className="orf-chat-send-button" disabled={disabled || uploading} onClick={() => void submit()} title="发送">
-            <Send className="h-4 w-4" />
+          <button type="button" className="orf-chat-send-button" disabled={disabled || busy} onClick={() => void submit()} title="发送">
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
           <input multiple hidden ref={fileRef} type="file" onChange={(event) => void handleFiles(event)} />
         </div>
