@@ -62,6 +62,7 @@ export type ChatFeedSnapshot = {
 export const chatMessagePageSize = 80;
 export const chatFeedWindowMessageLimit = chatMessagePageSize * 4;
 export const chatFeedFreshSnapshotMs = 5_000;
+export const chatFeedPrefetchChannelLimit = 24;
 export const emptyDraft: ChatDraft = { mentions: [], text: "" };
 
 export function chatDraftStorageKey(channelId: string, rootMessageId?: string | null) {
@@ -143,7 +144,7 @@ export function selectChatFeedPrefetchChannelIds({
   activeChannelId,
   channels,
   currentUserId,
-  limit = 8,
+  limit = chatFeedPrefetchChannelLimit,
 }: {
   activeChannelId?: string | null;
   channels: ChatChannel[];
