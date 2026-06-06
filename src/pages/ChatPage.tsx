@@ -64,6 +64,16 @@ import {
   upsertMessage,
 } from "../features/chat/chatModels";
 import {
+  type ChatAttachmentDraftItem,
+  completeAttachmentDraftItem,
+  createAttachmentDraftItem,
+  failedDraftAttachmentCount,
+  failAttachmentDraftItem,
+  hasUploadingDraftAttachments,
+  removeAttachmentDraftItem,
+  uploadedDraftAttachments,
+} from "../features/chat/chatComposerModel";
+import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
   createChatChannel,
@@ -1339,11 +1349,12 @@ function ChatComposer({
   rootMessageId?: string | null;
 }) {
   const [draft, setDraft] = useState<ChatDraft>(emptyDraft);
-  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [attachmentItems, setAttachmentItems] = useState<ChatAttachmentDraftItem[]>([]);
   const [mentionRange, setMentionRange] = useState<ReturnType<typeof mentionRangeFor>>(null);
   const [selectedMention, setSelectedMention] = useState(0);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const uploading = hasUploadingDraftAttachments(attachmentItems);
+  const failedUploads = failedDraftAttachmentCount(attachmentItems);
   const draftStorageKey = useMemo(() => chatDraftStorageKey(channelId, rootMessageId), [channelId, rootMessageId]);
   const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -1360,7 +1371,7 @@ function ChatComposer({
   useEffect(() => {
     activeDraftStorageKeyRef.current = draftStorageKey;
     setDraft(parseStoredDraft(window.localStorage.getItem(draftStorageKey)));
-    setAttachments([]);
+    setAttachmentItems([]);
     setError("");
     setMentionRange(null);
     setSelectedMention(0);
@@ -1424,31 +1435,38 @@ function ChatComposer({
   const handleFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
     if (files.length === 0) return;
-    setUploading(true);
     setError("");
+    const uploads = files.slice(0, 10).map((file) => ({ file, item: createAttachmentDraftItem(file) }));
+    setAttachmentItems((items) => [...items, ...uploads.map((upload) => upload.item)]);
     try {
-      const uploaded: ChatAttachment[] = [];
-      for (const file of files.slice(0, 10)) {
-        const response = await uploadChatAttachment({ channelId, file });
-        uploaded.push(response.attachment);
+      for (const upload of uploads) {
+        try {
+          const response = await uploadChatAttachment({ channelId, file: upload.file });
+          setAttachmentItems((items) => completeAttachmentDraftItem(items, upload.item.clientId, response.attachment));
+        } catch (uploadError) {
+          const message = uploadError instanceof Error ? uploadError.message : "上传附件失败";
+          setAttachmentItems((items) => failAttachmentDraftItem(items, upload.item.clientId, message));
+          setError(message);
+        }
       }
-      setAttachments((items) => [...items, ...uploaded]);
-    } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : "上传附件失败");
     } finally {
-      setUploading(false);
       event.target.value = "";
     }
   };
 
   const submit = async () => {
     if (disabled || uploading) return;
-    if (!draft.text.trim() && attachments.length === 0) return;
+    const uploadedAttachments = uploadedDraftAttachments(attachmentItems);
+    if (!draft.text.trim() && uploadedAttachments.length === 0) return;
+    if (failedUploads > 0) {
+      setError("请移除上传失败的附件后发送");
+      return;
+    }
     setError("");
     try {
-      await onSend(draft, attachments, rootMessageId, parentMessageId);
+      await onSend(draft, uploadedAttachments, rootMessageId, parentMessageId);
       setDraft(emptyDraft);
-      setAttachments([]);
+      setAttachmentItems([]);
       setMentionRange(null);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "发送消息失败");
@@ -1485,13 +1503,15 @@ function ChatComposer({
 
   return (
     <div className="orf-chat-composer">
-      {attachments.length > 0 && (
+      {attachmentItems.length > 0 && (
         <div className="orf-chat-pending-attachments">
-          {attachments.map((attachment) => (
-            <span key={attachment.id}>
-              {attachment.mimeType.startsWith("image/") ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
-              {attachment.fileName}
-              <button type="button" onClick={() => setAttachments((items) => items.filter((item) => item.id !== attachment.id))}>
+          {attachmentItems.map((item) => (
+            <span className={item.status === "failed" ? "orf-chat-pending-attachment-failed" : ""} key={item.clientId}>
+              {item.status === "uploading" ? <Loader2 className="h-4 w-4 animate-spin" /> : item.mimeType.startsWith("image/") ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+              {item.fileName}
+              {item.status === "failed" && <small>{item.error}</small>}
+              {item.status === "uploading" && <small>上传中</small>}
+              <button type="button" onClick={() => setAttachmentItems((items) => removeAttachmentDraftItem(items, item.clientId))}>
                 <X className="h-3.5 w-3.5" />
               </button>
             </span>

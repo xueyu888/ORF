@@ -9478,6 +9478,22 @@ button.orf-chat-image-attachment {
   font-size: 12px;
 }
 
+.orf-chat-pending-attachments small {
+  min-width: max-content;
+  color: var(--orf-text-muted);
+  font-weight: 700;
+}
+
+.orf-chat-pending-attachment-failed {
+  border-color: var(--orf-danger-border) !important;
+  background: var(--orf-danger-bg) !important;
+  color: var(--orf-danger-text) !important;
+}
+
+.orf-chat-pending-attachment-failed small {
+  color: var(--orf-danger-text);
+}
+
 .orf-chat-pending-attachments button {
   display: inline-flex;
   border: 0;
