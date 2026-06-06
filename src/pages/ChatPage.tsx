@@ -345,8 +345,9 @@ export function ChatPage() {
         setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
         if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
       }
-      if (payload.eventType === "member.changed" && payload.channel) {
-        applyChannel(payload.channel);
+      if (payload.eventType === "member.changed" && !payload.channel) {
+        setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
+        if (payload.channelId === activeChannel?.id) navigate("/chat", { replace: true });
       }
       if (payload.message) {
         applyRealtimeMessageToFeed(payload.message, applyMessageEffects);

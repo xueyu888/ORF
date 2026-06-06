@@ -13,6 +13,8 @@ import type {
   ChatThreadSummary,
   ChatUser,
 } from "../../src/types/orf";
+import type { ChatRealtimeEventType } from "../../src/types/realtime";
+import type { PermissionKey } from "../../src/config/permissions";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { pool } from "../db/client";
 import { env } from "../env";
@@ -20,6 +22,8 @@ import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
 import { objectStorage } from "../storage/objectStorage";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { createNotifications } from "./notificationRepository";
+import { getRolePermissionKeysForScope } from "./permissionRepository";
+import { runtimeScope } from "./runtimeScope";
 import {
   CHAT_ATTACHMENT_TTL_MS,
   DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME,
@@ -39,6 +43,7 @@ import {
   iso,
   makeChatAttachmentId,
   makeId,
+  normalizeTeamRole,
   normalizeChannelName,
   normalizeMimeType,
   nowIso,
@@ -338,6 +343,99 @@ async function getChannelRecipientIds(teamId: string, channelId: string) {
     [teamId, channelId],
   );
   return rows.map((row) => row.user_id);
+}
+
+async function chatActorForRealtimeRecipient(teamId: string, userId: string): Promise<ChatActor | null> {
+  const scope = runtimeScope(teamId);
+  const { rows } = await pool.query<{ id: string; name: string; role: string }>(
+    `
+      SELECT u.id, u.name, tm.role
+      FROM team_members tm
+      INNER JOIN users u ON u.id = tm.user_id
+      WHERE tm.team_id = $1
+        AND tm.user_id = $2
+        AND COALESCE(u.status, 'active') = 'active'
+      LIMIT 1
+    `,
+    [teamId, userId],
+  );
+  const row = rows[0];
+  if (!row) return null;
+
+  const role = normalizeTeamRole(row.role);
+  const permissions = role === "admin" ? [] : await getRolePermissionKeysForScope(scope, role);
+  const has = (key: PermissionKey) => role === "admin" || permissions.includes(key);
+  if (!has("chat.read")) return null;
+
+  return {
+    id: row.id,
+    name: row.name,
+    role,
+    scope,
+    canRead: true,
+    canWrite: has("chat.write"),
+    canCreatePrivateChannel: has("chat.channel.create"),
+    canCreatePublicChannel: has("chat.channel.manage"),
+    canManageAnyChannel: has("chat.channel.manage"),
+    canManageAnyMembers: has("chat.member.manage"),
+  };
+}
+
+type PersonalizedMessageRealtimeEventType = Extract<
+  ChatRealtimeEventType,
+  "message.created" | "message.updated" | "message.deleted" | "reaction.changed"
+>;
+type PersonalizedChannelRealtimeEventType = Extract<ChatRealtimeEventType, "channel.created" | "channel.updated" | "member.changed">;
+
+async function publishPersonalizedChannelRealtimeEvent(input: {
+  actorUserId: string;
+  channelId: string;
+  eventType: PersonalizedChannelRealtimeEventType;
+  recipientUserIds: string[];
+  teamId: string;
+}) {
+  const recipientUserIds = Array.from(new Set(input.recipientUserIds));
+  await Promise.all(recipientUserIds.map(async (recipientUserId) => {
+    const recipientActor = await chatActorForRealtimeRecipient(input.teamId, recipientUserId);
+    if (!recipientActor) return;
+    const channel = await getVisibleChannel(recipientActor, input.channelId);
+    publishRealtimeChatEvent(input.teamId, [recipientUserId], {
+      eventType: input.eventType,
+      channelId: input.channelId,
+      actorUserId: input.actorUserId,
+      channel: channel ?? undefined,
+    });
+  }));
+}
+
+async function publishPersonalizedMessageRealtimeEvent(input: {
+  actorUserId: string;
+  channelId: string;
+  eventType: PersonalizedMessageRealtimeEventType;
+  messageId: string;
+  recipientUserIds: string[];
+  rootMessageId?: string | null;
+  teamId: string;
+}) {
+  const recipientUserIds = Array.from(new Set(input.recipientUserIds));
+  await Promise.all(recipientUserIds.map(async (recipientUserId) => {
+    const recipientActor = await chatActorForRealtimeRecipient(input.teamId, recipientUserId);
+    if (!recipientActor) return;
+    const [channel, message] = await Promise.all([
+      getVisibleChannel(recipientActor, input.channelId),
+      getMessageById(recipientActor, input.messageId),
+    ]);
+    if (!channel || !message) return;
+    publishRealtimeChatEvent(input.teamId, [recipientUserId], {
+      eventType: input.eventType,
+      channelId: input.channelId,
+      actorUserId: input.actorUserId,
+      channel,
+      message,
+      messageId: input.messageId,
+      rootMessageId: input.rootMessageId ?? null,
+    });
+  }));
 }
 
 async function getMentionableRecipientIds(teamId: string, channelId: string, mentionedUserIds: string[]) {
@@ -989,11 +1087,12 @@ export async function createChatChannel(
   const channel = await getVisibleChannel(actor, id);
   if (!channel) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(teamId, id);
-  publishRealtimeChatEvent(teamId, recipients, {
+  await publishPersonalizedChannelRealtimeEvent({
     eventType: "channel.created",
+    teamId,
     channelId: id,
     actorUserId: actor.id,
-    channel,
+    recipientUserIds: recipients,
   });
   return ok({ channel });
 }
@@ -1047,11 +1146,12 @@ export async function createDirectOrGroupChannel(input: { userIds: string[] }, a
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(teamId, channelId);
-  publishRealtimeChatEvent(teamId, recipients, {
+  await publishPersonalizedChannelRealtimeEvent({
     eventType: "channel.created",
+    teamId,
     channelId,
     actorUserId: actor.id,
-    channel,
+    recipientUserIds: recipients,
   });
   return ok({ channel });
 }
@@ -1108,12 +1208,13 @@ export async function updateChatChannel(
 
   const updated = await getVisibleChannel(actor, channelId);
   if (!updated) return { status: "notFound" };
-  const recipients = await getChannelRecipientIds(storageTeamId(actor), channelId);
-  publishRealtimeChatEvent(storageTeamId(actor), recipients, {
+  const recipients = metadataChanged ? await getChannelRecipientIds(storageTeamId(actor), channelId) : [actor.id];
+  await publishPersonalizedChannelRealtimeEvent({
     eventType: "channel.updated",
+    teamId: storageTeamId(actor),
     channelId,
     actorUserId: actor.id,
-    channel: updated,
+    recipientUserIds: recipients,
   });
   return ok({ channel: updated });
 }
@@ -1154,11 +1255,12 @@ export async function addChatChannelMembers(
   const updated = await getVisibleChannel(actor, channelId);
   if (!updated) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(storageTeamId(actor), channelId);
-  publishRealtimeChatEvent(storageTeamId(actor), recipients, {
+  await publishPersonalizedChannelRealtimeEvent({
     eventType: "member.changed",
+    teamId: storageTeamId(actor),
     channelId,
     actorUserId: actor.id,
-    channel: updated,
+    recipientUserIds: recipients,
   });
   return ok({ channel: updated });
 }
@@ -1184,11 +1286,12 @@ export async function removeChatChannelMember(
   await pool.query("DELETE FROM chat_channel_members WHERE channel_id = $1 AND user_id = $2", [channelId, userId]);
   const recipients = Array.from(new Set([...(await getChannelRecipientIds(storageTeamId(actor), channelId)), userId]));
   const updated = selfLeave ? null : await getVisibleChannel(actor, channelId);
-  publishRealtimeChatEvent(storageTeamId(actor), recipients, {
+  await publishPersonalizedChannelRealtimeEvent({
     eventType: "member.changed",
+    teamId: storageTeamId(actor),
     channelId,
     actorUserId: actor.id,
-    channel: updated ?? undefined,
+    recipientUserIds: recipients,
   });
   return ok({ channel: updated });
 }
@@ -1288,13 +1391,14 @@ export async function sendChatMessage(
   const updatedChannel = await getVisibleChannel(actor, input.channelId);
   if (!message || !updatedChannel) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(teamId, input.channelId);
-  publishRealtimeChatEvent(teamId, recipients, {
+  await publishPersonalizedMessageRealtimeEvent({
     eventType: "message.created",
+    teamId,
     channelId: input.channelId,
     actorUserId: actor.id,
-    message,
+    messageId,
     rootMessageId,
-    channel: updatedChannel,
+    recipientUserIds: recipients,
   });
   await createChatNotifications({
     actor,
@@ -1331,13 +1435,14 @@ export async function updateChatMessage(
   const updatedChannel = await getVisibleChannel(actor, input.channelId);
   if (!updated || !updatedChannel) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
-  publishRealtimeChatEvent(storageTeamId(actor), recipients, {
+  await publishPersonalizedMessageRealtimeEvent({
     eventType: "message.updated",
+    teamId: storageTeamId(actor),
     channelId: input.channelId,
     actorUserId: actor.id,
-    channel: updatedChannel,
-    message: updated,
+    messageId: input.messageId,
     rootMessageId: updated.rootMessageId ?? null,
+    recipientUserIds: recipients,
   });
   return ok({ channel: updatedChannel, message: updated });
 }
@@ -1364,14 +1469,14 @@ export async function deleteChatMessage(
   const updatedChannel = await getVisibleChannel(actor, input.channelId);
   if (!updated || !updatedChannel) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
-  publishRealtimeChatEvent(storageTeamId(actor), recipients, {
+  await publishPersonalizedMessageRealtimeEvent({
     eventType: "message.deleted",
+    teamId: storageTeamId(actor),
     channelId: input.channelId,
     actorUserId: actor.id,
-    channel: updatedChannel,
-    message: updated,
     messageId: input.messageId,
     rootMessageId: updated.rootMessageId ?? null,
+    recipientUserIds: recipients,
   });
   return ok({ channel: updatedChannel, message: updated });
 }
@@ -1408,12 +1513,14 @@ export async function setChatReaction(
   const updated = await getMessageById(actor, input.messageId);
   if (!updated) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
-  publishRealtimeChatEvent(storageTeamId(actor), recipients, {
+  await publishPersonalizedMessageRealtimeEvent({
     eventType: "reaction.changed",
+    teamId: storageTeamId(actor),
     channelId: input.channelId,
     actorUserId: actor.id,
-    message: updated,
+    messageId: input.messageId,
     rootMessageId: updated.rootMessageId ?? null,
+    recipientUserIds: recipients,
   });
   return ok({ message: updated });
 }
@@ -1446,12 +1553,14 @@ export async function setChatMessagePin(
   const updated = await getMessageById(actor, input.messageId);
   if (!updated) return { status: "notFound" };
   const recipients = await getChannelRecipientIds(storageTeamId(actor), input.channelId);
-  publishRealtimeChatEvent(storageTeamId(actor), recipients, {
+  await publishPersonalizedMessageRealtimeEvent({
     eventType: "message.updated",
+    teamId: storageTeamId(actor),
     channelId: input.channelId,
     actorUserId: actor.id,
-    message: updated,
+    messageId: input.messageId,
     rootMessageId: updated.rootMessageId ?? null,
+    recipientUserIds: recipients,
   });
   return ok({ message: updated });
 }

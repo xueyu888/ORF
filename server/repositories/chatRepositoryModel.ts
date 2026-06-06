@@ -150,7 +150,7 @@ export function storageTeamId(actor: ChatActor) {
   return runtimeScopeStorageId(actor.scope);
 }
 
-function normalizeTeamRole(role: string): UserRole {
+export function normalizeTeamRole(role: string): UserRole {
   return role === "admin" ? "admin" : "member";
 }
 
