@@ -163,6 +163,12 @@ export function ChatMessageItem({
     if (isInteractiveMessageTarget(event.target) || hasSelectedMessageText(event.currentTarget)) return;
     onThread(message.rootMessageId ?? message.id);
   };
+  const handleReplyToThreadDoubleClick = (event: MouseEvent<HTMLElement>) => {
+    if (!onThread) return;
+    if (editing || message.deletedAt || deliveryStatus) return;
+    if (isInteractiveMessageTarget(event.target)) return;
+    onThread(message.rootMessageId ?? message.id, { focusComposer: true });
+  };
   const handleOpenThreadKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     if (!onThread) return;
@@ -187,6 +193,7 @@ export function ChatMessageItem({
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
       onClick={onThread ? handleOpenThreadClick : undefined}
+      onDoubleClick={onThread ? handleReplyToThreadDoubleClick : undefined}
       onKeyDown={onThread ? handleOpenThreadKeyDown : undefined}
       tabIndex={onThread && !editing && !message.deletedAt && !deliveryStatus ? 0 : undefined}
     >
