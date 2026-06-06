@@ -1,4 +1,5 @@
 import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
+import { useEffect, useRef } from "react";
 import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
@@ -34,6 +35,15 @@ export function ChatSearchPanel({
   setSearchType,
   usersById,
 }: ChatSearchPanelProps) {
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+  }, []);
+
   const applyScope = (scope: ChatSearchScope) => {
     setSearchScope(scope);
     if (query.trim()) void onSearch({ query, scope, type: searchType });
@@ -47,7 +57,7 @@ export function ChatSearchPanel({
     <div className="orf-chat-search-panel">
       <form onSubmit={(event) => { event.preventDefault(); void onSearch({ query }); }}>
         <Search className="h-4 w-4" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={chatSearchInputPlaceholder} />
+        <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={chatSearchInputPlaceholder} />
       </form>
       <div className="orf-chat-search-filters">
         <div className="orf-chat-segmented">
