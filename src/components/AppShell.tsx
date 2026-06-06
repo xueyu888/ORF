@@ -8,20 +8,13 @@ import { GlobalModals } from "./GlobalModals";
 import { NotificationBell } from "./NotificationBell";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
-import { orfAssetLibrary } from "../config/assetLibrary";
+import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
-import { useAppShellBackground } from "../hooks/useVisualBackground";
-import { getUserPreferences, saveUserPreferences, type VisualBackgroundPlacement } from "../state/apiClient";
+import { useVisualBackground } from "../hooks/useVisualBackground";
+import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-
-function backgroundPlacementStyle(placement: VisualBackgroundPlacement) {
-  return {
-    objectPosition: `${placement.positionX}% ${placement.positionY}%`,
-    transform: `scale(${placement.scale})`,
-  } as CSSProperties;
-}
 
 export function AppShell() {
   const location = useLocation();
@@ -29,9 +22,7 @@ export function AppShell() {
   const { currentUser, dismissSystemBroadcast, openModal, state, systemBroadcasts } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const topbarBackground = useAppShellBackground("topbar");
-  const sidebarBackground = useAppShellBackground("sidebar");
-  const mainContentBackground = useAppShellBackground("main_content");
+  const sidebarBackground = useVisualBackground("app_background");
 
   useEffect(() => {
     let cancelled = false;
@@ -69,12 +60,11 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const topbarBackgroundUrl =
-    topbarBackground.status === "ready" ? topbarBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
   const sidebarBackgroundUrl =
     sidebarBackground.status === "ready" ? sidebarBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
-  const mainContentBackgroundUrl =
-    mainContentBackground.status === "ready" ? mainContentBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
+  const shellStyle = {
+    "--orf-app-chrome-bg-image": toCssImageUrl(sidebarBackgroundUrl),
+  } as CSSProperties;
   const canCreateObjective = hasPermission(currentUser, state.permissionRules, "objective.create");
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const isBountyHall = location.pathname.startsWith("/bounties");
@@ -86,25 +76,16 @@ export function AppShell() {
       data-bounty-hall={isBountyHall ? "true" : "false"}
       data-chat-page={isChatPage ? "true" : "false"}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
+      style={shellStyle}
     >
       <Sidebar
         backgroundUrl={sidebarBackgroundUrl}
-        backgroundPlacement={sidebarBackground.placement}
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
         onCommand={() => setCommandOpen(true)}
       />
       <div className="orf-shell-body min-w-0 flex-1">
         <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2">
-          <img
-            className="orf-topbar-background-image"
-            src={topbarBackgroundUrl}
-            alt=""
-            aria-hidden="true"
-            loading="eager"
-            decoding="async"
-            style={backgroundPlacementStyle(topbarBackground.placement)}
-          />
           <div className="orf-topbar-title orf-text-primary min-w-[160px] font-semibold tracking-tight" role="heading" aria-level={1}>
             {isBountyHall && (
               <span className="orf-topbar-title-icon" aria-hidden="true">
@@ -142,15 +123,6 @@ export function AppShell() {
         </header>
         <SystemBroadcastBanner broadcasts={systemBroadcasts} onDismiss={dismissSystemBroadcast} />
         <main className="orf-main-content">
-          <img
-            className="orf-main-background-image"
-            src={mainContentBackgroundUrl}
-            alt=""
-            aria-hidden="true"
-            loading="eager"
-            decoding="async"
-            style={backgroundPlacementStyle(mainContentBackground.placement)}
-          />
           <Outlet />
         </main>
       </div>

@@ -1,13 +1,11 @@
 export const visualBackgroundScenes = ["login_background", "app_background"] as const;
 export const legacyVisualBackgroundScenes = ["sidebar_background"] as const;
-export const appShellBackgroundSlots = ["topbar", "sidebar", "main_content"] as const;
 export const visualBackgroundScopes = ["default", "system", "personal"] as const;
 export const legacyVisualBackgroundScopes = ["user"] as const;
 
 export type VisualBackgroundScene = (typeof visualBackgroundScenes)[number];
 export type LegacyVisualBackgroundScene = (typeof legacyVisualBackgroundScenes)[number];
 export type AnyVisualBackgroundScene = VisualBackgroundScene | LegacyVisualBackgroundScene;
-export type AppShellBackgroundSlot = (typeof appShellBackgroundSlots)[number];
 export type VisualBackgroundScope = (typeof visualBackgroundScopes)[number];
 export type LegacyVisualBackgroundScope = (typeof legacyVisualBackgroundScopes)[number];
 export type AnyVisualBackgroundScope = VisualBackgroundScope | LegacyVisualBackgroundScope;

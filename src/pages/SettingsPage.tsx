@@ -1,15 +1,11 @@
 import { clsx } from "clsx";
 import { Check, Image, Loader2, MousePointerClick, Shuffle, Timer, ToggleLeft, Upload } from "lucide-react";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
-import { BackgroundPlacementEditor, normalizeBackgroundPlacement } from "../components/settings/BackgroundPlacementEditor";
 import {
-  getAppShellBackgrounds,
   getVisualBackgrounds,
-  saveAppShellBackgroundConfig as requestSaveAppShellBackgroundConfig,
   saveVisualBackgroundConfig as requestSaveVisualBackgroundConfig,
   setDefaultVisualBackground as requestSetDefaultVisualBackground,
   uploadVisualBackground,
-  type AppShellBackgroundSlot,
   type VisualBackgroundConfig,
   type VisualBackgroundImage,
   type VisualBackgroundMode,
@@ -19,13 +15,12 @@ import {
 } from "../state/apiClient";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useOrf } from "../state/OrfProvider";
-import { dispatchAppShellBackgroundChanged, dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
+import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
 
 const backgroundSections: Array<{
   scene: VisualBackgroundScene;
-  slot?: AppShellBackgroundSlot;
   title: string;
   description: string;
 }> = [
@@ -36,21 +31,8 @@ const backgroundSections: Array<{
   },
   {
     scene: "app_background",
-    slot: "topbar",
-    title: "AppShell 顶栏背景",
-    description: "自定义登录后顶部栏的系统默认背景。",
-  },
-  {
-    scene: "app_background",
-    slot: "sidebar",
-    title: "AppShell 侧边栏背景",
-    description: "自定义登录后侧边栏的系统默认背景。",
-  },
-  {
-    scene: "app_background",
-    slot: "main_content",
-    title: "AppShell 主内容区背景",
-    description: "自定义登录后页面主内容区的系统默认背景。",
+    title: "AppShell 皮肤设置",
+    description: "自定义登录后侧边栏和顶部栏的系统默认皮肤。",
   },
 ];
 
@@ -60,11 +42,6 @@ const defaultVisualBackgroundConfig: VisualBackgroundConfig = {
   switchTrigger: "on_open",
   switchOrder: "random",
   switchIntervalMinutes: 10,
-  placement: {
-    positionX: 50,
-    positionY: 50,
-    scale: 1,
-  },
 };
 
 export function SystemSettingsPage() {
@@ -79,7 +56,7 @@ export function SystemSettingsPage() {
 
         <div className="orf-settings-sections">
           {backgroundSections.map((section) => (
-            <BackgroundSettingSection key={section.slot ?? section.scene} {...section} />
+            <BackgroundSettingSection key={section.scene} {...section} />
           ))}
         </div>
       </section>
@@ -89,12 +66,10 @@ export function SystemSettingsPage() {
 
 function BackgroundSettingSection({
   scene,
-  slot,
   title,
   description,
 }: {
   scene: VisualBackgroundScene;
-  slot?: AppShellBackgroundSlot;
   title: string;
   description: string;
 }) {
@@ -118,14 +93,9 @@ function BackgroundSettingSection({
   const areSwitchSettingsDisabled = backgroundConfig.mode === "fixed" || isConfigSaving;
   const isIntervalSettingDisabled = areSwitchSettingsDisabled || backgroundConfig.switchTrigger === "on_open";
   const isSetDefaultButtonDisabled =
-    backgroundConfig.mode !== "fixed" ||
-    !selectedBackgroundId ||
-    (!slot && selectedBackgroundId === fixedBackgroundId) ||
-    setDefaultStatus === "loading" ||
-    isConfigSaving;
+    backgroundConfig.mode !== "fixed" || !selectedBackgroundId || selectedBackgroundId === fixedBackgroundId || setDefaultStatus === "loading" || isConfigSaving;
   const isUploading = uploadStatus === "loading";
   const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
-  const selectedBackground = backgroundList.find((background) => background.id === selectedBackgroundId) ?? null;
 
   useEffect(() => {
     if (!configErrorMessage) {
@@ -145,7 +115,7 @@ function BackgroundSettingSection({
     setListQueryStatus("loading");
     setListQueryErrorMessage(null);
 
-    void (slot ? getAppShellBackgrounds(slot) : getVisualBackgrounds(scene))
+    void getVisualBackgrounds(scene)
       .then((data) => {
         if (cancelled) {
           return;
@@ -170,7 +140,7 @@ function BackgroundSettingSection({
     return () => {
       cancelled = true;
     };
-  }, [scene, settingsInvalidationKey, slot]);
+  }, [scene, settingsInvalidationKey]);
 
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
@@ -191,15 +161,11 @@ function BackgroundSettingSection({
     setUploadStatus("loading");
     setUploadErrorMessage(null);
     try {
-      const uploaded = await uploadVisualBackground(slot ? "app_background" : scene, file);
+      const uploaded = await uploadVisualBackground(scene, file);
       setBackgroundList((current) => [...current, uploaded]);
       setSelectedBackgroundId(uploaded.id);
       setUploadStatus("success");
-      if (slot) {
-        dispatchAppShellBackgroundChanged(slot);
-      } else {
-        dispatchVisualBackgroundChanged(scene);
-      }
+      dispatchVisualBackgroundChanged(scene);
       notify("背景图片已上传");
     } catch (error) {
       const message = error instanceof Error ? error.message : "上传失败";
@@ -217,7 +183,7 @@ function BackgroundSettingSection({
       setConfigSaveStatus("error");
       setConfigErrorMessage(message);
       notify(message);
-      return false;
+      return;
     }
 
     const configToSave = {
@@ -230,19 +196,12 @@ function BackgroundSettingSection({
     setConfigErrorMessage(null);
     setBackgroundConfig(configToSave);
     try {
-      const result = slot
-        ? await requestSaveAppShellBackgroundConfig(slot, configToSave)
-        : await requestSaveVisualBackgroundConfig(scene, configToSave);
+      const result = await requestSaveVisualBackgroundConfig(scene, configToSave);
       setBackgroundConfig(result.config);
       setIntervalInputValue(String(result.config.switchIntervalMinutes));
       setBackgroundList((current) => current.map((background) => ({ ...background, isDefault: background.id === result.config.fixedBackgroundId })));
       setConfigSaveStatus("success");
-      if (slot) {
-        dispatchAppShellBackgroundChanged(slot);
-      } else {
-        dispatchVisualBackgroundChanged(scene);
-      }
-      return true;
+      dispatchVisualBackgroundChanged(scene);
     } catch (error) {
       const message = error instanceof Error ? error.message : "保存设置失败";
       setBackgroundConfig(previousConfig);
@@ -250,7 +209,6 @@ function BackgroundSettingSection({
       setConfigSaveStatus("error");
       setConfigErrorMessage(message);
       notify(message);
-      return false;
     }
   };
 
@@ -320,18 +278,6 @@ function BackgroundSettingSection({
     setSetDefaultStatus("loading");
     setSetDefaultErrorMessage(null);
     try {
-      if (slot) {
-        const saved = await persistBackgroundConfig({
-          ...backgroundConfig,
-          mode: "fixed",
-          fixedBackgroundId: selectedBackgroundId,
-        });
-        setSetDefaultStatus(saved ? "success" : "error");
-        if (saved) {
-          notify("默认背景已更新");
-        }
-        return;
-      }
       const result = await requestSetDefaultVisualBackground(selectedBackgroundId);
       setBackgroundConfig(result.config);
       setIntervalInputValue(String(result.config.switchIntervalMinutes));
@@ -466,35 +412,13 @@ function BackgroundSettingSection({
             })}
         </div>
 
-        {slot && (
-          <>
-            <div className="orf-settings-background-label">
-              <Image className="h-5 w-5" />
-              <span>显示效果</span>
-            </div>
-            <BackgroundPlacementEditor
-              image={selectedBackground}
-              placement={normalizeBackgroundPlacement(backgroundConfig.placement)}
-              disabled={isConfigSaving}
-              previewClassName={`orf-background-placement-${slot}`}
-              onChange={(placement) => {
-                setBackgroundConfig((current) => ({
-                  ...current,
-                  fixedBackgroundId: selectedBackgroundId ?? current.fixedBackgroundId,
-                  placement,
-                }));
-              }}
-            />
-          </>
-        )}
-
         <div className="orf-settings-background-actions">
           <div className="orf-settings-selected-text">
             {(uploadErrorMessage || setDefaultErrorMessage) && <span>{uploadErrorMessage ?? setDefaultErrorMessage}</span>}
           </div>
           <button type="button" className="orf-settings-default-button" disabled={isSetDefaultButtonDisabled} onClick={() => void handleSetDefault()}>
             {setDefaultStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {slot ? "保存默认效果" : "设为默认"}
+            设为默认
           </button>
         </div>
       </div>

@@ -4,15 +4,12 @@ import { requireAdminContext, requireApiUser, requireUserScopeContext } from "..
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import {
-  appShellBackgroundSlotSchema,
   backgroundSceneConfigSchema,
   backgroundScenePathSchema,
   backgroundSceneSchema,
   backgroundScopePathSchema,
   getVisualBackgroundFile,
-  listAppShellBackgrounds,
   listVisualBackgrounds,
-  saveAppShellBackgroundConfig,
   saveUploadedVisualBackground,
   saveVisualBackgroundConfig,
   setDefaultVisualBackground,
@@ -32,15 +29,8 @@ import {
 const visualBackgroundQuerySchema = z.object({
   scene: backgroundSceneSchema,
 });
-const appShellBackgroundQuerySchema = z.object({
-  slot: appShellBackgroundSlotSchema,
-});
 const visualBackgroundConfigBodySchema = z.object({
   scene: backgroundSceneSchema,
-  config: backgroundSceneConfigSchema,
-});
-const appShellBackgroundConfigBodySchema = z.object({
-  slot: appShellBackgroundSlotSchema,
   config: backgroundSceneConfigSchema,
 });
 const visualBackgroundParamsSchema = z.object({
@@ -49,11 +39,6 @@ const visualBackgroundParamsSchema = z.object({
 const visualBackgroundStaticParamsSchema = z.object({
   scene: backgroundScenePathSchema,
   scope: backgroundScopePathSchema,
-  fileName: z.string().min(1),
-});
-const personalBackgroundStaticParamsSchema = z.object({
-  scene: backgroundScenePathSchema,
-  ownerKey: z.string().min(1),
   fileName: z.string().min(1),
 });
 
@@ -67,23 +52,6 @@ function publishSettingsInvalidation(input: { actorUserId?: string | null; scope
 }
 
 export function registerSettingsRoutes(app: FastifyInstance) {
-  app.get("/settings/backgrounds/:scene/personal/:ownerKey/:fileName", async (request, reply) => {
-    try {
-      const params = personalBackgroundStaticParamsSchema.parse(request.params);
-      const user = await requireApiUser(request, reply);
-      if (!user) {
-        return reply;
-      }
-
-      const file = await getPersonalBackgroundFile(user.id, params.scene, "personal", params.fileName, params.ownerKey);
-      reply.header("Content-Type", file.mimeType);
-      return reply.send(file.stream);
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ error: mapped.message });
-    }
-  });
-
   app.get("/settings/backgrounds/:scene/:scope/:fileName", async (request, reply) => {
     try {
       const params = visualBackgroundStaticParamsSchema.parse(request.params);
@@ -242,25 +210,6 @@ export function registerSettingsRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get("/api/settings/visual/app-shell-backgrounds", async (request, reply) => {
-    const user = await requireApiUser(request, reply);
-    if (!user) {
-      return reply;
-    }
-
-    try {
-      const query = appShellBackgroundQuerySchema.parse(request.query);
-      return {
-        code: 0,
-        message: "ok",
-        data: await listAppShellBackgrounds(query.slot),
-      };
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
-    }
-  });
-
   app.post("/api/settings/visual/backgrounds", async (request, reply) => {
     const context = await requireAdminContext(request, reply);
     if (!context) {
@@ -335,27 +284,6 @@ export function registerSettingsRoutes(app: FastifyInstance) {
       const body = visualBackgroundConfigBodySchema.parse(request.body);
       const data = await saveVisualBackgroundConfig(body.scene, body.config);
       publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `visual:${body.scene}` });
-      return {
-        code: 0,
-        message: "ok",
-        data,
-      };
-    } catch (error) {
-      const mapped = visualBackgroundError(error);
-      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
-    }
-  });
-
-  app.put("/api/settings/visual/app-shell-background-config", async (request, reply) => {
-    const context = await requireAdminContext(request, reply);
-    if (!context) {
-      return reply;
-    }
-
-    try {
-      const body = appShellBackgroundConfigBodySchema.parse(request.body);
-      const data = await saveAppShellBackgroundConfig(body.slot, body.config);
-      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: `visual:app-shell:${body.slot}` });
       return {
         code: 0,
         message: "ok",
