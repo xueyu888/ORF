@@ -33,6 +33,30 @@ type ChatMessageItemProps = {
   usersById: Map<string, ChatUser>;
 };
 
+function isInteractiveMessageTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest([
+    "button",
+    "a",
+    "input",
+    "label",
+    "select",
+    "textarea",
+    "[role='button']",
+    ".orf-chat-message-actions",
+    ".orf-chat-reaction-row",
+  ].join(", ")));
+}
+
+function hasSelectedMessageText(container: HTMLElement) {
+  const selection = window.getSelection?.();
+  if (!selection || selection.isCollapsed) return false;
+  const { anchorNode, focusNode } = selection;
+  return Boolean(
+    (anchorNode && container.contains(anchorNode)) ||
+    (focusNode && container.contains(focusNode)),
+  );
+}
+
 function AttachmentGrid({
   attachments,
   onAttachmentPreview,
@@ -119,10 +143,9 @@ export function ChatMessageItem({
       setEditSaving(false);
     }
   };
-  const handleDoubleClick = (event: MouseEvent<HTMLElement>) => {
+  const handleOpenThreadClick = (event: MouseEvent<HTMLElement>) => {
     if (editing || message.deletedAt) return;
-    const target = event.target;
-    if (target instanceof Element && target.closest("button, a, input, textarea, select, [role='button']")) return;
+    if (isInteractiveMessageTarget(event.target) || hasSelectedMessageText(event.currentTarget)) return;
     onThread(message.rootMessageId ?? message.id);
   };
 
@@ -137,7 +160,7 @@ export function ChatMessageItem({
       data-chat-message-id={message.id}
       data-chat-unread-message={firstUnread ? "true" : undefined}
       id={`chat-message-${message.id}`}
-      onDoubleClick={handleDoubleClick}
+      onClick={handleOpenThreadClick}
     >
       {compact ? (
         <div className="orf-chat-message-compact-time">{formatTime(message.createdAt)}</div>

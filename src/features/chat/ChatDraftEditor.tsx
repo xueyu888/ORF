@@ -4,6 +4,7 @@ import { type ClipboardEventHandler, type KeyboardEvent, type ReactNode, useEffe
 import { Avatar } from "../../components/ui";
 import type { ChatUser } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
+import { applyChatMarkdownShortcut, type ChatMarkdownMode } from "./chatMarkdownShortcutModel";
 import {
   type ChatDraft,
   mentionLabel,
@@ -33,6 +34,36 @@ type ChatDraftEditorProps = {
   toolbarControls?: ReactNode;
   toolbarEnd?: (state: ChatDraftEditorToolbarState) => ReactNode;
 };
+
+function markdownShortcutModeFor(event: KeyboardEvent<HTMLTextAreaElement>): ChatMarkdownMode | null {
+  if (event.nativeEvent.isComposing) return null;
+  const key = event.key.toLowerCase();
+  const code = event.code;
+  const primary = event.ctrlKey || event.metaKey;
+  if (primary && !event.altKey && !event.shiftKey) {
+    if (key === "b") return "bold";
+    if (key === "i") return "italic";
+    if (key === "k") return "link";
+  }
+  if (primary && event.altKey && !event.shiftKey) {
+    if (key === "c") return "code";
+    if (key === "h") return "heading";
+    if (key === "k") return "link";
+  }
+  if (!primary && event.altKey && event.shiftKey) {
+    if (code === "Digit7") return "orderedList";
+    if (code === "Digit8") return "unorderedList";
+    if (code === "Digit9") return "quote";
+    if (key === "h") return "heading";
+    if (key === "x") return "strike";
+  }
+  if (primary && event.shiftKey && !event.altKey) {
+    if (code === "Digit7") return "orderedList";
+    if (code === "Digit8") return "unorderedList";
+    if (key === "x") return "strike";
+  }
+  return null;
+}
 
 export function ChatDraftEditor({
   className,
@@ -86,22 +117,37 @@ export function ChatDraftEditor({
     onTyping?.();
   };
 
-  const insertMarkdown = (before: string, after = before) => {
+  const applyMarkdownMode = (mode: ChatMarkdownMode) => {
     const textarea = textAreaRef.current;
     if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const nextText = `${draft.text.slice(0, start)}${before}${draft.text.slice(start, end)}${after}${draft.text.slice(end)}`;
-    const mentions = reconcileMentions(draft.text, nextText, draft.mentions);
-    const cursor = start + before.length;
-    onChange({ text: nextText, mentions });
-    setMentionRange(mentionRangeFor(nextText, cursor, mentions));
+    const result = applyChatMarkdownShortcut({
+      draft,
+      mode,
+      selectionEnd: textarea.selectionEnd,
+      selectionStart: textarea.selectionStart,
+    });
+    onChange(result.draft);
+    setMentionRange(mentionRangeFor(result.draft.text, result.selectionEnd, result.draft.mentions));
     setSelectedMention(0);
     setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
     onTyping?.();
     window.setTimeout(() => {
       textarea.focus();
-      textarea.setSelectionRange(cursor, end + before.length);
+      textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
+    }, 0);
+  };
+
+  const insertTextAtSelection = (text: string) => {
+    const textarea = textAreaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextText = `${draft.text.slice(0, start)}${text}${draft.text.slice(end)}`;
+    setText(nextText, start + text.length);
+    setSelectedMention(0);
+    window.setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + text.length, start + text.length);
     }, 0);
   };
 
@@ -207,6 +253,13 @@ export function ChatDraftEditor({
         }
       }
     }
+    const markdownMode = markdownShortcutModeFor(event);
+    if (markdownMode) {
+      event.preventDefault();
+      event.stopPropagation();
+      applyMarkdownMode(markdownMode);
+      return;
+    }
     if (event.key === "Enter" && event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
       const textarea = textAreaRef.current;
       if (!textarea) return;
@@ -257,13 +310,13 @@ export function ChatDraftEditor({
         </div>
       )}
       <div className="orf-chat-composer-toolbar">
-        <button type="button" onClick={() => insertMarkdown("**")} title="加粗"><Bold className="h-4 w-4" /></button>
-        <button type="button" onClick={() => insertMarkdown("_")} title="斜体"><Italic className="h-4 w-4" /></button>
-        <button type="button" onClick={() => insertMarkdown("`")} title="代码"><Code className="h-4 w-4" /></button>
-        <button type="button" onClick={() => insertMarkdown("> ", "")} title="引用"><Quote className="h-4 w-4" /></button>
-        <button type="button" onClick={() => insertMarkdown("[", "](https://)")} title="链接"><LinkIcon className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("bold")} title="加粗 Ctrl/Cmd+B"><Bold className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("italic")} title="斜体 Ctrl/Cmd+I"><Italic className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("code")} title="代码 Ctrl/Cmd+Alt+C"><Code className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("quote")} title="引用 Shift+Alt+9"><Quote className="h-4 w-4" /></button>
+        <button type="button" onClick={() => applyMarkdownMode("link")} title="链接 Ctrl/Cmd+K"><LinkIcon className="h-4 w-4" /></button>
         {toolbarControls}
-        <button type="button" onClick={() => insertMarkdown("@", "")} title="提及成员"><AtSign className="h-4 w-4" /></button>
+        <button type="button" onClick={() => insertTextAtSelection("@")} title="提及成员 @"><AtSign className="h-4 w-4" /></button>
         <span className="orf-chat-composer-spacer" />
         {toolbarEnd?.({ submit: () => void submit(), submitting })}
       </div>
