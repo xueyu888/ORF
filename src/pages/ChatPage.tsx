@@ -9,7 +9,6 @@ import {
   ChevronDown,
   Code,
   Download,
-  Edit3,
   EyeOff,
   FileText,
   Hash,
@@ -27,15 +26,15 @@ import {
   Reply,
   Search,
   Send,
-  Smile,
   Star,
-  Trash2,
   Users,
   X,
 } from "lucide-react";
 import { type ChangeEvent, type ClipboardEvent, type DragEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Avatar, Button, IconButton } from "../components/ui";
+import { ChatMessageItem } from "../features/chat/ChatMessageItem";
+import { formatDay, formatFileSize, formatTime } from "../features/chat/chatFormat";
 import { ChatMarkdown } from "../features/chat/chatMarkdown";
 import {
   type ChatDraft,
@@ -125,23 +124,6 @@ type PendingThreadTarget = {
   focusMessageId: string;
   rootMessageId: string;
 };
-
-const reactionEmojis = ["👍", "👀", "✅", "❤️", "🔥", "🎉", "😂", "😮", "🙏"];
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
-}
-
-function formatDay(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", { day: "2-digit", month: "2-digit", weekday: "short" }).format(new Date(value));
-}
-
-function formatFileSize(value: number) {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
-  return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`;
-}
 
 function channelIcon(channel: ChatChannel) {
   if (channel.type === "public") return Hash;
@@ -1328,7 +1310,7 @@ function MessageList({
                 <span>新消息</span>
               </div>
             )}
-            <MessageItem
+            <ChatMessageItem
               canPin={canPin}
               currentUserId={currentUserId}
               firstUnread={unreadMessageId === message.id}
@@ -1346,152 +1328,6 @@ function MessageList({
               usersById={usersById}
             />
           </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function MessageItem({
-  onAttachmentPreview,
-  canPin,
-  currentUserId,
-  firstUnread,
-  focused,
-  message,
-  onCopyLink,
-  onDelete,
-  onEdit,
-  onMarkUnread,
-  onPin,
-  onReaction,
-  onSave,
-  onThread,
-  usersById,
-}: {
-  onAttachmentPreview: (attachment: ChatAttachment) => void;
-  canPin?: boolean;
-  currentUserId?: string;
-  firstUnread?: boolean;
-  focused?: boolean;
-  message: ChatMessage;
-  onCopyLink: (message: ChatMessage) => void;
-  onDelete: (message: ChatMessage) => void;
-  onEdit: (message: ChatMessage) => void;
-  onMarkUnread?: (message: ChatMessage) => void;
-  onPin?: (message: ChatMessage) => void;
-  onReaction: (message: ChatMessage, emojiName: string) => void;
-  onSave?: (message: ChatMessage) => void;
-  onThread: (rootMessageId: string) => void;
-  usersById: Map<string, ChatUser>;
-}) {
-  const [emojiOpen, setEmojiOpen] = useState(false);
-  const canMutate = message.authorUserId === currentUserId && !message.deletedAt;
-
-  return (
-    <article
-      className={clsx("orf-chat-message", message.pinnedAt && "orf-chat-message-pinned", focused && "orf-chat-message-focused")}
-      data-chat-message-id={message.id}
-      data-chat-unread-message={firstUnread ? "true" : undefined}
-      id={`chat-message-${message.id}`}
-    >
-      <Avatar avatarUrl={message.authorAvatarUrl} name={message.authorName} size="md" />
-      <div className="orf-chat-message-body">
-        <div className="orf-chat-message-meta">
-          <strong>{message.authorName}</strong>
-          <span>{formatTime(message.createdAt)}</span>
-          {message.pinnedAt && (
-            <span className="orf-chat-message-pin-label">
-              <Pin className="h-3 w-3" />
-              已固定
-            </span>
-          )}
-          {message.editedAt && !message.deletedAt && <em>已编辑</em>}
-        </div>
-        {message.deletedAt ? (
-          <div className="orf-chat-message-deleted">消息已删除</div>
-        ) : (
-          <>
-            <div className="orf-chat-message-text"><ChatMarkdown body={message.body} usersById={usersById} /></div>
-            <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
-            <div className="orf-chat-reaction-row">
-              {message.reactions.map((reaction) => (
-                <button
-                  type="button"
-                  className={clsx("orf-chat-reaction", reaction.reactedByCurrentUser && "orf-chat-reaction-active")}
-                  key={reaction.emojiName}
-                  onClick={() => onReaction(message, reaction.emojiName)}
-                >
-                  {reaction.emojiName} <span>{reaction.count}</span>
-                </button>
-              ))}
-              <div className="orf-chat-emoji-anchor">
-                <button type="button" className="orf-chat-mini-action" onClick={() => setEmojiOpen((open) => !open)} title="添加反应">
-                  <Smile className="h-3.5 w-3.5" />
-                </button>
-                {emojiOpen && (
-                  <div className="orf-chat-emoji-popover">
-                    {reactionEmojis.map((emoji) => (
-                      <button type="button" key={emoji} onClick={() => { setEmojiOpen(false); onReaction(message, emoji); }}>
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <button type="button" className="orf-chat-thread-link" onClick={() => onThread(message.id)}>
-                <Reply className="h-3.5 w-3.5" />
-                {message.replyCount > 0 ? `${message.replyCount} 条回复` : "回复"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-      {!message.deletedAt && (
-        <div className="orf-chat-message-actions">
-          {onSave && (
-            <IconButton
-              className={message.savedByCurrentUser ? "orf-chat-message-action-active" : ""}
-              icon={Bookmark}
-              label={message.savedByCurrentUser ? "取消保存" : "保存消息"}
-              onClick={() => onSave(message)}
-            />
-          )}
-          {canPin && onPin && (
-            <IconButton
-              className={message.pinnedAt ? "orf-chat-message-action-active" : ""}
-              icon={Pin}
-              label={message.pinnedAt ? "取消固定" : "固定消息"}
-              onClick={() => onPin(message)}
-            />
-          )}
-          {onMarkUnread && <IconButton icon={EyeOff} label="从这里标记未读" onClick={() => onMarkUnread(message)} />}
-          <IconButton icon={LinkIcon} label="复制消息链接" onClick={() => onCopyLink(message)} />
-          {canMutate && <IconButton icon={Edit3} label="编辑消息" onClick={() => onEdit(message)} />}
-          {canMutate && <IconButton icon={Trash2} label="删除消息" onClick={() => onDelete(message)} />}
-        </div>
-      )}
-    </article>
-  );
-}
-
-function AttachmentGrid({ attachments, onAttachmentPreview }: { attachments: ChatAttachment[]; onAttachmentPreview: (attachment: ChatAttachment) => void }) {
-  if (attachments.length === 0) return null;
-  return (
-    <div className="orf-chat-attachments">
-      {attachments.map((attachment) => {
-        const isImage = attachment.mimeType.startsWith("image/");
-        return isImage ? (
-          <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment)}>
-            <img src={attachment.contentUrl} alt={attachment.fileName} loading="lazy" />
-            <span>{attachment.fileName}</span>
-          </button>
-        ) : (
-          <button type="button" className="orf-chat-file-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment)}>
-            <FileText className="h-5 w-5" />
-            <span>{attachment.fileName}</span>
-            <small>{formatFileSize(attachment.fileSize)}</small>
-          </button>
         );
       })}
     </div>
@@ -2061,7 +1897,7 @@ function ThreadPanel({
 
   return (
     <div className="orf-chat-thread-panel" ref={threadPanelRef}>
-      <MessageItem
+      <ChatMessageItem
         canPin={canPin}
         currentUserId={currentUserId}
         focused={focusMessageId === thread.rootMessage.id}
@@ -2083,7 +1919,7 @@ function ThreadPanel({
       </button>
       <div className="orf-chat-thread-replies">
         {thread.replies.map((reply) => (
-          <MessageItem
+          <ChatMessageItem
             canPin={canPin}
             currentUserId={currentUserId}
             key={reply.id}
