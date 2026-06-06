@@ -13,6 +13,7 @@ import type {
   ChatThreadSummary,
   ChatUser,
 } from "../../src/types/orf";
+import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { pool } from "../db/client";
 import { env } from "../env";
 import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
@@ -1767,21 +1768,63 @@ export async function searchChatMessages(
   actor: ChatActor,
 ): Promise<Outcome<{ results: ChatSearchResult[] }>> {
   if (!actor.canRead) return { status: "forbidden" };
-  const q = input.q.trim();
-  if (q.length < 2) return ok({ results: [] });
+  const parsedQuery = parseChatSearchQuery(input.q);
+  if (!hasExecutableChatSearch(parsedQuery)) return ok({ results: [] });
   const teamId = storageTeamId(actor);
   await preparePublicChannels(teamId);
-  const params: unknown[] = [teamId, actor.id, `%${q.replace(/[%_]/g, "\\$&")}%`];
-  let channelClause = "";
-  let typeClause = "";
+  const params: unknown[] = [teamId, actor.id];
+  const clauses: string[] = [];
+  const pushParam = (value: unknown) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+  if (parsedQuery.text.length >= 2) {
+    const param = pushParam(`%${escapeLikePattern(parsedQuery.text)}%`);
+    clauses.push(`
+      (
+        m.body ILIKE ${param} ESCAPE '\\'
+        OR EXISTS (
+          SELECT 1
+          FROM chat_attachments a
+          WHERE a.team_id = m.team_id
+            AND a.message_id = m.id
+            AND a.file_name ILIKE ${param} ESCAPE '\\'
+        )
+      )
+    `);
+  }
+  if (parsedQuery.authorQuery) {
+    const param = pushParam(`%${escapeLikePattern(parsedQuery.authorQuery)}%`);
+    clauses.push(`(u.name ILIKE ${param} ESCAPE '\\' OR u.email ILIKE ${param} ESCAPE '\\')`);
+  }
+  if (parsedQuery.channelQuery) {
+    const param = pushParam(`%${escapeLikePattern(parsedQuery.channelQuery)}%`);
+    clauses.push(`(c.display_name ILIKE ${param} ESCAPE '\\' OR COALESCE(c.name, '') ILIKE ${param} ESCAPE '\\')`);
+  }
+  if (parsedQuery.attachment) {
+    clauses.push(`
+      EXISTS (
+        SELECT 1
+        FROM chat_attachments a
+        WHERE a.team_id = m.team_id
+          AND a.message_id = m.id
+          ${parsedQuery.attachment === "image" ? "AND a.mime_type ILIKE 'image/%'" : ""}
+      )
+    `);
+  }
+  if (parsedQuery.afterDate) {
+    clauses.push(`m.created_at >= ${pushParam(`${parsedQuery.afterDate}T00:00:00.000Z`)}::timestamptz`);
+  }
+  if (parsedQuery.beforeDate) {
+    clauses.push(`m.created_at < ${pushParam(`${addDaysToIsoDate(parsedQuery.beforeDate, 1)}T00:00:00.000Z`)}::timestamptz`);
+  }
   if (input.channelId) {
-    params.push(input.channelId);
-    channelClause = `AND c.id = $${params.length}`;
+    clauses.push(`c.id = ${pushParam(input.channelId)}`);
   }
   if (input.type) {
-    params.push(input.type);
-    typeClause = `AND c.type = $${params.length}`;
+    clauses.push(`c.type = ${pushParam(input.type)}`);
   }
+  const searchClause = clauses.length > 0 ? `AND ${clauses.join("\n        AND ")}` : "";
   type SearchRow = MessageRow & {
     channel_archived_at: Date | string | null;
     channel_created_at: Date | string;
@@ -1808,18 +1851,7 @@ export async function searchChatMessages(
       WHERE m.team_id = $1
         AND m.deleted_at IS NULL
         AND c.archived_at IS NULL
-        AND (
-          m.body ILIKE $3 ESCAPE '\\'
-          OR EXISTS (
-            SELECT 1
-            FROM chat_attachments a
-            WHERE a.team_id = m.team_id
-              AND a.message_id = m.id
-              AND a.file_name ILIKE $3 ESCAPE '\\'
-          )
-        )
-        ${channelClause}
-        ${typeClause}
+        ${searchClause}
       ORDER BY m.created_at DESC
       LIMIT 50
     `,
@@ -1863,6 +1895,10 @@ export async function searchChatMessages(
       return channel ? [{ channel, message }] : [];
     }),
   });
+}
+
+function escapeLikePattern(value: string) {
+  return value.replace(/[\\%_]/g, "\\$&");
 }
 
 export async function listChatMentionableUsers(channelId: string, actor: ChatActor): Promise<Outcome<{ users: ChatUser[] }>> {

@@ -2,6 +2,7 @@ import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
 import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
 import { ChatMarkdown } from "./chatMarkdown";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
+import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
 
 type ChatSearchPanelProps = {
   onOpenResult: (result: ChatSearchResult) => void;
@@ -45,7 +46,7 @@ export function ChatSearchPanel({
     <div className="orf-chat-search-panel">
       <form onSubmit={(event) => { event.preventDefault(); void onSearch({ query }); }}>
         <Search className="h-4 w-4" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索可见范围内的消息" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={chatSearchInputPlaceholder} />
       </form>
       <div className="orf-chat-search-filters">
         <div className="orf-chat-segmented">
