@@ -24,6 +24,7 @@ import {
   chatMessagePageSize,
   createFeedSnapshot,
   currentMembership,
+  hasMainFeedUnread,
   isFreshFeedSnapshot,
   prependOlderFeedMessages,
   rememberFeedScroll,
@@ -87,14 +88,6 @@ export function useChatFeedState({
     const element = messageScrollRef.current;
     if (!channelId || !element) return;
     feedCacheRef.current.set(channelId, rememberFeedScroll(feedCacheRef.current.get(channelId), element.scrollTop));
-  }, []);
-
-  const restoreFeedScroll = useCallback((scrollTop: number) => {
-    window.requestAnimationFrame(() => {
-      const element = messageScrollRef.current;
-      if (!element) return;
-      element.scrollTop = Math.max(0, scrollTop);
-    });
   }, []);
 
   const isMessageScrollNearLatest = useCallback(() => {
@@ -195,6 +188,7 @@ export function useChatFeedState({
     const channelId = activeChannel.id;
     const anchor = buildUnreadAnchor(activeChannel, currentUserId);
     const cachedFeed = feedCacheRef.current.get(channelId);
+    const shouldOpenMainUnread = hasMainFeedUnread(anchor) && !requestedMessageId;
     const cachedHasRequestedMessage = Boolean(
       requestedMessageId &&
       cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
@@ -206,30 +200,68 @@ export function useChatFeedState({
     setMessages(cachedFeed?.messages ?? []);
     setHasNewerMessages(cachedFeed?.hasNewerMessages ?? false);
     setHasOlderMessages(cachedFeed?.hasOlderMessages ?? false);
-    setMessagesLoading(!cachedFeed || Boolean(requestedMessageId && !cachedHasRequestedMessage));
-    if (cachedFeed) restoreFeedScroll(cachedFeed.scrollTop);
-    if (!requestedMessageId && isFreshFeedSnapshot(cachedFeed)) {
+    setMessagesLoading(
+      shouldOpenMainUnread ||
+      !cachedFeed ||
+      Boolean(requestedMessageId && !cachedHasRequestedMessage) ||
+      (!requestedMessageId && !isFreshFeedSnapshot(cachedFeed)),
+    );
+    if (shouldOpenMainUnread) {
+      if (cachedFeed) pendingUnreadScrollRef.current = true;
+      void getChatUnreadContext({ anchor, channelId, limit: chatMessagePageSize })
+        .then((response) => {
+          if (cancelled) return;
+          const snapshot = replaceFeedMessages(
+            feedCacheRef.current.get(channelId),
+            response.messages,
+            chatMessagePageSize,
+            {
+              hasNewerMessages: response.hasNewerMessages,
+              hasOlderMessages: response.hasOlderMessages,
+            },
+          );
+          feedCacheRef.current.set(channelId, snapshot);
+          setFeedChannelId(channelId);
+          setMessages(snapshot.messages);
+          setHasNewerMessages(snapshot.hasNewerMessages);
+          setHasOlderMessages(snapshot.hasOlderMessages);
+          pendingUnreadScrollRef.current = true;
+        })
+        .catch(() => {
+          if (cancelled) return;
+          if (cachedFeed) return;
+          return getChatMessages({ channelId, limit: chatMessagePageSize })
+            .then((response) => {
+              if (cancelled) return;
+              const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
+              feedCacheRef.current.set(channelId, snapshot);
+              setFeedChannelId(channelId);
+              setMessages(snapshot.messages);
+              setHasNewerMessages(snapshot.hasNewerMessages);
+              setHasOlderMessages(snapshot.hasOlderMessages);
+              requestScrollToLatest("auto");
+            })
+            .catch((latestError) => {
+              if (!cancelled) notify(latestError instanceof Error ? latestError.message : "加载消息失败");
+            });
+        })
+        .finally(() => {
+          if (!cancelled) setMessagesLoading(false);
+        });
+    } else if (!requestedMessageId && isFreshFeedSnapshot(cachedFeed)) {
       setMessagesLoading(false);
-      if (!anchor) requestScrollToLatest("auto");
+      requestScrollToLatest("auto");
     } else if (!requestedMessageId) {
       void getChatMessages({ channelId, limit: chatMessagePageSize })
         .then((response) => {
           if (cancelled) return;
-          const currentScrollTop = messageScrollRef.current?.scrollTop ?? cachedFeed?.scrollTop ?? 0;
-          const snapshot = replaceFeedMessages(
-            cachedFeed ? rememberFeedScroll(cachedFeed, currentScrollTop) : createFeedSnapshot({ scrollTop: currentScrollTop }),
-            response.messages,
-          );
+          const snapshot = replaceFeedMessages(feedCacheRef.current.get(channelId), response.messages);
           feedCacheRef.current.set(channelId, snapshot);
           setFeedChannelId(channelId);
           setMessages(response.messages);
           setHasNewerMessages(snapshot.hasNewerMessages);
           setHasOlderMessages(snapshot.hasOlderMessages);
-          if (!cachedFeed && !anchor) {
-            requestScrollToLatest("auto");
-          } else if (cachedFeed) {
-            restoreFeedScroll(snapshot.scrollTop);
-          }
+          requestScrollToLatest("auto");
         })
         .catch((error) => {
           if (!cancelled) notify(error instanceof Error ? error.message : "加载消息失败");
@@ -255,7 +287,6 @@ export function useChatFeedState({
     rememberActiveFeedScroll,
     requestScrollToLatest,
     requestedMessageId,
-    restoreFeedScroll,
   ]);
 
   useEffect(() => {

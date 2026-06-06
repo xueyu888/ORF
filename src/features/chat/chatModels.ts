@@ -294,6 +294,13 @@ export function buildUnreadAnchor(channel: ChatChannel, currentUserId?: string):
   } : null;
 }
 
+export function hasMainFeedUnread(unreadAnchor: UnreadAnchor | null): unreadAnchor is UnreadAnchor {
+  return Boolean(
+    unreadAnchor &&
+    (unreadAnchor.unreadCount > 0 || unreadAnchor.mentionCount > 0 || unreadAnchor.manuallyUnread),
+  );
+}
+
 export function resolveUnreadJumpTarget(input: {
   currentUserId?: string;
   hasOlderMessages: boolean;
@@ -301,7 +308,7 @@ export function resolveUnreadJumpTarget(input: {
   unreadAnchor: UnreadAnchor | null;
 }): { dividerIndex: number; jumpTarget: ChatUnreadJumpTarget; messageId: string | null } | null {
   const { currentUserId, hasOlderMessages, messages, unreadAnchor } = input;
-  if (!unreadAnchor || messages.length === 0) return null;
+  if (!hasMainFeedUnread(unreadAnchor) || messages.length === 0) return null;
 
   const firstUnreadIndex = messages.findIndex((message) => {
     if (message.deletedAt) return false;
