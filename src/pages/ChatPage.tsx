@@ -170,12 +170,14 @@ export function ChatPage() {
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
   const lastTypingSentAtRef = useRef(0);
   const activeChannelIdRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string | undefined>(undefined);
   const contextRequestKeyRef = useRef<string | null>(null);
   const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
   const pendingLatestScrollRef = useRef<ScrollBehavior | null>(null);
   const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
   activeChannelIdRef.current = activeChannel?.id ?? null;
+  currentUserIdRef.current = currentUser?.id;
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
     if (!activeChannel) return [];
@@ -466,40 +468,58 @@ export function ChatPage() {
     }
   }, [activeChannel?.id, notify, requestScrollToLatest]);
 
+  const applyChannelRef = useRef(applyChannel);
+  const applyMessageRef = useRef(applyMessage);
+  const isMessageScrollNearLatestRef = useRef(isMessageScrollNearLatest);
+  const loadLatestMessagesRef = useRef(loadLatestMessages);
+  const navigateRef = useRef(navigate);
+  const requestScrollToLatestRef = useRef(requestScrollToLatest);
+
   useEffect(() => {
-    const channelId = activeChannel?.id;
-    if (!channelId || typeof EventSource === "undefined") return undefined;
+    applyChannelRef.current = applyChannel;
+    applyMessageRef.current = applyMessage;
+    isMessageScrollNearLatestRef.current = isMessageScrollNearLatest;
+    loadLatestMessagesRef.current = loadLatestMessages;
+    navigateRef.current = navigate;
+    requestScrollToLatestRef.current = requestScrollToLatest;
+  }, [applyChannel, applyMessage, isMessageScrollNearLatest, loadLatestMessages, navigate, requestScrollToLatest]);
+
+  useEffect(() => {
+    if (typeof EventSource === "undefined") return undefined;
     const source = new EventSource("/api/events", { withCredentials: true });
     const handleChatEvent = (event: MessageEvent<string>) => {
       const payload = parseRealtimeEvent(event.data);
       if (!payload) return;
-      if (payload.channel) applyChannel(payload.channel);
+      const activeChannelId = activeChannelIdRef.current;
+      const currentUserId = currentUserIdRef.current;
+      if (payload.channel) applyChannelRef.current(payload.channel);
       if (payload.eventType === "channel.archived") {
         setChannels((items) => items.filter((channel) => channel.id !== payload.channelId));
-        if (payload.channelId === channelId) navigate("/chat", { replace: true });
+        if (payload.channelId === activeChannelId) navigateRef.current("/chat", { replace: true });
       }
       if (payload.eventType === "member.changed" && payload.channel) {
-        applyChannel(payload.channel);
+        applyChannelRef.current(payload.channel);
       }
-      if (payload.message && payload.channelId === channelId) {
-        const currentFeed = feedCacheRef.current.get(channelId);
+      if (payload.message) {
+        const isActiveMessage = payload.message.channelId === activeChannelId;
+        const currentFeed = isActiveMessage ? feedCacheRef.current.get(payload.message.channelId) : undefined;
         const shouldFollowLatest = shouldFollowIncomingMessage(
           payload.message,
-          currentUser?.id,
-          !currentFeed?.hasNewerMessages && isMessageScrollNearLatest(),
+          currentUserId,
+          isActiveMessage && !currentFeed?.hasNewerMessages && isMessageScrollNearLatestRef.current(),
         );
-        applyMessage(payload.message);
-        if (shouldFollowLatest) {
+        applyMessageRef.current(payload.message);
+        if (isActiveMessage && shouldFollowLatest) {
           if (currentFeed?.hasNewerMessages) {
-            void loadLatestMessages("smooth");
+            void loadLatestMessagesRef.current("smooth");
           } else {
-            requestScrollToLatest("smooth");
+            requestScrollToLatestRef.current("smooth");
           }
-        } else if (!payload.message.rootMessageId) {
+        } else if (isActiveMessage && !payload.message.rootMessageId) {
           setPendingNewMessageCount((count) => count + 1);
         }
       }
-      if (payload.eventType === "typing" && payload.channelId === channelId && payload.typing && payload.typing.userId !== currentUser?.id) {
+      if (payload.eventType === "typing" && payload.channelId === activeChannelId && payload.typing && payload.typing.userId !== currentUserId) {
         setTypingByUser((items) => {
           const next = new Map(items);
           next.set(payload.typing!.userId, payload.typing!);
@@ -512,7 +532,7 @@ export function ChatPage() {
       source.removeEventListener("chat.event", handleChatEvent);
       source.close();
     };
-  }, [activeChannel?.id, applyChannel, applyMessage, currentUser?.id, isMessageScrollNearLatest, loadLatestMessages, navigate, requestScrollToLatest]);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
