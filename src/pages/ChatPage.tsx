@@ -251,7 +251,7 @@ export function ChatPage() {
   const [draftChannelIds, setDraftChannelIds] = useState<Set<string>>(new Set());
   const [typingByUser, setTypingByUser] = useState<Map<string, TypingState>>(new Map());
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
-  const [imagePreview, setImagePreview] = useState<ChatAttachment | null>(null);
+  const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
   const [pendingNewMessageCount, setPendingNewMessageCount] = useState(0);
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
   const lastTypingSentAtRef = useRef(0);
@@ -847,7 +847,7 @@ export function ChatPage() {
                   onDelete={handleDeleteMessage}
                   onCopyLink={handleCopyMessageLink}
                   onEdit={setEditingMessage}
-                  onImage={setImagePreview}
+                  onAttachmentPreview={setAttachmentPreview}
                   onJumpUnread={handleJumpToUnread}
                   onLoadOlder={loadOlderMessages}
                   onMarkUnread={handleMarkMessageUnread}
@@ -937,7 +937,7 @@ export function ChatPage() {
             const response = await setChatThreadFollowRequest(thread.rootMessage.id, following);
             setThread(response.thread);
           }}
-          onImage={setImagePreview}
+          onAttachmentPreview={setAttachmentPreview}
           onReaction={handleReaction}
           onEdit={setEditingMessage}
           onMarkUnread={handleMarkMessageUnread}
@@ -979,7 +979,7 @@ export function ChatPage() {
           onSave={(draft) => handleEditMessage(serializeDraft(draft))}
         />
       )}
-      {imagePreview && <ImagePreview attachment={imagePreview} onClose={() => setImagePreview(null)} />}
+      {attachmentPreview && <AttachmentPreview attachment={attachmentPreview} onClose={() => setAttachmentPreview(null)} />}
     </div>
   );
 }
@@ -1164,6 +1164,7 @@ function ChatHeader({
 }
 
 function MessageList({
+  onAttachmentPreview,
   canPin,
   currentUserId,
   focusMessageId,
@@ -1173,7 +1174,6 @@ function MessageList({
   onCopyLink,
   onDelete,
   onEdit,
-  onImage,
   onJumpUnread,
   onLoadOlder,
   onMarkUnread,
@@ -1190,10 +1190,10 @@ function MessageList({
   hasOlderMessages: boolean;
   loadingOlderMessages: boolean;
   messages: ChatMessage[];
+  onAttachmentPreview: (attachment: ChatAttachment) => void;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
-  onImage: (attachment: ChatAttachment) => void;
   onJumpUnread: () => void;
   onLoadOlder: () => void;
   onMarkUnread: (message: ChatMessage) => void;
@@ -1252,7 +1252,7 @@ function MessageList({
               onCopyLink={onCopyLink}
               onDelete={onDelete}
               onEdit={onEdit}
-              onImage={onImage}
+              onAttachmentPreview={onAttachmentPreview}
               onMarkUnread={onMarkUnread}
               onPin={onPin}
               onReaction={onReaction}
@@ -1268,6 +1268,7 @@ function MessageList({
 }
 
 function MessageItem({
+  onAttachmentPreview,
   canPin,
   currentUserId,
   firstUnread,
@@ -1276,7 +1277,6 @@ function MessageItem({
   onCopyLink,
   onDelete,
   onEdit,
-  onImage,
   onMarkUnread,
   onPin,
   onReaction,
@@ -1284,6 +1284,7 @@ function MessageItem({
   onThread,
   usersById,
 }: {
+  onAttachmentPreview: (attachment: ChatAttachment) => void;
   canPin?: boolean;
   currentUserId?: string;
   firstUnread?: boolean;
@@ -1292,7 +1293,6 @@ function MessageItem({
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
-  onImage: (attachment: ChatAttachment) => void;
   onMarkUnread?: (message: ChatMessage) => void;
   onPin?: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
@@ -1327,7 +1327,7 @@ function MessageItem({
         ) : (
           <>
             <div className="orf-chat-message-text">{renderTextFragments(message.body, usersById)}</div>
-            <AttachmentGrid attachments={message.attachments} onImage={onImage} />
+            <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             <div className="orf-chat-reaction-row">
               {message.reactions.map((reaction) => (
                 <button
@@ -1389,24 +1389,23 @@ function MessageItem({
   );
 }
 
-function AttachmentGrid({ attachments, onImage }: { attachments: ChatAttachment[]; onImage: (attachment: ChatAttachment) => void }) {
+function AttachmentGrid({ attachments, onAttachmentPreview }: { attachments: ChatAttachment[]; onAttachmentPreview: (attachment: ChatAttachment) => void }) {
   if (attachments.length === 0) return null;
   return (
     <div className="orf-chat-attachments">
       {attachments.map((attachment) => {
         const isImage = attachment.mimeType.startsWith("image/");
         return isImage ? (
-          <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onImage(attachment)}>
+          <button type="button" className="orf-chat-image-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment)}>
             <img src={attachment.contentUrl} alt={attachment.fileName} loading="lazy" />
             <span>{attachment.fileName}</span>
           </button>
         ) : (
-          <a className="orf-chat-file-attachment" href={attachment.contentUrl} key={attachment.id} download={attachment.fileName}>
+          <button type="button" className="orf-chat-file-attachment" key={attachment.id} onClick={() => onAttachmentPreview(attachment)}>
             <FileText className="h-5 w-5" />
             <span>{attachment.fileName}</span>
             <small>{formatFileSize(attachment.fileSize)}</small>
-            <Download className="h-4 w-4" />
-          </a>
+          </button>
         );
       })}
     </div>
@@ -1746,7 +1745,7 @@ function ChatRightPanel(props: {
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
-  onImage: (attachment: ChatAttachment) => void;
+  onAttachmentPreview: (attachment: ChatAttachment) => void;
   onMarkUnread: (message: ChatMessage) => void;
   onOpenResult: (result: ChatSearchResult) => void;
   onOpenThreadSummary: (summary: ChatThreadSummary) => void;
@@ -1795,7 +1794,7 @@ function ChatRightPanel(props: {
             onDelete={props.onDelete}
             onDraftStateChange={props.onDraftStateChange}
             onEdit={props.onEdit}
-            onImage={props.onImage}
+            onAttachmentPreview={props.onAttachmentPreview}
             onMarkUnread={props.onMarkUnread}
             onPin={props.onPin}
             onReaction={props.onReaction}
@@ -1916,13 +1915,13 @@ function ThreadInboxPanel({
 }
 
 function ThreadPanel({
+  onAttachmentPreview,
   canPin,
   currentUserId,
   onCopyLink,
   onDelete,
   onDraftStateChange,
   onEdit,
-  onImage,
   onMarkUnread,
   onPin,
   onReaction,
@@ -1934,13 +1933,13 @@ function ThreadPanel({
   users,
   usersById,
 }: {
+  onAttachmentPreview: (attachment: ChatAttachment) => void;
   canPin: boolean;
   currentUserId?: string;
   onCopyLink: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
-  onImage: (attachment: ChatAttachment) => void;
   onMarkUnread: (message: ChatMessage) => void;
   onPin: (message: ChatMessage) => void;
   onReaction: (message: ChatMessage, emojiName: string) => void;
@@ -1971,7 +1970,7 @@ function ThreadPanel({
         onCopyLink={onCopyLink}
         onDelete={onDelete}
         onEdit={onEdit}
-        onImage={onImage}
+        onAttachmentPreview={onAttachmentPreview}
         onMarkUnread={onMarkUnread}
         onPin={onPin}
         onReaction={onReaction}
@@ -1993,7 +1992,7 @@ function ThreadPanel({
             onCopyLink={onCopyLink}
             onDelete={onDelete}
             onEdit={onEdit}
-            onImage={onImage}
+            onAttachmentPreview={onAttachmentPreview}
             onMarkUnread={onMarkUnread}
             onPin={onPin}
             onReaction={onReaction}
@@ -2441,12 +2440,32 @@ function EditMessageDialog({
   );
 }
 
-function ImagePreview({ attachment, onClose }: { attachment: ChatAttachment; onClose: () => void }) {
+function AttachmentPreview({ attachment, onClose }: { attachment: ChatAttachment; onClose: () => void }) {
+  const canEmbed = attachment.mimeType === "application/pdf" || attachment.mimeType.startsWith("text/");
+  const isImage = attachment.mimeType.startsWith("image/");
   return (
-    <div className="orf-chat-image-preview" onMouseDown={onClose}>
-      <button type="button" onClick={onClose}><X className="h-5 w-5" /></button>
-      <img src={attachment.contentUrl} alt={attachment.fileName} />
-      <span>{attachment.fileName}</span>
+    <div className="orf-chat-attachment-preview" onMouseDown={onClose}>
+      <div className="orf-chat-attachment-preview-panel" onMouseDown={(event) => event.stopPropagation()}>
+        <header>
+          <span>{attachment.fileName}</span>
+          <a href={attachment.contentUrl} download={attachment.fileName} title="下载附件">
+            <Download className="h-4 w-4" />
+          </a>
+          <button type="button" onClick={onClose} title="关闭预览"><X className="h-5 w-5" /></button>
+        </header>
+        {isImage ? (
+          <img src={attachment.contentUrl} alt={attachment.fileName} />
+        ) : canEmbed ? (
+          <iframe src={attachment.contentUrl} title={attachment.fileName} />
+        ) : (
+          <div className="orf-chat-attachment-preview-empty">
+            <FileText className="h-8 w-8" />
+            <strong>{attachment.fileName}</strong>
+            <small>{attachment.mimeType || "未知文件类型"} · {formatFileSize(attachment.fileSize)}</small>
+            <a href={attachment.contentUrl} download={attachment.fileName}>下载附件</a>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
