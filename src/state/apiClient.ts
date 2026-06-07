@@ -49,7 +49,13 @@ export type PushDeviceRegistrationInput = {
   appBuild?: string | null;
   appVersion?: string | null;
   deviceLabel?: string | null;
+  deviceManufacturer?: string | null;
+  deviceModel?: string | null;
+  googlePlayServicesAvailable?: boolean | null;
+  notificationPermission?: string | null;
+  osVersion?: string | null;
   platform: "android";
+  sdkInt?: number | null;
   token: string;
 };
 export type PushDeviceRegistrationResponse = {

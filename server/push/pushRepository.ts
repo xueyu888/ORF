@@ -14,18 +14,30 @@ export type PushDeviceRecord = {
   appVersion: string | null;
   appBuild: string | null;
   deviceLabel: string | null;
+  deviceManufacturer: string | null;
+  deviceModel: string | null;
+  googlePlayServicesAvailable: boolean | null;
   lastClientUpdateVersion: string | null;
   lastClientUpdatePushedAt: string | null;
+  notificationPermission: string | null;
+  osVersion: string | null;
+  sdkInt: number | null;
 };
 
 type PushDeviceRow = {
   app_build: string | null;
   app_version: string | null;
   device_label: string | null;
+  device_manufacturer: string | null;
+  device_model: string | null;
+  google_play_services_available: boolean | null;
   id: string;
   last_client_update_pushed_at: Date | string | null;
   last_client_update_version: string | null;
+  notification_permission: string | null;
+  os_version: string | null;
   platform: string;
+  sdk_int: number | null;
   team_id: string;
   token: string;
   token_hash: string;
@@ -36,7 +48,13 @@ export type RegisterPushDeviceInput = {
   appBuild?: string | null;
   appVersion?: string | null;
   deviceLabel?: string | null;
+  deviceManufacturer?: string | null;
+  deviceModel?: string | null;
+  googlePlayServicesAvailable?: boolean | null;
+  notificationPermission?: string | null;
+  osVersion?: string | null;
   platform: PushPlatform;
+  sdkInt?: number | null;
   token: string;
 };
 
@@ -52,9 +70,10 @@ export async function registerPushDeviceForUser(teamId: string, userId: string, 
     `
       INSERT INTO push_devices (
         id, team_id, user_id, platform, token_hash, token, app_version, app_build, device_label,
+        device_manufacturer, device_model, os_version, sdk_int, google_play_services_available, notification_permission,
         enabled, created_at, updated_at, last_seen_at, revoked_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10, $10, $10, null)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true, $16, $16, $16, null)
       ON CONFLICT (team_id, platform, token_hash)
       DO UPDATE SET
         user_id = EXCLUDED.user_id,
@@ -62,11 +81,18 @@ export async function registerPushDeviceForUser(teamId: string, userId: string, 
         app_version = EXCLUDED.app_version,
         app_build = EXCLUDED.app_build,
         device_label = EXCLUDED.device_label,
+        device_manufacturer = EXCLUDED.device_manufacturer,
+        device_model = EXCLUDED.device_model,
+        os_version = EXCLUDED.os_version,
+        sdk_int = EXCLUDED.sdk_int,
+        google_play_services_available = EXCLUDED.google_play_services_available,
+        notification_permission = EXCLUDED.notification_permission,
         enabled = true,
         updated_at = EXCLUDED.updated_at,
         last_seen_at = EXCLUDED.last_seen_at,
         revoked_at = null
       RETURNING id, team_id, user_id, platform, token_hash, token, app_version, app_build, device_label,
+        device_manufacturer, device_model, os_version, sdk_int, google_play_services_available, notification_permission,
         last_client_update_version, last_client_update_pushed_at
     `,
     [
@@ -79,6 +105,12 @@ export async function registerPushDeviceForUser(teamId: string, userId: string, 
       cleanOptionalText(input.appVersion, 64),
       cleanOptionalText(input.appBuild, 64),
       cleanOptionalText(input.deviceLabel, 120),
+      cleanOptionalText(input.deviceManufacturer, 80),
+      cleanOptionalText(input.deviceModel, 120),
+      cleanOptionalText(input.osVersion, 80),
+      cleanOptionalInteger(input.sdkInt),
+      typeof input.googlePlayServicesAvailable === "boolean" ? input.googlePlayServicesAvailable : null,
+      cleanOptionalText(input.notificationPermission, 32),
       now,
     ],
   ).then((result) => result.rows);
@@ -126,6 +158,7 @@ export async function listPushDevicesForUsers(teamId: string, userIds: string[],
   const { rows } = await pool.query<PushDeviceRow>(
     `
       SELECT d.id, d.team_id, d.user_id, d.platform, d.token_hash, d.token, d.app_version, d.app_build, d.device_label,
+             d.device_manufacturer, d.device_model, d.os_version, d.sdk_int, d.google_play_services_available, d.notification_permission,
              d.last_client_update_version, d.last_client_update_pushed_at
       FROM push_devices d
       INNER JOIN users u ON u.id = d.user_id AND COALESCE(u.status, 'active') = 'active'
@@ -167,6 +200,7 @@ export async function listPushDevicesNeedingClientUpdate(input: {
   const { rows } = await pool.query<PushDeviceRow>(
     `
       SELECT d.id, d.team_id, d.user_id, d.platform, d.token_hash, d.token, d.app_version, d.app_build, d.device_label,
+             d.device_manufacturer, d.device_model, d.os_version, d.sdk_int, d.google_play_services_available, d.notification_permission,
              d.last_client_update_version, d.last_client_update_pushed_at
       FROM push_devices d
       INNER JOIN users u ON u.id = d.user_id AND COALESCE(u.status, 'active') = 'active'
@@ -217,6 +251,10 @@ function cleanOptionalText(value: string | null | undefined, maxLength: number) 
   return trimmed ? trimmed.slice(0, maxLength) : null;
 }
 
+function cleanOptionalInteger(value: number | null | undefined) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
 function makePushDeviceId() {
   return `push-device-${Date.now()}-${randomUUID()}`;
 }
@@ -241,7 +279,13 @@ function toPushDeviceRecord(row: PushDeviceRow): PushDeviceRecord {
     appVersion: row.app_version,
     appBuild: row.app_build,
     deviceLabel: row.device_label,
+    deviceManufacturer: row.device_manufacturer,
+    deviceModel: row.device_model,
+    googlePlayServicesAvailable: row.google_play_services_available,
     lastClientUpdateVersion: row.last_client_update_version,
     lastClientUpdatePushedAt: iso(row.last_client_update_pushed_at),
+    notificationPermission: row.notification_permission,
+    osVersion: row.os_version,
+    sdkInt: row.sdk_int,
   };
 }

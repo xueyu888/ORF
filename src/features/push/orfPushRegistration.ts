@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { PushNotifications, type ActionPerformed, type Token } from "@capacitor/push-notifications";
 import { orfClientCurrentVersion } from "../client-updates/clientUpdateConfig";
-import { detectClientUpdateRuntimeInfo } from "../client-updates/clientUpdateRuntime";
+import { detectAndroidNativeRuntimeInfo, detectClientUpdateRuntimeInfo, type NativeRuntimeInfo } from "../client-updates/clientUpdateRuntime";
 import { registerPushDeviceRequest, revokePushDeviceRequest } from "../../state/apiClient";
 
 type PushOpenHandler = (targetPath: string) => void;
@@ -91,11 +91,18 @@ function handleNotificationAction(action: ActionPerformed) {
 
 async function registerAndroidPushToken(token: string) {
   const runtime = await detectClientUpdateRuntimeInfo(orfClientCurrentVersion);
+  const nativeInfo = await detectAndroidNativeRuntimeInfo();
   await registerPushDeviceRequest({
-    appBuild: null,
+    appBuild: nativeInfo?.versionCode ? String(nativeInfo.versionCode) : null,
     appVersion: runtime.currentVersion || orfClientCurrentVersion,
-    deviceLabel: "Android",
+    deviceLabel: androidDeviceLabel(nativeInfo),
+    deviceManufacturer: cleanNativeText(nativeInfo?.deviceManufacturer),
+    deviceModel: cleanNativeText(nativeInfo?.deviceModel),
+    googlePlayServicesAvailable: typeof nativeInfo?.googlePlayServicesAvailable === "boolean" ? nativeInfo.googlePlayServicesAvailable : null,
+    notificationPermission: cleanNativeText(nativeInfo?.notificationPermission),
+    osVersion: cleanNativeText(nativeInfo?.osVersion),
     platform: "android",
+    sdkInt: typeof nativeInfo?.sdkInt === "number" ? nativeInfo.sdkInt : null,
     token,
   });
 }
@@ -107,6 +114,17 @@ async function ensureAndroidPushChannels() {
 function readCachedAndroidPushToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(cachedAndroidPushTokenKey)?.trim() || null;
+}
+
+function androidDeviceLabel(nativeInfo: NativeRuntimeInfo | null) {
+  const parts = [nativeInfo?.deviceManufacturer, nativeInfo?.deviceModel]
+    .map((item) => cleanNativeText(item))
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join(" ") : "Android";
+}
+
+function cleanNativeText(value: string | null | undefined) {
+  return value?.trim() || null;
 }
 
 function notificationTargetPath(data: unknown) {

@@ -24,6 +24,10 @@ type PushTableCheckRow = {
   push_devices_table: string | null;
 };
 
+type ColumnNameRow = {
+  column_name: string;
+};
+
 type DeviceCountRow = {
   count: string;
   enabled: boolean;
@@ -34,12 +38,18 @@ type DeviceSampleRow = {
   app_build: string | null;
   app_version: string | null;
   device_label: string | null;
+  device_manufacturer: string | null;
+  device_model: string | null;
   enabled: boolean;
+  google_play_services_available: boolean | null;
   last_client_update_pushed_at: string | null;
   last_client_update_version: string | null;
   last_seen_at: string | null;
+  notification_permission: string | null;
+  os_version: string | null;
   platform: string;
   revoked_at: string | null;
+  sdk_int: number | null;
   team_id: string;
   updated_at: string;
   user_email: string | null;
@@ -195,6 +205,7 @@ async function printDeviceState(pool: pg.Pool) {
     }
   }
 
+  const columns = await pushDeviceColumns(pool);
   const samples = await pool.query<DeviceSampleRow>(
     `
       SELECT
@@ -207,6 +218,12 @@ async function printDeviceState(pool: pg.Pool) {
         d.app_version,
         d.app_build,
         d.device_label,
+        ${optionalColumn(columns, "device_manufacturer", "text")},
+        ${optionalColumn(columns, "device_model", "text")},
+        ${optionalColumn(columns, "os_version", "text")},
+        ${optionalColumn(columns, "sdk_int", "integer")},
+        ${optionalColumn(columns, "google_play_services_available", "boolean")},
+        ${optionalColumn(columns, "notification_permission", "text")},
         d.last_client_update_version,
         d.last_client_update_pushed_at::text,
         d.last_seen_at::text,
@@ -229,6 +246,9 @@ async function printDeviceState(pool: pg.Pool) {
           `platform=${row.platform}`,
           `enabled=${row.enabled}`,
           `version=${row.app_version ?? "unknown"}`,
+          `device=${deviceSummary(row)}`,
+          `gms=${gmsSummary(row.google_play_services_available)}`,
+          `notification=${row.notification_permission ?? "unknown"}`,
           `lastSeen=${row.last_seen_at ?? "never"}`,
           row.revoked_at ? `revokedAt=${row.revoked_at}` : "",
         ].filter(Boolean).join(" "),
@@ -237,6 +257,35 @@ async function printDeviceState(pool: pg.Pool) {
   }
   console.log("");
   return true;
+}
+
+async function pushDeviceColumns(pool: pg.Pool) {
+  const result = await pool.query<ColumnNameRow>(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = ANY(current_schemas(false))
+        AND table_name = 'push_devices'
+    `,
+  );
+  return new Set(result.rows.map((row) => row.column_name));
+}
+
+function optionalColumn(columns: Set<string>, columnName: string, postgresType: string) {
+  return columns.has(columnName) ? `d.${columnName}` : `null::${postgresType} AS ${columnName}`;
+}
+
+function deviceSummary(row: DeviceSampleRow) {
+  const parts = [row.device_manufacturer, row.device_model, row.os_version ? `Android ${row.os_version}` : null, row.sdk_int ? `SDK ${row.sdk_int}` : null]
+    .map((item) => item?.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join("/") : row.device_label ?? "unknown";
+}
+
+function gmsSummary(value: boolean | null) {
+  if (value === true) return "available";
+  if (value === false) return "unavailable";
+  return "unknown";
 }
 
 async function loadTestDevices(pool: pg.Pool, args: CliArgs) {

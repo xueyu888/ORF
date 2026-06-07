@@ -2,8 +2,14 @@ import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { isClientReleaseVersion, isTrustedClientUpdateUrl, type ClientReleaseAsset, type ClientUpdatePlatform } from "./clientUpdateModel";
 
-type NativeRuntimeInfo = {
+export type NativeRuntimeInfo = {
+  deviceManufacturer?: string | null;
+  deviceModel?: string | null;
+  googlePlayServicesAvailable?: boolean | null;
+  notificationPermission?: string | null;
+  osVersion?: string | null;
   platform?: string;
+  sdkInt?: number | null;
   version?: string | null;
   versionCode?: number | null;
 };
@@ -48,6 +54,11 @@ export async function detectClientUpdatePlatform(): Promise<ClientUpdatePlatform
   return (await detectClientUpdateRuntimeInfo("0.0.0")).platform;
 }
 
+export async function detectAndroidNativeRuntimeInfo(): Promise<NativeRuntimeInfo | null> {
+  if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return null;
+  return AndroidClientUpdate.getInfo?.().catch(() => null) ?? null;
+}
+
 export async function detectClientUpdateRuntimeInfo(webFallbackVersion: string): Promise<ClientUpdateRuntimeInfo> {
   if (typeof window !== "undefined" && window.orfNativeRuntime?.getInfo) {
     const info = await window.orfNativeRuntime.getInfo().catch(() => null);
@@ -58,7 +69,7 @@ export async function detectClientUpdateRuntimeInfo(webFallbackVersion: string):
     };
   }
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-    const info = await AndroidClientUpdate.getInfo?.().catch(() => null);
+    const info = await detectAndroidNativeRuntimeInfo();
     return {
       currentVersion: nativeClientVersion(info),
       platform: "android",

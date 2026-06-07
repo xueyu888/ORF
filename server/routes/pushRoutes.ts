@@ -9,7 +9,13 @@ const pushDeviceBodySchema = z.object({
   appBuild: z.string().trim().max(64).optional(),
   appVersion: z.string().trim().max(64).optional(),
   deviceLabel: z.string().trim().max(120).optional(),
+  deviceManufacturer: z.string().trim().max(80).optional(),
+  deviceModel: z.string().trim().max(120).optional(),
+  googlePlayServicesAvailable: z.boolean().optional(),
+  notificationPermission: z.string().trim().max(32).optional(),
+  osVersion: z.string().trim().max(80).optional(),
   platform: z.literal("android"),
+  sdkInt: z.number().int().positive().optional(),
   token: z.string().trim().min(20).max(4096),
 });
 

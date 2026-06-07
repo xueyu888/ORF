@@ -281,6 +281,13 @@
       "when": 1781023000000,
       "tag": "0039_orf_push_devices",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1781024000000,
+      "tag": "0040_push_device_environment",
+      "breakpoints": true
     }
   ]
 }

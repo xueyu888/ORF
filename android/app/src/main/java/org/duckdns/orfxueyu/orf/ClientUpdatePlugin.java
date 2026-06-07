@@ -6,6 +6,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -25,6 +26,12 @@ public class ClientUpdatePlugin extends Plugin {
     public void getInfo(PluginCall call) {
         JSObject result = new JSObject();
         result.put("platform", "android");
+        result.put("deviceManufacturer", Build.MANUFACTURER);
+        result.put("deviceModel", Build.MODEL);
+        result.put("osVersion", Build.VERSION.RELEASE);
+        result.put("sdkInt", Build.VERSION.SDK_INT);
+        result.put("googlePlayServicesAvailable", isGooglePlayServicesAvailable());
+        result.put("notificationPermission", notificationPermissionState());
         try {
             PackageInfo packageInfo = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
             result.put("version", packageInfo.versionName);
@@ -38,6 +45,28 @@ public class ClientUpdatePlugin extends Plugin {
             result.put("versionCode", null);
         }
         call.resolve(result);
+    }
+
+    private boolean isGooglePlayServicesAvailable() {
+        try {
+            Class<?> availabilityClass = Class.forName("com.google.android.gms.common.GoogleApiAvailability");
+            Object availability = availabilityClass.getMethod("getInstance").invoke(null);
+            Object result = availabilityClass
+                .getMethod("isGooglePlayServicesAvailable", android.content.Context.class)
+                .invoke(availability, getContext());
+            Class<?> connectionResultClass = Class.forName("com.google.android.gms.common.ConnectionResult");
+            int success = connectionResultClass.getField("SUCCESS").getInt(null);
+            return result instanceof Integer && (Integer) result == success;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    private String notificationPermissionState() {
+        if (!NotificationManagerCompat.from(getContext()).areNotificationsEnabled()) {
+            return "denied";
+        }
+        return "granted";
     }
 
     @PluginMethod

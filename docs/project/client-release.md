@@ -110,6 +110,8 @@ npm run push:diagnose -- --send-test --user-email <email>
 - `push_devices` 里已经有目标用户的启用 Android 设备。
 - 测试发送返回 FCM 成功数大于 0，且真机在后台或锁屏状态能看到通知。
 
+如果诊断中的设备样本显示 `gms=unavailable`，这类安卓机不能只依赖 FCM 达到微信式后台通知；需要再接入对应厂商 Push（例如 vivo/Huawei/Xiaomi/Oppo）或厂商聚合服务，并准备厂商开发者账号、应用包名审核和服务端密钥。FCM 仍保留给有 Google Play services 的设备使用。
+
 ## 版本事实源
 
 根 `package.json` 仍是发布版本的唯一维护入口，`scripts/sync-client-versions.mjs` 会同步桌面客户端和 Android 原生工程。运行中的客户端版本展示以原生容器返回的已安装版本为准：
