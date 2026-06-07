@@ -80,7 +80,7 @@ npm run release:clients -- --tag v0.0.1 --watch
 - GitHub Actions 从 `ORF_ANDROID_KEYSTORE_BASE64`、`ORF_ANDROID_KEYSTORE_PASSWORD`、`ORF_ANDROID_KEY_ALIAS`、`ORF_ANDROID_KEY_PASSWORD` 四个 GitHub Secrets 读取签名材料。
 - 仓库不能提交 keystore、私钥、keystore 密码或证书密码。
 
-如果手机上已经安装过不同签名的同包名 APK，Android 不允许直接覆盖安装。必须先卸载旧包，或者继续使用旧包对应的原始签名重新打包；这是系统安全规则，不是 ORF 下载逻辑可以绕过的行为。
+如果手机上已经安装过不同签名的同包名 APK，Android 不允许直接覆盖安装。ORF 内置安装器会在打开系统安装界面前先校验包名和签名；签名不一致时会直接提示用户先卸载旧包，或者继续使用旧包对应的原始签名重新打包。这是系统安全规则，不是 ORF 下载逻辑可以绕过的行为。
 
 ## Android 后台 Push 条件
 
@@ -101,6 +101,7 @@ vivo 系统 Push 只接入 vivo 一家，发布包和服务端还需要：
 - ORF 服务端配置 `ORF_VIVO_PUSH_ENABLED=true`、`ORF_VIVO_PUSH_APP_ID`、`ORF_VIVO_PUSH_APP_KEY`、`ORF_VIVO_PUSH_APP_SECRET`。
 - 服务端已执行 `npm run db:migrate`，保证 `push_vendor_devices`、`push_vendor_registration_statuses` 表存在。
 - vivo 用户至少打开过包含 vivo Push 注册逻辑的新版本客户端并授权通知；客户端拿到 vivo RegID 后才会写入 `push_vendor_devices`。
+- 聊天消息和客户端更新提醒共用用户级 Push 路由；同一用户同时有 FCM 与 vivo 设备时，vivo 设备优先，FCM 作为回退。`push_vendor_devices.last_client_update_version` 记录厂商设备已经提醒过的客户端版本，避免更新通知重复轰炸。
 
 远程 Push 默认使用 `ORF_PUSH_CONTENT_MODE=private`，通知栏只显示通用聊天提示，消息正文和私有频道内容仍回到 ORF 内查看。
 

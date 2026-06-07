@@ -204,6 +204,15 @@ function clientUpdateInstallMessage(result: ClientUpdateInstallResult) {
   if (result.reason === "invalid_payload") {
     return "更新安装参数无效。";
   }
+  if (result.reason === "apk_package_mismatch") {
+    return "安装包不是 ORF 客户端，已停止安装。";
+  }
+  if (result.reason === "apk_signature_mismatch") {
+    return "安装包签名和当前已安装版本不一致，Android 不允许覆盖安装；请先卸载旧版 ORF，再安装这一版。";
+  }
+  if (result.reason === "apk_parse_failed" || result.reason === "apk_signature_check_failed") {
+    return "安装包解析或签名校验失败，已停止安装。";
+  }
   if (result.reason === "unsupported_platform" || result.reason === "no_native_update_installer") {
     return "当前客户端缺少内置安装器，已打开安装包下载地址；安装一次新版后可应用内更新。";
   }

@@ -309,6 +309,13 @@
       "when": 1781027000000,
       "tag": "0043_push_vendor_registration_statuses",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1781028000000,
+      "tag": "0044_push_vendor_client_update_state",
+      "breakpoints": true
     }
   ]
 }

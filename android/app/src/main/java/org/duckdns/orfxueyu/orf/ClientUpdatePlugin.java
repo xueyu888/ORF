@@ -3,9 +3,11 @@ package org.duckdns.orfxueyu.orf;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
+import android.util.Base64;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.FileProvider;
 import com.getcapacitor.JSObject;
@@ -19,7 +21,9 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 @CapacitorPlugin(name = "OrfClientUpdate")
 public class ClientUpdatePlugin extends Plugin {
@@ -137,6 +141,11 @@ public class ClientUpdatePlugin extends Plugin {
         new Thread(() -> {
             try {
                 File apk = downloadApk(url, name);
+                String validationError = validateUpdateApk(apk);
+                if (validationError != null) {
+                    resolve(call, "error", validationError, null);
+                    return;
+                }
                 getActivity().runOnUiThread(() -> {
                     try {
                         openPackageInstaller(apk);
@@ -149,6 +158,67 @@ public class ClientUpdatePlugin extends Plugin {
                 resolve(call, "error", "apk_install_failed", String.valueOf(error));
             }
         }).start();
+    }
+
+    private String validateUpdateApk(File apk) {
+        PackageManager packageManager = getContext().getPackageManager();
+        int flags = signingPackageInfoFlags();
+        PackageInfo updatePackage = packageManager.getPackageArchiveInfo(apk.getAbsolutePath(), flags);
+        if (updatePackage == null) {
+            return "apk_parse_failed";
+        }
+        if (!getContext().getPackageName().equals(updatePackage.packageName)) {
+            return "apk_package_mismatch";
+        }
+
+        try {
+            PackageInfo installedPackage = packageManager.getPackageInfo(getContext().getPackageName(), flags);
+            return hasSharedSignature(installedPackage, updatePackage) ? null : "apk_signature_mismatch";
+        } catch (PackageManager.NameNotFoundException error) {
+            return "apk_signature_check_failed";
+        }
+    }
+
+    private int signingPackageInfoFlags() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return PackageManager.GET_SIGNING_CERTIFICATES;
+        }
+        return PackageManager.GET_SIGNATURES;
+    }
+
+    private boolean hasSharedSignature(PackageInfo installedPackage, PackageInfo updatePackage) {
+        Set<String> installedSignatures = signatureSet(installedPackage);
+        Set<String> updateSignatures = signatureSet(updatePackage);
+        if (installedSignatures.isEmpty() || updateSignatures.isEmpty()) {
+            return false;
+        }
+        for (String signature : updateSignatures) {
+            if (installedSignatures.contains(signature)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Set<String> signatureSet(PackageInfo packageInfo) {
+        Set<String> result = new HashSet<>();
+        Signature[] signatures;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P && packageInfo.signingInfo != null) {
+            signatures = packageInfo.signingInfo.hasMultipleSigners()
+                ? packageInfo.signingInfo.getApkContentsSigners()
+                : packageInfo.signingInfo.getSigningCertificateHistory();
+        } else {
+            signatures = packageInfo.signatures;
+        }
+        if (signatures == null) {
+            return result;
+        }
+        for (Signature signature : signatures) {
+            if (signature != null) {
+                result.add(Base64.encodeToString(signature.toByteArray(), Base64.NO_WRAP));
+            }
+        }
+        return result;
     }
 
     private boolean canInstallPackages() {

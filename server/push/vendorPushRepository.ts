@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { compareReleaseVersions } from "../../src/features/client-updates/clientUpdateModel";
 import { pool } from "../db/client";
 import { hashPushToken, type PushPlatform } from "./pushRepository";
 
@@ -11,6 +12,8 @@ export type PushVendorDeviceRecord = {
   deviceManufacturer: string | null;
   deviceModel: string | null;
   id: string;
+  lastClientUpdatePushedAt: string | null;
+  lastClientUpdateVersion: string | null;
   notificationPermission: string | null;
   osVersion: string | null;
   platform: PushPlatform;
@@ -29,6 +32,8 @@ type PushVendorDeviceRow = {
   device_manufacturer: string | null;
   device_model: string | null;
   id: string;
+  last_client_update_pushed_at: Date | string | null;
+  last_client_update_version: string | null;
   notification_permission: string | null;
   os_version: string | null;
   platform: string;
@@ -91,7 +96,8 @@ export async function registerPushVendorDeviceForUser(teamId: string, userId: st
         last_seen_at = EXCLUDED.last_seen_at,
         revoked_at = null
       RETURNING id, team_id, user_id, platform, vendor, token_hash, token, app_version, app_build, device_label,
-        device_manufacturer, device_model, os_version, sdk_int, notification_permission
+        device_manufacturer, device_model, os_version, sdk_int, notification_permission,
+        last_client_update_version, last_client_update_pushed_at
     `,
     [
       makePushVendorDeviceId(),
@@ -207,7 +213,8 @@ export async function listPushVendorDevicesForUsers(teamId: string, userIds: str
   const { rows } = await pool.query<PushVendorDeviceRow>(
     `
       SELECT d.id, d.team_id, d.user_id, d.platform, d.vendor, d.token_hash, d.token, d.app_version, d.app_build, d.device_label,
-             d.device_manufacturer, d.device_model, d.os_version, d.sdk_int, d.notification_permission
+             d.device_manufacturer, d.device_model, d.os_version, d.sdk_int, d.notification_permission,
+             d.last_client_update_version, d.last_client_update_pushed_at
       FROM push_vendor_devices d
       INNER JOIN users u ON u.id = d.user_id AND COALESCE(u.status, 'active') = 'active'
       INNER JOIN team_members tm ON tm.team_id = d.team_id AND tm.user_id = d.user_id
@@ -221,6 +228,72 @@ export async function listPushVendorDevicesForUsers(teamId: string, userIds: str
     [teamId, ids, platform],
   );
   return rows.map(toPushVendorDeviceRecord);
+}
+
+export async function listActivePushVendorDeviceTeamIds(platform: PushPlatform = "android", vendor: PushVendor = "vivo") {
+  const { rows } = await pool.query<{ team_id: string }>(
+    `
+      SELECT DISTINCT d.team_id
+      FROM push_vendor_devices d
+      INNER JOIN users u ON u.id = d.user_id AND COALESCE(u.status, 'active') = 'active'
+      INNER JOIN team_members tm ON tm.team_id = d.team_id AND tm.user_id = d.user_id
+      WHERE d.platform = $1
+        AND d.vendor = $2
+        AND d.enabled = true
+        AND d.revoked_at IS NULL
+      ORDER BY d.team_id
+    `,
+    [platform, vendor],
+  );
+  return rows.map((row) => row.team_id);
+}
+
+export async function listPushVendorDevicesNeedingClientUpdate(input: {
+  platform?: PushPlatform;
+  releaseVersion: string;
+  teamId: string;
+  vendor?: PushVendor;
+}) {
+  const { rows } = await pool.query<PushVendorDeviceRow>(
+    `
+      SELECT d.id, d.team_id, d.user_id, d.platform, d.vendor, d.token_hash, d.token, d.app_version, d.app_build, d.device_label,
+             d.device_manufacturer, d.device_model, d.os_version, d.sdk_int, d.notification_permission,
+             d.last_client_update_version, d.last_client_update_pushed_at
+      FROM push_vendor_devices d
+      INNER JOIN users u ON u.id = d.user_id AND COALESCE(u.status, 'active') = 'active'
+      INNER JOIN team_members tm ON tm.team_id = d.team_id AND tm.user_id = d.user_id
+      WHERE d.team_id = $1
+        AND d.platform = $2
+        AND d.vendor = $3
+        AND d.enabled = true
+        AND d.revoked_at IS NULL
+        AND d.app_version IS NOT NULL
+        AND d.app_version <> ''
+        AND (d.last_client_update_version IS NULL OR d.last_client_update_version <> $4)
+      ORDER BY d.updated_at DESC
+    `,
+    [input.teamId, input.platform ?? "android", input.vendor ?? "vivo", input.releaseVersion],
+  );
+  return rows
+    .map(toPushVendorDeviceRecord)
+    .filter((device) => device.appVersion !== null && compareReleaseVersions(input.releaseVersion, device.appVersion) > 0);
+}
+
+export async function markVendorClientUpdatePushAttempt(teamId: string, deviceIds: string[], releaseVersion: string) {
+  const ids = Array.from(new Set(deviceIds.filter(Boolean)));
+  if (ids.length === 0) return 0;
+  const { rowCount } = await pool.query(
+    `
+      UPDATE push_vendor_devices
+      SET last_client_update_version = $3,
+          last_client_update_pushed_at = $4,
+          updated_at = $4
+      WHERE team_id = $1
+        AND id = ANY($2::text[])
+    `,
+    [teamId, ids, releaseVersion, nowIso()],
+  );
+  return rowCount ?? 0;
 }
 
 function normalizedVendorToken(token: string) {
@@ -256,6 +329,8 @@ function toPushVendorDeviceRecord(row: PushVendorDeviceRow): PushVendorDeviceRec
     deviceManufacturer: row.device_manufacturer,
     deviceModel: row.device_model,
     id: row.id,
+    lastClientUpdatePushedAt: iso(row.last_client_update_pushed_at),
+    lastClientUpdateVersion: row.last_client_update_version,
     notificationPermission: row.notification_permission,
     osVersion: row.os_version,
     platform: "android",
@@ -266,4 +341,9 @@ function toPushVendorDeviceRecord(row: PushVendorDeviceRow): PushVendorDeviceRec
     userId: row.user_id,
     vendor: "vivo",
   };
+}
+
+function iso(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : value;
 }

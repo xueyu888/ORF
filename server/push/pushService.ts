@@ -66,7 +66,7 @@ export async function sendPushToDevices(input: Omit<SendPushToUsersInput, "recip
   };
 }
 
-async function sendPushToVendorDevices(input: Omit<SendPushToUsersInput, "recipientUserIds"> & { devices: PushVendorDeviceRecord[] }) {
+export async function sendPushToVendorDevices(input: Omit<SendPushToUsersInput, "recipientUserIds"> & { devices: PushVendorDeviceRecord[] }) {
   if (!env.ORF_PUSH_ENABLED || input.devices.length === 0) return emptyPushDelivery();
 
   const display = displayContent(input);

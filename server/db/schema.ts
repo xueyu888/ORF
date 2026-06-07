@@ -362,6 +362,8 @@ export const pushVendorDevices = pgTable(
     osVersion: text("os_version"),
     sdkInt: integer("sdk_int"),
     notificationPermission: text("notification_permission"),
+    lastClientUpdateVersion: text("last_client_update_version"),
+    lastClientUpdatePushedAt: timestamp("last_client_update_pushed_at", { mode: "string", withTimezone: true }),
     enabled: boolean("enabled").notNull().default(true),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
     updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),

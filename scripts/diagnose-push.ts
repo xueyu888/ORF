@@ -73,6 +73,8 @@ type VendorDeviceSampleRow = {
   device_manufacturer: string | null;
   device_model: string | null;
   enabled: boolean;
+  last_client_update_pushed_at: string | null;
+  last_client_update_version: string | null;
   last_seen_at: string | null;
   notification_permission: string | null;
   os_version: string | null;
@@ -305,7 +307,7 @@ async function printDeviceState(pool: pg.Pool) {
     }
   }
 
-  const columns = await pushDeviceColumns(pool);
+  const columns = await tableColumns(pool, "push_devices");
   const samples = await pool.query<DeviceSampleRow>(
     `
       SELECT
@@ -385,6 +387,7 @@ async function printVendorDeviceState(pool: pg.Pool) {
     }
   }
 
+  const columns = await tableColumns(pool, "push_vendor_devices");
   const samples = await pool.query<VendorDeviceSampleRow>(
     `
       SELECT
@@ -403,6 +406,8 @@ async function printVendorDeviceState(pool: pg.Pool) {
         d.os_version,
         d.sdk_int,
         d.notification_permission,
+        ${optionalColumn(columns, "last_client_update_version", "text")},
+        ${optionalTimestampTextColumn(columns, "last_client_update_pushed_at")},
         d.last_seen_at::text,
         d.revoked_at::text,
         d.updated_at::text
@@ -426,6 +431,7 @@ async function printVendorDeviceState(pool: pg.Pool) {
           `version=${row.app_version ?? "unknown"}`,
           `device=${vendorDeviceSummary(row)}`,
           `notification=${row.notification_permission ?? "unknown"}`,
+          row.last_client_update_version ? `lastUpdatePush=${row.last_client_update_version}@${row.last_client_update_pushed_at ?? "unknown"}` : "",
           `lastSeen=${row.last_seen_at ?? "never"}`,
           row.revoked_at ? `revokedAt=${row.revoked_at}` : "",
         ].filter(Boolean).join(" "),
@@ -590,20 +596,25 @@ async function printVendorRegistrationStatusState(pool: pg.Pool) {
   console.log("");
 }
 
-async function pushDeviceColumns(pool: pg.Pool) {
+async function tableColumns(pool: pg.Pool, tableName: string) {
   const result = await pool.query<ColumnNameRow>(
     `
       SELECT column_name
       FROM information_schema.columns
       WHERE table_schema = ANY(current_schemas(false))
-        AND table_name = 'push_devices'
+        AND table_name = $1
     `,
+    [tableName],
   );
   return new Set(result.rows.map((row) => row.column_name));
 }
 
 function optionalColumn(columns: Set<string>, columnName: string, postgresType: string) {
   return columns.has(columnName) ? `d.${columnName}` : `null::${postgresType} AS ${columnName}`;
+}
+
+function optionalTimestampTextColumn(columns: Set<string>, columnName: string) {
+  return columns.has(columnName) ? `d.${columnName}::text AS ${columnName}` : `null::text AS ${columnName}`;
 }
 
 function deviceSummary(row: DeviceSampleRow) {
