@@ -70,6 +70,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1051.0",
     "@capacitor/core": "8.4.0",
+    "@capacitor/local-notifications": "^8.2.0",
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
     "clsx": "^2.1.1",

@@ -12,7 +12,9 @@ const electronBuilderCli = path.resolve(repoRoot, "node_modules", "electron-buil
 
 const appPackage = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "clients/desktop/package.json"), "utf8"));
 const mainSource = path.resolve(repoRoot, "clients/desktop/main.cjs");
+const preloadSource = path.resolve(repoRoot, "clients/desktop/preload.cjs");
 const mainTarget = path.resolve(tempRoot, "main.cjs");
+const preloadTarget = path.resolve(tempRoot, "preload.cjs");
 const packageTarget = path.resolve(tempRoot, "package.json");
 const configTarget = path.resolve(tempRoot, "electron-builder.json");
 
@@ -27,6 +29,7 @@ const builderConfig = {
   files: [
     "main.cjs",
     "package.json",
+    "preload.cjs",
   ],
   asar: true,
   npmRebuild: false,
@@ -60,6 +63,7 @@ function rootElectronVersion() {
 
 try {
   fs.copyFileSync(mainSource, mainTarget);
+  fs.copyFileSync(preloadSource, preloadTarget);
   fs.writeFileSync(packageTarget, `${JSON.stringify(appPackage, null, 2)}\n`);
   fs.writeFileSync(configTarget, `${JSON.stringify(builderConfig, null, 2)}\n`);
 

@@ -10,6 +10,7 @@ import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
+import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import {
   chatMessageDeliveryStatus,
   chatMessagePendingSend,
@@ -185,6 +186,14 @@ export function ChatPage() {
     return mentionableUsersForChannel(rightPanelChannel, bootstrap?.users);
   }, [rightPanelChannel, bootstrap?.users]);
   const canManageRightPanelChannel = canManageChannel(rightPanelChannel);
+
+  useEffect(() => {
+    setChatNativeNotificationViewState({
+      activeChannelId: activeChannel?.id ?? null,
+      activeThreadRootMessageId: activePanel === "thread" ? thread?.rootMessage.id ?? null : null,
+    });
+    return resetChatNativeNotificationViewState;
+  }, [activeChannel?.id, activePanel, thread?.rootMessage.id]);
 
   const consumeRequestedMessage = useCallback(() => {
     setSearchParams((params) => {

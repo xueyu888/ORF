@@ -1,5 +1,5 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { API_AUTHENTICATION_EXPIRED_EVENT, getChatUnreadSummary, getUserPreferences } from "./apiClient";
 import { shouldLoadInitialTaskManagementReadModel } from "./orfDataLoading";
 import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
@@ -24,6 +24,14 @@ import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
+import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
+import {
+  isSafeChatNotificationTargetPath,
+  prepareNativeChatNotifications,
+  sendNativeChatNotification,
+  subscribeNativeChatNotificationOpen,
+} from "../features/chat/chatNativeNotificationDelivery";
+import { getChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 import type { ChatRealtimeEvent, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
@@ -67,6 +75,21 @@ const emptyChatUnreadSummary: ChatUnreadSummary = {
   totalUnreadCount: 0,
   unreadChannelCount: 0,
 };
+
+function appDocumentFocused() {
+  if (typeof document === "undefined") return false;
+  return document.visibilityState === "visible" && document.hasFocus();
+}
+
+function chatRouteChannelIdFromPathname(pathname: string) {
+  const match = /^\/chat\/([^/?#]+)/.exec(pathname);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
 
 interface OrfContextValue {
   state: OrfState;
@@ -175,6 +198,7 @@ export { authFailureMessage } from "./orfProviderAuth";
 
 export function OrfProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [state, setState] = useState(loadInitialState);
   const { authenticateWithPassword, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
   const [toastEnabled, setToastEnabled] = useState(true);
@@ -183,6 +207,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const [readModelInvalidations, setReadModelInvalidations] = useState<OrfReadModelInvalidation[]>([]);
   const [systemBroadcasts, setSystemBroadcasts] = useState<SystemBroadcast[]>([]);
   const [chatUnreadSummary, setChatUnreadSummary] = useState<ChatUnreadSummary>(emptyChatUnreadSummary);
+  const notifiedChatMessageIdsRef = useRef<string[]>([]);
   const notify = useCallback((message: string) => {
     if (!toastEnabled) {
       return;
@@ -273,10 +298,43 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     const summary = await getChatUnreadSummary();
     setChatUnreadSummary(summary);
   }, []);
+  const reserveChatNotification = useCallback((messageId: string) => {
+    const messageIds = notifiedChatMessageIdsRef.current;
+    if (messageIds.includes(messageId)) return false;
+    messageIds.push(messageId);
+    if (messageIds.length > 160) {
+      messageIds.splice(0, messageIds.length - 160);
+    }
+    return true;
+  }, []);
   const receiveRealtimeChatEvent = useCallback((event: ChatRealtimeEvent) => {
     if (event.eventType === "typing") return;
+    const viewState = getChatNativeNotificationViewState();
+    const decision = buildChatNativeNotificationDecision({
+      currentUserId: currentUser?.id,
+      event,
+      focus: {
+        activeChannelId: viewState.activeChannelId ?? chatRouteChannelIdFromPathname(location.pathname),
+        activeThreadRootMessageId: viewState.activeThreadRootMessageId,
+        appFocused: appDocumentFocused(),
+      },
+    });
+    if (decision.action === "notify" && reserveChatNotification(decision.notification.messageId)) {
+      void sendNativeChatNotification(decision.notification).catch(() => undefined);
+    }
     void refreshChatUnreadSummary().catch(() => undefined);
-  }, [refreshChatUnreadSummary]);
+  }, [currentUser?.id, location.pathname, refreshChatUnreadSummary, reserveChatNotification]);
+
+  useEffect(() => subscribeNativeChatNotificationOpen((targetPath) => {
+    if (isSafeChatNotificationTargetPath(targetPath)) {
+      navigate(targetPath);
+    }
+  }), [navigate]);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) return;
+    void prepareNativeChatNotifications().catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated]);
 
   useRealtimeEvents({
     enabled: authReady && isAuthenticated && isApproved,
