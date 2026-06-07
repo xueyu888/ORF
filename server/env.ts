@@ -2,6 +2,8 @@ import "dotenv/config";
 import { z } from "zod";
 
 const postgresUrl = z.string().startsWith("postgresql://");
+const booleanString = (defaultValue: "true" | "false") =>
+  z.enum(["true", "false"]).default(defaultValue).transform((value) => value === "true");
 
 const envSchema = z.object({
   DATABASE_URL: postgresUrl.optional(),
@@ -25,6 +27,12 @@ const envSchema = z.object({
   OBJECT_STORAGE_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
   OBJECT_STORAGE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
   CHAT_FILE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(100 * 1024 * 1024),
+  ORF_PUSH_ENABLED: booleanString("false"),
+  ORF_PUSH_CONTENT_MODE: z.enum(["private", "preview"]).default("private"),
+  ORF_FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  ORF_FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+  ORF_CLIENT_UPDATE_PUSH_ENABLED: booleanString("true"),
+  ORF_CLIENT_UPDATE_PUSH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 

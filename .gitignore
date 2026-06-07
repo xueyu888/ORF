@@ -53,6 +53,7 @@ android/captures/
 android/app/build/
 android/app/*.jks
 android/app/*.keystore
+android/app/google-services.json
 android/build/
 
 

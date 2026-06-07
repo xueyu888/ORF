@@ -45,6 +45,18 @@ export type NotificationsDeleteResponse = {
 export type ClientUpdateReleaseResponse = {
   release: ClientReleaseInfo;
 };
+export type PushDeviceRegistrationInput = {
+  appBuild?: string | null;
+  appVersion?: string | null;
+  deviceLabel?: string | null;
+  platform: "android";
+  token: string;
+};
+export type PushDeviceRegistrationResponse = {
+  deviceId: string;
+  ok: true;
+  pushEnabled: boolean;
+};
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type CommentAttachmentUploadResponse = {
   ok: true;
@@ -208,6 +220,20 @@ export async function getLatestClientUpdateRelease(signal?: AbortSignal) {
 
 export async function getClientUpdateRelease(version: string, signal?: AbortSignal) {
   return apiJson<ClientUpdateReleaseResponse>(`/api/client-updates/releases/${encodeURIComponent(version)}`, { signal });
+}
+
+export async function registerPushDeviceRequest(input: PushDeviceRegistrationInput) {
+  return apiJson<PushDeviceRegistrationResponse>("/api/push/devices", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function revokePushDeviceRequest(input: Pick<PushDeviceRegistrationInput, "platform" | "token">) {
+  return apiJson<{ revoked: number }>("/api/push/devices/revoke", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export async function markNotificationReadRequest(notificationId: string) {

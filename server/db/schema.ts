@@ -272,6 +272,37 @@ export const notifications = pgTable(
   }),
 );
 
+export const pushDevices = pgTable(
+  "push_devices",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    token: text("token").notNull(),
+    appVersion: text("app_version"),
+    appBuild: text("app_build"),
+    deviceLabel: text("device_label"),
+    lastClientUpdateVersion: text("last_client_update_version"),
+    lastClientUpdatePushedAt: timestamp("last_client_update_pushed_at", { mode: "string", withTimezone: true }),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { mode: "string", withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    teamUser: index("push_devices_team_user_idx").on(table.teamId, table.userId, table.enabled),
+    tokenUnique: uniqueIndex("push_devices_team_platform_token_unique").on(table.teamId, table.platform, table.tokenHash),
+    updated: index("push_devices_updated_idx").on(table.updatedAt),
+  }),
+);
+
 export const results = pgTable("results", {
   id: text("id").primaryKey(),
   teamId: text("team_id")

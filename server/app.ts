@@ -6,6 +6,7 @@ import { registerAuthRoutes, requireAuthenticatedApi } from "./auth/routes";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "./db/errors";
 import { assertRuntimeDatabaseSchema, databaseSchemaMismatchPayload, isDatabaseSchemaMismatchError } from "./db/schemaGuard";
 import { env } from "./env";
+import { startClientUpdatePushScheduler } from "./clientUpdates/clientUpdatePushScheduler";
 import { registerOptionalIntegrations } from "./integrations";
 import { registerSettingsRoutes } from "./routes/settingsRoutes";
 import { registerNotificationRoutes } from "./routes/notificationRoutes";
@@ -22,6 +23,7 @@ import { registerOrfResultRoutes } from "./routes/orfResultRoutes";
 import { registerOrfTaskRoutes } from "./routes/orfTaskRoutes";
 import { registerOrfObjectiveRoutes } from "./routes/orfObjectiveRoutes";
 import { registerClientUpdateRoutes } from "./routes/clientUpdateRoutes";
+import { registerPushRoutes } from "./routes/pushRoutes";
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
@@ -91,6 +93,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
 
   registerRealtimeRoutes(app);
   registerClientUpdateRoutes(app);
+  registerPushRoutes(app);
   registerNotificationRoutes(app);
   registerCurrentUserAccessRoutes(app);
   registerOrfReadRoutes(app);
@@ -104,6 +107,11 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerUserAvatarRoutes(app);
   registerUserRoutes(app);
   registerPermissionRoutes(app);
+
+  const stopClientUpdatePushScheduler = startClientUpdatePushScheduler(app.log);
+  app.addHook("onClose", async () => {
+    stopClientUpdatePushScheduler();
+  });
 
   return app;
 }

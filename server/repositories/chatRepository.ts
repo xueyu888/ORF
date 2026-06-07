@@ -17,8 +17,10 @@ import type {
 import type { ChatRealtimeEventType } from "../../src/types/realtime";
 import type { PermissionKey } from "../../src/config/permissions";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
+import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeNotificationModel";
 import { pool } from "../db/client";
 import { env } from "../env";
+import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
 import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
 import { readImageMetadata } from "../storage/images";
 import { objectStorage } from "../storage/objectStorage";
@@ -582,6 +584,54 @@ async function createChatNotifications(input: {
       title: "关注的聊天线程有新回复",
     });
   }
+}
+
+function chatPushRecipientIds(input: { actorUserId: string; channel: ChatChannel; recipientUserIds: string[] }) {
+  const activeRecipients = new Set(input.recipientUserIds.filter((id) => id !== input.actorUserId));
+  return input.channel.members
+    .filter((member) => activeRecipients.has(member.userId) && !member.muted)
+    .map((member) => member.userId);
+}
+
+async function sendChatMessagePush(input: {
+  actor: ChatActor;
+  channel: ChatChannel;
+  message: ChatMessage;
+  recipientUserIds: string[];
+  rootMessageId?: string | null;
+}) {
+  const recipientUserIds = chatPushRecipientIds({
+    actorUserId: input.actor.id,
+    channel: input.channel,
+    recipientUserIds: input.recipientUserIds,
+  });
+  if (recipientUserIds.length === 0) return;
+
+  const preview = chatNotificationPreviewText(input.message);
+  const title = input.message.rootMessageId
+    ? `回复：${input.channel.type === "direct" ? input.actor.name : input.channel.displayName || "聊天"}`
+    : input.channel.type === "direct"
+      ? input.actor.name
+      : input.channel.displayName || "聊天";
+  const body = input.channel.type === "direct" ? preview : `${input.actor.name}: ${preview}`;
+  const targetPath = `/chat/${encodeURIComponent(input.channel.id)}?message=${encodeURIComponent(input.message.id)}`;
+
+  await sendPushToUsers({
+    body,
+    channelId: chatPushChannelId,
+    collapseKey: `chat-${input.channel.id}`,
+    data: {
+      channelId: input.channel.id,
+      messageId: input.message.id,
+      rootMessageId: input.rootMessageId ?? "",
+    },
+    kind: "chat.message.created",
+    recipientUserIds,
+    tag: input.message.id,
+    targetPath,
+    teamId: storageTeamId(input.actor),
+    title,
+  });
 }
 
 async function loadAttachments(messageIds: string[]) {
@@ -1486,6 +1536,13 @@ export async function sendChatMessage(
     recipientUserIds: recipients,
     rootMessageId,
   });
+  void sendChatMessagePush({
+    actor,
+    channel: updatedChannel,
+    message,
+    recipientUserIds: recipients,
+    rootMessageId,
+  }).catch(() => undefined);
   return ok({ channel: updatedChannel, message });
 }
 

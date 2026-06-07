@@ -82,6 +82,19 @@ npm run release:clients -- --tag v0.0.1 --watch
 
 如果手机上已经安装过不同签名的同包名 APK，Android 不允许直接覆盖安装。必须先卸载旧包，或者继续使用旧包对应的原始签名重新打包；这是系统安全规则，不是 ORF 下载逻辑可以绕过的行为。
 
+## Android 后台 Push 条件
+
+Android 不运行时收到聊天消息或客户端更新通知，依赖 Firebase Cloud Messaging。它不是 WebView 本地通知能力，必须同时满足：
+
+- Android 包名 `org.duckdns.orfxueyu.orf` 已加入 Firebase Android app。
+- `android/app/google-services.json` 只在本机或 GitHub Actions 临时注入，仓库必须忽略它。
+- GitHub Actions 配置 `ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64`，用于发布时还原 `google-services.json`。
+- ORF 服务端配置 `ORF_PUSH_ENABLED=true`，并通过 `ORF_FIREBASE_SERVICE_ACCOUNT_PATH`、`ORF_FIREBASE_SERVICE_ACCOUNT_JSON` 或 `GOOGLE_APPLICATION_CREDENTIALS` 提供 Firebase service account。
+- 服务端已执行 `npm run db:migrate`，保证 `push_devices` 表存在。
+- 用户至少打开过包含 Push 注册逻辑的新版本客户端并授权通知；旧版本未注册 FCM token 时，服务端不能向它补发后台 Push。
+
+远程 Push 默认使用 `ORF_PUSH_CONTENT_MODE=private`，通知栏只显示通用聊天提示，消息正文和私有频道内容仍回到 ORF 内查看。
+
 ## 版本事实源
 
 根 `package.json` 仍是发布版本的唯一维护入口，`scripts/sync-client-versions.mjs` 会同步桌面客户端和 Android 原生工程。运行中的客户端版本展示以原生容器返回的已安装版本为准：

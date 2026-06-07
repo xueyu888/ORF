@@ -17,6 +17,7 @@ type AuthenticateWithPassword = (path: "/api/auth/login" | "/api/auth/registrati
 interface UserActionOptions {
   authenticateWithPassword: AuthenticateWithPassword;
   authUserId: string | null;
+  beforeLogout?: () => Promise<void>;
   notify: (message: string) => void;
   refreshPermissionRules: () => Promise<void>;
   refreshUsers: () => Promise<void>;
@@ -36,6 +37,7 @@ function mergeUser(state: OrfState, user: OrfUser): OrfState {
 export function useOrfProviderUserActions({
   authenticateWithPassword,
   authUserId,
+  beforeLogout,
   notify,
   refreshPermissionRules,
   refreshUsers,
@@ -85,9 +87,12 @@ export function useOrfProviderUserActions({
       },
       logout: () => {
         setAuthUserId(null);
-        void apiRequest("/api/auth/logout", { method: "POST" }).finally(() => {
-          window.location.assign("/auth");
-        });
+        void Promise.resolve(beforeLogout?.())
+          .catch(() => undefined)
+          .finally(() => apiRequest("/api/auth/logout", { method: "POST" }))
+          .finally(() => {
+            window.location.assign("/auth");
+          });
       },
       updateUser: async (userId: string, input: { name: string; email: string; role: UserRole }) => {
         try {
@@ -171,6 +176,6 @@ export function useOrfProviderUserActions({
         }
       },
     }),
-    [authUserId, authenticateWithPassword, notify, refreshPermissionRules, refreshUsers, setAuthUserId, setState],
+    [authUserId, authenticateWithPassword, beforeLogout, notify, refreshPermissionRules, refreshUsers, setAuthUserId, setState],
   );
 }

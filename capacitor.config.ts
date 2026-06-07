@@ -1,4 +1,5 @@
 /// <reference types="@capacitor/local-notifications" />
+/// <reference types="@capacitor/push-notifications" />
 
 import type { CapacitorConfig } from "@capacitor/cli";
 
@@ -25,6 +26,9 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: "ic_stat_orf_notification",
       iconColor: "#0F9EB5",
+    },
+    PushNotifications: {
+      presentationOptions: [],
     },
   },
 };

@@ -26,6 +26,7 @@ import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from 
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
+import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
 import {
   isSafeChatNotificationTargetPath,
   prepareNativeChatNotifications,
@@ -338,6 +339,13 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     void prepareNativeChatNotifications().catch(() => undefined);
   }, [authReady, isApproved, isAuthenticated]);
 
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || !isApproved) return;
+    void registerOrfPushNotifications((targetPath) => {
+      navigate(targetPath);
+    }).catch(() => undefined);
+  }, [authReady, isApproved, isAuthenticated, navigate]);
+
   useRealtimeEvents({
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
@@ -411,6 +419,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const userActions = useOrfProviderUserActions({
     authenticateWithPassword,
     authUserId,
+    beforeLogout: revokeOrfPushNotifications,
     notify,
     refreshPermissionRules,
     refreshUsers,
