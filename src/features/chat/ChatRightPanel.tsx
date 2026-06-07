@@ -18,6 +18,7 @@ type ChatRightPanelProps = {
   collectionResults: ChatSearchResult[];
   currentUserId?: string;
   editingMessageId?: string | null;
+  memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
   onCancelEdit: () => void;
@@ -150,6 +151,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
           canManage={props.canManage}
           channel={props.channel}
           currentUserId={props.currentUserId}
+          memberSearchFocusSignal={props.memberSearchFocusSignal}
           onAddMembers={props.onAddMembers}
           onRemoveMember={props.onRemoveMember}
           onUpdateChannel={props.onUpdateChannel}

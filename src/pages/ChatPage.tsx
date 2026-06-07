@@ -28,6 +28,7 @@ import {
   upsertChannel,
 } from "../features/chat/chatModels";
 import { useChatFeedState } from "../features/chat/useChatFeedState";
+import { useChatMobileViewport } from "../features/chat/useChatMobileViewport";
 import { useChatPanelState } from "../features/chat/useChatPanelState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
@@ -76,8 +77,11 @@ export function ChatPage() {
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
+  const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
   const openChannelRequestIdRef = useRef(0);
-  const activeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : channels[0] ?? null;
+  const mobileViewport = useChatMobileViewport();
+  const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
+  const activeChannel = routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
   const focusMessageId = searchParams.get("message");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
@@ -119,6 +123,7 @@ export function ChatPage() {
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
+    openInfoPanel,
     openSearchPanel,
     reconcilePinnedCollection,
     reconcileSavedCollection,
@@ -142,6 +147,7 @@ export function ChatPage() {
     currentUserId: currentUser?.id,
     notify,
   });
+  const chatMobileView = activePanel ? "panel" : activeChannel ? "channel" : "list";
 
   const {
     appendThreadReply,
@@ -299,6 +305,11 @@ export function ChatPage() {
     }
   }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify]);
 
+  const handleOpenMemberSearch = useCallback(() => {
+    openInfoPanel();
+    setMemberSearchFocusSignal((signal) => signal + 1);
+  }, [openInfoPanel]);
+
   const handleOpenChannel = useCallback((channelId: string) => {
     if (channelId === activeChannel?.id) {
       openChannelRequestIdRef.current += 1;
@@ -311,6 +322,12 @@ export function ChatPage() {
       navigate(`/chat/${encodeURIComponent(channelId)}`);
     });
   }, [activeChannel?.id, navigate, prefetchChannelMessages]);
+
+  const handleBackToChatList = useCallback(() => {
+    openChannelRequestIdRef.current += 1;
+    closePanel();
+    navigate("/chat");
+  }, [closePanel, navigate]);
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
@@ -380,10 +397,16 @@ export function ChatPage() {
   useEffect(() => {
     if (loading || channels.length === 0) return;
     const routeChannelExists = routeChannelId ? channels.some((channel) => channel.id === routeChannelId) : false;
+    if (mobileViewport) {
+      if (routeChannelId && !routeChannelExists) {
+        navigate("/chat", { replace: true });
+      }
+      return;
+    }
     if (!routeChannelId || !routeChannelExists) {
       navigate(`/chat/${encodeURIComponent(channels[0].id)}`, { replace: true });
     }
-  }, [channels, loading, navigate, routeChannelId]);
+  }, [channels, loading, mobileViewport, navigate, routeChannelId]);
 
   useEffect(() => {
     setDraftChannelIds(storedDraftChannelIds(channels));
@@ -695,7 +718,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className={clsx("orf-chat-page", activePanel && "orf-chat-page-with-panel")}>
+    <div className={clsx("orf-chat-page", activePanel && "orf-chat-page-with-panel")} data-chat-mobile-view={chatMobileView}>
       <ChatSidebar
         activeChannelId={activeChannel?.id ?? null}
         channels={channels}
@@ -725,6 +748,8 @@ export function ChatPage() {
               }}
               onInfo={() => togglePanel("info")}
               onMarkUnread={() => void markActiveChannelUnread()}
+              onMemberSearch={handleOpenMemberSearch}
+              onMobileBack={handleBackToChatList}
               onPins={() => void loadPinnedMessages()}
               onSaved={() => void loadSavedMessages()}
               onSearch={openSearchPanel}
@@ -801,10 +826,16 @@ export function ChatPage() {
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
           editingMessageId={editingMessage?.id ?? null}
+          memberSearchFocusSignal={memberSearchFocusSignal}
           onDraftStateChange={handleDraftStateChange}
           onAddMembers={async (userIds) => {
-            const response = await addChatChannelMembersRequest(activeChannel.id, userIds);
-            applyChannel(response.channel);
+            try {
+              const response = await addChatChannelMembersRequest((rightPanelChannel ?? activeChannel).id, userIds);
+              applyChannel(response.channel);
+            } catch (error) {
+              notify(error instanceof Error ? error.message : "添加成员失败");
+              throw error;
+            }
           }}
           onClose={closePanel}
           onCancelEdit={() => setEditingMessage(null)}
@@ -814,6 +845,7 @@ export function ChatPage() {
           threadSummariesLoading={threadSummariesLoading}
           onOpenResult={(result) => {
             navigate(`/chat/${encodeURIComponent(result.channel.id)}?message=${encodeURIComponent(result.message.id)}`);
+            if (mobileViewport) closePanel();
           }}
           onOpenThreadSummary={(summary) => {
             navigate(`/chat/${encodeURIComponent(summary.channel.id)}?message=${encodeURIComponent(summary.rootMessage.id)}`);
@@ -822,14 +854,19 @@ export function ChatPage() {
           }}
           onPin={handlePinMessage}
           onRemoveMember={async (userId) => {
-            const response = await removeChatChannelMemberRequest(activeChannel.id, userId);
-            if (response.channel) applyChannel(response.channel);
+            try {
+              const response = await removeChatChannelMemberRequest((rightPanelChannel ?? activeChannel).id, userId);
+              if (response.channel) applyChannel(response.channel);
+            } catch (error) {
+              notify(error instanceof Error ? error.message : "移除成员失败");
+              throw error;
+            }
           }}
           onSearch={searchMessages}
           onSave={handleSaveMessage}
           onSaveEdit={handleEditMessage}
           onUpdateChannel={async (input) => {
-            const response = await updateChatChannelRequest(activeChannel.id, input);
+            const response = await updateChatChannelRequest((rightPanelChannel ?? activeChannel).id, input);
             applyChannel(response.channel);
           }}
           searchLoading={searchLoading}

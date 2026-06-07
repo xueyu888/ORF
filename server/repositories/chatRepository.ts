@@ -31,6 +31,7 @@ import {
   DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME,
   DEFAULT_PUBLIC_CHANNEL_NAME,
   type AttachmentRow,
+  CHAT_BROADCAST_MENTION_SQL_PATTERN,
   type ChannelMemberRow,
   type ChannelRow,
   type ChatActor,
@@ -42,6 +43,7 @@ import {
   chatAttachmentContentUrl,
   displayNameForChannel,
   extractMentionUserIds,
+  hasChatBroadcastMention,
   iso,
   makeChatAttachmentId,
   makeId,
@@ -260,11 +262,11 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
           AND m.author_user_id <> $2
           AND m.deleted_at IS NULL
           AND m.root_message_id IS NULL
-          AND m.body LIKE $3
+          AND (m.body LIKE $3 OR m.body ~* $4)
           AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
         GROUP BY m.channel_id
       `,
-      [channelIds, actor.id, `%orf-user:${actor.id}%`],
+      [channelIds, actor.id, `%orf-user:${actor.id}%`, CHAT_BROADCAST_MENTION_SQL_PATTERN],
     ),
     pool.query<{ channel_id: string; count: number }>(
       `
@@ -518,7 +520,11 @@ async function createChatNotifications(input: {
 }) {
   const teamId = storageTeamId(input.actor);
   const href = `/chat/${encodeURIComponent(input.channel.id)}?message=${encodeURIComponent(input.message.id)}`;
-  const mentionedRecipients = await getMentionableRecipientIds(teamId, input.channel.id, input.mentionedUserIds);
+  const directlyMentionedRecipients = await getMentionableRecipientIds(teamId, input.channel.id, input.mentionedUserIds);
+  const broadcastMentionedRecipients = hasChatBroadcastMention(input.body)
+    ? input.recipientUserIds.filter((id) => id !== input.actor.id)
+    : [];
+  const mentionedRecipients = Array.from(new Set([...directlyMentionedRecipients, ...broadcastMentionedRecipients]));
   const directRecipients =
     input.channel.type === "direct" || input.channel.type === "group"
       ? input.recipientUserIds.filter((id) => id !== input.actor.id && !mentionedRecipients.includes(id))
@@ -1318,7 +1324,7 @@ export async function addChatChannelMembers(
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
-  if (channel.type === "public") return { status: "forbidden" };
+  if (channel.type !== "private") return { status: "forbidden" };
   if (!(await canManageChannel(actor, channelId))) return { status: "forbidden" };
 
   await addChannelMembersInternal({ channelId, memberUserIds, teamId: storageTeamId(actor) });
@@ -1343,7 +1349,7 @@ export async function removeChatChannelMember(
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
-  if (channel.type === "public") return { status: "forbidden" };
+  if (channel.type !== "private") return { status: "forbidden" };
   const selfLeave = userId === actor.id;
   if (!selfLeave && !(await canManageChannel(actor, channelId))) return { status: "forbidden" };
 

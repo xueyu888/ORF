@@ -9,6 +9,7 @@ type ChatChannelInfoPanelProps = {
   canManage: boolean;
   channel: ChatChannel;
   currentUserId?: string;
+  memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onRemoveMember: (userId: string) => Promise<void>;
   onUpdateChannel: (input: Partial<Pick<ChatChannel, "displayName" | "header" | "purpose">>) => Promise<void>;
@@ -20,6 +21,7 @@ export function ChatChannelInfoPanel({
   canManage,
   channel,
   currentUserId,
+  memberSearchFocusSignal,
   onAddMembers,
   onRemoveMember,
   onUpdateChannel,
@@ -31,9 +33,13 @@ export function ChatChannelInfoPanel({
   const [purpose, setPurpose] = useState(channel.purpose);
   const [header, setHeader] = useState(channel.header);
   const [savingDetails, setSavingDetails] = useState(false);
+  const [savingMembers, setSavingMembers] = useState(false);
+  const [memberMutationError, setMemberMutationError] = useState<string | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const memberIds = new Set(channel.members.map((member) => member.userId));
   const candidates = users.filter((user) => !memberIds.has(user.id));
   const canEditMetadata = canManage && channel.type !== "direct" && channel.type !== "group";
+  const canManageMembership = canManage && channel.type === "private";
   const detailsChanged = displayName !== channel.displayName || purpose !== channel.purpose || header !== channel.header;
 
   useEffect(() => {
@@ -41,6 +47,10 @@ export function ChatChannelInfoPanel({
     setPurpose(channel.purpose);
     setHeader(channel.header);
     setSavingDetails(false);
+    setSavingMembers(false);
+    setMemberMutationError(null);
+    setRemovingUserId(null);
+    setSelectedUserIds([]);
   }, [channel.displayName, channel.header, channel.id, channel.purpose]);
 
   const saveDetails = async () => {
@@ -56,8 +66,29 @@ export function ChatChannelInfoPanel({
     setSelectedUserIds((items) => items.includes(userId) ? items.filter((id) => id !== userId) : [...items, userId]);
   };
   const addSelectedMembers = async () => {
-    await onAddMembers(selectedUserIds);
-    setSelectedUserIds([]);
+    if (selectedUserIds.length === 0 || savingMembers) return;
+    setSavingMembers(true);
+    setMemberMutationError(null);
+    try {
+      await onAddMembers(selectedUserIds);
+      setSelectedUserIds([]);
+    } catch (error) {
+      setMemberMutationError(error instanceof Error ? error.message : "添加成员失败");
+    } finally {
+      setSavingMembers(false);
+    }
+  };
+  const removeMember = async (userId: string) => {
+    if (removingUserId) return;
+    setRemovingUserId(userId);
+    setMemberMutationError(null);
+    try {
+      await onRemoveMember(userId);
+    } catch (error) {
+      setMemberMutationError(error instanceof Error ? error.message : "移除成员失败");
+    } finally {
+      setRemovingUserId(null);
+    }
   };
 
   return (
@@ -86,7 +117,7 @@ export function ChatChannelInfoPanel({
           </div>
         </>
       )}
-      {canManage && channel.type !== "public" && (
+      {canManageMembership && (
         <div className="orf-chat-info-section">
           <label>添加成员</label>
           {candidates.length > 0 ? (
@@ -95,18 +126,20 @@ export function ChatChannelInfoPanel({
                 className="orf-chat-info-user-picker"
                 currentUserId={currentUserId}
                 emptyLabel="没有可添加成员"
+                focusSignal={memberSearchFocusSignal}
                 onToggleUser={toggleSelectedUser}
                 placeholder="查找成员"
                 selectedUserIds={selectedUserIds}
                 users={candidates}
               />
-              <Button disabled={selectedUserIds.length === 0} onClick={() => void addSelectedMembers()} variant="secondary">
-                添加成员
+              <Button disabled={selectedUserIds.length === 0 || savingMembers} onClick={() => void addSelectedMembers()} variant="secondary">
+                {savingMembers ? "添加中" : "添加成员"}
               </Button>
             </>
           ) : (
             <div className="orf-chat-member-empty">没有可添加成员</div>
           )}
+          {memberMutationError && <div className="orf-chat-member-error">{memberMutationError}</div>}
         </div>
       )}
       <div className="orf-chat-info-section">
@@ -119,8 +152,10 @@ export function ChatChannelInfoPanel({
                 <ChatPresenceAvatar className="orf-chat-member-avatar" currentUserId={currentUserId} name={user?.name ?? "成员"} size="sm" user={user} />
                 <span>{user?.name ?? member.userId}</span>
                 <small>{member.role} · {formatPresence(user, currentUserId)}</small>
-                {canManage && channel.type !== "public" && member.userId !== currentUserId && (
-                  <button type="button" onClick={() => void onRemoveMember(member.userId)}>移除</button>
+                {canManageMembership && member.userId !== currentUserId && (
+                  <button disabled={removingUserId === member.userId} type="button" onClick={() => void removeMember(member.userId)}>
+                    {removingUserId === member.userId ? "移除中" : "移除"}
+                  </button>
                 )}
               </div>
             );

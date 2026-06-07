@@ -21,6 +21,27 @@ import {
 } from "./chatModels";
 import { displayChatReactionEmoji } from "./chatReactions";
 
+const broadcastMentionUserId = "__orf_broadcast_mention_all__";
+const broadcastMentionOption: ChatUser = {
+  id: broadcastMentionUserId,
+  name: "所有人",
+  email: "通知当前频道所有成员",
+  role: "member",
+  status: "active",
+  avatarUrl: null,
+  lastOnlineAt: null,
+};
+const broadcastMentionSearchTerms = ["所有人", "全体", "全体成员", "all", "channel", "here"];
+
+function isBroadcastMentionOption(user: ChatUser) {
+  return user.id === broadcastMentionUserId;
+}
+
+function matchesBroadcastMention(query: string) {
+  const normalized = query.trim().toLowerCase();
+  return !normalized || broadcastMentionSearchTerms.some((term) => term.toLowerCase().includes(normalized));
+}
+
 type ChatDraftEditorToolbarState = {
   submit: () => void;
   submitting: boolean;
@@ -225,10 +246,13 @@ export function ChatDraftEditor({
   const mentionUsers = useMemo(() => {
     if (!mentionRange) return [];
     const query = mentionRange.query.toLowerCase();
-    return mentionableUsers
+    const users = mentionableUsers
       .filter((user) => user.status === "active")
-      .filter((user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
-      .slice(0, 8);
+      .filter((user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query));
+    return [
+      ...(matchesBroadcastMention(query) ? [broadcastMentionOption] : []),
+      ...users,
+    ].slice(0, 8);
   }, [mentionRange, mentionableUsers]);
   const usersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const previewBody = useMemo(() => serializeDraft(draft), [draft]);
@@ -334,6 +358,19 @@ export function ChatDraftEditor({
 
   const insertMention = (user: ChatUser) => {
     if (!mentionRange) return;
+    if (isBroadcastMentionOption(user)) {
+      const replacement = "@所有人";
+      const nextText = `${draft.text.slice(0, mentionRange.start)}${replacement} ${draft.text.slice(mentionRange.end)}`;
+      const mentions = draft.mentions.filter((mention) => mention.end <= mentionRange.start || mention.start >= mentionRange.end);
+      onChange({ text: nextText, mentions });
+      setMentionRange(null);
+      window.setTimeout(() => {
+        const cursor = mentionRange.start + replacement.length + 1;
+        textAreaRef.current?.focus();
+        textAreaRef.current?.setSelectionRange(cursor, cursor);
+      }, 0);
+      return;
+    }
     const label = mentionLabel(user.name);
     const replacement = `@${label}`;
     const nextText = `${draft.text.slice(0, mentionRange.start)}${replacement} ${draft.text.slice(mentionRange.end)}`;

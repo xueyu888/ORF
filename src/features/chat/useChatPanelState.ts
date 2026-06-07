@@ -51,6 +51,10 @@ export function useChatPanelState({
     setSearchFocusSignal((signal) => signal + 1);
   }, []);
 
+  const openInfoPanel = useCallback(() => {
+    setActivePanel("info");
+  }, []);
+
   const updateSearchQuery = useCallback((value: string) => {
     searchRequestIdRef.current += 1;
     setSearchQuery(value);
@@ -253,6 +257,7 @@ export function useChatPanelState({
     loadSavedMessages,
     loadThreadSummaries,
     markThreadSummaryViewed,
+    openInfoPanel,
     openSearchPanel,
     reconcilePinnedCollection,
     reconcileSavedCollection,

@@ -1,4 +1,4 @@
-import { Archive, Bell, BellOff, Bookmark, EyeOff, Info, Pin, Reply, Search, Star, Users } from "lucide-react";
+import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Info, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
 import { IconButton } from "../../components/ui";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { channelIcon } from "./chatChannelPresentation";
@@ -11,6 +11,8 @@ type ChatHeaderProps = {
   onArchive: () => void;
   onInfo: () => void;
   onMarkUnread: () => void;
+  onMemberSearch: () => void;
+  onMobileBack?: () => void;
   onPins: () => void;
   onSaved: () => void;
   onSearch: () => void;
@@ -27,6 +29,8 @@ export function ChatHeader({
   onArchive,
   onInfo,
   onMarkUnread,
+  onMemberSearch,
+  onMobileBack,
   onPins,
   onSaved,
   onSearch,
@@ -37,6 +41,7 @@ export function ChatHeader({
 }: ChatHeaderProps) {
   const Icon = channelIcon(channel);
   const membership = currentMembership(channel, currentUserId);
+  const canManageMembership = canManage && channel.type === "private";
   const memberNames = channel.members
     .slice(0, 4)
     .map((member) => usersById.get(member.userId)?.name)
@@ -45,6 +50,9 @@ export function ChatHeader({
 
   return (
     <header className="orf-chat-header">
+      {onMobileBack && (
+        <IconButton className="orf-chat-header-back" icon={ArrowLeft} label="返回聊天列表" onClick={onMobileBack} />
+      )}
       <button type="button" className="orf-chat-header-title" onClick={onInfo}>
         <Icon className="h-5 w-5" />
         <span>{channel.displayName}</span>
@@ -63,6 +71,7 @@ export function ChatHeader({
           label={membership?.muted ? "取消静音" : "静音频道"}
           onClick={onToggleMuted}
         />
+        {canManageMembership && <IconButton icon={UserPlus} label="添加成员" onClick={onMemberSearch} />}
         <IconButton icon={Pin} label="固定消息" onClick={onPins} />
         <IconButton icon={Bookmark} label="已保存消息" onClick={onSaved} />
         <button

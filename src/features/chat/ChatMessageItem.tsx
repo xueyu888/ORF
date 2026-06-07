@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, Loader2, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import { IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
@@ -421,7 +421,6 @@ export function ChatMessageItem({
         focused && "orf-chat-message-focused",
         emojiOpen && "orf-chat-message-actions-open",
         moreOpen && "orf-chat-message-actions-open",
-        deliveryStatus === "sending" && "orf-chat-message-pending",
         deliveryStatus === "failed" && "orf-chat-message-failed",
       )}
       data-chat-message-id={message.id}
@@ -483,28 +482,19 @@ export function ChatMessageItem({
           <>
             <CollapsibleMessageText body={message.body} usersById={usersById} />
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
-            {deliveryStatus && (
-              <div className="orf-chat-delivery-status" role={deliveryStatus === "failed" ? "alert" : "status"}>
-                {deliveryStatus === "sending" ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>发送中</span>
-                  </>
-                ) : (
-                  <>
-                    <span>发送失败</span>
-                    {onRetryPending && (
-                      <button type="button" onClick={() => onRetryPending(message)}>
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        重试
-                      </button>
-                    )}
-                    {onRemovePending && (
-                      <button type="button" onClick={() => onRemovePending(message)} aria-label="移除失败消息">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </>
+            {deliveryStatus === "failed" && (
+              <div className="orf-chat-delivery-status" role="alert">
+                <span>发送失败</span>
+                {onRetryPending && (
+                  <button type="button" onClick={() => onRetryPending(message)}>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    重试
+                  </button>
+                )}
+                {onRemovePending && (
+                  <button type="button" onClick={() => onRemovePending(message)} aria-label="移除失败消息">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 )}
               </div>
             )}

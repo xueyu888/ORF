@@ -118,6 +118,8 @@ export const DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME = "ORF 全员频道";
 export const CHAT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 
 const CHAT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
+const CHAT_BROADCAST_MENTION_PATTERN = /(^|[^A-Za-z0-9_@.])@(all|channel|here|所有人)(?=$|[^A-Za-z0-9_])/gi;
+export const CHAT_BROADCAST_MENTION_SQL_PATTERN = "(^|[^A-Za-z0-9_@.])@(all|channel|here|所有人)($|[^A-Za-z0-9_])";
 
 let idCounter = 0;
 let lastNowMs = 0;
@@ -248,6 +250,11 @@ export function extractMentionUserIds(body: string) {
     if (rawUserId.trim()) ids.add(rawUserId.trim());
   }
   return Array.from(ids);
+}
+
+export function hasChatBroadcastMention(body: string) {
+  CHAT_BROADCAST_MENTION_PATTERN.lastIndex = 0;
+  return CHAT_BROADCAST_MENTION_PATTERN.test(body);
 }
 
 export function previewText(body: string) {

@@ -293,7 +293,7 @@ function splitAutolinkTrailingText(value: string) {
 
 function renderSystemMentionFragments(text: string, keyPrefix: string) {
   const nodes: ReactNode[] = [];
-  const pattern = /(^|[^A-Za-z0-9_@.])@(all|channel|here)\b/g;
+  const pattern = /(^|[^A-Za-z0-9_@.])@(all|channel|here|所有人)(?=$|[^A-Za-z0-9_])/gi;
   let index = 0;
   let match: RegExpExecArray | null;
 
