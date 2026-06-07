@@ -22,6 +22,7 @@ import { type MoveResultInput, useOrfProviderResultActions } from "./orfProvider
 import { type MoveSubtaskInput, type MoveTaskInput, useOrfProviderTaskActions } from "./orfProviderTaskActions";
 import { useOrfProviderUserActions } from "./orfProviderUserActions";
 import { enqueueSystemBroadcast } from "../features/notifications/notificationBroadcasts";
+import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
@@ -308,6 +309,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     return true;
   }, []);
   const receiveRealtimeChatEvent = useCallback((event: ChatRealtimeEvent) => {
+    publishChatRealtimeEvent(event);
     if (event.eventType === "typing") return;
     const viewState = getChatNativeNotificationViewState();
     const decision = buildChatNativeNotificationDecision({
@@ -340,6 +342,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
     onChatEvent: receiveRealtimeChatEvent,
+    onConnectionRestored: publishChatRealtimeConnectionRestored,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
   });

@@ -6,13 +6,22 @@ type RealtimeEventOptions = {
   enabled: boolean;
   onBroadcast: (broadcast: SystemBroadcast) => void;
   onChatEvent?: (event: ChatRealtimeEvent) => void;
+  onConnectionRestored?: () => void;
   onReadModelInvalidation: (invalidation: OrfReadModelInvalidation) => void;
   onNotification: (notification: AppNotification) => void;
 };
 
-export function useRealtimeEvents({ enabled, onBroadcast, onChatEvent, onNotification, onReadModelInvalidation }: RealtimeEventOptions) {
+export function useRealtimeEvents({
+  enabled,
+  onBroadcast,
+  onChatEvent,
+  onConnectionRestored,
+  onNotification,
+  onReadModelInvalidation,
+}: RealtimeEventOptions) {
   const onBroadcastRef = useRef(onBroadcast);
   const onChatEventRef = useRef(onChatEvent);
+  const onConnectionRestoredRef = useRef(onConnectionRestored);
   const onNotificationRef = useRef(onNotification);
   const onReadModelInvalidationRef = useRef(onReadModelInvalidation);
 
@@ -29,6 +38,10 @@ export function useRealtimeEvents({ enabled, onBroadcast, onChatEvent, onNotific
   }, [onChatEvent]);
 
   useEffect(() => {
+    onConnectionRestoredRef.current = onConnectionRestored;
+  }, [onConnectionRestored]);
+
+  useEffect(() => {
     onReadModelInvalidationRef.current = onReadModelInvalidation;
   }, [onReadModelInvalidation]);
 
@@ -38,6 +51,7 @@ export function useRealtimeEvents({ enabled, onBroadcast, onChatEvent, onNotific
     }
 
     const source = new EventSource("/api/events", { withCredentials: true });
+    let connectionHadError = false;
     const handleNotification = (event: MessageEvent<string>) => {
       const payload = parseRealtimeEvent(event.data);
       if (payload?.kind === "notification.created") {
@@ -62,12 +76,24 @@ export function useRealtimeEvents({ enabled, onBroadcast, onChatEvent, onNotific
         onReadModelInvalidationRef.current(payload.invalidation);
       }
     };
+    const handleOpen = () => {
+      if (!connectionHadError) return;
+      connectionHadError = false;
+      onConnectionRestoredRef.current?.();
+    };
+    const handleError = () => {
+      connectionHadError = true;
+    };
 
+    source.addEventListener("open", handleOpen);
+    source.addEventListener("error", handleError);
     source.addEventListener("notification.created", handleNotification);
     source.addEventListener("system.broadcast", handleBroadcast);
     source.addEventListener("chat.event", handleChatEvent);
     source.addEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
     return () => {
+      source.removeEventListener("open", handleOpen);
+      source.removeEventListener("error", handleError);
       source.removeEventListener("notification.created", handleNotification);
       source.removeEventListener("system.broadcast", handleBroadcast);
       source.removeEventListener("chat.event", handleChatEvent);
