@@ -137,45 +137,50 @@ export function ChallengeTree({
 
   return (
     <div className="grid gap-5">
-      {projectGroups.map((project, index) => (
-        <div
-          key={project.id}
-          className={clsx(
-            "orf-project-section",
-            handlers.dragDrop.dragItem?.type === "objective" && dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "project", projectId: project.projectId }]),
-          )}
-          data-project-group-id={project.id}
-          id={projectSectionDomId(project.id)}
-          style={projectAccentStyle(project, index)}
-          onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
-          onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
-          onDrop={(event) => handleRowDrop(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
-        >
-          <ProjectHeader
-            canCreateObjective={handlers.canCreateObjective}
-            canManageProjects={handlers.canManageProjects}
-            onAddObjective={handlers.onAddObjective}
-            onDeleteProject={handlers.onDeleteProject}
-            project={project}
-          />
-          <div className="orf-project-body grid gap-3">
-            {project.objectives.length > 0 ? (
-              project.objectives.map((group) => (
-                <ObjectivePanel
-                  key={group.objective.id}
-                  group={group}
-                  handlers={handlers}
-                  now={now}
-                  projects={projects}
-                  scope={scope}
-                />
-              ))
-            ) : (
-              <div className="orf-project-empty">{project.isUnassigned ? "当前没有未归属目标。" : "当前项目还没有目标。"}</div>
+      {projectGroups.map((project, index) => {
+        const hasOpenRowMenu = project.objectives.some((group) => objectivePanelHasOpenRowMenu(group, handlers.openActionId));
+
+        return (
+          <div
+            key={project.id}
+            className={clsx(
+              "orf-project-section",
+              handlers.dragDrop.dragItem?.type === "objective" && dropTargetClass(handlers.dragDrop.dropTarget, [{ type: "project", projectId: project.projectId }]),
             )}
+            data-has-open-row-menu={hasOpenRowMenu ? "true" : undefined}
+            data-project-group-id={project.id}
+            id={projectSectionDomId(project.id)}
+            style={projectAccentStyle(project, index)}
+            onDragLeave={(event) => handleRowDragLeave(event, handlers.dragDrop)}
+            onDragOver={(event) => handleRowDragOver(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
+            onDrop={(event) => handleRowDrop(event, handlers.dragDrop, projectDropTargetForEvent(handlers.dragDrop.dragItem, project.projectId))}
+          >
+            <ProjectHeader
+              canCreateObjective={handlers.canCreateObjective}
+              canManageProjects={handlers.canManageProjects}
+              onAddObjective={handlers.onAddObjective}
+              onDeleteProject={handlers.onDeleteProject}
+              project={project}
+            />
+            <div className="orf-project-body grid gap-3">
+              {project.objectives.length > 0 ? (
+                project.objectives.map((group) => (
+                  <ObjectivePanel
+                    key={group.objective.id}
+                    group={group}
+                    handlers={handlers}
+                    now={now}
+                    projects={projects}
+                    scope={scope}
+                  />
+                ))
+              ) : (
+                <div className="orf-project-empty">{project.isUnassigned ? "当前没有未归属目标。" : "当前项目还没有目标。"}</div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       {groups.length === 0 && visibleProjects.length === 0 && <div className="orf-card orf-card-padding text-center text-sm orf-text-secondary">{emptyText}</div>}
     </div>
   );
