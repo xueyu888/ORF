@@ -5,6 +5,7 @@ const { pipeline } = require("node:stream/promises");
 const { app, BrowserWindow, Menu, Notification, ipcMain, net, shell } = require("electron");
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
+const DESKTOP_PACKAGE_PATH = path.join(__dirname, "package.json");
 const PACKAGED_DESKTOP_ICON_PATH = path.join(__dirname, "assets", "icon.png");
 const REPO_ANDROID_LAUNCHER_ICON_PATH = path.resolve(
   __dirname,
@@ -138,6 +139,7 @@ function isTrustedClientUpdateUrl(value) {
 function registerNativeRuntimeBridge() {
   ipcMain.handle("orf:runtime:get-info", () => ({
     platform: process.platform,
+    version: resolveDesktopClientVersion(),
   }));
   ipcMain.handle("orf:runtime:open-external", async (_event, url) => {
     if (!isTrustedClientUpdateUrl(url)) {
@@ -165,6 +167,15 @@ function registerNativeRuntimeBridge() {
       return { status: "error", reason: "installer_download_failed", data: String(error) };
     }
   });
+}
+
+function resolveDesktopClientVersion() {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(DESKTOP_PACKAGE_PATH, "utf8"));
+    return typeof packageJson.version === "string" ? packageJson.version : null;
+  } catch {
+    return null;
+  }
 }
 
 function clientUpdateInstallPayload(input) {

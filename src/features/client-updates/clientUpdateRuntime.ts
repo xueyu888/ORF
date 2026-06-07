@@ -1,9 +1,17 @@
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
-import { isTrustedClientUpdateUrl, type ClientReleaseAsset, type ClientUpdatePlatform } from "./clientUpdateModel";
+import { isClientReleaseVersion, isTrustedClientUpdateUrl, type ClientReleaseAsset, type ClientUpdatePlatform } from "./clientUpdateModel";
 
 type NativeRuntimeInfo = {
   platform?: string;
+  version?: string | null;
+  versionCode?: number | null;
+};
+
+export type ClientUpdateRuntimeInfo = {
+  currentVersion: string;
+  platform: ClientUpdatePlatform;
+  versionSource: "native" | "unknown" | "web";
 };
 
 export type ClientUpdateInstallResult = {
@@ -24,6 +32,7 @@ type ClientUpdateInstallPayload = {
 };
 
 type AndroidClientUpdatePlugin = {
+  getInfo?: () => Promise<NativeRuntimeInfo>;
   install: (payload: ClientUpdateInstallPayload) => Promise<ClientUpdateInstallResult>;
 };
 
@@ -36,14 +45,31 @@ declare global {
 const AndroidClientUpdate = registerPlugin<AndroidClientUpdatePlugin>("OrfClientUpdate");
 
 export async function detectClientUpdatePlatform(): Promise<ClientUpdatePlatform> {
+  return (await detectClientUpdateRuntimeInfo("0.0.0")).platform;
+}
+
+export async function detectClientUpdateRuntimeInfo(webFallbackVersion: string): Promise<ClientUpdateRuntimeInfo> {
   if (typeof window !== "undefined" && window.orfNativeRuntime?.getInfo) {
     const info = await window.orfNativeRuntime.getInfo().catch(() => null);
-    return info?.platform === "win32" ? "desktop-windows" : "desktop-other";
+    return {
+      currentVersion: nativeClientVersion(info),
+      platform: info?.platform === "win32" ? "desktop-windows" : "desktop-other",
+      versionSource: nativeClientVersionSource(info),
+    };
   }
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-    return "android";
+    const info = await AndroidClientUpdate.getInfo?.().catch(() => null);
+    return {
+      currentVersion: nativeClientVersion(info),
+      platform: "android",
+      versionSource: nativeClientVersionSource(info),
+    };
   }
-  return "web";
+  return {
+    currentVersion: webFallbackVersion,
+    platform: "web",
+    versionSource: "web",
+  };
 }
 
 export async function installClientUpdateAsset(asset: ClientReleaseAsset): Promise<ClientUpdateInstallResult> {
@@ -87,4 +113,12 @@ export async function openClientUpdateUrl(url: string) {
 
 function normalizeClientUpdateInstallResult(result: ClientUpdateInstallResult | undefined): ClientUpdateInstallResult {
   return result?.status ? result : { status: "success" };
+}
+
+function nativeClientVersion(info: NativeRuntimeInfo | null | undefined) {
+  return isClientReleaseVersion(info?.version ?? "") ? String(info?.version) : "0.0.0";
+}
+
+function nativeClientVersionSource(info: NativeRuntimeInfo | null | undefined): ClientUpdateRuntimeInfo["versionSource"] {
+  return isClientReleaseVersion(info?.version ?? "") ? "native" : "unknown";
 }

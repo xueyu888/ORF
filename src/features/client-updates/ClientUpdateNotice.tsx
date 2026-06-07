@@ -3,7 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { orfClientCurrentVersion } from "./clientUpdateConfig";
 import { getLatestClientRelease } from "./clientUpdateApi";
 import { buildClientUpdateDecision, type ClientUpdateDecision } from "./clientUpdateModel";
-import { detectClientUpdatePlatform, installClientUpdateAsset, openClientUpdateUrl, type ClientUpdateInstallResult } from "./clientUpdateRuntime";
+import {
+  detectClientUpdateRuntimeInfo,
+  installClientUpdateAsset,
+  openClientUpdateUrl,
+  type ClientUpdateInstallResult,
+  type ClientUpdateRuntimeInfo,
+} from "./clientUpdateRuntime";
 
 const updateDismissStoragePrefix = "orf-client-update-dismissed:";
 const updateCheckIntervalMs = 6 * 60 * 60 * 1000;
@@ -11,7 +17,7 @@ const updateCheckIntervalMs = 6 * 60 * 60 * 1000;
 type UpdateNoticeState =
   | { status: "checking" }
   | { status: "error"; message: string }
-  | { status: "ready"; decision: ClientUpdateDecision };
+  | { status: "ready"; decision: ClientUpdateDecision; runtime: ClientUpdateRuntimeInfo };
 
 export function ClientUpdateNotice() {
   const [noticeState, setNoticeState] = useState<UpdateNoticeState>({ status: "checking" });
@@ -24,7 +30,7 @@ export function ClientUpdateNotice() {
     const controller = new AbortController();
     const check = () => {
       void checkForClientUpdate(controller.signal)
-        .then((decision) => setNoticeState({ status: "ready", decision }))
+        .then(({ decision, runtime }) => setNoticeState({ status: "ready", decision, runtime }))
         .catch((error) => {
           if (!controller.signal.aborted) {
             setNoticeState({ status: "error", message: error instanceof Error ? error.message : "检查更新失败" });
@@ -42,15 +48,16 @@ export function ClientUpdateNotice() {
 
   const availableDecision = useMemo(() => {
     if (noticeState.status !== "ready" || noticeState.decision.status !== "available") return null;
-    return noticeState.decision;
+    return { decision: noticeState.decision, runtime: noticeState.runtime };
   }, [noticeState]);
 
-  if (!availableDecision || dismissedVersions.has(availableDecision.release.version)) {
+  if (!availableDecision || dismissedVersions.has(availableDecision.decision.release.version)) {
     return null;
   }
 
-  const release = availableDecision.release;
-  const asset = availableDecision.asset;
+  const { decision, runtime } = availableDecision;
+  const release = decision.release;
+  const asset = decision.asset;
   const secondaryUrl = release.htmlUrl;
   const dateLabel = release.publishedAt ? formatUpdateDate(release.publishedAt) : release.tagName;
 
@@ -92,7 +99,7 @@ export function ClientUpdateNotice() {
       <div className="orf-client-update-copy">
         <div className="orf-client-update-title">发现 ORF 客户端 {release.version}</div>
         <div className="orf-client-update-meta">
-          当前 {availableDecision.currentVersion} · {dateLabel}
+          {formatCurrentVersionLabel(decision, runtime)} · {dateLabel}
           {asset ? ` · ${asset.name}` : " · 打开发布页下载"}
         </div>
         {installMessage && <div className="orf-client-update-message">{installMessage}</div>}
@@ -134,15 +141,18 @@ export function ClientUpdateNotice() {
 }
 
 async function checkForClientUpdate(signal: AbortSignal) {
-  const [platform, release] = await Promise.all([
-    detectClientUpdatePlatform(),
+  const [runtime, release] = await Promise.all([
+    detectClientUpdateRuntimeInfo(orfClientCurrentVersion),
     getLatestClientRelease(signal),
   ]);
-  return buildClientUpdateDecision({
-    currentVersion: orfClientCurrentVersion,
-    platform,
-    release,
-  });
+  return {
+    decision: buildClientUpdateDecision({
+      currentVersion: runtime.currentVersion,
+      platform: runtime.platform,
+      release,
+    }),
+    runtime,
+  };
 }
 
 function readDismissedVersions() {
@@ -169,6 +179,16 @@ function formatUpdateDate(value: string) {
     month: "2-digit",
     year: "numeric",
   }).format(date);
+}
+
+function formatCurrentVersionLabel(decision: ClientUpdateDecision, runtime: ClientUpdateRuntimeInfo) {
+  if (runtime.versionSource === "unknown") {
+    return "当前版本未知";
+  }
+  if (runtime.versionSource === "web") {
+    return `当前 ${decision.currentVersion}（Web 版本）`;
+  }
+  return `当前 ${decision.currentVersion}`;
 }
 
 function clientUpdateInstallMessage(result: ClientUpdateInstallResult) {

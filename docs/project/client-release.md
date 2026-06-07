@@ -34,10 +34,20 @@ Win11 安装器：
 npm run client:desktop:dist:win
 ```
 
-Android 预览 APK：
+Android 本地调试 APK：
 
 ```bash
 npm run client:android:assemble:debug
+```
+
+Android 发布 APK 需要固定 release keystore，通过环境变量注入：
+
+```bash
+export ORF_ANDROID_KEYSTORE_PATH=/path/to/orf-release.keystore
+export ORF_ANDROID_KEYSTORE_PASSWORD=...
+export ORF_ANDROID_KEY_ALIAS=...
+export ORF_ANDROID_KEY_PASSWORD=...
+npm run client:android:assemble:release
 ```
 
 本机如果缺少 Java、Android SDK 或 Windows 打包工具，可以直接使用 GitHub Actions 发布流程。
@@ -47,21 +57,36 @@ npm run client:android:assemble:debug
 推送 `v*` 标签会触发客户端发布流程：
 
 ```bash
-git tag v0.0.1
-git push origin xy
-git push origin v0.0.1
+npm run release:clients -- --tag v0.0.1
+```
+
+需要等待 GitHub Actions 完成并核对 Release 资产时运行：
+
+```bash
+npm run release:clients -- --tag v0.0.1 --watch
 ```
 
 发布资产：
 
 - `ORF-0.0.1-win11-x64-setup.exe`
-- `ORF-v0.0.1-android-preview.apk`
+- `ORF-v0.0.1-android.apk`
 
 ## 签名边界
 
-v0.0.1 是内部预览发布：
+客户端发布必须区分安装包签名和业务数据来源：
 
 - Windows 安装器未做代码签名，首次安装可能提示发布者未知。
-- Android APK 使用调试签名，适合内部安装验证。
+- Android Release APK 必须使用同一把固定 release keystore 签名，才能被系统允许覆盖安装。
+- GitHub Actions 从 `ORF_ANDROID_KEYSTORE_BASE64`、`ORF_ANDROID_KEYSTORE_PASSWORD`、`ORF_ANDROID_KEY_ALIAS`、`ORF_ANDROID_KEY_PASSWORD` 四个 GitHub Secrets 读取签名材料。
+- 仓库不能提交 keystore、私钥、keystore 密码或证书密码。
 
-如果后续要支持稳定覆盖升级，Android release keystore 必须由项目所有者单独保管，并通过 GitHub Secrets 注入 CI；仓库不能提交私钥、keystore 密码或证书密码。
+如果手机上已经安装过不同签名的同包名 APK，Android 不允许直接覆盖安装。必须先卸载旧包，或者继续使用旧包对应的原始签名重新打包；这是系统安全规则，不是 ORF 下载逻辑可以绕过的行为。
+
+## 版本事实源
+
+根 `package.json` 仍是发布版本的唯一维护入口，`scripts/sync-client-versions.mjs` 会同步桌面客户端和 Android 原生工程。运行中的客户端版本展示以原生容器返回的已安装版本为准：
+
+- Win11 由 Electron 主进程读取客户端 `package.json`。
+- Android 由 Capacitor 插件读取系统安装包的 `versionName`。
+- 旧客户端如果没有原生版本接口，Web 不能反推出真实安装版本，会按“当前版本未知”处理并继续提示可用更新。
+- 普通浏览器没有原生容器，只能显示 Web 构建版本，并会在界面标注为 Web 版本。

@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+def orfAndroidKeystorePath = System.getenv("ORF_ANDROID_KEYSTORE_PATH")
+def orfAndroidKeystorePassword = System.getenv("ORF_ANDROID_KEYSTORE_PASSWORD")
+def orfAndroidKeyAlias = System.getenv("ORF_ANDROID_KEY_ALIAS")
+def orfAndroidKeyPassword = System.getenv("ORF_ANDROID_KEY_PASSWORD")
+def hasOrfAndroidReleaseSigning = [
+    orfAndroidKeystorePath,
+    orfAndroidKeystorePassword,
+    orfAndroidKeyAlias,
+    orfAndroidKeyPassword
+].every { value -> value != null && value.trim().length() > 0 }
+
 android {
     namespace = "org.duckdns.orfxueyu.orf"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +27,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasOrfAndroidReleaseSigning) {
+            orfRelease {
+                storeFile file(orfAndroidKeystorePath)
+                storePassword orfAndroidKeystorePassword
+                keyAlias orfAndroidKeyAlias
+                keyPassword orfAndroidKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            if (hasOrfAndroidReleaseSigning) {
+                signingConfig signingConfigs.orfRelease
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -51,4 +75,16 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def releaseTaskRequested = graph.allTasks.any { task ->
+        task.path == ":app:assembleRelease" ||
+        task.path == ":app:bundleRelease" ||
+        task.name == "assembleRelease" ||
+        task.name == "bundleRelease"
+    }
+    if (releaseTaskRequested && !hasOrfAndroidReleaseSigning) {
+        throw new GradleException("ORF Android release signing is required. Set ORF_ANDROID_KEYSTORE_PATH, ORF_ANDROID_KEYSTORE_PASSWORD, ORF_ANDROID_KEY_ALIAS, and ORF_ANDROID_KEY_PASSWORD.")
+    }
 }

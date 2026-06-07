@@ -1,6 +1,8 @@
 package org.duckdns.orfxueyu.orf;
 
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.provider.Settings;
@@ -19,6 +21,25 @@ import java.util.Locale;
 
 @CapacitorPlugin(name = "OrfClientUpdate")
 public class ClientUpdatePlugin extends Plugin {
+    @PluginMethod
+    public void getInfo(PluginCall call) {
+        JSObject result = new JSObject();
+        result.put("platform", "android");
+        try {
+            PackageInfo packageInfo = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
+            result.put("version", packageInfo.versionName);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                result.put("versionCode", packageInfo.getLongVersionCode());
+            } else {
+                result.put("versionCode", packageInfo.versionCode);
+            }
+        } catch (PackageManager.NameNotFoundException error) {
+            result.put("version", null);
+            result.put("versionCode", null);
+        }
+        call.resolve(result);
+    }
+
     @PluginMethod
     public void install(PluginCall call) {
         String url = call.getString("url", "").trim();

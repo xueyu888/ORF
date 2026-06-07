@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { orfClientCurrentVersion } from "./clientUpdateConfig";
 import { getClientRelease } from "./clientUpdateApi";
 import { compareReleaseVersions, type ClientReleaseInfo } from "./clientUpdateModel";
-import { detectClientUpdatePlatform, openClientUpdateUrl } from "./clientUpdateRuntime";
+import { detectClientUpdateRuntimeInfo, openClientUpdateUrl } from "./clientUpdateRuntime";
 
 const releaseNotesSeenStoragePrefix = "orf-client-release-notes-seen:";
 
@@ -13,9 +13,7 @@ type ReleaseNotesState =
   | { release: ClientReleaseInfo; status: "ready" };
 
 export function ClientReleaseNotesDialog() {
-  const [notesState, setNotesState] = useState<ReleaseNotesState>(() => (
-    hasSeenReleaseNotes(orfClientCurrentVersion) ? { status: "hidden" } : { status: "loading" }
-  ));
+  const [notesState, setNotesState] = useState<ReleaseNotesState>({ status: "loading" });
   const [openingReleasePage, setOpeningReleasePage] = useState(false);
 
   useEffect(() => {
@@ -100,12 +98,18 @@ export function ClientReleaseNotesDialog() {
 }
 
 async function loadCurrentReleaseNotes(signal: AbortSignal) {
-  const platform = await detectClientUpdatePlatform();
-  if (platform !== "android" && platform !== "desktop-windows") {
+  const runtime = await detectClientUpdateRuntimeInfo(orfClientCurrentVersion);
+  if (runtime.platform !== "android" && runtime.platform !== "desktop-windows") {
     return null;
   }
-  const release = await getClientRelease(orfClientCurrentVersion, signal);
-  return compareReleaseVersions(release.version, orfClientCurrentVersion) === 0 ? release : null;
+  if (runtime.versionSource !== "native") {
+    return null;
+  }
+  if (hasSeenReleaseNotes(runtime.currentVersion)) {
+    return null;
+  }
+  const release = await getClientRelease(runtime.currentVersion, signal);
+  return compareReleaseVersions(release.version, runtime.currentVersion) === 0 ? release : null;
 }
 
 function hasSeenReleaseNotes(version: string) {

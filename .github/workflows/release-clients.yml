@@ -100,20 +100,49 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Android debug APK
-        run: npm run client:android:assemble:debug
+      - name: Prepare Android release signing
+        shell: bash
+        env:
+          ORF_ANDROID_KEYSTORE_BASE64: ${{ secrets.ORF_ANDROID_KEYSTORE_BASE64 }}
+          ORF_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ORF_ANDROID_KEYSTORE_PASSWORD }}
+          ORF_ANDROID_KEY_ALIAS: ${{ secrets.ORF_ANDROID_KEY_ALIAS }}
+          ORF_ANDROID_KEY_PASSWORD: ${{ secrets.ORF_ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in ORF_ANDROID_KEYSTORE_BASE64 ORF_ANDROID_KEYSTORE_PASSWORD ORF_ANDROID_KEY_ALIAS ORF_ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              missing+=("$name")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing Android signing secrets: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+
+          keystore_path="$RUNNER_TEMP/orf-release.keystore"
+          printf '%s' "$ORF_ANDROID_KEYSTORE_BASE64" | base64 -d > "$keystore_path"
+          {
+            echo "ORF_ANDROID_KEYSTORE_PATH=$keystore_path"
+            echo "ORF_ANDROID_KEYSTORE_PASSWORD=$ORF_ANDROID_KEYSTORE_PASSWORD"
+            echo "ORF_ANDROID_KEY_ALIAS=$ORF_ANDROID_KEY_ALIAS"
+            echo "ORF_ANDROID_KEY_PASSWORD=$ORF_ANDROID_KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build Android release APK
+        run: npm run client:android:assemble:release
 
       - name: Collect Android artifact
         shell: bash
         run: |
           mkdir -p release/android
-          cp android/app/build/outputs/apk/debug/app-debug.apk "release/android/ORF-${RELEASE_TAG}-android-preview.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "release/android/ORF-${RELEASE_TAG}-android.apk"
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v7
         with:
-          name: orf-android-preview-apk
-          path: release/android/ORF-*-android-preview.apk
+          name: orf-android-apk
+          path: release/android/ORF-*-android.apk
           if-no-files-found: error
 
   github-release:
@@ -178,7 +207,7 @@ jobs:
             echo
             echo "客户端包："
             echo "- Win11 PC 端：Electron 安装器，打开 ${ORF_CLIENT_URL}"
-            echo "- Android 移动端：Capacitor 预览 APK，打开 ${ORF_CLIENT_URL}"
+            echo "- Android 移动端：Capacitor APK，打开 ${ORF_CLIENT_URL}"
             echo
             echo "安装后提示："
             echo "- 用户安装新客户端后，应用会读取本 Release 的中文说明并在首次启动时提示。"
@@ -190,7 +219,7 @@ jobs:
             echo
             echo "已知边界："
             echo "- Win11 安装器当前未做代码签名，首次安装时 Windows 可能提示发布者未知。"
-            echo "- Android 当前是内部预览 APK。后续要支持稳定覆盖升级，需要把 Android release keystore 放到 GitHub Secrets，再切换到正式签名构建。"
+            echo "- Android APK 需要 GitHub Secrets 中的固定 release keystore 签名；缺少签名配置时发布流程会直接失败，避免产出无法覆盖安装的包。"
           } > release-notes.md
 
       - name: Publish assets
