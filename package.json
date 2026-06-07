@@ -52,6 +52,7 @@
     "chat:import:mattermost": "node scripts/with-public-ca.mjs tsx scripts/import-mattermost-chat.ts",
     "gitlab:webhooks:reconcile": "node scripts/with-public-ca.mjs tsx scripts/reconcile-gitlab-mattermost-webhooks.ts",
     "notify:email": "tsx scripts/send-email-notification.ts",
+    "push:diagnose": "node scripts/with-public-ca.mjs tsx scripts/diagnose-push.ts",
     "client:sync-versions": "node scripts/sync-client-versions.mjs",
     "client:desktop:dev": "electron clients/desktop/main.cjs",
     "client:desktop:pack:linux": "node scripts/build-desktop-client.mjs --dir --linux",

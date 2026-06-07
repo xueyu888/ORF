@@ -95,6 +95,21 @@ Android 不运行时收到聊天消息或客户端更新通知，依赖 Firebase
 
 远程 Push 默认使用 `ORF_PUSH_CONTENT_MODE=private`，通知栏只显示通用聊天提示，消息正文和私有频道内容仍回到 ORF 内查看。
 
+上线后用诊断命令确认链路，不要手工查看或打印 token：
+
+```bash
+npm run push:diagnose
+npm run push:diagnose -- --send-test --user-email <email>
+```
+
+诊断结果必须同时满足：
+
+- `ORF_PUSH_ENABLED=true`。
+- Firebase 服务端凭据已配置，且 Firebase Admin 可初始化条件满足。
+- 发布 APK 使用的 `google-services.json` 包名匹配 `org.duckdns.orfxueyu.orf`。
+- `push_devices` 里已经有目标用户的启用 Android 设备。
+- 测试发送返回 FCM 成功数大于 0，且真机在后台或锁屏状态能看到通知。
+
 ## 版本事实源
 
 根 `package.json` 仍是发布版本的唯一维护入口，`scripts/sync-client-versions.mjs` 会同步桌面客户端和 Android 原生工程。运行中的客户端版本展示以原生容器返回的已安装版本为准：

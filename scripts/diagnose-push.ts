@@ -1,0 +1,349 @@
+import "dotenv/config";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import pg from "pg";
+import { env } from "../server/env";
+import { createPgPoolConfig } from "../server/db/connectionOptions";
+import { isFirebasePushConfigured, sendFcmPushMessage } from "../server/push/firebasePushClient";
+import { chatPushChannelId } from "../server/push/pushService";
+
+const { Pool } = pg;
+
+const androidPackageName = "org.duckdns.orfxueyu.orf";
+
+type CliArgs = {
+  help: boolean;
+  sendTest: boolean;
+  teamId?: string;
+  userEmail?: string;
+  userId?: string;
+  userName?: string;
+};
+
+type PushTableCheckRow = {
+  push_devices_table: string | null;
+};
+
+type DeviceCountRow = {
+  count: string;
+  enabled: boolean;
+  platform: string;
+};
+
+type DeviceSampleRow = {
+  app_build: string | null;
+  app_version: string | null;
+  device_label: string | null;
+  enabled: boolean;
+  last_client_update_pushed_at: string | null;
+  last_client_update_version: string | null;
+  last_seen_at: string | null;
+  platform: string;
+  revoked_at: string | null;
+  team_id: string;
+  updated_at: string;
+  user_email: string | null;
+  user_id: string;
+  user_name: string;
+};
+
+type TestDeviceRow = {
+  team_id: string;
+  token: string;
+  user_email: string | null;
+  user_id: string;
+  user_name: string;
+};
+
+type GoogleServicesCheck = {
+  found: boolean;
+  packageNames: string[];
+  packageMatches: boolean;
+  path: string;
+};
+
+function parseArgs(argv: string[]): CliArgs {
+  const args: CliArgs = { help: false, sendTest: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const item = argv[index];
+    if (item === "--help" || item === "-h") {
+      args.help = true;
+    } else if (item === "--send-test") {
+      args.sendTest = true;
+    } else if (item === "--team-id") {
+      args.teamId = requireValue(argv, index);
+      index += 1;
+    } else if (item === "--user-email") {
+      args.userEmail = requireValue(argv, index);
+      index += 1;
+    } else if (item === "--user-id") {
+      args.userId = requireValue(argv, index);
+      index += 1;
+    } else if (item === "--user-name") {
+      args.userName = requireValue(argv, index);
+      index += 1;
+    } else {
+      throw new Error(`未知参数：${item}`);
+    }
+  }
+  return args;
+}
+
+function requireValue(argv: string[], index: number) {
+  const value = argv[index + 1];
+  if (!value || value.startsWith("--")) {
+    throw new Error(`${argv[index]} 缺少参数值`);
+  }
+  return value;
+}
+
+function usage() {
+  return [
+    "用法：",
+    "  npm run push:diagnose",
+    "  npm run push:diagnose -- --send-test --user-email <email>",
+    "  npm run push:diagnose -- --send-test --user-name <name> [--team-id <teamId>]",
+    "",
+    "说明：",
+    "  默认只检查配置、数据库表和已注册设备，不打印 token、密码或 service account 内容。",
+    "  --send-test 会向匹配用户已注册的 Android 设备发送一条 FCM 测试通知。",
+  ].join("\n");
+}
+
+function checkGoogleServices(): GoogleServicesCheck {
+  const filePath = path.resolve("android/app/google-services.json");
+  if (!existsSync(filePath)) {
+    return { found: false, packageMatches: false, packageNames: [], path: filePath };
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as {
+      client?: Array<{ client_info?: { android_client_info?: { package_name?: string } } }>;
+    };
+    const packageNames = Array.from(
+      new Set(
+        (parsed.client ?? [])
+          .map((client) => client.client_info?.android_client_info?.package_name?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    return {
+      found: true,
+      packageMatches: packageNames.includes(androidPackageName),
+      packageNames,
+      path: filePath,
+    };
+  } catch {
+    return { found: true, packageMatches: false, packageNames: [], path: filePath };
+  }
+}
+
+function firebaseCredentialSource() {
+  if (process.env.ORF_FIREBASE_SERVICE_ACCOUNT_JSON?.trim()) return "ORF_FIREBASE_SERVICE_ACCOUNT_JSON";
+  if (process.env.ORF_FIREBASE_SERVICE_ACCOUNT_PATH?.trim()) return "ORF_FIREBASE_SERVICE_ACCOUNT_PATH";
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim()) return "GOOGLE_APPLICATION_CREDENTIALS";
+  return "missing";
+}
+
+function printConfig() {
+  const googleServices = checkGoogleServices();
+  const credentialSource = firebaseCredentialSource();
+  const localGoogleServicesBase64 = Boolean(process.env.ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64?.trim());
+
+  console.log("== ORF Push 配置 ==");
+  console.log(`ORF_PUSH_ENABLED: ${env.ORF_PUSH_ENABLED ? "true" : "false"}`);
+  console.log(`Firebase 服务端凭据: ${credentialSource === "missing" ? "缺失" : `已配置（${credentialSource}）`}`);
+  console.log(`Firebase Admin 可初始化条件: ${isFirebasePushConfigured() ? "满足" : "不满足"}`);
+  console.log(`本机 google-services.json: ${googleServices.found ? "存在" : "缺失"}`);
+  if (googleServices.found) {
+    const packageText = googleServices.packageNames.length > 0 ? googleServices.packageNames.join(", ") : "未解析到 package_name";
+    console.log(`google-services.json 包名: ${packageText}`);
+    console.log(`Android 包名匹配 ${androidPackageName}: ${googleServices.packageMatches ? "是" : "否"}`);
+  }
+  console.log(`本地 ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64: ${localGoogleServicesBase64 ? "存在" : "缺失或未暴露"}`);
+  console.log("");
+}
+
+async function tableExists(pool: pg.Pool) {
+  const result = await pool.query<PushTableCheckRow>("SELECT to_regclass('push_devices')::text AS push_devices_table");
+  return Boolean(result.rows[0]?.push_devices_table);
+}
+
+async function printDeviceState(pool: pg.Pool) {
+  const exists = await tableExists(pool);
+  console.log("== ORF Push 设备表 ==");
+  console.log(`push_devices 表: ${exists ? "存在" : "缺失"}`);
+  if (!exists) {
+    console.log("建议先运行 npm run db:migrate。");
+    console.log("");
+    return false;
+  }
+
+  const counts = await pool.query<DeviceCountRow>(
+    `
+      SELECT platform, enabled, count(*)::text AS count
+      FROM push_devices
+      GROUP BY platform, enabled
+      ORDER BY platform, enabled DESC
+    `,
+  );
+  if (counts.rows.length === 0) {
+    console.log("已注册设备: 0");
+  } else {
+    for (const row of counts.rows) {
+      console.log(`${row.platform} / ${row.enabled ? "启用" : "停用"}: ${row.count}`);
+    }
+  }
+
+  const samples = await pool.query<DeviceSampleRow>(
+    `
+      SELECT
+        d.team_id,
+        d.user_id::text,
+        u.name AS user_name,
+        u.email AS user_email,
+        d.platform,
+        d.enabled,
+        d.app_version,
+        d.app_build,
+        d.device_label,
+        d.last_client_update_version,
+        d.last_client_update_pushed_at::text,
+        d.last_seen_at::text,
+        d.revoked_at::text,
+        d.updated_at::text
+      FROM push_devices d
+      LEFT JOIN users u ON u.id = d.user_id
+      ORDER BY d.updated_at DESC
+      LIMIT 20
+    `,
+  );
+  if (samples.rows.length > 0) {
+    console.log("最近设备样本（不含 token）:");
+    for (const row of samples.rows) {
+      console.log(
+        [
+          `- ${row.user_name}`,
+          row.user_email ? `<${row.user_email}>` : "",
+          `team=${row.team_id}`,
+          `platform=${row.platform}`,
+          `enabled=${row.enabled}`,
+          `version=${row.app_version ?? "unknown"}`,
+          `lastSeen=${row.last_seen_at ?? "never"}`,
+          row.revoked_at ? `revokedAt=${row.revoked_at}` : "",
+        ].filter(Boolean).join(" "),
+      );
+    }
+  }
+  console.log("");
+  return true;
+}
+
+async function loadTestDevices(pool: pg.Pool, args: CliArgs) {
+  if (!args.userId && !args.userEmail && !args.userName) {
+    throw new Error("--send-test 必须配合 --user-id、--user-email 或 --user-name，避免误发给全员。");
+  }
+
+  const params: string[] = [];
+  const conditions = [
+    "d.platform = 'android'",
+    "d.enabled = true",
+    "d.revoked_at IS NULL",
+    "COALESCE(u.status, 'active') = 'active'",
+  ];
+
+  if (args.teamId) {
+    params.push(args.teamId);
+    conditions.push(`d.team_id = $${params.length}`);
+  }
+  if (args.userId) {
+    params.push(args.userId);
+    conditions.push(`u.id::text = $${params.length}`);
+  }
+  if (args.userEmail) {
+    params.push(args.userEmail.toLowerCase());
+    conditions.push(`lower(u.email) = $${params.length}`);
+  }
+  if (args.userName) {
+    params.push(args.userName);
+    conditions.push(`u.name = $${params.length}`);
+  }
+
+  const result = await pool.query<TestDeviceRow>(
+    `
+      SELECT d.team_id, d.user_id::text, u.name AS user_name, u.email AS user_email, d.token
+      FROM push_devices d
+      INNER JOIN users u ON u.id = d.user_id
+      INNER JOIN team_members tm ON tm.team_id = d.team_id AND tm.user_id = d.user_id
+      WHERE ${conditions.join("\n        AND ")}
+      ORDER BY d.updated_at DESC
+    `,
+    params,
+  );
+  return result.rows;
+}
+
+async function sendTestPush(pool: pg.Pool, args: CliArgs) {
+  console.log("== ORF Push 测试发送 ==");
+  if (!isFirebasePushConfigured()) {
+    throw new Error("Firebase Push 未配置完成：需要 ORF_PUSH_ENABLED=true，并提供服务端 Firebase 凭据。");
+  }
+
+  const devices = await loadTestDevices(pool, args);
+  if (devices.length === 0) {
+    throw new Error("没有找到匹配用户的启用 Android 设备。请先安装新版 APK，打开应用、登录并授权通知。");
+  }
+
+  const teams = Array.from(new Set(devices.map((device) => device.team_id)));
+  if (teams.length !== 1) {
+    throw new Error("匹配到多个 team 的设备，请加 --team-id 缩小范围。");
+  }
+
+  const result = await sendFcmPushMessage({
+    body: "如果手机后台或锁屏能看到这条通知，ORF Android Push 链路已经打通。",
+    channelId: chatPushChannelId,
+    collapseKey: "orf-push-diagnostic",
+    data: {
+      kind: "diagnostic.push",
+      targetPath: "/chat",
+      teamId: teams[0] ?? "",
+    },
+    tag: `orf-push-diagnostic-${Date.now()}`,
+    title: "ORF Push 诊断",
+    tokens: devices.map((device) => device.token),
+  });
+
+  const users = Array.from(new Set(devices.map((device) => `${device.user_name}${device.user_email ? ` <${device.user_email}>` : ""}`)));
+  console.log(`目标用户: ${users.join(", ")}`);
+  console.log(`目标设备数: ${devices.length}`);
+  console.log(`FCM 成功: ${result.successCount}`);
+  console.log(`FCM 失败: ${result.failureCount}`);
+  console.log(`无效 token: ${result.invalidTokens.length}`);
+  console.log("");
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    console.log(usage());
+    return;
+  }
+
+  printConfig();
+
+  const pool = new Pool(createPgPoolConfig(env.DATABASE_URL));
+  try {
+    const hasPushTable = await printDeviceState(pool);
+    if (args.sendTest) {
+      if (!hasPushTable) throw new Error("push_devices 表不存在，不能发送测试 Push。");
+      await sendTestPush(pool, args);
+    }
+  } finally {
+    await pool.end();
+  }
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
+});
