@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 coverage/
+release/
 
 .env
 .env.*
@@ -44,6 +45,13 @@ public/settings/user/*
 !public/settings/user/settings.json.example
 public/settings/users/*
 frontend-assets/*
+
+android/.gradle/
+android/.idea/
+android/local.properties
+android/captures/
+android/app/build/
+android/build/
 
 
 
