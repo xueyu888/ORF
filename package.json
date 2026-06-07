@@ -1,6 +1,6 @@
 {
   "name": "orf",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
   "bin": {
@@ -76,7 +76,6 @@
     "@capacitor/browser": "^8.0.3",
     "@capacitor/core": "8.4.0",
     "@capacitor/local-notifications": "^8.2.0",
-    "@capacitor/push-notifications": "^8.1.1",
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
     "clsx": "^2.1.1",

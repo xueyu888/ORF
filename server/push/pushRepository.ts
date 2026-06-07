@@ -58,7 +58,13 @@ export type RegisterPushDeviceInput = {
   token: string;
 };
 
-export type PushRegistrationStatus = "starting" | "permission_denied" | "registering" | "token_registered" | "registration_error";
+export type PushRegistrationStatus =
+  | "starting"
+  | "unavailable"
+  | "permission_denied"
+  | "registering"
+  | "token_registered"
+  | "registration_error";
 
 export type UpsertPushRegistrationStatusInput = Omit<RegisterPushDeviceInput, "token"> & {
   detail?: string | null;

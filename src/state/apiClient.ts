@@ -69,7 +69,7 @@ export type PushVendorRegistrationStatusInput = Omit<PushVendorDeviceRegistratio
 export type PushRegistrationStatusInput = Omit<PushDeviceRegistrationInput, "token"> & {
   detail?: string | null;
   reason?: string | null;
-  status: "starting" | "permission_denied" | "registering" | "token_registered" | "registration_error";
+  status: "starting" | "unavailable" | "permission_denied" | "registering" | "token_registered" | "registration_error";
 };
 export type PushDeviceRegistrationResponse = {
   deviceId: string;

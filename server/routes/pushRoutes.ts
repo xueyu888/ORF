@@ -38,7 +38,7 @@ const pushVendorRegistrationStatusBodySchema = pushDeviceEnvironmentSchema.exten
 const pushRegistrationStatusBodySchema = pushDeviceEnvironmentSchema.extend({
   detail: z.string().trim().max(200).nullish(),
   reason: z.string().trim().max(80).nullish(),
-  status: z.enum(["starting", "permission_denied", "registering", "token_registered", "registration_error"]),
+  status: z.enum(["starting", "unavailable", "permission_denied", "registering", "token_registered", "registration_error"]),
 });
 
 export function registerPushRoutes(app: FastifyInstance) {
