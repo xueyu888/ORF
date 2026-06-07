@@ -8,6 +8,7 @@
 
 | 用途 | 公网端口 | 内部端口 | 说明 |
 | --- | ---: | ---: | --- |
+| ORF Web | `8443` | `8443` | ORF 前端稳定入口，使用 DuckDNS 域名证书，`/api` 同源转发到本机后端。 |
 | Ory Public | `18443` | `18443` | ORF 后端访问 Ory Public API。 |
 | MinIO S3 API | `19443` | `19443` | ORF 后端访问 S3-compatible API。 |
 
@@ -28,6 +29,7 @@
 ```text
 public-gateway:18443 -> kratos:4433
 public-gateway:19443 -> minio:9000
+public-gateway:8443 -> ORF frontend/backend on host
 ```
 
 这样 Ory Admin 和 MinIO Console 不会因为路由器端口映射或局域网访问而意外暴露。
@@ -67,6 +69,59 @@ npm run infra:public:prepare
 ```bash
 npm run infra:public:up
 ```
+
+## 3.1 ORF Web 域名入口
+
+ORF Web 的公网入口使用：
+
+```text
+https://orf-xueyu.duckdns.org:8443
+```
+
+路由器映射：
+
+```text
+orf-web-public: TCP 8443 -> 199.199.199.8:8443
+```
+
+本机 `.env` 需要配置：
+
+```text
+ORF_WEB_EXTERNAL_PORT=8443
+ORF_DUCKDNS_DOMAIN=orf-xueyu.duckdns.org
+ORF_DUCKDNS_TOKEN=<DuckDNS token>
+ORF_DUCKDNS_PROPAGATION_SECONDS=120
+ORF_APP_URL=https://orf-xueyu.duckdns.org:8443
+CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173,https://orf-xueyu.duckdns.org:8443
+```
+
+`ORF_DUCKDNS_TOKEN` 只写入本机 `.env`，不得写入仓库、文档正文或提交信息。
+
+如果当前浏览器经过 VPN，DuckDNS 页面自动识别的 IP 可能不是服务器公网 IP。此时应手动把 DuckDNS `current ip` 改成服务器路由器公网 IP，或运行：
+
+```bash
+npm run infra:public:duckdns:update
+```
+
+签发 DuckDNS 域名证书：
+
+```bash
+npm run infra:public:domain-cert:issue
+```
+
+续期：
+
+```bash
+npm run infra:public:domain-cert:renew
+```
+
+安装每日自动续期任务：
+
+```bash
+npm run infra:public:domain-cert:install-renewal
+```
+
+该路径使用 DNS-01 challenge，通过 DuckDNS TXT API 自动写入和清理 `_acme-challenge` 记录，因此不需要常驻开放公网 `80/443`。
 
 ## 4. 证书
 
@@ -111,12 +166,13 @@ orf status
 | PostgreSQL | 使用 `.env` 的 `DATABASE_URL` 执行 `select 1`。 |
 | Ory | 请求 `ORY_PUBLIC_URL/health/ready`。 |
 | MinIO | 请求 `OBJECT_STORAGE_ENDPOINT/minio/health/live`。 |
+| ORF Web | 请求 `https://orf-xueyu.duckdns.org:8443/health`。 |
 
 如果 Ory 或 MinIO 返回 TLS、连接拒绝或超时，优先检查公网端口映射、证书状态和 `public-gateway` 容器日志。
 
 ## 6. 安全约束
 
-1. 日常只发布 `18443` 和 `19443`。
+1. 日常只发布 `8443`、`18443` 和 `19443`。
 2. `80/443` 仅在手工重试公网 CA 证书时临时开放。
 3. MinIO bucket 保持私有；浏览器不直接访问对象存储。
 4. ORF 使用独立 `orf-app` MinIO 用户，不使用 root 用户。

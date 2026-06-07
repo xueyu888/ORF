@@ -9,7 +9,10 @@ services:
         condition: service_started
       minio:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
+      - "${ORF_WEB_EXTERNAL_PORT:-8443}:8443"
       - "${ORY_PUBLIC_EXTERNAL_PORT:-18443}:18443"
       - "${OBJECT_STORAGE_EXTERNAL_PORT:-19443}:19443"
     volumes:
@@ -38,6 +41,11 @@ services:
     image: ${CERTBOT_IMAGE:-certbot/certbot:latest}
     profiles:
       - certbot
+    environment:
+      ORF_DUCKDNS_DOMAIN: ${ORF_DUCKDNS_DOMAIN:-}
+      ORF_DUCKDNS_TOKEN: ${ORF_DUCKDNS_TOKEN:-}
+      ORF_DUCKDNS_PROPAGATION_SECONDS: ${ORF_DUCKDNS_PROPAGATION_SECONDS:-120}
     volumes:
       - ./infra/public-ip/certbot/www:/var/www/certbot
       - ./infra/public-ip/letsencrypt:/etc/letsencrypt
+      - ./scripts/certbot-hooks:/opt/orf-certbot-hooks:ro

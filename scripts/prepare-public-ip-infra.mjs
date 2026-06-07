@@ -31,6 +31,10 @@ function main() {
 
   const oryPort = env.ORY_PUBLIC_EXTERNAL_PORT ?? "18443";
   const storagePort = env.OBJECT_STORAGE_EXTERNAL_PORT ?? "19443";
+  const webPort = env.ORF_WEB_EXTERNAL_PORT ?? "8443";
+  const webDomain = normalizeWebDomain(env.ORF_DUCKDNS_DOMAIN ?? env.ORF_WEB_DOMAIN ?? process.env.ORF_DUCKDNS_DOMAIN ?? process.env.ORF_WEB_DOMAIN);
+  const frontendUpstream = env.ORF_FRONTEND_UPSTREAM ?? process.env.ORF_FRONTEND_UPSTREAM ?? "http://host.docker.internal:5173";
+  const backendUpstream = env.ORF_BACKEND_UPSTREAM ?? process.env.ORF_BACKEND_UPSTREAM ?? "http://host.docker.internal:8787";
 
   for (const dir of [confDir, snippetsDir, webrootDir, letsEncryptDir, bootstrapCertDir]) {
     fs.mkdirSync(dir, { recursive: true });
@@ -38,7 +42,7 @@ function main() {
 
   ensureBootstrapCertificate(publicIp);
   writeSslSnippet();
-  writeNginxConfig({ publicIp, oryPort, storagePort });
+  writeNginxConfig({ backendUpstream, frontendUpstream, oryPort, publicIp, storagePort, webDomain, webPort });
 
   console.log(`Prepared public IP gateway config for ${publicIp}.`);
 }
@@ -80,6 +84,11 @@ function unquoteEnvValue(value) {
     return trimmed.slice(1, -1);
   }
   return value;
+}
+
+function normalizeWebDomain(value) {
+  const domain = value?.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "");
+  return domain || undefined;
 }
 
 function ensureBootstrapCertificate(publicIp) {
@@ -142,6 +151,22 @@ function activeCertPaths(publicIp) {
   };
 }
 
+function activeWebCertPaths(webDomain, publicIp) {
+  if (webDomain) {
+    const liveDir = path.join(letsEncryptDir, "live", webDomain);
+    const issuedFullchain = path.join(liveDir, "fullchain.pem");
+    const issuedPrivateKey = path.join(liveDir, "privkey.pem");
+    if (fs.existsSync(issuedFullchain) && fs.existsSync(issuedPrivateKey)) {
+      return {
+        fullchain: `${composeCertDir}/live/${webDomain}/fullchain.pem`,
+        privateKey: `${composeCertDir}/live/${webDomain}/privkey.pem`,
+      };
+    }
+  }
+
+  return activeCertPaths(publicIp);
+}
+
 function writeSslSnippet() {
   fs.writeFileSync(
     path.join(snippetsDir, "orf-ssl.conf"),
@@ -156,8 +181,10 @@ function writeSslSnippet() {
   );
 }
 
-function writeNginxConfig({ publicIp, oryPort, storagePort }) {
+function writeNginxConfig({ backendUpstream, frontendUpstream, oryPort, publicIp, storagePort, webDomain, webPort }) {
   const cert = activeCertPaths(publicIp);
+  const webCert = activeWebCertPaths(webDomain, publicIp);
+  const webServerName = webDomain ?? "_";
   fs.writeFileSync(
     path.join(confDir, "orf-public-ip.conf"),
     [
@@ -185,6 +212,53 @@ function writeNginxConfig({ publicIp, oryPort, storagePort }) {
       "",
       "  location / {",
       "    return 404;",
+      "  }",
+      "}",
+      "",
+      "server {",
+      `  listen ${webPort} ssl;`,
+      `  server_name ${webServerName};`,
+      `  ssl_certificate ${webCert.fullchain};`,
+      `  ssl_certificate_key ${webCert.privateKey};`,
+      "  include /etc/nginx/snippets/orf-ssl.conf;",
+      "  client_max_body_size 110m;",
+      "",
+      "  location /api/ {",
+      "    proxy_http_version 1.1;",
+      "    proxy_set_header Host $http_host;",
+      "    proxy_set_header X-Real-IP $remote_addr;",
+      "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+      "    proxy_set_header X-Forwarded-Proto https;",
+      `    proxy_pass ${backendUpstream};`,
+      "  }",
+      "",
+      "  location = /health {",
+      "    proxy_http_version 1.1;",
+      "    proxy_set_header Host $http_host;",
+      "    proxy_set_header X-Real-IP $remote_addr;",
+      "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+      "    proxy_set_header X-Forwarded-Proto https;",
+      `    proxy_pass ${backendUpstream};`,
+      "  }",
+      "",
+      "  location /settings/backgrounds/ {",
+      "    proxy_http_version 1.1;",
+      "    proxy_set_header Host $http_host;",
+      "    proxy_set_header X-Real-IP $remote_addr;",
+      "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+      "    proxy_set_header X-Forwarded-Proto https;",
+      `    proxy_pass ${backendUpstream};`,
+      "  }",
+      "",
+      "  location / {",
+      "    proxy_http_version 1.1;",
+      "    proxy_set_header Host $http_host;",
+      "    proxy_set_header X-Real-IP $remote_addr;",
+      "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
+      "    proxy_set_header X-Forwarded-Proto https;",
+      "    proxy_set_header Upgrade $http_upgrade;",
+      "    proxy_set_header Connection \"upgrade\";",
+      `    proxy_pass ${frontendUpstream};`,
       "  }",
       "}",
       "",
