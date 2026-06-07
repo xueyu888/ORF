@@ -1,4 +1,4 @@
-import { Plus, Search, Shield } from "lucide-react";
+import { Flag, MessageSquarePlus, Search, Shield } from "lucide-react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { type CSSProperties, useCallback, useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
@@ -108,16 +108,16 @@ export function AppShell() {
                   搜索目标、指标、任务
                 </button>
               </div>
-              {canCreateFeedback && <Button className="h-8 px-2.5 text-xs" variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
-                <Plus className="h-4 w-4" />
+              {canCreateFeedback && <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
+                <MessageSquarePlus className="h-4 w-4" />
                 新建反馈
               </Button>}
             </>
           )}
           <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-1.5">
             {canCreateObjective && (
-              <Button className="h-8 px-2.5 text-xs" onClick={() => navigate("/tasks?create=objective")}>
-                <Plus className="h-4 w-4" />
+              <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" onClick={() => navigate("/tasks?create=objective")}>
+                <Flag className="h-4 w-4" />
                 新建目标
               </Button>
             )}
