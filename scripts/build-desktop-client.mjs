@@ -8,12 +8,7 @@ import "./sync-client-versions.mjs";
 const repoRoot = process.cwd();
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "orf-desktop-client-"));
 const outputDir = path.resolve(repoRoot, "release/desktop");
-const electronBuilderBin = path.resolve(
-  repoRoot,
-  "node_modules",
-  ".bin",
-  process.platform === "win32" ? "electron-builder.cmd" : "electron-builder",
-);
+const electronBuilderCli = path.resolve(repoRoot, "node_modules", "electron-builder", "cli.js");
 
 const appPackage = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "clients/desktop/package.json"), "utf8"));
 const mainSource = path.resolve(repoRoot, "clients/desktop/main.cjs");
@@ -68,7 +63,8 @@ try {
   fs.writeFileSync(packageTarget, `${JSON.stringify(appPackage, null, 2)}\n`);
   fs.writeFileSync(configTarget, `${JSON.stringify(builderConfig, null, 2)}\n`);
 
-  const result = spawnSync(electronBuilderBin, [
+  const result = spawnSync(process.execPath, [
+    electronBuilderCli,
     "--projectDir",
     tempRoot,
     "--config",
