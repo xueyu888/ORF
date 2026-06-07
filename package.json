@@ -59,6 +59,7 @@
     "client:android:sync": "npm run client:sync-versions && npm run build && cap sync android",
     "client:android:assemble:debug": "npm run client:android:sync && cd android && ./gradlew assembleDebug",
     "client:android:assemble:release": "npm run client:android:sync && cd android && ./gradlew assembleRelease",
+    "release:clients": "node scripts/release-clients.mjs",
     "build": "node scripts/with-public-ca.mjs tsc --noEmit && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "check": "npm run check:env && npm run build"
