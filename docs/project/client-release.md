@@ -107,10 +107,11 @@ npm run push:diagnose -- --send-test --user-email <email>
 - `ORF_PUSH_ENABLED=true`。
 - Firebase 服务端凭据已配置，且 Firebase Admin 可初始化条件满足。
 - 发布 APK 使用的 `google-services.json` 包名匹配 `org.duckdns.orfxueyu.orf`。
+- `push_registration_statuses` 中目标用户最近状态是 `token_registered`。
 - `push_devices` 里已经有目标用户的启用 Android 设备。
 - 测试发送返回 FCM 成功数大于 0，且真机在后台或锁屏状态能看到通知。
 
-如果诊断中的设备样本显示 `gms=unavailable`，这类安卓机不能只依赖 FCM 达到微信式后台通知；需要再接入对应厂商 Push（例如 vivo/Huawei/Xiaomi/Oppo）或厂商聚合服务，并准备厂商开发者账号、应用包名审核和服务端密钥。FCM 仍保留给有 Google Play services 的设备使用。
+如果诊断中的注册状态显示 `registration_error`、`permission_denied` 或设备样本显示 `gms=unavailable`，这类安卓机不能只依赖 FCM 达到微信式后台通知；需要再接入对应厂商 Push（例如 vivo/Huawei/Xiaomi/Oppo）或厂商聚合服务，并准备厂商开发者账号、应用包名审核和服务端密钥。FCM 仍保留给有 Google Play services 的设备使用。
 
 ## 版本事实源
 

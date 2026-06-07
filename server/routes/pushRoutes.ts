@@ -2,10 +2,10 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
-import { registerPushDeviceForUser, revokePushDeviceForUser } from "../push/pushRepository";
+import { registerPushDeviceForUser, revokePushDeviceForUser, upsertPushRegistrationStatusForUser } from "../push/pushRepository";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 
-const pushDeviceBodySchema = z.object({
+const pushDeviceEnvironmentSchema = z.object({
   appBuild: z.string().trim().max(64).optional(),
   appVersion: z.string().trim().max(64).optional(),
   deviceLabel: z.string().trim().max(120).optional(),
@@ -16,7 +16,16 @@ const pushDeviceBodySchema = z.object({
   osVersion: z.string().trim().max(80).optional(),
   platform: z.literal("android"),
   sdkInt: z.number().int().positive().optional(),
+});
+
+const pushDeviceBodySchema = pushDeviceEnvironmentSchema.extend({
   token: z.string().trim().min(20).max(4096),
+});
+
+const pushRegistrationStatusBodySchema = pushDeviceEnvironmentSchema.extend({
+  detail: z.string().trim().max(200).optional(),
+  reason: z.string().trim().max(80).optional(),
+  status: z.enum(["starting", "permission_denied", "registering", "token_registered", "registration_error"]),
 });
 
 export function registerPushRoutes(app: FastifyInstance) {
@@ -30,6 +39,20 @@ export function registerPushRoutes(app: FastifyInstance) {
     const device = await registerPushDeviceForUser(runtimeScopeStorageId(context.scope), context.user.id, body);
     return {
       deviceId: device.id,
+      ok: true,
+      pushEnabled: env.ORF_PUSH_ENABLED,
+    };
+  });
+
+  app.post("/api/push/registration-status", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const body = pushRegistrationStatusBodySchema.parse(request.body);
+    await upsertPushRegistrationStatusForUser(runtimeScopeStorageId(context.scope), context.user.id, body);
+    return {
       ok: true,
       pushEnabled: env.ORF_PUSH_ENABLED,
     };

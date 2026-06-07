@@ -58,6 +58,14 @@ export type RegisterPushDeviceInput = {
   token: string;
 };
 
+export type PushRegistrationStatus = "starting" | "permission_denied" | "registering" | "token_registered" | "registration_error";
+
+export type UpsertPushRegistrationStatusInput = Omit<RegisterPushDeviceInput, "token"> & {
+  detail?: string | null;
+  reason?: string | null;
+  status: PushRegistrationStatus;
+};
+
 export function hashPushToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -117,7 +125,58 @@ export async function registerPushDeviceForUser(teamId: string, userId: string, 
   if (!row) {
     throw new Error("Failed to register push device");
   }
+  await upsertPushRegistrationStatusForUser(teamId, userId, {
+    ...input,
+    status: "token_registered",
+  });
   return toPushDeviceRecord(row);
+}
+
+export async function upsertPushRegistrationStatusForUser(teamId: string, userId: string, input: UpsertPushRegistrationStatusInput) {
+  const now = nowIso();
+  await pool.query(
+    `
+      INSERT INTO push_registration_statuses (
+        team_id, user_id, platform, status, reason, detail, app_version, app_build, device_label,
+        device_manufacturer, device_model, os_version, sdk_int, google_play_services_available, notification_permission,
+        created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
+      ON CONFLICT (team_id, user_id, platform)
+      DO UPDATE SET
+        status = EXCLUDED.status,
+        reason = EXCLUDED.reason,
+        detail = EXCLUDED.detail,
+        app_version = EXCLUDED.app_version,
+        app_build = EXCLUDED.app_build,
+        device_label = EXCLUDED.device_label,
+        device_manufacturer = EXCLUDED.device_manufacturer,
+        device_model = EXCLUDED.device_model,
+        os_version = EXCLUDED.os_version,
+        sdk_int = EXCLUDED.sdk_int,
+        google_play_services_available = EXCLUDED.google_play_services_available,
+        notification_permission = EXCLUDED.notification_permission,
+        updated_at = EXCLUDED.updated_at
+    `,
+    [
+      teamId,
+      userId,
+      input.platform,
+      input.status,
+      cleanOptionalText(input.reason, 80),
+      cleanOptionalText(input.detail, 200),
+      cleanOptionalText(input.appVersion, 64),
+      cleanOptionalText(input.appBuild, 64),
+      cleanOptionalText(input.deviceLabel, 120),
+      cleanOptionalText(input.deviceManufacturer, 80),
+      cleanOptionalText(input.deviceModel, 120),
+      cleanOptionalText(input.osVersion, 80),
+      cleanOptionalInteger(input.sdkInt),
+      typeof input.googlePlayServicesAvailable === "boolean" ? input.googlePlayServicesAvailable : null,
+      cleanOptionalText(input.notificationPermission, 32),
+      now,
+    ],
+  );
 }
 
 export async function revokePushDeviceForUser(teamId: string, userId: string, input: { platform: PushPlatform; token: string }) {

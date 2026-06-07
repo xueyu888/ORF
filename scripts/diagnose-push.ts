@@ -21,7 +21,7 @@ type CliArgs = {
 };
 
 type PushTableCheckRow = {
-  push_devices_table: string | null;
+  table_name: string | null;
 };
 
 type ColumnNameRow = {
@@ -50,6 +50,33 @@ type DeviceSampleRow = {
   platform: string;
   revoked_at: string | null;
   sdk_int: number | null;
+  team_id: string;
+  updated_at: string;
+  user_email: string | null;
+  user_id: string;
+  user_name: string;
+};
+
+type RegistrationStatusCountRow = {
+  count: string;
+  platform: string;
+  status: string;
+};
+
+type RegistrationStatusSampleRow = {
+  app_build: string | null;
+  app_version: string | null;
+  detail: string | null;
+  device_label: string | null;
+  device_manufacturer: string | null;
+  device_model: string | null;
+  google_play_services_available: boolean | null;
+  notification_permission: string | null;
+  os_version: string | null;
+  platform: string;
+  reason: string | null;
+  sdk_int: number | null;
+  status: string;
   team_id: string;
   updated_at: string;
   user_email: string | null;
@@ -175,8 +202,12 @@ function printConfig() {
 }
 
 async function tableExists(pool: pg.Pool) {
-  const result = await pool.query<PushTableCheckRow>("SELECT to_regclass('push_devices')::text AS push_devices_table");
-  return Boolean(result.rows[0]?.push_devices_table);
+  return namedTableExists(pool, "push_devices");
+}
+
+async function namedTableExists(pool: pg.Pool, tableName: string) {
+  const result = await pool.query<PushTableCheckRow>("SELECT to_regclass($1)::text AS table_name", [tableName]);
+  return Boolean(result.rows[0]?.table_name);
 }
 
 async function printDeviceState(pool: pg.Pool) {
@@ -259,6 +290,83 @@ async function printDeviceState(pool: pg.Pool) {
   return true;
 }
 
+async function printRegistrationStatusState(pool: pg.Pool) {
+  const exists = await namedTableExists(pool, "push_registration_statuses");
+  console.log("== ORF Push 注册状态 ==");
+  console.log(`push_registration_statuses 表: ${exists ? "存在" : "缺失"}`);
+  if (!exists) {
+    console.log("建议先运行 npm run db:migrate。");
+    console.log("");
+    return;
+  }
+
+  const counts = await pool.query<RegistrationStatusCountRow>(
+    `
+      SELECT platform, status, count(*)::text AS count
+      FROM push_registration_statuses
+      GROUP BY platform, status
+      ORDER BY platform, status
+    `,
+  );
+  if (counts.rows.length === 0) {
+    console.log("已上报注册状态: 0");
+  } else {
+    for (const row of counts.rows) {
+      console.log(`${row.platform} / ${row.status}: ${row.count}`);
+    }
+  }
+
+  const samples = await pool.query<RegistrationStatusSampleRow>(
+    `
+      SELECT
+        s.team_id,
+        s.user_id::text,
+        u.name AS user_name,
+        u.email AS user_email,
+        s.platform,
+        s.status,
+        s.reason,
+        s.detail,
+        s.app_version,
+        s.app_build,
+        s.device_label,
+        s.device_manufacturer,
+        s.device_model,
+        s.os_version,
+        s.sdk_int,
+        s.google_play_services_available,
+        s.notification_permission,
+        s.updated_at::text
+      FROM push_registration_statuses s
+      LEFT JOIN users u ON u.id = s.user_id
+      ORDER BY s.updated_at DESC
+      LIMIT 20
+    `,
+  );
+  if (samples.rows.length > 0) {
+    console.log("最近注册状态样本（不含 token）:");
+    for (const row of samples.rows) {
+      console.log(
+        [
+          `- ${row.user_name}`,
+          row.user_email ? `<${row.user_email}>` : "",
+          `team=${row.team_id}`,
+          `platform=${row.platform}`,
+          `status=${row.status}`,
+          row.reason ? `reason=${row.reason}` : "",
+          row.detail ? `detail=${row.detail}` : "",
+          `version=${row.app_version ?? "unknown"}`,
+          `device=${registrationDeviceSummary(row)}`,
+          `gms=${gmsSummary(row.google_play_services_available)}`,
+          `notification=${row.notification_permission ?? "unknown"}`,
+          `updated=${row.updated_at}`,
+        ].filter(Boolean).join(" "),
+      );
+    }
+  }
+  console.log("");
+}
+
 async function pushDeviceColumns(pool: pg.Pool) {
   const result = await pool.query<ColumnNameRow>(
     `
@@ -286,6 +394,13 @@ function gmsSummary(value: boolean | null) {
   if (value === true) return "available";
   if (value === false) return "unavailable";
   return "unknown";
+}
+
+function registrationDeviceSummary(row: RegistrationStatusSampleRow) {
+  const parts = [row.device_manufacturer, row.device_model, row.os_version ? `Android ${row.os_version}` : null, row.sdk_int ? `SDK ${row.sdk_int}` : null]
+    .map((item) => item?.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? parts.join("/") : row.device_label ?? "unknown";
 }
 
 async function loadTestDevices(pool: pg.Pool, args: CliArgs) {
@@ -383,6 +498,7 @@ async function main() {
   const pool = new Pool(createPgPoolConfig(env.DATABASE_URL));
   try {
     const hasPushTable = await printDeviceState(pool);
+    await printRegistrationStatusState(pool);
     if (args.sendTest) {
       if (!hasPushTable) throw new Error("push_devices 表不存在，不能发送测试 Push。");
       await sendTestPush(pool, args);

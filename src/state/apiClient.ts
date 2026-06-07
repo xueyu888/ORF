@@ -58,6 +58,11 @@ export type PushDeviceRegistrationInput = {
   sdkInt?: number | null;
   token: string;
 };
+export type PushRegistrationStatusInput = Omit<PushDeviceRegistrationInput, "token"> & {
+  detail?: string | null;
+  reason?: string | null;
+  status: "starting" | "permission_denied" | "registering" | "token_registered" | "registration_error";
+};
 export type PushDeviceRegistrationResponse = {
   deviceId: string;
   ok: true;
@@ -230,6 +235,13 @@ export async function getClientUpdateRelease(version: string, signal?: AbortSign
 
 export async function registerPushDeviceRequest(input: PushDeviceRegistrationInput) {
   return apiJson<PushDeviceRegistrationResponse>("/api/push/devices", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function reportPushRegistrationStatusRequest(input: PushRegistrationStatusInput) {
+  return apiJson<{ ok: true; pushEnabled: boolean }>("/api/push/registration-status", {
     method: "POST",
     body: JSON.stringify(input),
   });

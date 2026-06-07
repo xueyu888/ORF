@@ -309,6 +309,37 @@ export const pushDevices = pgTable(
   }),
 );
 
+export const pushRegistrationStatuses = pgTable(
+  "push_registration_statuses",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    status: text("status").notNull(),
+    reason: text("reason"),
+    detail: text("detail"),
+    appVersion: text("app_version"),
+    appBuild: text("app_build"),
+    deviceLabel: text("device_label"),
+    deviceManufacturer: text("device_manufacturer"),
+    deviceModel: text("device_model"),
+    osVersion: text("os_version"),
+    sdkInt: integer("sdk_int"),
+    googlePlayServicesAvailable: boolean("google_play_services_available"),
+    notificationPermission: text("notification_permission"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.userId, table.platform] }),
+    teamUpdated: index("push_registration_statuses_team_updated_idx").on(table.teamId, table.updatedAt),
+  }),
+);
+
 export const results = pgTable("results", {
   id: text("id").primaryKey(),
   teamId: text("team_id")

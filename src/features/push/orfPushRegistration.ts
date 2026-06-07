@@ -1,8 +1,8 @@
 import { Capacitor } from "@capacitor/core";
-import { PushNotifications, type ActionPerformed, type Token } from "@capacitor/push-notifications";
+import { PushNotifications, type ActionPerformed, type RegistrationError, type Token } from "@capacitor/push-notifications";
 import { orfClientCurrentVersion } from "../client-updates/clientUpdateConfig";
 import { detectAndroidNativeRuntimeInfo, detectClientUpdateRuntimeInfo, type NativeRuntimeInfo } from "../client-updates/clientUpdateRuntime";
-import { registerPushDeviceRequest, revokePushDeviceRequest } from "../../state/apiClient";
+import { registerPushDeviceRequest, reportPushRegistrationStatusRequest, revokePushDeviceRequest, type PushRegistrationStatusInput } from "../../state/apiClient";
 
 type PushOpenHandler = (targetPath: string) => void;
 
@@ -38,6 +38,7 @@ export async function registerOrfPushNotifications(onOpenTarget: PushOpenHandler
   openHandler = onOpenTarget;
   await ensurePushListeners();
   await ensureAndroidPushChannels();
+  await reportAndroidPushRegistrationStatus({ status: "starting" });
 
   const cachedToken = readCachedAndroidPushToken();
   if (cachedToken) {
@@ -49,10 +50,24 @@ export async function registerOrfPushNotifications(onOpenTarget: PushOpenHandler
     permission = await PushNotifications.requestPermissions();
   }
   if (permission.receive !== "granted") {
+    await reportAndroidPushRegistrationStatus({
+      detail: `receive=${permission.receive}`,
+      reason: "notification_permission_denied",
+      status: "permission_denied",
+    });
     return;
   }
 
-  await PushNotifications.register();
+  await reportAndroidPushRegistrationStatus({ status: "registering" });
+  try {
+    await PushNotifications.register();
+  } catch (error) {
+    await reportAndroidPushRegistrationStatus({
+      detail: errorMessage(error),
+      reason: "register_call_failed",
+      status: "registration_error",
+    });
+  }
 }
 
 export async function revokeOrfPushNotifications() {
@@ -69,7 +84,7 @@ async function ensurePushListeners() {
   if (listenersPromise) return listenersPromise;
   listenersPromise = Promise.all([
     PushNotifications.addListener("registration", handleRegistration),
-    PushNotifications.addListener("registrationError", () => undefined),
+    PushNotifications.addListener("registrationError", handleRegistrationError),
     PushNotifications.addListener("pushNotificationActionPerformed", handleNotificationAction),
   ]).then(() => undefined);
   return listenersPromise;
@@ -79,7 +94,21 @@ async function handleRegistration(token: Token) {
   const value = token.value.trim();
   if (!value) return;
   window.localStorage.setItem(cachedAndroidPushTokenKey, value);
-  await registerAndroidPushToken(value);
+  await registerAndroidPushToken(value).catch((error: unknown) =>
+    reportAndroidPushRegistrationStatus({
+      detail: errorMessage(error),
+      reason: "server_token_register_failed",
+      status: "registration_error",
+    }),
+  );
+}
+
+function handleRegistrationError(error: RegistrationError) {
+  void reportAndroidPushRegistrationStatus({
+    detail: cleanNativeText(error.error),
+    reason: "fcm_registration_error",
+    status: "registration_error",
+  });
 }
 
 function handleNotificationAction(action: ActionPerformed) {
@@ -90,9 +119,29 @@ function handleNotificationAction(action: ActionPerformed) {
 }
 
 async function registerAndroidPushToken(token: string) {
-  const runtime = await detectClientUpdateRuntimeInfo(orfClientCurrentVersion);
-  const nativeInfo = await detectAndroidNativeRuntimeInfo();
+  const baseInput = await androidPushRegistrationBaseInput();
   await registerPushDeviceRequest({
+    ...baseInput,
+    token,
+  });
+}
+
+async function reportAndroidPushRegistrationStatus(input: Pick<PushRegistrationStatusInput, "detail" | "reason" | "status">) {
+  const baseInput = await androidPushRegistrationBaseInput();
+  await reportPushRegistrationStatusRequest({
+    ...baseInput,
+    detail: input.detail,
+    reason: input.reason,
+    status: input.status,
+  }).catch(() => undefined);
+}
+
+async function androidPushRegistrationBaseInput(): Promise<Omit<PushRegistrationStatusInput, "detail" | "reason" | "status">> {
+  const [runtime, nativeInfo] = await Promise.all([
+    detectClientUpdateRuntimeInfo(orfClientCurrentVersion),
+    detectAndroidNativeRuntimeInfo(),
+  ]);
+  return {
     appBuild: nativeInfo?.versionCode ? String(nativeInfo.versionCode) : null,
     appVersion: runtime.currentVersion || orfClientCurrentVersion,
     deviceLabel: androidDeviceLabel(nativeInfo),
@@ -103,8 +152,7 @@ async function registerAndroidPushToken(token: string) {
     osVersion: cleanNativeText(nativeInfo?.osVersion),
     platform: "android",
     sdkInt: typeof nativeInfo?.sdkInt === "number" ? nativeInfo.sdkInt : null,
-    token,
-  });
+  };
 }
 
 async function ensureAndroidPushChannels() {
@@ -125,6 +173,10 @@ function androidDeviceLabel(nativeInfo: NativeRuntimeInfo | null) {
 
 function cleanNativeText(value: string | null | undefined) {
   return value?.trim() || null;
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function notificationTargetPath(data: unknown) {
