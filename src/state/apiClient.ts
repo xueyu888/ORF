@@ -18,6 +18,7 @@ import type {
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
+import type { ClientReleaseInfo } from "../features/client-updates/clientUpdateModel";
 export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 export type { BountyHallData, BountyHallItem, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 export type AuthSession = { authenticated: false; user: null } | { authenticated: true; user: OrfUser };
@@ -40,6 +41,9 @@ export type NotificationsReadAllResponse = {
 export type NotificationsDeleteResponse = {
   deleted: number;
   unreadCount: number;
+};
+export type ClientUpdateReleaseResponse = {
+  release: ClientReleaseInfo;
 };
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type CommentAttachmentUploadResponse = {
@@ -196,6 +200,10 @@ export async function getMyChallengesData(scope: MyChallengesScope) {
 
 export async function getNotifications() {
   return apiJson<NotificationsResponse>("/api/notifications");
+}
+
+export async function getLatestClientUpdateRelease(signal?: AbortSignal) {
+  return apiJson<ClientUpdateReleaseResponse>("/api/client-updates/latest", { signal });
 }
 
 export async function markNotificationReadRequest(notificationId: string) {

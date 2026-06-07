@@ -98,6 +98,32 @@ function registerNativeNotificationBridge(clientUrl) {
   });
 }
 
+function isTrustedClientUpdateUrl(value) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      url.hostname === "github.com" &&
+      /^\/xueyu888\/ORF\/releases(?:\/|$)/.test(url.pathname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function registerNativeRuntimeBridge() {
+  ipcMain.handle("orf:runtime:get-info", () => ({
+    platform: process.platform,
+  }));
+  ipcMain.handle("orf:runtime:open-external", async (_event, url) => {
+    if (!isTrustedClientUpdateUrl(url)) {
+      return { status: "error", reason: "untrusted_url" };
+    }
+    await shell.openExternal(url);
+    return { status: "success" };
+  });
+}
+
 app.setName("ORF");
 app.setAppUserModelId("org.duckdns.orfxueyu.orf");
 Menu.setApplicationMenu(null);
@@ -105,6 +131,7 @@ Menu.setApplicationMenu(null);
 app.whenReady().then(() => {
   const clientUrl = resolveClientUrl();
   registerNativeNotificationBridge(clientUrl);
+  registerNativeRuntimeBridge();
   createMainWindow(clientUrl);
 
   app.on("activate", () => {

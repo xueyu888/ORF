@@ -21,6 +21,7 @@ import { registerFeedbackRoutes } from "./routes/feedbackRoutes";
 import { registerOrfResultRoutes } from "./routes/orfResultRoutes";
 import { registerOrfTaskRoutes } from "./routes/orfTaskRoutes";
 import { registerOrfObjectiveRoutes } from "./routes/orfObjectiveRoutes";
+import { registerClientUpdateRoutes } from "./routes/clientUpdateRoutes";
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
@@ -89,6 +90,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerAuthRoutes(app);
 
   registerRealtimeRoutes(app);
+  registerClientUpdateRoutes(app);
   registerNotificationRoutes(app);
   registerCurrentUserAccessRoutes(app);
   registerOrfReadRoutes(app);

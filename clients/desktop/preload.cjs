@@ -13,3 +13,12 @@ contextBridge.exposeInMainWorld("orfNativeNotifications", {
     return () => ipcRenderer.removeListener("orf:chat-notification:open", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("orfNativeRuntime", {
+  getInfo() {
+    return ipcRenderer.invoke("orf:runtime:get-info");
+  },
+  openExternal(url) {
+    return ipcRenderer.invoke("orf:runtime:open-external", url);
+  },
+});
