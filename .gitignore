@@ -7,6 +7,10 @@ dist/
 build/
 coverage/
 release/
+gradle-*-all.zip
+google-services.json
+firebase-service-account*.json
+orf-firebase-service-account*.json
 
 .env
 .env.*

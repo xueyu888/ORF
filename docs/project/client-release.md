@@ -84,16 +84,16 @@ npm run release:clients -- --tag v0.0.1 --watch
 
 ## Android 后台 Push 条件
 
-Android 不运行时收到聊天消息或客户端更新通知，依赖系统 Push 通道。它不是 WebView 本地通知能力，必须至少打通 FCM 或 vivo 系统 Push 中的一条；vivo 手机优先使用 vivo 系统 Push，其他有 Google Play services 的设备使用 FCM。
+Android 不运行时收到聊天消息或客户端更新通知，依赖系统 Push 通道。它不是 WebView 本地通知能力，必须至少打通 FCM 或厂商系统 Push 中的一条。当前优先交付有 Google Play services 的 Android 设备：这类设备走 FCM；vivo 等厂商 Push 只保留为后续可选补充。
 
 - Android 包名 `org.duckdns.orfxueyu.orf` 已加入 Firebase Android app。
-- 需要 FCM 通道时，`android/app/google-services.json` 只在本机或 GitHub Actions 临时注入，仓库必须忽略它。
-- 需要 FCM 通道时，GitHub Actions 配置 `ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64`，用于发布时还原 `google-services.json`；缺失时 Android 包仍可发布，但不会包含 Firebase FCM 配置。
+- 需要 FCM 通道时，`android/app/google-services.json` 只在本机或 GitHub Actions 临时注入，仓库必须忽略它；本地也可以把 `google-services.json` 临时放在仓库根目录，构建脚本会复制到 Android 工程。
+- 需要 FCM 通道时，配置 `ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64` 可在构建时还原 `google-services.json`；缺失时 Android 包仍可发布，但构建脚本会从 Capacitor 生成工程中移除 FCM 原生模块，避免缺 Firebase 配置的 APK 参与启动链。
 - ORF 服务端配置 `ORF_PUSH_ENABLED=true`，并通过 `ORF_FIREBASE_SERVICE_ACCOUNT_PATH`、`ORF_FIREBASE_SERVICE_ACCOUNT_JSON` 或 `GOOGLE_APPLICATION_CREDENTIALS` 提供 Firebase service account。
 - 服务端已执行 `npm run db:migrate`，保证 `push_devices` 表存在。
 - 用户至少打开过包含 Push 注册逻辑的新版本客户端并授权通知；旧版本未注册 FCM token 时，服务端不能向它补发后台 Push。
 
-vivo 系统 Push 只接入 vivo 一家，发布包和服务端还需要：
+厂商系统 Push 暂不作为当前 Google 服务设备的交付条件。后续如果要覆盖无 Google Play services 的 vivo 设备，vivo 系统 Push 只接入 vivo 一家，发布包和服务端还需要：
 
 - vivo 开放平台已创建包名为 `org.duckdns.orfxueyu.orf` 的应用，并启用消息推送。
 - GitHub Actions 配置 `ORF_ANDROID_VIVO_PUSH_AAR_BASE64`，用于发布时把 vivo Push SDK AAR 临时写入 `android/app/libs/orf-vivo-push.aar`。
