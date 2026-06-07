@@ -45,11 +45,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify web build
-        run: npm run build
-
       - name: Build Windows installer
-        run: npm run client:desktop:dist:win
+        shell: pwsh
+        run: |
+          $nodePath = (Get-Command node).Source
+          & $nodePath --version
+          & $nodePath scripts/build-desktop-client.mjs --win nsis --x64
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -90,7 +91,9 @@ jobs:
       - name: Install Android SDK packages
         shell: bash
         run: |
+          set +o pipefail
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          set -o pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Install dependencies
