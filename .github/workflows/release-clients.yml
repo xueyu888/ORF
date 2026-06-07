@@ -1,0 +1,174 @@
+name: Release ORF clients
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish, for example v0.0.1"
+        required: true
+        default: "v0.0.1"
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: "22.22.2"
+  ORF_CLIENT_URL: ${{ vars.ORF_CLIENT_URL || 'https://orf-xueyu.duckdns.org:8443/' }}
+
+jobs:
+  windows-client:
+    name: Build Win11 installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        shell: pwsh
+        run: |
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            "RELEASE_TAG=${{ inputs.release_tag }}" >> $env:GITHUB_ENV
+          } else {
+            "RELEASE_TAG=$env:GITHUB_REF_NAME" >> $env:GITHUB_ENV
+          }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify web build
+        run: npm run build
+
+      - name: Build Windows installer
+        run: npm run client:desktop:dist:win
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orf-win11-installer
+          path: release/desktop/ORF-*-win11-x64-setup.exe
+          if-no-files-found: error
+
+  android-client:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ inputs.release_tag }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Android debug APK
+        run: npm run client:android:assemble:debug
+
+      - name: Collect Android artifact
+        shell: bash
+        run: |
+          mkdir -p release/android
+          cp android/app/build/outputs/apk/debug/app-debug.apk "release/android/ORF-${RELEASE_TAG}-android-preview.apk"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: orf-android-preview-apk
+          path: release/android/ORF-*-android-preview.apk
+          if-no-files-found: error
+
+  github-release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - windows-client
+      - android-client
+
+    steps:
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_TAG=${{ inputs.release_tag }}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write release notes
+        shell: bash
+        run: |
+          cat > release-notes.md <<EOF
+          ORF ${RELEASE_TAG}
+
+          客户端包：
+          - Win11 PC 端：Electron 安装器，打开 ${ORF_CLIENT_URL}
+          - Android 移动端：Capacitor 预览 APK，打开 ${ORF_CLIENT_URL}
+
+          数据和权限来源：
+          - 客户端不保存业务数据。
+          - 聊天、权限、附件、登录态仍以 ORF Web 服务端和数据库为唯一事实源。
+
+          已知边界：
+          - Win11 安装器当前未做代码签名，首次安装时 Windows 可能提示发布者未知。
+          - Android v0.0.1 是内部预览 APK。后续要支持稳定覆盖升级，需要把 Android release keystore 放到 GitHub Secrets，再切换到正式签名构建。
+          EOF
+
+      - name: Publish assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mapfile -t assets < <(find release-assets -type f | sort)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets were produced." >&2
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+            gh release edit "$RELEASE_TAG" --title "ORF $RELEASE_TAG" --notes-file release-notes.md
+          else
+            gh release create "$RELEASE_TAG" "${assets[@]}" --title "ORF $RELEASE_TAG" --notes-file release-notes.md
+          fi
