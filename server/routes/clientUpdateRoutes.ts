@@ -1,11 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { isClientReleaseVersion, normalizeReleaseVersion, toClientReleaseTag } from "../../src/features/client-updates/clientUpdateModel";
+import {
+  compareReleaseVersions,
+  isClientReleaseVersion,
+  normalizeReleaseVersion,
+  selectClientUpdateAsset,
+  toClientReleaseTag,
+} from "../../src/features/client-updates/clientUpdateModel";
 
 const githubRepository = process.env.ORF_CLIENT_UPDATE_GITHUB_REPOSITORY ?? process.env.GITHUB_REPOSITORY_FULL_NAME ?? "xueyu888/ORF";
 const githubApiUrl = process.env.ORF_CLIENT_UPDATE_GITHUB_API_URL ?? process.env.GITHUB_API_URL ?? "https://api.github.com";
 const githubToken = process.env.ORF_CLIENT_UPDATE_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
-const clientUpdateCacheMs = 5 * 60 * 1000;
+const clientUpdateCacheMs = 60 * 1000;
 
 type ClientUpdateReleaseResponse = {
   release: {
@@ -99,14 +105,18 @@ async function getCachedClientReleaseByVersion(version: string) {
 }
 
 async function fetchLatestClientRelease(): Promise<ClientUpdateReleaseResponse> {
-  const response = await fetch(`${trimSlash(githubApiUrl)}/repos/${githubRepository}/releases/latest`, {
+  const response = await fetch(`${trimSlash(githubApiUrl)}/repos/${githubRepository}/releases?per_page=100`, {
     headers: githubApiHeaders(),
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) {
     throw new Error(`GitHub release API returned ${response.status}`);
   }
-  return { release: toClientUpdateRelease(await response.json() as GitHubRelease) };
+  const release = selectLatestClientRelease(await response.json() as GitHubRelease[]);
+  if (!release) {
+    throw new Error("No published client release found");
+  }
+  return { release };
 }
 
 async function fetchClientReleaseByVersion(version: string): Promise<ClientUpdateReleaseResponse> {
@@ -153,6 +163,39 @@ function toClientUpdateRelease(release: GitHubRelease): ClientUpdateReleaseRespo
     tagName,
     version: normalizeReleaseVersion(tagName),
   };
+}
+
+function selectLatestClientRelease(releases: GitHubRelease[]) {
+  return releases
+    .filter(isPublishedClientRelease)
+    .map(toClientUpdateRelease)
+    .sort(compareClientReleaseInfoDesc)[0] ?? null;
+}
+
+function isPublishedClientRelease(release: GitHubRelease) {
+  const tagName = release.tag_name ?? "";
+  if (release.draft || release.prerelease || !isClientReleaseVersion(tagName)) {
+    return false;
+  }
+  const clientRelease = toClientUpdateRelease(release);
+  return Boolean(
+    selectClientUpdateAsset(clientRelease.assets, "android") ||
+    selectClientUpdateAsset(clientRelease.assets, "desktop-windows"),
+  );
+}
+
+function compareClientReleaseInfoDesc(
+  left: ClientUpdateReleaseResponse["release"],
+  right: ClientUpdateReleaseResponse["release"],
+) {
+  const versionOrder = compareReleaseVersions(right.version, left.version);
+  if (versionOrder !== 0) return versionOrder;
+  return releasePublishedAtMs(right) - releasePublishedAtMs(left);
+}
+
+function releasePublishedAtMs(release: ClientUpdateReleaseResponse["release"]) {
+  const timestamp = Date.parse(release.publishedAt ?? "");
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
 function trimSlash(value: string) {
