@@ -7,11 +7,14 @@ export type NativeRuntimeInfo = {
   deviceModel?: string | null;
   googlePlayServicesAvailable?: boolean | null;
   notificationPermission?: string | null;
-  osVersion?: string | null;
-  platform?: string;
-  sdkInt?: number | null;
-  version?: string | null;
-  versionCode?: number | null;
+    osVersion?: string | null;
+    platform?: string;
+    sdkInt?: number | null;
+    vivoPushReason?: string | null;
+    vivoPushRegId?: string | null;
+    vivoPushSupported?: boolean | null;
+    version?: string | null;
+    versionCode?: number | null;
 };
 
 export type ClientUpdateRuntimeInfo = {

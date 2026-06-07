@@ -2,11 +2,21 @@ import { Capacitor } from "@capacitor/core";
 import { PushNotifications, type ActionPerformed, type RegistrationError, type Token } from "@capacitor/push-notifications";
 import { orfClientCurrentVersion } from "../client-updates/clientUpdateConfig";
 import { detectAndroidNativeRuntimeInfo, detectClientUpdateRuntimeInfo, type NativeRuntimeInfo } from "../client-updates/clientUpdateRuntime";
-import { registerPushDeviceRequest, reportPushRegistrationStatusRequest, revokePushDeviceRequest, type PushRegistrationStatusInput } from "../../state/apiClient";
+import {
+  registerPushDeviceRequest,
+  registerPushVendorDeviceRequest,
+  reportPushRegistrationStatusRequest,
+  reportPushVendorRegistrationStatusRequest,
+  revokePushDeviceRequest,
+  revokePushVendorDeviceRequest,
+  type PushRegistrationStatusInput,
+  type PushVendorRegistrationStatusInput,
+} from "../../state/apiClient";
 
 type PushOpenHandler = (targetPath: string) => void;
 
 const cachedAndroidPushTokenKey = "orf.android.pushToken";
+const cachedAndroidVivoPushRegIdKey = "orf.android.vivoPushRegId";
 const pushChannels = [
   {
     id: "orf-chat-messages",
@@ -39,6 +49,7 @@ export async function registerOrfPushNotifications(onOpenTarget: PushOpenHandler
   await ensurePushListeners();
   await ensureAndroidPushChannels();
   await reportAndroidPushRegistrationStatus({ status: "starting" });
+  await reportAndroidVivoPushRegistrationStatus({ status: "starting" });
 
   const cachedToken = readCachedAndroidPushToken();
   if (cachedToken) {
@@ -58,6 +69,13 @@ export async function registerOrfPushNotifications(onOpenTarget: PushOpenHandler
     return;
   }
 
+  await registerCurrentAndroidVendorPushDevice().catch((error: unknown) =>
+    reportAndroidVivoPushRegistrationStatus({
+      detail: errorMessage(error),
+      reason: "vendor_push_register_failed",
+      status: "registration_error",
+    }),
+  );
   await reportAndroidPushRegistrationStatus({ status: "registering" });
   try {
     await PushNotifications.register();
@@ -76,6 +94,11 @@ export async function revokeOrfPushNotifications() {
   if (token) {
     await revokePushDeviceRequest({ platform: "android", token }).catch(() => undefined);
     window.localStorage.removeItem(cachedAndroidPushTokenKey);
+  }
+  const vivoRegId = readCachedAndroidVivoPushRegId();
+  if (vivoRegId) {
+    await revokePushVendorDeviceRequest({ platform: "android", token: vivoRegId, vendor: "vivo" }).catch(() => undefined);
+    window.localStorage.removeItem(cachedAndroidVivoPushRegIdKey);
   }
   await PushNotifications.unregister().catch(() => undefined);
 }
@@ -126,6 +149,41 @@ async function registerAndroidPushToken(token: string) {
   });
 }
 
+async function registerCurrentAndroidVendorPushDevice() {
+  const nativeInfo = await detectAndroidNativeRuntimeInfo();
+  const cachedVivoRegId = readCachedAndroidVivoPushRegId();
+  const vivoRegId = cleanNativeText(nativeInfo?.vivoPushRegId) ?? cachedVivoRegId;
+  if (!vivoRegId) {
+    if (nativeInfo?.vivoPushReason && nativeInfo.vivoPushReason !== "non_vivo_device") {
+      await reportAndroidVivoPushRegistrationStatus({
+        detail: cleanNativeText(nativeInfo.vivoPushReason),
+        reason: "vendor_push_unavailable",
+        status: "unavailable",
+      });
+    } else if (nativeInfo?.vivoPushReason === "non_vivo_device") {
+      await reportAndroidVivoPushRegistrationStatus({
+        detail: "non_vivo_device",
+        reason: "non_vivo_device",
+        status: "unavailable",
+      });
+    }
+    return;
+  }
+
+  await reportAndroidVivoPushRegistrationStatus({ status: "registering" });
+  await registerAndroidVivoPushToken(vivoRegId);
+  window.localStorage.setItem(cachedAndroidVivoPushRegIdKey, vivoRegId);
+}
+
+async function registerAndroidVivoPushToken(token: string) {
+  const { googlePlayServicesAvailable: _googlePlayServicesAvailable, ...baseInput } = await androidPushRegistrationBaseInput();
+  await registerPushVendorDeviceRequest({
+    ...baseInput,
+    token,
+    vendor: "vivo",
+  });
+}
+
 async function reportAndroidPushRegistrationStatus(input: Pick<PushRegistrationStatusInput, "detail" | "reason" | "status">) {
   const baseInput = await androidPushRegistrationBaseInput();
   await reportPushRegistrationStatusRequest({
@@ -133,6 +191,17 @@ async function reportAndroidPushRegistrationStatus(input: Pick<PushRegistrationS
     detail: input.detail,
     reason: input.reason,
     status: input.status,
+  }).catch(() => undefined);
+}
+
+async function reportAndroidVivoPushRegistrationStatus(input: Pick<PushVendorRegistrationStatusInput, "detail" | "reason" | "status">) {
+  const { googlePlayServicesAvailable: _googlePlayServicesAvailable, ...baseInput } = await androidPushRegistrationBaseInput();
+  await reportPushVendorRegistrationStatusRequest({
+    ...baseInput,
+    detail: input.detail,
+    reason: input.reason,
+    status: input.status,
+    vendor: "vivo",
   }).catch(() => undefined);
 }
 
@@ -162,6 +231,11 @@ async function ensureAndroidPushChannels() {
 function readCachedAndroidPushToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(cachedAndroidPushTokenKey)?.trim() || null;
+}
+
+function readCachedAndroidVivoPushRegId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(cachedAndroidVivoPushRegIdKey)?.trim() || null;
 }
 
 function androidDeviceLabel(nativeInfo: NativeRuntimeInfo | null) {

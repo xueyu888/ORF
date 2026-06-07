@@ -58,6 +58,14 @@ export type PushDeviceRegistrationInput = {
   sdkInt?: number | null;
   token: string;
 };
+export type PushVendorDeviceRegistrationInput = Omit<PushDeviceRegistrationInput, "googlePlayServicesAvailable"> & {
+  vendor: "vivo";
+};
+export type PushVendorRegistrationStatusInput = Omit<PushVendorDeviceRegistrationInput, "token"> & {
+  detail?: string | null;
+  reason?: string | null;
+  status: "starting" | "unavailable" | "registering" | "token_registered" | "registration_error";
+};
 export type PushRegistrationStatusInput = Omit<PushDeviceRegistrationInput, "token"> & {
   detail?: string | null;
   reason?: string | null;
@@ -240,6 +248,20 @@ export async function registerPushDeviceRequest(input: PushDeviceRegistrationInp
   });
 }
 
+export async function registerPushVendorDeviceRequest(input: PushVendorDeviceRegistrationInput) {
+  return apiJson<PushDeviceRegistrationResponse>("/api/push/vendor-devices", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function reportPushVendorRegistrationStatusRequest(input: PushVendorRegistrationStatusInput) {
+  return apiJson<{ ok: true; pushEnabled: boolean }>("/api/push/vendor-registration-status", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function reportPushRegistrationStatusRequest(input: PushRegistrationStatusInput) {
   return apiJson<{ ok: true; pushEnabled: boolean }>("/api/push/registration-status", {
     method: "POST",
@@ -249,6 +271,13 @@ export async function reportPushRegistrationStatusRequest(input: PushRegistratio
 
 export async function revokePushDeviceRequest(input: Pick<PushDeviceRegistrationInput, "platform" | "token">) {
   return apiJson<{ revoked: number }>("/api/push/devices/revoke", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function revokePushVendorDeviceRequest(input: Pick<PushVendorDeviceRegistrationInput, "platform" | "token" | "vendor">) {
+  return apiJson<{ revoked: number }>("/api/push/vendor-devices/revoke", {
     method: "POST",
     body: JSON.stringify(input),
   });

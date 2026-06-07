@@ -16,6 +16,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Locale;
@@ -32,6 +33,7 @@ public class ClientUpdatePlugin extends Plugin {
         result.put("sdkInt", Build.VERSION.SDK_INT);
         result.put("googlePlayServicesAvailable", isGooglePlayServicesAvailable());
         result.put("notificationPermission", notificationPermissionState());
+        appendVivoPushInfo(result);
         try {
             PackageInfo packageInfo = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
             result.put("version", packageInfo.versionName);
@@ -67,6 +69,55 @@ public class ClientUpdatePlugin extends Plugin {
             return "denied";
         }
         return "granted";
+    }
+
+    private void appendVivoPushInfo(JSObject result) {
+        if (!Build.MANUFACTURER.toLowerCase(Locale.ROOT).contains("vivo")) {
+            result.put("vivoPushSupported", false);
+            result.put("vivoPushRegId", null);
+            result.put("vivoPushReason", "non_vivo_device");
+            return;
+        }
+
+        try {
+            Class<?> pushClientClass = Class.forName("com.vivo.push.PushClient");
+            Object pushClient = pushClientClass
+                .getMethod("getInstance", android.content.Context.class)
+                .invoke(null, getContext());
+            boolean supported = readVivoPushSupported(pushClientClass, pushClient);
+            String regId = readVivoPushRegId(pushClientClass, pushClient);
+            result.put("vivoPushSupported", supported);
+            result.put("vivoPushRegId", cleanText(regId));
+            result.put("vivoPushReason", cleanText(regId) == null ? "reg_id_unavailable" : null);
+        } catch (ClassNotFoundException error) {
+            result.put("vivoPushSupported", false);
+            result.put("vivoPushRegId", null);
+            result.put("vivoPushReason", "vivo_sdk_missing");
+        } catch (Exception error) {
+            result.put("vivoPushSupported", false);
+            result.put("vivoPushRegId", null);
+            result.put("vivoPushReason", "vivo_probe_failed");
+        }
+    }
+
+    private boolean readVivoPushSupported(Class<?> pushClientClass, Object pushClient) {
+        try {
+            Method method = pushClientClass.getMethod("isSupport");
+            Object value = method.invoke(pushClient);
+            return value instanceof Boolean && (Boolean) value;
+        } catch (Exception ignored) {
+            return true;
+        }
+    }
+
+    private String readVivoPushRegId(Class<?> pushClientClass, Object pushClient) {
+        try {
+            Method method = pushClientClass.getMethod("getRegId");
+            Object value = method.invoke(pushClient);
+            return value instanceof String ? (String) value : null;
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 
     @PluginMethod
@@ -196,6 +247,14 @@ public class ClientUpdatePlugin extends Plugin {
             name = name + ".apk";
         }
         return name;
+    }
+
+    private String cleanText(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private void resolve(PluginCall call, String status, String reason, String data) {

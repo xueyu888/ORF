@@ -4,6 +4,8 @@ def orfAndroidKeystorePath = System.getenv("ORF_ANDROID_KEYSTORE_PATH")
 def orfAndroidKeystorePassword = System.getenv("ORF_ANDROID_KEYSTORE_PASSWORD")
 def orfAndroidKeyAlias = System.getenv("ORF_ANDROID_KEY_ALIAS")
 def orfAndroidKeyPassword = System.getenv("ORF_ANDROID_KEY_PASSWORD")
+def orfAndroidVivoPushAppId = System.getenv("ORF_ANDROID_VIVO_PUSH_APP_ID") ?: ""
+def orfAndroidVivoPushAppKey = System.getenv("ORF_ANDROID_VIVO_PUSH_APP_KEY") ?: ""
 def hasOrfAndroidReleaseSigning = [
     orfAndroidKeystorePath,
     orfAndroidKeystorePassword,
@@ -20,6 +22,10 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 5
         versionName "0.0.5"
+        manifestPlaceholders = [
+            VIVO_PUSH_APP_ID: orfAndroidVivoPushAppId,
+            VIVO_PUSH_APP_KEY: orfAndroidVivoPushAppKey
+        ]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

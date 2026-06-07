@@ -340,6 +340,72 @@ export const pushRegistrationStatuses = pgTable(
   }),
 );
 
+export const pushVendorDevices = pgTable(
+  "push_vendor_devices",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    vendor: text("vendor").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    token: text("token").notNull(),
+    appVersion: text("app_version"),
+    appBuild: text("app_build"),
+    deviceLabel: text("device_label"),
+    deviceManufacturer: text("device_manufacturer"),
+    deviceModel: text("device_model"),
+    osVersion: text("os_version"),
+    sdkInt: integer("sdk_int"),
+    notificationPermission: text("notification_permission"),
+    enabled: boolean("enabled").notNull().default(true),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+    lastSeenAt: timestamp("last_seen_at", { mode: "string", withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { mode: "string", withTimezone: true }),
+  },
+  (table) => ({
+    teamUser: index("push_vendor_devices_team_user_idx").on(table.teamId, table.userId, table.vendor, table.enabled),
+    tokenUnique: uniqueIndex("push_vendor_devices_team_vendor_platform_token_unique").on(table.teamId, table.vendor, table.platform, table.tokenHash),
+    updated: index("push_vendor_devices_updated_idx").on(table.updatedAt),
+  }),
+);
+
+export const pushVendorRegistrationStatuses = pgTable(
+  "push_vendor_registration_statuses",
+  {
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    vendor: text("vendor").notNull(),
+    status: text("status").notNull(),
+    reason: text("reason"),
+    detail: text("detail"),
+    appVersion: text("app_version"),
+    appBuild: text("app_build"),
+    deviceLabel: text("device_label"),
+    deviceManufacturer: text("device_manufacturer"),
+    deviceModel: text("device_model"),
+    osVersion: text("os_version"),
+    sdkInt: integer("sdk_int"),
+    notificationPermission: text("notification_permission"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.teamId, table.userId, table.platform, table.vendor] }),
+    teamUpdated: index("push_vendor_registration_statuses_team_updated_idx").on(table.teamId, table.updatedAt),
+  }),
+);
+
 export const results = pgTable("results", {
   id: text("id").primaryKey(),
   teamId: text("team_id")

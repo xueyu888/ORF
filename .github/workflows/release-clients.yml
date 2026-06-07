@@ -112,6 +112,25 @@ jobs:
           fi
           printf '%s' "$ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64" | base64 -d > android/app/google-services.json
 
+      - name: Prepare vivo Android Push SDK
+        shell: bash
+        env:
+          ORF_ANDROID_VIVO_PUSH_AAR_BASE64: ${{ secrets.ORF_ANDROID_VIVO_PUSH_AAR_BASE64 }}
+          ORF_ANDROID_VIVO_PUSH_APP_ID: ${{ secrets.ORF_ANDROID_VIVO_PUSH_APP_ID }}
+          ORF_ANDROID_VIVO_PUSH_APP_KEY: ${{ secrets.ORF_ANDROID_VIVO_PUSH_APP_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ORF_ANDROID_VIVO_PUSH_AAR_BASE64:-}" ]; then
+            mkdir -p android/app/libs
+            printf '%s' "$ORF_ANDROID_VIVO_PUSH_AAR_BASE64" | base64 -d > android/app/libs/orf-vivo-push.aar
+          else
+            echo "ORF_ANDROID_VIVO_PUSH_AAR_BASE64 is not set. Android APK will not include vivo Push SDK." >&2
+          fi
+          {
+            echo "ORF_ANDROID_VIVO_PUSH_APP_ID=$ORF_ANDROID_VIVO_PUSH_APP_ID"
+            echo "ORF_ANDROID_VIVO_PUSH_APP_KEY=$ORF_ANDROID_VIVO_PUSH_APP_KEY"
+          } >> "$GITHUB_ENV"
+
       - name: Prepare Android release signing
         shell: bash
         env:
