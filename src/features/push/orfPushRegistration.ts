@@ -1,11 +1,20 @@
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { LocalNotifications } from "@capacitor/local-notifications";
+import {
+  PushNotifications,
+  type ActionPerformed,
+  type PushNotificationSchema,
+  type RegistrationError,
+  type Token,
+} from "@capacitor/push-notifications";
 import { orfClientCurrentVersion } from "../client-updates/clientUpdateConfig";
 import { detectAndroidNativeRuntimeInfo, detectClientUpdateRuntimeInfo, type NativeRuntimeInfo } from "../client-updates/clientUpdateRuntime";
 import {
+  registerPushDeviceRequest,
   registerPushVendorDeviceRequest,
   reportPushRegistrationStatusRequest,
   reportPushVendorRegistrationStatusRequest,
+  revokePushDeviceRequest,
   revokePushVendorDeviceRequest,
   type PushRegistrationStatusInput,
   type PushVendorRegistrationStatusInput,
@@ -13,6 +22,7 @@ import {
 
 type PushOpenHandler = (targetPath: string) => void;
 
+const cachedAndroidFcmPushTokenKey = "orf.android.fcmPushToken";
 const cachedAndroidVivoPushRegIdKey = "orf.android.vivoPushRegId";
 const pushChannels = [
   {
@@ -37,15 +47,14 @@ const pushChannels = [
   },
 ];
 
-export async function registerOrfPushNotifications(_onOpenTarget: PushOpenHandler) {
+let androidFcmListenersReady: Promise<void> | null = null;
+let androidFcmOpenHandler: PushOpenHandler | null = null;
+
+export async function registerOrfPushNotifications(onOpenTarget: PushOpenHandler) {
   if (!isAndroidNativeRuntime()) return;
   await ensureAndroidPushChannels();
-  await reportAndroidPushRegistrationStatus({
-    detail: "FCM client plugin is not packaged in this Android build.",
-    reason: "fcm_not_packaged",
-    status: "unavailable",
-  });
-  await reportAndroidVivoPushRegistrationStatus({ status: "starting" });
+  await reportAndroidPushRegistrationStatus({ status: "starting" });
+  androidFcmOpenHandler = onOpenTarget;
 
   let permission = await readAndroidNotificationPermission();
   if (permission !== "granted") {
@@ -65,6 +74,14 @@ export async function registerOrfPushNotifications(_onOpenTarget: PushOpenHandle
     return;
   }
 
+  await registerCurrentAndroidFcmPushDevice().catch((error: unknown) =>
+    reportAndroidPushRegistrationStatus({
+      detail: errorMessage(error),
+      reason: "fcm_register_failed",
+      status: "registration_error",
+    }),
+  );
+  await reportAndroidVivoPushRegistrationStatus({ status: "starting" });
   await registerCurrentAndroidVendorPushDevice().catch((error: unknown) =>
     reportAndroidVivoPushRegistrationStatus({
       detail: errorMessage(error),
@@ -76,11 +93,112 @@ export async function registerOrfPushNotifications(_onOpenTarget: PushOpenHandle
 
 export async function revokeOrfPushNotifications() {
   if (!isAndroidNativeRuntime()) return;
+  const fcmToken = readCachedAndroidFcmPushToken();
+  if (fcmToken) {
+    await revokePushDeviceRequest({ platform: "android", token: fcmToken }).catch(() => undefined);
+    window.localStorage.removeItem(cachedAndroidFcmPushTokenKey);
+  }
+  await PushNotifications.unregister().catch(() => undefined);
+
   const vivoRegId = readCachedAndroidVivoPushRegId();
   if (vivoRegId) {
     await revokePushVendorDeviceRequest({ platform: "android", token: vivoRegId, vendor: "vivo" }).catch(() => undefined);
     window.localStorage.removeItem(cachedAndroidVivoPushRegIdKey);
   }
+}
+
+async function registerCurrentAndroidFcmPushDevice() {
+  let permission = await readAndroidPushReceivePermission();
+  if (permission === "plugin_unavailable") {
+    await reportAndroidPushRegistrationStatus({
+      detail: "Capacitor PushNotifications native plugin is not packaged in this Android build.",
+      reason: "fcm_not_packaged",
+      status: "unavailable",
+    });
+    return;
+  }
+  if (permission !== "granted") {
+    permission = await requestAndroidPushReceivePermission();
+  }
+  if (permission !== "granted") {
+    await reportAndroidPushRegistrationStatus({
+      detail: `receive=${permission}`,
+      reason: "push_permission_denied",
+      status: "permission_denied",
+    });
+    return;
+  }
+
+  await ensureAndroidFcmListeners();
+  await reportAndroidPushRegistrationStatus({ status: "registering" });
+  const cachedToken = readCachedAndroidFcmPushToken();
+  if (cachedToken) {
+    await registerAndroidFcmPushToken(cachedToken);
+  }
+  await PushNotifications.register();
+}
+
+async function ensureAndroidFcmListeners() {
+  androidFcmListenersReady ??= Promise.all([
+    PushNotifications.addListener("registration", (token) => {
+      void handleAndroidFcmRegistration(token);
+    }),
+    PushNotifications.addListener("registrationError", (error) => {
+      void handleAndroidFcmRegistrationError(error);
+    }),
+    PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
+      handleAndroidFcmNotificationAction(action);
+    }),
+  ])
+    .then(() => undefined)
+    .catch((error: unknown) => {
+      androidFcmListenersReady = null;
+      throw error;
+    });
+  return androidFcmListenersReady;
+}
+
+async function handleAndroidFcmRegistration(token: Token) {
+  const value = cleanNativeText(token.value);
+  if (!value) {
+    await reportAndroidPushRegistrationStatus({
+      detail: "registration event did not include an FCM token",
+      reason: "fcm_empty_token",
+      status: "registration_error",
+    });
+    return;
+  }
+
+  window.localStorage.setItem(cachedAndroidFcmPushTokenKey, value);
+  await registerAndroidFcmPushToken(value).catch((error: unknown) =>
+    reportAndroidPushRegistrationStatus({
+      detail: errorMessage(error),
+      reason: "fcm_token_register_failed",
+      status: "registration_error",
+    }),
+  );
+}
+
+async function handleAndroidFcmRegistrationError(error: RegistrationError) {
+  await reportAndroidPushRegistrationStatus({
+    detail: cleanNativeText(error.error) ?? "FCM registration failed",
+    reason: "fcm_registration_error",
+    status: "registration_error",
+  });
+}
+
+function handleAndroidFcmNotificationAction(action: ActionPerformed) {
+  const targetPath = pushNotificationTargetPath(action.notification);
+  if (targetPath) {
+    androidFcmOpenHandler?.(targetPath);
+  }
+}
+
+async function registerAndroidFcmPushToken(token: string) {
+  await registerPushDeviceRequest({
+    ...(await androidPushRegistrationBaseInput()),
+    token,
+  });
 }
 
 async function registerCurrentAndroidVendorPushDevice() {
@@ -172,6 +290,21 @@ async function requestAndroidNotificationPermission() {
   return cleanNativeText(permission?.display) ?? "unknown";
 }
 
+async function readAndroidPushReceivePermission() {
+  const permission = await PushNotifications.checkPermissions().catch(() => null);
+  return cleanNativeText(permission?.receive) ?? "plugin_unavailable";
+}
+
+async function requestAndroidPushReceivePermission() {
+  const permission = await PushNotifications.requestPermissions().catch(() => null);
+  return cleanNativeText(permission?.receive) ?? "plugin_unavailable";
+}
+
+function readCachedAndroidFcmPushToken() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(cachedAndroidFcmPushTokenKey)?.trim() || null;
+}
+
 function readCachedAndroidVivoPushRegId() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(cachedAndroidVivoPushRegIdKey)?.trim() || null;
@@ -190,6 +323,18 @@ function cleanNativeText(value: string | null | undefined) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function pushNotificationTargetPath(notification: PushNotificationSchema) {
+  const data = notification.data && typeof notification.data === "object" ? notification.data as Record<string, unknown> : {};
+  const targetPath = typeof data.targetPath === "string" ? data.targetPath : null;
+  if (targetPath && isSafePushTargetPath(targetPath)) return targetPath;
+  if (typeof notification.link === "string" && isSafePushTargetPath(notification.link)) return notification.link;
+  return null;
+}
+
+function isSafePushTargetPath(targetPath: string) {
+  return targetPath.startsWith("/") && !targetPath.startsWith("//");
 }
 
 function isAndroidNativeRuntime() {

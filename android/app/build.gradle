@@ -20,8 +20,8 @@ android {
         applicationId "org.duckdns.orfxueyu.orf"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 7
-        versionName "0.0.7"
+        versionCode 8
+        versionName "0.0.8"
         manifestPlaceholders = [
             VIVO_PUSH_APP_ID: orfAndroidVivoPushAppId,
             VIVO_PUSH_APP_KEY: orfAndroidVivoPushAppKey

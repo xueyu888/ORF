@@ -1,6 +1,6 @@
 {
   "name": "orf",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
   "bin": {
@@ -57,7 +57,7 @@
     "client:desktop:dev": "electron clients/desktop/main.cjs",
     "client:desktop:pack:linux": "node scripts/build-desktop-client.mjs --dir --linux",
     "client:desktop:dist:win": "node scripts/build-desktop-client.mjs --win nsis --x64",
-    "client:android:sync": "npm run client:sync-versions && npm run build && cap sync android",
+    "client:android:sync": "npm run client:sync-versions && npm run build && cap sync android && node scripts/configure-android-push.mjs",
     "client:android:assemble:debug": "npm run client:android:sync && node scripts/with-android-env.mjs --cwd android -- ./gradlew assembleDebug",
     "client:android:assemble:release": "npm run client:android:sync && node scripts/with-android-env.mjs --cwd android -- ./gradlew assembleRelease",
     "client:android:env:setup": "node scripts/setup-android-validation-env.mjs",
@@ -76,6 +76,7 @@
     "@capacitor/browser": "^8.0.3",
     "@capacitor/core": "8.4.0",
     "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/push-notifications": "^8.1.1",
     "@fastify/cors": "^11.2.0",
     "@fastify/multipart": "^10.0.0",
     "clsx": "^2.1.1",
