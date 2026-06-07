@@ -1,7 +1,23 @@
+const fs = require("node:fs");
 const path = require("node:path");
-const { app, BrowserWindow, Menu, Notification, ipcMain, shell } = require("electron");
+const { Readable } = require("node:stream");
+const { pipeline } = require("node:stream/promises");
+const { app, BrowserWindow, Menu, Notification, ipcMain, net, shell } = require("electron");
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
+const PACKAGED_DESKTOP_ICON_PATH = path.join(__dirname, "assets", "icon.png");
+const REPO_ANDROID_LAUNCHER_ICON_PATH = path.resolve(
+  __dirname,
+  "..",
+  "..",
+  "android",
+  "app",
+  "src",
+  "main",
+  "res",
+  "mipmap-xxxhdpi",
+  "ic_launcher.png",
+);
 
 function resolveClientUrl() {
   const rawUrl = process.env.ORF_CLIENT_URL || process.env.ORF_APP_URL || DEFAULT_ORF_CLIENT_URL;
@@ -19,6 +35,7 @@ function createMainWindow(clientUrl) {
     minWidth: 1024,
     minHeight: 680,
     title: "ORF",
+    icon: resolveDesktopIconPath(),
     backgroundColor: "#f6f8fb",
     autoHideMenuBar: true,
     webPreferences: {
@@ -47,6 +64,12 @@ function createMainWindow(clientUrl) {
 
   void mainWindow.loadURL(clientUrl.toString());
   return mainWindow;
+}
+
+function resolveDesktopIconPath() {
+  if (fs.existsSync(PACKAGED_DESKTOP_ICON_PATH)) return PACKAGED_DESKTOP_ICON_PATH;
+  if (fs.existsSync(REPO_ANDROID_LAUNCHER_ICON_PATH)) return REPO_ANDROID_LAUNCHER_ICON_PATH;
+  return undefined;
 }
 
 function isSafeChatTargetPath(targetPath) {
@@ -83,6 +106,7 @@ function registerNativeNotificationBridge(clientUrl) {
     const notification = new Notification({
       title: payload.title,
       body: payload.body,
+      icon: resolveDesktopIconPath(),
       silent: false,
     });
     notification.on("click", () => {
@@ -122,6 +146,56 @@ function registerNativeRuntimeBridge() {
     await shell.openExternal(url);
     return { status: "success" };
   });
+  ipcMain.handle("orf:runtime:install-update", async (_event, input) => {
+    if (process.platform !== "win32") {
+      return { status: "unsupported", reason: "unsupported_platform" };
+    }
+    const payload = clientUpdateInstallPayload(input);
+    if (!payload) {
+      return { status: "not_sent", reason: "invalid_payload" };
+    }
+    try {
+      const installerPath = await downloadClientUpdateInstaller(payload);
+      const openError = await shell.openPath(installerPath);
+      if (openError) {
+        return { status: "error", reason: "installer_open_failed", data: openError };
+      }
+      return { status: "success", data: installerPath };
+    } catch (error) {
+      return { status: "error", reason: "installer_download_failed", data: String(error) };
+    }
+  });
+}
+
+function clientUpdateInstallPayload(input) {
+  if (!input || typeof input !== "object") return null;
+  const url = typeof input.url === "string" ? input.url.trim() : "";
+  if (!isTrustedClientUpdateUrl(url)) return null;
+  const fileName = sanitizeUpdateInstallerName(input.name, "ORF-update-win11-x64-setup.exe");
+  if (!fileName.endsWith(".exe")) return null;
+  return { fileName, url };
+}
+
+async function downloadClientUpdateInstaller(payload) {
+  const updateDir = path.join(app.getPath("temp"), "orf-client-updates");
+  fs.mkdirSync(updateDir, { recursive: true });
+  const installerPath = path.join(updateDir, payload.fileName);
+  const tempPath = `${installerPath}.download`;
+  fs.rmSync(tempPath, { force: true });
+
+  const response = await net.fetch(payload.url);
+  if (!response.ok || !response.body) {
+    throw new Error(`Download failed: HTTP ${response.status}`);
+  }
+  await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath));
+  fs.renameSync(tempPath, installerPath);
+  return installerPath;
+}
+
+function sanitizeUpdateInstallerName(value, fallback) {
+  const rawName = typeof value === "string" ? path.basename(value.trim()) : "";
+  const safeName = rawName.replace(/[^A-Za-z0-9._-]/g, "-").replace(/-+/g, "-");
+  return safeName || fallback;
 }
 
 app.setName("ORF");

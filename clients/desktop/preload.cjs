@@ -21,4 +21,7 @@ contextBridge.exposeInMainWorld("orfNativeRuntime", {
   openExternal(url) {
     return ipcRenderer.invoke("orf:runtime:open-external", url);
   },
+  installUpdate(payload) {
+    return ipcRenderer.invoke("orf:runtime:install-update", payload);
+  },
 });

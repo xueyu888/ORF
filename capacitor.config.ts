@@ -1,3 +1,5 @@
+/// <reference types="@capacitor/local-notifications" />
+
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
@@ -18,6 +20,12 @@ const config: CapacitorConfig = {
   server: {
     url: resolveClientUrl(),
     cleartext: false,
+  },
+  plugins: {
+    LocalNotifications: {
+      smallIcon: "ic_stat_orf_notification",
+      iconColor: "#0F9EB5",
+    },
   },
 };
 

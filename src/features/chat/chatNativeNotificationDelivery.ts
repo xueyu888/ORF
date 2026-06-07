@@ -81,6 +81,8 @@ async function sendAndroidLocalChatNotification(payload: ChatNativeNotificationP
           body: payload.body,
           largeBody: payload.body,
           channelId: androidChatNotificationChannelId,
+          iconColor: "#0F9EB5",
+          smallIcon: "ic_stat_orf_notification",
           extra: {
             channelId: payload.channelId,
             messageId: payload.messageId,
@@ -104,6 +106,10 @@ function ensureAndroidLocalNotificationsReady() {
       }
       if (permission !== "granted") {
         return { status: "not_sent", reason: "permission_denied", data: permission } satisfies NativeChatNotificationResult;
+      }
+      const enabled = await LocalNotifications.areEnabled();
+      if (!enabled.value) {
+        return { status: "not_sent", reason: "permission_denied", data: "notifications_disabled" } satisfies NativeChatNotificationResult;
       }
       await LocalNotifications.createChannel({
         id: androidChatNotificationChannelId,

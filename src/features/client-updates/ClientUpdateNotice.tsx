@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { orfClientCurrentVersion } from "./clientUpdateConfig";
 import { getLatestClientRelease } from "./clientUpdateApi";
 import { buildClientUpdateDecision, type ClientUpdateDecision } from "./clientUpdateModel";
-import { detectClientUpdatePlatform, openClientUpdateUrl } from "./clientUpdateRuntime";
+import { detectClientUpdatePlatform, installClientUpdateAsset, openClientUpdateUrl, type ClientUpdateInstallResult } from "./clientUpdateRuntime";
 
 const updateDismissStoragePrefix = "orf-client-update-dismissed:";
 const updateCheckIntervalMs = 6 * 60 * 60 * 1000;
@@ -17,6 +17,8 @@ export function ClientUpdateNotice() {
   const [noticeState, setNoticeState] = useState<UpdateNoticeState>({ status: "checking" });
   const [dismissedVersions, setDismissedVersions] = useState<Set<string>>(() => readDismissedVersions());
   const [openingUrl, setOpeningUrl] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installMessage, setInstallMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -49,7 +51,6 @@ export function ClientUpdateNotice() {
 
   const release = availableDecision.release;
   const asset = availableDecision.asset;
-  const downloadUrl = asset?.downloadUrl ?? release.htmlUrl;
   const secondaryUrl = release.htmlUrl;
   const dateLabel = release.publishedAt ? formatUpdateDate(release.publishedAt) : release.tagName;
 
@@ -59,6 +60,27 @@ export function ClientUpdateNotice() {
       await openClientUpdateUrl(url);
     } finally {
       setOpeningUrl(null);
+    }
+  };
+
+  const installUpdate = async () => {
+    if (!asset) {
+      await openUrl(secondaryUrl);
+      return;
+    }
+
+    setInstalling(true);
+    setInstallMessage(null);
+    try {
+      const result = await installClientUpdateAsset(asset);
+      setInstallMessage(clientUpdateInstallMessage(result));
+      if (shouldOpenDownloadUrlAfterInstallResult(result)) {
+        await openUrl(asset.downloadUrl);
+      }
+    } catch (error) {
+      setInstallMessage(error instanceof Error ? error.message : "更新安装失败");
+    } finally {
+      setInstalling(false);
     }
   };
 
@@ -73,16 +95,17 @@ export function ClientUpdateNotice() {
           当前 {availableDecision.currentVersion} · {dateLabel}
           {asset ? ` · ${asset.name}` : " · 打开发布页下载"}
         </div>
+        {installMessage && <div className="orf-client-update-message">{installMessage}</div>}
       </div>
       <div className="orf-client-update-actions">
         <button
           type="button"
           className="orf-client-update-primary"
-          disabled={openingUrl !== null}
-          onClick={() => void openUrl(downloadUrl)}
+          disabled={openingUrl !== null || installing}
+          onClick={() => void installUpdate()}
         >
           <Download className="h-3.5 w-3.5" />
-          下载安装包
+          {installing ? "正在下载" : asset ? "下载并安装" : "打开发布页"}
         </button>
         <button
           type="button"
@@ -146,4 +169,33 @@ function formatUpdateDate(value: string) {
     month: "2-digit",
     year: "numeric",
   }).format(date);
+}
+
+function clientUpdateInstallMessage(result: ClientUpdateInstallResult) {
+  if (result.status === "success") {
+    return "安装程序已打开，按系统提示完成覆盖安装。";
+  }
+  if (result.reason === "install_permission_required") {
+    return "已打开安装权限页，允许 ORF 安装未知应用后再点一次更新。";
+  }
+  if (result.reason === "untrusted_url") {
+    return "更新安装包地址不可信，已停止。";
+  }
+  if (result.reason === "invalid_payload") {
+    return "更新安装参数无效。";
+  }
+  if (result.reason === "unsupported_platform" || result.reason === "no_native_update_installer") {
+    return "当前客户端缺少内置安装器，已打开安装包下载地址；安装一次新版后可应用内更新。";
+  }
+  if (result.reason === "installer_open_failed") {
+    return "安装包已下载，但启动安装程序失败。";
+  }
+  if (result.reason === "installer_download_failed" || result.reason === "apk_install_failed") {
+    return "安装包下载或安装启动失败，请稍后重试。";
+  }
+  return "更新安装启动失败。";
+}
+
+function shouldOpenDownloadUrlAfterInstallResult(result: ClientUpdateInstallResult) {
+  return result.reason === "unsupported_platform" || result.reason === "no_native_update_installer";
 }

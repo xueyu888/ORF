@@ -3517,6 +3517,14 @@ button:disabled {
   white-space: nowrap;
 }
 
+.orf-client-update-message {
+  margin-top: 3px;
+  color: #0f7892;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .orf-client-update-actions {
   display: inline-flex;
   align-items: center;
@@ -5380,6 +5388,10 @@ button:disabled {
   color: var(--orf-sidebar-text-muted);
 }
 
+.orf-mobile-bottom-nav {
+  display: none;
+}
+
 @media (max-width: 900px) {
   :root {
     --orf-page-padding-x: 12px;
@@ -5392,8 +5404,95 @@ button:disabled {
     min-width: 0;
   }
 
+  .orf-shell-body {
+    min-height: 100dvh;
+    padding-bottom: calc(66px + env(safe-area-inset-bottom));
+  }
+
+  .orf-app-shell[data-chat-page="true"] .orf-shell-body {
+    padding-bottom: 0;
+  }
+
   .orf-sidebar {
     display: none;
+  }
+
+  .orf-mobile-bottom-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 70;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 2px;
+    padding: 7px 8px max(7px, env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(202, 214, 226, 0.82);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 251, 253, 0.96)),
+      #ffffff;
+    box-shadow: 0 -14px 34px rgba(15, 35, 58, 0.13);
+  }
+
+  .orf-app-shell[data-chat-page="true"] .orf-mobile-bottom-nav {
+    display: none;
+  }
+
+  .orf-mobile-bottom-nav-item {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    min-height: 48px;
+    place-items: center;
+    gap: 3px;
+    border-radius: 8px;
+    color: #61728a;
+    font-size: 11px;
+    font-weight: 760;
+    text-decoration: none;
+    transition:
+      background 140ms ease,
+      color 140ms ease;
+  }
+
+  .orf-mobile-bottom-nav-item.is-active {
+    background: rgba(45, 190, 235, 0.16);
+    color: var(--orf-accent-text);
+  }
+
+  .orf-mobile-bottom-nav-icon {
+    position: relative;
+    display: inline-flex;
+    width: 24px;
+    height: 22px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .orf-mobile-bottom-nav-badge {
+    position: absolute;
+    top: -5px;
+    right: -10px;
+    display: inline-flex;
+    min-width: 17px;
+    height: 17px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.92);
+    border-radius: 999px;
+    background: #e5484d;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 800;
+    line-height: 1;
+    box-shadow: 0 4px 10px rgba(229, 72, 77, 0.22);
+  }
+
+  .orf-mobile-bottom-nav-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .orf-topbar {

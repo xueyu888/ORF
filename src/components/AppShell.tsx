@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
+import { MobileBottomNav } from "./MobileBottomNav";
 import { NotificationBell } from "./NotificationBell";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
@@ -130,6 +131,7 @@ export function AppShell() {
         </main>
       </div>
       <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />
+      <MobileBottomNav />
       <ClientReleaseNotesDialog />
       <GlobalModals />
       <Toasts />

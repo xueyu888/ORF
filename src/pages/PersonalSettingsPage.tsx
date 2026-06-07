@@ -1,10 +1,11 @@
 import { clsx } from "clsx";
-import { Check, Image, Loader2, Trash2, Upload } from "lucide-react";
+import { BellRing, Check, Image, Loader2, Trash2, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
 import { Button, Card, Field } from "../components/ui";
+import { sendNativeChatNotification } from "../features/chat/chatNativeNotificationDelivery";
 import {
   deletePersonalBackground,
   getPersonalBackgrounds,
@@ -20,6 +21,7 @@ import { dispatchVisualBackgroundChanged } from "../utils/visualBackgrounds";
 import { dispatchPersonalPreferencesChanged } from "../utils/personalPreferences";
 
 type RequestStatus = "idle" | "loading" | "success" | "error";
+type NativeNotificationTestResult = Awaited<ReturnType<typeof sendNativeChatNotification>>;
 
 const defaultPersonalBackgroundConfig: VisualBackgroundConfig = {
   mode: "fixed",
@@ -48,6 +50,7 @@ export function PersonalSettingsPage() {
   const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
   const [uploadStatus, setUploadStatus] = useState<RequestStatus>("idle");
   const [avatarStatus, setAvatarStatus] = useState<RequestStatus>("idle");
+  const [notificationTestStatus, setNotificationTestStatus] = useState<RequestStatus>("idle");
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
@@ -208,6 +211,37 @@ export function PersonalSettingsPage() {
     }
   };
 
+  const handleNativeNotificationTest = async () => {
+    if (notificationTestStatus === "loading") {
+      return;
+    }
+
+    const now = new Date();
+    const notificationId = `settings-notification-test-${now.getTime()}`;
+    setNotificationTestStatus("loading");
+    setErrorMessage(null);
+    const result = await sendNativeChatNotification({
+      body: "如果你看到这条通知，客户端系统通知通道正常。",
+      channelId: "settings",
+      createdAt: now.toISOString(),
+      id: notificationId,
+      messageId: notificationId,
+      targetPath: "/chat",
+      title: "ORF 系统通知测试",
+    });
+
+    if (result.status === "success") {
+      setNotificationTestStatus("success");
+      notify("系统通知已发出");
+      return;
+    }
+
+    const message = nativeNotificationTestMessage(result);
+    setNotificationTestStatus("error");
+    setErrorMessage(message);
+    notify(message);
+  };
+
   const handleDeleteSelectedBackground = async () => {
     if (!selectedBackgroundId || !isPersonalBackground(selectedBackgroundId)) {
       return;
@@ -325,6 +359,16 @@ export function PersonalSettingsPage() {
                 onChange={(event) => void savePreferencePatch({ notificationDisplay: { toastEnabled: event.target.checked } })}
               />
             </label>
+            <div className="flex items-center justify-between gap-4 border-t pt-4 orf-border">
+              <span>
+                <span className="block font-medium orf-text-primary">系统通知</span>
+                <span className="block text-sm orf-text-secondary">Windows / Android 客户端</span>
+              </span>
+              <Button type="button" variant="secondary" disabled={notificationTestStatus === "loading"} onClick={() => void handleNativeNotificationTest()}>
+                {notificationTestStatus === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+                测试
+              </Button>
+            </div>
           </Card>
         </div>
 
@@ -399,4 +443,20 @@ export function PersonalSettingsPage() {
 
 function isPersonalBackground(id: string | null | undefined) {
   return Boolean(id?.includes("/personal/"));
+}
+
+function nativeNotificationTestMessage(result: NativeNotificationTestResult) {
+  if (result.status === "unsupported") {
+    return "当前环境没有系统通知通道，请在 Win11 或 Android 客户端中测试";
+  }
+  if (result.reason === "permission_denied") {
+    return "系统通知权限未打开";
+  }
+  if (result.reason === "invalid_payload") {
+    return "系统通知测试参数无效";
+  }
+  if (result.reason === "notification_not_supported") {
+    return "当前系统不支持此客户端通知";
+  }
+  return "系统通知发送失败";
 }
