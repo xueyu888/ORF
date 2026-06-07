@@ -57,6 +57,14 @@ function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
 }
 
+function mentionableUsersForChannel(channel: ChatChannel | null, users: ChatUser[] | undefined) {
+  if (!channel) return [];
+  const allUsers = users ?? [];
+  if (channel.type === "public") return allUsers;
+  const memberIds = new Set(channel.members.map((member) => member.userId));
+  return allUsers.filter((user) => memberIds.has(user.id));
+}
+
 export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -85,9 +93,7 @@ export function ChatPage() {
   const focusMessageId = searchParams.get("message");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
-    if (!activeChannel) return [];
-    const memberIds = new Set(activeChannel.members.map((member) => member.userId));
-    return (bootstrap?.users ?? []).filter((user) => memberIds.has(user.id));
+    return mentionableUsersForChannel(activeChannel, bootstrap?.users);
   }, [activeChannel, bootstrap?.users]);
   const myMembership = currentMembership(activeChannel, currentUser?.id);
   const { applyTypingEvent, publishTyping, typingByUser } = useChatTypingState({
@@ -176,9 +182,7 @@ export function ChatPage() {
   }, [channels, thread]);
   const rightPanelChannel = activePanel === "thread" && threadChannel ? threadChannel : activeChannel;
   const rightPanelMentionableUsers = useMemo(() => {
-    if (!rightPanelChannel) return [];
-    const memberIds = new Set(rightPanelChannel.members.map((member) => member.userId));
-    return (bootstrap?.users ?? []).filter((user) => memberIds.has(user.id));
+    return mentionableUsersForChannel(rightPanelChannel, bootstrap?.users);
   }, [rightPanelChannel, bootstrap?.users]);
   const canManageRightPanelChannel = canManageChannel(rightPanelChannel);
 

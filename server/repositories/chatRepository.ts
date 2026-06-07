@@ -75,7 +75,7 @@ async function ensureDefaultPublicChannel(teamId: string) {
   );
 }
 
-async function ensurePublicChannelMemberships(teamId: string) {
+async function ensureActivePublicChannelMemberships(teamId: string) {
   const now = nowIso();
   await pool.query(
     `
@@ -87,13 +87,6 @@ async function ensurePublicChannelMemberships(teamId: string) {
       WHERE c.team_id = $1
         AND c.type = 'public'
         AND c.archived_at IS NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM chat_import_mappings im
-          WHERE im.team_id = c.team_id
-            AND im.target_table = 'chat_channels'
-            AND im.target_id = c.id
-        )
       ON CONFLICT (channel_id, user_id) DO NOTHING
     `,
     [teamId, now],
@@ -102,7 +95,7 @@ async function ensurePublicChannelMemberships(teamId: string) {
 
 async function preparePublicChannels(teamId: string) {
   await ensureDefaultPublicChannel(teamId);
-  await ensurePublicChannelMemberships(teamId);
+  await ensureActivePublicChannelMemberships(teamId);
 }
 
 async function listActiveTeamUsers(teamId: string) {
@@ -187,10 +180,18 @@ async function loadMembers(channelIds: string[]) {
   if (channelIds.length === 0) return new Map<string, ChatChannelMember[]>();
   const { rows } = await pool.query<ChannelMemberRow>(
     `
-      SELECT channel_id, user_id, role, favorite, muted, manually_unread, last_viewed_at, last_read_at, last_read_message_id, joined_at
-      FROM chat_channel_members
-      WHERE channel_id = ANY($1::text[])
-      ORDER BY joined_at ASC
+      SELECT m.channel_id, m.user_id, m.role, m.favorite, m.muted, m.manually_unread,
+             m.last_viewed_at, m.last_read_at, m.last_read_message_id, m.joined_at
+      FROM chat_channel_members m
+      INNER JOIN chat_channels c ON c.id = m.channel_id
+      LEFT JOIN team_members tm ON tm.team_id = c.team_id AND tm.user_id = m.user_id
+      LEFT JOIN users u ON u.id = m.user_id
+      WHERE m.channel_id = ANY($1::text[])
+        AND (
+          c.type <> 'public'
+          OR (tm.user_id IS NOT NULL AND COALESCE(u.status, 'active') = 'active')
+        )
+      ORDER BY m.joined_at ASC
     `,
     [channelIds],
   );
@@ -1149,7 +1150,7 @@ export async function createChatChannel(
   }
 
   if (input.type === "public") {
-    await ensurePublicChannelMemberships(teamId);
+    await ensureActivePublicChannelMemberships(teamId);
   } else {
     const memberIds = Array.from(new Set([actor.id, ...(input.memberUserIds ?? [])].filter(Boolean)));
     await addChannelMembersInternal({
