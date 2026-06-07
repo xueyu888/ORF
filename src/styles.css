@@ -9506,12 +9506,12 @@ a.orf-row-loot-action,
   align-items: baseline;
   gap: 8px;
   color: var(--orf-text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .orf-chat-message-meta strong {
   color: var(--orf-text-primary);
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .orf-chat-message-meta em {
@@ -9536,7 +9536,7 @@ a.orf-row-loot-action,
   position: relative;
   overflow-wrap: anywhere;
   color: var(--orf-text-primary);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.58;
   white-space: normal;
 }
@@ -9816,7 +9816,7 @@ a.orf-row-loot-action,
 
 .orf-chat-message-deleted {
   color: var(--orf-text-muted);
-  font-size: 13px;
+  font-size: 14px;
   font-style: italic;
 }
 
@@ -11391,7 +11391,7 @@ button.orf-chat-image-attachment {
   }
 
   .orf-chat-message-text {
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.55;
   }
 
