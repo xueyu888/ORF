@@ -16,16 +16,17 @@ permissions:
 
 env:
   NODE_VERSION: "22.22.2"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   ORF_CLIENT_URL: ${{ vars.ORF_CLIENT_URL || 'https://orf-xueyu.duckdns.org:8443/' }}
 
 jobs:
   windows-client:
     name: Build Win11 installer
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Resolve release tag
         shell: pwsh
@@ -37,7 +38,7 @@ jobs:
           }
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -53,7 +54,7 @@ jobs:
           & $nodePath scripts/build-desktop-client.mjs --win nsis --x64
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: orf-win11-installer
           path: release/desktop/ORF-*-win11-x64-setup.exe
@@ -65,7 +66,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Resolve release tag
         shell: bash
@@ -77,13 +78,13 @@ jobs:
           fi
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -109,7 +110,7 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk "release/android/ORF-${RELEASE_TAG}-android-preview.apk"
 
       - name: Upload Android artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: orf-android-preview-apk
           path: release/android/ORF-*-android-preview.apk
@@ -124,12 +125,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Download release assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: release-assets
           merge-multiple: true
