@@ -13,6 +13,7 @@ import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotice";
+import { ClientReleaseNotesDialog } from "../features/client-updates/ClientReleaseNotesDialog";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -129,6 +130,7 @@ export function AppShell() {
         </main>
       </div>
       <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />
+      <ClientReleaseNotesDialog />
       <GlobalModals />
       <Toasts />
     </div>

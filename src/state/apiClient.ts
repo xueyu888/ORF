@@ -206,6 +206,10 @@ export async function getLatestClientUpdateRelease(signal?: AbortSignal) {
   return apiJson<ClientUpdateReleaseResponse>("/api/client-updates/latest", { signal });
 }
 
+export async function getClientUpdateRelease(version: string, signal?: AbortSignal) {
+  return apiJson<ClientUpdateReleaseResponse>(`/api/client-updates/releases/${encodeURIComponent(version)}`, { signal });
+}
+
 export async function markNotificationReadRequest(notificationId: string) {
   return apiJson<NotificationReadResponse>(`/api/notifications/${encodeURIComponent(notificationId)}/read`, { method: "PATCH" });
 }

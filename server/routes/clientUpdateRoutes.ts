@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { normalizeReleaseVersion } from "../../src/features/client-updates/clientUpdateModel";
+import { z } from "zod";
+import { isClientReleaseVersion, normalizeReleaseVersion, toClientReleaseTag } from "../../src/features/client-updates/clientUpdateModel";
 
 const githubRepository = process.env.ORF_CLIENT_UPDATE_GITHUB_REPOSITORY ?? process.env.GITHUB_REPOSITORY_FULL_NAME ?? "xueyu888/ORF";
 const githubApiUrl = process.env.ORF_CLIENT_UPDATE_GITHUB_API_URL ?? process.env.GITHUB_API_URL ?? "https://api.github.com";
@@ -41,7 +42,16 @@ type GitHubRelease = {
   tag_name?: string;
 };
 
-let cachedRelease: { expiresAt: number; value: ClientUpdateReleaseResponse } | null = null;
+const releaseVersionParamsSchema = z.object({
+  version: z.string()
+    .trim()
+    .min(1)
+    .transform(normalizeReleaseVersion)
+    .refine(isClientReleaseVersion, { message: "Invalid client release version" }),
+});
+
+let cachedLatestRelease: { expiresAt: number; value: ClientUpdateReleaseResponse } | null = null;
+const cachedReleaseByVersion = new Map<string, { expiresAt: number; value: ClientUpdateReleaseResponse }>();
 
 export function registerClientUpdateRoutes(app: FastifyInstance) {
   app.get("/api/client-updates/latest", async (_request, reply) => {
@@ -52,20 +62,56 @@ export function registerClientUpdateRoutes(app: FastifyInstance) {
       return reply.code(502).send({ error: "Client update release check failed" });
     }
   });
+
+  app.get("/api/client-updates/releases/:version", async (request, reply) => {
+    try {
+      const { version } = releaseVersionParamsSchema.parse(request.params);
+      return await getCachedClientReleaseByVersion(version);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return reply.code(400).send({ error: "Invalid client release version" });
+      }
+      app.log.warn({ error }, "Client update release lookup failed");
+      return reply.code(502).send({ error: "Client update release lookup failed" });
+    }
+  });
 }
 
 async function getCachedLatestClientRelease() {
   const now = Date.now();
-  if (cachedRelease && cachedRelease.expiresAt > now) {
-    return cachedRelease.value;
+  if (cachedLatestRelease && cachedLatestRelease.expiresAt > now) {
+    return cachedLatestRelease.value;
   }
   const value = await fetchLatestClientRelease();
-  cachedRelease = { expiresAt: now + clientUpdateCacheMs, value };
+  cachedLatestRelease = { expiresAt: now + clientUpdateCacheMs, value };
+  return value;
+}
+
+async function getCachedClientReleaseByVersion(version: string) {
+  const now = Date.now();
+  const cached = cachedReleaseByVersion.get(version);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+  const value = await fetchClientReleaseByVersion(version);
+  cachedReleaseByVersion.set(version, { expiresAt: now + clientUpdateCacheMs, value });
   return value;
 }
 
 async function fetchLatestClientRelease(): Promise<ClientUpdateReleaseResponse> {
   const response = await fetch(`${trimSlash(githubApiUrl)}/repos/${githubRepository}/releases/latest`, {
+    headers: githubApiHeaders(),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub release API returned ${response.status}`);
+  }
+  return { release: toClientUpdateRelease(await response.json() as GitHubRelease) };
+}
+
+async function fetchClientReleaseByVersion(version: string): Promise<ClientUpdateReleaseResponse> {
+  const tagName = encodeURIComponent(toClientReleaseTag(version));
+  const response = await fetch(`${trimSlash(githubApiUrl)}/repos/${githubRepository}/releases/tags/${tagName}`, {
     headers: githubApiHeaders(),
     signal: AbortSignal.timeout(10_000),
   });

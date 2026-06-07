@@ -3,8 +3,10 @@ import test from "node:test";
 import {
   buildClientUpdateDecision,
   compareReleaseVersions,
+  isClientReleaseVersion,
   isTrustedClientUpdateUrl,
   selectClientUpdateAsset,
+  toClientReleaseTag,
   type ClientReleaseInfo,
 } from "../src/features/client-updates/clientUpdateModel";
 
@@ -33,6 +35,15 @@ test("client update version comparison handles tag prefixes and numeric segments
   assert.equal(compareReleaseVersions("v0.0.10", "0.0.2") > 0, true);
   assert.equal(compareReleaseVersions("v0.0.2", "0.0.2"), 0);
   assert.equal(compareReleaseVersions("0.0.2-beta.1", "0.0.2") < 0, true);
+});
+
+test("client update version tags are normalized before GitHub release lookup", () => {
+  assert.equal(isClientReleaseVersion("v0.0.2"), true);
+  assert.equal(isClientReleaseVersion("0.0.2-beta.1"), true);
+  assert.equal(isClientReleaseVersion("latest"), false);
+  assert.equal(isClientReleaseVersion("../v0.0.2"), false);
+  assert.equal(toClientReleaseTag("0.0.2"), "v0.0.2");
+  assert.equal(toClientReleaseTag("v0.0.2"), "v0.0.2");
 });
 
 test("client update selects platform-specific release assets", () => {

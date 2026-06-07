@@ -123,6 +123,11 @@ jobs:
       - android-client
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download release assets
         uses: actions/download-artifact@v4
         with:
@@ -141,21 +146,51 @@ jobs:
       - name: Write release notes
         shell: bash
         run: |
-          cat > release-notes.md <<EOF
-          ORF ${RELEASE_TAG}
+          set -euo pipefail
+          git fetch --tags --force
+          current_ref="$(git rev-list -n 1 "$RELEASE_TAG" 2>/dev/null || git rev-parse HEAD)"
+          previous_tag="$(git tag --merged "$current_ref" --sort=-version:refname | grep -E '^v[0-9]+' | grep -vx "$RELEASE_TAG" | head -n 1 || true)"
+          if [ -n "$previous_tag" ]; then
+            commit_range="${previous_tag}..${RELEASE_TAG}"
+            range_label="${previous_tag} 到 ${RELEASE_TAG}"
+          else
+            commit_range="$RELEASE_TAG"
+            range_label="初始版本到 ${RELEASE_TAG}"
+          fi
 
-          客户端包：
-          - Win11 PC 端：Electron 安装器，打开 ${ORF_CLIENT_URL}
-          - Android 移动端：Capacitor 预览 APK，打开 ${ORF_CLIENT_URL}
-
-          数据和权限来源：
-          - 客户端不保存业务数据。
-          - 聊天、权限、附件、登录态仍以 ORF Web 服务端和数据库为唯一事实源。
-
-          已知边界：
-          - Win11 安装器当前未做代码签名，首次安装时 Windows 可能提示发布者未知。
-          - Android v0.0.1 是内部预览 APK。后续要支持稳定覆盖升级，需要把 Android release keystore 放到 GitHub Secrets，再切换到正式签名构建。
-          EOF
+          {
+            echo "ORF ${RELEASE_TAG}"
+            echo
+            echo "本次更新范围：${range_label}。"
+            echo
+            echo "主要改动："
+            if git log --reverse --pretty=format:'- %s' "$commit_range" | sed '/^$/d' >> release-notes.tmp; then
+              if [ -s release-notes.tmp ]; then
+                cat release-notes.tmp
+              else
+                echo "- 本次版本主要包含客户端构建和发布流程整理。"
+              fi
+            else
+              echo "- 本次版本主要包含客户端构建和发布流程整理。"
+            fi
+            rm -f release-notes.tmp
+            echo
+            echo "客户端包："
+            echo "- Win11 PC 端：Electron 安装器，打开 ${ORF_CLIENT_URL}"
+            echo "- Android 移动端：Capacitor 预览 APK，打开 ${ORF_CLIENT_URL}"
+            echo
+            echo "安装后提示："
+            echo "- 用户安装新客户端后，应用会读取本 Release 的中文说明并在首次启动时提示。"
+            echo "- 后续版本会继续用 GitHub Release 正文作为应用内更新说明的唯一来源。"
+            echo
+            echo "数据和权限来源："
+            echo "- 客户端不保存业务数据。"
+            echo "- 聊天、权限、附件、登录态仍以 ORF Web 服务端和数据库为唯一事实源。"
+            echo
+            echo "已知边界："
+            echo "- Win11 安装器当前未做代码签名，首次安装时 Windows 可能提示发布者未知。"
+            echo "- Android 当前是内部预览 APK。后续要支持稳定覆盖升级，需要把 Android release keystore 放到 GitHub Secrets，再切换到正式签名构建。"
+          } > release-notes.md
 
       - name: Publish assets
         shell: bash

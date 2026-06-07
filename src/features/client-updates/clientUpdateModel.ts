@@ -32,6 +32,8 @@ type ParsedVersion = {
   prerelease: string | null;
 };
 
+const clientReleaseVersionPattern = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
 export function buildClientUpdateDecision(input: {
   currentVersion: string;
   platform: ClientUpdatePlatform;
@@ -76,6 +78,14 @@ export function compareReleaseVersions(left: string, right: string) {
 
 export function normalizeReleaseVersion(value: string) {
   return value.trim().replace(/^v/i, "");
+}
+
+export function isClientReleaseVersion(value: string) {
+  return clientReleaseVersionPattern.test(normalizeReleaseVersion(value));
+}
+
+export function toClientReleaseTag(version: string) {
+  return `v${normalizeReleaseVersion(version)}`;
 }
 
 export function isTrustedClientUpdateUrl(value: string) {
