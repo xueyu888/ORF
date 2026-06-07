@@ -107,8 +107,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
-            echo "Missing ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64 secret. Android background push notifications require google-services.json." >&2
-            exit 1
+            echo "ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64 is not set. Android APK will not include Firebase FCM config." >&2
+            exit 0
           fi
           printf '%s' "$ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64" | base64 -d > android/app/google-services.json
 
