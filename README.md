@@ -95,7 +95,7 @@ npm run db:audit:leaderboard
 
 ### 4) 一键启动
 
-后台启动会先检查 PostgreSQL；当 `.env` 指向共享 Ory/MinIO 时，只启动后端和前端：
+后台启动会先执行 `npm install` 同步 Node 依赖，再检查 PostgreSQL；当 `.env` 指向共享 Ory/MinIO 时，只启动后端和前端：
 
 ```bash
 orf up
@@ -116,7 +116,7 @@ orf down
 ```
 
 前端地址：`http://127.0.0.1:5173`；后端地址：`http://127.0.0.1:8787`。
-`orf status` 会同时检查 PostgreSQL、Ory、MinIO、后端和前端。缺少 `DATABASE_URL` / `REMOTE_DATABASE_URL` 或数据库不可连接时，`orf up` 会在启动前失败并给出错误。
+`orf status` 会同时检查 PostgreSQL、Ory、MinIO、后端和前端。缺少 `DATABASE_URL` / `REMOTE_DATABASE_URL` 或数据库不可连接时，`orf up` 会在启动前失败并给出错误；如果 `npm install` 失败，`orf up` 不会继续启动服务。
 
 如果不想后台运行，可以用前台开发模式：
 

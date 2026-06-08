@@ -4,8 +4,6 @@ import { spawn } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import dotenv from 'dotenv';
-import { checkDatabaseHealth, databaseDisplayUrl } from '../scripts/db-connection.mjs';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const runDir = resolve(rootDir, '.orf', 'run');
@@ -23,10 +21,12 @@ if (shouldSyncRequiredEnvDefaults(command)) {
   syncRequiredEnvDefaults();
 }
 
-dotenv.config({ path: envFile, quiet: true });
+loadEnvFile(envFile);
 
 const authBaseUrl = process.env.ORY_PUBLIC_URL ?? 'http://127.0.0.1:4433';
 const storageBaseUrl = process.env.OBJECT_STORAGE_ENDPOINT ?? 'http://127.0.0.1:9000';
+let databaseToolsPromise;
+let nodeDependenciesInstalled = false;
 
 const appServices = {
   backend: {
@@ -44,7 +44,7 @@ const appServices = {
 
 const dependencyServices = {
   database: {
-    check: checkDatabaseHealth,
+    check: checkDatabaseServiceHealth,
     displayUrl: databaseDisplayUrl(),
   },
   auth: {
@@ -65,6 +65,10 @@ const statusChecks = {
 };
 
 async function main() {
+  if (shouldInstallNodeDependencies(command) && !(await ensureNodeDependencies())) {
+    return;
+  }
+
   switch (command) {
     case 'help':
     case '-h':
@@ -135,7 +139,7 @@ function printHelp() {
   console.log(`ORF command line
 
 Usage:
-  orf up              Check PostgreSQL, start Ory, MinIO, backend, and frontend
+  orf up              Run npm install, check PostgreSQL, start Ory, MinIO, backend, and frontend
   orf down            Stop background backend and frontend
   orf restart         Restart background backend and frontend
   orf status          Check PostgreSQL, Ory, MinIO, backend, and frontend health
@@ -367,6 +371,23 @@ async function prepareRuntimeDependencies() {
   return true;
 }
 
+async function ensureNodeDependencies() {
+  if (nodeDependenciesInstalled) {
+    return true;
+  }
+
+  console.log('Synchronizing npm dependencies with package.json and package-lock.json...');
+  const code = await runNpmCommand(['install']);
+  if (code !== 0) {
+    console.error('npm install failed; ORF services were not started.');
+    process.exitCode = code;
+    return false;
+  }
+
+  nodeDependenciesInstalled = true;
+  return true;
+}
+
 function validateDatabaseEnv() {
   if (process.env.DATABASE_URL || process.env.REMOTE_DATABASE_URL) {
     return true;
@@ -380,6 +401,24 @@ function validateDatabaseEnv() {
 
 function shouldSyncRequiredEnvDefaults(commandName) {
   return new Set(['up', 'start', 'restart', 'dev', 'server', 'backend']).has(commandName);
+}
+
+function shouldInstallNodeDependencies(commandName) {
+  return new Set([
+    'up',
+    'start',
+    'restart',
+    'dev',
+    'server',
+    'backend',
+    'web',
+    'frontend',
+    'build',
+    'test',
+    'e2e',
+    'verify',
+    'migrate',
+  ]).has(commandName);
 }
 
 function syncRequiredEnvDefaults() {
@@ -543,6 +582,89 @@ function envKeySatisfied(key, keys) {
   return keys.has(key);
 }
 
+function loadEnvFile(file) {
+  if (!existsSync(file)) {
+    return;
+  }
+
+  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const key = parseEnvAssignmentKey(line);
+    if (!key || process.env[key] !== undefined) {
+      continue;
+    }
+
+    const separatorIndex = line.indexOf('=');
+    process.env[key] = parseEnvValue(line.slice(separatorIndex + 1));
+  }
+}
+
+function parseEnvValue(value) {
+  const trimmed = stripInlineEnvComment(value).trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+  return trimmed;
+}
+
+function stripInlineEnvComment(value) {
+  let quote;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+      continue;
+    }
+
+    if (character === '#') {
+      return value.slice(0, index);
+    }
+  }
+  return value;
+}
+
+async function checkDatabaseServiceHealth() {
+  try {
+    const { checkDatabaseHealth } = await loadDatabaseTools();
+    return await checkDatabaseHealth();
+  } catch (error) {
+    return {
+      ok: false,
+      ms: 0,
+      message: `database checker unavailable: ${error?.message ?? String(error)}`,
+    };
+  }
+}
+
+async function loadDatabaseTools() {
+  databaseToolsPromise ??= import('../scripts/db-connection.mjs');
+  return await databaseToolsPromise;
+}
+
+function databaseDisplayUrl() {
+  const connectionString = process.env.DATABASE_URL ?? process.env.REMOTE_DATABASE_URL;
+  if (!connectionString) {
+    return 'DATABASE_URL';
+  }
+
+  try {
+    const url = new URL(connectionString);
+    const user = url.username ? `${decodeURIComponent(url.username)}@` : '';
+    return `${url.protocol}//${user}${url.host}${url.pathname}`;
+  } catch {
+    return 'invalid database URL';
+  }
+}
+
 async function checkServiceHealth(service) {
   if (service.check) {
     return await service.check();
@@ -626,8 +748,12 @@ async function checkBackendHealth() {
 }
 
 async function runNpmScriptCommand(script, scriptArgs) {
+  return await runNpmCommand(['run', script, '--', ...scriptArgs]);
+}
+
+async function runNpmCommand(npmArgs) {
   return await new Promise((resolvePromise) => {
-    const child = spawn(npmCmd, ['run', script, '--', ...scriptArgs], {
+    const child = spawn(npmCmd, npmArgs, {
       cwd: rootDir,
       stdio: 'inherit',
       env: process.env,
