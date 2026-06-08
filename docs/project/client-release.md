@@ -84,7 +84,7 @@ npm run release:clients -- --tag v0.0.1 --watch
 
 ## Android 后台 Push 条件
 
-Android 不运行时收到聊天消息或客户端更新通知，依赖系统 Push 通道。它不是 WebView 本地通知能力，必须至少打通 FCM 或厂商系统 Push 中的一条。当前优先交付有 Google Play services 的 Android 设备：这类设备走 FCM；vivo 等厂商 Push 只保留为后续可选补充。
+Android 不运行时收到聊天消息或客户端更新通知，依赖系统 Push 通道。ORF 当前把 FCM 作为唯一系统 Push 通道：Android 客户端用 `google-services.json` 注册 FCM token，服务端用 Firebase Admin service account 给 `push_devices` 中的 token 发消息。厂商 Push 不参与聊天消息和客户端更新投递。
 
 - Android 包名 `org.duckdns.orfxueyu.orf` 已加入 Firebase Android app。
 - 需要 FCM 通道时，`android/app/google-services.json` 只在本机或 GitHub Actions 临时注入，仓库必须忽略它；本地也可以把 `google-services.json` 临时放在仓库根目录，构建脚本会复制到 Android 工程。
@@ -92,16 +92,6 @@ Android 不运行时收到聊天消息或客户端更新通知，依赖系统 Pu
 - ORF 服务端配置 `ORF_PUSH_ENABLED=true`，并通过 `ORF_FIREBASE_SERVICE_ACCOUNT_PATH`、`ORF_FIREBASE_SERVICE_ACCOUNT_JSON` 或 `GOOGLE_APPLICATION_CREDENTIALS` 提供 Firebase service account。
 - 服务端已执行 `npm run db:migrate`，保证 `push_devices` 表存在。
 - 用户至少打开过包含 Push 注册逻辑的新版本客户端并授权通知；旧版本未注册 FCM token 时，服务端不能向它补发后台 Push。
-
-厂商系统 Push 暂不作为当前 Google 服务设备的交付条件。后续如果要覆盖无 Google Play services 的 vivo 设备，vivo 系统 Push 只接入 vivo 一家，发布包和服务端还需要：
-
-- vivo 开放平台已创建包名为 `org.duckdns.orfxueyu.orf` 的应用，并启用消息推送。
-- GitHub Actions 配置 `ORF_ANDROID_VIVO_PUSH_AAR_BASE64`，用于发布时把 vivo Push SDK AAR 临时写入 `android/app/libs/orf-vivo-push.aar`。
-- GitHub Actions 配置 `ORF_ANDROID_VIVO_PUSH_APP_ID` 和 `ORF_ANDROID_VIVO_PUSH_APP_KEY`，用于写入 Android Manifest 的 vivo SDK 元数据。
-- ORF 服务端配置 `ORF_VIVO_PUSH_ENABLED=true`、`ORF_VIVO_PUSH_APP_ID`、`ORF_VIVO_PUSH_APP_KEY`、`ORF_VIVO_PUSH_APP_SECRET`。
-- 服务端已执行 `npm run db:migrate`，保证 `push_vendor_devices`、`push_vendor_registration_statuses` 表存在。
-- vivo 用户至少打开过包含 vivo Push 注册逻辑的新版本客户端并授权通知；客户端拿到 vivo RegID 后才会写入 `push_vendor_devices`。
-- 聊天消息和客户端更新提醒共用用户级 Push 路由；同一用户同时有 FCM 与 vivo 设备时，vivo 设备优先，FCM 作为回退。`push_vendor_devices.last_client_update_version` 记录厂商设备已经提醒过的客户端版本，避免更新通知重复轰炸。
 
 远程 Push 默认使用 `ORF_PUSH_CONTENT_MODE=private`，通知栏只显示通用聊天提示，消息正文和私有频道内容仍回到 ORF 内查看。
 
@@ -119,12 +109,9 @@ npm run push:diagnose -- --send-test --user-email <email>
 - 发布 APK 使用的 `google-services.json` 包名匹配 `org.duckdns.orfxueyu.orf`。
 - `push_registration_statuses` 中目标用户最近状态是 `token_registered`。
 - `push_devices` 里已经有目标用户的启用 Android 设备。
-- vivo 设备如果要走系统级厂商通道，`vivo Push 开关` 和 `vivo 服务端可发送条件` 都必须满足。
-- vivo 设备的 `push_vendor_registration_statuses` 最近状态必须是 `token_registered`，不能是 `unavailable` 或 `registration_error`。
-- vivo 设备的 `push_vendor_devices` 里必须有目标用户的启用 vivo/android 设备。
 - 测试发送返回投递成功数大于 0，且真机在后台或锁屏状态能看到通知。
 
-如果 FCM 诊断中的注册状态显示 `registration_error`、`permission_denied` 或设备样本显示 `gms=unavailable`，这类安卓机不能只依赖 FCM 达到微信式后台通知。ORF 当前只补 vivo 一家：vivo 设备必须继续看厂商注册状态；如果显示 `vivo_sdk_missing`、`reg_id_unavailable` 或 vivo 服务端凭据缺失，就说明发布包或服务端配置还没有真正满足 vivo 系统 Push 条件。FCM 仍保留给有 Google Play services 的设备使用。
+如果 FCM 诊断中的注册状态显示 `registration_error`、`permission_denied`，或设备样本显示 `gms=unavailable`，说明这台安卓机当前没有形成可用 FCM token；需要先修复 Google Play services、通知授权或 Firebase 配置。`push_vendor_devices` 和 `push_vendor_registration_statuses` 只保留历史兼容数据，当前不参与投递判断。
 
 ## 版本事实源
 

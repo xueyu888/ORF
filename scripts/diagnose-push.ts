@@ -6,7 +6,6 @@ import { env } from "../server/env";
 import { createPgPoolConfig } from "../server/db/connectionOptions";
 import { closeDb } from "../server/db/client";
 import { isFirebasePushConfigured } from "../server/push/firebasePushClient";
-import { isVivoPushConfigured } from "../server/push/vivoPushClient";
 import { chatPushChannelId, sendPushToUsers } from "../server/push/pushService";
 
 const { Pool } = pg;
@@ -241,27 +240,16 @@ function firebaseCredentialSource() {
   return "missing";
 }
 
-function vivoCredentialSummary() {
-  const missing = [
-    ["ORF_VIVO_PUSH_APP_ID", process.env.ORF_VIVO_PUSH_APP_ID],
-    ["ORF_VIVO_PUSH_APP_KEY", process.env.ORF_VIVO_PUSH_APP_KEY],
-    ["ORF_VIVO_PUSH_APP_SECRET", process.env.ORF_VIVO_PUSH_APP_SECRET],
-  ].flatMap(([name, value]) => (typeof value === "string" && value.trim() ? [] : [name]));
-  return missing.length === 0 ? "已配置" : `缺失（${missing.join(", ")}）`;
-}
-
 function printConfig() {
   const googleServices = checkGoogleServices();
   const credentialSource = firebaseCredentialSource();
   const localGoogleServicesBase64 = Boolean(process.env.ORF_ANDROID_GOOGLE_SERVICES_JSON_BASE64?.trim());
 
-    console.log("== ORF Push 配置 ==");
-    console.log(`ORF_PUSH_ENABLED: ${env.ORF_PUSH_ENABLED ? "true" : "false"}`);
-    console.log(`Firebase 服务端凭据: ${credentialSource === "missing" ? "缺失" : `已配置（${credentialSource}）`}`);
+  console.log("== ORF Push 配置 ==");
+  console.log(`ORF_PUSH_ENABLED: ${env.ORF_PUSH_ENABLED ? "true" : "false"}`);
+  console.log(`系统 Push 通道: FCM-only`);
+  console.log(`Firebase 服务端凭据: ${credentialSource === "missing" ? "缺失" : `已配置（${credentialSource}）`}`);
   console.log(`Firebase Admin 可初始化条件: ${isFirebasePushConfigured() ? "满足" : "不满足"}`);
-  console.log(`vivo Push 开关: ${env.ORF_VIVO_PUSH_ENABLED ? "true" : "false"}`);
-  console.log(`vivo 服务端凭据: ${vivoCredentialSummary()}`);
-  console.log(`vivo 服务端可发送条件: ${isVivoPushConfigured() ? "满足" : "不满足"}`);
   console.log(`本机 google-services.json: ${googleServices.found ? "存在" : "缺失"}`);
   if (googleServices.found) {
     const packageText = googleServices.packageNames.length > 0 ? googleServices.packageNames.join(", ") : "未解析到 package_name";
@@ -363,7 +351,7 @@ async function printDeviceState(pool: pg.Pool) {
 
 async function printVendorDeviceState(pool: pg.Pool) {
   const exists = await namedTableExists(pool, "push_vendor_devices");
-  console.log("== ORF 厂商 Push 设备表 ==");
+  console.log("== ORF 历史厂商 Push 设备表（当前不参与投递） ==");
   console.log(`push_vendor_devices 表: ${exists ? "存在" : "缺失"}`);
   if (!exists) {
     console.log("建议先运行 npm run db:migrate。");
@@ -521,7 +509,7 @@ async function printRegistrationStatusState(pool: pg.Pool) {
 
 async function printVendorRegistrationStatusState(pool: pg.Pool) {
   const exists = await namedTableExists(pool, "push_vendor_registration_statuses");
-  console.log("== ORF 厂商 Push 注册状态 ==");
+  console.log("== ORF 历史厂商 Push 注册状态（当前不参与投递） ==");
   console.log(`push_vendor_registration_statuses 表: ${exists ? "存在" : "缺失"}`);
   if (!exists) {
     console.log("建议先运行 npm run db:migrate。");
@@ -696,8 +684,8 @@ async function sendTestPush(pool: pg.Pool, args: CliArgs) {
   if (!env.ORF_PUSH_ENABLED) {
     throw new Error("ORF Push 未启用：需要 ORF_PUSH_ENABLED=true。");
   }
-  if (!isFirebasePushConfigured() && !isVivoPushConfigured()) {
-    throw new Error("没有可用的系统 Push 服务端通道：需要配置 Firebase 或 vivo Push。");
+  if (!isFirebasePushConfigured()) {
+    throw new Error("没有可用的系统 Push 服务端通道：需要配置 Firebase FCM。");
   }
 
   const recipients = await loadTestRecipients(pool, args);
@@ -734,7 +722,7 @@ async function sendTestPush(pool: pg.Pool, args: CliArgs) {
   console.log(`投递失败: ${result.failureCount}`);
   console.log(`无效 token: ${result.invalidTokenCount}`);
   if (result.targetDeviceCount === 0) {
-    console.log("没有可投递设备。请先安装新版 APK，打开应用、登录并授权通知；vivo 设备还需要厂商 Push RegID 注册成功。");
+    console.log("没有可投递设备。请先安装新版 APK，打开应用、登录并授权通知，确保 FCM token 已注册到 push_devices。");
   }
   console.log("");
 }

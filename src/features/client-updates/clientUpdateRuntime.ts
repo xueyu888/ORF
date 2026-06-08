@@ -10,9 +10,6 @@ export type NativeRuntimeInfo = {
   osVersion?: string | null;
   platform?: string;
   sdkInt?: number | null;
-  vivoPushReason?: string | null;
-  vivoPushRegId?: string | null;
-  vivoPushSupported?: boolean | null;
   version?: string | null;
   versionCode?: number | null;
 };
