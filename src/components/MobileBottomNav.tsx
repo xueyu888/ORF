@@ -18,7 +18,7 @@ export function MobileBottomNav() {
   }
 
   return (
-    <nav className="orf-mobile-bottom-nav" aria-label="移动端主导航">
+    <nav className="orf-mobile-bottom-nav" aria-label="移动端导航">
       {visibleItems.map((item) => {
         const badgeCount = item.path === "/chat"
           ? chatUnreadSummary.totalUnreadCount
