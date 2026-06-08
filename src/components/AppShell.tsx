@@ -18,8 +18,10 @@ import { ClientReleaseNotesDialog } from "../features/client-updates/ClientRelea
 import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls";
 import { isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
 import { useVisualBackground } from "../hooks/useVisualBackground";
+import { defaultChatTheme, type ChatTheme } from "../domain/settings/personalPreferences";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
+import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 
 export function AppShell() {
   const location = useLocation();
@@ -28,6 +30,7 @@ export function AppShell() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
   const sidebarBackground = useVisualBackground("app_background");
 
   useEffect(() => {
@@ -37,19 +40,28 @@ export function AppShell() {
   useEffect(() => {
     let cancelled = false;
     if (!currentUser) {
+      setSidebarCollapsed(false);
+      setChatTheme(defaultChatTheme);
       return undefined;
     }
 
-    void getUserPreferences()
-      .then((preferences) => {
-        if (!cancelled && preferences.sidebarCollapsed !== null) {
-          setSidebarCollapsed(preferences.sidebarCollapsed);
-        }
-      })
-      .catch(() => undefined);
+    const refreshPreferences = () => {
+      void getUserPreferences()
+        .then((preferences) => {
+          if (!cancelled) {
+            setSidebarCollapsed(preferences.sidebarCollapsed ?? false);
+            setChatTheme(preferences.chatTheme);
+          }
+        })
+        .catch(() => undefined);
+    };
+
+    refreshPreferences();
+    const unsubscribe = subscribePersonalPreferencesChanged(refreshPreferences);
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, [currentUser]);
 
@@ -85,6 +97,7 @@ export function AppShell() {
       className="orf-app-shell flex min-h-screen"
       data-bounty-hall={isBountyHall ? "true" : "false"}
       data-chat-page={isChatPage ? "true" : "false"}
+      data-chat-theme={chatTheme}
       data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       style={shellStyle}

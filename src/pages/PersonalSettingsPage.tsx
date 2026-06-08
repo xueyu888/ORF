@@ -1,10 +1,11 @@
 import { clsx } from "clsx";
-import { BellRing, Check, Image, Loader2, Trash2, Upload } from "lucide-react";
+import { BellRing, Check, Image, Loader2, Moon, Trash2, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
 import { Button, Card, Field } from "../components/ui";
+import { defaultChatTheme, type ChatTheme } from "../domain/settings/personalPreferences";
 import { sendNativeChatNotification } from "../features/chat/chatNativeNotificationDelivery";
 import {
   deletePersonalBackground,
@@ -37,6 +38,11 @@ const landingOptions = [
   { label: "反馈", value: "/feedback" },
   { label: "统计", value: "/reports" },
   { label: "消息", value: "/notifications" },
+];
+
+const chatThemeOptions: Array<{ label: string; value: ChatTheme }> = [
+  { label: "舒适暗色", value: "dark" },
+  { label: "经典浅色", value: "light" },
 ];
 
 export function PersonalSettingsPage() {
@@ -109,6 +115,10 @@ export function PersonalSettingsPage() {
 
   const handleSidebarPreferenceChange = async (value: string) => {
     await savePreferencePatch({ sidebarCollapsed: value === "system" ? null : value === "collapsed" });
+  };
+
+  const handleChatThemeChange = async (value: ChatTheme) => {
+    await savePreferencePatch({ chatTheme: value }, "聊天主题已更新");
   };
 
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -346,6 +356,25 @@ export function PersonalSettingsPage() {
                 <option value="collapsed">折叠</option>
               </select>
             </Field>
+            <Field label="聊天界面主题">
+              <select
+                className="orf-control border px-3 py-2 text-sm"
+                value={preferences?.chatTheme ?? defaultChatTheme}
+                disabled={!preferences || busy}
+                onChange={(event) => void handleChatThemeChange(event.target.value as ChatTheme)}
+              >
+                {chatThemeOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="flex items-start gap-3 border-t pt-4 orf-border">
+              <Moon className="mt-0.5 h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
+              <div>
+                <div className="font-medium orf-text-primary">聊天独立配色</div>
+                <div className="mt-1 text-sm orf-text-secondary">只影响聊天页的侧栏、消息区、输入框和聊天浮层，不改变其他页面皮肤。</div>
+              </div>
+            </div>
             <label className="flex items-center justify-between gap-4 border-t pt-4 orf-border">
               <span>
                 <span className="block font-medium orf-text-primary">Toast 通知</span>
