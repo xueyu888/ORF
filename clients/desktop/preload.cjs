@@ -25,3 +25,9 @@ contextBridge.exposeInMainWorld("orfNativeRuntime", {
     return ipcRenderer.invoke("orf:runtime:install-update", payload);
   },
 });
+
+contextBridge.exposeInMainWorld("orfDesktopShell", {
+  setChatUnreadCount(payload) {
+    return ipcRenderer.invoke("orf:desktop-shell:set-chat-unread-count", payload);
+  },
+});

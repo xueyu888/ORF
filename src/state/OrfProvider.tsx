@@ -26,6 +26,7 @@ import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from 
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
 import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
+import { syncDesktopChatUnreadCount } from "../features/desktop/desktopShellRuntime";
 import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
 import {
   isSafeChatNotificationTargetPath,
@@ -362,6 +363,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       setSystemBroadcasts([]);
     }
   }, [isApproved, isAuthenticated]);
+
+  useEffect(() => {
+    const unreadCount = isAuthenticated && isApproved ? chatUnreadSummary.totalUnreadCount : 0;
+    void syncDesktopChatUnreadCount(unreadCount).catch(() => undefined);
+  }, [chatUnreadSummary.totalUnreadCount, isApproved, isAuthenticated]);
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) return;

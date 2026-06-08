@@ -14,7 +14,6 @@ const appPackage = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "clients/de
 const mainSource = path.resolve(repoRoot, "clients/desktop/main.cjs");
 const preloadSource = path.resolve(repoRoot, "clients/desktop/preload.cjs");
 const androidLauncherIconSource = path.resolve(repoRoot, "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png");
-const androidLauncherForegroundIconSource = path.resolve(repoRoot, "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png");
 const mainTarget = path.resolve(tempRoot, "main.cjs");
 const preloadTarget = path.resolve(tempRoot, "preload.cjs");
 const packageTarget = path.resolve(tempRoot, "package.json");
@@ -77,13 +76,10 @@ function prepareDesktopIcons() {
   if (!fs.existsSync(androidLauncherIconSource)) {
     throw new Error(`Missing Android launcher icon: ${androidLauncherIconSource}`);
   }
-  if (!fs.existsSync(androidLauncherForegroundIconSource)) {
-    throw new Error(`Missing Android launcher foreground icon: ${androidLauncherForegroundIconSource}`);
-  }
   fs.mkdirSync(appAssetsTargetDir, { recursive: true });
   fs.mkdirSync(buildResourcesTargetDir, { recursive: true });
   fs.copyFileSync(androidLauncherIconSource, appIconTarget);
-  fs.copyFileSync(androidLauncherForegroundIconSource, buildIconTarget);
+  fs.copyFileSync(androidLauncherIconSource, buildIconTarget);
 }
 
 try {

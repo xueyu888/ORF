@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
-const { app, BrowserWindow, Menu, Notification, ipcMain, net, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, shell } = require("electron");
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
 const DESKTOP_PACKAGE_PATH = path.join(__dirname, "package.json");
@@ -19,6 +19,18 @@ const REPO_ANDROID_LAUNCHER_ICON_PATH = path.resolve(
   "mipmap-xxxhdpi",
   "ic_launcher.png",
 );
+const DESKTOP_UNREAD_BADGE_LIMIT = 99;
+const ORF_APP_NAME = "ORF";
+
+const desktopShellState = {
+  clientUrl: null,
+  isQuitting: false,
+  mainWindow: null,
+  tray: null,
+  unreadCount: 0,
+};
+
+let desktopIconDataUrlCache = null;
 
 function resolveClientUrl() {
   const rawUrl = process.env.ORF_CLIENT_URL || process.env.ORF_APP_URL || DEFAULT_ORF_CLIENT_URL;
@@ -46,6 +58,8 @@ function createMainWindow(clientUrl) {
       sandbox: true,
     },
   });
+  desktopShellState.clientUrl = clientUrl;
+  desktopShellState.mainWindow = mainWindow;
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const targetUrl = new URL(url);
@@ -63,7 +77,24 @@ function createMainWindow(clientUrl) {
     void shell.openExternal(url);
   });
 
+  mainWindow.on("close", (event) => {
+    if (!shouldKeepWindowInTray()) return;
+    event.preventDefault();
+    mainWindow.hide();
+    updateDesktopUnreadState();
+  });
+  mainWindow.on("focus", () => {
+    mainWindow.flashFrame(false);
+  });
+  mainWindow.on("show", updateDesktopUnreadState);
+  mainWindow.on("closed", () => {
+    if (desktopShellState.mainWindow === mainWindow) {
+      desktopShellState.mainWindow = null;
+    }
+  });
+
   void mainWindow.loadURL(clientUrl.toString());
+  updateDesktopUnreadState();
   return mainWindow;
 }
 
@@ -73,8 +104,190 @@ function resolveDesktopIconPath() {
   return undefined;
 }
 
+function resolveDesktopIconDataUrl() {
+  if (desktopIconDataUrlCache !== null) return desktopIconDataUrlCache;
+  const iconPath = resolveDesktopIconPath();
+  if (!iconPath) {
+    desktopIconDataUrlCache = "";
+    return desktopIconDataUrlCache;
+  }
+  try {
+    const mimeType = path.extname(iconPath).toLowerCase() === ".ico" ? "image/x-icon" : "image/png";
+    desktopIconDataUrlCache = `data:${mimeType};base64,${fs.readFileSync(iconPath).toString("base64")}`;
+  } catch {
+    desktopIconDataUrlCache = "";
+  }
+  return desktopIconDataUrlCache;
+}
+
+function shouldKeepWindowInTray() {
+  return process.platform === "win32" && Boolean(desktopShellState.tray) && !desktopShellState.isQuitting;
+}
+
+function createDesktopTray(clientUrl) {
+  if (process.platform !== "win32" || desktopShellState.tray) return;
+  desktopShellState.clientUrl = clientUrl;
+  const tray = new Tray(createTrayIconImage(desktopShellState.unreadCount));
+  desktopShellState.tray = tray;
+  tray.on("click", () => showMainWindow());
+  tray.on("double-click", () => showMainWindow("/chat"));
+  updateDesktopUnreadState();
+}
+
+function showMainWindow(targetPath) {
+  const clientUrl = desktopShellState.clientUrl ?? resolveClientUrl();
+  desktopShellState.clientUrl = clientUrl;
+  const currentWindow = desktopShellState.mainWindow;
+  const targetWindow = currentWindow && !currentWindow.isDestroyed() ? currentWindow : createMainWindow(clientUrl);
+  if (targetWindow.isMinimized()) targetWindow.restore();
+  targetWindow.show();
+  targetWindow.focus();
+  if (isSafeChatTargetPath(targetPath)) {
+    openChatTargetInWindow(targetWindow, targetPath);
+  }
+  return targetWindow;
+}
+
+function openChatTargetInWindow(targetWindow, targetPath) {
+  const sendOpenTarget = () => {
+    if (!targetWindow.isDestroyed()) {
+      targetWindow.webContents.send("orf:chat-notification:open", targetPath);
+    }
+  };
+  if (targetWindow.webContents.isLoading()) {
+    targetWindow.webContents.once("did-finish-load", sendOpenTarget);
+    return;
+  }
+  sendOpenTarget();
+}
+
+function requestDesktopAttention(targetWindow) {
+  if (process.platform !== "win32") return;
+  const windowToFlash = targetWindow && !targetWindow.isDestroyed() ? targetWindow : desktopShellState.mainWindow;
+  if (!windowToFlash || windowToFlash.isDestroyed() || windowToFlash.isFocused()) return;
+  windowToFlash.flashFrame(true);
+}
+
+function setDesktopUnreadCount(unreadCount) {
+  const previousUnreadCount = desktopShellState.unreadCount;
+  desktopShellState.unreadCount = unreadCount;
+  updateDesktopUnreadState({ unreadIncreased: unreadCount > previousUnreadCount });
+}
+
+function updateDesktopUnreadState(options = {}) {
+  updateTrayUnreadState();
+  const targetWindow = desktopShellState.mainWindow;
+  if (process.platform !== "win32" || !targetWindow || targetWindow.isDestroyed()) return;
+
+  const unreadCount = desktopShellState.unreadCount;
+  if (unreadCount > 0) {
+    targetWindow.setOverlayIcon(createTaskbarUnreadOverlayImage(unreadCount), unreadDescription(unreadCount));
+    if (options.unreadIncreased && !targetWindow.isFocused()) {
+      targetWindow.flashFrame(true);
+    }
+    return;
+  }
+
+  targetWindow.setOverlayIcon(null, "");
+  targetWindow.flashFrame(false);
+}
+
+function updateTrayUnreadState() {
+  const tray = desktopShellState.tray;
+  if (!tray || tray.isDestroyed()) return;
+  const unreadCount = desktopShellState.unreadCount;
+  tray.setImage(createTrayIconImage(unreadCount));
+  tray.setToolTip(unreadCount > 0 ? `${ORF_APP_NAME} - ${unreadDescription(unreadCount)}` : ORF_APP_NAME);
+  tray.setContextMenu(Menu.buildFromTemplate([
+    {
+      label: unreadCount > 0 ? `打开聊天（${desktopUnreadBadgeLabel(unreadCount)} 未读）` : "打开聊天",
+      click: () => showMainWindow("/chat"),
+    },
+    {
+      label: "打开 ORF",
+      click: () => showMainWindow(),
+    },
+    { type: "separator" },
+    {
+      label: "退出",
+      click: () => {
+        desktopShellState.isQuitting = true;
+        app.quit();
+      },
+    },
+  ]));
+}
+
+function createTrayIconImage(unreadCount) {
+  if (unreadCount <= 0) {
+    const iconPath = resolveDesktopIconPath();
+    if (iconPath) {
+      const image = nativeImage.createFromPath(iconPath).resize({ height: 32, width: 32 });
+      image.setTemplateImage(false);
+      return image;
+    }
+  }
+
+  const iconDataUrl = resolveDesktopIconDataUrl();
+  const label = desktopUnreadBadgeLabel(unreadCount);
+  const badgeWidth = label.length > 2 ? 18 : 14;
+  const badgeX = 31 - badgeWidth;
+  const fontSize = label.length > 2 ? 8 : 10;
+  const badgeMarkup = unreadCount > 0
+    ? `<rect x="${badgeX}" y="1" width="${badgeWidth}" height="14" rx="7" fill="#ef4444"/><text x="${badgeX + badgeWidth / 2}" y="11.3" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700" fill="#fff">${escapeSvgText(label)}</text>`
+    : "";
+  const iconMarkup = iconDataUrl
+    ? `<image href="${iconDataUrl}" x="1" y="1" width="30" height="30" preserveAspectRatio="xMidYMid meet"/>`
+    : `<rect x="2" y="2" width="28" height="28" rx="7" fill="#f8fafc"/><path d="M9 9l14 14M23 9L9 23" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>`;
+  const image = createSvgNativeImage(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">${iconMarkup}${badgeMarkup}</svg>`);
+  image.setTemplateImage(false);
+  return image;
+}
+
+function createTaskbarUnreadOverlayImage(unreadCount) {
+  const label = desktopUnreadBadgeLabel(unreadCount);
+  const wide = label.length > 2;
+  const badgeX = wide ? 2 : 4;
+  const badgeWidth = wide ? 28 : 24;
+  const fontSize = wide ? 11 : 14;
+  return createSvgNativeImage(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="${badgeX}" y="5" width="${badgeWidth}" height="22" rx="11" fill="#ef4444"/><path d="M9 11h14" stroke="#fff" stroke-width="2.3" stroke-linecap="round" opacity=".28"/><text x="16" y="${wide ? 21 : 22}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="800" fill="#fff">${escapeSvgText(label)}</text></svg>`);
+}
+
+function createSvgNativeImage(svg) {
+  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+}
+
+function desktopUnreadBadgeLabel(unreadCount) {
+  return unreadCount > DESKTOP_UNREAD_BADGE_LIMIT ? `${DESKTOP_UNREAD_BADGE_LIMIT}+` : String(Math.max(0, unreadCount));
+}
+
+function unreadDescription(unreadCount) {
+  return `${desktopUnreadBadgeLabel(unreadCount)} 条未读聊天消息`;
+}
+
+function escapeSvgText(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
+
 function isSafeChatTargetPath(targetPath) {
   return typeof targetPath === "string" && /^\/chat(?:\/[^?#]+)?(?:\?[^#]*)?$/.test(targetPath);
+}
+
+function normalizeDesktopUnreadInput(input) {
+  const rawValue = typeof input === "number"
+    ? input
+    : input && typeof input === "object" && "count" in input
+      ? input.count
+      : 0;
+  const count = Number(rawValue);
+  if (!Number.isFinite(count)) return 0;
+  return Math.max(0, Math.floor(count));
 }
 
 function notificationText(value, limit) {
@@ -111,15 +324,19 @@ function registerNativeNotificationBridge(clientUrl) {
       silent: false,
     });
     notification.on("click", () => {
-      const targetWindow = BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getAllWindows()[0];
-      if (!targetWindow || targetWindow.isDestroyed()) return;
-      if (targetWindow.isMinimized()) targetWindow.restore();
-      targetWindow.show();
-      targetWindow.focus();
-      targetWindow.webContents.send("orf:chat-notification:open", payload.targetPath);
+      showMainWindow(payload.targetPath);
     });
     notification.show();
+    requestDesktopAttention(BrowserWindow.fromWebContents(event.sender));
     return { status: "success" };
+  });
+}
+
+function registerDesktopShellBridge() {
+  ipcMain.handle("orf:desktop-shell:set-chat-unread-count", (_event, input) => {
+    const unreadCount = normalizeDesktopUnreadInput(input);
+    setDesktopUnreadCount(unreadCount);
+    return { status: "success", data: unreadCount };
   });
 }
 
@@ -212,18 +429,28 @@ function sanitizeUpdateInstallerName(value, fallback) {
 app.setName("ORF");
 app.setAppUserModelId("org.duckdns.orfxueyu.orf");
 Menu.setApplicationMenu(null);
+app.on("before-quit", () => {
+  desktopShellState.isQuitting = true;
+  if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
+    desktopShellState.tray.destroy();
+  }
+  desktopShellState.tray = null;
+});
 
 app.whenReady().then(() => {
   const clientUrl = resolveClientUrl();
+  desktopShellState.clientUrl = clientUrl;
   registerNativeNotificationBridge(clientUrl);
   registerNativeRuntimeBridge();
+  registerDesktopShellBridge();
+  createDesktopTray(clientUrl);
   createMainWindow(clientUrl);
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow(clientUrl);
+    showMainWindow();
   });
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin" && !desktopShellState.tray) app.quit();
 });
