@@ -21,6 +21,22 @@ const REPO_ANDROID_LAUNCHER_ICON_PATH = path.resolve(
 );
 const DESKTOP_UNREAD_BADGE_LIMIT = 99;
 const ORF_APP_NAME = "ORF";
+const DESKTOP_ICON_BITMAP_SIZE = 32;
+const DESKTOP_ICON_BITMAP_SCALE = 2;
+const desktopBadgeGlyphs = {
+  "0": ["111", "101", "101", "101", "111"],
+  "1": ["010", "110", "010", "010", "111"],
+  "2": ["111", "001", "111", "100", "111"],
+  "3": ["111", "001", "111", "001", "111"],
+  "4": ["101", "101", "111", "001", "001"],
+  "5": ["111", "100", "111", "001", "111"],
+  "6": ["111", "100", "111", "101", "111"],
+  "7": ["111", "001", "010", "010", "010"],
+  "8": ["111", "101", "111", "101", "111"],
+  "9": ["111", "101", "111", "001", "111"],
+  "+": ["000", "010", "111", "010", "000"],
+  "?": ["111", "001", "011", "000", "010"],
+};
 
 const desktopShellState = {
   clientUrl: null,
@@ -29,8 +45,6 @@ const desktopShellState = {
   tray: null,
   unreadCount: 0,
 };
-
-let desktopIconDataUrlCache = null;
 
 function resolveClientUrl() {
   const rawUrl = process.env.ORF_CLIENT_URL || process.env.ORF_APP_URL || DEFAULT_ORF_CLIENT_URL;
@@ -102,22 +116,6 @@ function resolveDesktopIconPath() {
   if (fs.existsSync(PACKAGED_DESKTOP_ICON_PATH)) return PACKAGED_DESKTOP_ICON_PATH;
   if (fs.existsSync(REPO_ANDROID_LAUNCHER_ICON_PATH)) return REPO_ANDROID_LAUNCHER_ICON_PATH;
   return undefined;
-}
-
-function resolveDesktopIconDataUrl() {
-  if (desktopIconDataUrlCache !== null) return desktopIconDataUrlCache;
-  const iconPath = resolveDesktopIconPath();
-  if (!iconPath) {
-    desktopIconDataUrlCache = "";
-    return desktopIconDataUrlCache;
-  }
-  try {
-    const mimeType = path.extname(iconPath).toLowerCase() === ".ico" ? "image/x-icon" : "image/png";
-    desktopIconDataUrlCache = `data:${mimeType};base64,${fs.readFileSync(iconPath).toString("base64")}`;
-  } catch {
-    desktopIconDataUrlCache = "";
-  }
-  return desktopIconDataUrlCache;
 }
 
 function shouldKeepWindowInTray() {
@@ -222,39 +220,185 @@ function createTrayIconImage(unreadCount) {
   if (unreadCount <= 0) {
     const iconPath = resolveDesktopIconPath();
     if (iconPath) {
-      const image = nativeImage.createFromPath(iconPath).resize({ height: 32, width: 32 });
+      const image = nativeImage.createFromPath(iconPath).resize({
+        height: DESKTOP_ICON_BITMAP_SIZE,
+        width: DESKTOP_ICON_BITMAP_SIZE,
+      });
       image.setTemplateImage(false);
       return image;
     }
   }
 
-  const iconDataUrl = resolveDesktopIconDataUrl();
-  const label = desktopUnreadBadgeLabel(unreadCount);
-  const badgeWidth = label.length > 2 ? 18 : 14;
-  const badgeX = 31 - badgeWidth;
-  const fontSize = label.length > 2 ? 8 : 10;
-  const badgeMarkup = unreadCount > 0
-    ? `<rect x="${badgeX}" y="1" width="${badgeWidth}" height="14" rx="7" fill="#ef4444"/><text x="${badgeX + badgeWidth / 2}" y="11.3" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="700" fill="#fff">${escapeSvgText(label)}</text>`
-    : "";
-  const iconMarkup = iconDataUrl
-    ? `<image href="${iconDataUrl}" x="1" y="1" width="30" height="30" preserveAspectRatio="xMidYMid meet"/>`
-    : `<rect x="2" y="2" width="28" height="28" rx="7" fill="#f8fafc"/><path d="M9 9l14 14M23 9L9 23" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>`;
-  const image = createSvgNativeImage(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">${iconMarkup}${badgeMarkup}</svg>`);
+  const image = createUnreadTrayIconImage(unreadCount);
   image.setTemplateImage(false);
   return image;
 }
 
-function createTaskbarUnreadOverlayImage(unreadCount) {
-  const label = desktopUnreadBadgeLabel(unreadCount);
-  const wide = label.length > 2;
-  const badgeX = wide ? 2 : 4;
-  const badgeWidth = wide ? 28 : 24;
-  const fontSize = wide ? 11 : 14;
-  return createSvgNativeImage(`<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><rect x="${badgeX}" y="5" width="${badgeWidth}" height="22" rx="11" fill="#ef4444"/><path d="M9 11h14" stroke="#fff" stroke-width="2.3" stroke-linecap="round" opacity=".28"/><text x="16" y="${wide ? 21 : 22}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${fontSize}" font-weight="800" fill="#fff">${escapeSvgText(label)}</text></svg>`);
+function createUnreadTrayIconImage(unreadCount) {
+  return createBitmapNativeImage(DESKTOP_ICON_BITMAP_SIZE, DESKTOP_ICON_BITMAP_SIZE, (canvas) => {
+    fillRoundedRect(canvas, 2, 2, 28, 28, 7, { r: 248, g: 250, b: 252, a: 255 });
+    fillRoundedRect(canvas, 3, 3, 26, 26, 6, { r: 255, g: 255, b: 255, a: 255 });
+    drawLine(canvas, 9, 8.5, 23.5, 23, 4.2, { r: 56, g: 189, b: 248, a: 255 });
+    drawLine(canvas, 23, 8.5, 8.5, 23, 4.2, { r: 56, g: 189, b: 248, a: 255 });
+    drawUnreadBadge(canvas, unreadCount, { centerX: 24, centerY: 8, radius: 7.5 });
+  });
 }
 
-function createSvgNativeImage(svg) {
-  return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`);
+function createTaskbarUnreadOverlayImage(unreadCount) {
+  return createBitmapNativeImage(DESKTOP_ICON_BITMAP_SIZE, DESKTOP_ICON_BITMAP_SIZE, (canvas) => {
+    drawUnreadBadge(canvas, unreadCount, { centerX: 16, centerY: 16, radius: 13.5 });
+  });
+}
+
+function createBitmapNativeImage(logicalWidth, logicalHeight, draw) {
+  const scaleFactor = DESKTOP_ICON_BITMAP_SCALE;
+  const canvas = {
+    buffer: Buffer.alloc(logicalWidth * scaleFactor * logicalHeight * scaleFactor * 4),
+    height: logicalHeight * scaleFactor,
+    scaleFactor,
+    width: logicalWidth * scaleFactor,
+  };
+  draw(canvas);
+  return nativeImage.createFromBitmap(canvas.buffer, {
+    height: canvas.height,
+    scaleFactor,
+    width: canvas.width,
+  });
+}
+
+function drawUnreadBadge(canvas, unreadCount, options) {
+  const label = desktopUnreadBadgeLabel(unreadCount);
+  fillCircle(canvas, options.centerX, options.centerY, options.radius, { r: 239, g: 68, b: 68, a: 255 });
+  fillCircle(canvas, options.centerX, options.centerY, options.radius - 1.4, { r: 248, g: 55, b: 61, a: 255 });
+  const textScale = badgeTextScale(label, options.radius);
+  drawCenteredPixelText(canvas, label, options.centerX, options.centerY + 0.2, textScale, {
+    r: 255,
+    g: 255,
+    b: 255,
+    a: 255,
+  });
+}
+
+function badgeTextScale(label, radius) {
+  if (radius >= 10) {
+    if (label.length <= 1) return 2.5;
+    if (label.length <= 2) return 1.8;
+    return 1.2;
+  }
+  if (label.length <= 1) return 1.8;
+  if (label.length <= 2) return 1.2;
+  return 0.82;
+}
+
+function fillRoundedRect(canvas, x, y, width, height, radius, color) {
+  const scale = canvas.scaleFactor;
+  const startX = Math.floor(x * scale);
+  const endX = Math.ceil((x + width) * scale);
+  const startY = Math.floor(y * scale);
+  const endY = Math.ceil((y + height) * scale);
+  for (let pixelY = startY; pixelY < endY; pixelY += 1) {
+    for (let pixelX = startX; pixelX < endX; pixelX += 1) {
+      const logicalX = (pixelX + 0.5) / scale;
+      const logicalY = (pixelY + 0.5) / scale;
+      const nearestX = Math.max(x + radius, Math.min(logicalX, x + width - radius));
+      const nearestY = Math.max(y + radius, Math.min(logicalY, y + height - radius));
+      const distanceX = logicalX - nearestX;
+      const distanceY = logicalY - nearestY;
+      if (distanceX * distanceX + distanceY * distanceY <= radius * radius) {
+        blendPixel(canvas, pixelX, pixelY, color);
+      }
+    }
+  }
+}
+
+function fillCircle(canvas, centerX, centerY, radius, color) {
+  const scale = canvas.scaleFactor;
+  const startX = Math.floor((centerX - radius) * scale);
+  const endX = Math.ceil((centerX + radius) * scale);
+  const startY = Math.floor((centerY - radius) * scale);
+  const endY = Math.ceil((centerY + radius) * scale);
+  for (let pixelY = startY; pixelY < endY; pixelY += 1) {
+    for (let pixelX = startX; pixelX < endX; pixelX += 1) {
+      const logicalX = (pixelX + 0.5) / scale;
+      const logicalY = (pixelY + 0.5) / scale;
+      const distanceX = logicalX - centerX;
+      const distanceY = logicalY - centerY;
+      if (distanceX * distanceX + distanceY * distanceY <= radius * radius) {
+        blendPixel(canvas, pixelX, pixelY, color);
+      }
+    }
+  }
+}
+
+function drawLine(canvas, startX, startY, endX, endY, thickness, color) {
+  const scale = canvas.scaleFactor;
+  const halfThickness = thickness / 2;
+  const minX = Math.floor((Math.min(startX, endX) - halfThickness) * scale);
+  const maxX = Math.ceil((Math.max(startX, endX) + halfThickness) * scale);
+  const minY = Math.floor((Math.min(startY, endY) - halfThickness) * scale);
+  const maxY = Math.ceil((Math.max(startY, endY) + halfThickness) * scale);
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+  if (lengthSquared <= 0) return;
+  for (let pixelY = minY; pixelY < maxY; pixelY += 1) {
+    for (let pixelX = minX; pixelX < maxX; pixelX += 1) {
+      const logicalX = (pixelX + 0.5) / scale;
+      const logicalY = (pixelY + 0.5) / scale;
+      const progress = Math.max(0, Math.min(1, ((logicalX - startX) * deltaX + (logicalY - startY) * deltaY) / lengthSquared));
+      const nearestX = startX + progress * deltaX;
+      const nearestY = startY + progress * deltaY;
+      const distanceX = logicalX - nearestX;
+      const distanceY = logicalY - nearestY;
+      if (distanceX * distanceX + distanceY * distanceY <= halfThickness * halfThickness) {
+        blendPixel(canvas, pixelX, pixelY, color);
+      }
+    }
+  }
+}
+
+function drawCenteredPixelText(canvas, text, centerX, centerY, scale, color) {
+  const glyphs = String(text).split("").map((char) => desktopBadgeGlyphs[char] ?? desktopBadgeGlyphs["?"]);
+  const glyphWidth = 3;
+  const glyphHeight = 5;
+  const gap = scale;
+  const totalWidth = glyphs.length * glyphWidth * scale + Math.max(0, glyphs.length - 1) * gap;
+  let cursorX = centerX - totalWidth / 2;
+  const top = centerY - (glyphHeight * scale) / 2;
+  for (const glyph of glyphs) {
+    for (let row = 0; row < glyphHeight; row += 1) {
+      for (let column = 0; column < glyphWidth; column += 1) {
+        if (glyph[row]?.[column] === "1") {
+          fillRect(canvas, cursorX + column * scale, top + row * scale, scale, scale, color);
+        }
+      }
+    }
+    cursorX += glyphWidth * scale + gap;
+  }
+}
+
+function fillRect(canvas, x, y, width, height, color) {
+  const scale = canvas.scaleFactor;
+  const startX = Math.floor(x * scale);
+  const endX = Math.ceil((x + width) * scale);
+  const startY = Math.floor(y * scale);
+  const endY = Math.ceil((y + height) * scale);
+  for (let pixelY = startY; pixelY < endY; pixelY += 1) {
+    for (let pixelX = startX; pixelX < endX; pixelX += 1) {
+      blendPixel(canvas, pixelX, pixelY, color);
+    }
+  }
+}
+
+function blendPixel(canvas, x, y, color) {
+  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height || color.a <= 0) return;
+  const offset = (y * canvas.width + x) * 4;
+  const alpha = color.a / 255;
+  const inverseAlpha = 1 - alpha;
+  canvas.buffer[offset] = Math.round(color.b * alpha + canvas.buffer[offset] * inverseAlpha);
+  canvas.buffer[offset + 1] = Math.round(color.g * alpha + canvas.buffer[offset + 1] * inverseAlpha);
+  canvas.buffer[offset + 2] = Math.round(color.r * alpha + canvas.buffer[offset + 2] * inverseAlpha);
+  canvas.buffer[offset + 3] = Math.round(color.a + canvas.buffer[offset + 3] * inverseAlpha);
 }
 
 function desktopUnreadBadgeLabel(unreadCount) {
@@ -263,16 +407,6 @@ function desktopUnreadBadgeLabel(unreadCount) {
 
 function unreadDescription(unreadCount) {
   return `${desktopUnreadBadgeLabel(unreadCount)} 条未读聊天消息`;
-}
-
-function escapeSvgText(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    "\"": "&quot;",
-    "'": "&#39;",
-  }[char]));
 }
 
 function isSafeChatTargetPath(targetPath) {
