@@ -12,9 +12,11 @@ const outputDir = path.resolve(repoRoot, "release/desktop");
 const electronBuilderCli = path.resolve(repoRoot, "node_modules", "electron-builder", "cli.js");
 
 const appPackage = JSON.parse(fs.readFileSync(path.resolve(repoRoot, "clients/desktop/package.json"), "utf8"));
+const iconRendererSource = path.resolve(repoRoot, "clients/desktop/icon-renderer.cjs");
 const mainSource = path.resolve(repoRoot, "clients/desktop/main.cjs");
 const preloadSource = path.resolve(repoRoot, "clients/desktop/preload.cjs");
-const androidLauncherIconSource = path.resolve(repoRoot, "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png");
+const desktopAppIconSource = path.resolve(repoRoot, "src/assets/brand/orf-app-icon.png");
+const iconRendererTarget = path.resolve(tempRoot, "icon-renderer.cjs");
 const mainTarget = path.resolve(tempRoot, "main.cjs");
 const preloadTarget = path.resolve(tempRoot, "preload.cjs");
 const packageTarget = path.resolve(tempRoot, "package.json");
@@ -37,6 +39,7 @@ const builderConfig = {
   },
   files: [
     "assets/icon.png",
+    "icon-renderer.cjs",
     "main.cjs",
     "package.json",
     "preload.cjs",
@@ -76,12 +79,12 @@ function rootElectronVersion() {
 }
 
 function prepareDesktopIcons() {
-  if (!fs.existsSync(androidLauncherIconSource)) {
-    throw new Error(`Missing Android launcher icon: ${androidLauncherIconSource}`);
+  if (!fs.existsSync(desktopAppIconSource)) {
+    throw new Error(`Missing desktop app icon: ${desktopAppIconSource}. Run npm run client:icons:generate.`);
   }
   fs.mkdirSync(appAssetsTargetDir, { recursive: true });
   fs.mkdirSync(buildResourcesTargetDir, { recursive: true });
-  const desktopIcon = createDesktopIconPng(androidLauncherIconSource, desktopIconSizePx);
+  const desktopIcon = createDesktopIconPng(desktopAppIconSource, desktopIconSizePx);
   fs.writeFileSync(appIconTarget, desktopIcon);
   fs.writeFileSync(buildIconTarget, desktopIcon);
 }
@@ -266,6 +269,7 @@ const crc32Table = (() => {
 
 try {
   prepareDesktopIcons();
+  fs.copyFileSync(iconRendererSource, iconRendererTarget);
   fs.copyFileSync(mainSource, mainTarget);
   fs.copyFileSync(preloadSource, preloadTarget);
   fs.writeFileSync(packageTarget, `${JSON.stringify(appPackage, null, 2)}\n`);

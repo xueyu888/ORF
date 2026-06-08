@@ -3,6 +3,10 @@ const path = require("node:path");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, shell } = require("electron");
+const {
+  createAppIconRgba,
+  createUnreadBadgeRgba,
+} = require("./icon-renderer.cjs");
 
 const DEFAULT_ORF_CLIENT_URL = "https://orf-xueyu.duckdns.org:8443/";
 const DESKTOP_PACKAGE_PATH = path.join(__dirname, "package.json");
@@ -22,21 +26,7 @@ const REPO_ANDROID_LAUNCHER_ICON_PATH = path.resolve(
 const DESKTOP_UNREAD_BADGE_LIMIT = 99;
 const ORF_APP_NAME = "ORF";
 const DESKTOP_ICON_BITMAP_SIZE = 32;
-const DESKTOP_ICON_BITMAP_SCALE = 2;
-const desktopBadgeGlyphs = {
-  "0": ["111", "101", "101", "101", "111"],
-  "1": ["010", "110", "010", "010", "111"],
-  "2": ["111", "001", "111", "100", "111"],
-  "3": ["111", "001", "111", "001", "111"],
-  "4": ["101", "101", "111", "001", "001"],
-  "5": ["111", "100", "111", "001", "111"],
-  "6": ["111", "100", "111", "101", "111"],
-  "7": ["111", "001", "010", "010", "010"],
-  "8": ["111", "101", "111", "101", "111"],
-  "9": ["111", "101", "111", "001", "111"],
-  "+": ["000", "010", "111", "010", "000"],
-  "?": ["111", "001", "011", "000", "010"],
-};
+const DESKTOP_ICON_BITMAP_SCALE = 4;
 
 const desktopShellState = {
   clientUrl: null,
@@ -222,188 +212,41 @@ function updateTrayUnreadState() {
 }
 
 function createTrayIconImage(unreadCount) {
-  if (unreadCount <= 0) {
-    const iconPath = resolveDesktopIconPath();
-    if (iconPath) {
-      const image = nativeImage.createFromPath(iconPath).resize({
-        height: DESKTOP_ICON_BITMAP_SIZE,
-        width: DESKTOP_ICON_BITMAP_SIZE,
-      });
-      image.setTemplateImage(false);
-      return image;
-    }
-  }
-
-  const image = createUnreadTrayIconImage(unreadCount);
+  const image = createDesktopIconNativeImage(DESKTOP_ICON_BITMAP_SIZE, unreadCount);
   image.setTemplateImage(false);
   return image;
 }
 
-function createUnreadTrayIconImage(unreadCount) {
-  return createBitmapNativeImage(DESKTOP_ICON_BITMAP_SIZE, DESKTOP_ICON_BITMAP_SIZE, (canvas) => {
-    fillRoundedRect(canvas, 2, 2, 28, 28, 7, { r: 248, g: 250, b: 252, a: 255 });
-    fillRoundedRect(canvas, 3, 3, 26, 26, 6, { r: 255, g: 255, b: 255, a: 255 });
-    drawLine(canvas, 9, 8.5, 23.5, 23, 4.2, { r: 56, g: 189, b: 248, a: 255 });
-    drawLine(canvas, 23, 8.5, 8.5, 23, 4.2, { r: 56, g: 189, b: 248, a: 255 });
-    drawUnreadBadge(canvas, unreadCount, { centerX: 24, centerY: 8, radius: 7.5 });
-  });
-}
-
 function createTaskbarUnreadOverlayImage(unreadCount) {
-  return createBitmapNativeImage(DESKTOP_ICON_BITMAP_SIZE, DESKTOP_ICON_BITMAP_SIZE, (canvas) => {
-    drawUnreadBadge(canvas, unreadCount, { centerX: 16, centerY: 16, radius: 13.5 });
+  return createNativeImageFromRgba(DESKTOP_ICON_BITMAP_SIZE, createUnreadBadgeRgba(
+    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+    DESKTOP_ICON_BITMAP_SIZE * DESKTOP_ICON_BITMAP_SCALE,
+    unreadCount,
+  ));
+}
+
+function createDesktopIconNativeImage(logicalSize, unreadCount) {
+  return createNativeImageFromRgba(logicalSize, createAppIconRgba(
+    logicalSize * DESKTOP_ICON_BITMAP_SCALE,
+    logicalSize * DESKTOP_ICON_BITMAP_SCALE,
+    { unreadCount },
+  ));
+}
+
+function createNativeImageFromRgba(logicalSize, rgbaBuffer) {
+  const physicalSize = logicalSize * DESKTOP_ICON_BITMAP_SCALE;
+  const bitmap = Buffer.alloc(rgbaBuffer.length);
+  for (let offset = 0; offset < rgbaBuffer.length; offset += 4) {
+    bitmap[offset] = rgbaBuffer[offset + 2];
+    bitmap[offset + 1] = rgbaBuffer[offset + 1];
+    bitmap[offset + 2] = rgbaBuffer[offset];
+    bitmap[offset + 3] = rgbaBuffer[offset + 3];
+  }
+  return nativeImage.createFromBitmap(bitmap, {
+    height: physicalSize,
+    scaleFactor: DESKTOP_ICON_BITMAP_SCALE,
+    width: physicalSize,
   });
-}
-
-function createBitmapNativeImage(logicalWidth, logicalHeight, draw) {
-  const scaleFactor = DESKTOP_ICON_BITMAP_SCALE;
-  const canvas = {
-    buffer: Buffer.alloc(logicalWidth * scaleFactor * logicalHeight * scaleFactor * 4),
-    height: logicalHeight * scaleFactor,
-    scaleFactor,
-    width: logicalWidth * scaleFactor,
-  };
-  draw(canvas);
-  return nativeImage.createFromBitmap(canvas.buffer, {
-    height: canvas.height,
-    scaleFactor,
-    width: canvas.width,
-  });
-}
-
-function drawUnreadBadge(canvas, unreadCount, options) {
-  const label = desktopUnreadBadgeLabel(unreadCount);
-  fillCircle(canvas, options.centerX, options.centerY, options.radius, { r: 239, g: 68, b: 68, a: 255 });
-  fillCircle(canvas, options.centerX, options.centerY, options.radius - 1.4, { r: 248, g: 55, b: 61, a: 255 });
-  const textScale = badgeTextScale(label, options.radius);
-  drawCenteredPixelText(canvas, label, options.centerX, options.centerY + 0.2, textScale, {
-    r: 255,
-    g: 255,
-    b: 255,
-    a: 255,
-  });
-}
-
-function badgeTextScale(label, radius) {
-  if (radius >= 10) {
-    if (label.length <= 1) return 2.5;
-    if (label.length <= 2) return 1.8;
-    return 1.2;
-  }
-  if (label.length <= 1) return 1.8;
-  if (label.length <= 2) return 1.2;
-  return 0.82;
-}
-
-function fillRoundedRect(canvas, x, y, width, height, radius, color) {
-  const scale = canvas.scaleFactor;
-  const startX = Math.floor(x * scale);
-  const endX = Math.ceil((x + width) * scale);
-  const startY = Math.floor(y * scale);
-  const endY = Math.ceil((y + height) * scale);
-  for (let pixelY = startY; pixelY < endY; pixelY += 1) {
-    for (let pixelX = startX; pixelX < endX; pixelX += 1) {
-      const logicalX = (pixelX + 0.5) / scale;
-      const logicalY = (pixelY + 0.5) / scale;
-      const nearestX = Math.max(x + radius, Math.min(logicalX, x + width - radius));
-      const nearestY = Math.max(y + radius, Math.min(logicalY, y + height - radius));
-      const distanceX = logicalX - nearestX;
-      const distanceY = logicalY - nearestY;
-      if (distanceX * distanceX + distanceY * distanceY <= radius * radius) {
-        blendPixel(canvas, pixelX, pixelY, color);
-      }
-    }
-  }
-}
-
-function fillCircle(canvas, centerX, centerY, radius, color) {
-  const scale = canvas.scaleFactor;
-  const startX = Math.floor((centerX - radius) * scale);
-  const endX = Math.ceil((centerX + radius) * scale);
-  const startY = Math.floor((centerY - radius) * scale);
-  const endY = Math.ceil((centerY + radius) * scale);
-  for (let pixelY = startY; pixelY < endY; pixelY += 1) {
-    for (let pixelX = startX; pixelX < endX; pixelX += 1) {
-      const logicalX = (pixelX + 0.5) / scale;
-      const logicalY = (pixelY + 0.5) / scale;
-      const distanceX = logicalX - centerX;
-      const distanceY = logicalY - centerY;
-      if (distanceX * distanceX + distanceY * distanceY <= radius * radius) {
-        blendPixel(canvas, pixelX, pixelY, color);
-      }
-    }
-  }
-}
-
-function drawLine(canvas, startX, startY, endX, endY, thickness, color) {
-  const scale = canvas.scaleFactor;
-  const halfThickness = thickness / 2;
-  const minX = Math.floor((Math.min(startX, endX) - halfThickness) * scale);
-  const maxX = Math.ceil((Math.max(startX, endX) + halfThickness) * scale);
-  const minY = Math.floor((Math.min(startY, endY) - halfThickness) * scale);
-  const maxY = Math.ceil((Math.max(startY, endY) + halfThickness) * scale);
-  const deltaX = endX - startX;
-  const deltaY = endY - startY;
-  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
-  if (lengthSquared <= 0) return;
-  for (let pixelY = minY; pixelY < maxY; pixelY += 1) {
-    for (let pixelX = minX; pixelX < maxX; pixelX += 1) {
-      const logicalX = (pixelX + 0.5) / scale;
-      const logicalY = (pixelY + 0.5) / scale;
-      const progress = Math.max(0, Math.min(1, ((logicalX - startX) * deltaX + (logicalY - startY) * deltaY) / lengthSquared));
-      const nearestX = startX + progress * deltaX;
-      const nearestY = startY + progress * deltaY;
-      const distanceX = logicalX - nearestX;
-      const distanceY = logicalY - nearestY;
-      if (distanceX * distanceX + distanceY * distanceY <= halfThickness * halfThickness) {
-        blendPixel(canvas, pixelX, pixelY, color);
-      }
-    }
-  }
-}
-
-function drawCenteredPixelText(canvas, text, centerX, centerY, scale, color) {
-  const glyphs = String(text).split("").map((char) => desktopBadgeGlyphs[char] ?? desktopBadgeGlyphs["?"]);
-  const glyphWidth = 3;
-  const glyphHeight = 5;
-  const gap = scale;
-  const totalWidth = glyphs.length * glyphWidth * scale + Math.max(0, glyphs.length - 1) * gap;
-  let cursorX = centerX - totalWidth / 2;
-  const top = centerY - (glyphHeight * scale) / 2;
-  for (const glyph of glyphs) {
-    for (let row = 0; row < glyphHeight; row += 1) {
-      for (let column = 0; column < glyphWidth; column += 1) {
-        if (glyph[row]?.[column] === "1") {
-          fillRect(canvas, cursorX + column * scale, top + row * scale, scale, scale, color);
-        }
-      }
-    }
-    cursorX += glyphWidth * scale + gap;
-  }
-}
-
-function fillRect(canvas, x, y, width, height, color) {
-  const scale = canvas.scaleFactor;
-  const startX = Math.floor(x * scale);
-  const endX = Math.ceil((x + width) * scale);
-  const startY = Math.floor(y * scale);
-  const endY = Math.ceil((y + height) * scale);
-  for (let pixelY = startY; pixelY < endY; pixelY += 1) {
-    for (let pixelX = startX; pixelX < endX; pixelX += 1) {
-      blendPixel(canvas, pixelX, pixelY, color);
-    }
-  }
-}
-
-function blendPixel(canvas, x, y, color) {
-  if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height || color.a <= 0) return;
-  const offset = (y * canvas.width + x) * 4;
-  const alpha = color.a / 255;
-  const inverseAlpha = 1 - alpha;
-  canvas.buffer[offset] = Math.round(color.b * alpha + canvas.buffer[offset] * inverseAlpha);
-  canvas.buffer[offset + 1] = Math.round(color.g * alpha + canvas.buffer[offset + 1] * inverseAlpha);
-  canvas.buffer[offset + 2] = Math.round(color.r * alpha + canvas.buffer[offset + 2] * inverseAlpha);
-  canvas.buffer[offset + 3] = Math.round(color.a + canvas.buffer[offset + 3] * inverseAlpha);
 }
 
 function desktopUnreadBadgeLabel(unreadCount) {

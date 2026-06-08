@@ -1,6 +1,6 @@
 {
   "name": "orf",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
   "bin": {
@@ -53,6 +53,7 @@
     "gitlab:webhooks:reconcile": "node scripts/with-public-ca.mjs tsx scripts/reconcile-gitlab-mattermost-webhooks.ts",
     "notify:email": "tsx scripts/send-email-notification.ts",
     "push:diagnose": "node scripts/with-public-ca.mjs tsx scripts/diagnose-push.ts",
+    "client:icons:generate": "node scripts/generate-client-icons.mjs",
     "client:sync-versions": "node scripts/sync-client-versions.mjs",
     "client:desktop:dev": "electron clients/desktop/main.cjs",
     "client:desktop:pack:linux": "node scripts/build-desktop-client.mjs --dir --linux",
