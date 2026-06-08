@@ -1,5 +1,7 @@
 import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import type { Agent } from "node:http";
 import { readFileSync } from "node:fs";
 import { env } from "../env";
 
@@ -22,6 +24,7 @@ export type FcmPushResult = {
 const maxFcmBatchSize = 500;
 
 let firebaseInitialized = false;
+let firebaseHttpAgent: Agent | undefined;
 
 export function isFirebasePushConfigured() {
   return Boolean(
@@ -39,6 +42,7 @@ export async function sendFcmPushMessage(input: FcmPushMessage): Promise<FcmPush
 
   ensureFirebaseApp();
   const messaging = getMessaging();
+  messaging.enableLegacyHttpTransport();
   const invalidTokens: string[] = [];
   let successCount = 0;
   let failureCount = 0;
@@ -86,22 +90,47 @@ function ensureFirebaseApp() {
     return;
   }
 
-  initializeApp({ credential: resolveFirebaseCredential() });
+  const httpAgent = resolveFirebaseHttpAgent();
+  initializeApp({
+    credential: resolveFirebaseCredential(httpAgent),
+    ...(httpAgent ? { httpAgent } : {}),
+  });
   firebaseInitialized = true;
 }
 
-function resolveFirebaseCredential() {
+function resolveFirebaseCredential(httpAgent?: Agent) {
   const inlineJson = env.ORF_FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (inlineJson) {
-    return cert(JSON.parse(inlineJson));
+    return cert(JSON.parse(inlineJson), httpAgent);
   }
 
   const serviceAccountPath = env.ORF_FIREBASE_SERVICE_ACCOUNT_PATH?.trim();
   if (serviceAccountPath) {
-    return cert(JSON.parse(readFileSync(serviceAccountPath, "utf8")));
+    return cert(JSON.parse(readFileSync(serviceAccountPath, "utf8")), httpAgent);
   }
 
-  return applicationDefault();
+  return applicationDefault(httpAgent);
+}
+
+function resolveFirebaseHttpAgent(): Agent | undefined {
+  if (firebaseHttpAgent) return firebaseHttpAgent;
+
+  const proxyUrl = [
+    env.ORF_FIREBASE_HTTP_PROXY,
+    process.env.HTTPS_PROXY,
+    process.env.https_proxy,
+    process.env.HTTP_PROXY,
+    process.env.http_proxy,
+  ].find((value) => typeof value === "string" && value.trim().length > 0)?.trim();
+
+  if (!proxyUrl) return undefined;
+
+  try {
+    firebaseHttpAgent = new HttpsProxyAgent(proxyUrl);
+    return firebaseHttpAgent;
+  } catch (error) {
+    throw new Error(`Invalid Firebase HTTP proxy configuration: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
 function isInvalidRegistrationTokenCode(code: string | undefined) {

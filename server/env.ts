@@ -31,6 +31,7 @@ const envSchema = z.object({
     ORF_PUSH_CONTENT_MODE: z.enum(["private", "preview"]).default("private"),
     ORF_FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
     ORF_FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+    ORF_FIREBASE_HTTP_PROXY: z.string().url().optional(),
     ORF_VIVO_PUSH_ENABLED: booleanString("false"),
     ORF_VIVO_PUSH_API_BASE_URL: z.string().url().default("https://api-push.vivo.com.cn"),
     ORF_VIVO_PUSH_APP_ID: z.string().trim().optional(),
