@@ -5874,6 +5874,7 @@ button:disabled {
     --orf-page-padding-x: 12px;
     --orf-page-padding-y: 16px;
     --orf-topbar-height: auto;
+    --orf-mobile-bottom-nav-height: calc(66px + env(safe-area-inset-bottom));
   }
 
   .orf-app-shell {
@@ -5883,11 +5884,11 @@ button:disabled {
 
   .orf-shell-body {
     min-height: 100dvh;
-    padding-bottom: calc(66px + env(safe-area-inset-bottom));
+    padding-bottom: var(--orf-mobile-bottom-nav-height);
   }
 
   .orf-app-shell[data-chat-page="true"] .orf-shell-body {
-    padding-bottom: 0;
+    padding-bottom: var(--orf-mobile-bottom-nav-height);
   }
 
   .orf-sidebar {
@@ -5909,10 +5910,6 @@ button:disabled {
       linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 251, 253, 0.96)),
       #ffffff;
     box-shadow: 0 -14px 34px rgba(15, 35, 58, 0.13);
-  }
-
-  .orf-app-shell[data-chat-page="true"] .orf-mobile-bottom-nav {
-    display: none;
   }
 
   .orf-mobile-bottom-nav-item {
@@ -6017,7 +6014,7 @@ button:disabled {
   }
 
   .orf-app-shell[data-chat-page="true"] .orf-main-content {
-    height: calc(100dvh - 64px);
+    height: calc(100dvh - 64px - var(--orf-mobile-bottom-nav-height));
   }
 }
 
@@ -12122,7 +12119,7 @@ button.orf-chat-image-attachment {
   }
 
   .orf-app-shell[data-chat-page="true"] .orf-main-content {
-    height: calc(100dvh - 56px);
+    height: calc(100dvh - 56px - var(--orf-mobile-bottom-nav-height));
   }
 
   .orf-chat-page {
