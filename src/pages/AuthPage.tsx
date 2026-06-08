@@ -1,8 +1,17 @@
-import { Eye, EyeOff, LockKeyhole, Mail, Sparkles, User } from "lucide-react";
+import { Check, Eye, EyeOff, LockKeyhole, Mail, Sparkles, Trash2, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
+import {
+  findSavedLoginAccountByEmail,
+  loadSavedLoginAccounts,
+  removeSavedLoginAccount,
+  removeSavedLoginAccountByEmail,
+  savedLoginAccountInitial,
+  type SavedLoginAccount,
+  upsertSavedLoginAccount,
+} from "../features/auth/savedLoginAccounts";
 import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
@@ -42,15 +51,45 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function AuthPage() {
   const navigate = useNavigate();
   const { authReady, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
+  const initialLoginMemory = useMemo(() => {
+    const accounts = loadSavedLoginAccounts();
+    const latest = accounts[0];
+    return {
+      accounts,
+      email: latest?.email ?? "",
+      password: latest?.password ?? "",
+      selectedAccountId: latest?.id ?? "",
+    };
+  }, []);
   const [mode, setMode] = useState<AuthMode>("login");
   const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
   const [configuredHeroOptions, setConfiguredHeroOptions] = useState<AuthHeroOption[]>([]);
-  const [email, setEmail] = useState("");
+  const [savedLoginAccounts, setSavedLoginAccounts] = useState<SavedLoginAccount[]>(initialLoginMemory.accounts);
+  const [selectedSavedAccountId, setSelectedSavedAccountId] = useState(initialLoginMemory.selectedAccountId);
+  const [rememberCredentials, setRememberCredentials] = useState(true);
+  const [email, setEmail] = useState(initialLoginMemory.email);
   const [name, setName] = useState("");
-  const [password, setPassword] = useState("");
+  const [password, setPassword] = useState(initialLoginMemory.password);
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [authError, setAuthError] = useState("");
+
+  const applySavedAccount = (account: SavedLoginAccount) => {
+    setEmail(account.email);
+    setPassword(account.password);
+    setSelectedSavedAccountId(account.id);
+    setAuthError("");
+  };
+
+  const deleteSavedAccount = (account: SavedLoginAccount) => {
+    const next = removeSavedLoginAccount(account.id);
+    setSavedLoginAccounts(next);
+    if (selectedSavedAccountId === account.id) {
+      setSelectedSavedAccountId("");
+      setEmail("");
+      setPassword("");
+    }
+  };
 
   useEffect(() => {
     if (!authReady || !isAuthenticated || !isApproved) {
@@ -155,6 +194,20 @@ export function AuthPage() {
       return;
     }
 
+    if (rememberCredentials) {
+      const next = upsertSavedLoginAccount({
+        displayName: mode === "register" ? normalizedName : undefined,
+        email: normalizedEmail,
+        password,
+      });
+      setSavedLoginAccounts(next);
+      setSelectedSavedAccountId(normalizedEmail);
+    } else {
+      const next = removeSavedLoginAccountByEmail(normalizedEmail);
+      setSavedLoginAccounts(next);
+      setSelectedSavedAccountId("");
+    }
+
     const landingPath = await getUserPreferences()
       .then((preferences) => preferences.defaultLandingPath ?? "/tasks")
       .catch(() => "/tasks");
@@ -205,6 +258,33 @@ export function AuthPage() {
           <span />
         </div>
 
+        {mode === "login" && savedLoginAccounts.length > 0 && (
+          <div className="orf-auth-saved-accounts" aria-label="已记住账号">
+            {savedLoginAccounts.map((account) => (
+              <div className="orf-auth-saved-account" data-selected={selectedSavedAccountId === account.id ? "true" : "false"} key={account.id}>
+                <button className="orf-auth-saved-account-main" type="button" onClick={() => applySavedAccount(account)}>
+                  <span className="orf-auth-saved-avatar" aria-hidden="true">
+                    {savedLoginAccountInitial(account)}
+                  </span>
+                  <span className="orf-auth-saved-copy">
+                    <span>{account.displayName || account.email}</span>
+                    {account.displayName && <small>{account.email}</small>}
+                  </span>
+                </button>
+                <button
+                  className="orf-auth-saved-remove"
+                  type="button"
+                  aria-label={`删除已记住账号 ${account.email}`}
+                  title="删除已记住账号"
+                  onClick={() => deleteSavedAccount(account)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <form className="orf-auth-form" onSubmit={submit} noValidate>
           {mode === "register" && (
             <AuthPill icon={User}>
@@ -230,7 +310,15 @@ export function AuthPage() {
               autoComplete="email"
               placeholder="Email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                const nextEmail = event.target.value;
+                const savedAccount = findSavedLoginAccountByEmail(savedLoginAccounts, nextEmail);
+                setEmail(nextEmail);
+                setSelectedSavedAccountId(savedAccount?.id ?? "");
+                if (savedAccount) {
+                  setPassword(savedAccount.password);
+                }
+              }}
               required
             />
           </AuthPill>
@@ -257,6 +345,18 @@ export function AuthPage() {
               {showPassword ? <EyeOff className="h-6 w-6" /> : <Eye className="h-6 w-6" />}
             </button>
           </AuthPill>
+
+          <label className="orf-auth-remember">
+            <input
+              type="checkbox"
+              checked={rememberCredentials}
+              onChange={(event) => setRememberCredentials(event.target.checked)}
+            />
+            <span className="orf-auth-remember-box" aria-hidden="true">
+              {rememberCredentials && <Check className="h-4 w-4" />}
+            </span>
+            <span>记住账号和密码</span>
+          </label>
 
           {authError && (
             <p className="orf-auth-error" role="alert">
