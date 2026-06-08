@@ -1,0 +1,89 @@
+import { orfClientCurrentVersion } from "./clientUpdateConfig";
+import { getLatestClientRelease } from "./clientUpdateApi";
+import { buildClientUpdateDecision, type ClientUpdateDecision, type ClientUpdatePlatform } from "./clientUpdateModel";
+import { detectClientUpdateRuntimeInfo, type ClientUpdateInstallResult, type ClientUpdateRuntimeInfo } from "./clientUpdateRuntime";
+
+export type ClientUpdateCheckResult = {
+  decision: ClientUpdateDecision;
+  runtime: ClientUpdateRuntimeInfo;
+};
+
+export async function checkForClientUpdate(signal?: AbortSignal): Promise<ClientUpdateCheckResult> {
+  const [runtime, release] = await Promise.all([
+    detectClientUpdateRuntimeInfo(orfClientCurrentVersion),
+    getLatestClientRelease(signal),
+  ]);
+  return {
+    decision: buildClientUpdateDecision({
+      currentVersion: runtime.currentVersion,
+      platform: runtime.platform,
+      release,
+    }),
+    runtime,
+  };
+}
+
+export function formatUpdateDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+export function formatCurrentVersionLabel(decision: ClientUpdateDecision, runtime: ClientUpdateRuntimeInfo) {
+  if (runtime.versionSource === "unknown") {
+    return "当前版本未知";
+  }
+  if (runtime.versionSource === "web") {
+    return `当前 ${decision.currentVersion}（Web 版本）`;
+  }
+  return `当前 ${decision.currentVersion}`;
+}
+
+export function clientUpdatePlatformLabel(platform: ClientUpdatePlatform) {
+  if (platform === "android") return "Android 移动端";
+  if (platform === "desktop-windows") return "Win11 PC 端";
+  if (platform === "desktop-other") return "桌面端";
+  return "Web 端";
+}
+
+export function clientUpdateInstallMessage(result: ClientUpdateInstallResult) {
+  if (result.status === "success") {
+    return "安装程序已打开，按系统提示完成覆盖安装。";
+  }
+  if (result.reason === "install_permission_required") {
+    return "已打开安装权限页，允许 ORF 安装未知应用后再点一次更新。";
+  }
+  if (result.reason === "untrusted_url") {
+    return "更新安装包地址不可信，已停止。";
+  }
+  if (result.reason === "invalid_payload") {
+    return "更新安装参数无效。";
+  }
+  if (result.reason === "apk_package_mismatch") {
+    return "安装包不是 ORF 客户端，已停止安装。";
+  }
+  if (result.reason === "apk_signature_mismatch") {
+    return "安装包签名和当前已安装版本不一致，Android 不允许覆盖安装；请先卸载旧版 ORF，再安装这一版。";
+  }
+  if (result.reason === "apk_parse_failed" || result.reason === "apk_signature_check_failed") {
+    return "安装包解析或签名校验失败，已停止安装。";
+  }
+  if (result.reason === "unsupported_platform" || result.reason === "no_native_update_installer") {
+    return "当前客户端缺少内置安装器，已打开安装包下载地址；安装一次新版后可应用内更新。";
+  }
+  if (result.reason === "installer_open_failed") {
+    return "安装包已下载，但启动安装程序失败。";
+  }
+  if (result.reason === "installer_download_failed" || result.reason === "apk_install_failed") {
+    return "安装包下载或安装启动失败，请稍后重试。";
+  }
+  return "更新安装启动失败。";
+}
+
+export function shouldOpenDownloadUrlAfterInstallResult(result: ClientUpdateInstallResult) {
+  return result.reason === "unsupported_platform" || result.reason === "no_native_update_installer";
+}

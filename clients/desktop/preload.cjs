@@ -30,4 +30,24 @@ contextBridge.exposeInMainWorld("orfDesktopShell", {
   setChatUnreadCount(payload) {
     return ipcRenderer.invoke("orf:desktop-shell:set-chat-unread-count", payload);
   },
+  getWindowState() {
+    return ipcRenderer.invoke("orf:desktop-shell:get-window-state");
+  },
+  minimizeWindow() {
+    return ipcRenderer.invoke("orf:desktop-shell:minimize-window");
+  },
+  toggleMaximizeWindow() {
+    return ipcRenderer.invoke("orf:desktop-shell:toggle-maximize-window");
+  },
+  closeWindow() {
+    return ipcRenderer.invoke("orf:desktop-shell:close-window");
+  },
+  onWindowStateChange(handler) {
+    if (typeof handler !== "function") return undefined;
+    const listener = (_event, state) => {
+      if (state && typeof state === "object") handler(state);
+    };
+    ipcRenderer.on("orf:desktop-shell:window-state", listener);
+    return () => ipcRenderer.removeListener("orf:desktop-shell:window-state", listener);
+  },
 });

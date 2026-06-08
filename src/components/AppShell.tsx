@@ -15,6 +15,8 @@ import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/fe
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
 import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotice";
 import { ClientReleaseNotesDialog } from "../features/client-updates/ClientReleaseNotesDialog";
+import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls";
+import { isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
 import { useVisualBackground } from "../hooks/useVisualBackground";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
@@ -24,8 +26,13 @@ export function AppShell() {
   const navigate = useNavigate();
   const { currentUser, dismissSystemBroadcast, openModal, state, systemBroadcasts } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const sidebarBackground = useVisualBackground("app_background");
+
+  useEffect(() => {
+    setDesktopChromeEnabled(isDesktopShellAvailable());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +85,7 @@ export function AppShell() {
       className="orf-app-shell flex min-h-screen"
       data-bounty-hall={isBountyHall ? "true" : "false"}
       data-chat-page={isChatPage ? "true" : "false"}
+      data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       style={shellStyle}
     >
@@ -122,6 +130,7 @@ export function AppShell() {
               </Button>
             )}
             <NotificationBell />
+            <DesktopWindowControls enabled={desktopChromeEnabled} />
           </div>
         </header>
         <SystemBroadcastBanner broadcasts={systemBroadcasts} onDismiss={dismissSystemBroadcast} />

@@ -1,4 +1,4 @@
-import { Command, Eye, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { Command, Eye, Info, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
@@ -6,6 +6,7 @@ import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
+import { ClientUpdateCenterDialog } from "../features/client-updates/ClientUpdateCenterDialog";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { Avatar } from "./ui";
 
@@ -39,6 +40,7 @@ export function Sidebar({
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
+  const [clientUpdateCenterOpen, setClientUpdateCenterOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const avatarPreview = currentUser?.avatarUrl
     ? { alt: `${currentUser.name} 头像`, label: `${currentUser.name} 头像`, src: currentUser.avatarUrl }
@@ -204,6 +206,18 @@ export function Sidebar({
                 role="menuitem"
                 onClick={() => {
                   setUserMenuOpen(false);
+                  setClientUpdateCenterOpen(true);
+                }}
+              >
+                <Info className="h-4 w-4" />
+                关于与更新
+              </button>
+              <button
+                type="button"
+                className="orf-sidebar-user-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setUserMenuOpen(false);
                   logout();
                 }}
               >
@@ -215,6 +229,7 @@ export function Sidebar({
         </div>
       </div>
       {avatarPreviewOpen && avatarPreview && <ImagePreviewDialog preview={avatarPreview} onClose={() => setAvatarPreviewOpen(false)} />}
+      <ClientUpdateCenterDialog open={clientUpdateCenterOpen} onClose={() => setClientUpdateCenterOpen(false)} />
     </aside>
   );
 }

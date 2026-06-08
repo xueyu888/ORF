@@ -63,6 +63,7 @@ function createMainWindow(clientUrl) {
     minHeight: 680,
     title: "ORF",
     icon: resolveDesktopIconPath(),
+    frame: false,
     backgroundColor: "#f6f8fb",
     autoHideMenuBar: true,
     webPreferences: {
@@ -101,6 +102,10 @@ function createMainWindow(clientUrl) {
     mainWindow.flashFrame(false);
   });
   mainWindow.on("show", updateDesktopUnreadState);
+  mainWindow.on("maximize", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("unmaximize", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("enter-full-screen", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("leave-full-screen", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("closed", () => {
     if (desktopShellState.mainWindow === mainWindow) {
       desktopShellState.mainWindow = null;
@@ -472,6 +477,45 @@ function registerDesktopShellBridge() {
     setDesktopUnreadCount(unreadCount);
     return { status: "success", data: unreadCount };
   });
+  ipcMain.handle("orf:desktop-shell:get-window-state", (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
+    return { status: "success", data: desktopWindowState(targetWindow) };
+  });
+  ipcMain.handle("orf:desktop-shell:minimize-window", (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
+    targetWindow.minimize();
+    return { status: "success", data: desktopWindowState(targetWindow) };
+  });
+  ipcMain.handle("orf:desktop-shell:toggle-maximize-window", (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
+    if (targetWindow.isMaximized()) {
+      targetWindow.unmaximize();
+    } else {
+      targetWindow.maximize();
+    }
+    return { status: "success", data: desktopWindowState(targetWindow) };
+  });
+  ipcMain.handle("orf:desktop-shell:close-window", (event) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
+    targetWindow.close();
+    return { status: "success" };
+  });
+}
+
+function desktopWindowState(targetWindow) {
+  return {
+    isFullScreen: targetWindow.isFullScreen(),
+    isMaximized: targetWindow.isMaximized(),
+  };
+}
+
+function sendDesktopWindowState(targetWindow) {
+  if (targetWindow.isDestroyed()) return;
+  targetWindow.webContents.send("orf:desktop-shell:window-state", desktopWindowState(targetWindow));
 }
 
 function isTrustedClientUpdateUrl(value) {

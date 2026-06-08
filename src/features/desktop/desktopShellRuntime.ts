@@ -4,8 +4,24 @@ export type DesktopShellUnreadResult = {
   status: "error" | "success" | "unsupported";
 };
 
+export type DesktopWindowState = {
+  isFullScreen?: boolean;
+  isMaximized: boolean;
+};
+
+export type DesktopShellWindowResult = {
+  data?: DesktopWindowState;
+  reason?: string;
+  status: "error" | "success" | "unsupported";
+};
+
 type DesktopShellBridge = {
+  closeWindow?: () => Promise<DesktopShellWindowResult>;
+  getWindowState?: () => Promise<DesktopShellWindowResult>;
+  minimizeWindow?: () => Promise<DesktopShellWindowResult>;
+  onWindowStateChange?: (handler: (state: DesktopWindowState) => void) => (() => void);
   setChatUnreadCount?: (payload: { count: number }) => Promise<DesktopShellUnreadResult>;
+  toggleMaximizeWindow?: () => Promise<DesktopShellWindowResult>;
 };
 
 declare global {
@@ -27,6 +43,69 @@ export async function syncDesktopChatUnreadCount(count: number): Promise<Desktop
   }
 }
 
+export function isDesktopShellAvailable() {
+  return typeof window !== "undefined" && Boolean(window.orfDesktopShell);
+}
+
+export async function getDesktopWindowState(): Promise<DesktopShellWindowResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.getWindowState) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    return normalizeDesktopWindowResult(await window.orfDesktopShell.getWindowState());
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export async function minimizeDesktopWindow(): Promise<DesktopShellWindowResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.minimizeWindow) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    return normalizeDesktopWindowResult(await window.orfDesktopShell.minimizeWindow());
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export async function toggleMaximizeDesktopWindow(): Promise<DesktopShellWindowResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.toggleMaximizeWindow) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    return normalizeDesktopWindowResult(await window.orfDesktopShell.toggleMaximizeWindow());
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export async function closeDesktopWindow(): Promise<DesktopShellWindowResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.closeWindow) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    return normalizeDesktopWindowResult(await window.orfDesktopShell.closeWindow());
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export function subscribeDesktopWindowState(handler: (state: DesktopWindowState) => void) {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.onWindowStateChange) {
+    return undefined;
+  }
+  return window.orfDesktopShell.onWindowStateChange((state) => {
+    if (state && typeof state.isMaximized === "boolean") {
+      handler(state);
+    }
+  });
+}
+
 function normalizeUnreadCount(count: number) {
   return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+}
+
+function normalizeDesktopWindowResult(result: DesktopShellWindowResult | undefined): DesktopShellWindowResult {
+  return result?.status ? result : { status: "success" };
 }
