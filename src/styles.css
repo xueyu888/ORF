@@ -3649,6 +3649,147 @@ button:disabled {
   color: #60728c;
 }
 
+.orf-client-update-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 92;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(11, 18, 32, 0.38);
+  backdrop-filter: blur(6px);
+}
+
+.orf-client-update-dialog {
+  display: grid;
+  width: min(560px, 100%);
+  overflow: hidden;
+  border: 1px solid rgba(54, 139, 176, 0.26);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(245, 251, 254, 0.97)),
+    #ffffff;
+  color: var(--orf-text-primary);
+  box-shadow: 0 30px 76px rgba(15, 35, 58, 0.3);
+}
+
+.orf-client-update-dialog-header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid rgba(210, 222, 234, 0.78);
+}
+
+.orf-client-update-dialog-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(14, 116, 144, 0.13);
+  color: #0f7892;
+}
+
+.orf-client-update-dialog-kicker {
+  margin: 0 0 3px;
+  color: #61728a;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.orf-client-update-dialog-header h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--orf-text-primary);
+  font-size: 19px;
+  font-weight: 850;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orf-client-update-dialog-close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(202, 214, 226, 0.82);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #60728c;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.orf-client-update-dialog-close:hover {
+  border-color: rgba(57, 128, 170, 0.28);
+  background: #f3f9fc;
+  color: #17314f;
+}
+
+.orf-client-update-dialog-body {
+  padding: 18px 22px 4px;
+}
+
+.orf-client-update-dialog-summary {
+  margin: 0;
+  color: #263b56;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.orf-client-update-dialog-meta {
+  margin: 12px 0 0;
+  color: #60728c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.orf-client-update-dialog-message {
+  margin: 12px 0 0;
+  color: #0f7892;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.5;
+}
+
+.orf-client-update-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 18px 22px 20px;
+}
+
+.orf-client-update-later {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(202, 214, 226, 0.9);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.74);
+  color: #41546f;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.orf-client-update-later:hover {
+  border-color: rgba(57, 128, 170, 0.28);
+  background: #f3f9fc;
+  color: #17314f;
+}
+
 .orf-client-release-notes-backdrop {
   position: fixed;
   inset: 0;
@@ -3843,6 +3984,35 @@ button:disabled {
   .orf-client-release-notes-backdrop {
     align-items: end;
     padding: 12px;
+  }
+
+  .orf-client-update-dialog-backdrop {
+    align-items: end;
+    padding: 12px;
+  }
+
+  .orf-client-update-dialog-header {
+    grid-template-columns: 38px minmax(0, 1fr) 32px;
+    padding: 16px;
+  }
+
+  .orf-client-update-dialog-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .orf-client-update-dialog-header h2 {
+    white-space: normal;
+  }
+
+  .orf-client-update-dialog-body {
+    padding: 16px 16px 4px;
+  }
+
+  .orf-client-update-dialog-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    padding: 16px;
   }
 
   .orf-client-release-notes-dialog {
