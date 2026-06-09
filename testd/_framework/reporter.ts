@@ -15,13 +15,21 @@ const STATE_CASE_TITLE_ANNOTATION = "state-case-title";
 const STATE_CASE_STAGES = new Set(["B", "Setup", "S0", "Action", "S1", "Clean", "B after Clean"]);
 const SCREENSHOT_ATTACHMENT_PREFIX = "state-case-screenshot";
 const REPORT_ROOT_DIR = "test-reports";
+const REPORT_STATE_ROOT_DIR = path.join(".artifacts", "testd-report-runs");
+const TESTD_REPORT_AGGREGATE_ENV = "TESTD_REPORT_AGGREGATE";
+const TESTD_REPORT_RUN_ID_ENV = "TESTD_REPORT_RUN_ID";
+const TESTD_RUN_ID_ENV = "TESTD_RUN_ID";
+const TESTD_SUITE_ENV = "TESTD_SUITE";
+const TESTD_RECOVERY_ONLY_ENV = "TESTD_RECOVERY_ONLY";
 const REPORT_RETENTION_DAYS_ENV = "TESTD_REPORT_RETENTION_DAYS";
 const DEFAULT_REPORT_RETENTION_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const SUITE_ORDER = ["isolated", "permissions", "settings"];
 
 type StageStatus = "passed" | "failed";
 type CaseStatus = TestResult["status"];
 type ScreenshotMoment = "on-failure" | "after-failure";
+type RunStatus = FullResult["status"];
 
 type ReportError = {
   message: string;
@@ -47,6 +55,7 @@ type StageReport = {
 type CaseReport = {
   id: string;
   title: string;
+  suite?: string;
   status: CaseStatus;
   durationMs: number;
   failedStage?: string;
@@ -68,20 +77,47 @@ type InternalCaseReport = Omit<CaseReport, "screenshots"> & {
   screenshotAttachments: RawScreenshotAttachment[];
 };
 
+type RunReport = {
+  startedAt: string;
+  endedAt: string;
+  durationMs: number;
+  status: RunStatus;
+  total: number;
+  passed: number;
+  failed: number;
+  skipped: number;
+  timedOut: number;
+  interrupted: number;
+};
+
+type SuiteSummary = {
+  name: string;
+} & RunReport;
+
 type ResultJson = {
-  run: {
-    startedAt: string;
-    endedAt: string;
-    durationMs: number;
-    status: FullResult["status"];
-    total: number;
-    passed: number;
-    failed: number;
-    skipped: number;
-    timedOut: number;
-    interrupted: number;
-  };
+  run: RunReport;
+  suites?: SuiteSummary[];
   cases: CaseReport[];
+};
+
+type SuiteReport = {
+  name: string;
+  run: RunReport;
+  cases: CaseReport[];
+};
+
+type AggregateState = {
+  runId: string;
+  startedAt: string;
+  reportDirName: string;
+  suites: Record<string, SuiteReport>;
+};
+
+type AggregateManifest = {
+  runId: string;
+  reportDir: string;
+  resultPath: string;
+  summaryPath: string;
 };
 
 export default class StateCaseReporter implements Reporter {
@@ -111,7 +147,7 @@ export default class StateCaseReporter implements Reporter {
   }
 
   async onEnd(result: FullResult) {
-    if (this.cases.length === 0) {
+    if (this.cases.length === 0 || process.env[TESTD_RECOVERY_ONLY_ENV] === "1") {
       return;
     }
 
@@ -120,32 +156,42 @@ export default class StateCaseReporter implements Reporter {
     const reportRoot = path.join(process.cwd(), REPORT_ROOT_DIR);
     await pruneOldReports(reportRoot, startedAt);
 
-    const reportDir = path.join(reportRoot, formatDirectoryName(startedAt));
-    const sortedInternalCases = [...this.cases].sort((left, right) => left.id.localeCompare(right.id));
-    const sortedCases: CaseReport[] = [];
+    if (shouldWriteAggregateReport()) {
+      const reportRunId = aggregateReportRunId();
+      if (reportRunId) {
+        const suiteName = currentSuiteName();
+        const state = await loadAggregateState(reportRunId, startedAt);
+        const reportDir = path.join(reportRoot, state.reportDirName);
+        const sortedCases = await this.materializeCurrentCases(reportDir, suiteName);
+        const suiteReport: SuiteReport = {
+          name: suiteName,
+          run: createRunReport({
+            startedAt,
+            endedAt,
+            durationMs: result.duration,
+            status: result.status,
+            total: this.total,
+            cases: sortedCases,
+          }),
+          cases: sortedCases,
+        };
 
-    await fs.promises.mkdir(reportDir, { recursive: true });
-    for (const [index, testCase] of sortedInternalCases.entries()) {
-      sortedCases.push(await materializeCaseReport(reportDir, testCase, index));
+        await writeAggregateReport(reportRoot, state, suiteReport, startedAt);
+        return;
+      }
     }
 
-    const failedCases = sortedCases.filter((testCase) =>
-      ["failed", "timedOut", "interrupted"].includes(testCase.status),
-    );
-
+    const reportDir = path.join(reportRoot, formatDirectoryName(startedAt));
+    const sortedCases = await this.materializeCurrentCases(reportDir);
     const resultJson: ResultJson = {
-      run: {
-        startedAt: formatIsoWithOffset(startedAt),
-        endedAt: formatIsoWithOffset(endedAt),
-        durationMs: Math.round(result.duration),
+      run: createRunReport({
+        startedAt,
+        endedAt,
+        durationMs: result.duration,
         status: result.status,
         total: this.total,
-        passed: sortedCases.filter((testCase) => testCase.status === "passed").length,
-        failed: failedCases.length,
-        skipped: sortedCases.filter((testCase) => testCase.status === "skipped").length,
-        timedOut: sortedCases.filter((testCase) => testCase.status === "timedOut").length,
-        interrupted: sortedCases.filter((testCase) => testCase.status === "interrupted").length,
-      },
+        cases: sortedCases,
+      }),
       cases: sortedCases,
     };
 
@@ -155,6 +201,19 @@ export default class StateCaseReporter implements Reporter {
 
   printsToStdio() {
     return false;
+  }
+
+  private async materializeCurrentCases(reportDir: string, suiteName?: string) {
+    const sortedInternalCases = [...this.cases].sort((left, right) => left.id.localeCompare(right.id));
+    const sortedCases: CaseReport[] = [];
+
+    await fs.promises.mkdir(reportDir, { recursive: true });
+    for (const [index, testCase] of sortedInternalCases.entries()) {
+      const materializedCase = await materializeCaseReport(reportDir, testCase, index);
+      sortedCases.push(suiteName ? { ...materializedCase, suite: suiteName } : materializedCase);
+    }
+
+    return sortedCases;
   }
 }
 
@@ -223,6 +282,184 @@ async function pathExists(targetPath: string) {
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
+}
+
+function shouldWriteAggregateReport() {
+  return process.env[TESTD_REPORT_AGGREGATE_ENV] === "1";
+}
+
+function aggregateReportRunId() {
+  return process.env[TESTD_REPORT_RUN_ID_ENV] ?? process.env[TESTD_RUN_ID_ENV];
+}
+
+function currentSuiteName() {
+  return process.env[TESTD_SUITE_ENV] ?? "default";
+}
+
+async function loadAggregateState(runId: string, startedAt: Date): Promise<AggregateState> {
+  const statePath = aggregateStatePath(runId);
+  await fs.promises.mkdir(path.dirname(statePath), { recursive: true });
+
+  try {
+    return JSON.parse(await fs.promises.readFile(statePath, "utf8")) as AggregateState;
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  return {
+    runId,
+    startedAt: formatIsoWithOffset(startedAt),
+    reportDirName: formatDirectoryName(startedAt),
+    suites: {},
+  };
+}
+
+async function writeAggregateReport(
+  reportRoot: string,
+  state: AggregateState,
+  suiteReport: SuiteReport,
+  reportTime: Date,
+) {
+  state.suites[suiteReport.name] = suiteReport;
+
+  const reportDir = path.join(reportRoot, state.reportDirName);
+  const resultJson = buildAggregateResult(state);
+  const resultPath = path.join(reportDir, "result.json");
+  const summaryPath = path.join(reportDir, "summary.md");
+
+  await fs.promises.mkdir(reportDir, { recursive: true });
+  await fs.promises.writeFile(resultPath, `${JSON.stringify(resultJson, null, 2)}\n`);
+  await fs.promises.writeFile(summaryPath, renderSummary(resultJson, new Date(state.startedAt || reportTime)));
+  await fs.promises.writeFile(aggregateStatePath(state.runId), `${JSON.stringify(state, null, 2)}\n`);
+  await fs.promises.writeFile(
+    aggregateManifestPath(state.runId),
+    `${JSON.stringify(createAggregateManifest(state.runId, reportDir, resultPath, summaryPath), null, 2)}\n`,
+  );
+}
+
+function createAggregateManifest(
+  runId: string,
+  reportDir: string,
+  resultPath: string,
+  summaryPath: string,
+): AggregateManifest {
+  return {
+    runId,
+    reportDir: toPosixPath(path.relative(process.cwd(), reportDir)),
+    resultPath: toPosixPath(path.relative(process.cwd(), resultPath)),
+    summaryPath: toPosixPath(path.relative(process.cwd(), summaryPath)),
+  };
+}
+
+function buildAggregateResult(state: AggregateState): ResultJson {
+  const suites = Object.values(state.suites).sort((left, right) => compareSuiteNames(left.name, right.name));
+  const cases = suites.flatMap((suite) => suite.cases).sort(compareCaseReports);
+  const startedAt = new Date(state.startedAt);
+  const endedAt = latestSuiteEndTime(suites) ?? startedAt;
+  const suiteSummaries = suites.map((suite) => ({
+    name: suite.name,
+    ...suite.run,
+  }));
+
+  return {
+    run: {
+      startedAt: formatIsoWithOffset(startedAt),
+      endedAt: formatIsoWithOffset(endedAt),
+      durationMs: Math.max(0, endedAt.getTime() - startedAt.getTime()),
+      status: aggregateRunStatus(suites),
+      total: sumSuiteCount(suites, "total"),
+      passed: sumSuiteCount(suites, "passed"),
+      failed: sumSuiteCount(suites, "failed"),
+      skipped: sumSuiteCount(suites, "skipped"),
+      timedOut: sumSuiteCount(suites, "timedOut"),
+      interrupted: sumSuiteCount(suites, "interrupted"),
+    },
+    ...(suiteSummaries.length ? { suites: suiteSummaries } : {}),
+    cases,
+  };
+}
+
+function createRunReport(input: {
+  startedAt: Date;
+  endedAt: Date;
+  durationMs: number;
+  status: RunStatus;
+  total: number;
+  cases: CaseReport[];
+}): RunReport {
+  const failedCases = input.cases.filter((testCase) =>
+    ["failed", "timedOut", "interrupted"].includes(testCase.status),
+  );
+
+  return {
+    startedAt: formatIsoWithOffset(input.startedAt),
+    endedAt: formatIsoWithOffset(input.endedAt),
+    durationMs: Math.round(input.durationMs),
+    status: input.status,
+    total: input.total,
+    passed: input.cases.filter((testCase) => testCase.status === "passed").length,
+    failed: failedCases.length,
+    skipped: input.cases.filter((testCase) => testCase.status === "skipped").length,
+    timedOut: input.cases.filter((testCase) => testCase.status === "timedOut").length,
+    interrupted: input.cases.filter((testCase) => testCase.status === "interrupted").length,
+  };
+}
+
+function latestSuiteEndTime(suites: SuiteReport[]) {
+  return suites.reduce<Date | undefined>((latest, suite) => {
+    const endedAt = new Date(suite.run.endedAt);
+    if (Number.isNaN(endedAt.getTime())) {
+      return latest;
+    }
+    if (!latest || endedAt.getTime() > latest.getTime()) {
+      return endedAt;
+    }
+    return latest;
+  }, undefined);
+}
+
+function aggregateRunStatus(suites: SuiteReport[]): RunStatus {
+  if (suites.some((suite) => suite.run.status === "interrupted")) {
+    return "interrupted";
+  }
+  if (suites.some((suite) => suite.run.status === "timedout")) {
+    return "timedout";
+  }
+  if (suites.some((suite) => suite.run.status === "failed" || suite.run.failed > 0)) {
+    return "failed";
+  }
+  return "passed";
+}
+
+function sumSuiteCount(suites: SuiteReport[], key: keyof Pick<RunReport, "total" | "passed" | "failed" | "skipped" | "timedOut" | "interrupted">) {
+  return suites.reduce((total, suite) => total + suite.run[key], 0);
+}
+
+function compareCaseReports(left: CaseReport, right: CaseReport) {
+  return compareSuiteNames(left.suite ?? "", right.suite ?? "") || left.id.localeCompare(right.id);
+}
+
+function compareSuiteNames(left: string, right: string) {
+  const leftIndex = SUITE_ORDER.indexOf(left);
+  const rightIndex = SUITE_ORDER.indexOf(right);
+  if (leftIndex !== -1 || rightIndex !== -1) {
+    return (leftIndex === -1 ? SUITE_ORDER.length : leftIndex) - (rightIndex === -1 ? SUITE_ORDER.length : rightIndex);
+  }
+  return left.localeCompare(right);
+}
+
+function aggregateStatePath(runId: string) {
+  return path.join(aggregateStateDir(runId), "state.json");
+}
+
+function aggregateManifestPath(runId: string) {
+  return path.join(aggregateStateDir(runId), "manifest.json");
+}
+
+function aggregateStateDir(runId: string) {
+  return path.join(process.cwd(), REPORT_STATE_ROOT_DIR, sanitizeFileName(runId));
 }
 
 function collectStateCaseStages(steps: TestStep[]): StageReport[] {
@@ -359,7 +596,12 @@ function renderSummary(result: ResultJson, reportTime: Date) {
     `- 总用例数：${result.run.total}`,
     `- 通过用例数：${result.run.passed}`,
     `- 失败用例数：${result.run.failed}`,
+    result.suites?.length ? `- 测试批次数：${result.suites.length}` : undefined,
     skippedCases.length ? `- 跳过用例数：${skippedCases.length}` : undefined,
+    result.suites?.length ? "" : undefined,
+    result.suites?.length ? "## 批次结果" : undefined,
+    result.suites?.length ? "" : undefined,
+    result.suites?.length ? renderSuiteSummaries(result.suites) : undefined,
     "",
     "## 通过用例",
     "",
@@ -374,9 +616,30 @@ function renderSummary(result: ResultJson, reportTime: Date) {
     .join("\n");
 }
 
+function renderSuiteSummaries(suites: SuiteSummary[]) {
+  return [
+    "| 批次 | 状态 | 总数 | 通过 | 失败 | 跳过 | 耗时 |",
+    "|---|---|---:|---:|---:|---:|---:|",
+    ...suites.map((suite) =>
+      `| ${escapeTableCell(suite.name)} | ${translateRunStatus(suite.status)} | ${suite.total} | ${suite.passed} | ${suite.failed} | ${suite.skipped} | ${formatDuration(suite.durationMs)} |`,
+    ),
+  ].join("\n");
+}
+
 function renderPassedCases(cases: CaseReport[]) {
   if (cases.length === 0) {
     return "无";
+  }
+
+  const includeSuite = cases.some((testCase) => testCase.suite);
+  if (includeSuite) {
+    return [
+      "| 批次 | 用例 ID | 用例名称 | 耗时 |",
+      "|---|---|---|---:|",
+      ...cases.map((testCase) =>
+        `| ${escapeTableCell(testCase.suite ?? "")} | ${escapeTableCell(testCase.id)} | ${escapeTableCell(testCase.title)} | ${formatDuration(testCase.durationMs)} |`,
+      ),
+    ].join("\n");
   }
 
   return [
@@ -402,6 +665,8 @@ function renderFailedCase(testCase: CaseReport) {
     "",
     `**用例名称：** ${testCase.title}`,
     "",
+    testCase.suite ? `**批次：** ${testCase.suite}` : undefined,
+    testCase.suite ? "" : undefined,
     `**失败阶段：** ${testCase.failedStage ?? "未记录"}`,
     "",
     `**耗时：** ${formatDuration(testCase.durationMs)}`,
@@ -426,7 +691,9 @@ function renderFailedCase(testCase: CaseReport) {
           stage.durationMs,
         )} | ${escapeTableCell(stage.error?.message ?? "")} |`,
     ),
-  ].join("\n");
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n");
 }
 
 function renderScreenshots(screenshots: ScreenshotReport[]) {
@@ -445,6 +712,19 @@ function screenshotMomentLabel(moment: ScreenshotMoment) {
 
 function translateStageStatus(status: StageStatus) {
   return status === "passed" ? "通过" : "失败";
+}
+
+function translateRunStatus(status: RunStatus) {
+  if (status === "passed") {
+    return "通过";
+  }
+  if (status === "timedout") {
+    return "超时";
+  }
+  if (status === "interrupted") {
+    return "中断";
+  }
+  return "失败";
 }
 
 function formatDuration(durationMs: number) {

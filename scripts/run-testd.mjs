@@ -8,6 +8,7 @@ import pg from "pg";
 import { createPgPoolConfig } from "./db-connection.mjs";
 
 const testdRunId = process.env.TESTD_RUN_ID ?? createTestdRunId();
+const testdReportRunId = process.env.TESTD_REPORT_RUN_ID ?? testdRunId;
 const extraArgs = process.argv.slice(2);
 const requestedSuite = process.env.TESTD_SUITE;
 const inferredSuite = requestedSuite ?? inferSuiteFromArgs(extraArgs);
@@ -85,6 +86,10 @@ if (!process.exitCode) {
   }
 }
 
+if (shouldPrintAggregateTestdSummary(extraArgs)) {
+  await printAggregateTestdSummary();
+}
+
 async function runSuiteWithNetworkRetry(suite, args) {
   const attempts = buildNetworkRetryAttempts(suite, args);
 
@@ -154,7 +159,10 @@ function runPlaywrightAttempt(suite, args, extraEnv = {}) {
           ...process.env,
           TESTD_RUN_ID: testdRunId,
           TESTD_SUITE: suite,
+          TESTD_REPORT_AGGREGATE: "1",
+          TESTD_REPORT_RUN_ID: testdReportRunId,
           ...extraEnv,
+          TESTD_REPORT_RUN_ID: testdReportRunId,
         },
         stdio: ["inherit", "pipe", "pipe"],
       },
@@ -454,6 +462,78 @@ function signalExitCode(signal) {
     return 129;
   }
   return 1;
+}
+
+async function printAggregateTestdSummary() {
+  const manifestPath = path.join(
+    process.cwd(),
+    ".artifacts",
+    "testd-report-runs",
+    sanitizePathSegment(testdReportRunId),
+    "manifest.json",
+  );
+
+  let manifest;
+  try {
+    manifest = JSON.parse(await fs.promises.readFile(manifestPath, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.error(`TestD 汇总读取失败: ${error?.message ?? String(error)}`);
+    }
+    return;
+  }
+
+  const resultPath = path.resolve(process.cwd(), manifest.resultPath ?? "");
+  let report;
+  try {
+    report = JSON.parse(await fs.promises.readFile(resultPath, "utf8"));
+  } catch (error) {
+    console.error(`TestD 汇总结果读取失败: ${error?.message ?? String(error)}`);
+    return;
+  }
+
+  const run = report.run ?? {};
+  console.error(
+    `TestD 汇总：总用例 ${numberOrZero(run.total)}，通过 ${numberOrZero(run.passed)}，未通过 ${numberOrZero(run.failed)}，跳过 ${numberOrZero(run.skipped)}。`,
+  );
+
+  if (Array.isArray(report.suites) && report.suites.length > 0) {
+    console.error(`TestD 批次：${report.suites.map(formatSuiteSummary).join("；")}。`);
+  }
+
+  const failedCases = Array.isArray(report.cases)
+    ? report.cases.filter((testCase) => testCase?.status !== "passed" && testCase?.status !== "skipped")
+    : [];
+  if (failedCases.length > 0) {
+    const visibleFailedCases = failedCases.slice(0, 10).map((testCase) => testCase.id).join(", ");
+    const overflow = failedCases.length > 10 ? ` 等 ${failedCases.length} 个` : "";
+    console.error(`TestD 未通过用例：${visibleFailedCases}${overflow}`);
+  }
+
+  if (typeof manifest.summaryPath === "string" && manifest.summaryPath) {
+    console.error(`TestD 报告：${manifest.summaryPath}`);
+  }
+}
+
+function formatSuiteSummary(suite) {
+  const skipped = numberOrZero(suite.skipped);
+  const skippedText = skipped > 0 ? `，跳过 ${skipped}` : "";
+  return `${suite.name} ${numberOrZero(suite.passed)}/${numberOrZero(suite.total)} 通过，未通过 ${numberOrZero(suite.failed)}${skippedText}`;
+}
+
+function numberOrZero(value) {
+  return Number.isFinite(value) ? value : 0;
+}
+
+function shouldPrintAggregateTestdSummary(args) {
+  if (process.env.TESTD_RECOVERY_ONLY === "1") {
+    return false;
+  }
+  return !args.some((arg) => arg === "--list" || arg === "--help" || arg === "-h");
+}
+
+function sanitizePathSegment(value) {
+  return String(value).replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "") || "run";
 }
 
 function compactDate() {
