@@ -106,7 +106,6 @@ export function AppShell() {
         backgroundUrl={sidebarBackgroundUrl}
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
-        onCommand={() => setCommandOpen(true)}
       />
       <div className="orf-shell-body min-w-0 flex-1">
         <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2">
@@ -118,22 +117,21 @@ export function AppShell() {
             )}
             <span>{breadcrumb(location.pathname)}</span>
           </div>
-          {!isBountyHall && (
-            <>
-              <div className="relative min-w-[180px] max-w-xl flex-1">
-                <Search className="orf-text-muted pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-                <button
-                  onClick={() => setCommandOpen(true)}
-                  className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
-                >
-                  搜索目标、指标、任务
-                </button>
-              </div>
-              {canCreateFeedback && <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
-                <MessageSquarePlus className="h-4 w-4" />
-                新建反馈
-              </Button>}
-            </>
+          <div className="relative min-w-[180px] max-w-xl flex-1">
+            <Search className="orf-text-muted pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
+            <button
+              onClick={() => setCommandOpen(true)}
+              className="orf-search-trigger h-8 w-full pl-8 pr-3 text-left text-xs transition"
+              aria-label="搜索页面、目标、指标、任务、反馈"
+            >
+              <span className="orf-search-trigger-label">搜索页面、目标、指标、任务、反馈</span>
+            </button>
+          </div>
+          {!isBountyHall && canCreateFeedback && (
+            <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
+              <MessageSquarePlus className="h-4 w-4" />
+              新建反馈
+            </Button>
           )}
           <div className="orf-topbar-actions ml-auto flex shrink-0 items-center gap-1.5">
             {canCreateObjective && (

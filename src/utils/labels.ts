@@ -55,6 +55,7 @@ export function statusLabel(status: WorkStatus | FeedbackStatus | TaskStatus | P
 
 export const commandTypeLabel: Record<string, string> = {
   Action: "动作",
+  Feedback: "反馈",
   Metric: "指标",
   Objective: "目标",
   Page: "页面",
