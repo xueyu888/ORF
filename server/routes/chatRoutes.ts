@@ -310,7 +310,11 @@ export function registerChatRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const params = channelIdParamsSchema.parse(request.params);
     const body = sendMessageBodySchema.parse(request.body);
-    return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor));
+    return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor, {
+      onSideEffectError: (error, context) => {
+        request.log.warn({ err: error, ...context }, "Chat message side effect failed");
+      },
+    }));
   });
 
   app.get("/api/chat/channels/:channelId/messages/:messageId/context", async (request, reply) => {
