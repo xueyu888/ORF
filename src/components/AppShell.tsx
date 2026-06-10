@@ -26,7 +26,7 @@ import { subscribePersonalPreferencesChanged } from "../utils/personalPreference
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser, dismissSystemBroadcast, openModal, state, systemBroadcasts } = useOrf();
+  const { currentUser, dismissSystemBroadcast, state, systemBroadcasts } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
   const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -128,7 +128,7 @@ export function AppShell() {
             </button>
           </div>
           {!isBountyHall && canCreateFeedback && (
-            <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" variant="secondary" onClick={() => openModal({ type: "newFeedback" })}>
+            <Button className="orf-topbar-action-button h-8 px-2.5 text-xs" variant="secondary" onClick={() => navigate("/feedback/new")}>
               <MessageSquarePlus className="h-4 w-4" />
               新建反馈
             </Button>

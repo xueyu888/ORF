@@ -1,4 +1,4 @@
-import { Check, X } from "lucide-react";
+import { X } from "lucide-react";
 import { clsx } from "clsx";
 import type { ReactNode } from "react";
 import { useState } from "react";
@@ -8,14 +8,9 @@ import {
   isObjectiveChallenger,
 } from "../domain/orfObjectiveParticipants";
 import { uncertaintyLevelOptions, uncertaintyScores } from "../domain/orfSettlement";
-import { BountyButton, BountyDialog } from "../features/bounty-hall/BountyHallSkin";
-import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
 import { useOrf } from "../state/OrfProvider";
-import type { Impact, UncertaintyLevel } from "../types/orf";
-import { impactLabel } from "../utils/labels";
+import type { UncertaintyLevel } from "../types/orf";
 import { Button, Field } from "./ui";
-
-const feedbackImpactOptions: Impact[] = ["Low", "Medium", "High", "Critical"];
 
 function ModalFrame({ title, children, size = "md" }: { title: string; children: ReactNode; size?: "md" | "lg" }) {
   const { closeModal } = useOrf();
@@ -51,7 +46,6 @@ export function GlobalModals() {
   const { modal } = useOrf();
 
   if (modal.type === "newResult") return <NewResultModal objectiveId={modal.objectiveId} source={modal.source} />;
-  if (modal.type === "newFeedback") return <NewFeedbackModal />;
   if (modal.type === "recruitChallengers") return <RecruitChallengersModal key={modal.objectiveId} objectiveId={modal.objectiveId} />;
   return null;
 }
@@ -161,92 +155,5 @@ function NewResultModal({ objectiveId, source = "managerDefined" }: { objectiveI
         <div className="flex justify-end gap-2"><Button variant="secondary" type="button" onClick={closeModal}>取消</Button><Button type="submit" disabled={submitting}>{source === "memberProposed" ? "提交指标" : "保存指标"}</Button></div>
       </form>
     </ModalFrame>
-  );
-}
-
-function NewFeedbackModal() {
-  const { state, createFeedback, closeModal, currentUser, notify } = useOrf();
-  const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
-  const [phenomenon, setPhenomenon] = useState("");
-  const causeOptions = teamFeedbackCauseOptions(state.causeCategories);
-  const [cause, setCause] = useState(causeOptions[0] ?? "技术问题");
-  const [impact, setImpact] = useState<Impact>("Medium");
-  const activeOwnerOptions = state.users.filter((user) => user.status === "active").map((user) => user.name);
-  const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : [defaultOwner];
-  const initialOwner = ownerOptions.includes(defaultOwner) ? defaultOwner : ownerOptions[0] ?? defaultOwner;
-  const [owner, setOwner] = useState(initialOwner);
-  const [suggestedAdjustment, setSuggestedAdjustment] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  return (
-    <BountyDialog
-      className="feedback-create-dialog"
-      footer={(
-        <>
-          <BountyButton disabled={submitting} onClick={closeModal} variant="secondary">取消</BountyButton>
-          <BountyButton disabled={submitting} form="new-feedback-form" loading={submitting} type="submit">
-            <Check aria-hidden="true" />
-            保存反馈
-          </BountyButton>
-        </>
-      )}
-      onClose={closeModal}
-      subtitle="团队内部 issue 会进入统一反馈池。"
-      title="新建反馈"
-    >
-      <form
-        className="feedback-create-form"
-        id="new-feedback-form"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (hasBlankRequiredValues([phenomenon, cause, suggestedAdjustment, owner])) {
-            notify("请填写所有必填字段");
-            return;
-          }
-          if (submitting) return;
-
-          setSubmitting(true);
-          try {
-            const ok = await createFeedback({
-              phenomenon: phenomenon.trim(),
-              causeCategories: [cause],
-              impact,
-              suggestedAdjustment: suggestedAdjustment.trim(),
-              owner: owner.trim(),
-            });
-            if (ok) closeModal();
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
-        <label className="feedback-form-field feedback-form-field-wide">
-          <span>标题</span>
-          <input required value={phenomenon} onChange={(event) => setPhenomenon(event.target.value)} />
-        </label>
-        <label className="feedback-form-field feedback-form-field-wide">
-          <span>说明</span>
-          <textarea required value={suggestedAdjustment} onChange={(event) => setSuggestedAdjustment(event.target.value)} />
-        </label>
-        <label className="feedback-form-field">
-          <span>分类</span>
-          <select required value={cause} onChange={(event) => setCause(event.target.value)}>
-            {causeOptions.map((item) => <option key={item}>{item}</option>)}
-          </select>
-        </label>
-        <label className="feedback-form-field">
-          <span>影响</span>
-          <select value={impact} onChange={(event) => setImpact(event.target.value as Impact)}>
-            {feedbackImpactOptions.map((item) => <option key={item} value={item}>{impactLabel[item]}</option>)}
-          </select>
-        </label>
-        <label className="feedback-form-field feedback-form-field-wide">
-          <span>处理人</span>
-          <select required value={owner} onChange={(event) => setOwner(event.target.value)}>
-            {ownerOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
-        </label>
-      </form>
-    </BountyDialog>
   );
 }

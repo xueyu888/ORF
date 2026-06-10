@@ -56,6 +56,8 @@ export function FeedbackIssuePage() {
   const [mentionableUsers, setMentionableUsers] = useState<CommentMentionUser[]>([]);
   const threads = useMemo(() => feedback ? feedbackIssueThreads(state.comments, feedback.id) : [], [feedback, state.comments]);
   const entries = useMemo(() => feedbackCommentEntries(threads), [threads]);
+  const originalEntry = entries[0] ?? null;
+  const timelineEntries = originalEntry ? entries.slice(1) : entries;
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canChangeState = feedback ? canManageFeedbackStatus(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
@@ -176,7 +178,7 @@ export function FeedbackIssuePage() {
             <IssueStateBadge feedback={feedback} />
             <span>#{feedbackIssueDisplayId(feedback.id)}</span>
             <span>{feedback.owner} 更新于 {formatIssueDate(feedback.updatedAt)}</span>
-            <span><MessageSquare aria-hidden="true" /> {entries.length}</span>
+            <span><MessageSquare aria-hidden="true" /> {timelineEntries.length}</span>
           </div>
         </div>
         <div className="feedback-issue-detail-actions">
@@ -195,10 +197,25 @@ export function FeedbackIssuePage() {
 
       <main className="feedback-issue-detail-layout">
         <section className="feedback-issue-thread" aria-label="反馈讨论">
-          <OriginalFeedbackCard feedback={feedback} mentionUsersById={mentionUsersById} onOpenImage={setImagePreview} />
+          <OriginalFeedbackCard
+            canManageAllComments={canManageAllComments}
+            currentUser={currentUser}
+            editState={editState}
+            entry={originalEntry}
+            feedback={feedback}
+            mentionableUsers={mentionableUsers}
+            mentionUsersById={mentionUsersById}
+            onCancelEdit={() => setEditState(null)}
+            onEditDraftChange={updateEditDraft}
+            onOpenImage={setImagePreview}
+            onReply={startReply}
+            onStartEdit={startEdit}
+            onSubmitEdit={submitEdit}
+            onUploadAttachment={(file) => uploadCommentAttachment({ file, targetId: feedback.id, targetType: "feedback" })}
+          />
 
           <div className="feedback-issue-timeline">
-            {entries.map(({ message, thread }) => (
+            {timelineEntries.map(({ message, thread }) => (
               <article key={`${thread.id}:${message.id}`} className="feedback-issue-comment-card">
                 <UserAvatar avatarUrl={message.authorAvatarUrl} className="h-8 w-8 text-[11px] shadow-sm" frame={false} name={message.author} />
                 <div className="feedback-issue-comment-main">
@@ -274,26 +291,75 @@ export function FeedbackIssuePage() {
 }
 
 function OriginalFeedbackCard({
+  canManageAllComments,
+  currentUser,
+  editState,
+  entry,
   feedback,
+  mentionableUsers,
   mentionUsersById,
+  onEditDraftChange,
+  onCancelEdit,
   onOpenImage,
+  onReply,
+  onStartEdit,
+  onSubmitEdit,
+  onUploadAttachment,
 }: {
+  canManageAllComments: boolean;
+  currentUser: OrfUser | null;
+  editState: { draft: CommentDraft; messageId: string; threadId: string } | null;
+  entry: FeedbackCommentEntry | null;
   feedback: Feedback;
+  mentionableUsers: CommentMentionUser[];
   mentionUsersById: Map<string, CommentMentionUser>;
+  onCancelEdit: () => void;
+  onEditDraftChange: (messageId: string, draft: CommentDraft) => void;
   onOpenImage: (preview: ImagePreview) => void;
+  onReply: (message: CommentMessage) => void;
+  onStartEdit: (entry: FeedbackCommentEntry) => void;
+  onSubmitEdit: (event: FormEvent, messageId: string) => void;
+  onUploadAttachment: (file: File) => Promise<string | null>;
 }) {
-  const createdAt = commentTimeDisplay(feedback.createdAt);
+  const message = entry?.message ?? null;
+  const createdAt = commentTimeDisplay(message?.createdAt ?? feedback.createdAt);
+  const authorName = message?.author ?? feedback.owner;
+  const authorAvatarUrl = message?.authorAvatarUrl ?? null;
 
   return (
     <article className="feedback-issue-original-card">
-      <UserAvatar avatarUrl={null} className="h-8 w-8 text-[11px] shadow-sm" frame={false} name={feedback.owner} />
+      <UserAvatar avatarUrl={authorAvatarUrl} className="h-8 w-8 text-[11px] shadow-sm" frame={false} name={authorName} />
       <div className="feedback-issue-original-main">
         <div className="feedback-issue-comment-header">
-          <strong>{feedback.owner}</strong>
-          <time dateTime={feedback.createdAt} title={createdAt.title}>{createdAt.label}</time>
+          <strong>{authorName}</strong>
+          <time dateTime={message?.createdAt ?? feedback.createdAt} title={createdAt.title}>{createdAt.label}</time>
+          {entry && canManageFeedbackComment(entry.message, currentUser, canManageAllComments) && (
+            <button type="button" className="feedback-issue-reply-action" onClick={() => onStartEdit(entry)}>
+              <Pencil aria-hidden="true" />
+              编辑
+            </button>
+          )}
+          {message && (
+            <button type="button" className="feedback-issue-reply-action" onClick={() => onReply(message)}>
+              <Reply aria-hidden="true" />
+              回复
+            </button>
+          )}
         </div>
         <div className="feedback-issue-comment-body">
-          {feedback.suggestedAdjustment ? (
+          {message && editState?.messageId === message.id ? (
+            <CommentInlineEditor
+              currentUserId={currentUser?.id ?? ""}
+              draft={editState.draft}
+              mentionableUsers={mentionableUsers}
+              onCancel={onCancelEdit}
+              onDraftChange={(draft) => onEditDraftChange(message.id, draft)}
+              onSubmit={(event) => onSubmitEdit(event, message.id)}
+              onUploadAttachment={onUploadAttachment}
+            />
+          ) : message ? (
+            <CommentBodyText attachments={message.attachments ?? []} body={message.body} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
+          ) : feedback.suggestedAdjustment ? (
             <FeedbackLinkedText text={feedback.suggestedAdjustment} />
           ) : (
             <CommentBodyText attachments={[]} body={feedback.phenomenon} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />

@@ -6,7 +6,7 @@ import { loadEmptyOrfStateSnapshot } from "./orfStateSnapshot";
 import { useOrfDataState } from "./orfProviderData";
 import { type AuthResult, useAuthSessionState } from "./orfProviderAuth";
 import { useOrfProviderCommentActions } from "./orfProviderCommentActions";
-import { useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
+import { type CreateFeedbackInput, useOrfProviderFeedbackActions } from "./orfProviderFeedbackActions";
 import { useNotificationState } from "./orfProviderNotifications";
 import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import {
@@ -58,7 +58,7 @@ import type {
   UserRole,
 } from "../types/orf";
 
-type ModalType = "newResult" | "newFeedback" | "recruitChallengers" | null;
+type ModalType = "newResult" | "recruitChallengers" | null;
 
 interface ModalState {
   type: ModalType;
@@ -135,7 +135,7 @@ interface OrfContextValue {
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
   submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
-  createFeedback: (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner">) => Promise<boolean>;
+  createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   setTaskCompletion: (taskId: string, done: boolean) => Promise<boolean>;

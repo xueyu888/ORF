@@ -14,6 +14,7 @@ const ChatPage = lazyNamed(() => import("./pages/ChatPage"), "ChatPage");
 const DashboardPage = lazyNamed(() => import("./pages/DashboardPage"), "DashboardPage");
 const FantasyUiPreviewPage = lazyNamed(() => import("./features/fantasy-ui"), "FantasyUiPreviewPage");
 const FeedbackInboxPage = lazyNamed(() => import("./pages/FeedbackInboxPage"), "FeedbackInboxPage");
+const FeedbackCreatePage = lazyNamed(() => import("./pages/FeedbackCreatePage"), "FeedbackCreatePage");
 const FeedbackIssuePage = lazyNamed(() => import("./pages/FeedbackIssuePage"), "FeedbackIssuePage");
 const GenshinUIKitPreviewPage = lazyNamed(() => import("./features/genshin-ui-kit"), "GenshinUIKitPreviewPage");
 const LootSubmitPage = lazyNamed(() => import("./pages/LootSubmitPage"), "LootSubmitPage");
@@ -41,6 +42,7 @@ export function App() {
         <Route path="fantasy-ui" element={<LazyRoute><FantasyUiPreviewPage /></LazyRoute>} />
         <Route path="genshin-ui-kit" element={<LazyRoute><GenshinUIKitPreviewPage /></LazyRoute>} />
         <Route path="feedback" element={<LazyRoute><FeedbackInboxPage /></LazyRoute>} />
+        <Route path="feedback/new" element={<LazyRoute><FeedbackCreatePage /></LazyRoute>} />
         <Route path="feedback/:feedbackId" element={<LazyRoute><FeedbackIssuePage /></LazyRoute>} />
         <Route path="notifications" element={<LazyRoute><NotificationsPage /></LazyRoute>} />
         <Route path="strategy-map" element={<LazyRoute><StrategyMapPage /></LazyRoute>} />

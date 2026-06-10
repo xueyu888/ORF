@@ -1,7 +1,12 @@
 import { useMemo } from "react";
-import { apiRequest } from "./apiClient";
+import { apiJson, apiRequest } from "./apiClient";
 import { businessMutationFailureMessage } from "./orfProviderMutationMessages";
 import type { Feedback, FeedbackStatus } from "../types/orf";
+
+export type CreateFeedbackInput = Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "owner"> & {
+  attachments?: Array<{ file: File; id: string }>;
+  initialBody: string;
+};
 
 interface FeedbackActionOptions {
   notify: (message: string) => void;
@@ -11,25 +16,29 @@ interface FeedbackActionOptions {
 export function useOrfProviderFeedbackActions({ notify, refreshTaskManagementData }: FeedbackActionOptions) {
   return useMemo(
     () => ({
-      createFeedback: async (input: Pick<Feedback, "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner">) => {
+      createFeedback: async (input: CreateFeedbackInput) => {
         try {
-          await apiRequest("/api/feedback", {
+          const formData = new FormData();
+          formData.set("phenomenon", input.phenomenon);
+          formData.set("causeCategories", JSON.stringify(input.causeCategories));
+          formData.set("impact", input.impact);
+          formData.set("initialBody", input.initialBody);
+          formData.set("owner", input.owner);
+          for (const attachment of input.attachments ?? []) {
+            formData.set(`attachment:${attachment.id}`, attachment.file);
+          }
+
+          const response = await apiJson<{ feedback: Feedback }>("/api/feedback", {
             method: "POST",
-            body: JSON.stringify({
-              phenomenon: input.phenomenon,
-              causeCategories: input.causeCategories,
-              impact: input.impact,
-              suggestedAdjustment: input.suggestedAdjustment,
-              owner: input.owner,
-            }),
+            body: formData,
           });
           await refreshTaskManagementData();
           notify("反馈已捕获");
-          return true;
+          return response.feedback;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "反馈保存失败"));
           void refreshTaskManagementData().catch(() => undefined);
-          return false;
+          return null;
         }
       },
       updateFeedbackStatus: (feedbackId: string, status: FeedbackStatus) => {

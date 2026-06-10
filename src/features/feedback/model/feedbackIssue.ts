@@ -23,10 +23,22 @@ export function feedbackIssueThreads(comments: readonly CommentThread[], feedbac
 }
 
 export function feedbackIssueCommentCount(comments: readonly CommentThread[], feedbackId: string) {
-  return feedbackIssueThreads(comments, feedbackId).reduce((count, thread) => count + thread.messages.length, 0);
+  const messages = feedbackIssueThreads(comments, feedbackId)
+    .flatMap((thread) => thread.messages)
+    .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  return Math.max(0, messages.length - 1);
 }
 
 export function feedbackIssueDisplayId(value: string) {
   const normalized = value.replace(/^fb-/, "");
   return normalized.length > 8 ? normalized.slice(0, 8) : normalized;
+}
+
+const feedbackAttachmentMarkdownPattern = /!\[[^\]\n]*\]\(orf-attachment:[^)]+\)/g;
+
+export function feedbackIssueBodyPreview(value: string) {
+  return value
+    .replace(feedbackAttachmentMarkdownPattern, "[图片]")
+    .replace(/\s+/g, " ")
+    .trim();
 }

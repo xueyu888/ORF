@@ -6041,6 +6041,10 @@ button:disabled {
     padding-bottom: var(--orf-mobile-bottom-nav-height);
   }
 
+  .orf-app-shell:has(.feedback-create-page) .orf-shell-body {
+    padding-bottom: 0;
+  }
+
   .orf-sidebar {
     display: none;
   }
@@ -6060,6 +6064,10 @@ button:disabled {
       linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 251, 253, 0.96)),
       #ffffff;
     box-shadow: 0 -14px 34px rgba(15, 35, 58, 0.13);
+  }
+
+  .orf-app-shell:has(.feedback-create-page) .orf-mobile-bottom-nav {
+    display: none;
   }
 
   .orf-mobile-bottom-nav-item {
