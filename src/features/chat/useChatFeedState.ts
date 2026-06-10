@@ -36,6 +36,7 @@ import {
   updatePendingMessageDelivery,
   upsertChannelMessage,
 } from "./chatModels";
+import { chatReadReceiptStableMs, selectChatReadThroughCandidate } from "./chatReadObserver";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 
 export type ChatFeedThreadTarget = {
@@ -78,6 +79,11 @@ function runChatFeedScrollIntent(tryScroll: () => boolean, onDone: () => void, a
   };
 }
 
+function canAutoAdvanceChatReadReceipt() {
+  if (typeof document === "undefined") return true;
+  return document.visibilityState === "visible" && document.hasFocus();
+}
+
 export function useChatFeedState({
   activeChannel,
   currentUserId,
@@ -100,13 +106,20 @@ export function useChatFeedState({
   const currentUserIdRef = useRef<string | undefined>(undefined);
   const contextRequestKeyRef = useRef<string | null>(null);
   const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
+  const manualUnreadAutoReadSuppressedRef = useRef(false);
   const messageScrollRef = useRef<HTMLDivElement | null>(null);
+  const messagesLoadingRef = useRef(false);
+  const messagesRef = useRef<ChatMessage[]>([]);
   const olderLoadInFlightRef = useRef(false);
+  const pendingReadReceiptRef = useRef<{ channelId: string; messageId: string; timer: number } | null>(null);
   const pendingUnreadScrollRef = useRef(false);
   const prefetchRequestsRef = useRef(new Map<string, Promise<boolean>>());
+  const readMarkInFlightRef = useRef<string | null>(null);
+  const unreadAnchorRef = useRef<UnreadAnchor | null>(null);
   const activeChannelId = activeChannel?.id ?? null;
   activeChannelIdRef.current = activeChannelId;
   currentUserIdRef.current = currentUserId;
+  unreadAnchorRef.current = unreadAnchor;
 
   const rememberActiveFeedScroll = useCallback((channelId = activeChannelIdRef.current) => {
     const element = messageScrollRef.current;
@@ -346,7 +359,88 @@ export function useChatFeedState({
     }
   }, [applyMessageToFeed, isFollowingLatest, isMessageScrollNearLatest, loadLatestMessages, requestScrollToLatest]);
 
-  // Rebuild the feed only when the channel identity changes; mark-read channel updates must not erase the unread anchor.
+  const cancelPendingReadReceipt = useCallback(() => {
+    const pending = pendingReadReceiptRef.current;
+    if (pending) window.clearTimeout(pending.timer);
+    pendingReadReceiptRef.current = null;
+  }, []);
+
+  const markReadThroughMessage = useCallback(async (channelId: string, messageId: string) => {
+    const requestKey = `${channelId}:${messageId}`;
+    if (readMarkInFlightRef.current === requestKey) return;
+    readMarkInFlightRef.current = requestKey;
+    try {
+      const response = await markChatChannelReadRequest(channelId, { messageId });
+      if (activeChannelIdRef.current !== channelId) return;
+      onChannelUpdate(response.channel);
+      setUnreadAnchor(buildUnreadAnchor(response.channel, currentUserIdRef.current));
+      manualUnreadAutoReadSuppressedRef.current = false;
+    } catch {
+      // Automatic read receipts are opportunistic; manual "mark read" remains available on failure.
+    } finally {
+      if (readMarkInFlightRef.current === requestKey) readMarkInFlightRef.current = null;
+    }
+  }, [onChannelUpdate]);
+
+  const scheduleVisibleReadReceipt = useCallback(() => {
+    const channelId = activeChannelIdRef.current;
+    const anchor = unreadAnchorRef.current;
+    if (
+      !channelId ||
+      !anchor ||
+      !hasMainFeedUnread(anchor) ||
+      messagesLoadingRef.current ||
+      !canAutoAdvanceChatReadReceipt() ||
+      (anchor.manuallyUnread && manualUnreadAutoReadSuppressedRef.current)
+    ) {
+      cancelPendingReadReceipt();
+      return;
+    }
+
+    const candidate = selectChatReadThroughCandidate({
+      container: messageScrollRef.current,
+      currentUserId: currentUserIdRef.current,
+      messages: messagesRef.current,
+      unreadAnchor: anchor,
+    });
+    if (!candidate) {
+      cancelPendingReadReceipt();
+      return;
+    }
+
+    const requestKey = `${channelId}:${candidate.id}`;
+    if (readMarkInFlightRef.current === requestKey) {
+      cancelPendingReadReceipt();
+      return;
+    }
+    const pending = pendingReadReceiptRef.current;
+    if (pending?.channelId === channelId && pending.messageId === candidate.id) return;
+
+    cancelPendingReadReceipt();
+    const timer = window.setTimeout(() => {
+      const latestCandidate = selectChatReadThroughCandidate({
+        container: messageScrollRef.current,
+        currentUserId: currentUserIdRef.current,
+        messages: messagesRef.current,
+        unreadAnchor: unreadAnchorRef.current,
+      });
+      pendingReadReceiptRef.current = null;
+      if (
+        activeChannelIdRef.current !== channelId ||
+        messagesLoadingRef.current ||
+        !canAutoAdvanceChatReadReceipt() ||
+        latestCandidate?.id !== candidate.id
+      ) {
+        window.requestAnimationFrame(scheduleVisibleReadReceipt);
+        return;
+      }
+      void markReadThroughMessage(channelId, candidate.id);
+    }, chatReadReceiptStableMs);
+
+    pendingReadReceiptRef.current = { channelId, messageId: candidate.id, timer };
+  }, [cancelPendingReadReceipt, markReadThroughMessage]);
+
+  // Rebuild the feed only when the channel identity changes; channel read updates are reconciled through the read observer.
   useEffect(() => {
     if (!activeChannel) return undefined;
     let cancelled = false;
@@ -358,6 +452,8 @@ export function useChatFeedState({
       requestedMessageId &&
       cachedFeed?.messages.some((message) => message.id === requestedMessageId || message.rootMessageId === requestedMessageId),
     );
+    manualUnreadAutoReadSuppressedRef.current = false;
+    cancelPendingReadReceipt();
     setFollowingLatest(!shouldOpenMainUnread && !requestedMessageId);
     setUnreadAnchor(anchor);
     setPendingNewMessageCount(0);
@@ -442,24 +538,57 @@ export function useChatFeedState({
     } else if (cachedHasRequestedMessage) {
       setMessagesLoading(false);
     }
-    void markChatChannelReadRequest(channelId)
-      .then((response) => onChannelUpdate(response.channel))
-      .catch(() => undefined);
     return () => {
       cancelled = true;
+      cancelPendingReadReceipt();
       rememberActiveFeedScroll(channelId);
     };
   }, [
     activeChannelId,
+    cancelPendingReadReceipt,
     currentUserId,
     notify,
-    onChannelUpdate,
     rememberActiveFeedScroll,
     loadLatestMessages,
     requestScrollToLatest,
     requestedMessageId,
     setFollowingLatest,
   ]);
+
+  useEffect(() => {
+    if (!activeChannel) return;
+    const nextAnchor = buildUnreadAnchor(activeChannel, currentUserId);
+    setUnreadAnchor((current) => {
+      if (current && current.channelId !== activeChannel.id) return current;
+      if (hasMainFeedUnread(current) && hasMainFeedUnread(nextAnchor)) {
+        if ((nextAnchor.lastReadAt ?? "") > (current.lastReadAt ?? "")) return nextAnchor;
+        return current;
+      }
+      if (hasMainFeedUnread(current) && !hasMainFeedUnread(nextAnchor)) return nextAnchor;
+      if (current && !hasMainFeedUnread(current) && hasMainFeedUnread(nextAnchor)) return nextAnchor;
+      if (!current && hasMainFeedUnread(nextAnchor)) return nextAnchor;
+      return current ?? nextAnchor;
+    });
+  }, [activeChannel, currentUserId]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (canAutoAdvanceChatReadReceipt()) {
+        scheduleVisibleReadReceipt();
+      } else {
+        cancelPendingReadReceipt();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleVisibilityChange);
+    window.addEventListener("blur", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleVisibilityChange);
+      window.removeEventListener("blur", handleVisibilityChange);
+      cancelPendingReadReceipt();
+    };
+  }, [cancelPendingReadReceipt, scheduleVisibleReadReceipt]);
 
   useEffect(() => {
     if (!activeChannelId || !requestedMessageId) return undefined;
@@ -542,6 +671,10 @@ export function useChatFeedState({
     );
   }, [messages, messagesLoading, setFollowingLatest]);
 
+  useLayoutEffect(() => {
+    scheduleVisibleReadReceipt();
+  }, [messages, messagesLoading, scheduleVisibleReadReceipt, unreadAnchor]);
+
   const loadOlderMessages = useCallback(async () => {
     if (!activeChannelId || messages.length === 0 || olderLoadInFlightRef.current || isLatestScrollPending() || !hasOlderMessages) return;
     setFollowingLatest(false);
@@ -588,11 +721,14 @@ export function useChatFeedState({
     rememberActiveFeedScroll();
     const nearLatest = handleLatestStickinessScroll();
     if (nearLatest) setPendingNewMessageCount(0);
+    if (!isLatestScrollPending()) scheduleVisibleReadReceipt();
     if (!isLatestScrollPending() && isChatFeedNearOldest(messageScrollRef.current)) void loadOlderMessages();
-  }, [handleLatestStickinessScroll, isLatestScrollPending, loadOlderMessages, rememberActiveFeedScroll]);
+  }, [handleLatestStickinessScroll, isLatestScrollPending, loadOlderMessages, rememberActiveFeedScroll, scheduleVisibleReadReceipt]);
 
   const markActiveChannelUnread = useCallback(async () => {
     if (!activeChannelId) return;
+    cancelPendingReadReceipt();
+    manualUnreadAutoReadSuppressedRef.current = true;
     const response = await setChatChannelUnreadRequest({ channelId: activeChannelId });
     onChannelUpdate(response.channel);
     const member = currentMembership(response.channel, currentUserIdRef.current);
@@ -605,24 +741,28 @@ export function useChatFeedState({
       threadUnreadCount: response.channel.threadUnreadCount,
       unreadCount: response.channel.unreadCount,
     });
-  }, [activeChannelId, onChannelUpdate]);
+  }, [activeChannelId, cancelPendingReadReceipt, onChannelUpdate]);
 
   const clearActiveChannelUnread = useCallback(async () => {
     const channelId = activeChannelIdRef.current;
     if (!channelId) return;
     try {
+      cancelPendingReadReceipt();
       const response = await markChatChannelReadRequest(channelId, { includeThreads: true });
       if (activeChannelIdRef.current !== channelId) return;
       onChannelUpdate(response.channel);
       setUnreadAnchor(null);
+      manualUnreadAutoReadSuppressedRef.current = false;
     } catch (error) {
       if (activeChannelIdRef.current === channelId) {
         notify(error instanceof Error ? error.message : "标记已读失败");
       }
     }
-  }, [notify, onChannelUpdate]);
+  }, [cancelPendingReadReceipt, notify, onChannelUpdate]);
 
   const markMessageUnread = useCallback(async (message: ChatMessage) => {
+    cancelPendingReadReceipt();
+    manualUnreadAutoReadSuppressedRef.current = true;
     const response = await setChatChannelUnreadRequest({ channelId: message.channelId, messageId: message.id });
     onChannelUpdate(response.channel);
     if (message.channelId !== activeChannelIdRef.current) return;
@@ -636,7 +776,7 @@ export function useChatFeedState({
       threadUnreadCount: response.channel.threadUnreadCount,
       unreadCount: response.channel.unreadCount,
     });
-  }, [onChannelUpdate]);
+  }, [cancelPendingReadReceipt, onChannelUpdate]);
 
   const jumpToUnread = useCallback(async (target: ChatUnreadJumpTarget) => {
     const channelId = activeChannelIdRef.current;
@@ -716,6 +856,8 @@ export function useChatFeedState({
     : activeFeedIsState
       ? messagesLoading
       : !activeFeedSnapshot || !isFreshFeedSnapshot(activeFeedSnapshot);
+  messagesLoadingRef.current = displayedMessagesLoading;
+  messagesRef.current = displayedMessages;
 
   return {
     applyMessageToFeed,

@@ -1904,7 +1904,7 @@ export async function listSavedChatMessages(actor: ChatActor): Promise<Outcome<{
 export async function markChatChannelRead(
   channelId: string,
   actor: ChatActor,
-  options: { includeThreads?: boolean } = {},
+  options: { includeThreads?: boolean; messageId?: string | null } = {},
 ): Promise<Outcome<{ channel: ChatChannel }>> {
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
@@ -1913,27 +1913,62 @@ export async function markChatChannelRead(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows } = await client.query<{ id: string }>(
-      `
-        SELECT id
-        FROM chat_messages
-        WHERE channel_id = $1
-          AND root_message_id IS NULL
-          AND deleted_at IS NULL
-        ORDER BY created_at DESC
-        LIMIT 1
-      `,
-      [channelId],
-    );
+    const targetMessageResult = options.messageId
+      ? await client.query<{ created_at: Date | string; id: string }>(
+        `
+          SELECT id, created_at
+          FROM chat_messages
+          WHERE team_id = $1
+            AND channel_id = $2
+            AND id = $3
+            AND root_message_id IS NULL
+            AND deleted_at IS NULL
+          LIMIT 1
+        `,
+        [storageTeamId(actor), channelId, options.messageId],
+      )
+      : await client.query<{ created_at: Date | string; id: string }>(
+        `
+          SELECT id, created_at
+          FROM chat_messages
+          WHERE team_id = $1
+            AND channel_id = $2
+            AND root_message_id IS NULL
+            AND deleted_at IS NULL
+          ORDER BY created_at DESC
+          LIMIT 1
+        `,
+        [storageTeamId(actor), channelId],
+      );
+    const targetMessage = targetMessageResult.rows[0] ?? null;
+    if (options.messageId && !targetMessage) {
+      await client.query("ROLLBACK");
+      return { status: "notFound" };
+    }
+    const lastReadAt = options.messageId && targetMessage ? targetMessage.created_at : readAt;
+    const lastReadMessageId = targetMessage?.id ?? null;
     await client.query(
       `
         UPDATE chat_channel_members
-        SET last_viewed_at = $3, last_read_at = $3, last_read_message_id = $4, manually_unread = false
+        SET
+          last_viewed_at = $3,
+          last_read_at = CASE
+            WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $4
+            ELSE last_read_at
+          END,
+          last_read_message_id = CASE
+            WHEN last_read_at IS NULL OR last_read_at < $4::timestamptz THEN $5
+            ELSE last_read_message_id
+          END,
+          manually_unread = CASE
+            WHEN last_read_at IS NULL OR last_read_at <= $4::timestamptz THEN false
+            ELSE manually_unread
+          END
         WHERE channel_id = $1 AND user_id = $2
       `,
-      [channelId, actor.id, readAt, rows[0]?.id ?? null],
+      [channelId, actor.id, readAt, lastReadAt, lastReadMessageId],
     );
-    if (options.includeThreads) {
+    if (options.includeThreads && !options.messageId) {
       await client.query(
         `
           UPDATE chat_thread_follows f

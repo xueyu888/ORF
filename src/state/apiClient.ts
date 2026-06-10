@@ -476,10 +476,13 @@ export async function setChatMessageSavedRequest(input: { channelId: string; mes
   );
 }
 
-export async function markChatChannelReadRequest(channelId: string, input: { includeThreads?: boolean } = {}) {
+export async function markChatChannelReadRequest(channelId: string, input: { includeThreads?: boolean; messageId?: string | null } = {}) {
   return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/read`, {
     method: "PATCH",
-    body: JSON.stringify({ includeThreads: input.includeThreads ?? false }),
+    body: JSON.stringify({
+      includeThreads: input.includeThreads ?? false,
+      messageId: input.messageId ?? null,
+    }),
   });
 }
 
