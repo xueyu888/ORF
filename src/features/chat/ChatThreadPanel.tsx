@@ -1,6 +1,6 @@
 import { Bell, BellOff } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import type { ChatAttachment, ChatMessage, ChatThread, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatMessage, ChatThread, ChatUser, Feedback } from "../../types/orf";
 import { ChatComposer } from "./ChatComposer";
 import { ChatMessageItem } from "./ChatMessageItem";
 import { scrollChatFeedToMessage } from "./chatFeedScroll";
@@ -12,6 +12,7 @@ type ChatThreadPanelProps = {
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
+  feedbackItems?: Feedback[];
   focusMessageId: string | null;
   composerFocusSignal?: number;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
@@ -40,6 +41,7 @@ export function ChatThreadPanel({
   canPin,
   currentUserId,
   editingMessageId,
+  feedbackItems,
   focusMessageId,
   composerFocusSignal,
   onCancelEdit,
@@ -153,6 +155,7 @@ export function ChatThreadPanel({
           canPin={canPin}
           currentUserId={currentUserId}
           editing={editingMessageId === thread.rootMessage.id}
+          feedbackItems={feedbackItems}
           focused={focusMessageId === thread.rootMessage.id}
           mentionableUsers={users}
           message={thread.rootMessage}
@@ -184,6 +187,7 @@ export function ChatThreadPanel({
                 compact={compact}
                 currentUserId={currentUserId}
                 editing={editingMessageId === reply.id}
+                feedbackItems={feedbackItems}
                 key={reply.id}
                 focused={focusMessageId === reply.id}
                 mentionableUsers={users}
@@ -209,6 +213,7 @@ export function ChatThreadPanel({
       </div>
       <ChatComposer
         channelId={thread.rootMessage.channelId}
+        feedbackItems={feedbackItems}
         focusSignal={composerFocusSignal}
         mentionableUsers={users}
         onDraftStateChange={onDraftStateChange}

@@ -6,6 +6,7 @@ import { quickCommands } from "../config/navigation";
 import { hasPermission } from "../config/permissions";
 import type { PermissionKey } from "../config/permissions";
 import { challengePathForTarget } from "../features/challenge/model/challengeLinks";
+import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
 import {
   filterResultsForVisibleObjectives,
   filterTasksForVisibleObjectives,
@@ -97,7 +98,7 @@ export function CommandMenu({ open, onClose }: { open: boolean; onClose: () => v
     );
     const feedbackItems = visibleFeedback.map((item) => ({
       label: item.phenomenon,
-      path: `/feedback/${encodeURIComponent(item.id)}`,
+      path: feedbackIssueHref(item.id),
       searchText: [
         item.id,
         item.phenomenon,

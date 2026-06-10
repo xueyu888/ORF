@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, CircleDot, MessageSquare, Pencil, Reply, RotateCcw, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleDot, Link as LinkIcon, MessageSquare, Pencil, Reply, RotateCcw, XCircle } from "lucide-react";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
@@ -22,6 +22,7 @@ import { FeedbackLinkedText } from "../features/feedback/components/FeedbackLink
 import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import {
   feedbackIssueDisplayId,
+  feedbackIssueMarkdownLink,
   feedbackIssueState,
   feedbackIssueStateLabel,
   feedbackIssueThreads,
@@ -43,6 +44,7 @@ export function FeedbackIssuePage() {
     addComment,
     currentUser,
     loadCommentMentionableUsers,
+    notify,
     state,
     updateCommentMessage,
     updateFeedbackStatus,
@@ -163,6 +165,16 @@ export function FeedbackIssuePage() {
     setEditState(null);
   };
 
+  const copyFeedbackLink = () => {
+    const write = navigator.clipboard?.writeText(feedbackIssueMarkdownLink(feedback));
+    if (!write) {
+      notify("当前浏览器不支持复制链接");
+      return;
+    }
+
+    void write.then(() => notify("反馈链接已复制")).catch(() => notify("复制链接失败"));
+  };
+
   const issueOpen = isFeedbackIssueOpen(feedback);
 
   return (
@@ -182,6 +194,10 @@ export function FeedbackIssuePage() {
           </div>
         </div>
         <div className="feedback-issue-detail-actions">
+          <BountyButton onClick={copyFeedbackLink} variant="secondary">
+            <LinkIcon aria-hidden="true" />
+            复制链接
+          </BountyButton>
           {canChangeState && (
             <BountyButton onClick={() => updateFeedbackStatus(feedback.id, nextFeedbackIssueStatus(feedback))} variant={issueOpen ? "secondary" : "primary"}>
               {issueOpen ? <XCircle aria-hidden="true" /> : <RotateCcw aria-hidden="true" />}

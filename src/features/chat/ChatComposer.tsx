@@ -8,9 +8,10 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { type ChangeEvent, type ClipboardEvent, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type ClipboardEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import { uploadChatAttachment } from "../../state/apiClient";
-import type { ChatAttachment, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatUser, Feedback } from "../../types/orf";
 import {
   type ChatAttachmentDraftItem,
   completeAttachmentDraftItem,
@@ -35,6 +36,7 @@ import { ChatDraftEditor } from "./ChatDraftEditor";
 type ChatComposerProps = {
   channelId: string;
   disabled?: boolean;
+  feedbackItems?: Feedback[];
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;
@@ -50,6 +52,7 @@ type ChatComposerProps = {
 export function ChatComposer({
   channelId,
   disabled,
+  feedbackItems = [],
   focusSignal,
   mentionableUsers,
   onDraftStateChange,
@@ -168,6 +171,10 @@ export function ChatComposer({
     event.preventDefault();
     uploadFiles(files);
   };
+  const transformPastedText = useCallback(
+    (text: string) => formatPastedFeedbackLinks(text, feedbackItems),
+    [feedbackItems],
+  );
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (disabled) return;
@@ -243,6 +250,7 @@ export function ChatComposer({
         className="orf-chat-composer-box"
         disabled={disabled}
         draft={draft}
+        feedbackItems={feedbackItems}
         focusSignal={focusSignal}
         mentionableUsers={mentionableUsers}
         onChange={setDraft}
@@ -256,6 +264,7 @@ export function ChatComposer({
         recordHistoryOnSubmit
         resetKey={draftStorageKey}
         submitDisabled={uploading || failedUploads > 0 || !hasSendableDraft}
+        transformPastedText={transformPastedText}
         toolbarControls={<button type="button" onClick={() => fileRef.current?.click()} title="附件"><Paperclip className="h-4 w-4" /></button>}
         toolbarEnd={({ submit: submitDraft, submitting }) => (
           <>

@@ -1,6 +1,6 @@
 import { Loader2, MessageSquare, X } from "lucide-react";
 import { IconButton } from "../../components/ui";
-import type { ChatAttachment, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
 import { ChatCollectionPanel } from "./ChatCollectionPanel";
 import type { ChatSendHandler } from "./chatModels";
@@ -18,6 +18,7 @@ type ChatRightPanelProps = {
   collectionResults: ChatSearchResult[];
   currentUserId?: string;
   editingMessageId?: string | null;
+  feedbackItems?: Feedback[];
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onAttachmentPreview: (attachment: ChatAttachment) => void;
@@ -82,6 +83,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             canPin={props.canManage}
             currentUserId={props.currentUserId}
             editingMessageId={props.editingMessageId}
+            feedbackItems={props.feedbackItems}
             focusMessageId={props.threadFocusMessageId}
             composerFocusSignal={props.threadComposerFocusSignal}
             onAttachmentPreview={props.onAttachmentPreview}
@@ -113,6 +115,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       )}
       {props.activePanel === "search" && (
         <ChatSearchPanel
+          feedbackItems={props.feedbackItems}
           onOpenResult={props.onOpenResult}
           onSearch={props.onSearch}
           focusSignal={props.searchFocusSignal}
@@ -130,6 +133,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       )}
       {props.activePanel === "threads" && (
         <ChatThreadInboxPanel
+          feedbackItems={props.feedbackItems}
           loading={props.threadSummariesLoading}
           onOpenThread={props.onOpenThreadSummary}
           summaries={props.threadSummaries}
@@ -138,6 +142,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       )}
       {(props.activePanel === "pins" || props.activePanel === "saved") && (
         <ChatCollectionPanel
+          feedbackItems={props.feedbackItems}
           kind={props.activePanel}
           loading={props.collectionLoading}
           onOpenResult={props.onOpenResult}

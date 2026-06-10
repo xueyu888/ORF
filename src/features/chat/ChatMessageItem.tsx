@@ -1,8 +1,9 @@
 import { clsx } from "clsx";
 import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
-import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
+import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
@@ -257,6 +258,10 @@ export function ChatMessageItem({
   const deliveryStatus = chatMessageDeliveryStatus(message);
   const canMutate = !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
   const canUseServerActions = !deliveryStatus && !message.deletedAt;
+  const transformPastedFeedbackText = useCallback(
+    (text: string) => formatPastedFeedbackLinks(text, feedbackItems ?? []),
+    [feedbackItems],
+  );
   const reactedByCurrentUser = new Set(
     message.reactions
       .filter((reaction) => reaction.reactedByCurrentUser)
@@ -482,6 +487,7 @@ export function ChatMessageItem({
               resetKey={message.id}
               rows={4}
               submitDisabled={editSaving || !editDraft.text.trim()}
+              transformPastedText={transformPastedFeedbackText}
             />
             <div className="orf-chat-inline-edit-actions">
               <button type="button" onClick={onCancelEdit}>取消</button>

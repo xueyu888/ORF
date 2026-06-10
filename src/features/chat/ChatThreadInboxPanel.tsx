@@ -1,16 +1,17 @@
 import { Loader2, Reply } from "lucide-react";
-import type { ChatThreadSummary, ChatUser } from "../../types/orf";
+import type { ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
 import { formatDateTime, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 
 type ChatThreadInboxPanelProps = {
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   loading: boolean;
   onOpenThread: (summary: ChatThreadSummary) => void;
   summaries: ChatThreadSummary[];
   usersById: Map<string, ChatUser>;
 };
 
-export function ChatThreadInboxPanel({ loading, onOpenThread, summaries, usersById }: ChatThreadInboxPanelProps) {
+export function ChatThreadInboxPanel({ feedbackItems, loading, onOpenThread, summaries, usersById }: ChatThreadInboxPanelProps) {
   if (loading && summaries.length === 0) {
     return (
       <div className="orf-chat-panel-loading">
@@ -41,7 +42,7 @@ export function ChatThreadInboxPanel({ loading, onOpenThread, summaries, usersBy
           {summary.unreadCount > 0 && <strong>{summary.unreadCount}</strong>}
           <b>{summary.rootMessage.authorName}</b>
           <div className="orf-chat-thread-inbox-body">
-            {summary.rootMessage.body.trim() ? <ChatMarkdown compact body={summary.rootMessage.body} usersById={usersById} /> : "附件话题"}
+            {summary.rootMessage.body.trim() ? <ChatMarkdown compact body={summary.rootMessage.body} feedbackItems={feedbackItems} usersById={usersById} /> : "附件话题"}
           </div>
           <small>
             {summary.rootMessage.replyCount} 条回复

@@ -70,7 +70,7 @@ export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, notify } = useOrf();
+  const { currentUser, notify, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -781,6 +781,7 @@ export function ChatPage() {
               canPin={canManageActiveChannel}
               currentUserId={currentUser?.id}
               editingMessageId={editingMessage?.id ?? null}
+              feedbackItems={state.feedback}
               focusMessageId={focusMessageId}
               hasNewerMessages={hasNewerMessages}
               hasOlderMessages={hasOlderMessages}
@@ -818,6 +819,7 @@ export function ChatPage() {
             <ChatComposer
               channelId={activeChannel.id}
               disabled={!bootstrap.permissions.canWrite}
+              feedbackItems={state.feedback}
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
               onEditLatest={handleEditLatestOwnMessage}
@@ -839,6 +841,7 @@ export function ChatPage() {
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
           editingMessageId={editingMessage?.id ?? null}
+          feedbackItems={state.feedback}
           memberSearchFocusSignal={memberSearchFocusSignal}
           onDraftStateChange={handleDraftStateChange}
           onAddMembers={async (userIds) => {

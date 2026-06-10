@@ -5,7 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
-import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
+import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
 import { useOrf } from "../state/OrfProvider";
 import type { Feedback, Impact } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -130,7 +130,7 @@ function FeedbackIssueRow({ commentCount, feedback }: { commentCount: number; fe
   const preview = feedbackIssueBodyPreview(feedback.suggestedAdjustment);
 
   return (
-    <Link className="feedback-issue-row" to={`/feedback/${encodeURIComponent(feedback.id)}`}>
+    <Link className="feedback-issue-row" to={feedbackIssueHref(feedback.id)}>
       <div className="feedback-issue-row-icon" data-open={open ? "true" : "false"}>
         {open ? <CircleDot aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
       </div>

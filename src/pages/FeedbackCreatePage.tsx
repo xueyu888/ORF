@@ -12,6 +12,7 @@ import {
 } from "../features/challenge/comments/CommentPanel";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { teamFeedbackCauseOptions } from "../features/feedback/model/feedbackCategories";
+import { feedbackIssueHref } from "../features/feedback/model/feedbackIssue";
 import { useOrf } from "../state/OrfProvider";
 import type { Impact } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -82,7 +83,7 @@ export function FeedbackCreatePage() {
         attachments: referencedAttachments,
       });
       if (feedback) {
-        navigate(`/feedback/${encodeURIComponent(feedback.id)}`);
+        navigate(feedbackIssueHref(feedback.id));
       }
     } finally {
       setSubmitting(false);
