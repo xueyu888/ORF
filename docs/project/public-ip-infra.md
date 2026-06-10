@@ -8,7 +8,7 @@
 
 | 用途 | 公网端口 | 内部端口 | 说明 |
 | --- | ---: | ---: | --- |
-| ORF Web | `8443` | `8443` | ORF 前端稳定入口，使用 DuckDNS 域名证书，`/api` 同源转发到本机后端。 |
+| ORF Web | `8443` | `8443` | ORF 前端稳定入口，使用 DuckDNS 域名证书，Nginx 直接服务 `dist` 构建产物，`/api` 同源转发到本机后端。 |
 | Ory Public | `18443` | `18443` | ORF 后端访问 Ory Public API。 |
 | MinIO S3 API | `19443` | `19443` | ORF 后端访问 S3-compatible API。 |
 | PostgreSQL | `54321` | `5432` | 远程开发机和成员环境直连共享 ORF 数据库；必须使用 TLS、最小权限账号和 PostgreSQL 自身的 `pg_hba.conf` 访问控制。 |
@@ -34,7 +34,7 @@
 ```text
 public-gateway:18443 -> kratos:4433
 public-gateway:19443 -> minio:9000
-public-gateway:8443 -> ORF frontend/backend on host
+public-gateway:8443 -> ORF dist in Nginx + /api backend on host
 router:54321 -> Windows PostgreSQL on 199.199.199.8:5432
 acme-http-gateway:80/443 -> ACME challenge only
 ```
@@ -100,6 +100,8 @@ npm run infra:public:prepare
 npm run infra:public:up
 ```
 
+该命令会先执行 `npm run build`，再生成 public-gateway 的 Nginx 配置并启动容器。`8443` 服务的是构建后的 `dist` 文件，不连接 Vite 开发服务；开发态的 `5173` 只用于本机调试，不能作为已发布客户端或长期手机访问入口。
+
 ## 3.1 ORF Web 域名入口
 
 ORF Web 的公网入口使用：
@@ -124,6 +126,8 @@ ORF_DUCKDNS_PROPAGATION_SECONDS=120
 ORF_APP_URL=https://orf-xueyu.duckdns.org:8443
 CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173,https://orf-xueyu.duckdns.org:8443
 ```
+
+`ORF_APP_URL` 是已发布客户端和稳定 Web 的同源入口，应保持在 `8443`。不要把稳定入口改到 `5173` 或让 `8443` 反向代理 Vite 开发服务，否则源代码保存会触发开发 HMR，导致已安装客户端刷新并丢失未提交的编辑内容。
 
 `ORF_DUCKDNS_TOKEN` 只写入本机 `.env`，不得写入仓库、文档正文或提交信息。
 

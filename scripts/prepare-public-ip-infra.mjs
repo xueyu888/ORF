@@ -34,7 +34,6 @@ function main() {
   const storagePort = env.OBJECT_STORAGE_EXTERNAL_PORT ?? "19443";
   const webPort = env.ORF_WEB_EXTERNAL_PORT ?? "8443";
   const webDomain = normalizeWebDomain(env.ORF_DUCKDNS_DOMAIN ?? env.ORF_WEB_DOMAIN ?? process.env.ORF_DUCKDNS_DOMAIN ?? process.env.ORF_WEB_DOMAIN);
-  const frontendUpstream = env.ORF_FRONTEND_UPSTREAM ?? process.env.ORF_FRONTEND_UPSTREAM ?? "http://host.docker.internal:5173";
   const backendUpstream = env.ORF_BACKEND_UPSTREAM ?? process.env.ORF_BACKEND_UPSTREAM ?? "http://host.docker.internal:8787";
 
   for (const dir of [confDir, snippetsDir, webrootDir, letsEncryptDir, bootstrapCertDir]) {
@@ -43,7 +42,7 @@ function main() {
 
   ensureBootstrapCertificate(publicIp, gatewayCertIps);
   writeSslSnippet();
-  writeNginxConfig({ backendUpstream, frontendUpstream, oryPort, publicIp, storagePort, webDomain, webPort });
+  writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, webDomain, webPort });
 
   console.log(`Prepared public IP gateway config for ${publicIp}.`);
 }
@@ -201,7 +200,7 @@ function writeSslSnippet() {
   );
 }
 
-function writeNginxConfig({ backendUpstream, frontendUpstream, oryPort, publicIp, storagePort, webDomain, webPort }) {
+function writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, webDomain, webPort }) {
   const cert = activeCertPaths(publicIp);
   const webCert = activeWebCertPaths(webDomain, publicIp);
   const webServerName = webDomain ?? "_";
@@ -242,6 +241,7 @@ function writeNginxConfig({ backendUpstream, frontendUpstream, oryPort, publicIp
       `  ssl_certificate_key ${webCert.privateKey};`,
       "  include /etc/nginx/snippets/orf-ssl.conf;",
       "  client_max_body_size 110m;",
+      "  root /usr/share/nginx/orf/dist;",
       "",
       "  location /api/ {",
       "    proxy_http_version 1.1;",
@@ -270,15 +270,19 @@ function writeNginxConfig({ backendUpstream, frontendUpstream, oryPort, publicIp
       `    proxy_pass ${backendUpstream};`,
       "  }",
       "",
+      "  location = /index.html {",
+      "    add_header Cache-Control \"no-cache\";",
+      "    try_files /index.html =404;",
+      "  }",
+      "",
+      "  location /assets/ {",
+      "    add_header Cache-Control \"public, max-age=31536000, immutable\";",
+      "    try_files $uri =404;",
+      "  }",
+      "",
       "  location / {",
-      "    proxy_http_version 1.1;",
-      "    proxy_set_header Host $http_host;",
-      "    proxy_set_header X-Real-IP $remote_addr;",
-      "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
-      "    proxy_set_header X-Forwarded-Proto https;",
-      "    proxy_set_header Upgrade $http_upgrade;",
-      "    proxy_set_header Connection \"upgrade\";",
-      `    proxy_pass ${frontendUpstream};`,
+      "    add_header Cache-Control \"no-cache\";",
+      "    try_files $uri $uri/ /index.html;",
       "  }",
       "}",
       "",
