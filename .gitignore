@@ -16,9 +16,7 @@ orf-firebase-service-account*.json
 .env
 .env.*
 !.env.example
-orf-team-database-config-*.zip
-orf-team-shared-infra-*.zip
-orf-ory-minio-connect-*.tar.gz
+orf-team-shared-infra-*
 orf-android-vivo-handoff-*.tar.gz
 anemo-foundation-ui-kit-v*.zip
 gf-foundation-ui-kit.zip
