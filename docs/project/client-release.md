@@ -84,7 +84,7 @@ npm run release:clients -- --tag v0.0.1 --watch
 
 ## Android 后台 Push 条件
 
-Android 不运行时收到聊天消息或客户端更新通知，依赖系统 Push 通道。ORF 当前把 FCM 作为唯一系统 Push 通道：Android 客户端用 `google-services.json` 注册 FCM token，服务端用 Firebase Admin service account 给 `push_devices` 中的 token 发消息。厂商 Push 不参与聊天消息和客户端更新投递。
+Android 不运行时收到聊天消息或客户端更新通知，依赖系统 Push 通道。ORF 当前把 FCM 作为唯一系统 Push 通道：Android 客户端用 `google-services.json` 注册 FCM token，服务端用 Firebase Admin service account 给 `push_devices` 中的 token 发消息。客户端收到 FCM 但系统没有自动展示时，会在页面不可见或失焦状态下用同一通知渠道补发本地通知；这个兜底只负责展示，不改变服务端消息事实源。厂商 Push 不参与聊天消息和客户端更新投递。
 
 - Android 包名 `org.duckdns.orfxueyu.orf` 已加入 Firebase Android app。
 - 需要 FCM 通道时，`android/app/google-services.json` 只在本机或 GitHub Actions 临时注入，仓库必须忽略它；本地也可以把 `google-services.json` 临时放在仓库根目录，构建脚本会复制到 Android 工程。
