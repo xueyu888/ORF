@@ -28,6 +28,7 @@ function main() {
   if (!publicIp || net.isIP(publicIp) === 0) {
     throw new Error("ORF_PUBLIC_IP is required. Run `npm run infra:public:env -- --public-ip <ip>` first.");
   }
+  const gatewayCertIps = collectGatewayCertIps(publicIp, env);
 
   const oryPort = env.ORY_PUBLIC_EXTERNAL_PORT ?? "18443";
   const storagePort = env.OBJECT_STORAGE_EXTERNAL_PORT ?? "19443";
@@ -40,7 +41,7 @@ function main() {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  ensureBootstrapCertificate(publicIp);
+  ensureBootstrapCertificate(publicIp, gatewayCertIps);
   writeSslSnippet();
   writeNginxConfig({ backendUpstream, frontendUpstream, oryPort, publicIp, storagePort, webDomain, webPort });
 
@@ -91,12 +92,31 @@ function normalizeWebDomain(value) {
   return domain || undefined;
 }
 
-function ensureBootstrapCertificate(publicIp) {
+function collectGatewayCertIps(publicIp, env) {
+  const extraIps = parseIpList(env.ORF_PUBLIC_GATEWAY_CERT_EXTRA_IPS ?? process.env.ORF_PUBLIC_GATEWAY_CERT_EXTRA_IPS);
+  const certIps = [];
+  for (const ip of [publicIp, ...extraIps]) {
+    if (net.isIP(ip) === 0) {
+      throw new Error(`Invalid public gateway certificate IP: ${ip}`);
+    }
+    if (!certIps.includes(ip)) {
+      certIps.push(ip);
+    }
+  }
+  return certIps;
+}
+
+function parseIpList(value) {
+  return value?.split(/[\s,]+/).map((entry) => entry.trim()).filter(Boolean) ?? [];
+}
+
+function ensureBootstrapCertificate(publicIp, certIps) {
+  const certIpState = `${certIps.join("\n")}\n`;
   if (
     fs.existsSync(fullchainFile) &&
     fs.existsSync(privateKeyFile) &&
     fs.existsSync(bootstrapIpFile) &&
-    fs.readFileSync(bootstrapIpFile, "utf8").trim() === publicIp &&
+    fs.readFileSync(bootstrapIpFile, "utf8") === certIpState &&
     certificateRemainsValid(fullchainFile)
   ) {
     return;
@@ -115,7 +135,7 @@ function ensureBootstrapCertificate(publicIp) {
       "-subj",
       `/CN=${publicIp}`,
       "-addext",
-      `subjectAltName=IP:${publicIp}`,
+      `subjectAltName=${certIps.map((ip) => `IP:${ip}`).join(",")}`,
       "-keyout",
       privateKeyFile,
       "-out",
@@ -124,7 +144,7 @@ function ensureBootstrapCertificate(publicIp) {
     { stdio: "ignore" },
   );
   fs.chmodSync(privateKeyFile, 0o600);
-  fs.writeFileSync(bootstrapIpFile, `${publicIp}\n`);
+  fs.writeFileSync(bootstrapIpFile, certIpState);
 }
 
 function certificateRemainsValid(certFile) {
