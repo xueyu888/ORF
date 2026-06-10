@@ -90,6 +90,12 @@ function oryPublicUrl(path: string) {
   return new URL(path, `${trimSlash(process.env.ORY_PUBLIC_URL ?? env.ORY_PUBLIC_URL)}/`).toString();
 }
 
+function oryPublicFlowActionUrl(action: string) {
+  const configuredBaseUrl = `${trimSlash(process.env.ORY_PUBLIC_URL ?? env.ORY_PUBLIC_URL)}/`;
+  const actionUrl = new URL(action, configuredBaseUrl);
+  return new URL(`${actionUrl.pathname}${actionUrl.search}${actionUrl.hash}`, configuredBaseUrl).toString();
+}
+
 function oryAdminBaseUrl() {
   const raw = Object.prototype.hasOwnProperty.call(process.env, "ORY_ADMIN_URL") ? process.env.ORY_ADMIN_URL : env.ORY_ADMIN_URL;
   const value = raw?.trim();
@@ -361,7 +367,7 @@ async function submitApiFlow(flowType: "login" | "registration", body: unknown):
     throw new Error(`Ory ${flowType} flow is missing action URL`);
   }
 
-  const response = await fetchOry(flow.ui.action, {
+  const response = await fetchOry(oryPublicFlowActionUrl(flow.ui.action), {
     method: "POST",
     headers: {
       accept: "application/json",
@@ -389,7 +395,7 @@ export async function checkPasswordLoginFlowHealth() {
     throw new Error("Ory login flow is missing action URL");
   }
 
-  const response = await fetchOry(flow.ui.action, {
+  const response = await fetchOry(oryPublicFlowActionUrl(flow.ui.action), {
     method: "POST",
     headers: {
       accept: "application/json",

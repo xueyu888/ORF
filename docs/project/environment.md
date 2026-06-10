@@ -75,7 +75,7 @@ Bucket: orf-comment-attachments
 
 `.env` 需要配置 `OBJECT_STORAGE_*`，本地示例见 `.env.example`。MinIO bucket 必须保持私有，ORF 后端负责鉴权后读取文件。开发机接入共享对象存储时，`OBJECT_STORAGE_ENDPOINT` 应指向公共 `19443` 入口，而不是本地 `9000`。
 
-无域名公网 IP 部署见 [公网 IP 共享基础设施](./public-ip-infra.md)。日常公网入口只暴露 `18443` 和 `19443`；`80/443` 只在重试公网 CA 证书时临时开放。Ory Admin 和 MinIO Console 不映射公网。
+无域名公网 IP 部署见 [公网 IP 共享基础设施](./public-ip-infra.md)。日常公网入口只暴露 `8443`、`18443`、`19443` 和 `54321`；`80/443` 只在重试公网 CA 证书时临时开放。Ory Admin 和 MinIO Console 不映射公网。
 
 停止：
 

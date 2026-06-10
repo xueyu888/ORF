@@ -30,6 +30,8 @@ async function main() {
   const publicIp = await resolvePublicIp();
   const externalOryPort = readArg("--ory-port") ?? "18443";
   const externalStoragePort = readArg("--storage-port") ?? "19443";
+  const externalDatabasePort = readArg("--database-port");
+  const runtimePublic = hasFlag("--runtime-public");
 
   if (net.isIP(publicIp) === 0) {
     throw new Error(`Invalid public IP: ${publicIp}`);
@@ -41,9 +43,9 @@ async function main() {
   set(next, "ORF_PUBLIC_IP", publicIp);
   set(next, "ORY_PUBLIC_EXTERNAL_PORT", externalOryPort);
   set(next, "OBJECT_STORAGE_EXTERNAL_PORT", externalStoragePort);
-  set(next, "ORY_PUBLIC_URL", `https://${publicIp}:${externalOryPort}`);
+  set(next, "ORY_PUBLIC_URL", runtimePublic ? `https://${publicIp}:${externalOryPort}` : "http://127.0.0.1:4433");
   set(next, "OBJECT_STORAGE_DRIVER", "s3");
-  set(next, "OBJECT_STORAGE_ENDPOINT", `https://${publicIp}:${externalStoragePort}`);
+  set(next, "OBJECT_STORAGE_ENDPOINT", runtimePublic ? `https://${publicIp}:${externalStoragePort}` : "http://127.0.0.1:9000");
   set(next, "ORF_PUBLIC_CA_CERT", path.join(rootDir, "infra", "public-ip", "bootstrap-certs", "fullchain.pem"));
   set(next, "OBJECT_STORAGE_REGION", env.values.OBJECT_STORAGE_REGION ?? "us-east-1");
   set(next, "OBJECT_STORAGE_BUCKET", env.values.OBJECT_STORAGE_BUCKET ?? "orf-comment-attachments");
@@ -52,6 +54,11 @@ async function main() {
   set(next, "OBJECT_STORAGE_UPLOAD_MAX_BYTES", env.values.OBJECT_STORAGE_UPLOAD_MAX_BYTES ?? "10485760");
   set(next, "MINIO_ROOT_USER", env.values.MINIO_ROOT_USER && env.values.MINIO_ROOT_USER !== "orf-dev-minio" ? env.values.MINIO_ROOT_USER : "orf-root");
 
+  const databaseNames = externalDatabasePort ? ["DATABASE_URL", "REMOTE_DATABASE_URL"].filter((name) => env.values[name]) : [];
+  for (const name of databaseNames) {
+    set(next, name, rewritePostgresEndpoint(env.values[name], publicIp, externalDatabasePort));
+  }
+
   for (const name of generatedSecrets) {
     const current = env.values[name];
     set(next, name, isUsableSecret(name, current) ? current : randomSecret(name));
@@ -59,7 +66,19 @@ async function main() {
 
   writeEnvFile(envFile, env.lines, next);
   console.log(`Configured public IP endpoints in .env for ${publicIp}.`);
+  console.log(runtimePublic ? "Runtime endpoints were configured for a remote-member/public path." : "Runtime endpoints were configured for the server host local/LAN path.");
   console.log("Generated or preserved strong Ory and MinIO secrets; values were not printed.");
+  if (databaseNames.length > 0) {
+    console.log(`Updated database endpoint host/port for ${databaseNames.join(", ")}; credentials were not printed.`);
+  } else if (externalDatabasePort) {
+    console.log("DATABASE_URL/REMOTE_DATABASE_URL was missing, so the database endpoint was not changed.");
+  } else {
+    console.log("Database endpoint was not changed; pass --database-port <port> when preparing a remote-member .env.");
+  }
+}
+
+function hasFlag(name) {
+  return process.argv.includes(name);
 }
 
 function readArg(name) {
@@ -135,6 +154,17 @@ function readEnvFile(file) {
 
 function set(map, name, value) {
   map.set(name, value);
+}
+
+function rewritePostgresEndpoint(value, publicIp, port) {
+  const url = new URL(value);
+  if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
+    throw new Error(`Expected PostgreSQL URL for database endpoint, got protocol ${url.protocol}`);
+  }
+
+  url.hostname = publicIp;
+  url.port = port;
+  return url.toString();
 }
 
 function writeEnvFile(file, lines, values) {

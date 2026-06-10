@@ -483,7 +483,7 @@ function insertRequiredEnvDefaults(current, requiredSection, missing) {
     }
 
     const index = findRequiredEnvDefaultInsertionIndex(lines, requiredSection, entry);
-    lines.splice(index, 0, `${entry.line} # ${generatedRequiredEnvDefaultComment}`);
+    lines.splice(index, 0, `# ${generatedRequiredEnvDefaultComment}`, entry.line);
   }
   return joinEnvLines(lines);
 }
