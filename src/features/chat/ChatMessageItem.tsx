@@ -2,7 +2,7 @@ import { clsx } from "clsx";
 import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import { IconButton } from "../../components/ui";
-import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
@@ -17,6 +17,7 @@ type ChatMessageItemProps = {
   compact?: boolean;
   currentUserId?: string;
   editing?: boolean;
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   firstUnread?: boolean;
   focused?: boolean;
   mentionableUsers: ChatUser[];
@@ -106,7 +107,15 @@ function MessageAuthorAvatar({
   );
 }
 
-function CollapsibleMessageText({ body, usersById }: { body: string; usersById: Map<string, ChatUser> }) {
+function CollapsibleMessageText({
+  body,
+  feedbackItems,
+  usersById,
+}: {
+  body: string;
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  usersById: Map<string, ChatUser>;
+}) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflowing, setOverflowing] = useState(false);
@@ -155,7 +164,7 @@ function CollapsibleMessageText({ body, usersById }: { body: string; usersById: 
         ref={contentRef}
         style={overflowing && !expanded ? { maxHeight: chatMessageCollapsedTextMaxHeightPx } : undefined}
       >
-        <ChatMarkdown body={body} usersById={usersById} />
+        <ChatMarkdown body={body} feedbackItems={feedbackItems} usersById={usersById} />
       </div>
       {overflowing && (
         <button
@@ -183,8 +192,9 @@ function AttachmentGrid({
   onAttachmentPreview: (attachment: ChatAttachment) => void;
 }) {
   if (attachments.length === 0) return null;
+  const singleImage = attachments.length === 1 && Boolean(attachments[0]?.mimeType.startsWith("image/"));
   return (
-    <div className="orf-chat-attachments">
+    <div className={clsx("orf-chat-attachments", singleImage && "orf-chat-attachments-single-image")}>
       {attachments.map((attachment) => {
         const isImage = attachment.mimeType.startsWith("image/");
         return isImage ? (
@@ -216,6 +226,7 @@ export function ChatMessageItem({
   compact,
   currentUserId,
   editing,
+  feedbackItems,
   firstUnread,
   focused,
   mentionableUsers,
@@ -462,6 +473,7 @@ export function ChatMessageItem({
               autoFocus
               className="orf-chat-inline-edit-box"
               draft={editDraft}
+              feedbackItems={feedbackItems}
               mentionableUsers={mentionableUsers}
               onCancel={onCancelEdit}
               onChange={setEditDraft}
@@ -480,7 +492,7 @@ export function ChatMessageItem({
           </div>
         ) : (
           <>
-            <CollapsibleMessageText body={message.body} usersById={usersById} />
+            <CollapsibleMessageText body={message.body} feedbackItems={feedbackItems} usersById={usersById} />
             <AttachmentGrid attachments={message.attachments} onAttachmentPreview={onAttachmentPreview} />
             {deliveryStatus === "failed" && (
               <div className="orf-chat-delivery-status" role="alert">
