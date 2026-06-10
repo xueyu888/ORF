@@ -100,8 +100,13 @@ import { addCalendarDays, isDateOnlyString, localDateString } from "../../src/ut
 import { publishRealtimeSystemBroadcast } from "../realtime/realtimeEventBus";
 import { publishObjectiveInvalidation, publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { objectStorage } from "../storage/objectStorage";
-import { validateImageUpload } from "../storage/images";
 import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
+import {
+  commentAttachmentDto,
+  deleteStoredCommentAttachmentObjects,
+  groupCommentAttachmentsByMessage,
+  prepareCommentAttachment,
+} from "./commentAttachmentRepository";
 
 type CommentActor = {
   canManageAllComments?: boolean;
@@ -120,7 +125,6 @@ type CommentMentionableUsersOutcome =
   | { status: "ok"; users: OrfState["users"] }
   | { status: "notFound" }
   | { status: "forbidden" };
-type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
 
 const today = () => localDateString(new Date());
 let lastNowMs = 0;
@@ -135,10 +139,8 @@ const nextIdCounter = () => {
   return idCounter.toString(36);
 };
 const makeId = (prefix: string) => `${prefix}-${Date.now()}-${nextIdCounter()}-${randomUUID()}`;
-const makeCommentAttachmentId = () => `catt_${Date.now()}_${nextIdCounter()}_${randomUUID()}`;
 const HALF_DAY_MS = 12 * 60 * 60 * 1000;
 const MAX_CONFIRMATION_HALVES = 18;
-const PENDING_COMMENT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
 const COMMENT_ATTACHMENT_TOKEN_PATTERN = /!\[[^\]\n]*\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
 const COMMENT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 function optional<T>(value: T | null): T | undefined {
@@ -150,33 +152,6 @@ function nullableTrimmedText(value: string | null | undefined) {
   return trimmed || null;
 }
 
-function commentAttachmentContentUrl(id: string) {
-  return `/api/comments/attachments/${encodeURIComponent(id)}/content`;
-}
-
-function commentAttachmentDto(row: CommentAttachmentRow): CommentAttachment {
-  return {
-    id: row.id,
-    fileName: row.fileName,
-    mimeType: row.mimeType,
-    fileSize: row.fileSize,
-    width: optional(row.width),
-    height: optional(row.height),
-    contentUrl: commentAttachmentContentUrl(row.id),
-  };
-}
-
-function groupCommentAttachmentsByMessage(rows: CommentAttachmentRow[]) {
-  const grouped = new Map<string, CommentAttachment[]>();
-  for (const row of rows) {
-    if (!row.messageId) continue;
-    const attachments = grouped.get(row.messageId) ?? [];
-    attachments.push(commentAttachmentDto(row));
-    grouped.set(row.messageId, attachments);
-  }
-  return grouped;
-}
-
 function extractCommentAttachmentIds(body: string) {
   const ids = new Set<string>();
   for (const match of body.matchAll(COMMENT_ATTACHMENT_TOKEN_PATTERN)) {
@@ -185,34 +160,6 @@ function extractCommentAttachmentIds(body: string) {
     }
   }
   return Array.from(ids);
-}
-
-function pendingCommentAttachmentExpiresAt(createdAt: string) {
-  return new Date(new Date(createdAt).getTime() + PENDING_COMMENT_ATTACHMENT_TTL_MS).toISOString();
-}
-
-function sanitizeFileName(fileName: string, extension: string) {
-  const leafName = fileName.split(/[\\/]/).pop()?.trim() ?? "";
-  const sanitized = leafName.replace(/[^\w.\-()\u4e00-\u9fff ]+/g, "_").slice(0, 120).trim();
-  return sanitized || `image.${extension}`;
-}
-
-function commentAttachmentObjectKey(input: {
-  attachmentId: string;
-  extension: string;
-  storageScopeId: string;
-  targetId: string;
-  targetType: CommentTargetType;
-}) {
-  const safeTargetId = input.targetId.replace(/[^A-Za-z0-9_-]+/g, "_");
-  const now = new Date();
-  const year = now.getUTCFullYear().toString();
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-  return `comments/${input.storageScopeId}/${input.targetType}/${safeTargetId}/${year}/${month}/${input.attachmentId}.${input.extension}`;
-}
-
-async function deleteStoredCommentAttachmentObjects(rows: CommentAttachmentRow[]) {
-  await Promise.allSettled(rows.map((row) => objectStorage.deleteObject(row.objectKey)));
 }
 
 function confirmationDueAt(finalDueAt: string | null, acceptedAt: string) {
@@ -2184,10 +2131,6 @@ export async function uploadCommentAttachment(
   input: UploadCommentAttachmentInput,
   actor: CommentActor,
 ): Promise<CommentAttachmentUploadOutcome> {
-  if (!input.body.byteLength || !input.fileName.trim()) {
-    return { status: "invalid" };
-  }
-
   await deleteExpiredPendingCommentAttachments().catch(() => 0);
 
   const target = await resolveCommentTarget(input.targetType, input.targetId);
@@ -2199,76 +2142,32 @@ export async function uploadCommentAttachment(
     return { status: access === "notFound" ? "notFound" : "forbidden" };
   }
 
-  const validation = validateImageUpload({ buffer: input.body, contentType: input.mimeType });
-  if (validation.status !== "ok") {
-    return { status: validation.status };
-  }
-
-  const attachmentId = makeCommentAttachmentId();
   const createdAt = nowIso();
-  const objectKey = commentAttachmentObjectKey({
-    attachmentId,
-    extension: validation.metadata.extension,
+  const prepared = await prepareCommentAttachment({
+    body: input.body,
+    createdAt,
+    createdBy: actor.id,
+    fileName: input.fileName,
+    messageId: null,
+    mimeType: input.mimeType,
     storageScopeId: target.storageScopeId,
     targetId: input.targetId,
     targetType: input.targetType,
   });
-  const fileName = sanitizeFileName(input.fileName, validation.metadata.extension);
-
-  await objectStorage.putObject({
-    body: input.body,
-    contentLength: input.body.byteLength,
-    contentType: validation.metadata.mimeType,
-    key: objectKey,
-  });
+  if (prepared.status !== "ok") {
+    return { status: prepared.status };
+  }
 
   try {
-    const [row] = await db
-      .insert(commentAttachments)
-      .values({
-        id: attachmentId,
-        teamId: target.storageScopeId,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        messageId: null,
-        objectKey,
-        fileName,
-        mimeType: validation.metadata.mimeType,
-        fileSize: input.body.byteLength,
-        width: validation.metadata.width ?? null,
-        height: validation.metadata.height ?? null,
-        createdBy: actor.id,
-        createdAt,
-        attachedAt: null,
-        expiresAt: pendingCommentAttachmentExpiresAt(createdAt),
-      })
-      .returning();
+    const [row] = await db.insert(commentAttachments).values(prepared.prepared.row).returning();
 
     return {
       status: "ok",
       attachment: commentAttachmentDto(row),
-      markdown: `![${fileName}](orf-attachment:${attachmentId})`,
+      markdown: prepared.prepared.markdown,
     };
   } catch (error) {
-    await deleteStoredCommentAttachmentObjects([
-      {
-        id: attachmentId,
-        teamId: target.storageScopeId,
-        targetType: input.targetType,
-        targetId: input.targetId,
-        messageId: null,
-        objectKey,
-        fileName,
-        mimeType: validation.metadata.mimeType,
-        fileSize: input.body.byteLength,
-        width: validation.metadata.width ?? null,
-        height: validation.metadata.height ?? null,
-        createdBy: actor.id,
-        createdAt,
-        attachedAt: null,
-        expiresAt: pendingCommentAttachmentExpiresAt(createdAt),
-      },
-    ]);
+    await deleteStoredCommentAttachmentObjects([prepared.prepared.row]);
     throw error;
   }
 }
