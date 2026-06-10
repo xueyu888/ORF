@@ -12,7 +12,7 @@ type ChatThreadPanelProps = {
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
-  feedbackItems?: Feedback[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   focusMessageId: string | null;
   composerFocusSignal?: number;
   onAttachmentPreview: (attachment: ChatAttachment) => void;

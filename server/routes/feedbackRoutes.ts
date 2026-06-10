@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
-import { createFeedback, updateFeedbackStatus } from "../repositories/orfFeedbackRepository";
+import { createFeedback, getFeedbackReferences, updateFeedbackStatus } from "../repositories/orfFeedbackRepository";
 
 const impactSchema = z.enum(["Low", "Medium", "High", "Critical"]);
 const feedbackStatusSchema = z.enum(["Open", "Closed"]);
@@ -22,6 +22,10 @@ const createFeedbackMultipartFieldsSchema = z.object({
   owner: z.string().trim().min(1),
 });
 const updateFeedbackStatusBodySchema = z.object({ status: feedbackStatusSchema });
+const feedbackReferencesQuerySchema = z.object({
+  id: z.union([z.string(), z.array(z.string())]).optional(),
+  ids: z.string().optional(),
+});
 
 function parseCauseCategories(value: string) {
   try {
@@ -30,6 +34,13 @@ function parseCauseCategories(value: string) {
   } catch {
     return z.array(z.string().trim().min(1)).min(1).parse([]);
   }
+}
+
+function parseFeedbackReferenceIds(query: unknown) {
+  const parsed = feedbackReferencesQuerySchema.parse(query);
+  const repeatedIds = Array.isArray(parsed.id) ? parsed.id : parsed.id ? [parsed.id] : [];
+  const commaSeparatedIds = parsed.ids?.split(",") ?? [];
+  return [...repeatedIds, ...commaSeparatedIds].map((value) => value.trim()).filter(Boolean).slice(0, 100);
 }
 
 async function readCreateFeedbackBody(request: FastifyRequest) {
@@ -77,6 +88,17 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
 }
 
 export function registerFeedbackRoutes(app: FastifyInstance) {
+  app.get("/api/feedback/references", async (request, reply) => {
+    const context = await requireUserScopeContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const feedbackIds = parseFeedbackReferenceIds(request.query);
+    const feedback = await getFeedbackReferences(feedbackIds, context.scope);
+    return { feedback };
+  });
+
   app.post("/api/feedback", async (request, reply) => {
     const context = await requireUserScopeContext(request, reply);
     if (!context) {

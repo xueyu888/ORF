@@ -18,7 +18,7 @@ type ChatRightPanelProps = {
   collectionResults: ChatSearchResult[];
   currentUserId?: string;
   editingMessageId?: string | null;
-  feedbackItems?: Feedback[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   memberSearchFocusSignal?: number;
   onAddMembers: (userIds: string[]) => Promise<void>;
   onAttachmentPreview: (attachment: ChatAttachment) => void;

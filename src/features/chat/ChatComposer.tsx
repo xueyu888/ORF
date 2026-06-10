@@ -36,7 +36,7 @@ import { ChatDraftEditor } from "./ChatDraftEditor";
 type ChatComposerProps = {
   channelId: string;
   disabled?: boolean;
-  feedbackItems?: Feedback[];
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   focusSignal?: number;
   mentionableUsers: ChatUser[];
   onDraftStateChange?: (channelId: string, hasDraft: boolean) => void;

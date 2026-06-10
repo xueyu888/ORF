@@ -87,7 +87,7 @@ export function feedbackIssueIdFromHref(value: string) {
   return match ? safeDecodeUriComponent(match[1] ?? "") : null;
 }
 
-const pastedLinkPattern = /https?:\/\/[^\s<>()]+|\/feedback\/[^\s<>()]+/g;
+const feedbackLinkPattern = /https?:\/\/[^\s<>()]+|\/feedback\/[^\s<>()]+/g;
 const trailingLinkPunctuationPattern = /[.,;:!?，。；：！？）\]\}]+$/;
 
 function splitTrailingLinkPunctuation(value: string) {
@@ -104,7 +104,7 @@ export function formatPastedFeedbackLinks(
 ) {
   const feedbackById = new Map(feedbackItems.map((feedback) => [feedback.id, feedback]));
   let changed = false;
-  const nextText = text.replace(pastedLinkPattern, (rawValue, offset: number) => {
+  const nextText = text.replace(feedbackLinkPattern, (rawValue, offset: number) => {
     if (text.slice(Math.max(0, offset - 2), offset) === "](") return rawValue;
 
     const { href, trailingText } = splitTrailingLinkPunctuation(rawValue);
@@ -117,6 +117,17 @@ export function formatPastedFeedbackLinks(
   });
 
   return changed ? nextText : text;
+}
+
+export function feedbackIssueIdsFromText(text: string) {
+  const ids = new Set<string>();
+  for (const match of text.matchAll(feedbackLinkPattern)) {
+    const rawValue = match[0] ?? "";
+    const { href } = splitTrailingLinkPunctuation(rawValue);
+    const feedbackId = feedbackIssueIdFromHref(href);
+    if (feedbackId) ids.add(feedbackId);
+  }
+  return Array.from(ids);
 }
 
 const feedbackAttachmentMarkdownPattern = /!\[[^\]\n]*\]\(orf-attachment:[^)]+\)/g;

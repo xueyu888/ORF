@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Feedback, FeedbackStatus, Impact } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { db } from "../db/client";
@@ -43,6 +43,7 @@ export type CreateFeedbackOutcome =
   | { status: "unsupported" };
 export type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; scope?: RuntimeScope | null };
 export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
+export type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;
 
 const today = () => localDateString(new Date());
 let lastNowMs = 0;
@@ -94,6 +95,10 @@ function canManageFeedbackStatus(
 function uniqueUserIds(userIds: Array<string | null | undefined>) {
   const normalized = userIds.map((userId) => userId?.trim()).filter((userId): userId is string => Boolean(userId));
   return Array.from(new Set(normalized));
+}
+
+function uniqueFeedbackIds(feedbackIds: readonly string[]) {
+  return Array.from(new Set(feedbackIds.map((feedbackId) => feedbackId.trim()).filter(Boolean))).slice(0, 100);
 }
 
 function feedbackTargetHref(feedbackId: string) {
@@ -350,6 +355,23 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
   const data = await getOrfStateSnapshot({ scope: runtimeScope(teamId) });
   const item = data.feedback.find((entry) => entry.id === id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
+}
+
+export async function getFeedbackReferences(feedbackIds: readonly string[], scope: RuntimeScope): Promise<FeedbackReference[]> {
+  const teamId = runtimeScopeStorageId(scope);
+  const ids = uniqueFeedbackIds(feedbackIds);
+  if (!teamId || ids.length === 0) return [];
+
+  const rows = await db
+    .select({
+      id: feedback.id,
+      phenomenon: feedback.phenomenon,
+    })
+    .from(feedback)
+    .where(and(eq(feedback.teamId, teamId), inArray(feedback.id, ids)));
+
+  const sortOrder = new Map(ids.map((id, index) => [id, index]));
+  return rows.sort((left, right) => (sortOrder.get(left.id) ?? 0) - (sortOrder.get(right.id) ?? 0));
 }
 
 export async function updateFeedbackStatus(
