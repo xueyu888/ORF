@@ -4,7 +4,7 @@ import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import type { UncertaintyLevel } from "../../../types/orf";
 import type { BountyItem, DifficultyFilter, HallTab, SortKey } from "./bountyHallTypes";
 
-export const difficultyOptions: DifficultyFilter[] = ["all", "入门", "进阶", "破局", "渡劫", "飞升"];
+export const difficultyOptions: DifficultyFilter[] = ["all", "简易", "入门", "进阶", "破局", "渡劫", "飞升"];
 export const hallTabs: Array<{ key: HallTab; label: string }> = [
   { key: "recruiting", label: "招募中" },
   { key: "started", label: "已开始" },
@@ -12,11 +12,12 @@ export const hallTabs: Array<{ key: HallTab; label: string }> = [
 ];
 
 const difficultyLabelsByRank: Record<number, UncertaintyLevel> = {
-  1: "入门",
-  2: "进阶",
-  3: "破局",
-  4: "渡劫",
-  5: "飞升",
+  1: "简易",
+  2: "入门",
+  3: "进阶",
+  4: "破局",
+  5: "渡劫",
+  6: "飞升",
 };
 
 export function buildHallItems(input: {

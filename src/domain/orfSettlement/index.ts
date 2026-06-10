@@ -17,6 +17,7 @@ import {
 } from "../orfObjectiveParticipants";
 
 export const uncertaintyLevelOptions: UncertaintyLevel[] = [
+  "简易",
   "入门",
   "进阶",
   "破局",
@@ -25,6 +26,7 @@ export const uncertaintyLevelOptions: UncertaintyLevel[] = [
 ];
 
 export const uncertaintyScores: Record<UncertaintyLevel, number> = {
+  简易: 0,
   入门: 10,
   进阶: 30,
   破局: 90,
@@ -66,10 +68,10 @@ export function uncertaintyScoreFor(
 export function isResultPointsCalibrated(
   result: ResultPointsTarget | null | undefined,
 ) {
-  return Boolean(
-    result?.uncertaintyLevel &&
+  if (!result?.uncertaintyLevel) return false;
+  return (
     Number.isFinite(result.uncertaintyScore) &&
-    result.uncertaintyScore > 0,
+    result.uncertaintyScore === uncertaintyScoreFor(result.uncertaintyLevel)
   );
 }
 
