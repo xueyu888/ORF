@@ -19,11 +19,11 @@ import type { PermissionKey } from "../../src/config/permissions";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeNotificationModel";
 import { pool } from "../db/client";
-import { env } from "../env";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
-import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
+import { publishRealtimeChatEvent, realtimeOnlineUserIds } from "../realtime/realtimeEventBus";
+import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
-import { objectStorage } from "../storage/objectStorage";
+import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { createNotifications } from "./notificationRepository";
 import { getRolePermissionKeysForScope } from "./permissionRepository";
@@ -112,7 +112,8 @@ async function listActiveTeamUsers(teamId: string) {
     `,
     [teamId],
   );
-  return rows.map(toChatUser);
+  const onlineUserIds = realtimeOnlineUserIds(teamId);
+  return rows.map((row) => toChatUser(row, { online: onlineUserIds.has(row.id) }));
 }
 
 async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?: string } = {}) {
@@ -206,19 +207,20 @@ async function loadMembers(channelIds: string[]) {
   return grouped;
 }
 
-async function loadUsersByIds(userIds: string[]) {
+async function loadUsersByIds(teamId: string, userIds: string[]) {
   const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
   if (uniqueIds.length === 0) return new Map<string, ChatUser>();
   const { rows } = await pool.query<UserRow>(
     `
       SELECT u.id, u.name, u.email, u.status, u.last_online_at, u.avatar_object_key, u.avatar_updated_at, COALESCE(tm.role, 'member') AS role
       FROM users u
-      LEFT JOIN team_members tm ON tm.user_id = u.id
+      LEFT JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = $2
       WHERE u.id = ANY($1::uuid[])
     `,
-    [uniqueIds],
+    [uniqueIds, teamId],
   );
-  return new Map(rows.map((row) => [row.id, toChatUser(row)]));
+  const onlineUserIds = realtimeOnlineUserIds(teamId);
+  return new Map(rows.map((row) => [row.id, toChatUser(row, { online: onlineUserIds.has(row.id) })]));
 }
 
 async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
@@ -299,10 +301,11 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
 
 async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<ChatChannel[]> {
   const channelIds = rows.map((row) => row.id);
+  const teamId = storageTeamId(actor);
   const membersByChannel = await loadMembers(channelIds);
   const allMemberIds = Array.from(new Set(Array.from(membersByChannel.values()).flat().map((member) => member.userId)));
   const [usersById, readModel] = await Promise.all([
-    loadUsersByIds(allMemberIds),
+    loadUsersByIds(teamId, allMemberIds),
     loadChannelReadModel(channelIds, actor),
   ]);
 
@@ -336,6 +339,41 @@ async function getVisibleChannel(actor: ChatActor, channelId: string): Promise<C
   const rows = await loadDisplayableChannelRows(actor, { channelId });
   const [channel] = await buildChannels(rows, actor);
   return channel ?? null;
+}
+
+async function hasReadableChannel(actor: ChatActor, channelId: string) {
+  const { rows } = await pool.query<{ id: string }>(
+    `
+      WITH readable_channel AS (
+        SELECT
+          c.id,
+          c.type,
+          (
+            SELECT count(*)::int
+            FROM chat_channel_members member_count
+            WHERE member_count.channel_id = c.id
+          ) AS member_count
+        FROM chat_channels c
+        INNER JOIN chat_channel_members actor_membership ON actor_membership.channel_id = c.id AND actor_membership.user_id = $2
+        WHERE c.team_id = $1
+          AND c.id = $3
+          AND c.archived_at IS NULL
+        LIMIT 1
+      )
+      SELECT id
+      FROM readable_channel
+      WHERE NOT (type = 'direct' AND member_count <> 2)
+        AND NOT (type = 'group' AND member_count < 3)
+      LIMIT 1
+    `,
+    [storageTeamId(actor), actor.id, channelId],
+  );
+  return rows.length > 0;
+}
+
+async function getReadableChannelMember(actor: ChatActor, channelId: string) {
+  if (!(await hasReadableChannel(actor, channelId))) return null;
+  return getChannelMember(channelId, actor.id);
 }
 
 async function getChannelRow(actor: ChatActor, channelId: string) {
@@ -922,9 +960,11 @@ async function getRawMessage(actor: ChatActor, messageId: string) {
 }
 
 export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap> {
+  const settings = await readChatSettings();
   if (!actor.canRead) {
     return {
       channels: [],
+      settings,
       users: [],
       permissions: {
         canCreatePrivateChannel: actor.canCreatePrivateChannel,
@@ -942,6 +982,7 @@ export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap>
   const channels = await buildChannels(channelRows, actor);
   return {
     channels,
+    settings,
     users,
     permissions: {
       canCreatePrivateChannel: actor.canCreatePrivateChannel,
@@ -951,18 +992,6 @@ export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap>
       canRead: actor.canRead,
       canWrite: actor.canWrite,
     },
-  };
-}
-
-function summarizeChatUnread(channels: ChatChannel[]): ChatUnreadSummary {
-  const messageUnreadCount = channels.reduce((total, channel) => total + channel.unreadCount, 0);
-  const threadUnreadCount = channels.reduce((total, channel) => total + channel.threadUnreadCount, 0);
-  return {
-    mentionCount: channels.reduce((total, channel) => total + channel.mentionCount, 0),
-    messageUnreadCount,
-    threadUnreadCount,
-    totalUnreadCount: messageUnreadCount + threadUnreadCount,
-    unreadChannelCount: channels.filter((channel) => channel.unreadCount > 0 || channel.threadUnreadCount > 0).length,
   };
 }
 
@@ -977,15 +1006,126 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
     };
   }
 
-  const channelRows = await listVisibleChannelRows(actor);
-  const channels = await buildChannels(channelRows, actor);
-  return summarizeChatUnread(channels);
+  const teamId = storageTeamId(actor);
+  await preparePublicChannels(teamId);
+  const { rows } = await pool.query<{
+    mention_count: number | string | null;
+    message_unread_count: number | string | null;
+    thread_unread_count: number | string | null;
+    unread_channel_count: number | string | null;
+  }>(
+    `
+      WITH visible_channels AS (
+        SELECT
+          c.id,
+          c.team_id,
+          c.type,
+          c.display_name,
+          c.updated_at,
+          m.manually_unread,
+          (
+            SELECT count(*)::int
+            FROM chat_channel_members cm
+            WHERE cm.channel_id = c.id
+          ) AS member_count,
+          (
+            SELECT count(*)::int
+            FROM chat_messages msg
+            WHERE msg.channel_id = c.id
+          ) AS message_count
+        FROM chat_channels c
+        INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $2
+        WHERE c.team_id = $1
+          AND c.archived_at IS NULL
+      ),
+      ranked_channels AS (
+        SELECT
+          *,
+          row_number() OVER (
+            PARTITION BY team_id, type, lower(display_name)
+            ORDER BY (message_count > 0) DESC, updated_at DESC, id
+          ) AS empty_duplicate_rank
+        FROM visible_channels
+      ),
+      displayable_channels AS (
+        SELECT id, manually_unread
+        FROM ranked_channels
+        WHERE NOT (type = 'direct' AND member_count <> 2)
+          AND NOT (type = 'group' AND member_count < 3)
+          AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
+      ),
+      message_unread AS (
+        SELECT m.channel_id, count(*)::int AS count
+        FROM chat_messages m
+        INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
+        INNER JOIN displayable_channels dc ON dc.id = m.channel_id
+        WHERE m.author_user_id <> $2
+          AND m.deleted_at IS NULL
+          AND m.root_message_id IS NULL
+          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+        GROUP BY m.channel_id
+      ),
+      mention_unread AS (
+        SELECT m.channel_id, count(*)::int AS count
+        FROM chat_messages m
+        INNER JOIN chat_channel_members cm ON cm.channel_id = m.channel_id AND cm.user_id = $2
+        INNER JOIN displayable_channels dc ON dc.id = m.channel_id
+        WHERE m.author_user_id <> $2
+          AND m.deleted_at IS NULL
+          AND m.root_message_id IS NULL
+          AND (m.body LIKE $3 OR m.body ~* $4)
+          AND (cm.last_read_at IS NULL OR m.created_at > cm.last_read_at)
+        GROUP BY m.channel_id
+      ),
+      thread_unread AS (
+        SELECT m.channel_id, count(DISTINCT m.root_message_id)::int AS count
+        FROM chat_messages m
+        INNER JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2 AND f.following = true
+        INNER JOIN displayable_channels dc ON dc.id = m.channel_id
+        WHERE m.root_message_id IS NOT NULL
+          AND m.author_user_id <> $2
+          AND m.deleted_at IS NULL
+          AND (f.last_viewed_at IS NULL OR m.created_at > f.last_viewed_at)
+        GROUP BY m.channel_id
+      ),
+      channel_unread AS (
+        SELECT
+          dc.id,
+          CASE
+            WHEN dc.manually_unread AND COALESCE(message_unread.count, 0) = 0 THEN 1
+            ELSE COALESCE(message_unread.count, 0)
+          END AS message_count,
+          COALESCE(mention_unread.count, 0) AS mention_count,
+          COALESCE(thread_unread.count, 0) AS thread_count
+        FROM displayable_channels dc
+        LEFT JOIN message_unread ON message_unread.channel_id = dc.id
+        LEFT JOIN mention_unread ON mention_unread.channel_id = dc.id
+        LEFT JOIN thread_unread ON thread_unread.channel_id = dc.id
+      )
+      SELECT
+        COALESCE(sum(message_count), 0)::int AS message_unread_count,
+        COALESCE(sum(mention_count), 0)::int AS mention_count,
+        COALESCE(sum(thread_count), 0)::int AS thread_unread_count,
+        count(*) FILTER (WHERE message_count > 0 OR thread_count > 0)::int AS unread_channel_count
+      FROM channel_unread
+    `,
+    [teamId, actor.id, `%orf-user:${actor.id}%`, CHAT_BROADCAST_MENTION_SQL_PATTERN],
+  );
+  const row = rows[0];
+  const messageUnreadCount = Number(row?.message_unread_count ?? 0);
+  const threadUnreadCount = Number(row?.thread_unread_count ?? 0);
+  return {
+    mentionCount: Number(row?.mention_count ?? 0),
+    messageUnreadCount,
+    threadUnreadCount,
+    totalUnreadCount: messageUnreadCount + threadUnreadCount,
+    unreadChannelCount: Number(row?.unread_channel_count ?? 0),
+  };
 }
 
 export async function listChatMessages(input: { before?: string; channelId: string; limit?: number }, actor: ChatActor): Promise<Outcome<{ messages: ChatMessage[] }>> {
   if (!actor.canRead) return { status: "forbidden" };
-  const channel = await getVisibleChannel(actor, input.channelId);
-  if (!channel) return { status: "notFound" };
+  if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
 
   const limit = Math.max(1, Math.min(100, input.limit ?? 60));
   const params: unknown[] = [storageTeamId(actor), input.channelId, limit];
@@ -1019,8 +1159,7 @@ export async function getChatMessageContext(
   actor: ChatActor,
 ): Promise<Outcome<ChatMessageContext>> {
   if (!actor.canRead) return { status: "forbidden" };
-  const channel = await getVisibleChannel(actor, input.channelId);
-  if (!channel) return { status: "notFound" };
+  if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
 
   const target = await getRawMessage(actor, input.messageId);
   if (!target || target.channel_id !== input.channelId) return { status: "notFound" };
@@ -1080,12 +1219,11 @@ export async function getChatUnreadContext(
   actor: ChatActor,
 ): Promise<Outcome<ChatMessageContext>> {
   if (!actor.canRead) return { status: "forbidden" };
-  const channel = await getVisibleChannel(actor, input.channelId);
-  if (!channel) return { status: "notFound" };
+  const member = await getReadableChannelMember(actor, input.channelId);
+  if (!member) return { status: "notFound" };
 
-  const member = channel.members.find((item) => item.userId === actor.id);
-  const lastReadAt = input.anchor ? input.anchor.lastReadAt ?? null : member?.lastReadAt ?? null;
-  const manuallyUnread = input.anchor ? input.anchor.manuallyUnread : Boolean(member?.manuallyUnread);
+  const lastReadAt = input.anchor ? input.anchor.lastReadAt ?? null : member.lastReadAt ?? null;
+  const manuallyUnread = input.anchor ? input.anchor.manuallyUnread : Boolean(member.manuallyUnread);
   const { rows } = await pool.query<{ id: string }>(
     `
       SELECT m.id
@@ -1729,8 +1867,7 @@ export async function setChatReaction(
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const emojiName = input.emojiName.trim().slice(0, 80);
   if (!emojiName) return { status: "invalid" };
-  const channel = await getVisibleChannel(actor, input.channelId);
-  if (!channel) return { status: "notFound" };
+  if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
   const message = await getRawMessage(actor, input.messageId);
   if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
 
@@ -1771,8 +1908,7 @@ export async function setChatMessagePin(
   actor: ChatActor,
 ): Promise<Outcome<{ message: ChatMessage }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
-  const channel = await getVisibleChannel(actor, input.channelId);
-  if (!channel) return { status: "notFound" };
+  if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
   const message = await getRawMessage(actor, input.messageId);
   if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
   if (!(await canManageChannel(actor, input.channelId))) return { status: "forbidden" };
@@ -1811,8 +1947,7 @@ export async function setChatMessageSaved(
   actor: ChatActor,
 ): Promise<Outcome<{ message: ChatMessage }>> {
   if (!actor.canRead) return { status: "forbidden" };
-  const channel = await getVisibleChannel(actor, input.channelId);
-  if (!channel) return { status: "notFound" };
+  if (!(await hasReadableChannel(actor, input.channelId))) return { status: "notFound" };
   const message = await getRawMessage(actor, input.messageId);
   if (!message || message.channel_id !== input.channelId || message.deleted_at) return { status: "notFound" };
 
@@ -1907,8 +2042,7 @@ export async function markChatChannelRead(
   options: { includeThreads?: boolean; messageId?: string | null } = {},
 ): Promise<Outcome<{ channel: ChatChannel }>> {
   if (!actor.canRead) return { status: "forbidden" };
-  const channel = await getVisibleChannel(actor, channelId);
-  if (!channel) return { status: "notFound" };
+  if (!(await hasReadableChannel(actor, channelId))) return { status: "notFound" };
   const readAt = nowIso();
   const client = await pool.connect();
   try {
@@ -2128,12 +2262,12 @@ export async function publishChatTyping(channelId: string, actor: ChatActor): Pr
 }
 
 export async function uploadChatAttachment(
-  input: { body: Buffer; channelId: string; fileName: string; mimeType: string },
+  input: { body: Readable; channelId: string; fileName: string; mimeType: string },
   actor: ChatActor,
 ): Promise<Outcome<{ attachment: ChatAttachment }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
-  if (!input.body.byteLength || !input.fileName.trim()) return { status: "invalid" };
-  if (input.body.byteLength > env.CHAT_FILE_UPLOAD_MAX_BYTES) return { status: "tooLarge" };
+  if (!input.fileName.trim()) return { status: "invalid" };
+  const settings = await readChatSettings();
   const channel = await getVisibleChannel(actor, input.channelId);
   if (!channel) return { status: "notFound" };
 
@@ -2142,17 +2276,27 @@ export async function uploadChatAttachment(
   const expiresAt = new Date(Date.now() + CHAT_ATTACHMENT_TTL_MS).toISOString();
   const fileName = input.fileName.trim().slice(0, 240);
   const mimeType = normalizeMimeType(input.mimeType);
-  const imageMetadata = mimeType.startsWith("image/") ? readImageMetadata(input.body) : null;
-  const imageWidth = imageMetadata?.width ?? null;
-  const imageHeight = imageMetadata?.height ?? null;
   const objectKey = `chat/${safePathSegment(storageTeamId(actor))}/${safePathSegment(input.channelId)}/${id}/${safePathSegment(fileName)}`;
 
-  await objectStorage.putObject({
-    body: input.body,
-    contentLength: input.body.byteLength,
-    contentType: mimeType,
-    key: objectKey,
-  });
+  let stored: { contentLength: number; peeked: Buffer };
+  try {
+    stored = await objectStorage.putObjectStream({
+      body: input.body,
+      contentType: mimeType,
+      key: objectKey,
+      maxBytes: settings.attachmentMaxBytes,
+      peekBytes: 4096,
+    });
+  } catch (error) {
+    if (error instanceof ObjectStorageUploadTooLargeError) return { status: "tooLarge" };
+    if (error instanceof ObjectStorageUploadEmptyError) return { status: "invalid" };
+    throw error;
+  }
+
+  if (stored.contentLength <= 0) return { status: "invalid" };
+  const imageMetadata = mimeType.startsWith("image/") ? readImageMetadata(stored.peeked) : null;
+  const imageWidth = imageMetadata?.width ?? null;
+  const imageHeight = imageMetadata?.height ?? null;
 
   try {
     await pool.query(
@@ -2167,7 +2311,7 @@ export async function uploadChatAttachment(
         objectKey,
         fileName,
         mimeType,
-        input.body.byteLength,
+        stored.contentLength,
         imageWidth,
         imageHeight,
         actor.id,
@@ -2185,7 +2329,7 @@ export async function uploadChatAttachment(
       id,
       fileName,
       mimeType,
-      fileSize: input.body.byteLength,
+      fileSize: stored.contentLength,
       contentUrl: chatAttachmentContentUrl(id),
       width: imageWidth,
       height: imageHeight,
@@ -2226,8 +2370,7 @@ export async function getChatAttachmentContent(
   );
   const row = rows[0];
   if (!row || row.deleted_at) return { status: "notFound" };
-  const channel = await getVisibleChannel(actor, row.channel_id);
-  if (!channel && row.created_by !== actor.id) return { status: "forbidden" };
+  if (!(await hasReadableChannel(actor, row.channel_id)) && row.created_by !== actor.id) return { status: "forbidden" };
 
   const stored = await objectStorage.getObject(row.object_key);
   if (!stored) return { status: "notFound" };
@@ -2385,6 +2528,6 @@ export async function listChatMentionableUsers(channelId: string, actor: ChatAct
     return ok({ users: await listActiveTeamUsers(storageTeamId(actor)) });
   }
   const memberIds = channel.members.map((member) => member.userId);
-  const usersById = await loadUsersByIds(memberIds);
+  const usersById = await loadUsersByIds(storageTeamId(actor), memberIds);
   return ok({ users: memberIds.map((id) => usersById.get(id)).filter((user): user is ChatUser => Boolean(user)) });
 }

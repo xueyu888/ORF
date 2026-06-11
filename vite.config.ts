@@ -18,6 +18,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const allowedHost = publicFrontendHost(env);
   return {
+    build: {
+      emptyOutDir: false,
+    },
     plugins: [tailwindcss()],
     define: {
       __ORF_CLIENT_VERSION__: JSON.stringify(packageJson.version),

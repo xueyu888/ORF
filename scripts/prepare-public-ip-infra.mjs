@@ -21,6 +21,7 @@ const bootstrapIpFile = path.join(bootstrapCertDir, "ip.txt");
 
 const composeCertDir = "/etc/letsencrypt";
 const composeBootstrapDir = "/etc/nginx/bootstrap-certs";
+const defaultInfraUploadMaxBytes = 10 * 1024 * 1024 * 1024;
 
 function main() {
   const env = readEnvFile(envFile);
@@ -35,6 +36,7 @@ function main() {
   const webPort = env.ORF_WEB_EXTERNAL_PORT ?? "8443";
   const webDomain = normalizeWebDomain(env.ORF_DUCKDNS_DOMAIN ?? env.ORF_WEB_DOMAIN ?? process.env.ORF_DUCKDNS_DOMAIN ?? process.env.ORF_WEB_DOMAIN);
   const backendUpstream = env.ORF_BACKEND_UPSTREAM ?? process.env.ORF_BACKEND_UPSTREAM ?? "http://host.docker.internal:8787";
+  const infraUploadMaxBytes = readPositiveIntegerEnv(env.ORF_INFRA_UPLOAD_MAX_BYTES ?? process.env.ORF_INFRA_UPLOAD_MAX_BYTES, defaultInfraUploadMaxBytes);
 
   for (const dir of [confDir, snippetsDir, webrootDir, letsEncryptDir, bootstrapCertDir]) {
     fs.mkdirSync(dir, { recursive: true });
@@ -42,7 +44,7 @@ function main() {
 
   ensureBootstrapCertificate(publicIp, gatewayCertIps);
   writeSslSnippet();
-  writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, webDomain, webPort });
+  writeNginxConfig({ backendUpstream, infraUploadMaxBytes, oryPort, publicIp, storagePort, webDomain, webPort });
 
   console.log(`Prepared public IP gateway config for ${publicIp}.`);
 }
@@ -89,6 +91,22 @@ function unquoteEnvValue(value) {
 function normalizeWebDomain(value) {
   const domain = value?.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/:\d+$/, "");
   return domain || undefined;
+}
+
+function readPositiveIntegerEnv(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isSafeInteger(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return parsed;
+}
+
+function nginxSize(bytes) {
+  const gib = 1024 * 1024 * 1024;
+  const mib = 1024 * 1024;
+  if (bytes % gib === 0) return `${bytes / gib}g`;
+  if (bytes % mib === 0) return `${bytes / mib}m`;
+  return String(bytes);
 }
 
 function collectGatewayCertIps(publicIp, env) {
@@ -200,10 +218,11 @@ function writeSslSnippet() {
   );
 }
 
-function writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, webDomain, webPort }) {
+function writeNginxConfig({ backendUpstream, infraUploadMaxBytes, oryPort, publicIp, storagePort, webDomain, webPort }) {
   const cert = activeCertPaths(publicIp);
   const webCert = activeWebCertPaths(webDomain, publicIp);
   const webServerName = webDomain ?? "_";
+  const uploadMaxBodySize = nginxSize(infraUploadMaxBytes);
   fs.writeFileSync(
     path.join(confDir, "orf-public-ip.conf"),
     [
@@ -240,15 +259,19 @@ function writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, web
       `  ssl_certificate ${webCert.fullchain};`,
       `  ssl_certificate_key ${webCert.privateKey};`,
       "  include /etc/nginx/snippets/orf-ssl.conf;",
-      "  client_max_body_size 110m;",
+      `  client_max_body_size ${uploadMaxBodySize};`,
       "  root /usr/share/nginx/orf/dist;",
       "",
       "  location /api/ {",
       "    proxy_http_version 1.1;",
+      "    proxy_request_buffering off;",
       "    proxy_set_header Host $http_host;",
       "    proxy_set_header X-Real-IP $remote_addr;",
       "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",
       "    proxy_set_header X-Forwarded-Proto https;",
+      "    proxy_connect_timeout 300s;",
+      "    proxy_send_timeout 300s;",
+      "    proxy_read_timeout 300s;",
       `    proxy_pass ${backendUpstream};`,
       "  }",
       "",
@@ -271,7 +294,7 @@ function writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, web
       "  }",
       "",
       "  location = /index.html {",
-      "    add_header Cache-Control \"no-cache\";",
+      "    add_header Cache-Control \"no-store, must-revalidate\" always;",
       "    try_files /index.html =404;",
       "  }",
       "",
@@ -281,7 +304,7 @@ function writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, web
       "  }",
       "",
       "  location / {",
-      "    add_header Cache-Control \"no-cache\";",
+      "    add_header Cache-Control \"no-store, must-revalidate\" always;",
       "    try_files $uri $uri/ /index.html;",
       "  }",
       "}",
@@ -310,10 +333,11 @@ function writeNginxConfig({ backendUpstream, oryPort, publicIp, storagePort, web
       `  ssl_certificate ${cert.fullchain};`,
       `  ssl_certificate_key ${cert.privateKey};`,
       "  include /etc/nginx/snippets/orf-ssl.conf;",
-      "  client_max_body_size 12m;",
+      `  client_max_body_size ${uploadMaxBodySize};`,
       "",
       "  location / {",
       "    proxy_http_version 1.1;",
+      "    proxy_request_buffering off;",
       "    proxy_set_header Host $http_host;",
       "    proxy_set_header X-Real-IP $remote_addr;",
       "    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;",

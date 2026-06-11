@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PermissionKey } from "../../src/config/permissions";
 import { requireUserScopeContext } from "../auth/accessPolicy";
+import { env } from "../env";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
 import {
   addChatChannelMembers,
@@ -158,25 +159,21 @@ function sendOutcome<T extends { status: string }>(reply: FastifyReply, outcome:
   return outcome;
 }
 
-async function readChatAttachmentUpload(request: FastifyRequest) {
-  const fields: Record<string, string> = {};
-  let file: { body: Buffer; fileName: string; mimeType: string } | null = null;
-
-  for await (const part of request.parts()) {
-    if (part.type === "field" && typeof part.value === "string") {
-      fields[part.fieldname] = part.value;
+async function uploadChatAttachmentFromRequest(request: FastifyRequest, input: { actor: ChatActor; channelId: string }) {
+  for await (const part of request.parts({ limits: { fields: 1, files: 1, fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES } })) {
+    if (part.type === "file" && part.fieldname !== "file") {
+      part.file.resume();
     }
     if (part.type === "file" && part.fieldname === "file") {
-      file = {
-        body: await part.toBuffer(),
+      return uploadChatAttachment({
+        channelId: input.channelId,
+        body: part.file,
         fileName: part.filename,
         mimeType: part.mimetype,
-      };
+      }, input.actor);
     }
   }
-
-  const parsed = z.object({ channelId: z.string().min(1) }).parse(fields);
-  return file ? { ...parsed, ...file } : null;
+  return null;
 }
 
 export function registerChatRoutes(app: FastifyInstance) {
@@ -396,12 +393,13 @@ export function registerChatRoutes(app: FastifyInstance) {
     return sendOutcome(reply, await setChatThreadFollow(params.rootMessageId, body.following, actor));
   });
 
-  app.post("/api/chat/attachments", async (request, reply) => {
+  app.post("/api/chat/channels/:channelId/attachments", async (request, reply) => {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
-    const upload = await readChatAttachmentUpload(request);
-    if (!upload) return reply.code(400).send({ error: "File is required" });
-    return sendOutcome(reply, await uploadChatAttachment(upload, actor));
+    const params = channelIdParamsSchema.parse(request.params);
+    const outcome = await uploadChatAttachmentFromRequest(request, { actor, channelId: params.channelId });
+    if (!outcome) return reply.code(400).send({ error: "File is required" });
+    return sendOutcome(reply, outcome);
   });
 
   app.get("/api/chat/attachments/:attachmentId/content", async (request, reply) => {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
@@ -15,6 +15,7 @@ import {
   type VisualBackgroundScene as CanonicalBackgroundScene,
   type VisualBackgroundScope as CanonicalBackgroundScope,
 } from "../../src/domain/settings/visualBackgrounds";
+import { ensureSystemSettingsDirectory, readSystemSettingsFile, updateSystemSettingsFile, type RawSystemSettingsFile } from "./systemSettingsStore";
 
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
 const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
@@ -53,7 +54,7 @@ export type VisualBackgroundImage = {
   createdAt?: string;
 };
 
-type SettingsFile = {
+type VisualSettings = {
   visual: {
     backgrounds: Record<CanonicalBackgroundScene, BackgroundSceneConfig>;
   };
@@ -61,12 +62,6 @@ type SettingsFile = {
 
 type LegacyBackgroundConfig = Partial<BackgroundSceneConfig> & {
   defaultBackgroundId?: unknown;
-};
-
-type RawSettingsFile = {
-  visual?: {
-    backgrounds?: Partial<Record<AnyVisualBackgroundScene, LegacyBackgroundConfig>>;
-  };
 };
 
 type ParsedBackgroundId = {
@@ -80,15 +75,8 @@ type ParsedBackgroundId = {
 
 const settingsRoot = path.join(process.cwd(), "public", "settings");
 const backgroundsRoot = path.join(settingsRoot, "backgrounds");
-const systemSettingsDir = path.join(settingsRoot, "system");
-const systemSettingsPath = path.join(systemSettingsDir, "settings.json");
-const systemSettingsExamplePath = path.join(systemSettingsDir, "settings.json.example");
-const legacySystemSettingsDir = path.join(settingsRoot, "user");
-const legacySystemSettingsPath = path.join(legacySystemSettingsDir, "settings.json");
-const legacySystemSettingsExamplePath = path.join(legacySystemSettingsDir, "settings.json.example");
-let settingsMutationQueue: Promise<void> = Promise.resolve();
 
-const emptySettings = (): SettingsFile => ({
+const emptyVisualSettings = (): VisualSettings => ({
   visual: {
     backgrounds: {
       login_background: defaultBackgroundConfig(),
@@ -235,14 +223,9 @@ async function writeUniqueUploadFile(directory: string, fileName: string, buffer
 async function ensureBackgroundDirectories() {
   const systemScopes: CanonicalBackgroundScope[] = ["default", "system"];
   await Promise.all([
-    mkdir(systemSettingsDir, { recursive: true }),
+    ensureSystemSettingsDirectory(),
     ...visualBackgroundScenes.flatMap((scene) => systemScopes.map((scope) => mkdir(sceneDir(scene, scope), { recursive: true }))),
   ]);
-}
-
-async function readSettingsJson(filePath: string) {
-  const raw = await readFile(filePath, "utf8");
-  return JSON.parse(raw) as RawSettingsFile;
 }
 
 function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefined): BackgroundSceneConfig {
@@ -259,59 +242,21 @@ function normalizeBackgroundConfig(input: LegacyBackgroundConfig | null | undefi
   });
 }
 
-function normalizeSettings(input: RawSettingsFile | null | undefined): SettingsFile {
-  const settings = emptySettings();
+function normalizeVisualSettings(input: RawSystemSettingsFile | null | undefined): VisualSettings {
+  const settings = emptyVisualSettings();
   for (const scene of visualBackgroundScenes) {
     const legacyScene = scene === "app_background" ? "sidebar_background" : scene;
-    settings.visual.backgrounds[scene] = normalizeBackgroundConfig(input?.visual?.backgrounds?.[scene] ?? input?.visual?.backgrounds?.[legacyScene]);
+    settings.visual.backgrounds[scene] = normalizeBackgroundConfig(
+      (input?.visual?.backgrounds?.[scene] as LegacyBackgroundConfig | undefined) ??
+        (input?.visual?.backgrounds?.[legacyScene] as LegacyBackgroundConfig | undefined),
+    );
   }
   return settings;
 }
 
-async function readUserSettings() {
+async function readVisualSettings() {
   await ensureBackgroundDirectories();
-
-  try {
-    return normalizeSettings(await readSettingsJson(systemSettingsPath));
-  } catch {
-    try {
-      return normalizeSettings(await readSettingsJson(systemSettingsExamplePath));
-    } catch {
-      try {
-        return normalizeSettings(await readSettingsJson(legacySystemSettingsPath));
-      } catch {
-        try {
-          return normalizeSettings(await readSettingsJson(legacySystemSettingsExamplePath));
-        } catch {
-          return emptySettings();
-        }
-      }
-    }
-  }
-}
-
-async function writeUserSettings(settings: SettingsFile) {
-  await mkdir(systemSettingsDir, { recursive: true });
-  const tempPath = `${systemSettingsPath}.${process.pid}.${Date.now().toString(36)}.${randomUUID()}.tmp`;
-
-  try {
-    await writeFile(tempPath, `${JSON.stringify(settings, null, 2)}\n`, "utf8");
-    await rename(tempPath, systemSettingsPath);
-  } catch (error) {
-    await rm(tempPath, { force: true }).catch(() => undefined);
-    throw error;
-  }
-}
-
-async function updateUserSettings<T>(mutator: (settings: SettingsFile) => T | Promise<T>) {
-  const mutation = settingsMutationQueue.then(async () => {
-    const settings = await readUserSettings();
-    const result = await mutator(settings);
-    await writeUserSettings(settings);
-    return result;
-  });
-  settingsMutationQueue = mutation.then(() => undefined, () => undefined);
-  return mutation;
+  return normalizeVisualSettings(await readSystemSettingsFile());
 }
 
 function storageSceneNames(scene: CanonicalBackgroundScene): AnyVisualBackgroundScene[] {
@@ -361,7 +306,7 @@ async function scanBackgroundScope(scene: CanonicalBackgroundScene, scope: Canon
 }
 
 export async function listVisualBackgrounds(scene: BackgroundScene) {
-  const settings = await readUserSettings();
+  const settings = await readVisualSettings();
   const defaultImages = await scanBackgroundScope(scene, "default");
   const systemImages = await scanBackgroundScope(scene, "system");
   const list = [...defaultImages, ...systemImages];
@@ -477,15 +422,18 @@ export async function saveVisualBackgroundConfig(scene: BackgroundScene, input: 
     fixedBackgroundId = `${fixedBackground.storageScene}/${fixedBackground.storageScope}/${fixedBackground.fileName}`;
   }
 
-  return updateUserSettings((settings) => {
-    settings.visual.backgrounds[scene] = {
+  return updateSystemSettingsFile((rawSettings) => {
+    rawSettings.visual = rawSettings.visual ?? {};
+    rawSettings.visual.backgrounds = rawSettings.visual.backgrounds ?? {};
+    const savedConfig = {
       ...config,
       fixedBackgroundId,
     };
+    rawSettings.visual.backgrounds[scene] = savedConfig;
 
     return {
       scene,
-      config: settings.visual.backgrounds[scene],
+      config: savedConfig,
     };
   });
 }
@@ -496,17 +444,20 @@ export async function setDefaultVisualBackground(id: string) {
     throw new Error("background not found");
   }
 
-  return updateUserSettings((settings) => {
-    settings.visual.backgrounds[parsed.scene] = {
+  return updateSystemSettingsFile((rawSettings) => {
+    const settings = normalizeVisualSettings(rawSettings);
+    rawSettings.visual = rawSettings.visual ?? {};
+    rawSettings.visual.backgrounds = rawSettings.visual.backgrounds ?? {};
+    rawSettings.visual.backgrounds[parsed.scene] = {
       ...settings.visual.backgrounds[parsed.scene],
       mode: "fixed",
       fixedBackgroundId: `${parsed.storageScene}/${parsed.storageScope}/${parsed.fileName}`,
     };
 
     return {
-      id: settings.visual.backgrounds[parsed.scene].fixedBackgroundId,
+      id: (rawSettings.visual.backgrounds[parsed.scene] as BackgroundSceneConfig).fixedBackgroundId,
       scene: parsed.scene,
-      config: settings.visual.backgrounds[parsed.scene],
+      config: rawSettings.visual.backgrounds[parsed.scene] as BackgroundSceneConfig,
       isDefault: true,
     };
   });

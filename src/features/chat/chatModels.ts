@@ -62,7 +62,7 @@ export type ChatFeedSnapshot = {
 export const chatMessagePageSize = 80;
 export const chatFeedWindowMessageLimit = chatMessagePageSize * 4;
 export const chatFeedFreshSnapshotMs = 5_000;
-export const chatFeedPrefetchChannelLimit = 24;
+export const chatFeedPrefetchChannelLimit = 4;
 export const emptyDraft: ChatDraft = { mentions: [], text: "" };
 
 export function chatDraftStorageKey(channelId: string, rootMessageId?: string | null) {
@@ -152,10 +152,8 @@ export function selectChatFeedPrefetchChannelIds({
   limit?: number;
 }) {
   return [...channels]
+    .filter((channel) => channel.id !== activeChannelId)
     .sort((left, right) => {
-      if (Boolean(activeChannelId && left.id === activeChannelId) !== Boolean(activeChannelId && right.id === activeChannelId)) {
-        return left.id === activeChannelId ? -1 : 1;
-      }
       if (isUnreadChannel(left, currentUserId) !== isUnreadChannel(right, currentUserId)) {
         return isUnreadChannel(left, currentUserId) ? -1 : 1;
       }

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { requireUserScopeContext } from "../../auth/accessPolicy";
+import { env } from "../../env";
 import { publishRealtimeReadModelInvalidation } from "../../realtime/realtimeEventBus";
 import { runtimeScopeStorageId } from "../../repositories/runtimeScope";
 import {
@@ -15,7 +16,7 @@ const avatarParamsSchema = z.object({ userId: z.string().min(1) });
 async function readAvatarUpload(request: FastifyRequest) {
   let file: { body: Buffer; mimeType: string } | null = null;
 
-  for await (const part of request.parts()) {
+  for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, files: 1 } })) {
     if (part.type === "file" && part.fieldname === "file") {
       file = {
         body: await part.toBuffer(),

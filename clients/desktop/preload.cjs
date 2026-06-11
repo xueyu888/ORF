@@ -6,11 +6,44 @@ contextBridge.exposeInMainWorld("orfNativeNotifications", {
   },
   onOpenChatTarget(handler) {
     if (typeof handler !== "function") return undefined;
-    const listener = (_event, targetPath) => {
-      if (typeof targetPath === "string") handler(targetPath);
+    let disposed = false;
+    let drainRequested = false;
+    let draining = false;
+
+    const drainOpenTargets = () => {
+      if (disposed) return;
+      if (draining) {
+        drainRequested = true;
+        return;
+      }
+      draining = true;
+      void (async () => {
+        try {
+          do {
+            drainRequested = false;
+            for (;;) {
+              const result = await ipcRenderer.invoke("orf:chat-notification:consume-open-target").catch(() => null);
+              const targetPath = result && typeof result === "object" ? result.targetPath : null;
+              if (disposed || typeof targetPath !== "string" || !targetPath) break;
+              handler(targetPath);
+            }
+          } while (!disposed && drainRequested);
+        } finally {
+          draining = false;
+          if (!disposed && drainRequested) drainOpenTargets();
+        }
+      })();
     };
-    ipcRenderer.on("orf:chat-notification:open", listener);
-    return () => ipcRenderer.removeListener("orf:chat-notification:open", listener);
+
+    const listener = () => {
+      drainOpenTargets();
+    };
+    ipcRenderer.on("orf:chat-notification:open-pending", listener);
+    drainOpenTargets();
+    return () => {
+      disposed = true;
+      ipcRenderer.removeListener("orf:chat-notification:open-pending", listener);
+    };
   },
 });
 
@@ -23,6 +56,14 @@ contextBridge.exposeInMainWorld("orfNativeRuntime", {
   },
   installUpdate(payload) {
     return ipcRenderer.invoke("orf:runtime:install-update", payload);
+  },
+  onInstallProgress(handler) {
+    if (typeof handler !== "function") return undefined;
+    const listener = (_event, progress) => {
+      if (progress && typeof progress === "object") handler(progress);
+    };
+    ipcRenderer.on("orf:runtime:install-progress", listener);
+    return () => ipcRenderer.removeListener("orf:runtime:install-progress", listener);
   },
 });
 

@@ -77,34 +77,45 @@ public class ClientUpdatePlugin extends Plugin {
     public void install(PluginCall call) {
         String url = call.getString("url", "").trim();
         String name = sanitizeApkName(call.getString("name", "ORF-android-update.apk"));
+        String installId = cleanText(call.getString("installId", ""));
         if (!isTrustedClientUpdateUrl(url)) {
             resolve(call, "not_sent", "untrusted_url", null);
             return;
         }
         if (!canInstallPackages()) {
             openInstallPermissionSettings();
+            emitInstallProgress(installId, "failed", 0, -1, -1, "install_permission_required");
             resolve(call, "not_sent", "install_permission_required", null);
             return;
         }
 
         new Thread(() -> {
             try {
-                File apk = downloadApk(url, name);
+                emitInstallProgress(installId, "preparing", 0, -1, 0, null);
+                File apk = downloadApk(url, name, installId);
+                emitInstallProgress(installId, "validating", -1, -1, 100, null);
                 String validationError = validateUpdateApk(apk);
                 if (validationError != null) {
+                    emitInstallProgress(installId, "failed", -1, -1, -1, validationError);
                     resolve(call, "error", validationError, null);
                     return;
                 }
                 getActivity().runOnUiThread(() -> {
                     try {
+                        emitInstallProgress(installId, "opening", -1, -1, 100, null);
                         openPackageInstaller(apk);
+                        emitInstallProgress(installId, "complete", -1, -1, 100, null);
                         resolve(call, "success", null, apk.getAbsolutePath());
                     } catch (Exception error) {
-                        resolve(call, "error", "apk_install_failed", String.valueOf(error));
+                        String message = readableErrorMessage(error);
+                        emitInstallProgress(installId, "failed", -1, -1, -1, message);
+                        resolve(call, "error", "apk_install_failed", message);
                     }
                 });
             } catch (Exception error) {
-                resolve(call, "error", "apk_install_failed", String.valueOf(error));
+                String message = readableErrorMessage(error);
+                emitInstallProgress(installId, "failed", -1, -1, -1, message);
+                resolve(call, "error", "apk_download_failed", message);
             }
         }).start();
     }
@@ -186,7 +197,7 @@ public class ClientUpdatePlugin extends Plugin {
         getContext().startActivity(intent);
     }
 
-    private File downloadApk(String url, String name) throws Exception {
+    private File downloadApk(String url, String name, String installId) throws Exception {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
         connection.setConnectTimeout(30000);
         connection.setInstanceFollowRedirects(true);
@@ -197,6 +208,7 @@ public class ClientUpdatePlugin extends Plugin {
         if (status < 200 || status >= 300) {
             throw new IllegalStateException("Download failed: HTTP " + status);
         }
+        long totalBytes = connection.getContentLengthLong();
 
         File updateDir = new File(getContext().getCacheDir(), "client-updates");
         if (!updateDir.exists() && !updateDir.mkdirs()) {
@@ -211,9 +223,14 @@ public class ClientUpdatePlugin extends Plugin {
         try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(tempApk)) {
             byte[] buffer = new byte[64 * 1024];
             int read;
+            long downloadedBytes = 0;
+            emitInstallProgress(installId, "downloading", 0, totalBytes, 0, null);
             while ((read = input.read(buffer)) != -1) {
                 output.write(buffer, 0, read);
+                downloadedBytes += read;
+                emitInstallProgress(installId, "downloading", downloadedBytes, totalBytes, percentFor(downloadedBytes, totalBytes), null);
             }
+            emitInstallProgress(installId, "downloaded", downloadedBytes, totalBytes, 100, null);
         } finally {
             connection.disconnect();
         }
@@ -225,6 +242,42 @@ public class ClientUpdatePlugin extends Plugin {
             throw new IllegalStateException("Cannot finalize update APK");
         }
         return apk;
+    }
+
+    private double percentFor(long downloadedBytes, long totalBytes) {
+        if (totalBytes <= 0) {
+            return -1;
+        }
+        return Math.max(0, Math.min(100, downloadedBytes * 100.0 / totalBytes));
+    }
+
+    private void emitInstallProgress(
+        String installId,
+        String stage,
+        long downloadedBytes,
+        long totalBytes,
+        double percent,
+        String error
+    ) {
+        JSObject event = new JSObject();
+        if (installId != null) {
+            event.put("installId", installId);
+        }
+        event.put("stage", stage);
+        if (downloadedBytes >= 0) {
+            event.put("downloadedBytes", downloadedBytes);
+        }
+        if (totalBytes > 0) {
+            event.put("totalBytes", totalBytes);
+        }
+        if (percent >= 0) {
+            event.put("percent", percent);
+        }
+        String cleanError = cleanText(error);
+        if (cleanError != null) {
+            event.put("error", cleanError);
+        }
+        notifyListeners("installProgress", event);
     }
 
     private void openPackageInstaller(File apk) {
@@ -274,6 +327,14 @@ public class ClientUpdatePlugin extends Plugin {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String readableErrorMessage(Exception error) {
+        String message = error.getMessage();
+        if (message != null && !message.trim().isEmpty()) {
+            return message.trim();
+        }
+        return error.getClass().getSimpleName();
     }
 
     private void resolve(PluginCall call, String status, String reason, String data) {

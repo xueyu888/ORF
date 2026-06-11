@@ -13,7 +13,9 @@ import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
 import { hasPermission } from "../config/permissions";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { SystemBroadcastBanner } from "../features/notifications/components/SystemBroadcastBanner";
+import { ClientUpdateCenterDialog } from "../features/client-updates/ClientUpdateCenterDialog";
 import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotice";
+import { clientUpdateCenterOpenEvent, type ClientUpdateCenterOpenRequest } from "../features/client-updates/clientUpdateCenterEvents";
 import { ClientReleaseNotesDialog } from "../features/client-updates/ClientReleaseNotesDialog";
 import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls";
 import { isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
@@ -31,6 +33,7 @@ export function AppShell() {
   const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
+  const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
   const sidebarBackground = useVisualBackground("app_background");
 
   useEffect(() => {
@@ -82,6 +85,16 @@ export function AppShell() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
+  useEffect(() => {
+    const handleOpenClientUpdateCenter = (event: Event) => {
+      const request = event instanceof CustomEvent ? event.detail as ClientUpdateCenterOpenRequest | undefined : undefined;
+      setClientUpdateCenter({ notice: request?.notice, open: true });
+    };
+
+    window.addEventListener(clientUpdateCenterOpenEvent, handleOpenClientUpdateCenter);
+    return () => window.removeEventListener(clientUpdateCenterOpenEvent, handleOpenClientUpdateCenter);
+  }, []);
+
   const sidebarBackgroundUrl =
     sidebarBackground.status === "ready" ? sidebarBackground.url : orfAssetLibrary.sidebar.characterGuideBackground.src;
   const shellStyle = {
@@ -106,6 +119,7 @@ export function AppShell() {
         backgroundUrl={sidebarBackgroundUrl}
         collapsed={sidebarCollapsed}
         onCollapsedChange={handleSidebarCollapsedChange}
+        onOpenClientUpdateCenter={() => setClientUpdateCenter({ open: true })}
       />
       <div className="orf-shell-body min-w-0 flex-1">
         <header className="orf-topbar orf-shell-x-padding sticky top-0 z-30 flex items-center gap-2">
@@ -153,6 +167,11 @@ export function AppShell() {
       <CommandMenu open={commandOpen} onClose={() => setCommandOpen(false)} />
       <MobileBottomNav />
       <ClientReleaseNotesDialog />
+      <ClientUpdateCenterDialog
+        notice={clientUpdateCenter.notice}
+        open={clientUpdateCenter.open}
+        onClose={() => setClientUpdateCenter({ open: false })}
+      />
       <GlobalModals />
       <Toasts />
     </div>

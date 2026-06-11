@@ -389,6 +389,9 @@ export interface ChatUser {
   status: UserStatus;
   avatarUrl?: string | null;
   lastOnlineAt?: string | null;
+  presence: {
+    online: boolean;
+  };
 }
 
 export interface ChatChannelMember {
@@ -492,6 +495,10 @@ export interface ChatMessageContext {
 
 export interface ChatBootstrap {
   channels: ChatChannel[];
+  settings: {
+    attachmentMaxBytes: number;
+    infrastructureMaxBytes: number;
+  };
   users: ChatUser[];
   permissions: {
     canCreatePrivateChannel: boolean;

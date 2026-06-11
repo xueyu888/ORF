@@ -156,7 +156,7 @@ export function normalizeTeamRole(role: string): UserRole {
   return role === "admin" ? "admin" : "member";
 }
 
-export function toChatUser(row: UserRow): ChatUser {
+export function toChatUser(row: UserRow, presence: ChatUser["presence"] = { online: false }): ChatUser {
   return {
     id: row.id,
     name: row.name,
@@ -169,6 +169,7 @@ export function toChatUser(row: UserRow): ChatUser {
       avatarUpdatedAt: iso(row.avatar_updated_at),
     }),
     lastOnlineAt: iso(row.last_online_at),
+    presence,
   };
 }
 

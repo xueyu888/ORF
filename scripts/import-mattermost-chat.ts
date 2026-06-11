@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { closeDb, pool } from "../server/db/client";
-import { env } from "../server/env";
 import { runtimeScope } from "../server/repositories/runtimeScope";
+import { readChatSettings } from "../server/settings/chatSettings";
 import { objectStorage } from "../server/storage/objectStorage";
 import { uploadCurrentUserAvatar } from "../server/users/avatar/avatarRepository";
 
@@ -948,6 +948,7 @@ async function insertMessages(input: {
   posts: MattermostPost[];
   source: MattermostSourceClient;
   teamId: string;
+  chatAttachmentMaxBytes: number;
   usersByMention: Map<string, OrfUser>;
 }) {
   let importedMessages = 0;
@@ -1032,7 +1033,7 @@ async function insertMessages(input: {
         });
         continue;
       }
-      const maxUploadBytes = Math.min(env.CHAT_FILE_UPLOAD_MAX_BYTES, env.OBJECT_STORAGE_UPLOAD_MAX_BYTES);
+      const maxUploadBytes = input.chatAttachmentMaxBytes;
       if (!isImageMimeType(mimeType) && fileInfo.size > maxUploadBytes) {
         skippedAttachments += 1;
         await recordSkippedAttachment(input.client, {
@@ -1186,6 +1187,7 @@ async function main() {
   const apply = hasFlag("--apply");
   const source = new MattermostSourceClient(requireMattermostConfig());
   const teamId = await getTargetTeamId();
+  const chatSettings = await readChatSettings();
   const orfUsers = await getOrfUsers(teamId);
   const fallbackUser = adminFallbackUser(orfUsers);
   if (!fallbackUser) throw new Error("No active ORF user exists for Mattermost import fallback");
@@ -1301,6 +1303,7 @@ async function main() {
         posts,
         source,
         usersByMention,
+        chatAttachmentMaxBytes: chatSettings.attachmentMaxBytes,
       });
       await channelClient.query("COMMIT");
       importedChannels += 1;

@@ -4,21 +4,24 @@ import {
   checkForClientUpdate,
   clientUpdateInstallMessage,
   clientUpdatePlatformLabel,
+  formatClientUpdateBytes,
   formatUpdateDate,
   shouldOpenDownloadUrlAfterInstallResult,
   type ClientUpdateCheckResult,
 } from "./clientUpdateController";
-import { installClientUpdateAsset, openClientUpdateUrl } from "./clientUpdateRuntime";
+import { ClientUpdateInstallProgressView } from "./ClientUpdateInstallProgressView";
+import { installClientUpdateAsset, openClientUpdateUrl, type ClientUpdateInstallProgress } from "./clientUpdateRuntime";
 
 type ClientUpdateCenterState =
   | { status: "checking" }
   | { message: string; status: "error" }
   | { result: ClientUpdateCheckResult; status: "ready" };
 
-export function ClientUpdateCenterDialog({ onClose, open }: { onClose: () => void; open: boolean }) {
+export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: string; onClose: () => void; open: boolean }) {
   const [centerState, setCenterState] = useState<ClientUpdateCenterState>({ status: "checking" });
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
+  const [installProgress, setInstallProgress] = useState<ClientUpdateInstallProgress | null>(null);
   const [openingUrl, setOpeningUrl] = useState(false);
 
   useEffect(() => {
@@ -33,6 +36,7 @@ export function ClientUpdateCenterDialog({ onClose, open }: { onClose: () => voi
   const runCheck = async (signal?: AbortSignal) => {
     setCenterState({ status: "checking" });
     setInstallMessage(null);
+    setInstallProgress(null);
     try {
       const result = await checkForClientUpdate(signal);
       if (!signal?.aborted) {
@@ -61,13 +65,18 @@ export function ClientUpdateCenterDialog({ onClose, open }: { onClose: () => voi
     }
     setInstalling(true);
     setInstallMessage(null);
+    setInstallProgress(null);
     try {
-      const installResult = await installClientUpdateAsset(result.decision.asset);
+      const installResult = await installClientUpdateAsset(result.decision.asset, { onProgress: setInstallProgress });
       setInstallMessage(clientUpdateInstallMessage(installResult));
       if (shouldOpenDownloadUrlAfterInstallResult(installResult)) {
         await openReleasePage(result.decision.asset.downloadUrl);
       }
     } catch (error) {
+      setInstallProgress({
+        error: error instanceof Error ? error.message : "更新安装失败",
+        stage: "failed",
+      });
       setInstallMessage(error instanceof Error ? error.message : "更新安装失败");
     } finally {
       setInstalling(false);
@@ -105,6 +114,7 @@ export function ClientUpdateCenterDialog({ onClose, open }: { onClose: () => voi
         </header>
 
         <div className="orf-client-update-center-body">
+          {notice && <p className="orf-client-update-center-message" data-tone="warning">{notice}</p>}
           {centerState.status === "checking" && (
             <div className="orf-client-update-center-status">
               <RefreshCw className="h-4 w-4 animate-spin" />
@@ -141,9 +151,10 @@ export function ClientUpdateCenterDialog({ onClose, open }: { onClose: () => voi
                 </div>
                 <div>
                   <dt>安装包</dt>
-                  <dd>{asset ? `${asset.name}${asset.size ? ` · ${formatBytes(asset.size)}` : ""}` : compatibleAssetText(decision.status)}</dd>
+                  <dd>{asset ? `${asset.name}${asset.size ? ` · ${formatClientUpdateBytes(asset.size)}` : ""}` : compatibleAssetText(decision.status)}</dd>
                 </div>
               </dl>
+              <ClientUpdateInstallProgressView progress={installProgress} />
               {installMessage && <p className="orf-client-update-center-message">{installMessage}</p>}
             </>
           )}
@@ -195,10 +206,4 @@ function compatibleAssetText(status: ClientUpdateCheckResult["decision"]["status
   if (status === "unsupported_platform") return "当前平台无需安装包";
   if (status === "no_compatible_asset") return "没有匹配安装包";
   return "无";
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }

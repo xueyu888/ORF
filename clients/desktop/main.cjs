@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { Readable } = require("node:stream");
+const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, shell } = require("electron");
 const {
@@ -27,11 +27,14 @@ const DESKTOP_UNREAD_BADGE_LIMIT = 99;
 const ORF_APP_NAME = "ORF";
 const DESKTOP_ICON_BITMAP_SIZE = 32;
 const DESKTOP_ICON_BITMAP_SCALE = 4;
+const MAX_PENDING_CHAT_NOTIFICATION_TARGETS = 16;
+const CHAT_NOTIFICATION_ACTIVATION_PREFIX = "orf-chat-notification";
 
 const desktopShellState = {
   clientUrl: null,
   isQuitting: false,
   mainWindow: null,
+  pendingChatNotificationTargetsByWebContents: new Map(),
   tray: null,
   unreadCount: 0,
 };
@@ -63,6 +66,7 @@ function createMainWindow(clientUrl) {
       sandbox: true,
     },
   });
+  const webContentsId = mainWindow.webContents.id;
   desktopShellState.clientUrl = clientUrl;
   desktopShellState.mainWindow = mainWindow;
 
@@ -97,6 +101,7 @@ function createMainWindow(clientUrl) {
   mainWindow.on("enter-full-screen", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("leave-full-screen", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("closed", () => {
+    desktopShellState.pendingChatNotificationTargetsByWebContents.delete(webContentsId);
     if (desktopShellState.mainWindow === mainWindow) {
       desktopShellState.mainWindow = null;
     }
@@ -142,9 +147,10 @@ function showMainWindow(targetPath) {
 }
 
 function openChatTargetInWindow(targetWindow, targetPath) {
+  enqueueChatNotificationTarget(targetWindow, targetPath);
   const sendOpenTarget = () => {
     if (!targetWindow.isDestroyed()) {
-      targetWindow.webContents.send("orf:chat-notification:open", targetPath);
+      targetWindow.webContents.send("orf:chat-notification:open-pending");
     }
   };
   if (targetWindow.webContents.isLoading()) {
@@ -152,6 +158,30 @@ function openChatTargetInWindow(targetWindow, targetPath) {
     return;
   }
   sendOpenTarget();
+}
+
+function enqueueChatNotificationTarget(targetWindow, targetPath) {
+  if (!isSafeChatTargetPath(targetPath) || targetWindow.isDestroyed()) return;
+  const webContentsId = targetWindow.webContents.id;
+  const pendingTargets = desktopShellState.pendingChatNotificationTargetsByWebContents.get(webContentsId) ?? [];
+  pendingTargets.push(targetPath);
+  desktopShellState.pendingChatNotificationTargetsByWebContents.set(
+    webContentsId,
+    pendingTargets.slice(-MAX_PENDING_CHAT_NOTIFICATION_TARGETS),
+  );
+}
+
+function consumePendingChatNotificationTarget(webContents) {
+  if (!webContents || webContents.isDestroyed()) return null;
+  const webContentsId = webContents.id;
+  const pendingTargets = desktopShellState.pendingChatNotificationTargetsByWebContents.get(webContentsId) ?? [];
+  const targetPath = pendingTargets.shift() ?? null;
+  if (pendingTargets.length > 0) {
+    desktopShellState.pendingChatNotificationTargetsByWebContents.set(webContentsId, pendingTargets);
+  } else {
+    desktopShellState.pendingChatNotificationTargetsByWebContents.delete(webContentsId);
+  }
+  return isSafeChatTargetPath(targetPath) ? targetPath : null;
 }
 
 function requestDesktopAttention(targetWindow) {
@@ -293,21 +323,83 @@ function chatNotificationPayload(input, clientUrl) {
   };
 }
 
+function chatNotificationActivationArguments(targetPath) {
+  const params = new URLSearchParams();
+  params.set("targetPath", targetPath);
+  return `${CHAT_NOTIFICATION_ACTIVATION_PREFIX}?${params.toString()}`;
+}
+
+function chatNotificationTargetPathFromActivationArguments(value) {
+  if (typeof value !== "string") return null;
+  const queryStart = value.indexOf("?");
+  if (queryStart < 0 || value.slice(0, queryStart) !== CHAT_NOTIFICATION_ACTIVATION_PREFIX) return null;
+  const params = new URLSearchParams(value.slice(queryStart + 1));
+  const targetPath = params.get("targetPath");
+  return isSafeChatTargetPath(targetPath) ? targetPath : null;
+}
+
+function chatNotificationOptions(payload) {
+  if (process.platform === "win32") {
+    return {
+      toastXml: windowsChatNotificationToastXml(payload),
+    };
+  }
+  return {
+    title: payload.title,
+    body: payload.body,
+    icon: resolveDesktopIconPath(),
+    silent: false,
+  };
+}
+
+function windowsChatNotificationToastXml(payload) {
+  return [
+    `<toast launch="${escapeXmlAttribute(chatNotificationActivationArguments(payload.targetPath))}">`,
+    "<visual>",
+    '<binding template="ToastGeneric">',
+    `<text>${escapeXmlText(payload.title)}</text>`,
+    `<text>${escapeXmlText(payload.body)}</text>`,
+    "</binding>",
+    "</visual>",
+    "</toast>",
+  ].join("");
+}
+
+function escapeXmlAttribute(value) {
+  return escapeXmlText(value).replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function escapeXmlText(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function registerNativeNotificationBridge(clientUrl) {
+  if (process.platform === "win32" && typeof Notification.handleActivation === "function") {
+    Notification.handleActivation((details) => {
+      const targetPath = chatNotificationTargetPathFromActivationArguments(details?.arguments);
+      if (targetPath) showMainWindow(targetPath);
+    });
+  }
+
+  ipcMain.handle("orf:chat-notification:consume-open-target", (event) => ({
+    status: "success",
+    targetPath: consumePendingChatNotificationTarget(event.sender),
+  }));
+
   ipcMain.handle("orf:chat-notification:show", (event, input) => {
     const payload = chatNotificationPayload(input, clientUrl);
     if (!payload) return { status: "not_sent", reason: "invalid_payload" };
     if (!Notification.isSupported()) return { status: "unsupported", reason: "notification_not_supported" };
 
-    const notification = new Notification({
-      title: payload.title,
-      body: payload.body,
-      icon: resolveDesktopIconPath(),
-      silent: false,
-    });
-    notification.on("click", () => {
-      showMainWindow(payload.targetPath);
-    });
+    const notification = new Notification(chatNotificationOptions(payload));
+    if (process.platform !== "win32" || typeof Notification.handleActivation !== "function") {
+      notification.on("click", () => {
+        showMainWindow(payload.targetPath);
+      });
+    }
     notification.show();
     requestDesktopAttention(BrowserWindow.fromWebContents(event.sender));
     return { status: "success" };
@@ -394,15 +486,25 @@ function registerNativeRuntimeBridge() {
     if (!payload) {
       return { status: "not_sent", reason: "invalid_payload" };
     }
+    const sendProgress = createClientUpdateProgressEmitter(_event.sender, {
+      assetName: payload.fileName,
+      installId: payload.installId,
+    });
     try {
-      const installerPath = await downloadClientUpdateInstaller(payload);
+      sendProgress({ downloadedBytes: 0, stage: "preparing" });
+      const installerPath = await downloadClientUpdateInstaller(payload, sendProgress);
+      sendProgress({ percent: 100, stage: "opening" });
       const openError = await shell.openPath(installerPath);
       if (openError) {
+        sendProgress({ error: openError, stage: "failed" });
         return { status: "error", reason: "installer_open_failed", data: openError };
       }
+      sendProgress({ percent: 100, stage: "complete" });
       return { status: "success", data: installerPath };
     } catch (error) {
-      return { status: "error", reason: "installer_download_failed", data: String(error) };
+      const message = readableErrorMessage(error);
+      sendProgress({ error: message, stage: "failed" });
+      return { status: "error", reason: "installer_download_failed", data: message };
     }
   });
 }
@@ -420,12 +522,15 @@ function clientUpdateInstallPayload(input) {
   if (!input || typeof input !== "object") return null;
   const url = typeof input.url === "string" ? input.url.trim() : "";
   if (!isTrustedClientUpdateUrl(url)) return null;
+  const installId = typeof input.installId === "string" && input.installId.trim()
+    ? input.installId.trim().slice(0, 120)
+    : `desktop-update-${Date.now()}`;
   const fileName = sanitizeUpdateInstallerName(input.name, "ORF-update-win11-x64-setup.exe");
   if (!fileName.endsWith(".exe")) return null;
-  return { fileName, url };
+  return { fileName, installId, url };
 }
 
-async function downloadClientUpdateInstaller(payload) {
+async function downloadClientUpdateInstaller(payload, sendProgress) {
   const updateDir = path.join(app.getPath("temp"), "orf-client-updates");
   fs.mkdirSync(updateDir, { recursive: true });
   const installerPath = path.join(updateDir, payload.fileName);
@@ -436,9 +541,70 @@ async function downloadClientUpdateInstaller(payload) {
   if (!response.ok || !response.body) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }
-  await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath));
+  const totalBytes = parseContentLength(response.headers.get("content-length"));
+  sendProgress({ downloadedBytes: 0, stage: "downloading", totalBytes });
+  await pipeline(
+    Readable.fromWeb(response.body),
+    createDownloadProgressStream((downloadedBytes) => {
+      sendProgress({ downloadedBytes, stage: "downloading", totalBytes });
+    }),
+    fs.createWriteStream(tempPath),
+  );
+  sendProgress({ percent: 100, stage: "downloaded", totalBytes });
+  fs.rmSync(installerPath, { force: true });
   fs.renameSync(tempPath, installerPath);
   return installerPath;
+}
+
+function createDownloadProgressStream(onProgress) {
+  let downloadedBytes = 0;
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      downloadedBytes += chunk.length;
+      onProgress(downloadedBytes);
+      callback(null, chunk);
+    },
+  });
+}
+
+function parseContentLength(value) {
+  const length = Number(value);
+  return Number.isFinite(length) && length > 0 ? length : null;
+}
+
+function createClientUpdateProgressEmitter(webContents, baseProgress) {
+  let lastPercent = -1;
+  let lastSentAt = 0;
+  return (progress) => {
+    if (!webContents || webContents.isDestroyed()) return;
+    const totalBytes = typeof progress.totalBytes === "number" && progress.totalBytes > 0 ? progress.totalBytes : null;
+    const downloadedBytes = typeof progress.downloadedBytes === "number" && progress.downloadedBytes >= 0 ? progress.downloadedBytes : null;
+    const percent = typeof progress.percent === "number"
+      ? Math.max(0, Math.min(100, progress.percent))
+      : totalBytes && downloadedBytes !== null
+        ? Math.max(0, Math.min(100, (downloadedBytes / totalBytes) * 100))
+        : null;
+    const roundedPercent = percent === null ? null : Math.floor(percent);
+    const now = Date.now();
+    const shouldThrottle = progress.stage === "downloading" && roundedPercent === lastPercent && now - lastSentAt < 250;
+    if (shouldThrottle) return;
+    lastPercent = roundedPercent ?? lastPercent;
+    lastSentAt = now;
+    webContents.send("orf:runtime:install-progress", {
+      assetName: baseProgress.assetName,
+      downloadedBytes,
+      error: typeof progress.error === "string" ? progress.error.slice(0, 240) : null,
+      installId: baseProgress.installId,
+      percent,
+      stage: progress.stage,
+      totalBytes,
+    });
+  };
+}
+
+function readableErrorMessage(error) {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
 }
 
 function sanitizeUpdateInstallerName(value, fallback) {

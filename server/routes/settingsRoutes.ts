@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAdminContext, requireApiUser, requireUserScopeContext } from "../auth/accessPolicy";
+import { env } from "../env";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
+import { chatSettingsError, chatSettingsPatchSchema, readChatSettings, saveChatSettings } from "../settings/chatSettings";
 import {
   backgroundSceneConfigSchema,
   backgroundScenePathSchema,
@@ -148,7 +150,7 @@ export function registerSettingsRoutes(app: FastifyInstance) {
     try {
       let file: { fileName: string; mimeType: string; buffer: Buffer } | null = null;
 
-      for await (const part of request.parts()) {
+      for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, files: 1 } })) {
         if (part.type === "file" && part.fieldname === "file") {
           file = {
             fileName: part.filename,
@@ -196,6 +198,45 @@ export function registerSettingsRoutes(app: FastifyInstance) {
     }
   });
 
+  app.get("/api/settings/chat", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    try {
+      return {
+        code: 0,
+        message: "ok",
+        data: await readChatSettings(),
+      };
+    } catch (error) {
+      const mapped = chatSettingsError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
+  app.put("/api/settings/chat", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    try {
+      const body = chatSettingsPatchSchema.parse(request.body);
+      const data = await saveChatSettings(body);
+      publishSettingsInvalidation({ actorUserId: context.user.id, scope: context.scope, targetId: "chat" });
+      return {
+        code: 0,
+        message: "ok",
+        data,
+      };
+    } catch (error) {
+      const mapped = chatSettingsError(error);
+      return reply.code(mapped.status).send({ code: mapped.code, message: mapped.message, data: null });
+    }
+  });
+
   app.get("/api/settings/visual/backgrounds", async (request, reply) => {
     try {
       const query = visualBackgroundQuerySchema.parse(request.query);
@@ -220,7 +261,7 @@ export function registerSettingsRoutes(app: FastifyInstance) {
       let scene: z.infer<typeof backgroundSceneSchema> | null = null;
       let file: { fileName: string; mimeType: string; buffer: Buffer } | null = null;
 
-      for await (const part of request.parts()) {
+      for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, files: 1 } })) {
         if (part.type === "field" && part.fieldname === "scene") {
           scene = backgroundSceneSchema.parse(part.value);
         }

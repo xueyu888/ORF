@@ -30,6 +30,7 @@ const broadcastMentionOption: ChatUser = {
   status: "active",
   avatarUrl: null,
   lastOnlineAt: null,
+  presence: { online: false },
 };
 const broadcastMentionSearchTerms = ["所有人", "全体", "全体成员", "all", "channel", "here"];
 

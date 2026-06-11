@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { requireFeedbackInScope, requireUserScopeContext } from "../auth/accessPolicy";
+import { env } from "../env";
 import { createFeedback, getFeedbackReferences, updateFeedbackStatus } from "../repositories/orfFeedbackRepository";
 
 const impactSchema = z.enum(["Low", "Medium", "High", "Critical"]);
@@ -59,7 +60,7 @@ async function readCreateFeedbackBody(request: FastifyRequest) {
 
   const fields: Record<string, string> = {};
   const attachments: Array<{ body: Buffer; clientId: string; fileName: string; mimeType: string }> = [];
-  for await (const part of request.parts()) {
+  for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES } })) {
     if (part.type === "field" && typeof part.value === "string") {
       fields[part.fieldname] = part.value;
     }

@@ -3748,6 +3748,32 @@ button:disabled {
   }
 }
 
+.orf-toast-stack {
+  position: fixed;
+  right: 20px;
+  bottom: calc(var(--orf-mobile-bottom-nav-height, 0px) + 20px);
+  z-index: 80;
+  display: grid;
+  width: min(360px, calc(100vw - 32px));
+  gap: 8px;
+  pointer-events: none;
+}
+
+.orf-toast-card {
+  width: 100%;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.orf-toast-card .flex-1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.orf-toast-card button {
+  flex: 0 0 auto;
+}
+
 .orf-client-update-notice {
   position: sticky;
   top: var(--orf-topbar-height);
@@ -3808,6 +3834,92 @@ button:disabled {
   font-size: 12px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.orf-client-update-progress {
+  display: grid;
+  width: min(420px, 100%);
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.orf-client-update-progress-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #41546f;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
+.orf-client-update-progress-header span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.orf-client-update-progress-header strong {
+  flex: 0 0 auto;
+  color: #0f7892;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.orf-client-update-progress-track {
+  position: relative;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(210, 222, 234, 0.82);
+}
+
+.orf-client-update-progress-track span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 7px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f7892, #16a085);
+  transition: width 160ms ease;
+}
+
+.orf-client-update-progress-track[data-indeterminate="true"] span {
+  width: 42%;
+  animation: orf-client-update-progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+.orf-client-update-progress-bytes {
+  color: #60728c;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.orf-client-update-progress[data-stage="failed"] .orf-client-update-progress-header,
+.orf-client-update-progress[data-stage="failed"] .orf-client-update-progress-header strong {
+  color: var(--orf-danger-text);
+}
+
+.orf-client-update-progress[data-stage="failed"] .orf-client-update-progress-track span {
+  background: var(--orf-danger-text);
+}
+
+@keyframes orf-client-update-progress-indeterminate {
+  from {
+    transform: translateX(-110%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orf-client-update-progress-track[data-indeterminate="true"] span {
+    animation: none;
+    transform: none;
+  }
 }
 
 .orf-client-update-actions {
@@ -4390,6 +4502,10 @@ button:disabled {
     white-space: normal;
   }
 
+  .orf-client-update-progress {
+    width: 100%;
+  }
+
   .orf-client-release-notes-backdrop {
     align-items: end;
     padding: 12px;
@@ -4461,6 +4577,71 @@ button:disabled {
   .orf-client-update-center-actions {
     justify-content: flex-start;
     padding: 12px 16px 16px;
+  }
+}
+
+@media (max-width: 900px) {
+  .orf-toast-stack {
+    right: 12px;
+    left: 12px;
+    bottom: calc(var(--orf-mobile-bottom-nav-height) + 10px);
+    width: auto;
+    max-height: min(42dvh, calc(100dvh - var(--orf-mobile-bottom-nav-height) - 24px));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .orf-toast-card {
+    align-items: flex-start;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .orf-client-update-notice {
+    position: relative;
+    top: auto;
+    z-index: 2;
+    grid-template-columns: 28px minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    margin: 8px 12px 0;
+    padding: 9px 10px;
+    border: 1px solid rgba(54, 139, 176, 0.24);
+    border-radius: 8px;
+    box-shadow: 0 8px 20px rgba(29, 55, 85, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  }
+
+  .orf-client-update-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 1px;
+    scrollbar-width: none;
+  }
+
+  .orf-client-update-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .orf-client-update-primary,
+  .orf-client-update-secondary,
+  .orf-client-update-close {
+    flex: 0 0 auto;
+  }
+
+  .orf-client-update-title,
+  .orf-client-update-meta {
+    white-space: normal;
+  }
+
+  .orf-client-update-message {
+    overflow-wrap: anywhere;
+  }
+
+  .orf-client-update-dialog-backdrop {
+    display: none;
   }
 }
 

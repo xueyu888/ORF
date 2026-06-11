@@ -124,6 +124,10 @@ export type VisualBackgroundsData = {
   config: VisualBackgroundConfig;
   list: VisualBackgroundImage[];
 };
+export type ChatSettingsData = {
+  attachmentMaxBytes: number;
+  infrastructureMaxBytes: number;
+};
 export type UserPreferences = {
   userId: string;
   defaultLandingPath: string | null;
@@ -526,9 +530,8 @@ export async function setChatThreadFollowRequest(rootMessageId: string, followin
 
 export async function uploadChatAttachment(input: { channelId: string; file: File }) {
   const formData = new FormData();
-  formData.set("channelId", input.channelId);
   formData.set("file", input.file);
-  return apiJson<ChatAttachmentUploadResponse>("/api/chat/attachments", {
+  return apiJson<ChatAttachmentUploadResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`, {
     method: "POST",
     body: formData,
   });
@@ -559,6 +562,19 @@ export async function getChatUnreadSummary() {
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
   const response = await apiJson<ApiEnvelope<VisualBackgroundsData>>(`/api/settings/visual/backgrounds?scene=${encodeURIComponent(scene)}`);
+  return response.data;
+}
+
+export async function getChatSettings() {
+  const response = await apiJson<ApiEnvelope<ChatSettingsData>>("/api/settings/chat");
+  return response.data;
+}
+
+export async function saveChatSettings(input: Pick<ChatSettingsData, "attachmentMaxBytes">) {
+  const response = await apiJson<ApiEnvelope<ChatSettingsData>>("/api/settings/chat", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
   return response.data;
 }
 

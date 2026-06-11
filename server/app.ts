@@ -41,7 +41,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   });
   await app.register(multipart, {
     limits: {
-      fileSize: Math.max(env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, env.CHAT_FILE_UPLOAD_MAX_BYTES),
+      fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES,
       files: 1,
     },
   });
