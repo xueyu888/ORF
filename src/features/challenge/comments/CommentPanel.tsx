@@ -1,13 +1,24 @@
-import { ArrowLeft, ChevronRight, ImagePlus, Pencil, Reply, Send, Trash2, X } from "lucide-react";
-import type { ClipboardEvent, FormEvent, KeyboardEvent, ReactNode } from "react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ChevronRight, Pencil, Reply, Send, Trash2, X } from "lucide-react";
+import type { FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
+import { Link } from "react-router-dom";
 import { ImagePreviewDialog, type ImagePreview } from "../../../components/ImagePreviewDialog";
 import { UserAvatar } from "../../../components/UserAvatar";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
+import { OrfRichTextEditor, orfRichTextHasMeaningfulContent, type OrfRichTextImageUploadResult } from "../../rich-text/OrfRichTextEditor";
+import {
+  orfAttachmentMarkdown,
+  type OrfAttachmentReference,
+  type OrfMentionReference,
+} from "../../rich-text/orfRichTextMarkdown";
+import { OrfRichTextMarkdownViewer } from "../../rich-text/OrfRichTextMarkdownViewer";
 import { commentTimeDisplay } from "./commentTime";
-import { parseCommentBodyLinks } from "./commentText";
+
+function isInternalCommentHref(href: string) {
+  return href.startsWith("/") && !href.startsWith("//");
+}
 
 type CommentEntry = {
   message: CommentMessage;
@@ -17,16 +28,8 @@ type CommentEntry = {
 
 export type CommentMentionUser = Pick<OrfUser, "avatarUrl" | "email" | "id" | "name" | "role" | "status">;
 
-export type CommentDraftMention = {
-  end: number;
-  label: string;
-  start: number;
-  userId: string;
-};
-
 export type CommentDraft = {
-  mentions: CommentDraftMention[];
-  text: string;
+  body: string;
 };
 
 export type CommentDraftMode =
@@ -38,9 +41,6 @@ export type CommentReplyInput = {
   replyToAuthor?: string;
   replyToMessageId?: string;
 };
-
-const commentAttachmentTokenPattern = /!\[([^\]\n]*)\]\(orf-attachment:([A-Za-z0-9_-]+)\)/g;
-const commentMentionTokenPattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 
 export function CommentPanel({
   canManageAllComments = false,
@@ -67,7 +67,7 @@ export function CommentPanel({
   onDeleteComment: (threadId: string, messageId: string) => void;
   onLoadMentionableUsers: (input: { targetId: string; targetType: CommentTargetType }) => Promise<CommentMentionUser[]>;
   onUpdateComment: (threadId: string, messageId: string, body: string) => void;
-  onUploadAttachment: (file: File) => Promise<string | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
   targetId: string;
   targetTitle: string;
   targetType: CommentTargetType;
@@ -183,7 +183,7 @@ export function CommentPanel({
   const handleEdit = (threadId: string, message: CommentMessage) => {
     setSelectedMessageId(message.id);
     resetDraft();
-    setEditState({ draft: commentDraftFromStoredBody(message.body, mentionUsersById), messageId: message.id, threadId });
+    setEditState({ draft: commentDraftFromStoredBody(message.body), messageId: message.id, threadId });
   };
 
   const handleDelete = (threadId: string, messageId: string) => {
@@ -377,13 +377,17 @@ function CommentMessageRow({
   onReply: (message: CommentMessage) => void;
   onSelect: (messageId: string) => void;
   onSubmitEdit: (event: FormEvent) => void;
-  onUploadAttachment: (file: File) => Promise<string | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
   selected: boolean;
   showReplyEntry?: boolean;
 }) {
   const { message, threadId } = entry;
   const canManageMessage = canManageAllComments || (message.authorUserId ? message.authorUserId === currentUserId : message.author === currentMember);
   const createdTime = commentTimeDisplay(message.createdAt);
+  const attachmentPreviewUrls = useMemo(
+    () => new Map((message.attachments ?? []).map((attachment) => [attachment.id, attachment.contentUrl])),
+    [message.attachments],
+  );
   const deleteMessage = () => {
     if (window.confirm("删除这条评论？")) {
       onDelete(threadId, message.id);
@@ -415,6 +419,7 @@ function CommentMessageRow({
         </div>
         {editDraft ? (
           <CommentInlineEditor
+            attachmentPreviewUrls={attachmentPreviewUrls}
             currentUserId={currentUserId}
             draft={editDraft}
             mentionableUsers={mentionableUsers}
@@ -440,67 +445,6 @@ function CommentMessageRow({
   );
 }
 
-function CommentTextFragment({ mentionUsersById, value }: { mentionUsersById: Map<string, CommentMentionUser>; value: string }) {
-  const nodes: ReactNode[] = [];
-  let lastIndex = 0;
-
-  for (const match of value.matchAll(commentMentionTokenPattern)) {
-    const token = match[0];
-    const fallbackLabel = match[1] || "成员";
-    const rawUserId = match[2] ?? "";
-    const userId = decodeMentionUserId(rawUserId);
-    const index = match.index ?? 0;
-
-    if (index > lastIndex) {
-      nodes.push(<CommentLinkedText key={`mention-text:${lastIndex}`} value={value.slice(lastIndex, index)} />);
-    }
-
-    const user = mentionUsersById.get(userId);
-    nodes.push(
-      user ? (
-        <span key={`mention:${user.id}:${index}`} className="orf-comment-mention" title={user.email || user.name}>
-          @{user.name}
-        </span>
-      ) : (
-        <span key={`mention:${rawUserId}:${index}`} className="orf-comment-mention">
-          @{fallbackLabel}
-        </span>
-      ),
-    );
-    lastIndex = index + token.length;
-  }
-
-  if (lastIndex < value.length) {
-    nodes.push(<CommentLinkedText key={`mention-text:${lastIndex}`} value={value.slice(lastIndex)} />);
-  }
-
-  return <>{nodes}</>;
-}
-
-function CommentLinkedText({ value }: { value: string }) {
-  return (
-    <>
-      {parseCommentBodyLinks(value).map((token, index) =>
-        token.type === "link" ? (
-          <a
-            key={`${token.href}:${index}`}
-            className="orf-comment-link"
-            href={token.href}
-            rel="noreferrer noopener"
-            target="_blank"
-            onClick={(event) => event.stopPropagation()}
-            onDoubleClick={(event) => event.stopPropagation()}
-          >
-            {token.value}
-          </a>
-        ) : (
-          <Fragment key={`${token.value}:${index}`}>{token.value}</Fragment>
-        ),
-      )}
-    </>
-  );
-}
-
 export function CommentBodyText({
   attachments,
   body,
@@ -513,194 +457,93 @@ export function CommentBodyText({
   onOpenImage: (preview: ImagePreview) => void;
 }) {
   const attachmentsById = new Map(attachments.map((attachment) => [attachment.id, attachment]));
-  const nodes: ReactNode[] = [];
-  let lastIndex = 0;
+  const renderMention = (reference: OrfMentionReference, key: string) => {
+    const user = mentionUsersById.get(reference.userId);
+    return user ? (
+      <span key={key} className="orf-comment-mention" title={user.email || user.name}>
+        @{user.name}
+      </span>
+    ) : (
+      <span key={key} className="orf-comment-mention">
+        @{reference.label}
+      </span>
+    );
+  };
+  const renderAttachment = (reference: OrfAttachmentReference, key: string) => {
+    const attachment = reference.kind === "attached" ? attachmentsById.get(reference.attachmentId) : undefined;
+    const alt = reference.alt;
+    return attachment ? (
+      <figure key={key} className="orf-comment-attachment">
+        <button
+          type="button"
+          className="orf-comment-attachment-preview-button"
+          aria-label={`查看图片 ${attachment.fileName || alt}`}
+          title="查看图片"
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenImage({ alt, label: attachment.fileName || alt, src: attachment.contentUrl });
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <img className="orf-comment-attachment-image" src={attachment.contentUrl} alt={alt} loading="lazy" />
+        </button>
+      </figure>
+    ) : (
+      <span key={key}>{orfAttachmentMarkdown(reference)}</span>
+    );
+  };
 
-  for (const match of body.matchAll(commentAttachmentTokenPattern)) {
-    const token = match[0];
-    const alt = match[1] || "评论图片";
-    const attachmentId = match[2];
-    const index = match.index ?? 0;
-    if (index > lastIndex) {
-      nodes.push(<CommentTextFragment key={`text:${lastIndex}`} mentionUsersById={mentionUsersById} value={body.slice(lastIndex, index)} />);
-    }
-
-    const attachment = attachmentId ? attachmentsById.get(attachmentId) : undefined;
-    nodes.push(
-      attachment ? (
-        <figure key={`attachment:${attachment.id}`} className="orf-comment-attachment">
-          <button
-            type="button"
-            className="orf-comment-attachment-preview-button"
-            aria-label={`查看图片 ${attachment.fileName || alt}`}
-            title="查看图片"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenImage({ alt, label: attachment.fileName || alt, src: attachment.contentUrl });
-            }}
+  return (
+    <OrfRichTextMarkdownViewer
+      body={body}
+      classNamePrefix="orf-comment-markdown"
+      enableTitleAutolinks
+      renderAttachment={renderAttachment}
+      renderLink={(href, children, key) => (
+        isInternalCommentHref(href) ? (
+          <Link
+            key={key}
+            className="orf-comment-link"
+            to={href}
+            onClick={(event) => event.stopPropagation()}
             onDoubleClick={(event) => event.stopPropagation()}
           >
-            <img className="orf-comment-attachment-image" src={attachment.contentUrl} alt={alt} loading="lazy" />
-          </button>
-        </figure>
-      ) : (
-        <CommentTextFragment key={`missing:${index}`} mentionUsersById={mentionUsersById} value={token} />
-      ),
-    );
-    lastIndex = index + token.length;
-  }
-
-  if (lastIndex < body.length) {
-    nodes.push(<CommentTextFragment key={`text:${lastIndex}`} mentionUsersById={mentionUsersById} value={body.slice(lastIndex)} />);
-  }
-
-  return <>{nodes}</>;
-}
-
-function decodeMentionUserId(rawUserId: string) {
-  try {
-    return decodeURIComponent(rawUserId);
-  } catch {
-    return rawUserId;
-  }
+            {children}
+          </Link>
+        ) : (
+          <a
+            key={key}
+            className="orf-comment-link"
+            href={href}
+            rel="noreferrer noopener"
+            target="_blank"
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            {children}
+          </a>
+        )
+      )}
+      renderMention={renderMention}
+      usersById={mentionUsersById}
+    />
+  );
 }
 
 export function emptyCommentDraft(): CommentDraft {
-  return { mentions: [], text: "" };
+  return { body: "" };
 }
 
-export function commentDraftFromStoredBody(body: string, mentionUsersById: Map<string, CommentMentionUser>): CommentDraft {
-  const mentions: CommentDraftMention[] = [];
-  let text = "";
-  let lastIndex = 0;
-
-  for (const match of body.matchAll(commentMentionTokenPattern)) {
-    const token = match[0];
-    const fallbackLabel = match[1] || "成员";
-    const rawUserId = match[2] ?? "";
-    const userId = decodeMentionUserId(rawUserId);
-    const index = match.index ?? 0;
-    const label = commentMentionLabel(mentionUsersById.get(userId)?.name ?? fallbackLabel);
-    const visibleMention = `@${label}`;
-
-    text += body.slice(lastIndex, index);
-    const start = text.length;
-    text += visibleMention;
-    mentions.push({ end: text.length, label, start, userId });
-    lastIndex = index + token.length;
-  }
-
-  text += body.slice(lastIndex);
-  return { mentions, text };
+export function commentDraftFromStoredBody(body: string): CommentDraft {
+  return { body };
 }
 
 export function serializeCommentDraft(draft: CommentDraft) {
-  const validMentions = draft.mentions
-    .filter((mention) => draft.text.slice(mention.start, mention.end) === `@${mention.label}`)
-    .sort((left, right) => left.start - right.start);
-  let serialized = "";
-  let lastIndex = 0;
-
-  for (const mention of validMentions) {
-    if (mention.start < lastIndex) continue;
-    serialized += draft.text.slice(lastIndex, mention.start);
-    serialized += commentMentionTokenForDraftMention(mention);
-    lastIndex = mention.end;
-  }
-
-  return serialized + draft.text.slice(lastIndex);
-}
-
-type CommentMentionRange = {
-  end: number;
-  query: string;
-  start: number;
-};
-
-function commentMentionRangeFor(value: string, cursor: number, mentions: CommentDraftMention[]): CommentMentionRange | null {
-  if (mentions.some((mention) => cursor > mention.start && cursor <= mention.end)) return null;
-
-  const prefix = value.slice(0, cursor);
-  const match = /(^|[\s(（])@([^\s@()[\]]{0,40})$/u.exec(prefix);
-  if (!match) return null;
-  const query = match[2] ?? "";
-  return {
-    end: cursor,
-    query,
-    start: cursor - query.length - 1,
-  };
-}
-
-function commentMentionTokenForDraftMention(mention: Pick<CommentDraftMention, "label" | "userId">) {
-  return `@[${commentMentionLabel(mention.label)}](orf-user:${encodeURIComponent(mention.userId)})`;
-}
-
-function commentMentionLabel(name: string) {
-  return name.replace(/[\]\r\n]/g, " ").trim() || "成员";
-}
-
-function reconcileCommentDraftMentions(previousText: string, nextText: string, mentions: CommentDraftMention[]) {
-  let prefixLength = 0;
-  const commonPrefixLimit = Math.min(previousText.length, nextText.length);
-  while (prefixLength < commonPrefixLimit && previousText[prefixLength] === nextText[prefixLength]) {
-    prefixLength += 1;
-  }
-
-  let suffixLength = 0;
-  const suffixLimit = commonPrefixLimit - prefixLength;
-  while (
-    suffixLength < suffixLimit &&
-    previousText[previousText.length - 1 - suffixLength] === nextText[nextText.length - 1 - suffixLength]
-  ) {
-    suffixLength += 1;
-  }
-
-  const previousEditEnd = previousText.length - suffixLength;
-  const nextEditEnd = nextText.length - suffixLength;
-  const delta = nextEditEnd - previousEditEnd;
-
-  return mentions
-    .flatMap((mention) => {
-      if (mention.end <= prefixLength) return [mention];
-      if (mention.start >= previousEditEnd) {
-        return [{ ...mention, end: mention.end + delta, start: mention.start + delta }];
-      }
-      return [];
-    })
-    .filter((mention) => nextText.slice(mention.start, mention.end) === `@${mention.label}`);
-}
-
-function replaceCommentDraftText(
-  draft: CommentDraft,
-  start: number,
-  end: number,
-  replacement: string,
-  mention?: Omit<CommentDraftMention, "end" | "start"> & { length: number },
-): CommentDraft {
-  const nextText = `${draft.text.slice(0, start)}${replacement}${draft.text.slice(end)}`;
-  const delta = replacement.length - (end - start);
-  const mentions = draft.mentions.flatMap((entry) => {
-    if (entry.end <= start) return [entry];
-    if (entry.start >= end) return [{ ...entry, end: entry.end + delta, start: entry.start + delta }];
-    return [];
-  });
-
-  if (mention) {
-    mentions.push({
-      end: start + mention.length,
-      label: mention.label,
-      start,
-      userId: mention.userId,
-    });
-  }
-
-  return {
-    mentions: mentions.sort((left, right) => left.start - right.start),
-    text: nextText,
-  };
+  return draft.body;
 }
 
 export function CommentDraftFields({
+  attachmentPreviewUrls,
   autoFocus = false,
   cancelLabel = "取消",
   currentUserId,
@@ -715,6 +558,7 @@ export function CommentDraftFields({
   submitOnEnter = true,
   submitLabel,
 }: {
+  attachmentPreviewUrls?: Map<string, string>;
   autoFocus?: boolean;
   cancelLabel?: string;
   currentUserId: string;
@@ -723,238 +567,73 @@ export function CommentDraftFields({
   mentionableUsers: CommentMentionUser[];
   onCancel?: () => void;
   onDraftChange: (draft: CommentDraft) => void;
-  onUploadAttachment: (file: File) => Promise<string | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
   placeholder: string;
   showSubmitButton?: boolean;
   submitOnEnter?: boolean;
   submitLabel: string;
 }) {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fieldRef = useRef<HTMLDivElement | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState("");
-  const [mentionRange, setMentionRange] = useState<CommentMentionRange | null>(null);
-  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
-  const draftRef = useRef(draft);
-  const filteredMentionUsers = useMemo(() => {
-    if (!mentionRange) return [];
-    const query = mentionRange.query.trim().toLowerCase();
-    return mentionableUsers
-      .filter((user) => user.id !== currentUserId)
-      .filter((user) => !query || user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query))
-      .slice(0, 6);
-  }, [currentUserId, mentionRange, mentionableUsers]);
-
-  useEffect(() => {
-    draftRef.current = draft;
-  }, [draft]);
-
-  useEffect(() => {
-    setSelectedMentionIndex(0);
-  }, [mentionRange?.query, filteredMentionUsers.length]);
-
-  useEffect(() => {
-    if (!autoFocus) return;
-    window.requestAnimationFrame(() => {
-      const textarea = textareaRef.current;
-      if (!textarea) return;
-      const cursor = textarea.value.length;
-      textarea.focus();
-      textarea.setSelectionRange(cursor, cursor);
-    });
-  }, [autoFocus]);
-
-  const commitDraftChange = (nextDraft: CommentDraft) => {
-    draftRef.current = nextDraft;
-    onDraftChange(nextDraft);
-  };
-  const updateMentionRange = (value: string, cursor: number, mentions = draftRef.current.mentions) => {
-    setMentionRange(commentMentionRangeFor(value, cursor, mentions));
-  };
-  const insertMention = (user: CommentMentionUser, range = mentionRange) => {
-    if (!range) return;
-    const textarea = textareaRef.current;
-    const currentDraft = draftRef.current;
-    const after = currentDraft.text.slice(range.end);
-    const label = commentMentionLabel(user.name);
-    const visibleMention = `@${label}`;
-    const suffix = after && /^\s/.test(after) ? "" : " ";
-    const nextDraft = replaceCommentDraftText(currentDraft, range.start, range.end, `${visibleMention}${suffix}`, {
-      label,
-      length: visibleMention.length,
-      userId: user.id,
-    });
-    const nextCursor = range.start + visibleMention.length + suffix.length;
-    commitDraftChange(nextDraft);
-    setMentionRange(null);
-    window.requestAnimationFrame(() => {
-      textarea?.focus();
-      textarea?.setSelectionRange(nextCursor, nextCursor);
-    });
-  };
-  const insertMarkdown = (markdown: string) => {
-    const textarea = textareaRef.current;
-    const currentDraft = draftRef.current;
-    const start = Math.max(0, Math.min(textarea?.selectionStart ?? currentDraft.text.length, currentDraft.text.length));
-    const end = Math.max(start, Math.min(textarea?.selectionEnd ?? currentDraft.text.length, currentDraft.text.length));
-    const before = currentDraft.text.slice(0, start);
-    const after = currentDraft.text.slice(end);
-    const prefix = before && !before.endsWith("\n") ? "\n" : "";
-    const suffix = after && !after.startsWith("\n") ? "\n" : "";
-    const nextCursor = before.length + prefix.length + markdown.length;
-    commitDraftChange(replaceCommentDraftText(currentDraft, start, end, `${prefix}${markdown}${suffix}`));
-    setMentionRange(null);
-    window.requestAnimationFrame(() => {
-      textarea?.focus();
-      textarea?.setSelectionRange(nextCursor, nextCursor);
-    });
-  };
-  const uploadImage = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      setUploadError("只能上传图片");
-      return;
-    }
-
-    setUploadingImage(true);
-    setUploadError("");
-    try {
-      const markdown = await onUploadAttachment(file);
-      if (markdown) {
-        insertMarkdown(markdown);
-      } else {
-        setUploadError("图片上传失败");
-      }
-    } finally {
-      setUploadingImage(false);
-    }
-  };
-  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const image = Array.from(event.clipboardData.files).find((file) => file.type.startsWith("image/"));
-    if (!image) return;
-
-    event.preventDefault();
-    void uploadImage(image);
-  };
-  const handleBodyChange = (value: string, cursor: number) => {
-    const currentDraft = draftRef.current;
-    const mentions = reconcileCommentDraftMentions(currentDraft.text, value, currentDraft.mentions);
-    commitDraftChange({ mentions, text: value });
-    updateMentionRange(value, cursor, mentions);
-  };
-  const submitDraftFromKeyboard = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    event.preventDefault();
+  const markdownValue = serializeCommentDraft(draft);
+  const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
+  const attachmentPreviewUrlForReference = useCallback((reference: OrfAttachmentReference) => {
+    const id = reference.kind === "pending" ? reference.pendingAttachmentId : reference.attachmentId;
+    return attachmentPreviewUrls?.get(id) ?? null;
+  }, [attachmentPreviewUrls]);
+  const submitDraftFromEditor = () => {
     if (uploadingImage) return;
-    event.currentTarget.form?.requestSubmit();
+    fieldRef.current?.closest("form")?.requestSubmit();
   };
 
   return (
-    <>
-      <textarea
-        ref={textareaRef}
-        className="orf-comment-compose-field"
-        onChange={(event) => handleBodyChange(event.target.value, event.currentTarget.selectionStart)}
-        onKeyDown={(event) => {
-          if (mentionRange && filteredMentionUsers.length > 0) {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setSelectedMentionIndex((index) => (index + 1) % filteredMentionUsers.length);
-              return;
-            }
-            if (event.key === "ArrowUp") {
-              event.preventDefault();
-              setSelectedMentionIndex((index) => (index - 1 + filteredMentionUsers.length) % filteredMentionUsers.length);
-              return;
-            }
-            if (event.key === "Enter" || event.key === "Tab") {
-              event.preventDefault();
-              const selectedUser = filteredMentionUsers[selectedMentionIndex] ?? filteredMentionUsers[0];
-              if (selectedUser) insertMention(selectedUser);
-              return;
-            }
-          }
-          if (mentionRange && event.key === "Escape") {
-            event.preventDefault();
-            setMentionRange(null);
-            return;
-          }
-          if (submitOnEnter && event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
-            submitDraftFromKeyboard(event);
-            return;
-          }
+    <div ref={fieldRef} className="orf-comment-rich-text-field">
+      <OrfRichTextEditor
+        attachmentPreviewUrlForReference={attachmentPreviewUrlForReference}
+        autoFocus={autoFocus}
+        currentUserId={currentUserId}
+        idleHint={uploadError || (idleHint ?? "Enter 发送，Shift + Enter 换行")}
+        mentionUsersById={mentionUsersById}
+        mentionableUsers={mentionableUsers}
+        onBusyChange={setUploadingImage}
+        onChange={(markdown) => {
+          setUploadError("");
+          onDraftChange({ body: markdown });
         }}
-        onKeyUp={(event) => updateMentionRange(event.currentTarget.value, event.currentTarget.selectionStart)}
-        onPaste={handlePaste}
-        onSelect={(event) => updateMentionRange(event.currentTarget.value, event.currentTarget.selectionStart)}
+        onErrorChange={setUploadError}
+        onSubmitRequest={submitDraftFromEditor}
+        onUploadImage={onUploadAttachment}
         placeholder={placeholder}
-        rows={3}
-        value={draft.text}
-      />
-      {mentionRange && (
-        <div className="orf-comment-mention-menu">
-          {filteredMentionUsers.length > 0 ? (
-            filteredMentionUsers.map((user, index) => (
-              <button
-                key={user.id}
-                type="button"
-                className={clsx("orf-comment-mention-option", index === selectedMentionIndex && "orf-comment-mention-option-active")}
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  insertMention(user);
-                }}
-              >
-                <PersonAvatar avatarUrl={user.avatarUrl} name={user.name} />
-                <span>
-                  <span className="orf-comment-mention-name">{user.name}</span>
-                  <span className="orf-comment-mention-email">{user.email}</span>
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="orf-comment-mention-empty">没有匹配成员</div>
-          )}
-        </div>
-      )}
-      <div className="orf-comment-composer-footer">
-        <span className={clsx("orf-comment-hint", uploadError && "orf-comment-upload-error")}>
-          {uploadError || (uploadingImage ? "图片上传中..." : idleHint ?? "Enter 发送，Shift + Enter 换行")}
-        </span>
-        <input
-          ref={fileInputRef}
-          accept="image/gif,image/jpeg,image/png,image/webp"
-          className="hidden"
-          type="file"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) void uploadImage(file);
-          }}
-        />
-        <button
-          type="button"
-          className="orf-comment-icon-button"
-          disabled={uploadingImage}
-          aria-label="添加图片"
-          title="添加图片"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <ImagePlus className="h-4 w-4" />
-        </button>
+        submitOnEnter={submitOnEnter}
+        value={markdownValue}
+        footer={
+          <>
         {onCancel && (
           <button type="button" className="orf-comment-icon-button" aria-label={cancelLabel} title={cancelLabel} onClick={onCancel}>
             <X className="h-4 w-4" />
           </button>
         )}
         {showSubmitButton && (
-          <button type="submit" className="orf-comment-send-button" disabled={!draft.text.trim() || uploadingImage} aria-label={submitLabel} title={submitLabel}>
+          <button
+            type="submit"
+            className="orf-comment-send-button"
+            disabled={!orfRichTextHasMeaningfulContent(markdownValue) || uploadingImage}
+            aria-label={submitLabel}
+            title={submitLabel}
+          >
             <Send className="h-4 w-4" />
           </button>
         )}
-      </div>
-    </>
+          </>
+        }
+      />
+    </div>
   );
 }
 
 export function CommentInlineEditor({
+  attachmentPreviewUrls,
   currentUserId,
   draft,
   mentionableUsers,
@@ -963,17 +642,19 @@ export function CommentInlineEditor({
   onSubmit,
   onUploadAttachment,
 }: {
+  attachmentPreviewUrls?: Map<string, string>;
   currentUserId: string;
   draft: CommentDraft;
   mentionableUsers: CommentMentionUser[];
   onCancel: () => void;
   onDraftChange: (draft: CommentDraft) => void;
   onSubmit: (event: FormEvent) => void;
-  onUploadAttachment: (file: File) => Promise<string | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
 }) {
   return (
     <form className="orf-comment-inline-editor" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onSubmit={onSubmit}>
       <CommentDraftFields
+        attachmentPreviewUrls={attachmentPreviewUrls}
         autoFocus
         cancelLabel="取消编辑"
         currentUserId={currentUserId}
@@ -1012,7 +693,7 @@ export function CommentComposer({
   onCancelMode: () => void;
   onDraftChange: (draft: CommentDraft) => void;
   onSubmit: (event: FormEvent) => void;
-  onUploadAttachment: (file: File) => Promise<string | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
 }) {
   const placeholder = mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
   const submitLabel = mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";

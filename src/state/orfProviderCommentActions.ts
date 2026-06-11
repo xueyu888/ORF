@@ -5,7 +5,7 @@ import {
   uploadCommentAttachment as uploadCommentAttachmentRequest,
 } from "./apiClient";
 import { commentMutationFailureMessage } from "./orfProviderMutationMessages";
-import type { CommentStatus, CommentTargetType, CommentThread, OrfUser } from "../types/orf";
+import type { CommentAttachmentUploadResult, CommentStatus, CommentTargetType, CommentThread, OrfUser } from "../types/orf";
 
 type CommentMutationResponse = { ok: boolean; commentThread: CommentThread | null };
 
@@ -61,10 +61,10 @@ export function useOrfProviderCommentActions({
         const response = await getCommentMentionableUsers(input);
         return response.users;
       },
-      uploadCommentAttachment: async (input: { file: File; targetId: string; targetType: CommentTargetType }) => {
+      uploadCommentAttachment: async (input: { file: File; targetId: string; targetType: CommentTargetType }): Promise<CommentAttachmentUploadResult | null> => {
         try {
           const response = await uploadCommentAttachmentRequest(input);
-          return response.markdown;
+          return { attachment: response.attachment, markdown: response.markdown };
         } catch (error) {
           notify(commentMutationFailureMessage(error, "图片上传失败"));
           return null;

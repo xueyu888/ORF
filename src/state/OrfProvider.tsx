@@ -54,6 +54,7 @@ import type {
   ContributionAllocation,
   AppNotification,
   ChatUnreadSummary,
+  CommentAttachmentUploadResult,
   UncertaintyLevel,
   UserRole,
 } from "../types/orf";
@@ -186,7 +187,7 @@ interface OrfContextValue {
     replyToAuthor?: string;
   }) => void;
   loadCommentMentionableUsers: (input: { targetId: string; targetType: CommentTargetType }) => Promise<OrfUser[]>;
-  uploadCommentAttachment: (input: { file: File; targetId: string; targetType: CommentTargetType }) => Promise<string | null>;
+  uploadCommentAttachment: (input: { file: File; targetId: string; targetType: CommentTargetType }) => Promise<CommentAttachmentUploadResult | null>;
   updateCommentThreadStatus: (threadId: string, status: CommentStatus) => void;
   updateCommentMessage: (threadId: string, messageId: string, body: string) => void;
   deleteCommentMessage: (threadId: string, messageId: string) => void;
