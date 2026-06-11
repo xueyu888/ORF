@@ -97,6 +97,7 @@ function chatRouteChannelIdFromPathname(pathname: string) {
 interface OrfContextValue {
   state: OrfState;
   currentUser: OrfUser | null;
+  authConnectionError: string | null;
   authReady: boolean;
   dataReady: boolean;
   isAuthenticated: boolean;
@@ -203,7 +204,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [state, setState] = useState(loadInitialState);
-  const { authenticateWithPassword, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
+  const { authenticateWithPassword, authConnectionError, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
   const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -474,6 +475,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       currentUser,
+      authConnectionError,
       authReady,
       dataReady,
       isAuthenticated,
@@ -510,6 +512,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       ...commentActions,
     }),
     [
+      authConnectionError,
       authReady,
       chatUnreadSummary,
       commentActions,

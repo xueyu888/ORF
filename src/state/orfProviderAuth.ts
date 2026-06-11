@@ -55,12 +55,14 @@ export function authFailureMessage(error: unknown, action: "login" | "registrati
 export function useAuthSessionState(setState: Dispatch<SetStateAction<OrfState>>) {
   const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [authConnectionError, setAuthConnectionError] = useState<string | null>(null);
 
   const refreshAuthSession = useCallback(async () => {
     try {
       const session = await apiJson<AuthSession>("/api/auth/session", {
         signal: AbortSignal.timeout(AUTH_SESSION_TIMEOUT_MS),
       });
+      setAuthConnectionError(null);
       if (!session.authenticated) {
         setAuthUserId(null);
         return;
@@ -68,7 +70,8 @@ export function useAuthSessionState(setState: Dispatch<SetStateAction<OrfState>>
 
       setAuthUserId(session.user.id);
       persistAuthenticatedUser(session.user, setState);
-    } catch {
+    } catch (error) {
+      setAuthConnectionError(authFailureMessage(error, "login"));
       setAuthUserId(null);
     } finally {
       setAuthReady(true);
@@ -82,6 +85,7 @@ export function useAuthSessionState(setState: Dispatch<SetStateAction<OrfState>>
       }
 
       setAuthUserId(session.user.id);
+      setAuthConnectionError(null);
       persistAuthenticatedUser(session.user, setState);
       return { ok: true } satisfies AuthResult;
     },
@@ -107,6 +111,7 @@ export function useAuthSessionState(setState: Dispatch<SetStateAction<OrfState>>
 
   return {
     authenticateWithPassword,
+    authConnectionError,
     authReady,
     authUserId,
     refreshAuthSession,

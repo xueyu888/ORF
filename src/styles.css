@@ -175,6 +175,88 @@ button:disabled {
   line-height: 1.45;
 }
 
+.orf-app-fallback-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--orf-page-glow);
+}
+
+.orf-app-fallback-panel {
+  display: grid;
+  width: min(100%, 560px);
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  border: 1px solid rgba(197, 76, 76, 0.24);
+  border-radius: var(--orf-radius-card);
+  background: rgba(255, 252, 247, 0.94);
+  box-shadow: var(--orf-shadow-card);
+  color: var(--orf-text-primary);
+  padding: 22px;
+}
+
+.orf-app-fallback-icon {
+  display: inline-flex;
+  height: 44px;
+  width: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(197, 76, 76, 0.12);
+  color: var(--orf-danger-text);
+}
+
+.orf-app-fallback-content {
+  min-width: 0;
+}
+
+.orf-app-fallback-content h1 {
+  margin: 0;
+  color: var(--orf-text-primary);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.orf-app-fallback-content p {
+  margin: 8px 0 0;
+  color: var(--orf-text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.orf-app-fallback-content pre {
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--orf-text-muted);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  margin: 14px 0 0;
+  padding: 10px;
+}
+
+.orf-app-fallback-content button {
+  margin-top: 16px;
+}
+
+@media (max-width: 560px) {
+  .orf-app-fallback-page {
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .orf-app-fallback-panel {
+    align-self: center;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 18px;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
