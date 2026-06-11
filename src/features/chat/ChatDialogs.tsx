@@ -47,25 +47,27 @@ export function ChannelModal({
   };
   return (
     <div className="orf-chat-modal-backdrop" onMouseDown={onClose}>
-      <div className="orf-chat-modal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="orf-chat-modal orf-chat-channel-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header><h2>新建频道</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
-        <div className="orf-chat-segmented">
-          <button className={type === "private" ? "active" : ""} disabled={!canCreatePrivate} type="button" onClick={() => setType("private")}>私有</button>
-          <button className={type === "public" ? "active" : ""} disabled={!canCreatePublic} type="button" onClick={() => setType("public")}>公开</button>
+        <div className="orf-chat-modal-body">
+          <div className="orf-chat-segmented">
+            <button className={type === "private" ? "active" : ""} disabled={!canCreatePrivate} type="button" onClick={() => setType("private")}>私有</button>
+            <button className={type === "public" ? "active" : ""} disabled={!canCreatePublic} type="button" onClick={() => setType("public")}>公开</button>
+          </div>
+          <label>频道名<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
+          <label>说明<input value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
+          <label>标题<input value={header} onChange={(event) => setHeader(event.target.value)} /></label>
+          {type === "private" && (
+            <ChatUserPicker
+              currentUserId={currentUserId}
+              emptyLabel="没有可添加成员"
+              onToggleUser={toggleSelected}
+              placeholder="查找成员"
+              selectedUserIds={selected}
+              users={selectableUsers}
+            />
+          )}
         </div>
-        <label>频道名<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
-        <label>说明<input value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
-        <label>标题<input value={header} onChange={(event) => setHeader(event.target.value)} /></label>
-        {type === "private" && (
-          <ChatUserPicker
-            currentUserId={currentUserId}
-            emptyLabel="没有可添加成员"
-            onToggleUser={toggleSelected}
-            placeholder="查找成员"
-            selectedUserIds={selected}
-            users={selectableUsers}
-          />
-        )}
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
           <Button disabled={!canCreateSelectedType || !displayName.trim() || saving} onClick={() => void submit()}>{saving ? "创建中" : "创建"}</Button>
@@ -103,16 +105,18 @@ export function ConversationModal({
   };
   return (
     <div className="orf-chat-modal-backdrop" onMouseDown={onClose}>
-      <div className="orf-chat-modal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="orf-chat-modal orf-chat-conversation-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header><h2>新建私聊</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
-        <ChatUserPicker
-          currentUserId={currentUserId}
-          emptyLabel="没有可私聊成员"
-          onToggleUser={toggleSelected}
-          placeholder="查找成员"
-          selectedUserIds={selected}
-          users={candidates}
-        />
+        <div className="orf-chat-modal-body">
+          <ChatUserPicker
+            currentUserId={currentUserId}
+            emptyLabel="没有可私聊成员"
+            onToggleUser={toggleSelected}
+            placeholder="查找成员"
+            selectedUserIds={selected}
+            users={candidates}
+          />
+        </div>
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
           <Button disabled={selected.length !== 1 || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>
