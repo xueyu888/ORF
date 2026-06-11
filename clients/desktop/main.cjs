@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
-const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, safeStorage, shell } = require("electron");
 const {
   createAppIconRgba,
   createUnreadBadgeRgba,
@@ -33,6 +33,8 @@ const DESKTOP_RECOVERY_ROOT_CHECK_DELAY_MS = 4000;
 const DESKTOP_RECOVERY_RELOAD_COOLDOWN_MS = 8000;
 const DESKTOP_RECOVERY_STABLE_RESET_DELAY_MS = 30000;
 const DESKTOP_RECOVERY_MAX_AUTOMATIC_RELOADS = 2;
+const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
+const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
 const DESKTOP_RECOVERY_CHECK_SCRIPT = `
 (() => {
   const root = document.getElementById("root");
@@ -571,6 +573,163 @@ function normalizeDesktopUnreadInput(input) {
   return Math.max(0, Math.floor(count));
 }
 
+function registerDesktopCredentialBridge(clientUrl) {
+  ipcMain.handle("orf:credentials:list-accounts", (event) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    return { status: "success", data: { accounts: listDesktopCredentialAccounts() } };
+  });
+
+  ipcMain.handle("orf:credentials:save-account", (event, input) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    const credential = desktopCredentialInput(input);
+    if (!credential) return { status: "error", reason: "invalid_payload" };
+    return { status: "success", data: { accounts: upsertDesktopCredentialAccount(credential) } };
+  });
+
+  ipcMain.handle("orf:credentials:get-password", (event, accountId) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    const id = normalizeCredentialEmail(typeof accountId === "string" ? accountId : "");
+    if (!id) return { status: "error", reason: "invalid_payload" };
+    const password = readDesktopCredentialPassword(id);
+    if (typeof password !== "string") return { status: "error", reason: "credential_not_found" };
+    return { status: "success", data: { password } };
+  });
+
+  ipcMain.handle("orf:credentials:delete-account", (event, accountId) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    const id = normalizeCredentialEmail(typeof accountId === "string" ? accountId : "");
+    if (!id) return { status: "error", reason: "invalid_payload" };
+    return { status: "success", data: { accounts: deleteDesktopCredentialAccount(id) } };
+  });
+}
+
+function isDesktopCredentialVaultAvailable() {
+  return Boolean(safeStorage?.isEncryptionAvailable?.());
+}
+
+function isTrustedDesktopIpcSender(event, clientUrl) {
+  const frameUrl = typeof event.senderFrame?.url === "string" ? event.senderFrame.url : "";
+  return isClientWindowUrl(frameUrl, clientUrl) || isClientWindowUrl(event.sender?.getURL?.(), clientUrl);
+}
+
+function desktopCredentialsFilePath() {
+  return path.join(app.getPath("userData"), "credentials", DESKTOP_CREDENTIALS_FILE_NAME);
+}
+
+function listDesktopCredentialAccounts() {
+  return readDesktopCredentialRecords()
+    .map((record) => ({
+      displayName: cleanCredentialText(record.displayName),
+      email: record.email,
+      id: record.id,
+      updatedAt: record.updatedAt,
+    }))
+    .sort((first, second) => Date.parse(second.updatedAt) - Date.parse(first.updatedAt))
+    .slice(0, DESKTOP_CREDENTIALS_MAX_ACCOUNTS);
+}
+
+function readDesktopCredentialPassword(accountId) {
+  const record = readDesktopCredentialRecords().find((item) => item.id === accountId);
+  if (!record) return null;
+  try {
+    return safeStorage.decryptString(Buffer.from(record.encryptedPassword, "base64"));
+  } catch {
+    return null;
+  }
+}
+
+function upsertDesktopCredentialAccount(input) {
+  const records = readDesktopCredentialRecords();
+  const previous = records.find((record) => record.email === input.email);
+  const existing = records.filter((record) => record.email !== input.email);
+  const record = {
+    displayName: cleanCredentialText(input.displayName) ?? previous?.displayName,
+    email: input.email,
+    encryptedPassword: safeStorage.encryptString(input.password).toString("base64"),
+    id: credentialAccountId(input.email),
+    updatedAt: new Date().toISOString(),
+  };
+  writeDesktopCredentialRecords([record, ...existing].slice(0, DESKTOP_CREDENTIALS_MAX_ACCOUNTS));
+  return listDesktopCredentialAccounts();
+}
+
+function deleteDesktopCredentialAccount(accountId) {
+  writeDesktopCredentialRecords(readDesktopCredentialRecords().filter((record) => record.id !== accountId));
+  return listDesktopCredentialAccounts();
+}
+
+function readDesktopCredentialRecords() {
+  const filePath = desktopCredentialsFilePath();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(toDesktopCredentialRecord)
+      .filter(Boolean)
+      .sort((first, second) => Date.parse(second.updatedAt) - Date.parse(first.updatedAt))
+      .slice(0, DESKTOP_CREDENTIALS_MAX_ACCOUNTS);
+  } catch {
+    return [];
+  }
+}
+
+function writeDesktopCredentialRecords(records) {
+  const filePath = desktopCredentialsFilePath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const tempPath = `${filePath}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(records, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tempPath, filePath);
+  fs.chmodSync(filePath, 0o600);
+}
+
+function desktopCredentialInput(input) {
+  if (!input || typeof input !== "object") return null;
+  const email = normalizeCredentialEmail(input.email);
+  const password = typeof input.password === "string" ? input.password : "";
+  if (!email || !password) return null;
+  return {
+    displayName: cleanCredentialText(input.displayName),
+    email,
+    password,
+  };
+}
+
+function toDesktopCredentialRecord(value) {
+  if (!value || typeof value !== "object") return null;
+  const email = normalizeCredentialEmail(value.email);
+  const encryptedPassword = typeof value.encryptedPassword === "string" ? value.encryptedPassword : "";
+  if (!email || !encryptedPassword) return null;
+  return {
+    displayName: cleanCredentialText(value.displayName),
+    email,
+    encryptedPassword,
+    id: credentialAccountId(email),
+    updatedAt: validIsoDate(value.updatedAt) ?? new Date(0).toISOString(),
+  };
+}
+
+function credentialAccountId(email) {
+  return normalizeCredentialEmail(email);
+}
+
+function normalizeCredentialEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+function cleanCredentialText(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || undefined;
+}
+
+function validIsoDate(value) {
+  if (typeof value !== "string" || !value) return null;
+  return Number.isNaN(Date.parse(value)) ? null : value;
+}
+
 function notificationText(value, limit) {
   return typeof value === "string" ? value.trim().slice(0, limit) : "";
 }
@@ -899,6 +1058,7 @@ app.whenReady().then(() => {
   registerNativeNotificationBridge(clientUrl);
   registerNativeRuntimeBridge();
   registerDesktopShellBridge();
+  registerDesktopCredentialBridge(clientUrl);
   createDesktopTray(clientUrl);
   createMainWindow(clientUrl);
 
