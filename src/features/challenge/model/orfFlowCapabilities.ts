@@ -1,8 +1,7 @@
 import { hasPermission } from "../../../config/permissions";
 import { canReviewObjectiveTrialReview, latestObjectiveTrialReview } from "../../../domain/orfTrialReview";
-import { hasUncalibratedResultPoints } from "../../../domain/orfSettlement";
 import {
-  canFreezeObjectiveByFlow,
+  canFreezeObjectiveAfterReestimate,
   canRecruitObjectiveChallengersByFlow,
   canReviewObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
@@ -10,6 +9,7 @@ import {
   isObjectiveReestimateWindowOpen,
   isObjectiveResultLockedByFlow,
   isObjectiveSettledOrClosed,
+  type ObjectiveFreezeReadiness,
 } from "../../../domain/orfLifecycle";
 import {
   canMutateObjectiveWorkItemsForActor,
@@ -23,8 +23,9 @@ import type {
   ObjectiveTrialReview,
   OrfUser,
   PermissionRule,
-  Result,
 } from "../../../types/orf";
+
+export { canFreezeObjectiveAfterReestimate };
 
 type MetricCreationAction = {
   label: string;
@@ -140,16 +141,12 @@ export function metricEditUnavailableMessage(access: MetricEditAccess) {
   return "没有编辑指标权限";
 }
 
-export function canFreezeObjectiveAfterReestimate(
-  objective: Objective | undefined,
-  results: readonly Pick<Result, "objectiveId" | "uncertaintyLevel" | "uncertaintyScore">[],
-): boolean {
-  return Boolean(
-    objective &&
-      canFreezeObjectiveByFlow(objective) &&
-      results.some((result) => result.objectiveId === objective.id) &&
-      !hasUncalibratedResultPoints(results.filter((result) => result.objectiveId === objective.id)),
-  );
+export function objectiveFreezeUnavailableMessage(readiness: ObjectiveFreezeReadiness) {
+  if (readiness.status === "ready") return "";
+  if (readiness.reason === "missingResults") return "目标至少需要一个已校准指标后才能冻结";
+  if (readiness.reason === "uncalibratedResults") return "请先校准目标下所有指标积分，再完成对齐冻结";
+  if (readiness.reason === "lifecycleLocked") return "目标当前阶段不能冻结";
+  return "目标不可用，无法冻结";
 }
 
 export function metricCreationActionForObjective({

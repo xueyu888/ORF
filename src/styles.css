@@ -8387,7 +8387,7 @@ body[data-dragging-floating="true"] {
   color: #087567;
 }
 
-.orf-objective-application-approve:hover {
+.orf-objective-application-approve:hover:not(:disabled) {
   background: rgba(209, 250, 229, 0.8);
 }
 
@@ -8395,7 +8395,7 @@ body[data-dragging-floating="true"] {
   color: var(--orf-danger-text);
 }
 
-.orf-objective-application-reject:hover {
+.orf-objective-application-reject:hover:not(:disabled) {
   background: rgba(254, 226, 226, 0.82);
 }
 
