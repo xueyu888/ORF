@@ -37,7 +37,7 @@ export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
 export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance";
 export type ObjectiveAlignmentRequestStatus = "requested" | "scheduled" | "completed" | "needsWork" | "cancelled";
-export type ChatChannelType = "public" | "private" | "direct" | "group";
+export type ChatChannelType = "public" | "private" | "direct";
 export type ChatMemberRole = "owner" | "admin" | "member";
 
 export interface OrfUser {

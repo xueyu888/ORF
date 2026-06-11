@@ -1,7 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PermissionKey } from "../../src/config/permissions";
-import { CHAT_GROUP_MAX_MEMBER_COUNT } from "../../src/domain/chatConversation";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
@@ -9,7 +8,7 @@ import {
   addChatChannelMembers,
   archiveChatChannel,
   createChatChannel,
-  createDirectOrGroupChannel,
+  createDirectChannel,
   deleteChatMessage,
   getChatAttachmentContent,
   getChatBootstrap,
@@ -38,7 +37,7 @@ import {
   type ChatActor,
 } from "../repositories/chatRepository";
 
-const channelTypeSchema = z.enum(["public", "private", "direct", "group"]);
+const channelTypeSchema = z.enum(["public", "private", "direct"]);
 const channelIdParamsSchema = z.object({ channelId: z.string().min(1) });
 const messageParamsSchema = channelIdParamsSchema.extend({ messageId: z.string().min(1) });
 const memberParamsSchema = channelIdParamsSchema.extend({ userId: z.string().uuid() });
@@ -71,7 +70,7 @@ const createChannelBodySchema = z.object({
 });
 
 const createDirectBodySchema = z.object({
-  userIds: z.array(z.string().uuid()).min(1).max(CHAT_GROUP_MAX_MEMBER_COUNT),
+  userIds: z.array(z.string().uuid()).length(1),
 });
 
 const updateChannelBodySchema = z.object({
@@ -248,7 +247,7 @@ export function registerChatRoutes(app: FastifyInstance) {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
     const body = createDirectBodySchema.parse(request.body);
-    return sendOutcome(reply, await createDirectOrGroupChannel(body, actor));
+    return sendOutcome(reply, await createDirectChannel(body, actor));
   });
 
   app.patch("/api/chat/channels/:channelId", async (request, reply) => {

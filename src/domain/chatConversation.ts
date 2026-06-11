@@ -1,13 +1,11 @@
 import type { ChatChannel, ChatChannelMember, ChatChannelType, ChatUser } from "../types/orf";
 
 export const CHAT_DIRECT_MEMBER_COUNT = 2;
-export const CHAT_GROUP_MIN_MEMBER_COUNT = 3;
-export const CHAT_GROUP_MAX_MEMBER_COUNT = 8;
 
 type ChatConversationMemberUser = Pick<ChatUser, "id" | "name">;
 
 export function isChatConversationType(type: ChatChannelType) {
-  return type === "direct" || type === "group";
+  return type === "direct";
 }
 
 export function isChatConversation(channel: Pick<ChatChannel, "type">) {
@@ -34,7 +32,7 @@ export function chatConversationDisplayName(input: {
 
   const fallback = input.fallbackDisplayName?.trim();
   if (fallback) return fallback;
-  return input.type === "direct" ? "私聊" : "群聊";
+  return "私聊";
 }
 
 export function chatConversationVisibleMembers(input: {
@@ -48,7 +46,7 @@ export function chatConversationVisibleMembers(input: {
     .filter((user): user is ChatConversationMemberUser => user !== undefined);
   const others = members.filter((user) => user.id !== input.currentUserId);
   const visibleMembers = others.length > 0 ? others : members;
-  return input.type === "group" ? sortChatConversationUsersByName(visibleMembers) : visibleMembers.slice(0, 1);
+  return visibleMembers.slice(0, 1);
 }
 
 export function chatConversationSearchText(input: {
@@ -67,8 +65,4 @@ export function chatConversationSearchText(input: {
     input.fallbackDisplayName?.trim() ?? "",
     ...memberNames,
   ].filter(Boolean).join(" ");
-}
-
-function sortChatConversationUsersByName(users: ChatConversationMemberUser[]) {
-  return [...users].sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }) || left.id.localeCompare(right.id));
 }
