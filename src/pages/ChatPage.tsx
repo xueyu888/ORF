@@ -448,6 +448,18 @@ export function ChatPage() {
     navigate("/chat");
   }, [closePanel, navigate]);
 
+  const handleOpenConversation = useCallback(async (userIds: string[]) => {
+    try {
+      const response = await openChatConversation(userIds);
+      applyChannel(response.channel);
+      navigate(`/chat/${encodeURIComponent(response.channel.id)}`);
+      setModal(null);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "打开私聊失败");
+      throw error;
+    }
+  }, [applyChannel, navigate, notify]);
+
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !activeChannel?.id) return;
@@ -890,6 +902,7 @@ export function ChatPage() {
         onMarkUnreadChannelsRead={handleMarkUnreadChannelsRead}
         onOpenChannel={handleOpenChannel}
         onOpenConversation={() => setModal("conversation")}
+        onOpenConversationWithUser={(userId) => void handleOpenConversation([userId])}
         onPreviewChannel={(channelId) => void prefetchChannelMessages(channelId)}
         query={channelQuery}
         setQuery={setChannelQuery}
@@ -1088,12 +1101,7 @@ export function ChatPage() {
         <ConversationModal
           currentUserId={currentUser?.id}
           onClose={() => setModal(null)}
-          onOpen={async (userIds) => {
-            const response = await openChatConversation(userIds);
-            applyChannel(response.channel);
-            navigate(`/chat/${encodeURIComponent(response.channel.id)}`);
-            setModal(null);
-          }}
+          onOpen={handleOpenConversation}
           users={bootstrap.users}
         />
       )}

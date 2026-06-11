@@ -10196,6 +10196,13 @@ a.orf-row-loot-action,
   justify-content: space-between;
 }
 
+.orf-chat-sidebar-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
 .orf-chat-sidebar-header h2 {
   margin: 0;
   color: var(--orf-text-primary);
@@ -10256,6 +10263,17 @@ a.orf-row-loot-action,
   min-height: 0;
   overflow-y: auto;
   padding: 2px 8px 18px;
+}
+
+.orf-chat-sidebar-empty {
+  border: 1px dashed var(--orf-border);
+  border-radius: var(--orf-radius-control);
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--orf-text-muted);
+  margin: 12px 4px 0;
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
 }
 
 .orf-chat-channel-group {
@@ -10321,6 +10339,35 @@ a.orf-row-loot-action,
   grid-template-columns: 28px minmax(0, 1fr) auto;
   min-height: 40px;
   padding-block: 5px;
+}
+
+.orf-chat-user-results {
+  display: grid;
+  gap: 2px;
+}
+
+.orf-chat-user-result {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto 18px;
+  width: 100%;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: var(--orf-radius-control);
+  background: transparent;
+  color: var(--orf-text-secondary);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.orf-chat-user-result small {
+  color: var(--orf-text-muted);
+  font-size: 11px;
+}
+
+.orf-chat-user-result svg:last-child {
+  color: var(--orf-accent-text);
 }
 
 .orf-chat-channel-avatar {
@@ -10720,13 +10767,12 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-message {
-  --orf-chat-message-action-reserve: 232px;
   position: relative;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr);
   gap: 10px;
   border-radius: var(--orf-radius-card);
-  padding: 8px var(--orf-chat-message-action-reserve) 8px 8px;
+  padding: 8px;
 }
 
 .orf-chat-message-compact {
@@ -11918,10 +11964,6 @@ button.orf-chat-image-attachment {
   padding: 10px 12px 12px;
 }
 
-.orf-chat-thread-panel .orf-chat-message {
-  --orf-chat-message-action-reserve: min(184px, 48%);
-}
-
 .orf-chat-thread-panel .orf-chat-message-actions {
   position: absolute;
   top: 6px;
@@ -12808,7 +12850,6 @@ button.orf-chat-image-attachment {
   }
 
   .orf-chat-message {
-    --orf-chat-message-action-reserve: 0px;
     grid-template-columns: 34px minmax(0, 1fr);
     gap: 8px;
     padding: 8px 6px;
@@ -12983,10 +13024,6 @@ button.orf-chat-image-attachment {
 
   .orf-chat-thread-panel > .orf-chat-composer {
     padding: 8px 8px max(10px, env(safe-area-inset-bottom));
-  }
-
-  .orf-chat-thread-panel .orf-chat-message {
-    --orf-chat-message-action-reserve: 0px;
   }
 
   .orf-chat-thread-panel .orf-chat-message-actions {

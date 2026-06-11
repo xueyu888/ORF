@@ -3,9 +3,11 @@ import { CheckCheck, ChevronDown, MessageSquare, Plus, Reply, Search } from "luc
 import { useMemo } from "react";
 import { IconButton } from "../../components/ui";
 import type { ChatChannel, ChatUser } from "../../types/orf";
+import { formatPresence } from "./chatPresence";
 import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
 import { ChatGroupAvatar } from "./ChatGroupAvatar";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
+import { searchChatUsers } from "./chatUserSearch";
 
 type ChatSidebarProps = {
   activeChannelId: string | null;
@@ -13,6 +15,7 @@ type ChatSidebarProps = {
   currentUserId?: string;
   draftChannelIds: Set<string>;
   onCreateChannel: () => void;
+  onOpenConversationWithUser: (userId: string) => void;
   onMarkUnreadChannelsRead: (channelIds: string[]) => void;
   onOpenChannel: (channelId: string) => void;
   onOpenConversation: () => void;
@@ -29,6 +32,7 @@ export function ChatSidebar({
   currentUserId,
   draftChannelIds,
   onCreateChannel,
+  onOpenConversationWithUser,
   onMarkUnreadChannelsRead,
   onOpenChannel,
   onOpenConversation,
@@ -38,7 +42,9 @@ export function ChatSidebar({
   markingUnreadChannelsRead,
   users,
 }: ChatSidebarProps) {
-  const filteredChannels = channels.filter((channel) => channel.displayName.toLowerCase().includes(query.trim().toLowerCase()));
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredChannels = channels.filter((channel) => channel.displayName.toLowerCase().includes(normalizedQuery));
+  const matchedUsers = searchChatUsers(users, query, { excludeUserId: currentUserId });
   const unreadChannels = sortUnreadChannels(filteredChannels.filter((channel) => isUnreadChannel(channel, currentUserId)));
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const unreadChannelIds = new Set(unreadChannels.map((channel) => channel.id));
@@ -66,17 +72,28 @@ export function ChatSidebar({
           <h2>聊天</h2>
           <span>{users.length} 位成员</span>
         </div>
-        <IconButton icon={Plus} label="新建频道" onClick={onCreateChannel} />
+        <div className="orf-chat-sidebar-actions">
+          <IconButton icon={MessageSquare} label="新建私聊/群聊" onClick={onOpenConversation} />
+          <IconButton icon={Plus} label="新建频道" onClick={onCreateChannel} />
+        </div>
       </div>
       <label className="orf-chat-search-box">
         <Search className="h-4 w-4" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="查找频道或私信" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索频道、私信或成员" />
       </label>
       <button type="button" className="orf-chat-new-conversation" onClick={onOpenConversation}>
         <MessageSquare className="h-4 w-4" />
         新建私聊/群聊
       </button>
       <div className="orf-chat-channel-groups">
+        {matchedUsers.length > 0 && (
+          <UserResultGroup
+            currentUserId={currentUserId}
+            onOpenConversationWithUser={onOpenConversationWithUser}
+            title="成员"
+            users={matchedUsers}
+          />
+        )}
         {channelGroups.map((group) => (
           <ChannelGroup
             activeChannelId={activeChannelId}
@@ -92,6 +109,9 @@ export function ChatSidebar({
             usersById={usersById}
           />
         ))}
+        {normalizedQuery && filteredChannels.length === 0 && matchedUsers.length === 0 && (
+          <div className="orf-chat-sidebar-empty">没有匹配的频道、私信或成员</div>
+        )}
       </div>
     </aside>
   );
@@ -190,4 +210,43 @@ function directChannelPeer(channel: ChatChannel, currentUserId: string | undefin
   if (channel.type !== "direct") return null;
   const peerMember = channel.members.find((member) => member.userId !== currentUserId) ?? channel.members[0];
   return peerMember ? usersById.get(peerMember.userId) ?? null : null;
+}
+
+function UserResultGroup({
+  currentUserId,
+  onOpenConversationWithUser,
+  title,
+  users,
+}: {
+  currentUserId?: string;
+  onOpenConversationWithUser: (userId: string) => void;
+  title: string;
+  users: ChatUser[];
+}) {
+  return (
+    <section className="orf-chat-channel-group">
+      <div className="orf-chat-channel-group-title">
+        <span>
+          <ChevronDown className="h-3.5 w-3.5" />
+          {title}
+        </span>
+      </div>
+      <div className="orf-chat-user-results">
+        {users.map((user) => (
+          <button
+            aria-label={`和 ${user.name} 私聊`}
+            className="orf-chat-user-result"
+            key={user.id}
+            type="button"
+            onClick={() => onOpenConversationWithUser(user.id)}
+          >
+            <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
+            <span className="truncate">{user.name}</span>
+            <small>{formatPresence(user, currentUserId)}</small>
+            <MessageSquare className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
 }
