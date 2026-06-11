@@ -24,6 +24,14 @@ contextBridge.exposeInMainWorld("orfNativeRuntime", {
   installUpdate(payload) {
     return ipcRenderer.invoke("orf:runtime:install-update", payload);
   },
+  onInstallProgress(handler) {
+    if (typeof handler !== "function") return undefined;
+    const listener = (_event, progress) => {
+      if (progress && typeof progress === "object") handler(progress);
+    };
+    ipcRenderer.on("orf:runtime:install-progress", listener);
+    return () => ipcRenderer.removeListener("orf:runtime:install-progress", listener);
+  },
 });
 
 contextBridge.exposeInMainWorld("orfDesktopShell", {

@@ -8,9 +8,11 @@ import {
   formatUpdateDate,
   shouldOpenDownloadUrlAfterInstallResult,
 } from "./clientUpdateController";
+import { ClientUpdateInstallProgressView } from "./ClientUpdateInstallProgressView";
 import {
   installClientUpdateAsset,
   openClientUpdateUrl,
+  type ClientUpdateInstallProgress,
   type ClientUpdateRuntimeInfo,
 } from "./clientUpdateRuntime";
 
@@ -30,6 +32,7 @@ export function ClientUpdateNotice() {
   const [openingUrl, setOpeningUrl] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
+  const [installProgress, setInstallProgress] = useState<ClientUpdateInstallProgress | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -84,13 +87,18 @@ export function ClientUpdateNotice() {
 
     setInstalling(true);
     setInstallMessage(null);
+    setInstallProgress(null);
     try {
-      const result = await installClientUpdateAsset(asset);
+      const result = await installClientUpdateAsset(asset, { onProgress: setInstallProgress });
       setInstallMessage(clientUpdateInstallMessage(result));
       if (shouldOpenDownloadUrlAfterInstallResult(result)) {
         await openUrl(asset.downloadUrl);
       }
     } catch (error) {
+      setInstallProgress({
+        error: error instanceof Error ? error.message : "更新安装失败",
+        stage: "failed",
+      });
       setInstallMessage(error instanceof Error ? error.message : "更新安装失败");
     } finally {
       setInstalling(false);
@@ -130,6 +138,7 @@ export function ClientUpdateNotice() {
                 {dateLabel}
                 {asset ? ` · ${asset.name}` : " · 打开发布页下载"}
               </p>
+              <ClientUpdateInstallProgressView progress={installProgress} />
               {installMessage && <p className="orf-client-update-dialog-message">{installMessage}</p>}
             </div>
             <footer className="orf-client-update-dialog-actions">
@@ -175,6 +184,7 @@ export function ClientUpdateNotice() {
             {formatCurrentVersionLabel(decision, runtime)} · {dateLabel}
             {asset ? ` · ${asset.name}` : " · 打开发布页下载"}
           </div>
+          <ClientUpdateInstallProgressView progress={installProgress} />
           {installMessage && <div className="orf-client-update-message">{installMessage}</div>}
         </div>
         <div className="orf-client-update-actions">

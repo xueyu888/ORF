@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin } from "@capacitor/core";
+import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { isClientReleaseVersion, isTrustedClientUpdateUrl, type ClientReleaseAsset, type ClientUpdatePlatform } from "./clientUpdateModel";
 
@@ -26,18 +26,35 @@ export type ClientUpdateInstallResult = {
   status: "error" | "not_sent" | "success" | "unsupported";
 };
 
+export type ClientUpdateInstallProgressStage = "preparing" | "downloading" | "downloaded" | "validating" | "opening" | "complete" | "failed";
+
+export type ClientUpdateInstallProgress = {
+  assetName?: string;
+  downloadedBytes?: number | null;
+  error?: string | null;
+  installId?: string;
+  percent?: number | null;
+  stage: ClientUpdateInstallProgressStage;
+  totalBytes?: number | null;
+};
+
+export type ClientUpdateInstallProgressHandler = (progress: ClientUpdateInstallProgress) => void;
+
 type NativeRuntimeBridge = {
   getInfo?: () => Promise<NativeRuntimeInfo>;
   installUpdate?: (payload: ClientUpdateInstallPayload) => Promise<ClientUpdateInstallResult>;
+  onInstallProgress?: (handler: ClientUpdateInstallProgressHandler) => (() => void) | undefined;
   openExternal?: (url: string) => Promise<{ reason?: string; status: "error" | "success" | "unsupported" }>;
 };
 
 type ClientUpdateInstallPayload = {
+  installId: string;
   name: string;
   url: string;
 };
 
 type AndroidClientUpdatePlugin = {
+  addListener: (eventName: "installProgress", listenerFunc: ClientUpdateInstallProgressHandler) => Promise<PluginListenerHandle>;
   getInfo?: () => Promise<NativeRuntimeInfo>;
   install: (payload: ClientUpdateInstallPayload) => Promise<ClientUpdateInstallResult>;
 };
@@ -83,27 +100,57 @@ export async function detectClientUpdateRuntimeInfo(webFallbackVersion: string):
   };
 }
 
-export async function installClientUpdateAsset(asset: ClientReleaseAsset): Promise<ClientUpdateInstallResult> {
+export async function installClientUpdateAsset(
+  asset: ClientReleaseAsset,
+  options: { onProgress?: ClientUpdateInstallProgressHandler } = {},
+): Promise<ClientUpdateInstallResult> {
   if (!isTrustedClientUpdateUrl(asset.downloadUrl)) {
     return { status: "not_sent", reason: "untrusted_url" };
   }
 
+  const installId = createClientUpdateInstallId();
   const payload = {
+    installId,
     name: asset.name,
     url: asset.downloadUrl,
   };
+  const emitProgress = (progress: Partial<ClientUpdateInstallProgress> & { stage: ClientUpdateInstallProgressStage }) => {
+    options.onProgress?.(normalizeClientUpdateInstallProgress(progress, {
+      assetName: asset.name,
+      installId,
+      totalBytes: asset.size ?? null,
+    }));
+  };
 
   if (typeof window !== "undefined" && window.orfNativeRuntime?.installUpdate) {
-    return normalizeClientUpdateInstallResult(await window.orfNativeRuntime.installUpdate(payload));
-  }
-  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+    const removeProgressListener = subscribeDesktopInstallProgress(installId, asset, options.onProgress);
     try {
-      return normalizeClientUpdateInstallResult(await AndroidClientUpdate.install(payload));
-    } catch (error) {
-      return { status: "unsupported", reason: "no_native_update_installer", data: String(error) };
+      emitProgress({ downloadedBytes: 0, stage: "preparing" });
+      const result = normalizeClientUpdateInstallResult(await window.orfNativeRuntime.installUpdate(payload));
+      emitTerminalInstallProgress(result, emitProgress);
+      return result;
+    } finally {
+      removeProgressListener?.();
     }
   }
-  return { status: "unsupported", reason: "no_native_update_installer" };
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+    const removeProgressListener = await subscribeAndroidInstallProgress(installId, asset, options.onProgress);
+    try {
+      emitProgress({ downloadedBytes: 0, stage: "preparing" });
+      const result = normalizeClientUpdateInstallResult(await AndroidClientUpdate.install(payload));
+      emitTerminalInstallProgress(result, emitProgress);
+      return result;
+    } catch (error) {
+      const result = { status: "unsupported", reason: "no_native_update_installer", data: String(error) } as const;
+      emitTerminalInstallProgress(result, emitProgress);
+      return result;
+    } finally {
+      removeProgressListener?.();
+    }
+  }
+  const result = { status: "unsupported", reason: "no_native_update_installer" } as const;
+  emitTerminalInstallProgress(result, emitProgress);
+  return result;
 }
 
 export async function openClientUpdateUrl(url: string) {
@@ -124,6 +171,116 @@ export async function openClientUpdateUrl(url: string) {
 
 function normalizeClientUpdateInstallResult(result: ClientUpdateInstallResult | undefined): ClientUpdateInstallResult {
   return result?.status ? result : { status: "success" };
+}
+
+function createClientUpdateInstallId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `client-update-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function subscribeDesktopInstallProgress(
+  installId: string,
+  asset: ClientReleaseAsset,
+  onProgress?: ClientUpdateInstallProgressHandler,
+) {
+  if (typeof window === "undefined" || !onProgress || !window.orfNativeRuntime?.onInstallProgress) {
+    return undefined;
+  }
+  try {
+    return window.orfNativeRuntime.onInstallProgress((progress) => {
+      if (progress.installId !== installId) return;
+      onProgress(normalizeClientUpdateInstallProgress(progress, {
+        assetName: asset.name,
+        installId,
+        totalBytes: asset.size ?? null,
+      }));
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+async function subscribeAndroidInstallProgress(
+  installId: string,
+  asset: ClientReleaseAsset,
+  onProgress?: ClientUpdateInstallProgressHandler,
+) {
+  if (!onProgress || !AndroidClientUpdate.addListener) {
+    return undefined;
+  }
+  try {
+    const listener = await AndroidClientUpdate.addListener("installProgress", (progress) => {
+      if (progress.installId !== installId) return;
+      onProgress(normalizeClientUpdateInstallProgress(progress, {
+        assetName: asset.name,
+        installId,
+        totalBytes: asset.size ?? null,
+      }));
+    });
+    return () => {
+      void listener.remove();
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function emitTerminalInstallProgress(
+  result: ClientUpdateInstallResult,
+  emitProgress: (progress: Partial<ClientUpdateInstallProgress> & { stage: ClientUpdateInstallProgressStage }) => void,
+) {
+  if (result.status === "success") {
+    emitProgress({ percent: 100, stage: "complete" });
+    return;
+  }
+  if (result.status === "error") {
+    emitProgress({ error: result.data ?? result.reason ?? null, stage: "failed" });
+  }
+}
+
+function normalizeClientUpdateInstallProgress(
+  progress: Partial<ClientUpdateInstallProgress> & { stage: ClientUpdateInstallProgressStage },
+  fallback: { assetName: string; installId: string; totalBytes: number | null },
+): ClientUpdateInstallProgress {
+  const downloadedBytes = finiteNonNegative(progress.downloadedBytes);
+  const totalBytes = positiveNumber(progress.totalBytes) ?? fallback.totalBytes;
+  const percent = boundedPercent(progress.percent ?? calculatePercent(downloadedBytes, totalBytes));
+  return {
+    assetName: progress.assetName ?? fallback.assetName,
+    downloadedBytes,
+    error: cleanProgressText(progress.error),
+    installId: progress.installId ?? fallback.installId,
+    percent,
+    stage: progress.stage,
+    totalBytes,
+  };
+}
+
+function calculatePercent(downloadedBytes: number | null, totalBytes: number | null) {
+  if (downloadedBytes === null || totalBytes === null || totalBytes <= 0) return null;
+  return (downloadedBytes / totalBytes) * 100;
+}
+
+function boundedPercent(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(100, value));
+}
+
+function finiteNonNegative(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, value);
+}
+
+function positiveNumber(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+function cleanProgressText(value: string | null | undefined) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  return trimmed ? trimmed.slice(0, 240) : null;
 }
 
 function nativeClientVersion(info: NativeRuntimeInfo | null | undefined) {

@@ -1,6 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const { Readable } = require("node:stream");
+const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, shell } = require("electron");
 const {
@@ -394,15 +394,25 @@ function registerNativeRuntimeBridge() {
     if (!payload) {
       return { status: "not_sent", reason: "invalid_payload" };
     }
+    const sendProgress = createClientUpdateProgressEmitter(_event.sender, {
+      assetName: payload.fileName,
+      installId: payload.installId,
+    });
     try {
-      const installerPath = await downloadClientUpdateInstaller(payload);
+      sendProgress({ downloadedBytes: 0, stage: "preparing" });
+      const installerPath = await downloadClientUpdateInstaller(payload, sendProgress);
+      sendProgress({ percent: 100, stage: "opening" });
       const openError = await shell.openPath(installerPath);
       if (openError) {
+        sendProgress({ error: openError, stage: "failed" });
         return { status: "error", reason: "installer_open_failed", data: openError };
       }
+      sendProgress({ percent: 100, stage: "complete" });
       return { status: "success", data: installerPath };
     } catch (error) {
-      return { status: "error", reason: "installer_download_failed", data: String(error) };
+      const message = readableErrorMessage(error);
+      sendProgress({ error: message, stage: "failed" });
+      return { status: "error", reason: "installer_download_failed", data: message };
     }
   });
 }
@@ -420,12 +430,15 @@ function clientUpdateInstallPayload(input) {
   if (!input || typeof input !== "object") return null;
   const url = typeof input.url === "string" ? input.url.trim() : "";
   if (!isTrustedClientUpdateUrl(url)) return null;
+  const installId = typeof input.installId === "string" && input.installId.trim()
+    ? input.installId.trim().slice(0, 120)
+    : `desktop-update-${Date.now()}`;
   const fileName = sanitizeUpdateInstallerName(input.name, "ORF-update-win11-x64-setup.exe");
   if (!fileName.endsWith(".exe")) return null;
-  return { fileName, url };
+  return { fileName, installId, url };
 }
 
-async function downloadClientUpdateInstaller(payload) {
+async function downloadClientUpdateInstaller(payload, sendProgress) {
   const updateDir = path.join(app.getPath("temp"), "orf-client-updates");
   fs.mkdirSync(updateDir, { recursive: true });
   const installerPath = path.join(updateDir, payload.fileName);
@@ -436,9 +449,70 @@ async function downloadClientUpdateInstaller(payload) {
   if (!response.ok || !response.body) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }
-  await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath));
+  const totalBytes = parseContentLength(response.headers.get("content-length"));
+  sendProgress({ downloadedBytes: 0, stage: "downloading", totalBytes });
+  await pipeline(
+    Readable.fromWeb(response.body),
+    createDownloadProgressStream((downloadedBytes) => {
+      sendProgress({ downloadedBytes, stage: "downloading", totalBytes });
+    }),
+    fs.createWriteStream(tempPath),
+  );
+  sendProgress({ percent: 100, stage: "downloaded", totalBytes });
+  fs.rmSync(installerPath, { force: true });
   fs.renameSync(tempPath, installerPath);
   return installerPath;
+}
+
+function createDownloadProgressStream(onProgress) {
+  let downloadedBytes = 0;
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      downloadedBytes += chunk.length;
+      onProgress(downloadedBytes);
+      callback(null, chunk);
+    },
+  });
+}
+
+function parseContentLength(value) {
+  const length = Number(value);
+  return Number.isFinite(length) && length > 0 ? length : null;
+}
+
+function createClientUpdateProgressEmitter(webContents, baseProgress) {
+  let lastPercent = -1;
+  let lastSentAt = 0;
+  return (progress) => {
+    if (!webContents || webContents.isDestroyed()) return;
+    const totalBytes = typeof progress.totalBytes === "number" && progress.totalBytes > 0 ? progress.totalBytes : null;
+    const downloadedBytes = typeof progress.downloadedBytes === "number" && progress.downloadedBytes >= 0 ? progress.downloadedBytes : null;
+    const percent = typeof progress.percent === "number"
+      ? Math.max(0, Math.min(100, progress.percent))
+      : totalBytes && downloadedBytes !== null
+        ? Math.max(0, Math.min(100, (downloadedBytes / totalBytes) * 100))
+        : null;
+    const roundedPercent = percent === null ? null : Math.floor(percent);
+    const now = Date.now();
+    const shouldThrottle = progress.stage === "downloading" && roundedPercent === lastPercent && now - lastSentAt < 250;
+    if (shouldThrottle) return;
+    lastPercent = roundedPercent ?? lastPercent;
+    lastSentAt = now;
+    webContents.send("orf:runtime:install-progress", {
+      assetName: baseProgress.assetName,
+      downloadedBytes,
+      error: typeof progress.error === "string" ? progress.error.slice(0, 240) : null,
+      installId: baseProgress.installId,
+      percent,
+      stage: progress.stage,
+      totalBytes,
+    });
+  };
+}
+
+function readableErrorMessage(error) {
+  if (error instanceof Error && error.message) return error.message;
+  return String(error);
 }
 
 function sanitizeUpdateInstallerName(value, fallback) {
