@@ -120,6 +120,7 @@ export function GenshinUIKitPreviewPage() {
                 <GiField label="难度">
                   <GiSelect defaultValue="all">
                     <option value="all">全部难度</option>
+                    <option value="simple">简易</option>
                     <option value="entry">入门</option>
                     <option value="advanced">进阶</option>
                     <option value="hard">破局</option>

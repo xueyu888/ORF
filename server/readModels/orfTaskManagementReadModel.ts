@@ -2,7 +2,6 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { initialOrfState } from "../../src/data/initialOrfState";
 import type { TaskManagementData } from "../../src/domain/orfReadModel";
 import type {
-  CommentAttachment,
   CommentThread,
   Evidence,
   Feedback,
@@ -38,6 +37,7 @@ import {
 import { getPermissionRulesForScope } from "../repositories/permissionRepository";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
 import { getScopedUsers } from "../repositories/userRepository";
+import { groupCommentAttachmentsByMessage } from "../repositories/commentAttachmentRepository";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import {
   getUserMapsForStorageScope,
@@ -59,33 +59,6 @@ export type TaskManagementDataScope = {
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
 type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
-
-function commentAttachmentContentUrl(id: string) {
-  return `/api/comments/attachments/${encodeURIComponent(id)}/content`;
-}
-
-function commentAttachmentDto(row: CommentAttachmentRow): CommentAttachment {
-  return {
-    id: row.id,
-    fileName: row.fileName,
-    mimeType: row.mimeType,
-    fileSize: row.fileSize,
-    width: optional(row.width),
-    height: optional(row.height),
-    contentUrl: commentAttachmentContentUrl(row.id),
-  };
-}
-
-function groupCommentAttachmentsByMessage(rows: CommentAttachmentRow[]) {
-  const grouped = new Map<string, CommentAttachment[]>();
-  for (const row of rows) {
-    if (!row.messageId) continue;
-    const attachments = grouped.get(row.messageId) ?? [];
-    attachments.push(commentAttachmentDto(row));
-    grouped.set(row.messageId, attachments);
-  }
-  return grouped;
-}
 
 function isMissingCommentStorageError(error: unknown) {
   const cause = error && typeof error === "object" && "cause" in error ? (error as { cause?: unknown }).cause : error;
@@ -219,6 +192,14 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     });
     messagesByThread.set(message.threadId, messages);
   }
+  const firstFeedbackMessageByTarget = new Map<string, string>();
+  for (const thread of [...commentThreadRows].sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+    if (thread.targetType !== "feedback") continue;
+    const firstMessage = messagesByThread.get(thread.id)?.[0];
+    if (firstMessage && !firstFeedbackMessageByTarget.has(thread.targetId)) {
+      firstFeedbackMessageByTarget.set(thread.targetId, firstMessage.body);
+    }
+  }
 
   const taskItems: Task[] = orderedTaskRows.map((task) => ({
     id: task.id,
@@ -255,7 +236,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     phenomenon: item.phenomenon,
     causeCategories: causeCategoriesByFeedback.get(item.id) ?? [],
     impact: item.impact,
-    suggestedAdjustment: item.suggestedAdjustment,
+    suggestedAdjustment: firstFeedbackMessageByTarget.get(item.id) ?? item.suggestedAdjustment ?? "",
     status: item.status,
     owner: nameForUserId(userNameById, item.ownerUserId, item.owner),
     ownerUserId: optional(item.ownerUserId),

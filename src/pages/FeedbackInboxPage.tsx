@@ -1,11 +1,11 @@
 import { CheckCircle2, CircleDot, MessageSquare, Plus, RotateCcw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { BountyBadge, BountyButton, BountyEmptyState, BountySelect, BountyTextInput } from "../features/bounty-hall/BountyHallSkin";
 import { canCreateFeedbackFromVisibleState } from "../features/feedback/model/feedbackCapabilities";
 import { summarizeFeedbackInsights } from "../features/feedback/model/feedbackInsights";
-import { feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
+import { feedbackIssueBodyPreview, feedbackIssueCommentCount, feedbackIssueDisplayId, feedbackIssueHref, feedbackIssueStateLabel, isFeedbackIssueOpen } from "../features/feedback/model/feedbackIssue";
 import { useOrf } from "../state/OrfProvider";
 import type { Feedback, Impact } from "../types/orf";
 import { impactLabel } from "../utils/labels";
@@ -13,7 +13,8 @@ import { impactLabel } from "../utils/labels";
 type FeedbackListState = "open" | "closed" | "all";
 
 export function FeedbackInboxPage() {
-  const { currentUser, state, openModal } = useOrf();
+  const navigate = useNavigate();
+  const { currentUser, state } = useOrf();
   const [query, setQuery] = useState("");
   const [listState, setListState] = useState<FeedbackListState>("open");
   const [cause, setCause] = useState("All");
@@ -62,7 +63,7 @@ export function FeedbackInboxPage() {
           <p>团队内部的技术、管理和系统问题都会进入同一个 issue 池。</p>
         </div>
         {canCreateFeedback && (
-          <BountyButton onClick={() => openModal({ type: "newFeedback" })}>
+          <BountyButton onClick={() => navigate("/feedback/new")}>
             <Plus aria-hidden="true" />
             新建反馈
           </BountyButton>
@@ -126,10 +127,10 @@ function IssueStateButton({ active, onClick, children }: { active: boolean; onCl
 function FeedbackIssueRow({ commentCount, feedback }: { commentCount: number; feedback: Feedback }) {
   const open = isFeedbackIssueOpen(feedback);
   const causes = feedback.causeCategories.map((item) => item.trim()).filter(Boolean);
-  const preview = feedback.suggestedAdjustment.trim();
+  const preview = feedbackIssueBodyPreview(feedback.suggestedAdjustment);
 
   return (
-    <Link className="feedback-issue-row" to={`/feedback/${encodeURIComponent(feedback.id)}`}>
+    <Link className="feedback-issue-row" to={feedbackIssueHref(feedback.id)}>
       <div className="feedback-issue-row-icon" data-open={open ? "true" : "false"}>
         {open ? <CircleDot aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />}
       </div>

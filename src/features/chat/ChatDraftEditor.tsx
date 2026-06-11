@@ -1,8 +1,8 @@
 import { clsx } from "clsx";
 import { AtSign, Bold, Code, Edit3, Eye, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Smile, Strikethrough } from "lucide-react";
-import { type ClipboardEventHandler, type ComponentType, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ClipboardEvent, type ClipboardEventHandler, type ComponentType, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "../../components/ui";
-import type { ChatUser } from "../../types/orf";
+import type { ChatUser, Feedback } from "../../types/orf";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
 import { matchesChatShortcutKey } from "./chatKeyboardShortcuts";
 import { ChatMarkdown } from "./chatMarkdown";
@@ -52,6 +52,7 @@ type ChatDraftEditorProps = {
   className?: string;
   disabled?: boolean;
   draft: ChatDraft;
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   mentionableUsers: ChatUser[];
   onCancel?: () => void;
   onChange: (draft: ChatDraft) => void;
@@ -63,6 +64,7 @@ type ChatDraftEditorProps = {
   onTyping?: () => void;
   placeholder?: string;
   recordHistoryOnSubmit?: boolean;
+  transformPastedText?: (text: string) => string;
   focusSignal?: number;
   resetKey?: string;
   rows?: number;
@@ -215,6 +217,7 @@ export function ChatDraftEditor({
   className,
   disabled,
   draft,
+  feedbackItems,
   mentionableUsers,
   onCancel,
   onChange,
@@ -226,6 +229,7 @@ export function ChatDraftEditor({
   onTyping,
   placeholder,
   recordHistoryOnSubmit,
+  transformPastedText,
   focusSignal,
   resetKey,
   rows = 3,
@@ -354,6 +358,20 @@ export function ChatDraftEditor({
   const insertEmoji = (emojiName: string) => {
     setEmojiOpen(false);
     insertTextAtSelection(displayChatReactionEmoji(emojiName));
+  };
+
+  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    onPaste?.(event);
+    if (event.defaultPrevented || previewing || disabled || !transformPastedText) return;
+
+    const text = event.clipboardData.getData("text/plain");
+    if (!text) return;
+
+    const nextText = transformPastedText(text);
+    if (nextText === text) return;
+
+    event.preventDefault();
+    insertTextAtSelection(nextText);
   };
 
   const insertMention = (user: ChatUser) => {
@@ -624,7 +642,7 @@ export function ChatDraftEditor({
           tabIndex={0}
         >
           {previewBody.trim() ? (
-            <ChatMarkdown body={previewBody} usersById={usersById} />
+            <ChatMarkdown body={previewBody} feedbackItems={feedbackItems} usersById={usersById} />
           ) : (
             <span className="orf-chat-draft-preview-empty">{placeholder}</span>
           )}
@@ -634,7 +652,7 @@ export function ChatDraftEditor({
           disabled={disabled}
           onChange={(event) => setText(event.target.value, event.target.selectionStart)}
           onKeyDown={handleKeyDown}
-          onPaste={onPaste}
+          onPaste={handlePaste}
           placeholder={placeholder}
           ref={textAreaRef}
           rows={rows}

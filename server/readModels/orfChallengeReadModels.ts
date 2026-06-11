@@ -36,11 +36,12 @@ import {
 } from "./orfReadModelMappers";
 
 const difficultyRanks: Record<UncertaintyLevel, number> = {
-  入门: 1,
-  进阶: 2,
-  破局: 3,
-  渡劫: 4,
-  飞升: 5,
+  简易: 1,
+  入门: 2,
+  进阶: 3,
+  破局: 4,
+  渡劫: 5,
+  飞升: 6,
 };
 
 function resultDifficultyRank(result: Result) {

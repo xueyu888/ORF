@@ -700,27 +700,33 @@ function replaceCommentDraftText(
   };
 }
 
-function CommentDraftFields({
+export function CommentDraftFields({
   autoFocus = false,
   cancelLabel = "取消",
   currentUserId,
   draft,
+  idleHint,
   mentionableUsers,
   onCancel,
   onDraftChange,
   onUploadAttachment,
   placeholder,
+  showSubmitButton = true,
+  submitOnEnter = true,
   submitLabel,
 }: {
   autoFocus?: boolean;
   cancelLabel?: string;
   currentUserId: string;
   draft: CommentDraft;
+  idleHint?: string;
   mentionableUsers: CommentMentionUser[];
   onCancel?: () => void;
   onDraftChange: (draft: CommentDraft) => void;
   onUploadAttachment: (file: File) => Promise<string | null>;
   placeholder: string;
+  showSubmitButton?: boolean;
+  submitOnEnter?: boolean;
   submitLabel: string;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -871,7 +877,7 @@ function CommentDraftFields({
             setMentionRange(null);
             return;
           }
-          if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
+          if (submitOnEnter && event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
             submitDraftFromKeyboard(event);
             return;
           }
@@ -910,7 +916,7 @@ function CommentDraftFields({
       )}
       <div className="orf-comment-composer-footer">
         <span className={clsx("orf-comment-hint", uploadError && "orf-comment-upload-error")}>
-          {uploadError || (uploadingImage ? "图片上传中..." : "Enter 发送，Shift + Enter 换行")}
+          {uploadError || (uploadingImage ? "图片上传中..." : idleHint ?? "Enter 发送，Shift + Enter 换行")}
         </span>
         <input
           ref={fileInputRef}
@@ -938,9 +944,11 @@ function CommentDraftFields({
             <X className="h-4 w-4" />
           </button>
         )}
-        <button type="submit" className="orf-comment-send-button" disabled={!draft.text.trim() || uploadingImage} aria-label={submitLabel} title={submitLabel}>
-          <Send className="h-4 w-4" />
-        </button>
+        {showSubmitButton && (
+          <button type="submit" className="orf-comment-send-button" disabled={!draft.text.trim() || uploadingImage} aria-label={submitLabel} title={submitLabel}>
+            <Send className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </>
   );

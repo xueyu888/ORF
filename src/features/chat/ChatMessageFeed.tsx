@@ -1,6 +1,6 @@
 import { CheckCheck, ChevronDown, Loader2, Reply } from "lucide-react";
 import type { RefObject } from "react";
-import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
+import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatDay } from "./chatFormat";
 import { shouldCompactChatMessage } from "./chatMessagePresentation";
 import { resolveUnreadJumpTarget, type ChatUnreadJumpTarget, type UnreadAnchor } from "./chatModels";
@@ -11,6 +11,7 @@ type ChatMessageFeedProps = {
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   focusMessageId: string | null;
   hasNewerMessages: boolean;
   hasOlderMessages: boolean;
@@ -54,6 +55,7 @@ export function ChatMessageFeed({
   canPin,
   currentUserId,
   editingMessageId,
+  feedbackItems,
   focusMessageId,
   hasNewerMessages,
   hasOlderMessages,
@@ -102,6 +104,7 @@ export function ChatMessageFeed({
           canPin={canPin}
           currentUserId={currentUserId}
           editingMessageId={editingMessageId}
+          feedbackItems={feedbackItems}
           focusMessageId={focusMessageId}
           hasOlderMessages={hasOlderMessages}
           loadingOlderMessages={loadingOlderMessages}
@@ -151,6 +154,7 @@ function MessageList({
   canPin,
   currentUserId,
   editingMessageId,
+  feedbackItems,
   focusMessageId,
   hasOlderMessages,
   loadingOlderMessages,
@@ -236,6 +240,7 @@ function MessageList({
               compact={compact}
               currentUserId={currentUserId}
               editing={editingMessageId === message.id}
+              feedbackItems={feedbackItems}
               firstUnread={unreadMessageId === message.id}
               focused={focusMessageId === message.id}
               mentionableUsers={mentionableUsers}

@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
-import type { Feedback, FeedbackStatus } from "../../src/types/orf";
+import { and, eq, inArray } from "drizzle-orm";
+import type { Feedback, FeedbackStatus, Impact } from "../../src/types/orf";
 import { localDateString } from "../../src/utils/date";
 import { db } from "../db/client";
-import { commentMessages, commentThreads, feedback, feedbackCauseCategories } from "../db/schema";
+import { commentAttachments, commentMessages, commentThreads, feedback, feedbackCauseCategories } from "../db/schema";
 import { publishOrfDataInvalidation } from "../realtime/orfReadModelInvalidations";
 import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
+import {
+  deleteStoredCommentAttachmentObjects,
+  prepareCommentAttachment,
+  type PreparedCommentAttachment,
+} from "./commentAttachmentRepository";
 import {
   createNotifications,
   getActiveAdminNotificationRecipients,
@@ -16,26 +21,57 @@ import { getScopedUsers } from "./userRepository";
 
 export type CreateFeedbackInput = Pick<
   Feedback,
-  "phenomenon" | "causeCategories" | "impact" | "suggestedAdjustment" | "owner"
->;
+  "phenomenon" | "causeCategories" | "owner"
+> & {
+  attachments?: CreateFeedbackAttachmentInput[];
+  impact: Impact;
+  initialBody: string;
+};
+export type CreateFeedbackAttachmentInput = {
+  body: Buffer;
+  clientId: string;
+  fileName: string;
+  mimeType: string;
+};
 export type CreateFeedbackActor = { id: string; name: string; scope?: RuntimeScope | null };
 export type CreateFeedbackOutcome =
   | { status: "ok"; feedback: Feedback }
   | { status: "notFound" }
-  | { status: "invalidOwner" };
+  | { status: "invalid" }
+  | { status: "invalidOwner" }
+  | { status: "tooLarge" }
+  | { status: "unsupported" };
 export type FeedbackStatusActor = { id: string; name: string; role: "admin" | "member"; scope?: RuntimeScope | null };
 export type FeedbackStatusUpdateResult = { status: "ok" } | { status: "notFound" } | { status: "forbidden" };
+export type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;
 
 const today = () => localDateString(new Date());
+let lastNowMs = 0;
 let feedbackIdCounter = 0;
+let commentIdCounter = 0;
+
+function nowIso() {
+  const nextNowMs = Math.max(Date.now(), lastNowMs + 1);
+  lastNowMs = nextNowMs;
+  return new Date(nextNowMs).toISOString();
+}
 
 function nextFeedbackIdCounter() {
   feedbackIdCounter = (feedbackIdCounter + 1) % Number.MAX_SAFE_INTEGER;
   return feedbackIdCounter.toString(36);
 }
 
+function nextCommentIdCounter() {
+  commentIdCounter = (commentIdCounter + 1) % Number.MAX_SAFE_INTEGER;
+  return commentIdCounter.toString(36);
+}
+
 function makeFeedbackId() {
   return `fb-${Date.now()}-${nextFeedbackIdCounter()}-${randomUUID()}`;
+}
+
+function makeCommentId(prefix: "cmsg" | "cthread") {
+  return `${prefix}-${Date.now()}-${nextCommentIdCounter()}-${randomUUID()}`;
 }
 
 async function resolveActiveMemberByName(storageScopeId: string, memberName: string) {
@@ -61,12 +97,43 @@ function uniqueUserIds(userIds: Array<string | null | undefined>) {
   return Array.from(new Set(normalized));
 }
 
+function uniqueFeedbackIds(feedbackIds: readonly string[]) {
+  return Array.from(new Set(feedbackIds.map((feedbackId) => feedbackId.trim()).filter(Boolean))).slice(0, 100);
+}
+
 function feedbackTargetHref(feedbackId: string) {
   return `/feedback/${encodeURIComponent(feedbackId)}`;
 }
 
 function feedbackStatusNotificationTitle(status: FeedbackStatus) {
   return status === "Closed" ? "反馈已关闭" : "反馈已重新打开";
+}
+
+const pendingFeedbackAttachmentTokenPattern = /!\[([^\]\n]*)\]\(orf-pending-attachment:([A-Za-z0-9_-]+)\)/g;
+
+function buildInitialCommentBody(input: { body: string; uploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> }) {
+  const uploadsByClientId = new Map(input.uploads.map((upload) => [upload.clientId, upload.prepared]));
+  const usedClientIds = new Set<string>();
+  const missingClientIds = new Set<string>();
+  const replaced = input.body.replace(pendingFeedbackAttachmentTokenPattern, (_token, _alt, clientId: string) => {
+    const upload = uploadsByClientId.get(clientId);
+    if (!upload) {
+      missingClientIds.add(clientId);
+      return "";
+    }
+
+    usedClientIds.add(clientId);
+    return upload.markdown;
+  });
+  if (missingClientIds.size > 0) {
+    return { status: "invalid" as const };
+  }
+
+  const unreferencedMarkdown = input.uploads
+    .filter((upload) => !usedClientIds.has(upload.clientId))
+    .map((upload) => upload.prepared.markdown);
+  const body = [replaced.trim(), ...unreferencedMarkdown].filter(Boolean).join("\n\n").trim();
+  return body ? { status: "ok" as const, body } : { status: "invalid" as const };
 }
 
 async function getFeedbackCommentParticipantUserIds(teamId: string, feedbackId: string) {
@@ -169,6 +236,10 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
   if (!teamId) {
     return { status: "notFound" };
   }
+  const initialBody = input.initialBody.trim();
+  if (!initialBody) {
+    return { status: "invalid" };
+  }
 
   const owner = input.owner.trim();
   const ownerUser = await resolveActiveMemberByName(teamId, owner);
@@ -177,28 +248,91 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
   }
 
   const id = makeFeedbackId();
-  const now = today();
-  await db.transaction(async (tx) => {
-    await tx.insert(feedback).values({
-      id,
-      teamId,
-      phenomenon: input.phenomenon,
-      impact: input.impact,
-      suggestedAdjustment: input.suggestedAdjustment,
-      status: "Open",
-      owner: ownerUser.name,
-      ownerUserId: ownerUser.id,
-      createdAt: now,
-      updatedAt: now,
-      createdBy: actor.id,
-      updatedBy: actor.id,
-    });
-
-    const categories = input.causeCategories.map((category, index) => ({ feedbackId: id, category, sortOrder: index }));
-    if (categories.length > 0) {
-      await tx.insert(feedbackCauseCategories).values(categories);
+  const commentThreadId = makeCommentId("cthread");
+  const commentMessageId = makeCommentId("cmsg");
+  const date = today();
+  const createdAt = nowIso();
+  const preparedUploads: Array<{ clientId: string; prepared: PreparedCommentAttachment }> = [];
+  try {
+    for (const attachment of input.attachments ?? []) {
+      const prepared = await prepareCommentAttachment({
+        body: attachment.body,
+        createdAt,
+        createdBy: actor.id,
+        fileName: attachment.fileName,
+        messageId: commentMessageId,
+        mimeType: attachment.mimeType,
+        storageScopeId: teamId,
+        targetId: id,
+        targetType: "feedback",
+      });
+      if (prepared.status !== "ok") {
+        await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
+        return { status: prepared.status };
+      }
+      preparedUploads.push({ clientId: attachment.clientId, prepared: prepared.prepared });
     }
-  });
+
+    const initialComment = buildInitialCommentBody({ body: initialBody, uploads: preparedUploads });
+    if (initialComment.status !== "ok") {
+      await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
+      return { status: "invalid" };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.insert(feedback).values({
+        id,
+        teamId,
+        phenomenon: input.phenomenon,
+        impact: input.impact,
+        suggestedAdjustment: "",
+        status: "Open",
+        owner: ownerUser.name,
+        ownerUserId: ownerUser.id,
+        createdAt: date,
+        updatedAt: date,
+        createdBy: actor.id,
+        updatedBy: actor.id,
+      });
+
+      const categories = input.causeCategories.map((category, index) => ({ feedbackId: id, category, sortOrder: index }));
+      if (categories.length > 0) {
+        await tx.insert(feedbackCauseCategories).values(categories);
+      }
+
+      await tx.insert(commentThreads).values({
+        id: commentThreadId,
+        teamId,
+        targetType: "feedback",
+        targetId: id,
+        targetTitle: input.phenomenon,
+        status: "open",
+        createdBy: actor.id,
+        createdAt,
+        updatedAt: createdAt,
+      });
+
+      await tx.insert(commentMessages).values({
+        id: commentMessageId,
+        threadId: commentThreadId,
+        authorUserId: actor.id,
+        author: actor.name,
+        body: initialComment.body,
+        createdAt,
+        parentMessageId: null,
+        replyToMessageId: null,
+        replyToAuthor: null,
+        sortOrder: 0,
+      });
+
+      if (preparedUploads.length > 0) {
+        await tx.insert(commentAttachments).values(preparedUploads.map((upload) => upload.prepared.row));
+      }
+    });
+  } catch (error) {
+    await deleteStoredCommentAttachmentObjects(preparedUploads.map((upload) => upload.prepared.row));
+    throw error;
+  }
 
   await notifyFeedbackCreated({
     actorName: actor.name,
@@ -221,6 +355,23 @@ export async function createFeedback(input: CreateFeedbackInput, actor: CreateFe
   const data = await getOrfStateSnapshot({ scope: runtimeScope(teamId) });
   const item = data.feedback.find((entry) => entry.id === id);
   return item ? { status: "ok", feedback: item } : { status: "notFound" };
+}
+
+export async function getFeedbackReferences(feedbackIds: readonly string[], scope: RuntimeScope): Promise<FeedbackReference[]> {
+  const teamId = runtimeScopeStorageId(scope);
+  const ids = uniqueFeedbackIds(feedbackIds);
+  if (!teamId || ids.length === 0) return [];
+
+  const rows = await db
+    .select({
+      id: feedback.id,
+      phenomenon: feedback.phenomenon,
+    })
+    .from(feedback)
+    .where(and(eq(feedback.teamId, teamId), inArray(feedback.id, ids)));
+
+  const sortOrder = new Map(ids.map((id, index) => [id, index]));
+  return rows.sort((left, right) => (sortOrder.get(left.id) ?? 0) - (sortOrder.get(right.id) ?? 0));
 }
 
 export async function updateFeedbackStatus(

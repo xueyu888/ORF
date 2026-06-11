@@ -1,4 +1,4 @@
-import { Command, Eye, Info, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { Eye, Info, LogOut, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
@@ -24,12 +24,10 @@ export function Sidebar({
   backgroundUrl,
   collapsed,
   onCollapsedChange,
-  onCommand,
 }: {
   backgroundUrl: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
-  onCommand: () => void;
 }) {
   const { chatUnreadSummary, currentUser, logout } = useOrf();
   const visibleGroups = sidebarGroups
@@ -161,17 +159,6 @@ export function Sidebar({
                 <span className="orf-sidebar-user-name block truncate">{currentUser?.name ?? "User"}</span>
               </span>
             </button>
-            <div className="orf-sidebar-user-actions" aria-label="用户操作">
-              <button
-                type="button"
-                onClick={onCommand}
-                className="orf-sidebar-user-action inline-flex items-center justify-center transition"
-                aria-label="搜索"
-                title="搜索"
-              >
-                <Command className="h-4 w-4" />
-              </button>
-            </div>
           </div>
           {userMenuOpen && (
             <div className="orf-sidebar-user-menu" role="menu" aria-label="用户菜单">

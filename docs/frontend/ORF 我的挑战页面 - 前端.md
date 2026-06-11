@@ -37,7 +37,7 @@ currentUser.id in Objective.challengerUserIds
 - 目标标题。
 - 目标状态。
 - 挑战者头像组，来源 `Objective.challengers`。
-- 剩余时间，来源 `Objective.finalDueAt`。
+- 剩余时间：非重估目标显示最终剩余时间，来源 `Objective.finalDueAt`；重估中目标显示两行时间摘要，主信息为重估窗口剩余或已超时，来源 `Objective.confirmationDueAt`，次信息为最终剩余时间，来源 `Objective.finalDueAt`。
 - 截止时间；点击日期本身打开 ORF 自定义日期选择器，选定不同日期后立即提交，不进入可见输入框，也不需要二次确认。指挥官可编辑 `Objective.finalDueAt`；冻结前可正常调整，`frozen` 只允许延后；无权限或状态锁定时点击日期提示原因。
 - 目标进度，来源 `Objective.progress`。
 - `提交战利品` 入口；仅 `flowStatus=frozen` 且当前用户是挑战者时展示。
@@ -49,7 +49,7 @@ currentUser.id in Objective.challengerUserIds
 展示：
 
 - 指标标题。
-- 难度 / 不确定性等级，直接显示 `入门 / 进阶 / 破局 / 渡劫 / 飞升`，未设置时显示 `待校准`；挑战页不把难度转写成星级。
+- 难度 / 不确定性等级，直接显示 `简易 / 入门 / 进阶 / 破局 / 渡劫 / 飞升`，未设置时显示 `待校准`；挑战页不把难度转写成星级。
 - 验收状态。
 - 指标进度。
 - 最近更新时间，来源为指标自身最后修改时间，并组合指标趋势和历史材料的最新时间；团队反馈 issue 不参与指标更新时间聚合。
@@ -114,7 +114,7 @@ currentUser.id in Objective.challengerUserIds
 | 提出指标 | 挑战者在自己参与目标的未过期重估期，点击目标行唯一主新增 `+`，在类型选择层选择提出指标后插入指标 temporary 行并进入标题编辑；提交后后端返回的真实指标进入一次性创建覆盖层并替换 temporary 行，挑战页刷新数据包含同一真实 id 后撤掉覆盖层；成功后不自动生成下一条指标 temporary 行 |
 | 编辑指标 | 指挥官可编辑未冻结目标下指标；挑战者可编辑自己参与目标的未过期重估期指标；指标标题编辑和难度等级点选复用同一个指标编辑权限判断，不能在组件内分散判断角色、挑战者窗口或冻结状态 |
 | 查看/编辑指标详情 | 指标行 hover/focus 时在行下方展开完整详情；已有详情时双击详情内容原地编辑，没有详情时双击灰色占位进入编辑；编辑态固定展开，保存调用 `PATCH /api/results/:resultId/details`，取消只丢弃临时草稿。无权限或冻结后不进入编辑并提示同一套指标编辑不可用原因 |
-| 编辑指标难度 | 指标行难度列直接点选 `入门 / 进阶 / 破局 / 渡劫 / 飞升` 并调用 `PATCH /api/results/:resultId/uncertainty`；`Result.uncertaintyLevel` 是难度事实源，`Result.uncertaintyScore` 由后端映射写入；无权限或冻结后保留只读中文等级并提示原因 |
+| 编辑指标难度 | 指标行难度列直接点选 `简易 / 入门 / 进阶 / 破局 / 渡劫 / 飞升` 并调用 `PATCH /api/results/:resultId/uncertainty`；`Result.uncertaintyLevel` 是难度事实源，`Result.uncertaintyScore` 由后端映射写入；无权限或冻结后保留只读中文等级并提示原因 |
 | 新增任务 | 指挥官或正式挑战者点击目标行唯一主新增 `+`，在类型选择层选择新增行动项后插入行动项 temporary 行并进入标题编辑；提交后后端返回的真实任务进入一次性创建覆盖层并替换 temporary 行，挑战页刷新数据包含同一真实 id 后撤掉覆盖层；成功后不自动生成下一条行动项 temporary 行 |
 | 新增子任务 | 同一目标正式挑战者或指挥官点击任务行 `+` 后，在当前任务下插入子任务 temporary 行；提交后后端返回的真实子任务进入一次性创建覆盖层并替换 temporary 行，挑战页刷新数据包含同一真实 id 后撤掉覆盖层；成功后不自动生成下一条子任务 temporary 行 |
 | 编辑标题 | 行操作或双击进入编辑；保存已有目标、指标、行动项或子行动项标题后，前端用短生命周期标题覆盖层立即显示新标题，后端快照包含同一标题后撤掉覆盖层；保存失败时撤掉覆盖层并回到后端事实，不能出现新标题短暂消失再回来的闪回 |
@@ -128,7 +128,7 @@ currentUser.id in Objective.challengerUserIds
 | 审核挑战申请 | 指挥官在目标行处理待审核申请；审批成功后立即刷新目标状态和申请记录，当前目标使用列表位置锚点保持原展示位置，直到用户离开当前目标上下文 |
 | 查看我的申请 | 普通成员可在顶部“我的申请”折叠区追踪尚未通过的申请；点击 `查看悬赏` 进入悬赏大厅对应目标，不能在该区编辑指标、行动项或提交战利品 |
 
-目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
+目标、指标和流程操作由 `permissionRules`、状态机和对应业务能力共同控制。目标内容只能由指挥官调整；截止日期以 `Objective.finalDueAt` 为唯一事实源，指标行不展示也不保存独立截止日期。重估窗口以 `Objective.confirmationDueAt` 为事实源，只用于重估中目标的窗口剩余展示和挑战者指标编辑窗口判断，不作为可编辑截止日期。指标可由指挥官编辑，挑战者只可在 `reestimating` 且未过 `confirmationDueAt` 时提出或编辑 `Objective.challengerUserIds` 包含自己的目标下的指标。行动项和子行动项不使用独立角色权限 key；候选目标允许指挥官先维护目标行动项，挑战者正式进入 `Objective.challengerUserIds` 后，任务和子任务的新增、编辑、勾选、移动、删除都按目标共同维护，不按 `assignee` 或创建人区分。冻结后指标口径锁定。
 
 反馈状态控件仅对管理员、反馈创建人或反馈 `owner` 指定处理人显示。普通成员可以看到自己可见范围内的反馈内容，但不能关闭或改写他人反馈状态。
 

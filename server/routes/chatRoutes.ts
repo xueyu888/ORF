@@ -114,6 +114,7 @@ const followThreadBodySchema = z.object({
 
 const markReadBodySchema = z.object({
   includeThreads: z.boolean().optional(),
+  messageId: z.string().min(1).nullable().optional(),
 }).optional();
 
 const channelUnreadBodySchema = z.object({
@@ -287,7 +288,10 @@ export function registerChatRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const params = channelIdParamsSchema.parse(request.params);
     const body = markReadBodySchema.parse(request.body);
-    return sendOutcome(reply, await markChatChannelRead(params.channelId, actor, { includeThreads: body?.includeThreads ?? false }));
+    return sendOutcome(reply, await markChatChannelRead(params.channelId, actor, {
+      includeThreads: body?.includeThreads ?? false,
+      messageId: body?.messageId ?? null,
+    }));
   });
 
   app.patch("/api/chat/channels/:channelId/unread", async (request, reply) => {
@@ -310,7 +314,11 @@ export function registerChatRoutes(app: FastifyInstance) {
     if (!actor) return reply;
     const params = channelIdParamsSchema.parse(request.params);
     const body = sendMessageBodySchema.parse(request.body);
-    return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor));
+    return sendOutcome(reply, await sendChatMessage({ ...body, channelId: params.channelId }, actor, {
+      onSideEffectError: (error, context) => {
+        request.log.warn({ err: error, ...context }, "Chat message side effect failed");
+      },
+    }));
   });
 
   app.get("/api/chat/channels/:channelId/messages/:messageId/context", async (request, reply) => {

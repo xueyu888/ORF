@@ -16,7 +16,7 @@ import {
   objectiveAlignmentRequestStatusLabel,
 } from "../../../domain/orfAlignment";
 import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
-import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
+import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, isObjectiveReestimatingByFlow, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
 import {
   normalizeResultDetails,
   normalizeResultDetailsInput,
@@ -38,7 +38,7 @@ import type {
 } from "../../../types/orf";
 import { avatarStyleForName } from "../../../utils/avatar";
 import { initials } from "../../../utils/format";
-import { remainingTime } from "../model/challengeDates";
+import { deadlineRemainingTime, formatDateTimeMinute, reestimateWindowRemainingTime, remainingTime, type RelativeTime } from "../model/challengeDates";
 import {
   actionDropTargetForEvent,
   bountyDropTargetForEvent,
@@ -420,7 +420,7 @@ function ObjectivePanel({
         <ObjectiveFlowAction disabled={isDraftObjective} group={group} handlers={handlers} />
         <AvatarStack names={group.challengers} />
         {statusChip}
-        <TimeValue icon={Clock3} value={remainingTime(group.deadline, now)} />
+        <ObjectiveTimeSummary deadline={group.deadline} now={now} objective={group.objective} />
         <ObjectiveDeadlineCell
           editState={handlers.objectiveDeadlineEditState(group.objective)}
           objective={group.objective}
@@ -1506,9 +1506,41 @@ function DateStack({ primary, secondary }: { primary: string; secondary?: string
   );
 }
 
-function TimeValue({ icon: Icon, subtle, value }: { icon: LucideIcon; subtle?: boolean; value: string }) {
+function ObjectiveTimeSummary({ deadline, now, objective }: { deadline: string; now: Date; objective: ObjectiveNode["objective"] }) {
+  const finalRemaining = deadlineRemainingTime(deadline, now);
+  const finalRemainingValue = finalRemaining?.value ?? (deadline || "未设置");
+  const reestimateRemaining = isObjectiveReestimatingByFlow(objective) ? reestimateWindowRemainingTime(objective.confirmationDueAt, now) : null;
+
+  if (!reestimateRemaining) return <TimeValue icon={Clock3} value={finalRemainingValue} />;
+
+  const title = [
+    `重估窗口：${reestimateRemaining.value}`,
+    `重估截止：${formatDateTimeMinute(objective.confirmationDueAt)}`,
+    `最终剩余：${finalRemainingValue}`,
+    `最终截止：${deadline || "未设置"}`,
+  ].join("\n");
+  const finalShortValue = finalRemaining ? compactTimeSummaryLabel("最终", finalRemaining) : "最终 未设置";
+
   return (
-    <span className={clsx("orf-time-value inline-flex h-7 min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "text-[#667085]" : "text-[#344054]")} title={value}>
+    <span className={clsx("orf-objective-time-summary", reestimateRemaining.overdue && "orf-objective-time-summary-overdue")} title={title}>
+      <span className="orf-objective-time-icon" aria-hidden="true">
+        <Clock3 />
+      </span>
+      <span className="orf-objective-time-lines">
+        <span className="orf-objective-time-line orf-objective-time-primary">{compactTimeSummaryLabel("重估", reestimateRemaining)}</span>
+        <span className="orf-objective-time-line orf-objective-time-secondary">{finalShortValue}</span>
+      </span>
+    </span>
+  );
+}
+
+function compactTimeSummaryLabel(label: string, time: RelativeTime) {
+  return time.overdue ? `${label}超 ${time.compactDuration}` : `${label} ${time.compactDuration}`;
+}
+
+function TimeValue({ className, icon: Icon, subtle, title, value }: { className?: string; icon: LucideIcon; subtle?: boolean; title?: string; value: string }) {
+  return (
+    <span className={clsx("orf-time-value inline-flex h-7 min-w-0 items-center gap-2 whitespace-nowrap text-sm font-medium", subtle ? "text-[#667085]" : "text-[#344054]", className)} title={title ?? value}>
       <Icon className={clsx("h-4 w-4", subtle ? "text-[#98a2b3]" : "text-[#667085]")} />
       <span className="orf-time-value-text">{value}</span>
     </span>

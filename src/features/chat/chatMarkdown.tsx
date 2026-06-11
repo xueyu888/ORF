@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
-import type { ChatUser } from "../../types/orf";
+import { Link } from "react-router-dom";
+import type { ChatUser, Feedback } from "../../types/orf";
+import { feedbackIssueHref, feedbackIssueIdFromHref, feedbackIssueMarkdownLabel } from "../feedback/model/feedbackIssue";
 
 type MarkdownListItem = { checked: boolean | null; text: string };
 type MarkdownTableAlignment = "center" | "left" | "right" | null;
@@ -21,6 +23,7 @@ type MarkdownBlock =
 type ChatMarkdownProps = {
   body: string;
   compact?: boolean;
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   usersById: Map<string, ChatUser>;
 };
 
@@ -257,10 +260,15 @@ function parseMarkdownBlocks(body: string): MarkdownBlock[] {
   return blocks;
 }
 
-function renderLineBreakJoined(lines: string[], usersById: Map<string, ChatUser>, keyPrefix: string) {
+function renderLineBreakJoined(
+  lines: string[],
+  usersById: Map<string, ChatUser>,
+  keyPrefix: string,
+  feedbackById: Map<string, Pick<Feedback, "id" | "phenomenon">>,
+) {
   const nodes: ReactNode[] = [];
   lines.forEach((line, lineIndex) => {
-    nodes.push(...renderInlineFragments(line, usersById, `${keyPrefix}:${lineIndex}`));
+    nodes.push(...renderInlineFragments(line, usersById, `${keyPrefix}:${lineIndex}`, feedbackById));
     if (lineIndex < lines.length - 1) nodes.push(<br key={`${keyPrefix}:br:${lineIndex}`} />);
   });
   return nodes;
@@ -318,9 +326,40 @@ function appendPlainText(nodes: ReactNode[], text: string, keyPrefix: string) {
   nodes.push(...renderSystemMentionFragments(text, keyPrefix));
 }
 
-function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, keyPrefix: string) {
+function isInternalHref(href: string) {
+  return href.startsWith("/") && !href.startsWith("//");
+}
+
+function feedbackLinkForHref(href: string, feedbackById: Map<string, Pick<Feedback, "id" | "phenomenon">>) {
+  const feedbackId = feedbackIssueIdFromHref(href);
+  if (!feedbackId) return null;
+  const feedback = feedbackId ? feedbackById.get(feedbackId) : null;
+  return {
+    href: feedbackIssueHref(feedbackId),
+    label: feedback ? feedbackIssueMarkdownLabel(feedback) : "反馈链接",
+  };
+}
+
+function renderMarkdownLink(href: string, children: ReactNode, key: string) {
+  if (isInternalHref(href)) {
+    return <Link key={key} to={href}>{children}</Link>;
+  }
+
+  return (
+    <a href={href} key={key} target="_blank" rel="noreferrer noopener">
+      {children}
+    </a>
+  );
+}
+
+function renderInlineFragments(
+  body: string,
+  usersById: Map<string, ChatUser>,
+  keyPrefix: string,
+  feedbackById: Map<string, Pick<Feedback, "id" | "phenomenon">>,
+) {
   const nodes: ReactNode[] = [];
-  const pattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|\[([^\]\n]+)\]\((https?:\/\/[^)\s<]+)\)|(https?:\/\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
+  const pattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|\[([^\]\n]+)\]\((https?:\/\/[^)\s<]+|\/(?!\/)[^)\s<]+)\)|(https?:\/\/[^\s<]+|\/feedback\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
   let index = 0;
   let match: RegExpExecArray | null;
 
@@ -335,18 +374,20 @@ function renderInlineFragments(body: string, usersById: Map<string, ChatUser>, k
         </span>,
       );
     } else if (match[4]) {
-      nodes.push(
-        <a href={match[4]} key={`${keyPrefix}:md-link:${match.index}`} target="_blank" rel="noreferrer noopener">
-          {match[3]}
-        </a>,
-      );
+      const feedbackLink = feedbackLinkForHref(match[4], feedbackById);
+      nodes.push(renderMarkdownLink(
+        feedbackLink?.href ?? match[4],
+        feedbackLink?.label ?? match[3],
+        `${keyPrefix}:md-link:${match.index}`,
+      ));
     } else if (match[5]) {
       const { trailingText, url } = splitAutolinkTrailingText(match[5]);
-      nodes.push(
-        <a href={url} key={`${keyPrefix}:link:${match.index}`} target="_blank" rel="noreferrer noopener">
-          {url}
-        </a>,
-      );
+      const feedbackLink = feedbackLinkForHref(url, feedbackById);
+      nodes.push(renderMarkdownLink(
+        feedbackLink?.href ?? url,
+        feedbackLink?.label ?? url,
+        `${keyPrefix}:link:${match.index}`,
+      ));
       if (trailingText) nodes.push(<span key={`${keyPrefix}:link-trailing:${match.index}`}>{trailingText}</span>);
     } else if (match[6]) {
       nodes.push(<code key={`${keyPrefix}:code:${match.index}`}>{match[6]}</code>);
@@ -393,9 +434,10 @@ function MarkdownCodeBlock({ content, compact, language }: { content: string; co
   );
 }
 
-export function ChatMarkdown({ body, compact = false, usersById }: ChatMarkdownProps) {
+export function ChatMarkdown({ body, compact = false, feedbackItems = [], usersById }: ChatMarkdownProps) {
   const blocks = parseMarkdownBlocks(body);
   if (blocks.length === 0) return null;
+  const feedbackById = new Map(feedbackItems.map((feedback) => [feedback.id, feedback]));
 
   return (
     <>
@@ -410,14 +452,14 @@ export function ChatMarkdown({ body, compact = false, usersById }: ChatMarkdownP
           const HeadingTag = `h${block.level}` as "h1" | "h2" | "h3" | "h4" | "h5" | "h6";
           return (
             <HeadingTag className={`orf-chat-markdown-heading orf-chat-markdown-heading-${block.level}`} key={block.key}>
-              {renderInlineFragments(block.text, usersById, block.key)}
+              {renderInlineFragments(block.text, usersById, block.key, feedbackById)}
             </HeadingTag>
           );
         }
         if (block.kind === "quote") {
           return (
             <blockquote className="orf-chat-markdown-quote" key={block.key}>
-              {renderLineBreakJoined(block.lines, usersById, block.key)}
+              {renderLineBreakJoined(block.lines, usersById, block.key, feedbackById)}
             </blockquote>
           );
         }
@@ -428,7 +470,7 @@ export function ChatMarkdown({ body, compact = false, usersById }: ChatMarkdownP
               {block.items.map((item, itemIndex) => (
                 <li className={item.checked !== null ? "orf-chat-markdown-task-item" : undefined} key={`${block.key}:${itemIndex}`}>
                   {item.checked !== null && <input type="checkbox" checked={item.checked} readOnly tabIndex={-1} />}
-                  {renderInlineFragments(item.text, usersById, `${block.key}:${itemIndex}`)}
+                  {renderInlineFragments(item.text, usersById, `${block.key}:${itemIndex}`, feedbackById)}
                 </li>
               ))}
             </ListTag>
@@ -442,7 +484,7 @@ export function ChatMarkdown({ body, compact = false, usersById }: ChatMarkdownP
                   <tr>
                     {block.table.headers.map((header, columnIndex) => (
                       <th key={`${block.key}:head:${columnIndex}`} style={{ textAlign: block.table.alignments[columnIndex] ?? "left" }}>
-                        {renderInlineFragments(header, usersById, `${block.key}:head:${columnIndex}`)}
+                        {renderInlineFragments(header, usersById, `${block.key}:head:${columnIndex}`, feedbackById)}
                       </th>
                     ))}
                   </tr>
@@ -452,7 +494,7 @@ export function ChatMarkdown({ body, compact = false, usersById }: ChatMarkdownP
                     <tr key={`${block.key}:row:${rowIndex}`}>
                       {block.table.headers.map((_, columnIndex) => (
                         <td key={`${block.key}:cell:${rowIndex}:${columnIndex}`} style={{ textAlign: block.table.alignments[columnIndex] ?? "left" }}>
-                          {renderInlineFragments(row[columnIndex] ?? "", usersById, `${block.key}:cell:${rowIndex}:${columnIndex}`)}
+                          {renderInlineFragments(row[columnIndex] ?? "", usersById, `${block.key}:cell:${rowIndex}:${columnIndex}`, feedbackById)}
                         </td>
                       ))}
                     </tr>
@@ -464,7 +506,7 @@ export function ChatMarkdown({ body, compact = false, usersById }: ChatMarkdownP
         }
         return (
           <span className={compact ? undefined : "orf-chat-markdown-paragraph"} key={block.key}>
-            {renderLineBreakJoined(block.lines, usersById, block.key)}
+            {renderLineBreakJoined(block.lines, usersById, block.key, feedbackById)}
           </span>
         );
       })}

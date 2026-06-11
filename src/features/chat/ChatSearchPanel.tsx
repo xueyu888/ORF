@@ -1,12 +1,13 @@
 import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
 import { useEffect, useRef } from "react";
-import type { ChatMessage, ChatSearchResult, ChatUser } from "../../types/orf";
+import type { ChatMessage, ChatSearchResult, ChatUser, Feedback } from "../../types/orf";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
 
 type ChatSearchPanelProps = {
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   focusSignal: number;
   onOpenResult: (result: ChatSearchResult) => void;
   onSearch: (input?: { query?: string; scope?: ChatSearchScope; type?: ChatSearchTypeFilter }) => Promise<void>;
@@ -23,6 +24,7 @@ type ChatSearchPanelProps = {
 };
 
 export function ChatSearchPanel({
+  feedbackItems,
   focusSignal,
   onOpenResult,
   onSearch,
@@ -97,7 +99,7 @@ export function ChatSearchPanel({
             <span>{result.channel.displayName}</span>
             <strong>{result.message.authorName}</strong>
             <small title={formatDateTime(result.message.createdAt)}>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
-            <SearchResultPreview message={result.message} usersById={usersById} />
+            <SearchResultPreview feedbackItems={feedbackItems} message={result.message} usersById={usersById} />
           </button>
         ))}
         {!loading && results.length === 0 && (
@@ -110,12 +112,20 @@ export function ChatSearchPanel({
   );
 }
 
-function SearchResultPreview({ message, usersById }: { message: ChatMessage; usersById: Map<string, ChatUser> }) {
+function SearchResultPreview({
+  feedbackItems,
+  message,
+  usersById,
+}: {
+  feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  message: ChatMessage;
+  usersById: Map<string, ChatUser>;
+}) {
   return (
     <>
       <div className="orf-chat-search-result-body">
         {message.body.trim() ? (
-          <ChatMarkdown compact body={message.body} usersById={usersById} />
+          <ChatMarkdown compact body={message.body} feedbackItems={feedbackItems} usersById={usersById} />
         ) : (
           <span className="orf-chat-search-attachment-only">附件消息</span>
         )}

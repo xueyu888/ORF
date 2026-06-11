@@ -1,6 +1,6 @@
 {
   "name": "orf",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "private": true,
   "description": "ORF project management tool built from ORF documentation.",
   "bin": {
@@ -33,7 +33,7 @@
     "storage:logs": "docker compose -f docker-compose.minio.yml logs -f minio",
     "infra:public:env": "node scripts/configure-public-ip-env.mjs",
     "infra:public:prepare": "node scripts/prepare-public-ip-infra.mjs",
-    "infra:public:up": "npm run infra:public:prepare && tsx scripts/prepare-ory-env.ts && docker compose -f docker-compose.ory.yml -f docker-compose.minio.yml -f docker-compose.public.yml up -d kratos minio minio-init public-gateway",
+    "infra:public:up": "npm run build && npm run infra:public:prepare && tsx scripts/prepare-ory-env.ts && docker compose -f docker-compose.ory.yml -f docker-compose.minio.yml -f docker-compose.public.yml up -d kratos minio minio-init public-gateway",
     "infra:public:down": "docker compose -f docker-compose.ory.yml -f docker-compose.minio.yml -f docker-compose.public.yml down",
     "infra:public:cert:staging": "node scripts/public-ip-cert.mjs --staging",
     "infra:public:cert:issue": "node scripts/public-ip-cert.mjs",

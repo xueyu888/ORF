@@ -11,6 +11,7 @@ import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
+import { feedbackIssueIdsFromText } from "../features/feedback/model/feedbackIssue";
 import {
   chatMessageDeliveryStatus,
   chatMessagePendingSend,
@@ -40,6 +41,7 @@ import {
   createChatChannel,
   deleteChatMessageRequest,
   getChatBootstrap,
+  getFeedbackReferences,
   markChatChannelReadRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
@@ -52,7 +54,7 @@ import {
   updateChatMessageRequest,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatUser } from "../types/orf";
+import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../types/orf";
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -66,13 +68,53 @@ function mentionableUsersForChannel(channel: ChatChannel | null, users: ChatUser
   return allUsers.filter((user) => memberIds.has(user.id));
 }
 
+type FeedbackReference = Pick<Feedback, "id" | "phenomenon">;
+
+function addFeedbackIdsFromMessage(ids: Set<string>, message: ChatMessage | null | undefined) {
+  if (!message?.body) return;
+  for (const feedbackId of feedbackIssueIdsFromText(message.body)) {
+    ids.add(feedbackId);
+  }
+}
+
+function collectFeedbackIdsFromSearchResults(ids: Set<string>, results: readonly ChatSearchResult[]) {
+  for (const result of results) {
+    addFeedbackIdsFromMessage(ids, result.message);
+  }
+}
+
+function collectFeedbackIdsFromThread(ids: Set<string>, thread: ChatThread | null) {
+  if (!thread) return;
+  addFeedbackIdsFromMessage(ids, thread.rootMessage);
+  for (const reply of thread.replies) {
+    addFeedbackIdsFromMessage(ids, reply);
+  }
+}
+
+function collectFeedbackIdsFromThreadSummaries(ids: Set<string>, summaries: readonly ChatThreadSummary[]) {
+  for (const summary of summaries) {
+    addFeedbackIdsFromMessage(ids, summary.rootMessage);
+  }
+}
+
+function mergeFeedbackReferences(...groups: Array<readonly FeedbackReference[]>) {
+  const byId = new Map<string, FeedbackReference>();
+  for (const group of groups) {
+    for (const item of group) {
+      byId.set(item.id, { id: item.id, phenomenon: item.phenomenon });
+    }
+  }
+  return Array.from(byId.values());
+}
+
 export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, notify } = useOrf();
+  const { currentUser, notify, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
+  const [feedbackReferences, setFeedbackReferences] = useState<FeedbackReference[]>([]);
   const [loading, setLoading] = useState(true);
   const [channelQuery, setChannelQuery] = useState("");
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
@@ -265,6 +307,45 @@ export function ChatPage() {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [feedPrefetchChannelKey, prefetchChannelMessages]);
+
+  const visibleFeedbackReferenceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const message of messages) {
+      addFeedbackIdsFromMessage(ids, message);
+    }
+    collectFeedbackIdsFromThread(ids, thread);
+    collectFeedbackIdsFromSearchResults(ids, searchResults);
+    collectFeedbackIdsFromSearchResults(ids, collectionResults);
+    collectFeedbackIdsFromThreadSummaries(ids, threadSummaries);
+    return Array.from(ids).sort();
+  }, [collectionResults, messages, searchResults, thread, threadSummaries]);
+  const visibleFeedbackReferenceKey = visibleFeedbackReferenceIds.join("\n");
+  const feedbackLinkItems = useMemo(
+    () => mergeFeedbackReferences(feedbackReferences, state.feedback),
+    [feedbackReferences, state.feedback],
+  );
+  const feedbackLinkItemsById = useMemo(
+    () => new Map(feedbackLinkItems.map((item) => [item.id, item])),
+    [feedbackLinkItems],
+  );
+
+  useEffect(() => {
+    if (!visibleFeedbackReferenceKey) return undefined;
+    const missingFeedbackIds = visibleFeedbackReferenceIds.filter((feedbackId) => !feedbackLinkItemsById.has(feedbackId));
+    if (missingFeedbackIds.length === 0) return undefined;
+
+    let cancelled = false;
+    void getFeedbackReferences(missingFeedbackIds)
+      .then((response) => {
+        if (cancelled || response.feedback.length === 0) return;
+        setFeedbackReferences((items) => mergeFeedbackReferences(items, response.feedback));
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [feedbackLinkItemsById, visibleFeedbackReferenceIds, visibleFeedbackReferenceKey]);
 
   const applyMessageEffects = useCallback((message: ChatMessage) => {
     applyThreadMessage(message);
@@ -781,6 +862,7 @@ export function ChatPage() {
               canPin={canManageActiveChannel}
               currentUserId={currentUser?.id}
               editingMessageId={editingMessage?.id ?? null}
+              feedbackItems={feedbackLinkItems}
               focusMessageId={focusMessageId}
               hasNewerMessages={hasNewerMessages}
               hasOlderMessages={hasOlderMessages}
@@ -818,6 +900,7 @@ export function ChatPage() {
             <ChatComposer
               channelId={activeChannel.id}
               disabled={!bootstrap.permissions.canWrite}
+              feedbackItems={feedbackLinkItems}
               mentionableUsers={activeMentionableUsers}
               onDraftStateChange={handleDraftStateChange}
               onEditLatest={handleEditLatestOwnMessage}
@@ -839,6 +922,7 @@ export function ChatPage() {
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}
           editingMessageId={editingMessage?.id ?? null}
+          feedbackItems={feedbackLinkItems}
           memberSearchFocusSignal={memberSearchFocusSignal}
           onDraftStateChange={handleDraftStateChange}
           onAddMembers={async (userIds) => {

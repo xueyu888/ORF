@@ -1,5 +1,6 @@
 import type { ElementType } from "react";
 import { Card, ConfidenceBadge, ProgressBar, StatusBadge } from "./ui";
+import { feedbackIssueBodyPreview } from "../features/feedback/model/feedbackIssue";
 import type { Feedback, Objective, Result } from "../types/orf";
 
 export function MetricCard({ title, value, delta, icon: Icon }: { title: string; value: string; delta: string; icon: ElementType }) {
@@ -56,7 +57,7 @@ export function FeedbackCard({ feedback }: { feedback: Feedback }) {
         {feedback.causeCategories.map((cause) => <span key={cause} className="orf-status-tag border orf-border orf-surface-muted px-2 py-0.5 text-xs orf-text-secondary">{cause}</span>)}
       </div>
       <div className="mt-3 text-xs orf-text-muted">处理人：<span className="orf-text-secondary">{feedback.owner}</span></div>
-      <div className="mt-3 text-xs orf-text-secondary">{feedback.suggestedAdjustment}</div>
+      <div className="mt-3 text-xs orf-text-secondary">{feedbackIssueBodyPreview(feedback.suggestedAdjustment)}</div>
     </Card>
   );
 }

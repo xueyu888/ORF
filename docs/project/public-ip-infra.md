@@ -8,14 +8,14 @@
 
 | 用途 | 公网端口 | 内部端口 | 说明 |
 | --- | ---: | ---: | --- |
-| ORF Web | `8443` | `8443` | ORF 前端稳定入口，使用 DuckDNS 域名证书，`/api` 同源转发到本机后端。 |
+| ORF Web | `8443` | `8443` | ORF 前端稳定入口，使用 DuckDNS 域名证书，Nginx 直接服务 `dist` 构建产物，`/api` 同源转发到本机后端。 |
 | Ory Public | `18443` | `18443` | ORF 后端访问 Ory Public API。 |
 | MinIO S3 API | `19443` | `19443` | ORF 后端访问 S3-compatible API。 |
 | PostgreSQL | `54321` | `5432` | 远程开发机和成员环境直连共享 ORF 数据库；必须使用 TLS、最小权限账号和 PostgreSQL 自身的 `pg_hba.conf` 访问控制。 |
 
 当前路由器公网 IP 是 `125.70.13.137`。远程成员机器的 `DATABASE_URL`、`ORY_PUBLIC_URL` 和 `OBJECT_STORAGE_ENDPOINT` 必须以这个地址为事实源；DuckDNS A 记录也应指向这个地址。
 
-服务器本机位于同一个局域网内，当前路由器不支持稳定 NAT 回环；本机运行 `orf up`、ORF 后端和 Ory 时不要把运行时依赖指向 `125.70.13.137`，应使用 `199.199.199.8:5432`、`127.0.0.1:4433` 和 `127.0.0.1:9000`。
+服务器本机和局域网成员位于同一个局域网内，当前路由器不支持稳定 NAT 回环；本机运行 `orf up`、ORF 后端和 Ory 时不要把运行时依赖指向 `125.70.13.137`，应使用 `199.199.199.8:5432`、`127.0.0.1:4433` 和 `127.0.0.1:9000`。局域网成员接入共享环境时，PostgreSQL、Ory Public 和 MinIO 应使用 `199.199.199.8` 入口，由共享包安装脚本的 `--mode auto` 自动选择。
 
 `80` 和 `443` 不作为日常入口。只有明确重试公网 CA 证书时，才临时开放服务端 `acme-http-gateway` 并运行 `infra:public:cert:*`。如果路由器已经保留 `80 -> 199.199.199.8:80`，它也只应作为证书验证入口；日常 ORF Web 仍走 `8443`。
 
@@ -34,7 +34,7 @@
 ```text
 public-gateway:18443 -> kratos:4433
 public-gateway:19443 -> minio:9000
-public-gateway:8443 -> ORF frontend/backend on host
+public-gateway:8443 -> ORF dist in Nginx + /api backend on host
 router:54321 -> Windows PostgreSQL on 199.199.199.8:5432
 acme-http-gateway:80/443 -> ACME challenge only
 ```
@@ -61,6 +61,7 @@ npm run infra:public:env -- --public-ip 125.70.13.137
 
 ```text
 ORF_PUBLIC_IP=125.70.13.137
+ORF_PUBLIC_GATEWAY_CERT_EXTRA_IPS=199.199.199.8
 DATABASE_URL=postgresql://<user>:<password>@199.199.199.8:5432/orf?sslmode=verify-full&sslrootcert=<root.crt>&options=-csearch_path%3Dorf_current%2Cpublic
 ORY_PUBLIC_URL=http://127.0.0.1:4433
 OBJECT_STORAGE_ENDPOINT=http://127.0.0.1:9000
@@ -99,6 +100,8 @@ npm run infra:public:prepare
 npm run infra:public:up
 ```
 
+该命令会先执行 `npm run build`，再生成 public-gateway 的 Nginx 配置并启动容器。`8443` 服务的是构建后的 `dist` 文件，不连接 Vite 开发服务；开发态的 `5173` 只用于本机调试，不能作为已发布客户端或长期手机访问入口。
+
 ## 3.1 ORF Web 域名入口
 
 ORF Web 的公网入口使用：
@@ -123,6 +126,8 @@ ORF_DUCKDNS_PROPAGATION_SECONDS=120
 ORF_APP_URL=https://orf-xueyu.duckdns.org:8443
 CORS_ORIGIN=http://127.0.0.1:5173,http://localhost:5173,https://orf-xueyu.duckdns.org:8443
 ```
+
+`ORF_APP_URL` 是已发布客户端和稳定 Web 的同源入口，应保持在 `8443`。不要把稳定入口改到 `5173` 或让 `8443` 反向代理 Vite 开发服务，否则源代码保存会触发开发 HMR，导致已安装客户端刷新并丢失未提交的编辑内容。
 
 `ORF_DUCKDNS_TOKEN` 只写入本机 `.env`，不得写入仓库、文档正文或提交信息。
 
@@ -176,7 +181,7 @@ npm run infra:public:cert:issue
 npm run infra:public:cert:renew
 ```
 
-`public-gateway` 在没有正式证书时会先使用本地 bootstrap 自签证书启动。bootstrap 证书有效期为 397 天；公网 IP 变化或证书剩余有效期不足 30 天时，`npm run infra:public:prepare` 会重新生成。正式证书签发成功后，脚本会重新生成 Nginx 配置并 reload。
+`public-gateway` 在没有正式证书时会先使用本地 bootstrap 自签证书启动。bootstrap 证书有效期为 397 天；公网 IP、`ORF_PUBLIC_GATEWAY_CERT_EXTRA_IPS` 或证书剩余有效期不足 30 天时，`npm run infra:public:prepare` 会重新生成。当前 bootstrap 证书 SAN 必须同时包含 `IP:125.70.13.137` 和 `IP:199.199.199.8`，让公网成员和局域网成员都能通过同一份 `orf-public-ca.crt` 校验 Ory / MinIO public-gateway。
 
 如果公网 CA 签发失败，`ORF_PUBLIC_CA_CERT` 会让本机 ORF 命令和 `npm run server:*` 在进程启动时自动信任 bootstrap 证书。其他开发机使用这套共享 Ory/MinIO 时，也需要拿到该证书的公开部分，并在本机 `.env` 中设置自己的 `ORF_PUBLIC_CA_CERT` 路径。
 
@@ -196,6 +201,13 @@ orf status
 | Ory | 请求 `ORY_PUBLIC_URL/health/ready`。 |
 | MinIO | 请求 `OBJECT_STORAGE_ENDPOINT/minio/health/live`。 |
 | ORF Web | 请求 `https://orf-xueyu.duckdns.org:8443/health`。 |
+
+局域网成员可以直接验证 public-gateway 的 LAN 入口：
+
+```bash
+curl --cacert .orf/shared-infra/certs/orf-public-ca.crt https://199.199.199.8:18443/health/ready
+curl --cacert .orf/shared-infra/certs/orf-public-ca.crt https://199.199.199.8:19443/minio/health/live
+```
 
 如果 Ory 或 MinIO 返回 TLS、连接拒绝或超时，优先检查公网端口映射、证书状态和 `public-gateway` 容器日志。
 

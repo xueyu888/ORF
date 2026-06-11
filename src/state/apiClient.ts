@@ -78,6 +78,9 @@ export type PushDeviceRegistrationResponse = {
   pushEnabled: boolean;
 };
 export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
+export type FeedbackReferencesResponse = {
+  feedback: Array<Pick<OrfState["feedback"][number], "id" | "phenomenon">>;
+};
 export type CommentAttachmentUploadResponse = {
   ok: true;
   attachment: CommentAttachment;
@@ -321,6 +324,15 @@ export async function getCommentMentionableUsers(input: { targetId: string; targ
   return apiJson<CommentMentionableUsersResponse>(`/api/comments/mentionable-users?${query.toString()}`);
 }
 
+export async function getFeedbackReferences(feedbackIds: string[]) {
+  const query = new URLSearchParams();
+  for (const feedbackId of feedbackIds.slice(0, 100)) {
+    query.append("id", feedbackId);
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<FeedbackReferencesResponse>(`/api/feedback/references${suffix}`);
+}
+
 export async function getChatBootstrap() {
   return apiJson<ChatBootstrapResponse>("/api/chat/bootstrap");
 }
@@ -476,10 +488,13 @@ export async function setChatMessageSavedRequest(input: { channelId: string; mes
   );
 }
 
-export async function markChatChannelReadRequest(channelId: string, input: { includeThreads?: boolean } = {}) {
+export async function markChatChannelReadRequest(channelId: string, input: { includeThreads?: boolean; messageId?: string | null } = {}) {
   return apiJson<ChatChannelResponse>(`/api/chat/channels/${encodeURIComponent(channelId)}/read`, {
     method: "PATCH",
-    body: JSON.stringify({ includeThreads: input.includeThreads ?? false }),
+    body: JSON.stringify({
+      includeThreads: input.includeThreads ?? false,
+      messageId: input.messageId ?? null,
+    }),
   });
 }
 

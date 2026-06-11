@@ -15,6 +15,14 @@ import {
   revokePushDeviceRequest,
   type PushRegistrationStatusInput,
 } from "../../state/apiClient";
+import {
+  buildReceivedPushFallbackNotification,
+  orfChatPushChannelId,
+  orfClientUpdatePushChannelId,
+  orfPushFallbackSource,
+  pushNotificationTargetPath,
+  targetPathFromPushNotificationExtra,
+} from "./orfPushNotificationModel";
 
 type PushOpenHandler = (targetPath: string) => void;
 
@@ -22,7 +30,7 @@ const cachedAndroidFcmPushTokenKey = "orf.android.fcmPushToken";
 const cachedAndroidVivoPushRegIdKey = "orf.android.vivoPushRegId";
 const pushChannels = [
   {
-    id: "orf-chat-messages",
+    id: orfChatPushChannelId,
     name: "ORF 聊天消息",
     description: "私聊、群聊和频道新消息",
     importance: 4 as const,
@@ -32,7 +40,7 @@ const pushChannels = [
     visibility: 0 as const,
   },
   {
-    id: "orf-client-updates",
+    id: orfClientUpdatePushChannelId,
     name: "ORF 客户端更新",
     description: "客户端新版本提示",
     importance: 3 as const,
@@ -129,6 +137,12 @@ async function ensureAndroidFcmListeners() {
     PushNotifications.addListener("pushNotificationActionPerformed", (action) => {
       handleAndroidFcmNotificationAction(action);
     }),
+    PushNotifications.addListener("pushNotificationReceived", (notification) => {
+      void showAndroidReceivedPushFallbackNotification(notification);
+    }),
+    LocalNotifications.addListener("localNotificationActionPerformed", (action) => {
+      handleAndroidPushFallbackLocalNotificationAction(action.notification.extra);
+    }),
   ])
     .then(() => undefined)
     .catch((error: unknown) => {
@@ -172,6 +186,35 @@ function handleAndroidFcmNotificationAction(action: ActionPerformed) {
   if (targetPath) {
     androidFcmOpenHandler?.(targetPath);
   }
+}
+
+function handleAndroidPushFallbackLocalNotificationAction(extra: unknown) {
+  const data = extra && typeof extra === "object" ? (extra as Record<string, unknown>) : {};
+  if (data.source !== orfPushFallbackSource) return;
+  const targetPath = targetPathFromPushNotificationExtra(data);
+  if (targetPath) {
+    androidFcmOpenHandler?.(targetPath);
+  }
+}
+
+async function showAndroidReceivedPushFallbackNotification(notification: PushNotificationSchema) {
+  const fallback = buildReceivedPushFallbackNotification(notification, readAndroidPushDisplayState());
+  if (!fallback) return;
+
+  await LocalNotifications.schedule({
+    notifications: [
+      {
+        id: fallback.id,
+        title: fallback.title,
+        body: fallback.body,
+        largeBody: fallback.body,
+        channelId: fallback.channelId,
+        iconColor: "#0F9EB5",
+        smallIcon: "ic_stat_orf_notification",
+        extra: fallback.extra,
+      },
+    ],
+  }).catch(() => undefined);
 }
 
 async function registerAndroidFcmPushToken(token: string) {
@@ -259,18 +302,16 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
-function pushNotificationTargetPath(notification: PushNotificationSchema) {
-  const data = notification.data && typeof notification.data === "object" ? notification.data as Record<string, unknown> : {};
-  const targetPath = typeof data.targetPath === "string" ? data.targetPath : null;
-  if (targetPath && isSafePushTargetPath(targetPath)) return targetPath;
-  if (typeof notification.link === "string" && isSafePushTargetPath(notification.link)) return notification.link;
-  return null;
-}
-
-function isSafePushTargetPath(targetPath: string) {
-  return targetPath.startsWith("/") && !targetPath.startsWith("//");
-}
-
 function isAndroidNativeRuntime() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
+}
+
+function readAndroidPushDisplayState() {
+  if (typeof document === "undefined") {
+    return { documentFocused: false, visibilityState: "unknown" as const };
+  }
+  return {
+    documentFocused: document.hasFocus(),
+    visibilityState: document.visibilityState,
+  };
 }

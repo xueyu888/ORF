@@ -25,7 +25,7 @@ import {
 } from "../repositories/orfRepository";
 
 const metricDirectionSchema = z.enum(["increase", "decrease"]);
-const uncertaintyLevelSchema = z.enum(["入门", "进阶", "破局", "渡劫", "飞升"]);
+const uncertaintyLevelSchema = z.enum(["简易", "入门", "进阶", "破局", "渡劫", "飞升"]);
 const bountySourceSchema = z.enum(["managerDefined", "memberProposed"]);
 const requiredTextSchema = z.string().trim().min(1);
 const optionalTextSchema = z.string().trim().transform((value) => value || undefined).optional();
