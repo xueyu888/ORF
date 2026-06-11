@@ -21,7 +21,7 @@ import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeN
 import { pool } from "../db/client";
 import { env } from "../env";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
-import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
+import { publishRealtimeChatEvent, realtimeOnlineUserIds } from "../realtime/realtimeEventBus";
 import { readImageMetadata } from "../storage/images";
 import { objectStorage } from "../storage/objectStorage";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
@@ -112,7 +112,8 @@ async function listActiveTeamUsers(teamId: string) {
     `,
     [teamId],
   );
-  return rows.map(toChatUser);
+  const onlineUserIds = realtimeOnlineUserIds(teamId);
+  return rows.map((row) => toChatUser(row, { online: onlineUserIds.has(row.id) }));
 }
 
 async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?: string } = {}) {
@@ -206,19 +207,20 @@ async function loadMembers(channelIds: string[]) {
   return grouped;
 }
 
-async function loadUsersByIds(userIds: string[]) {
+async function loadUsersByIds(teamId: string, userIds: string[]) {
   const uniqueIds = Array.from(new Set(userIds.filter(Boolean)));
   if (uniqueIds.length === 0) return new Map<string, ChatUser>();
   const { rows } = await pool.query<UserRow>(
     `
       SELECT u.id, u.name, u.email, u.status, u.last_online_at, u.avatar_object_key, u.avatar_updated_at, COALESCE(tm.role, 'member') AS role
       FROM users u
-      LEFT JOIN team_members tm ON tm.user_id = u.id
+      LEFT JOIN team_members tm ON tm.user_id = u.id AND tm.team_id = $2
       WHERE u.id = ANY($1::uuid[])
     `,
-    [uniqueIds],
+    [uniqueIds, teamId],
   );
-  return new Map(rows.map((row) => [row.id, toChatUser(row)]));
+  const onlineUserIds = realtimeOnlineUserIds(teamId);
+  return new Map(rows.map((row) => [row.id, toChatUser(row, { online: onlineUserIds.has(row.id) })]));
 }
 
 async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
@@ -299,10 +301,11 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
 
 async function buildChannels(rows: ChannelRow[], actor: ChatActor): Promise<ChatChannel[]> {
   const channelIds = rows.map((row) => row.id);
+  const teamId = storageTeamId(actor);
   const membersByChannel = await loadMembers(channelIds);
   const allMemberIds = Array.from(new Set(Array.from(membersByChannel.values()).flat().map((member) => member.userId)));
   const [usersById, readModel] = await Promise.all([
-    loadUsersByIds(allMemberIds),
+    loadUsersByIds(teamId, allMemberIds),
     loadChannelReadModel(channelIds, actor),
   ]);
 
@@ -2512,6 +2515,6 @@ export async function listChatMentionableUsers(channelId: string, actor: ChatAct
     return ok({ users: await listActiveTeamUsers(storageTeamId(actor)) });
   }
   const memberIds = channel.members.map((member) => member.userId);
-  const usersById = await loadUsersByIds(memberIds);
+  const usersById = await loadUsersByIds(storageTeamId(actor), memberIds);
   return ok({ users: memberIds.map((id) => usersById.get(id)).filter((user): user is ChatUser => Boolean(user)) });
 }

@@ -10,7 +10,9 @@ import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
+import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
+import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
 import { feedbackIssueIdsFromText } from "../features/feedback/model/feedbackIssue";
 import {
   chatMessageDeliveryStatus,
@@ -35,6 +37,7 @@ import { useChatPanelState } from "../features/chat/useChatPanelState";
 import { useChatRealtimeEvents } from "../features/chat/useChatRealtimeEvents";
 import { useChatThreadState } from "../features/chat/useChatThreadState";
 import { useChatTypingState } from "../features/chat/useChatTypingState";
+import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import {
   addChatChannelMembersRequest,
   archiveChatChannelRequest,
@@ -113,7 +116,7 @@ export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, notify, state } = useOrf();
+  const { currentUser, notify, readModelInvalidations, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -132,6 +135,7 @@ export function ChatPage() {
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
+  const handledUsersInvalidationKeyRef = useRef("");
   const openChannelRequestIdRef = useRef(0);
   const mobileViewport = useChatMobileViewport();
   const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
@@ -141,6 +145,7 @@ export function ChatPage() {
   const activeMentionableUsers = useMemo(() => {
     return mentionableUsersForChannel(activeChannel, bootstrap?.users);
   }, [activeChannel, bootstrap?.users]);
+  const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
   const myMembership = currentMembership(activeChannel, currentUser?.id);
   const { applyTypingEvent, publishTyping, typingByUser } = useChatTypingState({
     activeChannelId: activeChannel?.id,
@@ -362,11 +367,25 @@ export function ChatPage() {
 
   const refreshBootstrap = useCallback(async () => {
     const data = await getChatBootstrap();
+    if (hasChatPresenceProtocolMismatch(data.users)) {
+      setBootstrap(null);
+      setBootstrapError(chatPresenceProtocolUpgradeMessage);
+      setChannels([]);
+      requestClientUpdateCenterOpen({ notice: chatPresenceProtocolUpgradeMessage });
+      throw new Error(chatPresenceProtocolUpgradeMessage);
+    }
     setBootstrap(data);
     setBootstrapError(null);
     setChannels(sortChannels(data.channels, currentUser?.id));
     return data;
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!usersInvalidationKey || loading || bootstrapError) return;
+    if (handledUsersInvalidationKeyRef.current === usersInvalidationKey) return;
+    handledUsersInvalidationKeyRef.current = usersInvalidationKey;
+    void refreshBootstrap().catch(() => undefined);
+  }, [bootstrapError, loading, refreshBootstrap, usersInvalidationKey]);
 
   const handleDraftStateChange = useCallback((channelId: string, hasDraft: boolean) => {
     setDraftChannelIds((items) => {
@@ -513,6 +532,10 @@ export function ChatPage() {
       .finally(() => setLoading(false));
   }, [notify, refreshBootstrap]);
 
+  const handleOpenUpdateCenter = useCallback(() => {
+    requestClientUpdateCenterOpen({ notice: chatPresenceProtocolUpgradeMessage });
+  }, []);
+
   useEffect(() => {
     if (loading || channels.length === 0) return;
     const routeChannelExists = routeChannelId ? channels.some((channel) => channel.id === routeChannelId) : false;
@@ -627,7 +650,7 @@ export function ChatPage() {
       };
       const pendingMessage = createPendingChatMessage({
         attachments,
-        author: currentUser,
+        author: { ...currentUser, presence: { online: true } },
         body,
         channelId,
         parentMessageId,
@@ -837,6 +860,12 @@ export function ChatPage() {
       return (
         <div className="orf-chat-empty-page">
           <span>{bootstrapError ?? "聊天中心加载失败。"}</span>
+          {bootstrapError === chatPresenceProtocolUpgradeMessage && (
+            <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleOpenUpdateCenter}>
+              <RefreshCw className="h-4 w-4" />
+              打开版本与更新
+            </button>
+          )}
           <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleRetryBootstrap}>
             <RefreshCw className="h-4 w-4" />
             重新加载

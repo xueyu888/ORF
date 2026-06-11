@@ -389,6 +389,9 @@ export interface ChatUser {
   status: UserStatus;
   avatarUrl?: string | null;
   lastOnlineAt?: string | null;
+  presence: {
+    online: boolean;
+  };
 }
 
 export interface ChatChannelMember {

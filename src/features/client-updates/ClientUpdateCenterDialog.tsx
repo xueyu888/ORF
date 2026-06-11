@@ -15,7 +15,7 @@ type ClientUpdateCenterState =
   | { message: string; status: "error" }
   | { result: ClientUpdateCheckResult; status: "ready" };
 
-export function ClientUpdateCenterDialog({ onClose, open }: { onClose: () => void; open: boolean }) {
+export function ClientUpdateCenterDialog({ notice, onClose, open }: { notice?: string; onClose: () => void; open: boolean }) {
   const [centerState, setCenterState] = useState<ClientUpdateCenterState>({ status: "checking" });
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
@@ -105,6 +105,7 @@ export function ClientUpdateCenterDialog({ onClose, open }: { onClose: () => voi
         </header>
 
         <div className="orf-client-update-center-body">
+          {notice && <p className="orf-client-update-center-message" data-tone="warning">{notice}</p>}
           {centerState.status === "checking" && (
             <div className="orf-client-update-center-status">
               <RefreshCw className="h-4 w-4 animate-spin" />

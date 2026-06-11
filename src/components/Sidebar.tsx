@@ -6,7 +6,6 @@ import { orfAssetLibrary } from "../config/assetLibrary";
 import { canShowFrontend, canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
-import { ClientUpdateCenterDialog } from "../features/client-updates/ClientUpdateCenterDialog";
 import { ImagePreviewDialog } from "./ImagePreviewDialog";
 import { Avatar } from "./ui";
 
@@ -24,10 +23,12 @@ export function Sidebar({
   backgroundUrl,
   collapsed,
   onCollapsedChange,
+  onOpenClientUpdateCenter,
 }: {
   backgroundUrl: string;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onOpenClientUpdateCenter: () => void;
 }) {
   const { chatUnreadSummary, currentUser, logout } = useOrf();
   const visibleGroups = sidebarGroups
@@ -38,7 +39,6 @@ export function Sidebar({
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [avatarPreviewOpen, setAvatarPreviewOpen] = useState(false);
-  const [clientUpdateCenterOpen, setClientUpdateCenterOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
   const avatarPreview = currentUser?.avatarUrl
     ? { alt: `${currentUser.name} 头像`, label: `${currentUser.name} 头像`, src: currentUser.avatarUrl }
@@ -193,7 +193,7 @@ export function Sidebar({
                 role="menuitem"
                 onClick={() => {
                   setUserMenuOpen(false);
-                  setClientUpdateCenterOpen(true);
+                  onOpenClientUpdateCenter();
                 }}
               >
                 <Info className="h-4 w-4" />
@@ -216,7 +216,6 @@ export function Sidebar({
         </div>
       </div>
       {avatarPreviewOpen && avatarPreview && <ImagePreviewDialog preview={avatarPreview} onClose={() => setAvatarPreviewOpen(false)} />}
-      <ClientUpdateCenterDialog open={clientUpdateCenterOpen} onClose={() => setClientUpdateCenterOpen(false)} />
     </aside>
   );
 }
