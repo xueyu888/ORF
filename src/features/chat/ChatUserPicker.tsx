@@ -9,10 +9,8 @@ import { matchesChatUser } from "./chatUserSearch";
 type ChatUserPickerProps = {
   className?: string;
   currentUserId?: string;
-  disabledUserTitle?: string | ((user: ChatUser) => string);
   emptyLabel: string;
   focusSignal?: number;
-  isUserDisabled?: (user: ChatUser) => boolean;
   onToggleUser: (userId: string) => void;
   placeholder: string;
   selectedUserIds: string[];
@@ -22,10 +20,8 @@ type ChatUserPickerProps = {
 export function ChatUserPicker({
   className,
   currentUserId,
-  disabledUserTitle,
   emptyLabel,
   focusSignal,
-  isUserDisabled,
   onToggleUser,
   placeholder,
   selectedUserIds,
@@ -54,26 +50,18 @@ export function ChatUserPicker({
         <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={placeholder} />
       </label>
       <div className="orf-chat-user-picker-list">
-        {filteredUsers.map((user) => {
-          const disabled = !selectedIds.has(user.id) && Boolean(isUserDisabled?.(user));
-          const title = disabled
-            ? typeof disabledUserTitle === "function" ? disabledUserTitle(user) : disabledUserTitle
-            : undefined;
-          return (
-            <button
-              className={selectedIds.has(user.id) ? "selected" : ""}
-              disabled={disabled}
-              key={user.id}
-              title={title}
-              type="button"
-              onClick={() => onToggleUser(user.id)}
-            >
-              <ChatPresenceAvatar className="orf-chat-member-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
-              <span>{user.name}</span>
-              <small>{formatPresence(user, currentUserId)}</small>
-            </button>
-          );
-        })}
+        {filteredUsers.map((user) => (
+          <button
+            className={selectedIds.has(user.id) ? "selected" : ""}
+            key={user.id}
+            type="button"
+            onClick={() => onToggleUser(user.id)}
+          >
+            <ChatPresenceAvatar className="orf-chat-member-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
+            <span>{user.name}</span>
+            <small>{formatPresence(user, currentUserId)}</small>
+          </button>
+        ))}
         {filteredUsers.length === 0 && (
           <div className="orf-chat-member-empty">{query.trim() ? "没有匹配成员" : emptyLabel}</div>
         )}

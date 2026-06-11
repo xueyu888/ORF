@@ -35,26 +35,32 @@ export function chatChannelSearchText(channel: ChatChannel, currentUserId: strin
   });
 }
 
-export function chatConversationAvatarUsers(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
+export function chatChannelAvatarUsers(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
+  if (isChatConversation(channel)) return [];
+  const members = channel.members
+    .map((member) => usersById.get(member.userId))
+    .filter((user): user is ChatUser => user !== undefined);
+  const visibleMembers = members.filter((user) => user.id !== currentUserId);
+  return sortChatChannelAvatarUsers(visibleMembers.length > 0 ? visibleMembers : members).slice(0, 3);
+}
+
+export function chatDirectPeer(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
+  if (channel.type !== "direct") return null;
   const visibleMembers = chatConversationVisibleMembers({
     currentUserId,
     members: channel.members,
     type: channel.type,
     usersById,
   });
-  return visibleMembers
-    .map((user) => usersById.get(user.id))
-    .filter((user): user is ChatUser => user !== undefined)
-    .slice(0, 3);
-}
-
-export function chatDirectPeer(channel: ChatChannel, currentUserId: string | undefined, usersById: ReadonlyMap<string, ChatUser>) {
-  if (channel.type !== "direct") return null;
-  return chatConversationAvatarUsers(channel, currentUserId, usersById)[0] ?? null;
+  const peer = visibleMembers[0];
+  return peer ? usersById.get(peer.id) ?? null : null;
 }
 
 export function chatChannelInfoLabel(channel: ChatChannel) {
-  if (channel.type === "group") return "群聊信息";
   if (channel.type === "direct") return "私聊信息";
   return "频道信息";
+}
+
+function sortChatChannelAvatarUsers(users: ChatUser[]) {
+  return [...users].sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }) || left.id.localeCompare(right.id));
 }

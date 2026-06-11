@@ -45,7 +45,7 @@ export function ChatChannelInfoPanel({
   const canManageMembership = canManage && channel.type === "private";
   const detailsChanged = displayName !== channel.displayName || purpose !== channel.purpose || header !== channel.header;
   const conversationHeaderChanged = header !== channel.header;
-  const conversationLabel = channel.type === "group" ? "群聊" : "私聊";
+  const conversationLabel = "私聊";
 
   useEffect(() => {
     setDisplayName(channel.displayName);

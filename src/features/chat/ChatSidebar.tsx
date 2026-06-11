@@ -1,7 +1,8 @@
 import { clsx } from "clsx";
-import { CheckCheck, ChevronDown, MessageSquare, Plus, Reply, Search } from "lucide-react";
-import { useMemo } from "react";
-import { IconButton } from "../../components/ui";
+import type { LucideIcon } from "lucide-react";
+import { CheckCheck, ChevronDown, Hash, MessageSquare, Plus, Reply, Search } from "lucide-react";
+import type { KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { chatChannelDisplayLabel, chatChannelSearchText, chatDirectPeer } from "./chatChannelPresentation";
@@ -11,16 +12,20 @@ import { ChatGroupAvatar } from "./ChatGroupAvatar";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { searchChatUsers } from "./chatUserSearch";
 
+export type ChatSidebarCreateCommand = {
+  kind: "channel" | "conversation";
+  onSelect: () => void;
+};
+
 type ChatSidebarProps = {
   activeChannelId: string | null;
   channels: ChatChannel[];
+  createCommands: ChatSidebarCreateCommand[];
   currentUserId?: string;
   draftChannelIds: Set<string>;
-  onCreateChannel: () => void;
   onOpenConversationWithUser: (userId: string) => void;
   onMarkUnreadChannelsRead: (channelIds: string[]) => void;
   onOpenChannel: (channelId: string) => void;
-  onOpenConversation: () => void;
   onPreviewChannel: (channelId: string) => void;
   query: string;
   setQuery: (value: string) => void;
@@ -31,13 +36,12 @@ type ChatSidebarProps = {
 export function ChatSidebar({
   activeChannelId,
   channels,
+  createCommands,
   currentUserId,
   draftChannelIds,
-  onCreateChannel,
   onOpenConversationWithUser,
   onMarkUnreadChannelsRead,
   onOpenChannel,
-  onOpenConversation,
   onPreviewChannel,
   query,
   setQuery,
@@ -58,14 +62,12 @@ export function ChatSidebar({
     : regularChannels;
   const publicChannels = uncategorizedChannels.filter((channel) => channel.type === "public");
   const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private");
-  const groupChannels = uncategorizedChannels.filter((channel) => channel.type === "group");
   const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct");
   const channelGroups: Array<{ channels: ChatChannel[]; title: string }> = [
     { title: "未读", channels: unreadChannels },
     { title: "收藏", channels: favorites },
     { title: "公开频道", channels: publicChannels },
     { title: "私有频道", channels: privateChannels },
-    { title: "群聊", channels: groupChannels },
     { title: "私信", channels: conversations },
   ];
 
@@ -76,19 +78,12 @@ export function ChatSidebar({
           <h2>聊天</h2>
           <span>{users.length} 位成员</span>
         </div>
-        <div className="orf-chat-sidebar-actions">
-          <IconButton icon={MessageSquare} label="新建私聊/群聊" onClick={onOpenConversation} />
-          <IconButton icon={Plus} label="新建频道" onClick={onCreateChannel} />
-        </div>
+        <ChatSidebarCreateMenu commands={createCommands} />
       </div>
       <label className="orf-chat-search-box">
         <Search className="h-4 w-4" />
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索频道、私信或成员" />
       </label>
-      <button type="button" className="orf-chat-new-conversation" onClick={onOpenConversation}>
-        <MessageSquare className="h-4 w-4" />
-        新建私聊/群聊
-      </button>
       <div className="orf-chat-channel-groups">
         {matchedUsers.length > 0 && (
           <UserResultGroup
@@ -118,6 +113,148 @@ export function ChatSidebar({
         )}
       </div>
     </aside>
+  );
+}
+
+const chatSidebarCreateCommandPresentation: Record<ChatSidebarCreateCommand["kind"], { description: string; icon: LucideIcon; label: string }> = {
+  channel: {
+    description: "公开或私有频道",
+    icon: Hash,
+    label: "新建频道",
+  },
+  conversation: {
+    description: "选择成员开始私聊",
+    icon: MessageSquare,
+    label: "打开私信",
+  },
+};
+
+function ChatSidebarCreateMenu({ commands }: { commands: ChatSidebarCreateCommand[] }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
+  const menuItems = () => (
+    Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? [])
+      .filter((item) => !item.disabled)
+  );
+  const focusTrigger = () => {
+    const trigger = rootRef.current?.querySelector<HTMLButtonElement>(".orf-chat-sidebar-create-trigger");
+    window.setTimeout(() => trigger?.focus(), 0);
+  };
+  const focusMenuItem = (index: number) => {
+    const items = menuItems();
+    if (items.length === 0) return;
+    const nextIndex = (index + items.length) % items.length;
+    items[nextIndex]?.focus();
+  };
+  const closeMenu = (restoreTriggerFocus = false) => {
+    setOpen(false);
+    if (restoreTriggerFocus) focusTrigger();
+  };
+  const runCommand = (command: ChatSidebarCreateCommand) => {
+    setOpen(false);
+    command.onSelect();
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const items = menuItems();
+    const currentIndex = items.findIndex((item) => item === target);
+    if (event.key === "Escape") {
+      if (!open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu(true);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      focusMenuItem(currentIndex >= 0 ? currentIndex + 1 : 0);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      focusMenuItem(currentIndex >= 0 ? currentIndex - 1 : items.length - 1);
+      return;
+    }
+    if (open && event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(0);
+      return;
+    }
+    if (open && event.key === "End") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(items.length - 1);
+      return;
+    }
+    if (open && target?.getAttribute("role") === "menuitem" && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      event.stopPropagation();
+      target.click();
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!rootRef.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const timer = window.setTimeout(() => menuItems()[0]?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  if (commands.length === 0) return null;
+
+  return (
+    <div className="orf-chat-sidebar-create" ref={rootRef} onKeyDown={handleKeyDown}>
+      <button
+        aria-controls={open ? menuId : undefined}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="新建"
+        className="orf-chat-sidebar-create-trigger"
+        title="新建"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Plus className="h-5 w-5" />
+      </button>
+      {open && (
+        <div className="orf-chat-sidebar-create-menu" id={menuId} role="menu" aria-label="新建聊天内容">
+          {commands.map((command) => {
+            const presentation = chatSidebarCreateCommandPresentation[command.kind];
+            const Icon = presentation.icon;
+            return (
+              <button key={command.kind} type="button" role="menuitem" onClick={() => runCommand(command)}>
+                <Icon className="h-4 w-4" />
+                <span>
+                  <strong>{presentation.label}</strong>
+                  <small>{presentation.description}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

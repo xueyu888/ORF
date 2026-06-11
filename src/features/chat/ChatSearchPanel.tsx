@@ -77,7 +77,6 @@ export function ChatSearchPanel({
             ["public", "公开"],
             ["private", "私有"],
             ["direct", "私信"],
-            ["group", "群聊"],
           ].map(([value, label]) => (
             <button
               type="button"

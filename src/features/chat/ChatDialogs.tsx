@@ -1,36 +1,43 @@
 import { Download, FileText, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ImagePreviewDialog, type ImagePreview } from "../../components/ImagePreviewDialog";
 import { Button, IconButton } from "../../components/ui";
-import { CHAT_GROUP_MAX_MEMBER_COUNT } from "../../domain/chatConversation";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
 import { ChatUserPicker } from "./ChatUserPicker";
 
 export function ChannelModal({
+  canCreatePrivate,
   canCreatePublic,
   currentUserId,
   onClose,
   onCreate,
   users,
 }: {
+  canCreatePrivate: boolean;
   canCreatePublic: boolean;
   currentUserId?: string;
   onClose: () => void;
   onCreate: (input: { displayName: string; header?: string; memberUserIds?: string[]; name?: string; purpose?: string; type: "public" | "private" }) => Promise<void>;
   users: ChatUser[];
 }) {
-  const [type, setType] = useState<"public" | "private">("private");
+  const [type, setType] = useState<"public" | "private">(() => canCreatePrivate ? "private" : "public");
   const [displayName, setDisplayName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [header, setHeader] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const selectableUsers = users.filter((user) => user.id !== currentUserId);
+  const canCreateSelectedType = type === "private" ? canCreatePrivate : canCreatePublic;
+  useEffect(() => {
+    if (type === "private" && !canCreatePrivate && canCreatePublic) setType("public");
+    if (type === "public" && !canCreatePublic && canCreatePrivate) setType("private");
+  }, [canCreatePrivate, canCreatePublic, type]);
   const toggleSelected = (userId: string) => {
     setSelected((items) => items.includes(userId) ? items.filter((id) => id !== userId) : [...items, userId]);
   };
   const submit = async () => {
+    if (!canCreateSelectedType) return;
     setSaving(true);
     try {
       await onCreate({ type, displayName, purpose, header, memberUserIds: selected });
@@ -43,7 +50,7 @@ export function ChannelModal({
       <div className="orf-chat-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header><h2>新建频道</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
         <div className="orf-chat-segmented">
-          <button className={type === "private" ? "active" : ""} type="button" onClick={() => setType("private")}>私有</button>
+          <button className={type === "private" ? "active" : ""} disabled={!canCreatePrivate} type="button" onClick={() => setType("private")}>私有</button>
           <button className={type === "public" ? "active" : ""} disabled={!canCreatePublic} type="button" onClick={() => setType("public")}>公开</button>
         </div>
         <label>频道名<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></label>
@@ -61,7 +68,7 @@ export function ChannelModal({
         )}
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
-          <Button disabled={!displayName.trim() || saving} onClick={() => void submit()}>{saving ? "创建中" : "创建"}</Button>
+          <Button disabled={!canCreateSelectedType || !displayName.trim() || saving} onClick={() => void submit()}>{saving ? "创建中" : "创建"}</Button>
         </footer>
       </div>
     </div>
@@ -79,19 +86,14 @@ export function ConversationModal({
   onOpen: (userIds: string[]) => Promise<void>;
   users: ChatUser[];
 }) {
-  const maxPeerCount = CHAT_GROUP_MAX_MEMBER_COUNT - 1;
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const candidates = users.filter((user) => user.id !== currentUserId);
   const toggleSelected = (userId: string) => {
-    setSelected((items) => {
-      if (items.includes(userId)) return items.filter((id) => id !== userId);
-      if (items.length >= maxPeerCount) return items;
-      return [...items, userId];
-    });
+    setSelected((items) => items.includes(userId) ? [] : [userId]);
   };
   const submit = async () => {
-    if (selected.length === 0 || selected.length > maxPeerCount) return;
+    if (selected.length !== 1) return;
     setSaving(true);
     try {
       await onOpen(selected);
@@ -102,21 +104,18 @@ export function ConversationModal({
   return (
     <div className="orf-chat-modal-backdrop" onMouseDown={onClose}>
       <div className="orf-chat-modal" onMouseDown={(event) => event.stopPropagation()}>
-        <header><h2>新建私聊/群聊</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
+        <header><h2>新建私聊</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
         <ChatUserPicker
           currentUserId={currentUserId}
-          disabledUserTitle={`群聊最多 ${CHAT_GROUP_MAX_MEMBER_COUNT} 人`}
           emptyLabel="没有可私聊成员"
-          isUserDisabled={() => selected.length >= maxPeerCount}
           onToggleUser={toggleSelected}
           placeholder="查找成员"
           selectedUserIds={selected}
           users={candidates}
         />
-        <div className="orf-chat-modal-note">已选 {selected.length} / {maxPeerCount}</div>
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
-          <Button disabled={selected.length === 0 || selected.length > maxPeerCount || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>
+          <Button disabled={selected.length !== 1 || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>
         </footer>
       </div>
     </div>
