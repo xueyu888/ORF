@@ -51,6 +51,7 @@ async function main() {
   set(next, "OBJECT_STORAGE_BUCKET", env.values.OBJECT_STORAGE_BUCKET ?? "orf-comment-attachments");
   set(next, "OBJECT_STORAGE_ACCESS_KEY", env.values.OBJECT_STORAGE_ACCESS_KEY && !weakValues.has(env.values.OBJECT_STORAGE_ACCESS_KEY) ? env.values.OBJECT_STORAGE_ACCESS_KEY : "orf-app");
   set(next, "OBJECT_STORAGE_FORCE_PATH_STYLE", "true");
+  set(next, "ORF_INFRA_UPLOAD_MAX_BYTES", env.values.ORF_INFRA_UPLOAD_MAX_BYTES ?? "10737418240");
   set(next, "OBJECT_STORAGE_UPLOAD_MAX_BYTES", env.values.OBJECT_STORAGE_UPLOAD_MAX_BYTES ?? "10485760");
   set(next, "MINIO_ROOT_USER", env.values.MINIO_ROOT_USER && env.values.MINIO_ROOT_USER !== "orf-dev-minio" ? env.values.MINIO_ROOT_USER : "orf-root");
 

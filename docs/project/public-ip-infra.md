@@ -13,6 +13,8 @@
 | MinIO S3 API | `19443` | `19443` | ORF 后端访问 S3-compatible API。 |
 | PostgreSQL | `54321` | `5432` | 远程开发机和成员环境直连共享 ORF 数据库；必须使用 TLS、最小权限账号和 PostgreSQL 自身的 `pg_hba.conf` 访问控制。 |
 
+基础设施上传承载上限由 `ORF_INFRA_UPLOAD_MAX_BYTES` 统一配置，默认 `10737418240`。`scripts/prepare-public-ip-infra.mjs` 会用它生成 ORF Web `/api` 入口和 MinIO S3 入口的 `client_max_body_size`，不能再为 Web 和 MinIO 分别手写不同上限。聊天附件业务上限属于系统设置 `chat.attachmentMaxBytes`，默认 2GiB，不能超过基础设施承载上限。
+
 当前路由器公网 IP 是 `125.70.13.137`。远程成员机器的 `DATABASE_URL`、`ORY_PUBLIC_URL` 和 `OBJECT_STORAGE_ENDPOINT` 必须以这个地址为事实源；DuckDNS A 记录也应指向这个地址。
 
 服务器本机和局域网成员位于同一个局域网内，当前路由器不支持稳定 NAT 回环；本机运行 `orf up`、ORF 后端和 Ory 时不要把运行时依赖指向 `125.70.13.137`，应使用 `199.199.199.8:5432`、`127.0.0.1:4433` 和 `127.0.0.1:9000`。局域网成员接入共享环境时，PostgreSQL、Ory Public 和 MinIO 应使用 `199.199.199.8` 入口，由共享包安装脚本的 `--mode auto` 自动选择。
@@ -219,4 +221,5 @@ curl --cacert .orf/shared-infra/certs/orf-public-ca.crt https://199.199.199.8:19
 4. MinIO bucket 保持私有；浏览器不直接访问对象存储。
 5. ORF 使用独立 `orf-app` MinIO 用户，不使用 root 用户。
 6. Ory 公网部署不使用 `--dev`。
-7. `.env`、`infra/public-ip/letsencrypt/`、bootstrap 证书和运行时 Nginx 配置都不提交。
+7. 基础设施承载上限只能放在 `ORF_INFRA_UPLOAD_MAX_BYTES`，业务模块上传上限放在各自系统设置；承载层不得反向定义聊天、评论、头像或背景的业务规则。
+8. `.env`、`infra/public-ip/letsencrypt/`、bootstrap 证书和运行时 Nginx 配置都不提交。

@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { commentActorWithPermissions } from "../auth/accessPolicy";
+import { env } from "../env";
 import {
   createComment,
   deleteCommentMessage,
@@ -53,7 +54,7 @@ async function readCommentAttachmentUpload(request: FastifyRequest) {
   const fields: Record<string, string> = {};
   let file: { buffer: Buffer; fileName: string; mimeType: string } | null = null;
 
-  for await (const part of request.parts()) {
+  for await (const part of request.parts({ limits: { fileSize: env.OBJECT_STORAGE_UPLOAD_MAX_BYTES, files: 1 } })) {
     if (part.type === "field" && typeof part.value === "string") {
       fields[part.fieldname] = part.value;
     }

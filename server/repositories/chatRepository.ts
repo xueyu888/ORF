@@ -19,11 +19,11 @@ import type { PermissionKey } from "../../src/config/permissions";
 import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from "../../src/features/chat/chatSearchSyntax";
 import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeNotificationModel";
 import { pool } from "../db/client";
-import { env } from "../env";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
 import { publishRealtimeChatEvent, realtimeOnlineUserIds } from "../realtime/realtimeEventBus";
+import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
-import { objectStorage } from "../storage/objectStorage";
+import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { createNotifications } from "./notificationRepository";
 import { getRolePermissionKeysForScope } from "./permissionRepository";
@@ -960,9 +960,11 @@ async function getRawMessage(actor: ChatActor, messageId: string) {
 }
 
 export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap> {
+  const settings = await readChatSettings();
   if (!actor.canRead) {
     return {
       channels: [],
+      settings,
       users: [],
       permissions: {
         canCreatePrivateChannel: actor.canCreatePrivateChannel,
@@ -980,6 +982,7 @@ export async function getChatBootstrap(actor: ChatActor): Promise<ChatBootstrap>
   const channels = await buildChannels(channelRows, actor);
   return {
     channels,
+    settings,
     users,
     permissions: {
       canCreatePrivateChannel: actor.canCreatePrivateChannel,
@@ -2259,12 +2262,12 @@ export async function publishChatTyping(channelId: string, actor: ChatActor): Pr
 }
 
 export async function uploadChatAttachment(
-  input: { body: Buffer; channelId: string; fileName: string; mimeType: string },
+  input: { body: Readable; channelId: string; fileName: string; mimeType: string },
   actor: ChatActor,
 ): Promise<Outcome<{ attachment: ChatAttachment }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
-  if (!input.body.byteLength || !input.fileName.trim()) return { status: "invalid" };
-  if (input.body.byteLength > env.CHAT_FILE_UPLOAD_MAX_BYTES) return { status: "tooLarge" };
+  if (!input.fileName.trim()) return { status: "invalid" };
+  const settings = await readChatSettings();
   const channel = await getVisibleChannel(actor, input.channelId);
   if (!channel) return { status: "notFound" };
 
@@ -2273,17 +2276,27 @@ export async function uploadChatAttachment(
   const expiresAt = new Date(Date.now() + CHAT_ATTACHMENT_TTL_MS).toISOString();
   const fileName = input.fileName.trim().slice(0, 240);
   const mimeType = normalizeMimeType(input.mimeType);
-  const imageMetadata = mimeType.startsWith("image/") ? readImageMetadata(input.body) : null;
-  const imageWidth = imageMetadata?.width ?? null;
-  const imageHeight = imageMetadata?.height ?? null;
   const objectKey = `chat/${safePathSegment(storageTeamId(actor))}/${safePathSegment(input.channelId)}/${id}/${safePathSegment(fileName)}`;
 
-  await objectStorage.putObject({
-    body: input.body,
-    contentLength: input.body.byteLength,
-    contentType: mimeType,
-    key: objectKey,
-  });
+  let stored: { contentLength: number; peeked: Buffer };
+  try {
+    stored = await objectStorage.putObjectStream({
+      body: input.body,
+      contentType: mimeType,
+      key: objectKey,
+      maxBytes: settings.attachmentMaxBytes,
+      peekBytes: 4096,
+    });
+  } catch (error) {
+    if (error instanceof ObjectStorageUploadTooLargeError) return { status: "tooLarge" };
+    if (error instanceof ObjectStorageUploadEmptyError) return { status: "invalid" };
+    throw error;
+  }
+
+  if (stored.contentLength <= 0) return { status: "invalid" };
+  const imageMetadata = mimeType.startsWith("image/") ? readImageMetadata(stored.peeked) : null;
+  const imageWidth = imageMetadata?.width ?? null;
+  const imageHeight = imageMetadata?.height ?? null;
 
   try {
     await pool.query(
@@ -2298,7 +2311,7 @@ export async function uploadChatAttachment(
         objectKey,
         fileName,
         mimeType,
-        input.body.byteLength,
+        stored.contentLength,
         imageWidth,
         imageHeight,
         actor.id,
@@ -2316,7 +2329,7 @@ export async function uploadChatAttachment(
       id,
       fileName,
       mimeType,
-      fileSize: input.body.byteLength,
+      fileSize: stored.contentLength,
       contentUrl: chatAttachmentContentUrl(id),
       width: imageWidth,
       height: imageHeight,

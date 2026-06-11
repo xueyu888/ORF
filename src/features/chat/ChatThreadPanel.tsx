@@ -9,6 +9,7 @@ import { chatMessageDeliveryStatus, type ChatSendHandler } from "./chatModels";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 
 type ChatThreadPanelProps = {
+  attachmentMaxBytes: number;
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
@@ -37,6 +38,7 @@ type ChatThreadPanelProps = {
 };
 
 export function ChatThreadPanel({
+  attachmentMaxBytes,
   onAttachmentPreview,
   canPin,
   currentUserId,
@@ -212,6 +214,7 @@ export function ChatThreadPanel({
         </div>
       </div>
       <ChatComposer
+        attachmentMaxBytes={attachmentMaxBytes}
         channelId={thread.rootMessage.channelId}
         feedbackItems={feedbackItems}
         focusSignal={composerFocusSignal}

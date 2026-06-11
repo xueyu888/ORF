@@ -1,11 +1,14 @@
 import { clsx } from "clsx";
-import { Check, Image, Loader2, MousePointerClick, Shuffle, Timer, ToggleLeft, Upload } from "lucide-react";
+import { Check, Image, Loader2, MessageSquare, MousePointerClick, Shuffle, Timer, ToggleLeft, Upload } from "lucide-react";
 import { type ChangeEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
+  getChatSettings,
   getVisualBackgrounds,
+  saveChatSettings as requestSaveChatSettings,
   saveVisualBackgroundConfig as requestSaveVisualBackgroundConfig,
   setDefaultVisualBackground as requestSetDefaultVisualBackground,
   uploadVisualBackground,
+  type ChatSettingsData,
   type VisualBackgroundConfig,
   type VisualBackgroundImage,
   type VisualBackgroundMode,
@@ -44,23 +47,162 @@ const defaultVisualBackgroundConfig: VisualBackgroundConfig = {
   switchIntervalMinutes: 10,
 };
 
+const bytesPerGb = 1024 * 1024 * 1024;
+
+function formatUploadBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${bytes} B`;
+  if (bytes < bytesPerGb) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / bytesPerGb).toFixed(1)} GB`;
+}
+
+function uploadBytesToGbInput(bytes: number) {
+  return Number.isInteger(bytes / bytesPerGb) ? String(bytes / bytesPerGb) : (bytes / bytesPerGb).toFixed(2).replace(/\.?0+$/, "");
+}
+
+function parseGbInput(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.round(parsed * bytesPerGb);
+}
+
 export function SystemSettingsPage() {
   return (
     <div className="orf-settings-page orf-settings-page-single">
       <section className="orf-settings-detail" aria-label="设置详情">
         <div className="orf-settings-detail-heading">
-          <span>Visual Config</span>
-          <h1>视觉设置</h1>
-          <p>自定义系统的视觉风格，让界面更贴合你的偏好。</p>
+          <span>System Config</span>
+          <h1>系统设置</h1>
+          <p>管理全站视觉、聊天和系统级策略。</p>
         </div>
 
         <div className="orf-settings-sections">
+          <ChatSettingSection />
           {backgroundSections.map((section) => (
             <BackgroundSettingSection key={section.scene} {...section} />
           ))}
         </div>
       </section>
     </div>
+  );
+}
+
+function ChatSettingSection() {
+  const { notify, readModelInvalidations } = useOrf();
+  const settingsInvalidationKey = readModelInvalidationKey(readModelInvalidations, "settings");
+  const [settings, setSettings] = useState<ChatSettingsData | null>(null);
+  const [inputValue, setInputValue] = useState("2");
+  const [queryStatus, setQueryStatus] = useState<RequestStatus>("idle");
+  const [queryErrorMessage, setQueryErrorMessage] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<RequestStatus>("idle");
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null);
+
+  const nextBytes = parseGbInput(inputValue);
+  const validationMessage =
+    nextBytes === null
+      ? "请输入有效数值"
+      : settings && nextBytes > settings.infrastructureMaxBytes
+        ? `不能超过基础设施上限 ${formatUploadBytes(settings.infrastructureMaxBytes)}`
+        : null;
+  const isSaving = saveStatus === "loading";
+  const isSaveDisabled =
+    !settings ||
+    isSaving ||
+    queryStatus === "loading" ||
+    Boolean(validationMessage) ||
+    nextBytes === settings.attachmentMaxBytes;
+
+  useEffect(() => {
+    let cancelled = false;
+    setQueryStatus("loading");
+    setQueryErrorMessage(null);
+    void getChatSettings()
+      .then((data) => {
+        if (cancelled) return;
+        setSettings(data);
+        setInputValue(uploadBytesToGbInput(data.attachmentMaxBytes));
+        setQueryStatus("success");
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setQueryStatus("error");
+        setQueryErrorMessage(error instanceof Error ? error.message : "聊天设置加载失败");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsInvalidationKey]);
+
+  const handleSave = async () => {
+    if (!settings || isSaveDisabled || nextBytes === null) return;
+    setSaveStatus("loading");
+    setSaveErrorMessage(null);
+    try {
+      const data = await requestSaveChatSettings({ attachmentMaxBytes: nextBytes });
+      setSettings(data);
+      setInputValue(uploadBytesToGbInput(data.attachmentMaxBytes));
+      setSaveStatus("success");
+      notify("聊天设置已保存");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "聊天设置保存失败";
+      setSaveStatus("error");
+      setSaveErrorMessage(message);
+      notify(message);
+    }
+  };
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      void handleSave();
+    }
+  };
+
+  return (
+    <section className="orf-settings-background-section">
+      <div className="orf-settings-section-header">
+        <div>
+          <h2>聊天设置</h2>
+          <p>配置聊天附件上传上限。</p>
+        </div>
+        <button type="button" className="orf-settings-default-button" disabled={isSaveDisabled} onClick={() => void handleSave()}>
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+          保存
+        </button>
+      </div>
+
+      <div className="orf-settings-background-controls" aria-label="聊天设置">
+        <div className="orf-settings-background-label">
+          <MessageSquare className="h-5 w-5" />
+          <span>附件上限</span>
+        </div>
+        <div className="orf-settings-control-field orf-settings-interval-field">
+          <input
+            className="orf-settings-number-input"
+            type="number"
+            min={0.01}
+            max={settings ? settings.infrastructureMaxBytes / bytesPerGb : 10}
+            step={0.1}
+            value={inputValue}
+            disabled={queryStatus === "loading" || isSaving}
+            onChange={(event) => setInputValue(event.target.value)}
+            onKeyDown={handleInputKeyDown}
+          />
+          <select className="orf-settings-unit-select" value="gb" disabled onChange={() => undefined}>
+            <option value="gb">GB</option>
+          </select>
+          {(validationMessage || saveErrorMessage) && <span className="orf-settings-inline-error">{validationMessage ?? saveErrorMessage}</span>}
+        </div>
+
+        <div className="orf-settings-background-label">
+          <Upload className="h-5 w-5" />
+          <span>承载上限</span>
+        </div>
+        <div className="orf-settings-control-field">
+          {queryStatus === "loading" && <span className="orf-settings-inline-error">加载中...</span>}
+          {queryStatus === "error" && <span className="orf-settings-inline-error">{queryErrorMessage ?? "聊天设置加载失败"}</span>}
+          {settings && <span className="orf-settings-selected-text">{formatUploadBytes(settings.infrastructureMaxBytes)}</span>}
+        </div>
+      </div>
+    </section>
   );
 }
 

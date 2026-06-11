@@ -12,6 +12,7 @@ import { type ChangeEvent, type ClipboardEvent, type DragEvent, useCallback, use
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import { uploadChatAttachment } from "../../state/apiClient";
 import type { ChatAttachment, ChatUser, Feedback } from "../../types/orf";
+import { formatFileSize } from "./chatFormat";
 import {
   type ChatAttachmentDraftItem,
   completeAttachmentDraftItem,
@@ -34,6 +35,7 @@ import {
 import { ChatDraftEditor } from "./ChatDraftEditor";
 
 type ChatComposerProps = {
+  attachmentMaxBytes: number;
   channelId: string;
   disabled?: boolean;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
@@ -50,6 +52,7 @@ type ChatComposerProps = {
 };
 
 export function ChatComposer({
+  attachmentMaxBytes,
   channelId,
   disabled,
   feedbackItems = [],
@@ -139,6 +142,11 @@ export function ChatComposer({
   const uploadFiles = (files: File[]) => {
     if (disabled) return;
     if (files.length === 0) return;
+    const oversizedFile = files.find((file) => file.size > attachmentMaxBytes);
+    if (oversizedFile) {
+      setError(`附件不能超过 ${formatFileSize(attachmentMaxBytes)}`);
+      return;
+    }
     const filesToUpload = files.slice(0, 10);
     setError(files.length > filesToUpload.length ? "一次最多添加 10 个附件，已忽略多余文件" : "");
     const uploads = filesToUpload.map((file) => ({ file, item: createAttachmentDraftItem(file) }));

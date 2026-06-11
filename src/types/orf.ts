@@ -495,6 +495,10 @@ export interface ChatMessageContext {
 
 export interface ChatBootstrap {
   channels: ChatChannel[];
+  settings: {
+    attachmentMaxBytes: number;
+    infrastructureMaxBytes: number;
+  };
   users: ChatUser[];
   permissions: {
     canCreatePrivateChannel: boolean;

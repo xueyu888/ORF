@@ -1,4 +1,7 @@
 {
+  "chat": {
+    "attachmentMaxBytes": 2147483648
+  },
   "visual": {
     "backgrounds": {
       "login_background": {

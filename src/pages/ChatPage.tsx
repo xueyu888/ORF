@@ -963,6 +963,7 @@ export function ChatPage() {
             />
             <ChatTypingLine typingByUser={typingByUser} />
             <ChatComposer
+              attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
               channelId={activeChannel.id}
               disabled={!bootstrap.permissions.canWrite}
               feedbackItems={feedbackLinkItems}
@@ -983,6 +984,7 @@ export function ChatPage() {
         <ChatRightPanel
           activePanel={activePanel}
           allUsers={bootstrap.users}
+          attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
           canManage={canManageRightPanelChannel}
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}

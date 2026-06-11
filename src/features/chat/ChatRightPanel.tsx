@@ -12,6 +12,7 @@ import { ChatThreadPanel } from "./ChatThreadPanel";
 type ChatRightPanelProps = {
   activePanel: ActivePanel;
   allUsers: ChatUser[];
+  attachmentMaxBytes: number;
   canManage: boolean;
   channel: ChatChannel;
   collectionLoading: boolean;
@@ -80,6 +81,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       {props.activePanel === "thread" && (
         props.thread ? (
           <ChatThreadPanel
+            attachmentMaxBytes={props.attachmentMaxBytes}
             canPin={props.canManage}
             currentUserId={props.currentUserId}
             editingMessageId={props.editingMessageId}

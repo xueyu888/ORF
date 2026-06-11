@@ -124,6 +124,10 @@ export type VisualBackgroundsData = {
   config: VisualBackgroundConfig;
   list: VisualBackgroundImage[];
 };
+export type ChatSettingsData = {
+  attachmentMaxBytes: number;
+  infrastructureMaxBytes: number;
+};
 export type UserPreferences = {
   userId: string;
   defaultLandingPath: string | null;
@@ -559,6 +563,19 @@ export async function getChatUnreadSummary() {
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
   const response = await apiJson<ApiEnvelope<VisualBackgroundsData>>(`/api/settings/visual/backgrounds?scene=${encodeURIComponent(scene)}`);
+  return response.data;
+}
+
+export async function getChatSettings() {
+  const response = await apiJson<ApiEnvelope<ChatSettingsData>>("/api/settings/chat");
+  return response.data;
+}
+
+export async function saveChatSettings(input: Pick<ChatSettingsData, "attachmentMaxBytes">) {
+  const response = await apiJson<ApiEnvelope<ChatSettingsData>>("/api/settings/chat", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
   return response.data;
 }
 
