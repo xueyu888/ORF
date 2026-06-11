@@ -10,6 +10,7 @@ import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
 
 type ChatThreadPanelProps = {
   attachmentMaxBytes: number;
+  canDeleteAnyMessage: boolean;
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
@@ -40,6 +41,7 @@ type ChatThreadPanelProps = {
 export function ChatThreadPanel({
   attachmentMaxBytes,
   onAttachmentPreview,
+  canDeleteAnyMessage,
   canPin,
   currentUserId,
   editingMessageId,
@@ -154,6 +156,7 @@ export function ChatThreadPanel({
         onScroll={handleThreadStickinessScroll}
       >
         <ChatMessageItem
+          canDeleteAnyMessage={canDeleteAnyMessage}
           canPin={canPin}
           currentUserId={currentUserId}
           editing={editingMessageId === thread.rootMessage.id}
@@ -185,6 +188,7 @@ export function ChatThreadPanel({
             const compact = shouldCompactChatMessage(thread.replies[index - 1], reply);
             return (
               <ChatMessageItem
+                canDeleteAnyMessage={canDeleteAnyMessage}
                 canPin={canPin}
                 compact={compact}
                 currentUserId={currentUserId}

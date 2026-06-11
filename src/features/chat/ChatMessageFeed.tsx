@@ -8,6 +8,7 @@ import { ChatMessageItem } from "./ChatMessageItem";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
 type ChatMessageFeedProps = {
+  canDeleteAnyMessage: boolean;
   canPin: boolean;
   currentUserId?: string;
   editingMessageId?: string | null;
@@ -52,6 +53,7 @@ type MessageListProps = Omit<
 >;
 
 export function ChatMessageFeed({
+  canDeleteAnyMessage,
   canPin,
   currentUserId,
   editingMessageId,
@@ -102,6 +104,7 @@ export function ChatMessageFeed({
       ) : (
         <MessageList
           canPin={canPin}
+          canDeleteAnyMessage={canDeleteAnyMessage}
           currentUserId={currentUserId}
           editingMessageId={editingMessageId}
           feedbackItems={feedbackItems}
@@ -151,6 +154,7 @@ export function ChatMessageFeed({
 
 function MessageList({
   onAttachmentPreview,
+  canDeleteAnyMessage,
   canPin,
   currentUserId,
   editingMessageId,
@@ -237,6 +241,7 @@ function MessageList({
             )}
             <ChatMessageItem
               canPin={canPin}
+              canDeleteAnyMessage={canDeleteAnyMessage}
               compact={compact}
               currentUserId={currentUserId}
               editing={editingMessageId === message.id}

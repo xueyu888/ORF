@@ -15,6 +15,7 @@ type ChatRightPanelProps = {
   allUsers: ChatUser[];
   attachmentMaxBytes: number;
   canManage: boolean;
+  canDeleteAnyMessage: boolean;
   channel: ChatChannel;
   collectionLoading: boolean;
   collectionResults: ChatSearchResult[];
@@ -84,6 +85,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
         props.thread ? (
           <ChatThreadPanel
             attachmentMaxBytes={props.attachmentMaxBytes}
+            canDeleteAnyMessage={props.canDeleteAnyMessage}
             canPin={props.canManage}
             currentUserId={props.currentUserId}
             editingMessageId={props.editingMessageId}
