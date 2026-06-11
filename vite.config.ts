@@ -4,6 +4,40 @@ import { defineConfig, loadEnv } from "vite";
 
 const packageJson = JSON.parse(fs.readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version: string };
 
+function normalizedModuleId(id: string) {
+  return id.replace(/\\/g, "/");
+}
+
+function manualChunkForOrfModule(id: string) {
+  const moduleId = normalizedModuleId(id);
+
+  if (
+    moduleId.includes("/node_modules/@tiptap/") ||
+    moduleId.includes("/node_modules/prosemirror-") ||
+    moduleId.includes("/node_modules/orderedmap/") ||
+    moduleId.includes("/node_modules/rope-sequence/") ||
+    moduleId.includes("/node_modules/w3c-keyname/")
+  ) {
+    return "vendor-tiptap";
+  }
+
+  if (
+    moduleId.includes("/src/features/rich-text/OrfRichTextEditor.tsx") ||
+    moduleId.includes("/src/features/rich-text/orfRichTextExtensions.ts")
+  ) {
+    return "orf-rich-text-editor";
+  }
+
+  if (
+    moduleId.includes("/src/features/rich-text/OrfRichTextMarkdownViewer.tsx") ||
+    moduleId.includes("/src/features/rich-text/orfRichTextMarkdown.ts")
+  ) {
+    return "orf-rich-text-markdown";
+  }
+
+  return undefined;
+}
+
 function publicFrontendHost(env: Record<string, string>) {
   const candidate = env.ORF_APP_URL || env.ORF_DUCKDNS_DOMAIN || env.ORF_WEB_DOMAIN || "";
   if (!candidate) return null;
@@ -20,6 +54,11 @@ export default defineConfig(({ mode }) => {
   return {
     build: {
       emptyOutDir: false,
+      rollupOptions: {
+        output: {
+          manualChunks: manualChunkForOrfModule,
+        },
+      },
     },
     plugins: [tailwindcss()],
     define: {
