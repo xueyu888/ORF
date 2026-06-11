@@ -27,11 +27,14 @@ const DESKTOP_UNREAD_BADGE_LIMIT = 99;
 const ORF_APP_NAME = "ORF";
 const DESKTOP_ICON_BITMAP_SIZE = 32;
 const DESKTOP_ICON_BITMAP_SCALE = 4;
+const MAX_PENDING_CHAT_NOTIFICATION_TARGETS = 16;
+const CHAT_NOTIFICATION_ACTIVATION_PREFIX = "orf-chat-notification";
 
 const desktopShellState = {
   clientUrl: null,
   isQuitting: false,
   mainWindow: null,
+  pendingChatNotificationTargetsByWebContents: new Map(),
   tray: null,
   unreadCount: 0,
 };
@@ -63,6 +66,7 @@ function createMainWindow(clientUrl) {
       sandbox: true,
     },
   });
+  const webContentsId = mainWindow.webContents.id;
   desktopShellState.clientUrl = clientUrl;
   desktopShellState.mainWindow = mainWindow;
 
@@ -97,6 +101,7 @@ function createMainWindow(clientUrl) {
   mainWindow.on("enter-full-screen", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("leave-full-screen", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("closed", () => {
+    desktopShellState.pendingChatNotificationTargetsByWebContents.delete(webContentsId);
     if (desktopShellState.mainWindow === mainWindow) {
       desktopShellState.mainWindow = null;
     }
@@ -142,9 +147,10 @@ function showMainWindow(targetPath) {
 }
 
 function openChatTargetInWindow(targetWindow, targetPath) {
+  enqueueChatNotificationTarget(targetWindow, targetPath);
   const sendOpenTarget = () => {
     if (!targetWindow.isDestroyed()) {
-      targetWindow.webContents.send("orf:chat-notification:open", targetPath);
+      targetWindow.webContents.send("orf:chat-notification:open-pending");
     }
   };
   if (targetWindow.webContents.isLoading()) {
@@ -152,6 +158,30 @@ function openChatTargetInWindow(targetWindow, targetPath) {
     return;
   }
   sendOpenTarget();
+}
+
+function enqueueChatNotificationTarget(targetWindow, targetPath) {
+  if (!isSafeChatTargetPath(targetPath) || targetWindow.isDestroyed()) return;
+  const webContentsId = targetWindow.webContents.id;
+  const pendingTargets = desktopShellState.pendingChatNotificationTargetsByWebContents.get(webContentsId) ?? [];
+  pendingTargets.push(targetPath);
+  desktopShellState.pendingChatNotificationTargetsByWebContents.set(
+    webContentsId,
+    pendingTargets.slice(-MAX_PENDING_CHAT_NOTIFICATION_TARGETS),
+  );
+}
+
+function consumePendingChatNotificationTarget(webContents) {
+  if (!webContents || webContents.isDestroyed()) return null;
+  const webContentsId = webContents.id;
+  const pendingTargets = desktopShellState.pendingChatNotificationTargetsByWebContents.get(webContentsId) ?? [];
+  const targetPath = pendingTargets.shift() ?? null;
+  if (pendingTargets.length > 0) {
+    desktopShellState.pendingChatNotificationTargetsByWebContents.set(webContentsId, pendingTargets);
+  } else {
+    desktopShellState.pendingChatNotificationTargetsByWebContents.delete(webContentsId);
+  }
+  return isSafeChatTargetPath(targetPath) ? targetPath : null;
 }
 
 function requestDesktopAttention(targetWindow) {
@@ -293,21 +323,83 @@ function chatNotificationPayload(input, clientUrl) {
   };
 }
 
+function chatNotificationActivationArguments(targetPath) {
+  const params = new URLSearchParams();
+  params.set("targetPath", targetPath);
+  return `${CHAT_NOTIFICATION_ACTIVATION_PREFIX}?${params.toString()}`;
+}
+
+function chatNotificationTargetPathFromActivationArguments(value) {
+  if (typeof value !== "string") return null;
+  const queryStart = value.indexOf("?");
+  if (queryStart < 0 || value.slice(0, queryStart) !== CHAT_NOTIFICATION_ACTIVATION_PREFIX) return null;
+  const params = new URLSearchParams(value.slice(queryStart + 1));
+  const targetPath = params.get("targetPath");
+  return isSafeChatTargetPath(targetPath) ? targetPath : null;
+}
+
+function chatNotificationOptions(payload) {
+  if (process.platform === "win32") {
+    return {
+      toastXml: windowsChatNotificationToastXml(payload),
+    };
+  }
+  return {
+    title: payload.title,
+    body: payload.body,
+    icon: resolveDesktopIconPath(),
+    silent: false,
+  };
+}
+
+function windowsChatNotificationToastXml(payload) {
+  return [
+    `<toast launch="${escapeXmlAttribute(chatNotificationActivationArguments(payload.targetPath))}">`,
+    "<visual>",
+    '<binding template="ToastGeneric">',
+    `<text>${escapeXmlText(payload.title)}</text>`,
+    `<text>${escapeXmlText(payload.body)}</text>`,
+    "</binding>",
+    "</visual>",
+    "</toast>",
+  ].join("");
+}
+
+function escapeXmlAttribute(value) {
+  return escapeXmlText(value).replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
+function escapeXmlText(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function registerNativeNotificationBridge(clientUrl) {
+  if (process.platform === "win32" && typeof Notification.handleActivation === "function") {
+    Notification.handleActivation((details) => {
+      const targetPath = chatNotificationTargetPathFromActivationArguments(details?.arguments);
+      if (targetPath) showMainWindow(targetPath);
+    });
+  }
+
+  ipcMain.handle("orf:chat-notification:consume-open-target", (event) => ({
+    status: "success",
+    targetPath: consumePendingChatNotificationTarget(event.sender),
+  }));
+
   ipcMain.handle("orf:chat-notification:show", (event, input) => {
     const payload = chatNotificationPayload(input, clientUrl);
     if (!payload) return { status: "not_sent", reason: "invalid_payload" };
     if (!Notification.isSupported()) return { status: "unsupported", reason: "notification_not_supported" };
 
-    const notification = new Notification({
-      title: payload.title,
-      body: payload.body,
-      icon: resolveDesktopIconPath(),
-      silent: false,
-    });
-    notification.on("click", () => {
-      showMainWindow(payload.targetPath);
-    });
+    const notification = new Notification(chatNotificationOptions(payload));
+    if (process.platform !== "win32" || typeof Notification.handleActivation !== "function") {
+      notification.on("click", () => {
+        showMainWindow(payload.targetPath);
+      });
+    }
     notification.show();
     requestDesktopAttention(BrowserWindow.fromWebContents(event.sender));
     return { status: "success" };
