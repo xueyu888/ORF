@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ChatComposer } from "../features/chat/ChatComposer";
@@ -55,6 +55,8 @@ import {
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { ChatAttachment, ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../types/orf";
+
+const chatFeedPrefetchDelayMs = 250;
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
@@ -113,6 +115,7 @@ export function ChatPage() {
   const navigate = useNavigate();
   const { currentUser, notify, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [feedbackReferences, setFeedbackReferences] = useState<FeedbackReference[]>([]);
   const [loading, setLoading] = useState(true);
@@ -302,7 +305,7 @@ export function ChatPage() {
     if (!feedPrefetchChannelKey) return undefined;
     const timers = feedPrefetchChannelKey.split("\n").map((channelId, index) => window.setTimeout(() => {
       void prefetchChannelMessages(channelId);
-    }, index * 80));
+    }, index * chatFeedPrefetchDelayMs));
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
     };
@@ -360,6 +363,7 @@ export function ChatPage() {
   const refreshBootstrap = useCallback(async () => {
     const data = await getChatBootstrap();
     setBootstrap(data);
+    setBootstrapError(null);
     setChannels(sortChannels(data.channels, currentUser?.id));
     return data;
   }, [currentUser?.id]);
@@ -476,9 +480,16 @@ export function ChatPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setBootstrapError(null);
     void refreshBootstrap()
       .catch((error) => {
-        if (!cancelled) notify(error instanceof Error ? error.message : "加载聊天失败");
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "加载聊天失败";
+          setBootstrap(null);
+          setChannels([]);
+          setBootstrapError(message);
+          notify(message);
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -486,6 +497,20 @@ export function ChatPage() {
     return () => {
       cancelled = true;
     };
+  }, [notify, refreshBootstrap]);
+
+  const handleRetryBootstrap = useCallback(() => {
+    setLoading(true);
+    setBootstrapError(null);
+    void refreshBootstrap()
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : "加载聊天失败";
+        setBootstrap(null);
+        setChannels([]);
+        setBootstrapError(message);
+        notify(message);
+      })
+      .finally(() => setLoading(false));
   }, [notify, refreshBootstrap]);
 
   useEffect(() => {
@@ -808,6 +833,17 @@ export function ChatPage() {
   }
 
   if (!bootstrap?.permissions.canRead) {
+    if (!bootstrap) {
+      return (
+        <div className="orf-chat-empty-page">
+          <span>{bootstrapError ?? "聊天中心加载失败。"}</span>
+          <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleRetryBootstrap}>
+            <RefreshCw className="h-4 w-4" />
+            重新加载
+          </button>
+        </div>
+      );
+    }
     return <div className="orf-chat-empty-page">当前账号没有聊天访问权限。</div>;
   }
 
