@@ -2,7 +2,9 @@ import { clsx } from "clsx";
 import { CheckCheck, ChevronDown, MessageSquare, Plus, Reply, Search } from "lucide-react";
 import { useMemo } from "react";
 import { IconButton } from "../../components/ui";
+import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
+import { chatChannelDisplayLabel, chatChannelSearchText, chatDirectPeer } from "./chatChannelPresentation";
 import { formatPresence } from "./chatPresence";
 import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
 import { ChatGroupAvatar } from "./ChatGroupAvatar";
@@ -43,10 +45,10 @@ export function ChatSidebar({
   users,
 }: ChatSidebarProps) {
   const normalizedQuery = query.trim().toLowerCase();
-  const filteredChannels = channels.filter((channel) => channel.displayName.toLowerCase().includes(normalizedQuery));
+  const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
+  const filteredChannels = channels.filter((channel) => chatChannelSearchText(channel, currentUserId, usersById).toLowerCase().includes(normalizedQuery));
   const matchedUsers = searchChatUsers(users, query, { excludeUserId: currentUserId });
   const unreadChannels = sortUnreadChannels(filteredChannels.filter((channel) => isUnreadChannel(channel, currentUserId)));
-  const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
   const unreadChannelIds = new Set(unreadChannels.map((channel) => channel.id));
   const regularChannels = unreadChannelIds.size > 0 ? filteredChannels.filter((channel) => !unreadChannelIds.has(channel.id)) : filteredChannels;
   const favorites = regularChannels.filter((channel) => currentMembership(channel, currentUserId)?.favorite);
@@ -55,13 +57,15 @@ export function ChatSidebar({
     ? regularChannels.filter((channel) => !favoriteChannelIds.has(channel.id))
     : regularChannels;
   const publicChannels = uncategorizedChannels.filter((channel) => channel.type === "public");
-  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private" || channel.type === "group");
+  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private");
+  const groupChannels = uncategorizedChannels.filter((channel) => channel.type === "group");
   const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct");
   const channelGroups: Array<{ channels: ChatChannel[]; title: string }> = [
     { title: "未读", channels: unreadChannels },
     { title: "收藏", channels: favorites },
     { title: "公开频道", channels: publicChannels },
     { title: "私有频道", channels: privateChannels },
+    { title: "群聊", channels: groupChannels },
     { title: "私信", channels: conversations },
   ];
 
@@ -163,8 +167,9 @@ function ChannelGroup({
       </div>
       {channels.map((channel) => {
         const membership = currentMembership(channel, currentUserId);
-        const directPeer = directChannelPeer(channel, currentUserId, usersById);
-        const isChannel = channel.type !== "direct";
+        const directPeer = chatDirectPeer(channel, currentUserId, usersById);
+        const isConversation = isChatConversation(channel);
+        const label = chatChannelDisplayLabel(channel, currentUserId, usersById);
         const hasUnreadBadge = channel.mentionCount > 0 || channel.unreadCount > 0 || channel.threadUnreadCount > 0;
         const hasDraft = draftChannelIds.has(channel.id);
         return (
@@ -173,7 +178,7 @@ function ChannelGroup({
             className={clsx(
               "orf-chat-channel-item",
               channel.id === activeChannelId && "orf-chat-channel-item-active",
-              (directPeer || isChannel) && "orf-chat-channel-item-conversation",
+              isConversation && "orf-chat-channel-item-conversation",
               membership?.muted && "orf-chat-channel-item-muted",
             )}
             key={channel.id}
@@ -186,7 +191,7 @@ function ChannelGroup({
             ) : (
               <ChatGroupAvatar channel={channel} className="orf-chat-channel-avatar" currentUserId={currentUserId} usersById={usersById} />
             )}
-            <span className="truncate">{channel.displayName}</span>
+            <span className="truncate">{label}</span>
             {hasUnreadBadge ? (
               <span className="orf-chat-channel-badges">
                 {channel.mentionCount > 0 && <strong>@{channel.mentionCount}</strong>}
@@ -204,12 +209,6 @@ function ChannelGroup({
       })}
     </section>
   );
-}
-
-function directChannelPeer(channel: ChatChannel, currentUserId: string | undefined, usersById: Map<string, ChatUser>) {
-  if (channel.type !== "direct") return null;
-  const peerMember = channel.members.find((member) => member.userId !== currentUserId) ?? channel.members[0];
-  return peerMember ? usersById.get(peerMember.userId) ?? null : null;
 }
 
 function UserResultGroup({

@@ -1,10 +1,12 @@
 import { Bookmark, Loader2, Pin } from "lucide-react";
 import { IconButton } from "../../components/ui";
 import type { ChatMessage, ChatSearchResult, ChatUser, Feedback } from "../../types/orf";
+import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 
 type ChatCollectionPanelProps = {
+  currentUserId?: string;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   kind: "pins" | "saved";
   loading: boolean;
@@ -14,7 +16,7 @@ type ChatCollectionPanelProps = {
   usersById: Map<string, ChatUser>;
 };
 
-export function ChatCollectionPanel({ feedbackItems, kind, loading, onOpenResult, onSave, results, usersById }: ChatCollectionPanelProps) {
+export function ChatCollectionPanel({ currentUserId, feedbackItems, kind, loading, onOpenResult, onSave, results, usersById }: ChatCollectionPanelProps) {
   const empty = kind === "pins" ? "当前频道还没有固定消息。" : "还没有保存过消息。";
   return (
     <div className="orf-chat-collection-panel">
@@ -29,7 +31,7 @@ export function ChatCollectionPanel({ feedbackItems, kind, loading, onOpenResult
           {results.map((result) => (
             <article className="orf-chat-collection-item" key={result.message.id}>
               <button type="button" onClick={() => onOpenResult(result)}>
-                <span>{result.channel.displayName}</span>
+                <span>{chatChannelDisplayLabel(result.channel, currentUserId, usersById)}</span>
                 <strong>{result.message.authorName}</strong>
                 <small title={formatDateTime(result.message.createdAt)}>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
                 <div className="orf-chat-collection-body"><ChatMarkdown compact body={result.message.body} feedbackItems={feedbackItems} usersById={usersById} /></div>

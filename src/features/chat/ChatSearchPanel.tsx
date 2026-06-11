@@ -1,12 +1,14 @@
 import { FileText, Image as ImageIcon, Loader2, Search } from "lucide-react";
 import { useEffect, useRef } from "react";
 import type { ChatMessage, ChatSearchResult, ChatUser, Feedback } from "../../types/orf";
+import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatDay, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import type { ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
 import { chatSearchInputPlaceholder } from "./chatSearchSyntax";
 
 type ChatSearchPanelProps = {
+  currentUserId?: string;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   focusSignal: number;
   onOpenResult: (result: ChatSearchResult) => void;
@@ -24,6 +26,7 @@ type ChatSearchPanelProps = {
 };
 
 export function ChatSearchPanel({
+  currentUserId,
   feedbackItems,
   focusSignal,
   onOpenResult,
@@ -96,7 +99,7 @@ export function ChatSearchPanel({
         )}
         {results.map((result) => (
           <button type="button" key={result.message.id} onClick={() => onOpenResult(result)}>
-            <span>{result.channel.displayName}</span>
+            <span>{chatChannelDisplayLabel(result.channel, currentUserId, usersById)}</span>
             <strong>{result.message.authorName}</strong>
             <small title={formatDateTime(result.message.createdAt)}>{formatDay(result.message.createdAt)} {formatTime(result.message.createdAt)}</small>
             <SearchResultPreview feedbackItems={feedbackItems} message={result.message} usersById={usersById} />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui";
+import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
 import { formatPresence } from "./chatPresence";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
@@ -38,9 +39,13 @@ export function ChatChannelInfoPanel({
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const memberIds = new Set(channel.members.map((member) => member.userId));
   const candidates = users.filter((user) => !memberIds.has(user.id));
-  const canEditMetadata = canManage && channel.type !== "direct" && channel.type !== "group";
+  const isConversation = isChatConversation(channel);
+  const canEditChannelMetadata = canManage && !isConversation;
+  const canEditConversationHeader = isConversation;
   const canManageMembership = canManage && channel.type === "private";
   const detailsChanged = displayName !== channel.displayName || purpose !== channel.purpose || header !== channel.header;
+  const conversationHeaderChanged = header !== channel.header;
+  const conversationLabel = channel.type === "group" ? "群聊" : "私聊";
 
   useEffect(() => {
     setDisplayName(channel.displayName);
@@ -54,10 +59,19 @@ export function ChatChannelInfoPanel({
   }, [channel.displayName, channel.header, channel.id, channel.purpose]);
 
   const saveDetails = async () => {
-    if (!canEditMetadata || !displayName.trim()) return;
+    if (!canEditChannelMetadata || !displayName.trim()) return;
     setSavingDetails(true);
     try {
       await onUpdateChannel({ displayName: displayName.trim(), purpose: purpose.trim(), header: header.trim() });
+    } finally {
+      setSavingDetails(false);
+    }
+  };
+  const saveConversationHeader = async () => {
+    if (!canEditConversationHeader) return;
+    setSavingDetails(true);
+    try {
+      await onUpdateChannel({ header: header.trim() });
     } finally {
       setSavingDetails(false);
     }
@@ -93,7 +107,7 @@ export function ChatChannelInfoPanel({
 
   return (
     <div className="orf-chat-info-panel">
-      {canEditMetadata ? (
+      {canEditChannelMetadata ? (
         <div className="orf-chat-info-section">
           <label>频道设置</label>
           <div className="orf-chat-info-fields">
@@ -105,14 +119,26 @@ export function ChatChannelInfoPanel({
             {savingDetails ? "保存中" : "保存频道设置"}
           </Button>
         </div>
+      ) : canEditConversationHeader ? (
+        <div className="orf-chat-info-section">
+          <label>{conversationLabel}标题</label>
+          <div className="orf-chat-info-fields">
+            <textarea value={header} onChange={(event) => setHeader(event.target.value)} placeholder={`${conversationLabel}标题`} rows={3} />
+          </div>
+          <Button disabled={!conversationHeaderChanged || savingDetails} onClick={() => void saveConversationHeader()} variant="secondary">
+            {savingDetails ? "保存中" : `保存${conversationLabel}标题`}
+          </Button>
+        </div>
       ) : (
         <>
+          {isConversation ? null : (
+            <div className="orf-chat-info-section">
+              <label>频道说明</label>
+              <p>{channel.purpose || "暂无说明"}</p>
+            </div>
+          )}
           <div className="orf-chat-info-section">
-            <label>频道说明</label>
-            <p>{channel.purpose || "暂无说明"}</p>
-          </div>
-          <div className="orf-chat-info-section">
-            <label>频道标题</label>
+            <label>{isConversation ? `${conversationLabel}标题` : "频道标题"}</label>
             <p>{channel.header || "暂无标题"}</p>
           </div>
         </>

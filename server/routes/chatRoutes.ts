@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { PermissionKey } from "../../src/config/permissions";
+import { CHAT_GROUP_MAX_MEMBER_COUNT } from "../../src/domain/chatConversation";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { env } from "../env";
 import { getRolePermissionKeysForScope } from "../repositories/permissionRepository";
@@ -70,7 +71,7 @@ const createChannelBodySchema = z.object({
 });
 
 const createDirectBodySchema = z.object({
-  userIds: z.array(z.string().uuid()).min(1).max(16),
+  userIds: z.array(z.string().uuid()).min(1).max(CHAT_GROUP_MAX_MEMBER_COUNT),
 });
 
 const updateChannelBodySchema = z.object({

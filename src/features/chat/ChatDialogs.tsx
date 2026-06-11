@@ -1,6 +1,8 @@
-import { Check, Copy, Download, FileText, RotateCcw, Trash2, X, ZoomIn, ZoomOut } from "lucide-react";
-import { type WheelEvent, useEffect, useRef, useState } from "react";
+import { Download, FileText, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { ImagePreviewDialog, type ImagePreview } from "../../components/ImagePreviewDialog";
 import { Button, IconButton } from "../../components/ui";
+import { CHAT_GROUP_MAX_MEMBER_COUNT } from "../../domain/chatConversation";
 import type { ChatAttachment, ChatMessage, ChatUser } from "../../types/orf";
 import { formatFileSize } from "./chatFormat";
 import { ChatUserPicker } from "./ChatUserPicker";
@@ -77,13 +79,19 @@ export function ConversationModal({
   onOpen: (userIds: string[]) => Promise<void>;
   users: ChatUser[];
 }) {
+  const maxPeerCount = CHAT_GROUP_MAX_MEMBER_COUNT - 1;
   const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const candidates = users.filter((user) => user.id !== currentUserId);
   const toggleSelected = (userId: string) => {
-    setSelected((items) => items.includes(userId) ? items.filter((id) => id !== userId) : [...items, userId]);
+    setSelected((items) => {
+      if (items.includes(userId)) return items.filter((id) => id !== userId);
+      if (items.length >= maxPeerCount) return items;
+      return [...items, userId];
+    });
   };
   const submit = async () => {
+    if (selected.length === 0 || selected.length > maxPeerCount) return;
     setSaving(true);
     try {
       await onOpen(selected);
@@ -97,15 +105,18 @@ export function ConversationModal({
         <header><h2>新建私聊/群聊</h2><IconButton icon={X} label="关闭" onClick={onClose} /></header>
         <ChatUserPicker
           currentUserId={currentUserId}
+          disabledUserTitle={`群聊最多 ${CHAT_GROUP_MAX_MEMBER_COUNT} 人`}
           emptyLabel="没有可私聊成员"
+          isUserDisabled={() => selected.length >= maxPeerCount}
           onToggleUser={toggleSelected}
           placeholder="查找成员"
           selectedUserIds={selected}
           users={candidates}
         />
+        <div className="orf-chat-modal-note">已选 {selected.length} / {maxPeerCount}</div>
         <footer>
           <Button onClick={onClose} variant="secondary">取消</Button>
-          <Button disabled={selected.length === 0 || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>
+          <Button disabled={selected.length === 0 || selected.length > maxPeerCount || saving} onClick={() => void submit()}>{saving ? "打开中" : "打开"}</Button>
         </footer>
       </div>
     </div>
@@ -156,157 +167,21 @@ export function DeleteMessageDialog({
 export function AttachmentPreview({ attachment, onClose }: { attachment: ChatAttachment; onClose: () => void }) {
   const canEmbed = attachment.mimeType === "application/pdf" || attachment.mimeType.startsWith("text/");
   const isImage = attachment.mimeType.startsWith("image/");
-  const imageViewportRef = useRef<HTMLDivElement | null>(null);
-  const copyResetTimerRef = useRef<number | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copying" | "copied" | "failed">("idle");
-  const [naturalSize, setNaturalSize] = useState<{ height: number; width: number } | null>(() => imageNaturalSize(attachment));
-  const [fitSize, setFitSize] = useState<{ height: number; width: number } | null>(null);
-  const zoomPercent = Math.round(zoom * 100);
-  const setZoomLevel = (update: number | ((current: number) => number), anchor?: { clientX: number; clientY: number }) => {
-    setZoom((current) => {
-      const next = clampZoom(typeof update === "function" ? update(current) : update);
-      const viewport = imageViewportRef.current;
-      if (next !== current && viewport && anchor) {
-        const bounds = viewport.getBoundingClientRect();
-        const anchorX = anchor.clientX - bounds.left;
-        const anchorY = anchor.clientY - bounds.top;
-        const contentX = viewport.scrollLeft + anchorX;
-        const contentY = viewport.scrollTop + anchorY;
-        const scale = next / current;
-        window.requestAnimationFrame(() => {
-          viewport.scrollLeft = contentX * scale - anchorX;
-          viewport.scrollTop = contentY * scale - anchorY;
-        });
-      }
-      return next;
-    });
-  };
-  const zoomOut = () => setZoomLevel((value) => value - 0.25);
-  const zoomIn = () => setZoomLevel((value) => value + 0.25);
-  const resetZoom = () => setZoomLevel(1);
-  const handleImageWheel = (event: WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const direction = event.deltaY > 0 ? -1 : 1;
-    setZoomLevel((value) => value + direction * 0.15, { clientX: event.clientX, clientY: event.clientY });
-  };
-  const copyImage = async () => {
-    if (!isImage || copyStatus === "copying") return;
-    setCopyStatus("copying");
-    try {
-      await copyAttachmentImage(attachment);
-      setCopyStatus("copied");
-    } catch {
-      setCopyStatus("failed");
-    }
-    if (copyResetTimerRef.current !== null) {
-      window.clearTimeout(copyResetTimerRef.current);
-    }
-    copyResetTimerRef.current = window.setTimeout(() => setCopyStatus("idle"), 1800);
-  };
-
-  useEffect(() => {
-    setZoom(1);
-    setCopyStatus("idle");
-    setNaturalSize(imageNaturalSize(attachment));
-    setFitSize(null);
-    if (copyResetTimerRef.current !== null) {
-      window.clearTimeout(copyResetTimerRef.current);
-      copyResetTimerRef.current = null;
-    }
-  }, [attachment]);
-
-  useEffect(() => {
-    return () => {
-      if (copyResetTimerRef.current !== null) {
-        window.clearTimeout(copyResetTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isImage) return undefined;
-    const element = imageViewportRef.current;
-    const sourceSize = imageNaturalSize(attachment) ?? naturalSize;
-    if (!element || !sourceSize) return undefined;
-
-    const updateFitSize = () => {
-      const bounds = element.getBoundingClientRect();
-      if (bounds.width <= 0 || bounds.height <= 0) return;
-      const scale = Math.min(bounds.width / sourceSize.width, bounds.height / sourceSize.height, 1);
-      const next = {
-        height: Math.max(1, Math.round(sourceSize.height * scale)),
-        width: Math.max(1, Math.round(sourceSize.width * scale)),
-      };
-      setFitSize((current) => (
-        current?.height === next.height && current.width === next.width ? current : next
-      ));
-    };
-
-    updateFitSize();
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateFitSize);
-      return () => window.removeEventListener("resize", updateFitSize);
-    }
-
-    const observer = new ResizeObserver(updateFitSize);
-    observer.observe(element);
-    window.addEventListener("resize", updateFitSize);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateFitSize);
-    };
-  }, [attachment, isImage, naturalSize]);
-
-  const imageSizeStyle = fitSize
-    ? {
-        height: `${Math.round(fitSize.height * zoom)}px`,
-        width: `${Math.round(fitSize.width * zoom)}px`,
-      }
-    : undefined;
+  if (isImage) {
+    return <ImagePreviewDialog preview={chatAttachmentImagePreview(attachment)} onClose={onClose} />;
+  }
 
   return (
     <div className="orf-chat-attachment-preview" onMouseDown={onClose}>
       <div className="orf-chat-attachment-preview-panel" onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <span>{attachment.fileName}</span>
-          {isImage && (
-            <div className="orf-chat-attachment-preview-actions" aria-label="图片查看工具">
-              <button type="button" onClick={zoomOut} disabled={zoom <= 0.25} title="缩小图片" aria-label="缩小图片">
-                <ZoomOut className="h-4 w-4" />
-              </button>
-              <span className="orf-chat-attachment-zoom-value">{zoomPercent}%</span>
-              <button type="button" onClick={zoomIn} disabled={zoom >= 4} title="放大图片" aria-label="放大图片">
-                <ZoomIn className="h-4 w-4" />
-              </button>
-              <button type="button" onClick={resetZoom} disabled={zoom === 1} title="重置缩放" aria-label="重置缩放">
-                <RotateCcw className="h-4 w-4" />
-              </button>
-              <button type="button" onClick={() => void copyImage()} disabled={copyStatus === "copying"} title={copyButtonTitle(copyStatus)} aria-label={copyButtonTitle(copyStatus)}>
-                {copyStatus === "copied" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </button>
-            </div>
-          )}
           <a href={attachment.contentUrl} download={attachment.fileName} title="下载附件">
             <Download className="h-4 w-4" />
           </a>
           <button type="button" onClick={onClose} title="关闭预览"><X className="h-5 w-5" /></button>
         </header>
-        {isImage ? (
-          <div className="orf-chat-attachment-preview-image-scroll" ref={imageViewportRef} onWheel={handleImageWheel}>
-            <img
-              src={attachment.contentUrl}
-              alt={attachment.fileName}
-              style={imageSizeStyle}
-              onLoad={(event) => {
-                const image = event.currentTarget;
-                if (image.naturalWidth > 0 && image.naturalHeight > 0) {
-                  setNaturalSize({ height: image.naturalHeight, width: image.naturalWidth });
-                }
-              }}
-            />
-          </div>
-        ) : canEmbed ? (
+        {canEmbed ? (
           <iframe src={attachment.contentUrl} title={attachment.fileName} />
         ) : (
           <div className="orf-chat-attachment-preview-empty">
@@ -321,39 +196,16 @@ export function AttachmentPreview({ attachment, onClose }: { attachment: ChatAtt
   );
 }
 
-function imageNaturalSize(attachment: ChatAttachment) {
-  const width = imageDimension(attachment.width);
-  const height = imageDimension(attachment.height);
-  return width && height ? { height, width } : null;
-}
-
-function imageDimension(value?: number | null) {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function clampZoom(value: number) {
-  return Math.min(4, Math.max(0.25, Math.round(value * 100) / 100));
-}
-
-function copyButtonTitle(status: "idle" | "copying" | "copied" | "failed") {
-  if (status === "copying") return "正在复制图片";
-  if (status === "copied") return "图片已复制";
-  if (status === "failed") return "复制失败";
-  return "复制图片";
-}
-
-async function copyAttachmentImage(attachment: ChatAttachment) {
-  if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
-    throw new Error("Clipboard image copy is not supported");
-  }
-
-  const response = await fetch(attachment.contentUrl, { credentials: "include" });
-  if (!response.ok) {
-    throw new Error("Image content request failed");
-  }
-
-  const blob = await response.blob();
-  const mimeType = blob.type || attachment.mimeType || "image/png";
-  const clipboardBlob = blob.type ? blob : blob.slice(0, blob.size, mimeType);
-  await navigator.clipboard.write([new ClipboardItem({ [mimeType]: clipboardBlob })]);
+function chatAttachmentImagePreview(attachment: ChatAttachment): ImagePreview {
+  return {
+    alt: attachment.fileName,
+    copySourceUrl: attachment.contentUrl,
+    downloadFileName: attachment.fileName,
+    downloadUrl: attachment.contentUrl,
+    height: attachment.height,
+    label: attachment.fileName,
+    mimeType: attachment.mimeType,
+    src: attachment.contentUrl,
+    width: attachment.width,
+  };
 }

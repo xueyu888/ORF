@@ -2,6 +2,7 @@ import { Loader2, MessageSquare, X } from "lucide-react";
 import { IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
 import { ChatChannelInfoPanel } from "./ChatChannelInfoPanel";
+import { chatChannelInfoLabel } from "./chatChannelPresentation";
 import { ChatCollectionPanel } from "./ChatCollectionPanel";
 import type { ChatSendHandler } from "./chatModels";
 import type { ActivePanel, ChatSearchScope, ChatSearchTypeFilter } from "./chatPanelTypes";
@@ -65,13 +66,14 @@ type ChatRightPanelProps = {
 };
 
 export function ChatRightPanel(props: ChatRightPanelProps) {
+  const infoTitle = chatChannelInfoLabel(props.channel);
   const title =
     props.activePanel === "thread" ? "话题"
       : props.activePanel === "threads" ? "话题收件箱"
         : props.activePanel === "search" ? "搜索"
           : props.activePanel === "pins" ? "固定消息"
             : props.activePanel === "saved" ? "已保存"
-              : "频道信息";
+              : infoTitle;
   return (
     <aside className="orf-chat-right-panel">
       <div className="orf-chat-right-header">
@@ -118,6 +120,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       {props.activePanel === "search" && (
         <ChatSearchPanel
           feedbackItems={props.feedbackItems}
+          currentUserId={props.currentUserId}
           onOpenResult={props.onOpenResult}
           onSearch={props.onSearch}
           focusSignal={props.searchFocusSignal}
@@ -135,6 +138,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       )}
       {props.activePanel === "threads" && (
         <ChatThreadInboxPanel
+          currentUserId={props.currentUserId}
           feedbackItems={props.feedbackItems}
           loading={props.threadSummariesLoading}
           onOpenThread={props.onOpenThreadSummary}
@@ -145,6 +149,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
       {(props.activePanel === "pins" || props.activePanel === "saved") && (
         <ChatCollectionPanel
           feedbackItems={props.feedbackItems}
+          currentUserId={props.currentUserId}
           kind={props.activePanel}
           loading={props.collectionLoading}
           onOpenResult={props.onOpenResult}
