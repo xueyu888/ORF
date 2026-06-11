@@ -18,7 +18,7 @@ import {
 
 const updateDismissStoragePrefix = "orf-client-update-dismissed:";
 const updatePromptDismissStoragePrefix = "orf-client-update-prompt-dismissed:";
-const updateCheckIntervalMs = 6 * 60 * 60 * 1000;
+const updateCheckIntervalMs = 10 * 60 * 1000;
 
 type UpdateNoticeState =
   | { status: "checking" }
