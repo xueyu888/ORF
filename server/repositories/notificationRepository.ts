@@ -48,6 +48,14 @@ function toNotification(row: typeof notifications.$inferSelect): AppNotification
   };
 }
 
+function systemNotificationScope(userId: string, scope: RuntimeScope) {
+  return and(
+    eq(notifications.teamId, runtimeScopeStorageId(scope)),
+    eq(notifications.recipientUserId, userId),
+    sql`${notifications.targetType} <> 'chat'`,
+  );
+}
+
 export async function createNotifications(input: NotificationInput): Promise<AppNotification[]> {
   const recipientUserIds = uniqueRecipients(input.recipientUserIds, input.actorUserId);
   if (recipientUserIds.length === 0) {
@@ -146,7 +154,7 @@ export async function listNotificationsForUser(userId: string, scope: RuntimeSco
   const rows = await db
     .select()
     .from(notifications)
-    .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId)))
+    .where(systemNotificationScope(userId, scope))
     .orderBy(desc(notifications.createdAt))
     .limit(Math.max(1, Math.min(100, limit)));
   return rows.map(toNotification);
@@ -156,7 +164,7 @@ export async function getUnreadNotificationCount(userId: string, scope: RuntimeS
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(notifications)
-    .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId), isNull(notifications.readAt)))
+    .where(and(systemNotificationScope(userId, scope), isNull(notifications.readAt)))
     .limit(1);
   return Number(row?.count ?? 0);
 }
@@ -165,7 +173,7 @@ export async function markNotificationRead(notificationId: string, userId: strin
   const [row] = await db
     .update(notifications)
     .set({ readAt: nowIso() })
-    .where(and(eq(notifications.id, notificationId), eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId)))
+    .where(and(eq(notifications.id, notificationId), systemNotificationScope(userId, scope)))
     .returning();
   if (!row) {
     return null;
@@ -183,7 +191,7 @@ export async function markAllNotificationsRead(userId: string, scope: RuntimeSco
   const rows = await db
     .update(notifications)
     .set({ readAt: nowIso() })
-    .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId), isNull(notifications.readAt)))
+    .where(and(systemNotificationScope(userId, scope), isNull(notifications.readAt)))
     .returning({ id: notifications.id });
   if (rows.length > 0) {
     publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
@@ -204,7 +212,7 @@ export async function deleteNotificationsForUser(notificationIds: string[], user
 
   const rows = await db
     .delete(notifications)
-    .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId), inArray(notifications.id, ids)))
+    .where(and(systemNotificationScope(userId, scope), inArray(notifications.id, ids)))
     .returning({ id: notifications.id });
   if (rows.length > 0) {
     publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
@@ -220,7 +228,7 @@ export async function deleteNotificationsForUser(notificationIds: string[], user
 export async function clearNotificationsForUser(userId: string, scope: RuntimeScope): Promise<number> {
   const rows = await db
     .delete(notifications)
-    .where(and(eq(notifications.teamId, runtimeScopeStorageId(scope)), eq(notifications.recipientUserId, userId)))
+    .where(systemNotificationScope(userId, scope))
     .returning({ id: notifications.id });
   if (rows.length > 0) {
     publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {

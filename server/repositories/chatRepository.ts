@@ -25,7 +25,6 @@ import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
 import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
-import { createNotifications } from "./notificationRepository";
 import { getRolePermissionKeysForScope } from "./permissionRepository";
 import { runtimeScope } from "./runtimeScope";
 import {
@@ -45,8 +44,6 @@ import {
   type UserRow,
   chatAttachmentContentUrl,
   displayNameForChannel,
-  extractMentionUserIds,
-  hasChatBroadcastMention,
   iso,
   makeChatAttachmentId,
   makeId,
@@ -532,114 +529,6 @@ async function publishPersonalizedMessageRealtimeEvent(input: {
   });
 }
 
-async function getMentionableRecipientIds(teamId: string, channelId: string, mentionedUserIds: string[]) {
-  const uniqueMentioned = Array.from(new Set(mentionedUserIds.filter(Boolean)));
-  if (uniqueMentioned.length === 0) return [];
-  const { rows } = await pool.query<{ user_id: string }>(
-    `
-      SELECT m.user_id
-      FROM chat_channel_members m
-      INNER JOIN users u ON u.id = m.user_id AND COALESCE(u.status, 'active') = 'active'
-      INNER JOIN chat_channels c ON c.id = m.channel_id AND c.team_id = $1
-      WHERE m.channel_id = $2
-        AND m.user_id = ANY($3::uuid[])
-    `,
-    [teamId, channelId, uniqueMentioned],
-  );
-  return rows.map((row) => row.user_id);
-}
-
-async function getThreadFollowerNotificationRecipients(teamId: string, rootMessageId: string, actorUserId: string, excludedUserIds: string[]) {
-  const excluded = Array.from(new Set([actorUserId, ...excludedUserIds].filter(Boolean)));
-  const { rows } = await pool.query<{ user_id: string }>(
-    `
-      SELECT f.user_id
-      FROM chat_thread_follows f
-      INNER JOIN chat_messages root ON root.id = f.root_message_id AND root.team_id = $1
-      INNER JOIN users u ON u.id = f.user_id AND COALESCE(u.status, 'active') = 'active'
-      WHERE f.root_message_id = $2
-        AND f.following = true
-        AND NOT (f.user_id = ANY($3::uuid[]))
-    `,
-    [teamId, rootMessageId, excluded.length > 0 ? excluded : [actorUserId]],
-  );
-  return rows.map((row) => row.user_id);
-}
-
-async function createChatNotifications(input: {
-  actor: ChatActor;
-  body: string;
-  channel: ChatChannel;
-  message: ChatMessage;
-  mentionedUserIds: string[];
-  recipientUserIds: string[];
-  rootMessageId?: string | null;
-}) {
-  const teamId = storageTeamId(input.actor);
-  const href = `/chat/${encodeURIComponent(input.channel.id)}?message=${encodeURIComponent(input.message.id)}`;
-  const directlyMentionedRecipients = await getMentionableRecipientIds(teamId, input.channel.id, input.mentionedUserIds);
-  const broadcastMentionedRecipients = hasChatBroadcastMention(input.body)
-    ? input.recipientUserIds.filter((id) => id !== input.actor.id)
-    : [];
-  const mentionedRecipients = Array.from(new Set([...directlyMentionedRecipients, ...broadcastMentionedRecipients]));
-  const directRecipients =
-    input.channel.type === "direct"
-      ? input.recipientUserIds.filter((id) => id !== input.actor.id && !mentionedRecipients.includes(id))
-      : [];
-  const threadRecipients =
-    input.rootMessageId && input.channel.type !== "direct"
-      ? await getThreadFollowerNotificationRecipients(teamId, input.rootMessageId, input.actor.id, mentionedRecipients)
-      : [];
-
-  if (directRecipients.length > 0) {
-    await createNotifications({
-      actorName: input.actor.name,
-      actorUserId: input.actor.id,
-      body: previewText(input.body) || "发送了一条消息",
-      kind: "chat.direct.created",
-      metadata: { channelId: input.channel.id, messageId: input.message.id, rootMessageId: input.rootMessageId ?? "" },
-      recipientUserIds: directRecipients,
-      targetHref: href,
-      targetId: input.channel.id,
-      targetType: "chat",
-      teamId,
-      title: `${input.actor.name} 发来私聊消息`,
-    });
-  }
-
-  if (mentionedRecipients.length > 0) {
-    await createNotifications({
-      actorName: input.actor.name,
-      actorUserId: input.actor.id,
-      body: previewText(input.body) || "提到了你",
-      kind: "chat.mention.created",
-      metadata: { channelId: input.channel.id, messageId: input.message.id, rootMessageId: input.rootMessageId ?? "" },
-      recipientUserIds: mentionedRecipients,
-      targetHref: href,
-      targetId: input.channel.id,
-      targetType: "chat",
-      teamId,
-      title: `${input.actor.name} 在聊天中提到了你`,
-    });
-  }
-
-  if (threadRecipients.length > 0) {
-    await createNotifications({
-      actorName: input.actor.name,
-      actorUserId: input.actor.id,
-      body: previewText(input.body) || "关注的线程有新回复",
-      kind: "chat.thread.updated",
-      metadata: { channelId: input.channel.id, messageId: input.message.id, rootMessageId: input.rootMessageId ?? "" },
-      recipientUserIds: threadRecipients,
-      targetHref: href,
-      targetId: input.channel.id,
-      targetType: "chat",
-      teamId,
-      title: "关注的聊天线程有新回复",
-    });
-  }
-}
-
 function chatPushRecipientIds(input: { actorUserId: string; channel: ChatChannel; recipientUserIds: string[] }) {
   const activeRecipients = new Set(input.recipientUserIds.filter((id) => id !== input.actorUserId));
   return input.channel.members
@@ -688,7 +577,7 @@ async function sendChatMessagePush(input: {
   });
 }
 
-type ChatMessageSideEffectStage = "recipients" | "realtime" | "notifications" | "push" | "unexpected";
+type ChatMessageSideEffectStage = "recipients" | "realtime" | "push" | "unexpected";
 type ChatMessageSideEffectContext = {
   channelId: string;
   messageId: string;
@@ -759,19 +648,6 @@ async function dispatchChatMessageSideEffects(input: {
       messageId: input.message.id,
       rootMessageId: input.rootMessageId,
       recipientUserIds,
-    }),
-    input.onError,
-  );
-  await runChatMessageSideEffect(
-    { ...baseContext, stage: "notifications" },
-    () => createChatNotifications({
-      actor: input.actor,
-      body: input.body,
-      channel: input.channel,
-      message: input.message,
-      mentionedUserIds: extractMentionUserIds(input.body),
-      recipientUserIds,
-      rootMessageId: input.rootMessageId,
     }),
     input.onError,
   );
