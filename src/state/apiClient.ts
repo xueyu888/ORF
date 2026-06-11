@@ -530,9 +530,8 @@ export async function setChatThreadFollowRequest(rootMessageId: string, followin
 
 export async function uploadChatAttachment(input: { channelId: string; file: File }) {
   const formData = new FormData();
-  formData.set("channelId", input.channelId);
   formData.set("file", input.file);
-  return apiJson<ChatAttachmentUploadResponse>("/api/chat/attachments", {
+  return apiJson<ChatAttachmentUploadResponse>(`/api/chat/channels/${encodeURIComponent(input.channelId)}/attachments`, {
     method: "POST",
     body: formData,
   });

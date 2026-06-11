@@ -135,7 +135,7 @@ export function ChatPage() {
   const [markingUnreadChannelsRead, setMarkingUnreadChannelsRead] = useState(false);
   const [attachmentPreview, setAttachmentPreview] = useState<ChatAttachment | null>(null);
   const [memberSearchFocusSignal, setMemberSearchFocusSignal] = useState(0);
-  const handledUsersInvalidationKeyRef = useRef("");
+  const handledBootstrapInvalidationKeyRef = useRef("");
   const openChannelRequestIdRef = useRef(0);
   const mobileViewport = useChatMobileViewport();
   const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
@@ -146,6 +146,8 @@ export function ChatPage() {
     return mentionableUsersForChannel(activeChannel, bootstrap?.users);
   }, [activeChannel, bootstrap?.users]);
   const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
+  const settingsInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "settings"), [readModelInvalidations]);
+  const bootstrapInvalidationKey = `${usersInvalidationKey}|${settingsInvalidationKey}`;
   const myMembership = currentMembership(activeChannel, currentUser?.id);
   const { applyTypingEvent, publishTyping, typingByUser } = useChatTypingState({
     activeChannelId: activeChannel?.id,
@@ -381,11 +383,11 @@ export function ChatPage() {
   }, [currentUser?.id]);
 
   useEffect(() => {
-    if (!usersInvalidationKey || loading || bootstrapError) return;
-    if (handledUsersInvalidationKeyRef.current === usersInvalidationKey) return;
-    handledUsersInvalidationKeyRef.current = usersInvalidationKey;
+    if (!bootstrapInvalidationKey || bootstrapInvalidationKey === "|" || loading || bootstrapError) return;
+    if (handledBootstrapInvalidationKeyRef.current === bootstrapInvalidationKey) return;
+    handledBootstrapInvalidationKeyRef.current = bootstrapInvalidationKey;
     void refreshBootstrap().catch(() => undefined);
-  }, [bootstrapError, loading, refreshBootstrap, usersInvalidationKey]);
+  }, [bootstrapError, bootstrapInvalidationKey, loading, refreshBootstrap]);
 
   const handleDraftStateChange = useCallback((channelId: string, hasDraft: boolean) => {
     setDraftChannelIds((items) => {

@@ -159,24 +159,18 @@ function sendOutcome<T extends { status: string }>(reply: FastifyReply, outcome:
   return outcome;
 }
 
-async function uploadChatAttachmentFromRequest(request: FastifyRequest, actor: ChatActor) {
-  const fields: Record<string, string> = {};
-
+async function uploadChatAttachmentFromRequest(request: FastifyRequest, input: { actor: ChatActor; channelId: string }) {
   for await (const part of request.parts({ limits: { fields: 1, files: 1, fileSize: env.ORF_INFRA_UPLOAD_MAX_BYTES } })) {
-    if (part.type === "field" && typeof part.value === "string") {
-      fields[part.fieldname] = part.value;
-    }
     if (part.type === "file" && part.fieldname !== "file") {
       part.file.resume();
     }
     if (part.type === "file" && part.fieldname === "file") {
-      const parsed = z.object({ channelId: z.string().min(1) }).parse(fields);
       return uploadChatAttachment({
-        ...parsed,
+        channelId: input.channelId,
         body: part.file,
         fileName: part.filename,
         mimeType: part.mimetype,
-      }, actor);
+      }, input.actor);
     }
   }
   return null;
@@ -399,10 +393,11 @@ export function registerChatRoutes(app: FastifyInstance) {
     return sendOutcome(reply, await setChatThreadFollow(params.rootMessageId, body.following, actor));
   });
 
-  app.post("/api/chat/attachments", async (request, reply) => {
+  app.post("/api/chat/channels/:channelId/attachments", async (request, reply) => {
     const actor = await chatActorFromRequest(request, reply);
     if (!actor) return reply;
-    const outcome = await uploadChatAttachmentFromRequest(request, actor);
+    const params = channelIdParamsSchema.parse(request.params);
+    const outcome = await uploadChatAttachmentFromRequest(request, { actor, channelId: params.channelId });
     if (!outcome) return reply.code(400).send({ error: "File is required" });
     return sendOutcome(reply, outcome);
   });
