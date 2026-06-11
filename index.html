@@ -5,9 +5,136 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preload" as="image" href="/settings/backgrounds/sidebar_background/default/sidebar-character-guide-bg.png" />
     <title>ORF Flow</title>
+    <style>
+      .orf-boot-fallback-page {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        margin: 0;
+        padding: 24px;
+        background: #f6f8fb;
+        color: #172033;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      .orf-boot-fallback-panel {
+        width: min(100%, 560px);
+        border: 1px solid rgba(197, 76, 76, 0.24);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: 0 18px 50px rgba(23, 32, 51, 0.12);
+        padding: 24px;
+      }
+
+      .orf-boot-fallback-panel h1 {
+        margin: 0;
+        font-size: 20px;
+        line-height: 1.35;
+      }
+
+      .orf-boot-fallback-panel p {
+        margin: 10px 0 0;
+        color: #526078;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .orf-boot-fallback-panel pre {
+        max-height: 140px;
+        overflow: auto;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        border: 1px solid rgba(148, 163, 184, 0.34);
+        border-radius: 8px;
+        background: #f8fafc;
+        color: #64748b;
+        font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        margin: 14px 0 0;
+        padding: 10px;
+      }
+
+      .orf-boot-fallback-panel button {
+        min-height: 38px;
+        border: 0;
+        border-radius: 6px;
+        background: #1f6feb;
+        color: #fff;
+        cursor: pointer;
+        font: 600 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin-top: 16px;
+        padding: 0 16px;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var shown = false;
+        var fallbackTitle = "ORF 页面没有成功启动";
+        var fallbackDescription = "前端入口或页面资源没有成功加载。请重新加载页面；如果仍然失败，请升级客户端或联系管理员。";
+
+        function escapeHtml(value) {
+          return String(value || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+        }
+
+        function hasRenderedContent(root) {
+          return Boolean(root && (root.childElementCount > 0 || root.textContent.trim()));
+        }
+
+        function showBootFallback(title, description, detail) {
+          if (shown) return;
+          var root = document.getElementById("root");
+          if (!root || hasRenderedContent(root)) return;
+          shown = true;
+          document.body.style.margin = "0";
+          root.innerHTML = [
+            '<main class="orf-boot-fallback-page" role="alert" aria-live="assertive">',
+            '<section class="orf-boot-fallback-panel">',
+            "<h1>" + escapeHtml(title) + "</h1>",
+            "<p>" + escapeHtml(description) + "</p>",
+            detail ? "<pre>" + escapeHtml(detail) + "</pre>" : "",
+            '<button type="button" onclick="window.location.reload()">重新加载</button>',
+            "</section>",
+            "</main>",
+          ].join("");
+        }
+
+        function isFrontendResourceError(message) {
+          return /Failed to fetch dynamically imported module/i.test(message)
+            || /Failed to load module script/i.test(message)
+            || /Importing a module script failed/i.test(message)
+            || /Loading chunk .* failed/i.test(message)
+            || /\/assets\/.*\b404\b/i.test(message);
+        }
+
+        window.addEventListener("error", function (event) {
+          var target = event.target;
+          if (target && (target.tagName === "SCRIPT" || target.tagName === "LINK")) {
+            showBootFallback("前端资源加载失败", fallbackDescription, target.src || target.href || event.message);
+            return;
+          }
+          if (isFrontendResourceError(event.message || "")) {
+            showBootFallback("前端资源加载失败", fallbackDescription, event.message);
+          }
+        }, true);
+
+        window.addEventListener("unhandledrejection", function (event) {
+          var reason = event.reason;
+          var message = reason && reason.message ? reason.message : String(reason || "");
+          if (isFrontendResourceError(message)) {
+            showBootFallback("前端资源加载失败", fallbackDescription, message);
+          }
+        });
+
+        window.setTimeout(function () {
+          showBootFallback(fallbackTitle, fallbackDescription, "Root remained empty after startup timeout.");
+        }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

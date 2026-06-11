@@ -92,3 +92,18 @@ contextBridge.exposeInMainWorld("orfDesktopShell", {
     return () => ipcRenderer.removeListener("orf:desktop-shell:window-state", listener);
   },
 });
+
+contextBridge.exposeInMainWorld("orfDesktopCredentials", {
+  listAccounts() {
+    return ipcRenderer.invoke("orf:credentials:list-accounts");
+  },
+  saveAccount(payload) {
+    return ipcRenderer.invoke("orf:credentials:save-account", payload);
+  },
+  getPassword(accountId) {
+    return ipcRenderer.invoke("orf:credentials:get-password", accountId);
+  },
+  deleteAccount(accountId) {
+    return ipcRenderer.invoke("orf:credentials:delete-account", accountId);
+  },
+});

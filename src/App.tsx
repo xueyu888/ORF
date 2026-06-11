@@ -2,6 +2,7 @@ import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./components/AppShell";
+import { AppFallbackPage } from "./components/AppFallback";
 import { canShowFrontend, canShowFrontendPath, type FrontendVisibilityKey } from "./config/frontendVisibility";
 import { systemManagementPages } from "./config/navigation";
 import { useOrf } from "./state/OrfProvider";
@@ -100,17 +101,23 @@ export function App() {
 }
 
 function AuthRoute() {
-  const { authReady, isAuthenticated, isApproved } = useOrf();
+  const { authConnectionError, authReady, isAuthenticated, isApproved } = useOrf();
+  if (authReady && !isAuthenticated && authConnectionError) {
+    return <BackendUnavailableScreen detail={authConnectionError} />;
+  }
   return authReady && isAuthenticated && isApproved ? <Navigate to="/bounties" replace /> : <LazyRoute><AuthPage /></LazyRoute>;
 }
 
 function RequireAuth() {
-  const { authReady, currentUser, isAuthenticated, isApproved, logout } = useOrf();
+  const { authConnectionError, authReady, currentUser, isAuthenticated, isApproved, logout } = useOrf();
   if (!authReady) {
     return <AuthLoadingScreen />;
   }
 
   if (!isAuthenticated) {
+    if (authConnectionError) {
+      return <BackendUnavailableScreen detail={authConnectionError} />;
+    }
     return <Navigate to="/auth" replace />;
   }
 
@@ -119,6 +126,16 @@ function RequireAuth() {
   }
 
   return <AppShell />;
+}
+
+function BackendUnavailableScreen({ detail }: { detail: string }) {
+  return (
+    <AppFallbackPage
+      title="无法连接后端服务"
+      description="ORF 前端已经启动，但后端认证接口没有响应。请确认后端服务已启动，然后重新加载页面。"
+      detail={detail}
+    />
+  );
 }
 
 function AuthLoadingScreen() {

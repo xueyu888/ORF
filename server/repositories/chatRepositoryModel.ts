@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import {
+  CHAT_DIRECT_MEMBER_COUNT,
+  chatConversationDisplayName,
+} from "../../src/domain/chatConversation";
 import type {
   ChatAttachment,
   ChatChannelMember,
@@ -116,6 +120,7 @@ export type UserRow = {
 export const DEFAULT_PUBLIC_CHANNEL_NAME = "orf-town-square";
 export const DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME = "ORF 全员频道";
 export const CHAT_ATTACHMENT_TTL_MS = 24 * 60 * 60 * 1000;
+export { CHAT_DIRECT_MEMBER_COUNT };
 
 const CHAT_MENTION_TOKEN_PATTERN = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
 const CHAT_BROADCAST_MENTION_PATTERN = /(^|[^A-Za-z0-9_@.])@(all|channel|here|所有人)(?=$|[^A-Za-z0-9_])/gi;
@@ -228,18 +233,16 @@ export function toChannelMember(row: ChannelMemberRow): ChatChannelMember {
 }
 
 export function displayNameForChannel(row: ChannelRow, members: ChatChannelMember[], usersById: Map<string, ChatUser>, actor: ChatActor) {
-  if (row.type !== "direct" && row.type !== "group") {
+  if (row.type !== "direct") {
     return row.display_name;
   }
-
-  const others = members
-    .map((member) => usersById.get(member.userId))
-    .filter((user): user is ChatUser => user !== undefined && user.id !== actor.id)
-    .map((user) => user.name);
-  if (others.length > 0) {
-    return others.join(", ");
-  }
-  return row.type === "direct" ? `${actor.name} 的私聊` : row.display_name;
+  return chatConversationDisplayName({
+    currentUserId: actor.id,
+    fallbackDisplayName: row.display_name,
+    members,
+    type: row.type,
+    usersById,
+  });
 }
 
 export function extractMentionUserIds(body: string) {

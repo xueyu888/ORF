@@ -330,6 +330,13 @@
       "when": 1781110000000,
       "tag": "0046_feedback_body_comment_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1781111000000,
+      "tag": "0047_remove_chat_group_channels",
+      "breakpoints": true
     }
   ]
 }

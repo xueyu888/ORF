@@ -173,7 +173,25 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
       if (error.message === "Feedback owner must be an active member") {
         return "反馈处理人必须是当前可用成员";
       }
+      if (error.message === "Objective must have at least one calibrated result before freezing") {
+        return "目标至少需要一个已校准指标后才能冻结";
+      }
+      if (error.message === "Objective result points must be calibrated before freezing") {
+        return "请先校准目标下所有指标积分，再完成对齐冻结";
+      }
       return error.message || "数据状态已变化，请刷新后再试";
+    }
+
+    if (error.status === 400) {
+      if (error.message === "Objective must have at least one calibrated result before freezing") {
+        return "目标至少需要一个已校准指标后才能冻结";
+      }
+      if (error.message === "Objective result points must be calibrated before freezing") {
+        return "请先校准目标下所有指标积分，再完成对齐冻结";
+      }
+      if (error.message === "Objective alignment request is invalid") {
+        return "对齐申请参数无效，请刷新后再试";
+      }
     }
 
     return error.message || fallback;

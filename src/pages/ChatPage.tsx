@@ -8,7 +8,7 @@ import { ChatHeader } from "../features/chat/ChatHeader";
 import { matchesChatShortcutKey } from "../features/chat/chatKeyboardShortcuts";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
-import { ChatSidebar } from "../features/chat/ChatSidebar";
+import { ChatSidebar, type ChatSidebarCreateCommand } from "../features/chat/ChatSidebar";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
@@ -162,6 +162,19 @@ export function ChatPage() {
     );
   }, [bootstrap?.permissions.canManageAnyChannel, bootstrap?.permissions.canManageAnyMembers, currentUser?.id]);
   const canManageActiveChannel = canManageChannel(activeChannel);
+  const sidebarCreateCommands = useMemo<ChatSidebarCreateCommand[]>(() => {
+    if (!bootstrap?.permissions.canRead) return [];
+    const commands: ChatSidebarCreateCommand[] = [];
+    if (bootstrap.permissions.canCreatePrivateChannel || bootstrap.permissions.canCreatePublicChannel) {
+      commands.push({ kind: "channel", onSelect: () => setModal("channel") });
+    }
+    commands.push({ kind: "conversation", onSelect: () => setModal("conversation") });
+    return commands;
+  }, [
+    bootstrap?.permissions.canCreatePrivateChannel,
+    bootstrap?.permissions.canCreatePublicChannel,
+    bootstrap?.permissions.canRead,
+  ]);
 
   const applyChannel = useCallback((channel: ChatChannel) => {
     setChannels((items) => upsertChannel(items, channel, currentUser?.id));
@@ -447,6 +460,18 @@ export function ChatPage() {
     closePanel();
     navigate("/chat");
   }, [closePanel, navigate]);
+
+  const handleOpenConversation = useCallback(async (userIds: string[]) => {
+    try {
+      const response = await openChatConversation(userIds);
+      applyChannel(response.channel);
+      navigate(`/chat/${encodeURIComponent(response.channel.id)}`);
+      setModal(null);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "打开私聊失败");
+      throw error;
+    }
+  }, [applyChannel, navigate, notify]);
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
@@ -883,13 +908,13 @@ export function ChatPage() {
       <ChatSidebar
         activeChannelId={activeChannel?.id ?? null}
         channels={channels}
+        createCommands={sidebarCreateCommands}
         currentUserId={currentUser?.id}
         draftChannelIds={draftChannelIds}
         markingUnreadChannelsRead={markingUnreadChannelsRead}
-        onCreateChannel={() => setModal("channel")}
         onMarkUnreadChannelsRead={handleMarkUnreadChannelsRead}
         onOpenChannel={handleOpenChannel}
-        onOpenConversation={() => setModal("conversation")}
+        onOpenConversationWithUser={(userId) => void handleOpenConversation([userId])}
         onPreviewChannel={(channelId) => void prefetchChannelMessages(channelId)}
         query={channelQuery}
         setQuery={setChannelQuery}
@@ -1072,6 +1097,7 @@ export function ChatPage() {
       )}
       {modal === "channel" && (
         <ChannelModal
+          canCreatePrivate={bootstrap.permissions.canCreatePrivateChannel}
           canCreatePublic={bootstrap.permissions.canCreatePublicChannel}
           currentUserId={currentUser?.id}
           onClose={() => setModal(null)}
@@ -1088,12 +1114,7 @@ export function ChatPage() {
         <ConversationModal
           currentUserId={currentUser?.id}
           onClose={() => setModal(null)}
-          onOpen={async (userIds) => {
-            const response = await openChatConversation(userIds);
-            applyChannel(response.channel);
-            navigate(`/chat/${encodeURIComponent(response.channel.id)}`);
-            setModal(null);
-          }}
+          onOpen={handleOpenConversation}
           users={bootstrap.users}
         />
       )}

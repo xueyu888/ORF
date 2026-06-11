@@ -28,6 +28,7 @@ import {
   submitObjectiveTrialReview,
   updateObjectiveDetails,
   updateObjectiveProject,
+  type ObjectiveMutationInvalidReason,
 } from "../repositories/orfRepository";
 import { isDateOnlyString } from "../../src/utils/date";
 
@@ -134,7 +135,7 @@ function sendObjectiveFlowOutcome(reply: FastifyReply, outcome: Awaited<ReturnTy
   }
 
   if (outcome.status === "invalid") {
-    return reply.code(409).send({ error: "Objective status does not allow this operation" });
+    return reply.code(409).send({ error: objectiveInvalidErrorMessage(outcome.reason, "Objective status does not allow this operation") });
   }
 
   return { objective: outcome.objective };
@@ -216,7 +217,7 @@ function sendAlignmentRequestOutcome(
   }
 
   if (outcome.status === "invalid") {
-    return reply.code(400).send({ error: "Objective alignment request is invalid" });
+    return reply.code(400).send({ error: objectiveInvalidErrorMessage(outcome.reason, "Objective alignment request is invalid") });
   }
 
   if (outcome.status === "closed") {
@@ -228,6 +229,13 @@ function sendAlignmentRequestOutcome(
   }
 
   return { alignmentRequest: outcome.request };
+}
+
+function objectiveInvalidErrorMessage(reason: ObjectiveMutationInvalidReason | undefined, fallback: string) {
+  if (reason === "missingResults") return "Objective must have at least one calibrated result before freezing";
+  if (reason === "uncalibratedResults") return "Objective result points must be calibrated before freezing";
+  if (reason === "lifecycleLocked") return "Objective status does not allow this operation";
+  return fallback;
 }
 
 export function registerOrfObjectiveRoutes(app: FastifyInstance) {

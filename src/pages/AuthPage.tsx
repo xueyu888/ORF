@@ -1,17 +1,17 @@
 import { Check, Eye, EyeOff, LockKeyhole, Mail, Sparkles, Trash2, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import brandLogo from "../assets/brand/orf-logo.png";
 import {
-  findSavedLoginAccountByEmail,
-  loadSavedLoginAccounts,
-  removeSavedLoginAccount,
-  removeSavedLoginAccountByEmail,
-  savedLoginAccountInitial,
-  type SavedLoginAccount,
-  upsertSavedLoginAccount,
-} from "../features/auth/savedLoginAccounts";
+  findSavedCredentialAccountByEmail,
+  forgetSavedCredentialByEmail,
+  initializeSavedCredentialAccounts,
+  readSavedCredentialPassword,
+  rememberSuccessfulCredential,
+  savedCredentialAccountInitial,
+  type SavedCredentialAccount,
+} from "../features/auth/credentialMemory";
 import { getUserPreferences, getVisualBackgrounds } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import { pickVisualBackground, subscribeVisualBackgroundChanged, visualBackgroundIntervalMs } from "../utils/visualBackgrounds";
@@ -51,39 +51,36 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function AuthPage() {
   const navigate = useNavigate();
   const { authReady, isApproved, isAuthenticated, loginWithPassword, notify, registerWithPassword } = useOrf();
-  const initialLoginMemory = useMemo(() => {
-    const accounts = loadSavedLoginAccounts();
-    const latest = accounts[0];
-    return {
-      accounts,
-      email: latest?.email ?? "",
-      password: latest?.password ?? "",
-      selectedAccountId: latest?.id ?? "",
-    };
-  }, []);
   const [mode, setMode] = useState<AuthMode>("login");
   const [selectedHeroId, setSelectedHeroId] = useState(() => authHeroOptions[0]?.id ?? "");
   const [configuredHeroOptions, setConfiguredHeroOptions] = useState<AuthHeroOption[]>([]);
-  const [savedLoginAccounts, setSavedLoginAccounts] = useState<SavedLoginAccount[]>(initialLoginMemory.accounts);
-  const [selectedSavedAccountId, setSelectedSavedAccountId] = useState(initialLoginMemory.selectedAccountId);
+  const [savedCredentialAccounts, setSavedCredentialAccounts] = useState<SavedCredentialAccount[]>([]);
+  const [credentialProvider, setCredentialProvider] = useState<"browser" | "desktop">("browser");
+  const [selectedSavedAccountId, setSelectedSavedAccountId] = useState("");
   const [rememberCredentials, setRememberCredentials] = useState(true);
-  const [email, setEmail] = useState(initialLoginMemory.email);
+  const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [password, setPassword] = useState(initialLoginMemory.password);
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [authError, setAuthError] = useState("");
 
-  const applySavedAccount = (account: SavedLoginAccount) => {
+  const applySavedAccount = async (account: SavedCredentialAccount) => {
     setEmail(account.email);
-    setPassword(account.password);
     setSelectedSavedAccountId(account.id);
     setAuthError("");
+    const result = await readSavedCredentialPassword(account.id);
+    if (result.status === "success" && result.password) {
+      setPassword(result.password);
+      return;
+    }
+    setPassword("");
+    notify("无法读取已保存密码，请手动输入密码");
   };
 
-  const deleteSavedAccount = (account: SavedLoginAccount) => {
-    const next = removeSavedLoginAccount(account.id);
-    setSavedLoginAccounts(next);
+  const deleteSavedAccount = async (account: SavedCredentialAccount) => {
+    const result = await forgetSavedCredentialByEmail(account.email);
+    setSavedCredentialAccounts(result.accounts);
     if (selectedSavedAccountId === account.id) {
       setSelectedSavedAccountId("");
       setEmail("");
@@ -113,6 +110,23 @@ export function AuthPage() {
       cancelled = true;
     };
   }, [authReady, isApproved, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void initializeSavedCredentialAccounts().then((result) => {
+      if (cancelled) return;
+      setCredentialProvider(result.provider);
+      setSavedCredentialAccounts(result.accounts);
+      const latest = result.accounts[0];
+      if (latest) {
+        setEmail((value) => value || latest.email);
+        setSelectedSavedAccountId((value) => value || latest.id);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,7 +188,19 @@ export function AuthPage() {
     setAuthError("");
     const normalizedName = name.trim();
     const normalizedEmail = email.trim().toLowerCase();
-    const validationMessage = validateAuthInput(mode, { name: normalizedName, email: normalizedEmail, password });
+    let submissionPassword = password;
+    if (mode === "login" && !submissionPassword && selectedSavedAccountId) {
+      const selectedAccount = savedCredentialAccounts.find((account) => account.id === selectedSavedAccountId && account.email === normalizedEmail);
+      if (selectedAccount) {
+        const savedPassword = await readSavedCredentialPassword(selectedAccount.id);
+        if (savedPassword.status === "success" && savedPassword.password) {
+          submissionPassword = savedPassword.password;
+          setPassword(savedPassword.password);
+        }
+      }
+    }
+
+    const validationMessage = validateAuthInput(mode, { name: normalizedName, email: normalizedEmail, password: submissionPassword });
     if (validationMessage) {
       setAuthError(validationMessage);
       notify(validationMessage);
@@ -184,8 +210,8 @@ export function AuthPage() {
     setSubmitting(true);
     const result =
       mode === "login"
-        ? await loginWithPassword(normalizedEmail, password)
-        : await registerWithPassword({ name: normalizedName, email: normalizedEmail, password });
+        ? await loginWithPassword(normalizedEmail, submissionPassword)
+        : await registerWithPassword({ name: normalizedName, email: normalizedEmail, password: submissionPassword });
     setSubmitting(false);
 
     if (!result.ok) {
@@ -195,16 +221,21 @@ export function AuthPage() {
     }
 
     if (rememberCredentials) {
-      const next = upsertSavedLoginAccount({
+      const next = await rememberSuccessfulCredential({
         displayName: mode === "register" ? normalizedName : undefined,
         email: normalizedEmail,
-        password,
+        password: submissionPassword,
       });
-      setSavedLoginAccounts(next);
-      setSelectedSavedAccountId(normalizedEmail);
+      setCredentialProvider(next.provider);
+      setSavedCredentialAccounts(next.accounts);
+      setSelectedSavedAccountId(next.accounts.some((account) => account.id === normalizedEmail) ? normalizedEmail : "");
+      if (next.provider === "desktop" && next.status !== "success") {
+        notify("无法安全保存账号，请稍后重试");
+      }
     } else {
-      const next = removeSavedLoginAccountByEmail(normalizedEmail);
-      setSavedLoginAccounts(next);
+      const next = await forgetSavedCredentialByEmail(normalizedEmail);
+      setCredentialProvider(next.provider);
+      setSavedCredentialAccounts(next.accounts);
       setSelectedSavedAccountId("");
     }
 
@@ -220,6 +251,7 @@ export function AuthPage() {
   const busyLabel = mode === "login" ? "Signing In" : "Creating";
   const heroOptions = configuredHeroOptions.length > 0 ? configuredHeroOptions : authHeroOptions;
   const selectedHero = heroOptions.find((option) => option.id === selectedHeroId) ?? heroOptions[0];
+  const rememberLabel = credentialProvider === "desktop" ? "记住到本机" : "让浏览器记住";
 
   return (
     <main className="orf-auth-page">
@@ -258,13 +290,13 @@ export function AuthPage() {
           <span />
         </div>
 
-        {mode === "login" && savedLoginAccounts.length > 0 && (
+        {mode === "login" && savedCredentialAccounts.length > 0 && (
           <div className="orf-auth-saved-accounts" aria-label="已记住账号">
-            {savedLoginAccounts.map((account) => (
+            {savedCredentialAccounts.map((account) => (
               <div className="orf-auth-saved-account" data-selected={selectedSavedAccountId === account.id ? "true" : "false"} key={account.id}>
-                <button className="orf-auth-saved-account-main" type="button" onClick={() => applySavedAccount(account)}>
+                <button className="orf-auth-saved-account-main" type="button" onClick={() => void applySavedAccount(account)}>
                   <span className="orf-auth-saved-avatar" aria-hidden="true">
-                    {savedLoginAccountInitial(account)}
+                    {savedCredentialAccountInitial(account)}
                   </span>
                   <span className="orf-auth-saved-copy">
                     <span>{account.displayName || account.email}</span>
@@ -276,7 +308,7 @@ export function AuthPage() {
                   type="button"
                   aria-label={`删除已记住账号 ${account.email}`}
                   title="删除已记住账号"
-                  onClick={() => deleteSavedAccount(account)}
+                  onClick={() => void deleteSavedAccount(account)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -307,17 +339,16 @@ export function AuthPage() {
               id="auth-email"
               className="orf-auth-input"
               type="email"
-              autoComplete="email"
+              autoComplete={mode === "login" ? "username" : "email"}
               placeholder="Email"
               value={email}
               onChange={(event) => {
                 const nextEmail = event.target.value;
-                const savedAccount = findSavedLoginAccountByEmail(savedLoginAccounts, nextEmail);
+                const savedAccount = findSavedCredentialAccountByEmail(savedCredentialAccounts, nextEmail);
+                const nextSelectedAccountId = savedAccount?.id ?? "";
                 setEmail(nextEmail);
-                setSelectedSavedAccountId(savedAccount?.id ?? "");
-                if (savedAccount) {
-                  setPassword(savedAccount.password);
-                }
+                setSelectedSavedAccountId(nextSelectedAccountId);
+                if (nextSelectedAccountId !== selectedSavedAccountId) setPassword("");
               }}
               required
             />
@@ -355,7 +386,7 @@ export function AuthPage() {
             <span className="orf-auth-remember-box" aria-hidden="true">
               {rememberCredentials && <Check className="h-4 w-4" />}
             </span>
-            <span>记住账号和密码</span>
+            <span>{rememberLabel}</span>
           </label>
 
           {authError && (

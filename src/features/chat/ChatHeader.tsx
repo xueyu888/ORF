@@ -1,7 +1,8 @@
 import { Archive, ArrowLeft, Bell, BellOff, Bookmark, EyeOff, Info, Pin, Reply, Search, Star, UserPlus, Users } from "lucide-react";
 import { IconButton } from "../../components/ui";
+import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
-import { channelIcon } from "./chatChannelPresentation";
+import { channelIcon, chatChannelDisplayLabel, chatChannelInfoLabel } from "./chatChannelPresentation";
 import { currentMembership } from "./chatModels";
 
 type ChatHeaderProps = {
@@ -42,6 +43,9 @@ export function ChatHeader({
   const Icon = channelIcon(channel);
   const membership = currentMembership(channel, currentUserId);
   const canManageMembership = canManage && channel.type === "private";
+  const infoLabel = chatChannelInfoLabel(channel);
+  const title = chatChannelDisplayLabel(channel, currentUserId, usersById);
+  const headerText = channel.header.trim();
   const memberNames = channel.members
     .slice(0, 4)
     .map((member) => usersById.get(member.userId)?.name)
@@ -55,12 +59,13 @@ export function ChatHeader({
       )}
       <button type="button" className="orf-chat-header-title" onClick={onInfo}>
         <Icon className="h-5 w-5" />
-        <span>{channel.displayName}</span>
+        <span>{title}</span>
       </button>
       <div className="orf-chat-header-meta">
         <Users className="h-4 w-4" />
         <span>{channel.memberCount}</span>
-        {memberNames && <span className="truncate">{memberNames}</span>}
+        {headerText && <span className="orf-chat-header-description truncate" title={headerText}>{headerText}</span>}
+        {memberNames && <span className="orf-chat-header-member-names truncate">{memberNames}</span>}
       </div>
       <div className="orf-chat-header-actions">
         <IconButton className={membership?.favorite ? "orf-chat-starred" : ""} icon={Star} label="收藏频道" onClick={onToggleFavorite} />
@@ -85,8 +90,8 @@ export function ChatHeader({
           {channel.threadUnreadCount > 0 && <span>{channel.threadUnreadCount}</span>}
         </button>
         <IconButton icon={Search} label="搜索消息" onClick={onSearch} />
-        <IconButton icon={Info} label="频道信息" onClick={onInfo} />
-        {canManage && channel.type !== "direct" && channel.type !== "group" && channel.name !== "orf-town-square" && (
+        <IconButton icon={Info} label={infoLabel} onClick={onInfo} />
+        {canManage && !isChatConversation(channel) && channel.name !== "orf-town-square" && (
           <IconButton icon={Archive} label="归档频道" onClick={onArchive} />
         )}
       </div>

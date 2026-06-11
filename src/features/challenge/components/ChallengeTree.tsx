@@ -16,7 +16,13 @@ import {
   objectiveAlignmentRequestStatusLabel,
 } from "../../../domain/orfAlignment";
 import { minimumObjectiveDeadlineValue, type ObjectiveDeadlineEditState } from "../../../domain/orfDeadline";
-import { canPublishObjectiveByFlow, canReviewObjectiveChallengeApplications, isObjectiveReestimatingByFlow, shouldRenderObjectiveAsFrozen } from "../../../domain/orfLifecycle";
+import {
+  canPublishObjectiveByFlow,
+  canReviewObjectiveChallengeApplications,
+  isObjectiveReestimatingByFlow,
+  objectiveFreezeReadinessAfterReestimate,
+  shouldRenderObjectiveAsFrozen,
+} from "../../../domain/orfLifecycle";
 import {
   normalizeResultDetails,
   normalizeResultDetailsInput,
@@ -51,7 +57,7 @@ import {
   subActionDropTargetForEvent,
 } from "../model/challengeDragDrop";
 import { commentCountFor } from "../model/challengeComments";
-import { canFreezeObjectiveAfterReestimate, metricEditUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
+import { metricEditUnavailableMessage, objectiveFreezeUnavailableMessage, workbenchActionForObjective, type MetricEditAccess } from "../model/orfFlowCapabilities";
 import { actionVisualStatus, bountyStatusLabel, objectiveComplete, objectiveStatusLabel, objectiveStatusTone, subActionVisualStatus } from "../model/challengeStatus";
 import { childCreationDraftId, childCreationTarget, type ChildCreationTemporaryRow } from "../model/childCreationSession";
 import { groupChallengeGroupsByProject, unassignedObjectiveProjectName, type ObjectiveProjectGroup } from "../model/projectGroups";
@@ -311,6 +317,9 @@ function ObjectivePanel({
   const pendingApplications = group.objective.challengeApplications.filter((application) => application.status === "pending");
   const objectiveAlignmentRequests = (handlers.alignmentRequests ?? []).filter((request) => request.objectiveId === group.objective.id);
   const openAlignmentRequests = objectiveAlignmentRequests.filter(isOpenObjectiveAlignmentRequest);
+  const objectiveResults = group.bounties.map((bounty) => bounty.result);
+  const freezeReadiness = objectiveFreezeReadinessAfterReestimate(group.objective, objectiveResults);
+  const freezeUnavailableMessage = objectiveFreezeUnavailableMessage(freezeReadiness);
   const statusChip = isDraftObjective ? (
     <StatusChip tone="open">{draftObjectiveIsSubmitting ? "保存中" : "草稿"}</StatusChip>
   ) : (
@@ -417,7 +426,7 @@ function ObjectivePanel({
             projects={projects}
           />
         </HierarchyRootCell>
-        <ObjectiveFlowAction disabled={isDraftObjective} group={group} handlers={handlers} />
+        <ObjectiveFlowAction disabled={isDraftObjective} freezeReadiness={freezeReadiness} group={group} handlers={handlers} />
         <AvatarStack names={group.challengers} />
         {statusChip}
         <ObjectiveTimeSummary deadline={group.deadline} now={now} objective={group.objective} />
@@ -492,7 +501,13 @@ function ObjectivePanel({
               </span>
               <span className="orf-objective-application-actions">
                 {request.kind === "reestimateCompletion" ? (
-                  <button type="button" className="orf-objective-application-approve" onClick={() => void handlers.onReviewAlignment(group.objective.id, request.id, { status: "completed" })}>
+                  <button
+                    type="button"
+                    className="orf-objective-application-approve"
+                    disabled={freezeReadiness.status !== "ready"}
+                    title={freezeReadiness.status === "ready" ? "重估完成并冻结目标" : freezeUnavailableMessage}
+                    onClick={() => void handlers.onReviewAlignment(group.objective.id, request.id, { status: "completed" })}
+                  >
                     完成并冻结
                   </button>
                 ) : (
@@ -724,7 +739,17 @@ function ObjectiveProjectMenu({
   );
 }
 
-function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?: boolean; group: ObjectiveNode; handlers: RowHandlers }) {
+function ObjectiveFlowAction({
+  disabled = false,
+  freezeReadiness,
+  group,
+  handlers,
+}: {
+  disabled?: boolean;
+  freezeReadiness: ReturnType<typeof objectiveFreezeReadinessAfterReestimate>;
+  group: ObjectiveNode;
+  handlers: RowHandlers;
+}) {
   const objective = group.objective;
   if (!handlers.canManageFlow) return <EmptySlot />;
 
@@ -748,7 +773,7 @@ function ObjectiveFlowAction({ disabled = false, group, handlers }: { disabled?:
     );
   }
 
-  if (canFreezeObjectiveAfterReestimate(objective, group.bounties.map((bounty) => bounty.result))) {
+  if (freezeReadiness.status === "ready") {
     actions.push(
       <button className="orf-flow-action-button orf-flow-action-primary" disabled={disabled} type="button" title={disabled ? "完成目标标题后可冻结" : "重估完成并冻结目标"} onClick={() => void handlers.onFreezeObjective(objective.id)}>
         <CheckCircle2 className="h-3.5 w-3.5" />

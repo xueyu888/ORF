@@ -20,6 +20,8 @@ ORF 客户端只提供安装入口，不复制业务逻辑。Win11 PC 端和 And
 ORF_CLIENT_URL=https://example.com/ npm run client:desktop:dist:win
 ```
 
+Win11 客户端可以保存登录账号。保存职责属于客户端壳层：Electron 主进程通过系统 `safeStorage` 加密密码并写入本机 `userData/credentials`，渲染进程只能通过受限 IPC 读取账号列表、保存、删除或在用户选择/提交登录时临时读取密码。浏览器和 Android 不共享这份本机 vault；浏览器入口只依赖浏览器自己的密码管理能力。
+
 ## 本地构建
 
 Web 基础构建：

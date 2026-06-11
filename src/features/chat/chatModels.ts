@@ -1,4 +1,5 @@
 import type { ChatAttachment, ChatChannel, ChatMessage, ChatThreadSummary, ChatUser } from "../../types/orf";
+import { isChatConversation } from "../../domain/chatConversation";
 
 export type DraftMention = {
   end: number;
@@ -160,8 +161,8 @@ export function selectChatFeedPrefetchChannelIds({
       const leftFavorite = Boolean(currentMembership(left, currentUserId)?.favorite);
       const rightFavorite = Boolean(currentMembership(right, currentUserId)?.favorite);
       if (leftFavorite !== rightFavorite) return leftFavorite ? -1 : 1;
-      if ((left.type === "direct" || left.type === "group") !== (right.type === "direct" || right.type === "group")) {
-        return left.type === "direct" || left.type === "group" ? -1 : 1;
+      if (isChatConversation(left) !== isChatConversation(right)) {
+        return isChatConversation(left) ? -1 : 1;
       }
       return (right.lastMessageAt ?? right.updatedAt).localeCompare(left.lastMessageAt ?? left.updatedAt);
     })

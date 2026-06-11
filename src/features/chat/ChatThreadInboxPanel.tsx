@@ -1,9 +1,11 @@
 import { Loader2, Reply } from "lucide-react";
 import type { ChatThreadSummary, ChatUser, Feedback } from "../../types/orf";
+import { chatChannelDisplayLabel } from "./chatChannelPresentation";
 import { formatDateTime, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 
 type ChatThreadInboxPanelProps = {
+  currentUserId?: string;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
   loading: boolean;
   onOpenThread: (summary: ChatThreadSummary) => void;
@@ -11,7 +13,7 @@ type ChatThreadInboxPanelProps = {
   usersById: Map<string, ChatUser>;
 };
 
-export function ChatThreadInboxPanel({ feedbackItems, loading, onOpenThread, summaries, usersById }: ChatThreadInboxPanelProps) {
+export function ChatThreadInboxPanel({ currentUserId, feedbackItems, loading, onOpenThread, summaries, usersById }: ChatThreadInboxPanelProps) {
   if (loading && summaries.length === 0) {
     return (
       <div className="orf-chat-panel-loading">
@@ -38,7 +40,7 @@ export function ChatThreadInboxPanel({ feedbackItems, loading, onOpenThread, sum
       )}
       {summaries.map((summary) => (
         <button type="button" key={summary.rootMessage.id} onClick={() => onOpenThread(summary)}>
-          <span>{summary.channel.displayName}</span>
+          <span>{chatChannelDisplayLabel(summary.channel, currentUserId, usersById)}</span>
           {summary.unreadCount > 0 && <strong>{summary.unreadCount}</strong>}
           <b>{summary.rootMessage.authorName}</b>
           <div className="orf-chat-thread-inbox-body">

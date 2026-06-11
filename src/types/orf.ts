@@ -21,11 +21,8 @@ export type NotificationKind =
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
-  | "comment.mention.created"
-  | "chat.direct.created"
-  | "chat.mention.created"
-  | "chat.thread.updated";
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "chat";
+  | "comment.mention.created";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -37,7 +34,7 @@ export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
 export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance";
 export type ObjectiveAlignmentRequestStatus = "requested" | "scheduled" | "completed" | "needsWork" | "cancelled";
-export type ChatChannelType = "public" | "private" | "direct" | "group";
+export type ChatChannelType = "public" | "private" | "direct";
 export type ChatMemberRole = "owner" | "admin" | "member";
 
 export interface OrfUser {

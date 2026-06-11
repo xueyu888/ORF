@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
-const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, safeStorage, shell } = require("electron");
 const {
   createAppIconRgba,
   createUnreadBadgeRgba,
@@ -29,12 +29,28 @@ const DESKTOP_ICON_BITMAP_SIZE = 32;
 const DESKTOP_ICON_BITMAP_SCALE = 4;
 const MAX_PENDING_CHAT_NOTIFICATION_TARGETS = 16;
 const CHAT_NOTIFICATION_ACTIVATION_PREFIX = "orf-chat-notification";
+const DESKTOP_RECOVERY_ROOT_CHECK_DELAY_MS = 4000;
+const DESKTOP_RECOVERY_RELOAD_COOLDOWN_MS = 8000;
+const DESKTOP_RECOVERY_STABLE_RESET_DELAY_MS = 30000;
+const DESKTOP_RECOVERY_MAX_AUTOMATIC_RELOADS = 2;
+const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
+const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
+const DESKTOP_RECOVERY_CHECK_SCRIPT = `
+(() => {
+  const root = document.getElementById("root");
+  return {
+    href: window.location.href,
+    rootChildCount: root ? root.childElementCount : -1
+  };
+})()
+`;
 
 const desktopShellState = {
   clientUrl: null,
   isQuitting: false,
   mainWindow: null,
   pendingChatNotificationTargetsByWebContents: new Map(),
+  recoveryStateByWebContents: new Map(),
   tray: null,
   unreadCount: 0,
 };
@@ -69,6 +85,7 @@ function createMainWindow(clientUrl) {
   const webContentsId = mainWindow.webContents.id;
   desktopShellState.clientUrl = clientUrl;
   desktopShellState.mainWindow = mainWindow;
+  desktopShellState.recoveryStateByWebContents.set(webContentsId, createDesktopRecoveryState());
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const targetUrl = new URL(url);
@@ -85,6 +102,7 @@ function createMainWindow(clientUrl) {
     event.preventDefault();
     void shell.openExternal(url);
   });
+  registerDesktopRecoveryHandlers(mainWindow, clientUrl);
 
   mainWindow.on("close", (event) => {
     if (!shouldKeepWindowInTray()) return;
@@ -102,6 +120,8 @@ function createMainWindow(clientUrl) {
   mainWindow.on("leave-full-screen", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("closed", () => {
     desktopShellState.pendingChatNotificationTargetsByWebContents.delete(webContentsId);
+    clearDesktopRecoveryTimersByWebContentsId(webContentsId);
+    desktopShellState.recoveryStateByWebContents.delete(webContentsId);
     if (desktopShellState.mainWindow === mainWindow) {
       desktopShellState.mainWindow = null;
     }
@@ -116,6 +136,251 @@ function resolveDesktopIconPath() {
   if (fs.existsSync(PACKAGED_DESKTOP_ICON_PATH)) return PACKAGED_DESKTOP_ICON_PATH;
   if (fs.existsSync(REPO_ANDROID_LAUNCHER_ICON_PATH)) return REPO_ANDROID_LAUNCHER_ICON_PATH;
   return undefined;
+}
+
+function createDesktopRecoveryState() {
+  return {
+    automaticReloadCount: 0,
+    checkTimer: null,
+    recoveryTimer: null,
+    stableTimer: null,
+    lastReloadAt: 0,
+  };
+}
+
+function registerDesktopRecoveryHandlers(targetWindow, clientUrl) {
+  targetWindow.webContents.on("before-input-event", (event, input) => {
+    if (isDesktopReloadShortcut(input)) {
+      event.preventDefault();
+      reloadDesktopWindow(targetWindow, { resetRecovery: true });
+    }
+  });
+
+  targetWindow.webContents.on("did-start-loading", () => {
+    clearDesktopRecoveryCheck(targetWindow);
+  });
+
+  targetWindow.webContents.on("did-finish-load", () => {
+    scheduleDesktopRootCheck(targetWindow, clientUrl);
+  });
+
+  targetWindow.webContents.on("did-fail-load", (_event, errorCode, _errorDescription, _validatedURL, isMainFrame) => {
+    if (isMainFrame === false) return;
+    scheduleDesktopRecoveryReload(targetWindow, `main-frame-load-failed:${errorCode}`);
+  });
+
+  targetWindow.webContents.on("render-process-gone", (_event, details) => {
+    scheduleDesktopRecoveryReload(targetWindow, `renderer-gone:${details?.reason ?? "unknown"}`);
+  });
+
+  targetWindow.webContents.on("console-message", (_event, _level, message) => {
+    if (!isRecoverableDesktopConsoleMessage(message)) return;
+    scheduleDesktopRecoveryReload(targetWindow, "asset-load-failed");
+  });
+}
+
+function isDesktopReloadShortcut(input) {
+  if (!input || input.type !== "keyDown") return false;
+  const key = typeof input.key === "string" ? input.key.toLowerCase() : "";
+  return key === "f5" || ((input.control || input.meta) && key === "r");
+}
+
+function isRecoverableDesktopConsoleMessage(message) {
+  if (typeof message !== "string") return false;
+  return /Failed to fetch dynamically imported module/i.test(message)
+    || /Failed to load module script/i.test(message)
+    || /Loading chunk .* failed/i.test(message)
+    || /\/assets\/.*\b404\b/i.test(message);
+}
+
+function getDesktopRecoveryState(targetWindow) {
+  if (!targetWindow || targetWindow.isDestroyed()) return null;
+  const webContentsId = targetWindow.webContents.id;
+  let recoveryState = desktopShellState.recoveryStateByWebContents.get(webContentsId);
+  if (!recoveryState) {
+    recoveryState = createDesktopRecoveryState();
+    desktopShellState.recoveryStateByWebContents.set(webContentsId, recoveryState);
+  }
+  return recoveryState;
+}
+
+function clearDesktopRecoveryCheck(targetWindow) {
+  const recoveryState = getDesktopRecoveryState(targetWindow);
+  if (!recoveryState || !recoveryState.checkTimer) return;
+  clearTimeout(recoveryState.checkTimer);
+  recoveryState.checkTimer = null;
+}
+
+function clearDesktopRecoveryTimers(targetWindow) {
+  const recoveryState = getDesktopRecoveryState(targetWindow);
+  clearDesktopRecoveryStateTimers(recoveryState);
+}
+
+function clearDesktopRecoveryTimersByWebContentsId(webContentsId) {
+  clearDesktopRecoveryStateTimers(desktopShellState.recoveryStateByWebContents.get(webContentsId) ?? null);
+}
+
+function clearDesktopRecoveryStateTimers(recoveryState) {
+  if (!recoveryState) return;
+  if (recoveryState.checkTimer) {
+    clearTimeout(recoveryState.checkTimer);
+    recoveryState.checkTimer = null;
+  }
+  if (recoveryState.recoveryTimer) {
+    clearTimeout(recoveryState.recoveryTimer);
+    recoveryState.recoveryTimer = null;
+  }
+  if (recoveryState.stableTimer) {
+    clearTimeout(recoveryState.stableTimer);
+    recoveryState.stableTimer = null;
+  }
+}
+
+function scheduleDesktopRootCheck(targetWindow, clientUrl) {
+  if (!targetWindow || targetWindow.isDestroyed() || desktopShellState.isQuitting) return;
+  const recoveryState = getDesktopRecoveryState(targetWindow);
+  if (!recoveryState) return;
+  clearDesktopRecoveryCheck(targetWindow);
+  recoveryState.checkTimer = setTimeout(() => {
+    recoveryState.checkTimer = null;
+    void checkDesktopRootRendered(targetWindow, clientUrl);
+  }, DESKTOP_RECOVERY_ROOT_CHECK_DELAY_MS);
+}
+
+async function checkDesktopRootRendered(targetWindow, clientUrl) {
+  if (!targetWindow || targetWindow.isDestroyed() || desktopShellState.isQuitting) return;
+  if (!isClientWindowUrl(targetWindow.webContents.getURL(), clientUrl)) return;
+
+  let result = null;
+  try {
+    result = await targetWindow.webContents.executeJavaScript(DESKTOP_RECOVERY_CHECK_SCRIPT, true);
+  } catch {
+    scheduleDesktopRecoveryReload(targetWindow, "root-check-failed");
+    return;
+  }
+
+  if (!result || !isClientWindowUrl(result.href, clientUrl)) return;
+  if (typeof result.rootChildCount === "number" && result.rootChildCount > 0) {
+    scheduleDesktopRecoveryStableReset(targetWindow);
+    return;
+  }
+  scheduleDesktopRecoveryReload(targetWindow, "root-not-mounted");
+}
+
+function scheduleDesktopRecoveryStableReset(targetWindow) {
+  const recoveryState = getDesktopRecoveryState(targetWindow);
+  if (!recoveryState) return;
+  if (recoveryState.automaticReloadCount <= 0) return;
+  if (recoveryState.stableTimer) clearTimeout(recoveryState.stableTimer);
+  recoveryState.stableTimer = setTimeout(() => {
+    recoveryState.stableTimer = null;
+    recoveryState.automaticReloadCount = 0;
+  }, DESKTOP_RECOVERY_STABLE_RESET_DELAY_MS);
+}
+
+function scheduleDesktopRecoveryReload(targetWindow, reason) {
+  if (!targetWindow || targetWindow.isDestroyed() || desktopShellState.isQuitting) return;
+  const recoveryState = getDesktopRecoveryState(targetWindow);
+  if (!recoveryState || recoveryState.recoveryTimer) return;
+  if (recoveryState.stableTimer) {
+    clearTimeout(recoveryState.stableTimer);
+    recoveryState.stableTimer = null;
+  }
+
+  if (recoveryState.automaticReloadCount >= DESKTOP_RECOVERY_MAX_AUTOMATIC_RELOADS) {
+    showDesktopRecoveryFallback(targetWindow, reason);
+    return;
+  }
+
+  const delay = Math.max(0, DESKTOP_RECOVERY_RELOAD_COOLDOWN_MS - (Date.now() - recoveryState.lastReloadAt));
+  recoveryState.recoveryTimer = setTimeout(() => {
+    recoveryState.recoveryTimer = null;
+    if (!targetWindow || targetWindow.isDestroyed() || desktopShellState.isQuitting) return;
+    recoveryState.automaticReloadCount += 1;
+    reloadDesktopWindow(targetWindow, { resetRecovery: false });
+  }, delay);
+}
+
+function reloadDesktopWindow(targetWindow, options = {}) {
+  if (!targetWindow || targetWindow.isDestroyed()) return;
+  const recoveryState = getDesktopRecoveryState(targetWindow);
+  if (recoveryState) {
+    if (options.resetRecovery) recoveryState.automaticReloadCount = 0;
+    if (recoveryState.stableTimer) {
+      clearTimeout(recoveryState.stableTimer);
+      recoveryState.stableTimer = null;
+    }
+    recoveryState.lastReloadAt = Date.now();
+  }
+  clearDesktopRecoveryTimers(targetWindow);
+
+  const clientUrl = desktopShellState.clientUrl ?? resolveClientUrl();
+  desktopShellState.clientUrl = clientUrl;
+  targetWindow.show();
+  targetWindow.focus();
+
+  if (isClientWindowUrl(targetWindow.webContents.getURL(), clientUrl)) {
+    targetWindow.webContents.reloadIgnoringCache();
+    return;
+  }
+  void targetWindow.loadURL(clientUrl.toString());
+}
+
+function showDesktopRecoveryFallback(targetWindow, reason) {
+  if (!targetWindow || targetWindow.isDestroyed() || desktopShellState.isQuitting) return;
+  clearDesktopRecoveryTimers(targetWindow);
+  const clientUrl = desktopShellState.clientUrl ?? resolveClientUrl();
+  desktopShellState.clientUrl = clientUrl;
+  const fallbackHtml = [
+    "<!doctype html>",
+    '<html lang="zh-CN">',
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width, initial-scale=1">',
+    "<title>ORF 加载失败</title>",
+    "<style>",
+    "body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f8fb;color:#172033;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
+    "main{width:min(520px,calc(100vw - 48px));border:1px solid #d7dee9;background:#fff;border-radius:8px;padding:28px;box-shadow:0 18px 50px rgba(23,32,51,.12)}",
+    "h1{margin:0 0 12px;font-size:22px;line-height:1.3}",
+    "p{margin:10px 0 0;font-size:14px;line-height:1.7;color:#526078}",
+    "a{display:inline-flex;align-items:center;justify-content:center;margin-top:18px;min-height:38px;padding:0 16px;border-radius:6px;background:#1f6feb;color:#fff;text-decoration:none;font-size:14px;font-weight:600}",
+    "code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#6b7280}",
+    "</style>",
+    "</head>",
+    "<body>",
+    "<main>",
+    "<h1>ORF 页面加载失败</h1>",
+    "<p>客户端已经尝试自动恢复，但当前页面仍然没有成功加载。请从托盘菜单选择“刷新 ORF”，或按 Ctrl+R / F5 重新加载。</p>",
+    "<p>如果刷新后仍然失败，请安装最新版本客户端。</p>",
+    `<a href="${escapeHtmlAttribute(clientUrl.toString())}">重新加载 ORF</a>`,
+    `<p><code>${escapeHtmlText(reason)}</code></p>`,
+    "</main>",
+    "</body>",
+    "</html>",
+  ].join("");
+  void targetWindow.webContents.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fallbackHtml)}`);
+}
+
+function isClientWindowUrl(value, clientUrl) {
+  if (typeof value !== "string" || !value) return false;
+  try {
+    return new URL(value).origin === clientUrl.origin;
+  } catch {
+    return false;
+  }
+}
+
+function escapeHtmlText(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeHtmlAttribute(value) {
+  return escapeHtmlText(value)
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function shouldKeepWindowInTray() {
@@ -230,6 +495,12 @@ function updateTrayUnreadState() {
       label: "打开 ORF",
       click: () => showMainWindow(),
     },
+    {
+      label: "刷新 ORF",
+      click: () => {
+        reloadDesktopWindow(showMainWindow(), { resetRecovery: true });
+      },
+    },
     { type: "separator" },
     {
       label: "退出",
@@ -300,6 +571,163 @@ function normalizeDesktopUnreadInput(input) {
   const count = Number(rawValue);
   if (!Number.isFinite(count)) return 0;
   return Math.max(0, Math.floor(count));
+}
+
+function registerDesktopCredentialBridge(clientUrl) {
+  ipcMain.handle("orf:credentials:list-accounts", (event) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    return { status: "success", data: { accounts: listDesktopCredentialAccounts() } };
+  });
+
+  ipcMain.handle("orf:credentials:save-account", (event, input) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    const credential = desktopCredentialInput(input);
+    if (!credential) return { status: "error", reason: "invalid_payload" };
+    return { status: "success", data: { accounts: upsertDesktopCredentialAccount(credential) } };
+  });
+
+  ipcMain.handle("orf:credentials:get-password", (event, accountId) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    const id = normalizeCredentialEmail(typeof accountId === "string" ? accountId : "");
+    if (!id) return { status: "error", reason: "invalid_payload" };
+    const password = readDesktopCredentialPassword(id);
+    if (typeof password !== "string") return { status: "error", reason: "credential_not_found" };
+    return { status: "success", data: { password } };
+  });
+
+  ipcMain.handle("orf:credentials:delete-account", (event, accountId) => {
+    if (!isTrustedDesktopIpcSender(event, clientUrl)) return { status: "error", reason: "untrusted_sender" };
+    if (!isDesktopCredentialVaultAvailable()) return { status: "unsupported", reason: "safe_storage_unavailable" };
+    const id = normalizeCredentialEmail(typeof accountId === "string" ? accountId : "");
+    if (!id) return { status: "error", reason: "invalid_payload" };
+    return { status: "success", data: { accounts: deleteDesktopCredentialAccount(id) } };
+  });
+}
+
+function isDesktopCredentialVaultAvailable() {
+  return Boolean(safeStorage?.isEncryptionAvailable?.());
+}
+
+function isTrustedDesktopIpcSender(event, clientUrl) {
+  const frameUrl = typeof event.senderFrame?.url === "string" ? event.senderFrame.url : "";
+  return isClientWindowUrl(frameUrl, clientUrl) || isClientWindowUrl(event.sender?.getURL?.(), clientUrl);
+}
+
+function desktopCredentialsFilePath() {
+  return path.join(app.getPath("userData"), "credentials", DESKTOP_CREDENTIALS_FILE_NAME);
+}
+
+function listDesktopCredentialAccounts() {
+  return readDesktopCredentialRecords()
+    .map((record) => ({
+      displayName: cleanCredentialText(record.displayName),
+      email: record.email,
+      id: record.id,
+      updatedAt: record.updatedAt,
+    }))
+    .sort((first, second) => Date.parse(second.updatedAt) - Date.parse(first.updatedAt))
+    .slice(0, DESKTOP_CREDENTIALS_MAX_ACCOUNTS);
+}
+
+function readDesktopCredentialPassword(accountId) {
+  const record = readDesktopCredentialRecords().find((item) => item.id === accountId);
+  if (!record) return null;
+  try {
+    return safeStorage.decryptString(Buffer.from(record.encryptedPassword, "base64"));
+  } catch {
+    return null;
+  }
+}
+
+function upsertDesktopCredentialAccount(input) {
+  const records = readDesktopCredentialRecords();
+  const previous = records.find((record) => record.email === input.email);
+  const existing = records.filter((record) => record.email !== input.email);
+  const record = {
+    displayName: cleanCredentialText(input.displayName) ?? previous?.displayName,
+    email: input.email,
+    encryptedPassword: safeStorage.encryptString(input.password).toString("base64"),
+    id: credentialAccountId(input.email),
+    updatedAt: new Date().toISOString(),
+  };
+  writeDesktopCredentialRecords([record, ...existing].slice(0, DESKTOP_CREDENTIALS_MAX_ACCOUNTS));
+  return listDesktopCredentialAccounts();
+}
+
+function deleteDesktopCredentialAccount(accountId) {
+  writeDesktopCredentialRecords(readDesktopCredentialRecords().filter((record) => record.id !== accountId));
+  return listDesktopCredentialAccounts();
+}
+
+function readDesktopCredentialRecords() {
+  const filePath = desktopCredentialsFilePath();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(toDesktopCredentialRecord)
+      .filter(Boolean)
+      .sort((first, second) => Date.parse(second.updatedAt) - Date.parse(first.updatedAt))
+      .slice(0, DESKTOP_CREDENTIALS_MAX_ACCOUNTS);
+  } catch {
+    return [];
+  }
+}
+
+function writeDesktopCredentialRecords(records) {
+  const filePath = desktopCredentialsFilePath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  const tempPath = `${filePath}.tmp`;
+  fs.writeFileSync(tempPath, `${JSON.stringify(records, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(tempPath, filePath);
+  fs.chmodSync(filePath, 0o600);
+}
+
+function desktopCredentialInput(input) {
+  if (!input || typeof input !== "object") return null;
+  const email = normalizeCredentialEmail(input.email);
+  const password = typeof input.password === "string" ? input.password : "";
+  if (!email || !password) return null;
+  return {
+    displayName: cleanCredentialText(input.displayName),
+    email,
+    password,
+  };
+}
+
+function toDesktopCredentialRecord(value) {
+  if (!value || typeof value !== "object") return null;
+  const email = normalizeCredentialEmail(value.email);
+  const encryptedPassword = typeof value.encryptedPassword === "string" ? value.encryptedPassword : "";
+  if (!email || !encryptedPassword) return null;
+  return {
+    displayName: cleanCredentialText(value.displayName),
+    email,
+    encryptedPassword,
+    id: credentialAccountId(email),
+    updatedAt: validIsoDate(value.updatedAt) ?? new Date(0).toISOString(),
+  };
+}
+
+function credentialAccountId(email) {
+  return normalizeCredentialEmail(email);
+}
+
+function normalizeCredentialEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
+
+function cleanCredentialText(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text || undefined;
+}
+
+function validIsoDate(value) {
+  if (typeof value !== "string" || !value) return null;
+  return Number.isNaN(Date.parse(value)) ? null : value;
 }
 
 function notificationText(value, limit) {
@@ -630,6 +1058,7 @@ app.whenReady().then(() => {
   registerNativeNotificationBridge(clientUrl);
   registerNativeRuntimeBridge();
   registerDesktopShellBridge();
+  registerDesktopCredentialBridge(clientUrl);
   createDesktopTray(clientUrl);
   createMainWindow(clientUrl);
 

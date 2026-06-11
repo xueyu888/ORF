@@ -30,7 +30,6 @@ import type {
   UserRole,
 } from "../../src/types/orf";
 import {
-  hasUncalibratedResultPoints,
   objectiveBasePointsForResults,
   planObjectiveSettlement,
   uncertaintyScoreFor,
@@ -49,7 +48,6 @@ import {
   canAcceptObjectiveChallengeByFlow,
   canApplyForObjectiveChallenge,
   canDeleteObjectiveByFlow,
-  canFreezeObjectiveByFlow,
   canMutateObjectiveCommentsAsChallengerByFlow,
   canMutateObjectiveCommentsByFlow,
   canMutateObjectiveResultsByFlow,
@@ -58,6 +56,8 @@ import {
   canReviewObjectiveLootByFlow,
   canSubmitObjectiveLootByFlow,
   isObjectiveReestimateWindowOpen,
+  objectiveFreezeReadinessAfterReestimate,
+  type ObjectiveFreezeBlockReason,
   objectiveFlowStatusAfterChallengeApplication,
   objectiveFlowStatusAfterChallengeApplicationReview,
   objectiveFlowStatusAfterRecruitment,
@@ -1158,14 +1158,16 @@ export async function applyForObjectiveChallenge(objectiveId: string, applicant:
   return applied ? { status: "applied", objective: applied } : { status: "notFound" };
 }
 
+export type ObjectiveMutationInvalidReason = ObjectiveFreezeBlockReason;
+
 export type ObjectiveFlowMutationOutcome =
   | { status: "ok"; objective: Objective }
-  | { status: "invalid" }
+  | { status: "invalid"; reason?: ObjectiveMutationInvalidReason }
   | { status: "notFound" };
 
 export type ObjectiveAlignmentMutationOutcome =
   | { status: "ok"; request: ObjectiveAlignmentRequest }
-  | { status: "invalid" }
+  | { status: "invalid"; reason?: ObjectiveMutationInvalidReason }
   | { status: "notFound" }
   | { status: "forbidden" }
   | { status: "duplicate" }
@@ -1392,14 +1394,15 @@ export async function freezeObjectiveAfterReestimate(objectiveId: string, actorI
   const frozen = await db.transaction(async (tx) => {
     const [objective] = await tx.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1).for("update");
     if (!objective) return { status: "notFound" as const };
-    if (!canFreezeObjectiveByFlow(objective)) return { status: "invalid" as const };
 
     const objectiveResults = await tx
-      .select({ id: results.id, uncertaintyLevel: results.uncertaintyLevel, uncertaintyScore: results.uncertaintyScore })
+      .select({ objectiveId: results.objectiveId, uncertaintyLevel: results.uncertaintyLevel, uncertaintyScore: results.uncertaintyScore })
       .from(results)
       .where(eq(results.objectiveId, objectiveId));
-    if (objectiveResults.length === 0) return { status: "invalid" as const };
-    if (hasUncalibratedResultPoints(objectiveResults)) return { status: "invalid" as const };
+    const freezeReadiness = objectiveFreezeReadinessAfterReestimate(objective, objectiveResults);
+    if (freezeReadiness.status === "blocked") {
+      return { status: "invalid" as const, reason: freezeReadiness.reason };
+    }
 
     const decidedAt = nowIso();
     const challengeApplications = (objective.challengeApplications ?? []).map((application) =>
@@ -1586,7 +1589,7 @@ export async function reviewObjectiveAlignmentRequest(
   if (input.status === "completed") {
     if (request.kind !== "reestimateCompletion") return { status: "invalid" };
     const frozen = await freezeObjectiveAfterReestimate(objectiveId, actorId);
-    if (frozen.status !== "ok") return frozen.status === "notFound" ? { status: "notFound" } : { status: "invalid" };
+    if (frozen.status !== "ok") return frozen.status === "notFound" ? { status: "notFound" } : { status: "invalid", reason: frozen.reason };
 
     const completed = await objectiveAlignmentOutcome(requestId, runtimeScope(request.teamId));
     if (completed.status === "ok") {

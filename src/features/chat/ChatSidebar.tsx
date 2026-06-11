@@ -1,21 +1,31 @@
 import { clsx } from "clsx";
-import { CheckCheck, ChevronDown, MessageSquare, Plus, Reply, Search } from "lucide-react";
-import { useMemo } from "react";
-import { IconButton } from "../../components/ui";
+import type { LucideIcon } from "lucide-react";
+import { CheckCheck, ChevronDown, Hash, MessageSquare, Plus, Reply, Search } from "lucide-react";
+import type { KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { isChatConversation } from "../../domain/chatConversation";
 import type { ChatChannel, ChatUser } from "../../types/orf";
+import { chatChannelDisplayLabel, chatChannelSearchText, chatDirectPeer } from "./chatChannelPresentation";
+import { formatPresence } from "./chatPresence";
 import { currentMembership, isUnreadChannel, sortUnreadChannels } from "./chatModels";
 import { ChatGroupAvatar } from "./ChatGroupAvatar";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
+import { searchChatUsers } from "./chatUserSearch";
+
+export type ChatSidebarCreateCommand = {
+  kind: "channel" | "conversation";
+  onSelect: () => void;
+};
 
 type ChatSidebarProps = {
   activeChannelId: string | null;
   channels: ChatChannel[];
+  createCommands: ChatSidebarCreateCommand[];
   currentUserId?: string;
   draftChannelIds: Set<string>;
-  onCreateChannel: () => void;
+  onOpenConversationWithUser: (userId: string) => void;
   onMarkUnreadChannelsRead: (channelIds: string[]) => void;
   onOpenChannel: (channelId: string) => void;
-  onOpenConversation: () => void;
   onPreviewChannel: (channelId: string) => void;
   query: string;
   setQuery: (value: string) => void;
@@ -26,21 +36,23 @@ type ChatSidebarProps = {
 export function ChatSidebar({
   activeChannelId,
   channels,
+  createCommands,
   currentUserId,
   draftChannelIds,
-  onCreateChannel,
+  onOpenConversationWithUser,
   onMarkUnreadChannelsRead,
   onOpenChannel,
-  onOpenConversation,
   onPreviewChannel,
   query,
   setQuery,
   markingUnreadChannelsRead,
   users,
 }: ChatSidebarProps) {
-  const filteredChannels = channels.filter((channel) => channel.displayName.toLowerCase().includes(query.trim().toLowerCase()));
-  const unreadChannels = sortUnreadChannels(filteredChannels.filter((channel) => isUnreadChannel(channel, currentUserId)));
+  const normalizedQuery = query.trim().toLowerCase();
   const usersById = useMemo(() => new Map(users.map((user) => [user.id, user])), [users]);
+  const filteredChannels = channels.filter((channel) => chatChannelSearchText(channel, currentUserId, usersById).toLowerCase().includes(normalizedQuery));
+  const matchedUsers = searchChatUsers(users, query, { excludeUserId: currentUserId });
+  const unreadChannels = sortUnreadChannels(filteredChannels.filter((channel) => isUnreadChannel(channel, currentUserId)));
   const unreadChannelIds = new Set(unreadChannels.map((channel) => channel.id));
   const regularChannels = unreadChannelIds.size > 0 ? filteredChannels.filter((channel) => !unreadChannelIds.has(channel.id)) : filteredChannels;
   const favorites = regularChannels.filter((channel) => currentMembership(channel, currentUserId)?.favorite);
@@ -49,7 +61,7 @@ export function ChatSidebar({
     ? regularChannels.filter((channel) => !favoriteChannelIds.has(channel.id))
     : regularChannels;
   const publicChannels = uncategorizedChannels.filter((channel) => channel.type === "public");
-  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private" || channel.type === "group");
+  const privateChannels = uncategorizedChannels.filter((channel) => channel.type === "private");
   const conversations = uncategorizedChannels.filter((channel) => channel.type === "direct");
   const channelGroups: Array<{ channels: ChatChannel[]; title: string }> = [
     { title: "未读", channels: unreadChannels },
@@ -66,17 +78,21 @@ export function ChatSidebar({
           <h2>聊天</h2>
           <span>{users.length} 位成员</span>
         </div>
-        <IconButton icon={Plus} label="新建频道" onClick={onCreateChannel} />
+        <ChatSidebarCreateMenu commands={createCommands} />
       </div>
       <label className="orf-chat-search-box">
         <Search className="h-4 w-4" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="查找频道或私信" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索频道、私信或成员" />
       </label>
-      <button type="button" className="orf-chat-new-conversation" onClick={onOpenConversation}>
-        <MessageSquare className="h-4 w-4" />
-        新建私聊/群聊
-      </button>
       <div className="orf-chat-channel-groups">
+        {matchedUsers.length > 0 && (
+          <UserResultGroup
+            currentUserId={currentUserId}
+            onOpenConversationWithUser={onOpenConversationWithUser}
+            title="成员"
+            users={matchedUsers}
+          />
+        )}
         {channelGroups.map((group) => (
           <ChannelGroup
             activeChannelId={activeChannelId}
@@ -92,8 +108,153 @@ export function ChatSidebar({
             usersById={usersById}
           />
         ))}
+        {normalizedQuery && filteredChannels.length === 0 && matchedUsers.length === 0 && (
+          <div className="orf-chat-sidebar-empty">没有匹配的频道、私信或成员</div>
+        )}
       </div>
     </aside>
+  );
+}
+
+const chatSidebarCreateCommandPresentation: Record<ChatSidebarCreateCommand["kind"], { description: string; icon: LucideIcon; label: string }> = {
+  channel: {
+    description: "公开或私有频道",
+    icon: Hash,
+    label: "新建频道",
+  },
+  conversation: {
+    description: "选择成员开始私聊",
+    icon: MessageSquare,
+    label: "打开私信",
+  },
+};
+
+function ChatSidebarCreateMenu({ commands }: { commands: ChatSidebarCreateCommand[] }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
+  const menuItems = () => (
+    Array.from(rootRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? [])
+      .filter((item) => !item.disabled)
+  );
+  const focusTrigger = () => {
+    const trigger = rootRef.current?.querySelector<HTMLButtonElement>(".orf-chat-sidebar-create-trigger");
+    window.setTimeout(() => trigger?.focus(), 0);
+  };
+  const focusMenuItem = (index: number) => {
+    const items = menuItems();
+    if (items.length === 0) return;
+    const nextIndex = (index + items.length) % items.length;
+    items[nextIndex]?.focus();
+  };
+  const closeMenu = (restoreTriggerFocus = false) => {
+    setOpen(false);
+    if (restoreTriggerFocus) focusTrigger();
+  };
+  const runCommand = (command: ChatSidebarCreateCommand) => {
+    setOpen(false);
+    command.onSelect();
+  };
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const items = menuItems();
+    const currentIndex = items.findIndex((item) => item === target);
+    if (event.key === "Escape") {
+      if (!open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu(true);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      focusMenuItem(currentIndex >= 0 ? currentIndex + 1 : 0);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!open) {
+        setOpen(true);
+        return;
+      }
+      focusMenuItem(currentIndex >= 0 ? currentIndex - 1 : items.length - 1);
+      return;
+    }
+    if (open && event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(0);
+      return;
+    }
+    if (open && event.key === "End") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(items.length - 1);
+      return;
+    }
+    if (open && target?.getAttribute("role") === "menuitem" && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      event.stopPropagation();
+      target.click();
+    }
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!rootRef.current?.contains(target)) setOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const timer = window.setTimeout(() => menuItems()[0]?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
+  if (commands.length === 0) return null;
+
+  return (
+    <div className="orf-chat-sidebar-create" ref={rootRef} onKeyDown={handleKeyDown}>
+      <button
+        aria-controls={open ? menuId : undefined}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label="新建"
+        className="orf-chat-sidebar-create-trigger"
+        title="新建"
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Plus className="h-5 w-5" />
+      </button>
+      {open && (
+        <div className="orf-chat-sidebar-create-menu" id={menuId} role="menu" aria-label="新建聊天内容">
+          {commands.map((command) => {
+            const presentation = chatSidebarCreateCommandPresentation[command.kind];
+            const Icon = presentation.icon;
+            return (
+              <button key={command.kind} type="button" role="menuitem" onClick={() => runCommand(command)}>
+                <Icon className="h-4 w-4" />
+                <span>
+                  <strong>{presentation.label}</strong>
+                  <small>{presentation.description}</small>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -143,8 +304,9 @@ function ChannelGroup({
       </div>
       {channels.map((channel) => {
         const membership = currentMembership(channel, currentUserId);
-        const directPeer = directChannelPeer(channel, currentUserId, usersById);
-        const isChannel = channel.type !== "direct";
+        const directPeer = chatDirectPeer(channel, currentUserId, usersById);
+        const isConversation = isChatConversation(channel);
+        const label = chatChannelDisplayLabel(channel, currentUserId, usersById);
         const hasUnreadBadge = channel.mentionCount > 0 || channel.unreadCount > 0 || channel.threadUnreadCount > 0;
         const hasDraft = draftChannelIds.has(channel.id);
         return (
@@ -153,7 +315,7 @@ function ChannelGroup({
             className={clsx(
               "orf-chat-channel-item",
               channel.id === activeChannelId && "orf-chat-channel-item-active",
-              (directPeer || isChannel) && "orf-chat-channel-item-conversation",
+              isConversation && "orf-chat-channel-item-conversation",
               membership?.muted && "orf-chat-channel-item-muted",
             )}
             key={channel.id}
@@ -166,7 +328,7 @@ function ChannelGroup({
             ) : (
               <ChatGroupAvatar channel={channel} className="orf-chat-channel-avatar" currentUserId={currentUserId} usersById={usersById} />
             )}
-            <span className="truncate">{channel.displayName}</span>
+            <span className="truncate">{label}</span>
             {hasUnreadBadge ? (
               <span className="orf-chat-channel-badges">
                 {channel.mentionCount > 0 && <strong>@{channel.mentionCount}</strong>}
@@ -186,8 +348,41 @@ function ChannelGroup({
   );
 }
 
-function directChannelPeer(channel: ChatChannel, currentUserId: string | undefined, usersById: Map<string, ChatUser>) {
-  if (channel.type !== "direct") return null;
-  const peerMember = channel.members.find((member) => member.userId !== currentUserId) ?? channel.members[0];
-  return peerMember ? usersById.get(peerMember.userId) ?? null : null;
+function UserResultGroup({
+  currentUserId,
+  onOpenConversationWithUser,
+  title,
+  users,
+}: {
+  currentUserId?: string;
+  onOpenConversationWithUser: (userId: string) => void;
+  title: string;
+  users: ChatUser[];
+}) {
+  return (
+    <section className="orf-chat-channel-group">
+      <div className="orf-chat-channel-group-title">
+        <span>
+          <ChevronDown className="h-3.5 w-3.5" />
+          {title}
+        </span>
+      </div>
+      <div className="orf-chat-user-results">
+        {users.map((user) => (
+          <button
+            aria-label={`和 ${user.name} 私聊`}
+            className="orf-chat-user-result"
+            key={user.id}
+            type="button"
+            onClick={() => onOpenConversationWithUser(user.id)}
+          >
+            <ChatPresenceAvatar className="orf-chat-channel-avatar" currentUserId={currentUserId} name={user.name} size="sm" user={user} />
+            <span className="truncate">{user.name}</span>
+            <small>{formatPresence(user, currentUserId)}</small>
+            <MessageSquare className="h-4 w-4" />
+          </button>
+        ))}
+      </div>
+    </section>
+  );
 }

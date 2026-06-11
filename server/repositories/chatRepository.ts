@@ -25,11 +25,11 @@ import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
 import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
-import { createNotifications } from "./notificationRepository";
 import { getRolePermissionKeysForScope } from "./permissionRepository";
 import { runtimeScope } from "./runtimeScope";
 import {
   CHAT_ATTACHMENT_TTL_MS,
+  CHAT_DIRECT_MEMBER_COUNT,
   DEFAULT_PUBLIC_CHANNEL_DISPLAY_NAME,
   DEFAULT_PUBLIC_CHANNEL_NAME,
   type AttachmentRow,
@@ -44,8 +44,6 @@ import {
   type UserRow,
   chatAttachmentContentUrl,
   displayNameForChannel,
-  extractMentionUserIds,
-  hasChatBroadcastMention,
   iso,
   makeChatAttachmentId,
   makeId,
@@ -166,7 +164,6 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
       SELECT id, team_id, type, name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
       FROM ranked_channels
       WHERE NOT (type = 'direct' AND member_count <> 2)
-        AND NOT (type = 'group' AND member_count < 3)
         AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
       ORDER BY current_favorite DESC, type, updated_at DESC, lower(display_name)
     `,
@@ -363,7 +360,6 @@ async function hasReadableChannel(actor: ChatActor, channelId: string) {
       SELECT id
       FROM readable_channel
       WHERE NOT (type = 'direct' AND member_count <> 2)
-        AND NOT (type = 'group' AND member_count < 3)
       LIMIT 1
     `,
     [storageTeamId(actor), actor.id, channelId],
@@ -533,114 +529,6 @@ async function publishPersonalizedMessageRealtimeEvent(input: {
   });
 }
 
-async function getMentionableRecipientIds(teamId: string, channelId: string, mentionedUserIds: string[]) {
-  const uniqueMentioned = Array.from(new Set(mentionedUserIds.filter(Boolean)));
-  if (uniqueMentioned.length === 0) return [];
-  const { rows } = await pool.query<{ user_id: string }>(
-    `
-      SELECT m.user_id
-      FROM chat_channel_members m
-      INNER JOIN users u ON u.id = m.user_id AND COALESCE(u.status, 'active') = 'active'
-      INNER JOIN chat_channels c ON c.id = m.channel_id AND c.team_id = $1
-      WHERE m.channel_id = $2
-        AND m.user_id = ANY($3::uuid[])
-    `,
-    [teamId, channelId, uniqueMentioned],
-  );
-  return rows.map((row) => row.user_id);
-}
-
-async function getThreadFollowerNotificationRecipients(teamId: string, rootMessageId: string, actorUserId: string, excludedUserIds: string[]) {
-  const excluded = Array.from(new Set([actorUserId, ...excludedUserIds].filter(Boolean)));
-  const { rows } = await pool.query<{ user_id: string }>(
-    `
-      SELECT f.user_id
-      FROM chat_thread_follows f
-      INNER JOIN chat_messages root ON root.id = f.root_message_id AND root.team_id = $1
-      INNER JOIN users u ON u.id = f.user_id AND COALESCE(u.status, 'active') = 'active'
-      WHERE f.root_message_id = $2
-        AND f.following = true
-        AND NOT (f.user_id = ANY($3::uuid[]))
-    `,
-    [teamId, rootMessageId, excluded.length > 0 ? excluded : [actorUserId]],
-  );
-  return rows.map((row) => row.user_id);
-}
-
-async function createChatNotifications(input: {
-  actor: ChatActor;
-  body: string;
-  channel: ChatChannel;
-  message: ChatMessage;
-  mentionedUserIds: string[];
-  recipientUserIds: string[];
-  rootMessageId?: string | null;
-}) {
-  const teamId = storageTeamId(input.actor);
-  const href = `/chat/${encodeURIComponent(input.channel.id)}?message=${encodeURIComponent(input.message.id)}`;
-  const directlyMentionedRecipients = await getMentionableRecipientIds(teamId, input.channel.id, input.mentionedUserIds);
-  const broadcastMentionedRecipients = hasChatBroadcastMention(input.body)
-    ? input.recipientUserIds.filter((id) => id !== input.actor.id)
-    : [];
-  const mentionedRecipients = Array.from(new Set([...directlyMentionedRecipients, ...broadcastMentionedRecipients]));
-  const directRecipients =
-    input.channel.type === "direct" || input.channel.type === "group"
-      ? input.recipientUserIds.filter((id) => id !== input.actor.id && !mentionedRecipients.includes(id))
-      : [];
-  const threadRecipients =
-    input.rootMessageId && input.channel.type !== "direct" && input.channel.type !== "group"
-      ? await getThreadFollowerNotificationRecipients(teamId, input.rootMessageId, input.actor.id, mentionedRecipients)
-      : [];
-
-  if (directRecipients.length > 0) {
-    await createNotifications({
-      actorName: input.actor.name,
-      actorUserId: input.actor.id,
-      body: previewText(input.body) || "发送了一条消息",
-      kind: "chat.direct.created",
-      metadata: { channelId: input.channel.id, messageId: input.message.id, rootMessageId: input.rootMessageId ?? "" },
-      recipientUserIds: directRecipients,
-      targetHref: href,
-      targetId: input.channel.id,
-      targetType: "chat",
-      teamId,
-      title: input.channel.type === "direct" ? `${input.actor.name} 发来私聊消息` : `${input.channel.displayName} 有新消息`,
-    });
-  }
-
-  if (mentionedRecipients.length > 0) {
-    await createNotifications({
-      actorName: input.actor.name,
-      actorUserId: input.actor.id,
-      body: previewText(input.body) || "提到了你",
-      kind: "chat.mention.created",
-      metadata: { channelId: input.channel.id, messageId: input.message.id, rootMessageId: input.rootMessageId ?? "" },
-      recipientUserIds: mentionedRecipients,
-      targetHref: href,
-      targetId: input.channel.id,
-      targetType: "chat",
-      teamId,
-      title: `${input.actor.name} 在聊天中提到了你`,
-    });
-  }
-
-  if (threadRecipients.length > 0) {
-    await createNotifications({
-      actorName: input.actor.name,
-      actorUserId: input.actor.id,
-      body: previewText(input.body) || "关注的线程有新回复",
-      kind: "chat.thread.updated",
-      metadata: { channelId: input.channel.id, messageId: input.message.id, rootMessageId: input.rootMessageId ?? "" },
-      recipientUserIds: threadRecipients,
-      targetHref: href,
-      targetId: input.channel.id,
-      targetType: "chat",
-      teamId,
-      title: "关注的聊天线程有新回复",
-    });
-  }
-}
-
 function chatPushRecipientIds(input: { actorUserId: string; channel: ChatChannel; recipientUserIds: string[] }) {
   const activeRecipients = new Set(input.recipientUserIds.filter((id) => id !== input.actorUserId));
   return input.channel.members
@@ -689,7 +577,7 @@ async function sendChatMessagePush(input: {
   });
 }
 
-type ChatMessageSideEffectStage = "recipients" | "realtime" | "notifications" | "push" | "unexpected";
+type ChatMessageSideEffectStage = "recipients" | "realtime" | "push" | "unexpected";
 type ChatMessageSideEffectContext = {
   channelId: string;
   messageId: string;
@@ -760,19 +648,6 @@ async function dispatchChatMessageSideEffects(input: {
       messageId: input.message.id,
       rootMessageId: input.rootMessageId,
       recipientUserIds,
-    }),
-    input.onError,
-  );
-  await runChatMessageSideEffect(
-    { ...baseContext, stage: "notifications" },
-    () => createChatNotifications({
-      actor: input.actor,
-      body: input.body,
-      channel: input.channel,
-      message: input.message,
-      mentionedUserIds: extractMentionUserIds(input.body),
-      recipientUserIds,
-      rootMessageId: input.rootMessageId,
     }),
     input.onError,
   );
@@ -1051,7 +926,6 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
         SELECT id, manually_unread
         FROM ranked_channels
         WHERE NOT (type = 'direct' AND member_count <> 2)
-          AND NOT (type = 'group' AND member_count < 3)
           AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
       ),
       message_unread AS (
@@ -1497,32 +1371,49 @@ async function addChannelMembersInternal(input: { channelId: string; memberUserI
   );
 }
 
-export async function createDirectOrGroupChannel(input: { userIds: string[] }, actor: ChatActor): Promise<Outcome<{ channel: ChatChannel }>> {
+export async function createDirectChannel(input: { userIds: string[] }, actor: ChatActor): Promise<Outcome<{ channel: ChatChannel }>> {
   if (!actor.canRead || !actor.canWrite) return { status: "forbidden" };
   const memberIds = Array.from(new Set([actor.id, ...input.userIds].filter(Boolean))).sort();
-  if (memberIds.length < 2) return { status: "invalid" };
+  if (memberIds.length !== CHAT_DIRECT_MEMBER_COUNT) return { status: "invalid" };
 
   const teamId = storageTeamId(actor);
-  const type: ChatChannelType = memberIds.length === 2 ? "direct" : "group";
-  const name = stableConversationName(type === "direct" ? "dm" : "gm", memberIds);
+  const name = stableConversationName("dm", memberIds);
   const activeUsers = await listActiveTeamUsers(teamId);
   const activeUserIds = new Set(activeUsers.map((user) => user.id));
   if (memberIds.some((id) => !activeUserIds.has(id))) return { status: "notFound" };
 
-  const namesById = new Map(activeUsers.map((user) => [user.id, user.name]));
-  const displayName = memberIds.map((id) => namesById.get(id)).filter(Boolean).join(", ");
+  const existing = await pool.query<{ id: string }>(
+    "SELECT id FROM chat_channels WHERE team_id = $1 AND name = $2 AND archived_at IS NULL",
+    [teamId, name],
+  );
+  const existingChannelId = existing.rows[0]?.id;
+  if (existingChannelId) {
+    const channel = await getVisibleChannel(actor, existingChannelId);
+    return channel ? ok({ channel }) : { status: "forbidden" };
+  }
+
   const now = nowIso();
   const id = makeId("chat-channel");
-  const { rows } = await pool.query<{ id: string }>(
-    `
-      INSERT INTO chat_channels (id, team_id, type, name, display_name, purpose, header, created_by, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, '', '', $6, $7, $7)
-      ON CONFLICT (team_id, name) DO UPDATE SET updated_at = chat_channels.updated_at
-      RETURNING id
-    `,
-    [id, teamId, type, name, displayName, actor.id, now],
-  );
-  const channelId = rows[0]?.id ?? id;
+  try {
+    await pool.query(
+      `
+        INSERT INTO chat_channels (id, team_id, type, name, display_name, purpose, header, created_by, created_at, updated_at)
+        VALUES ($1, $2, 'direct', $3, '', '', '', $4, $5, $5)
+      `,
+      [id, teamId, name, actor.id, now],
+    );
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "23505") {
+      const conflict = await pool.query<{ id: string }>(
+        "SELECT id FROM chat_channels WHERE team_id = $1 AND name = $2 AND archived_at IS NULL",
+        [teamId, name],
+      );
+      const channel = conflict.rows[0]?.id ? await getVisibleChannel(actor, conflict.rows[0].id) : null;
+      return channel ? ok({ channel }) : { status: "conflict" };
+    }
+    throw error;
+  }
+  const channelId = id;
   await addChannelMembersInternal({ channelId, memberUserIds: memberIds, ownerUserId: actor.id, teamId });
 
   const channel = await getVisibleChannel(actor, channelId);
@@ -1561,8 +1452,11 @@ export async function updateChatChannel(
   const metadataChanged =
     input.displayName !== undefined || input.header !== undefined || input.name !== undefined || input.purpose !== undefined;
   if (metadataChanged) {
-    if (channel.type === "direct" || channel.type === "group") return { status: "forbidden" };
-    if (!(await canManageChannel(actor, channelId))) return { status: "forbidden" };
+    const isDirect = channel.type === "direct";
+    if (isDirect && (input.displayName !== undefined || input.name !== undefined || input.purpose !== undefined)) {
+      return { status: "forbidden" };
+    }
+    if (!isDirect && !(await canManageChannel(actor, channelId))) return { status: "forbidden" };
     const displayName = input.displayName?.trim();
     const name = input.name === undefined ? undefined : normalizeChannelName(input.name);
     if ((input.displayName !== undefined && !displayName) || (input.name !== undefined && !name)) return { status: "invalid" };
@@ -1605,7 +1499,7 @@ export async function archiveChatChannel(channelId: string, actor: ChatActor): P
   if (!actor.canRead) return { status: "forbidden" };
   const channel = await getVisibleChannel(actor, channelId);
   if (!channel) return { status: "notFound" };
-  if (channel.type === "direct" || channel.type === "group" || channel.name === DEFAULT_PUBLIC_CHANNEL_NAME) return { status: "forbidden" };
+  if (channel.type === "direct" || channel.name === DEFAULT_PUBLIC_CHANNEL_NAME) return { status: "forbidden" };
   if (!(await canManageChannel(actor, channelId))) return { status: "forbidden" };
 
   await pool.query("UPDATE chat_channels SET archived_at = $3, archived_by = $2, updated_at = $3 WHERE id = $1", [

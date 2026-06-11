@@ -32,7 +32,7 @@ const pushChannels = [
   {
     id: orfChatPushChannelId,
     name: "ORF 聊天消息",
-    description: "私聊、群聊和频道新消息",
+    description: "私聊和频道新消息",
     importance: 4 as const,
     lights: true,
     lightColor: "#0F9EB5",

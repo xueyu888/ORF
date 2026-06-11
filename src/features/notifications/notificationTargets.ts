@@ -9,15 +9,6 @@ const commentTargetTypeToChallengeTargetType: Record<string, ChallengeUrlTargetT
 };
 
 export function notificationTargetHref(notification: AppNotification) {
-  if (notification.targetType === "chat" || notification.kind.startsWith("chat.")) {
-    const channelId = notification.metadata.channelId || notification.targetId;
-    const messageId = notification.metadata.messageId;
-    if (channelId && messageId) {
-      return `/chat/${encodeURIComponent(channelId)}?message=${encodeURIComponent(messageId)}`;
-    }
-    return channelId ? `/chat/${encodeURIComponent(channelId)}` : notification.targetHref || "/chat";
-  }
-
   if (notification.targetType === "feedback" || notification.kind.startsWith("feedback.")) {
     return notification.targetId
       ? `/feedback/${encodeURIComponent(notification.targetId)}`

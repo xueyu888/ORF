@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatUser } from "../../types/orf";
 import { formatPresence } from "./chatPresence";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
+import { matchesChatUser } from "./chatUserSearch";
 
 type ChatUserPickerProps = {
   className?: string;
@@ -15,12 +16,6 @@ type ChatUserPickerProps = {
   selectedUserIds: string[];
   users: ChatUser[];
 };
-
-function matchesChatUser(user: ChatUser, query: string) {
-  if (!query) return true;
-  const normalized = query.toLowerCase();
-  return user.name.toLowerCase().includes(normalized) || user.email.toLowerCase().includes(normalized);
-}
 
 export function ChatUserPicker({
   className,

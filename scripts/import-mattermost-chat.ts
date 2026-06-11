@@ -8,7 +8,7 @@ import { readChatSettings } from "../server/settings/chatSettings";
 import { objectStorage } from "../server/storage/objectStorage";
 import { uploadCurrentUserAvatar } from "../server/users/avatar/avatarRepository";
 
-type ChannelType = "direct" | "group" | "private" | "public";
+type ChannelType = "direct" | "private" | "public";
 type OrfUser = {
   avatar_object_key: string | null;
   email: string | null;
@@ -293,7 +293,7 @@ function targetAttachmentId(sourceId: string) {
 function mattermostTypeToOrf(type: string): ChannelType {
   if (type === "P") return "private";
   if (type === "D") return "direct";
-  if (type === "G") return "group";
+  if (type === "G") return "private";
   return "public";
 }
 
@@ -772,7 +772,7 @@ function channelDisplayName(channel: MattermostChannel, members: MattermostChann
 
 function channelName(channel: MattermostChannel) {
   const type = mattermostTypeToOrf(channel.type);
-  if (type === "direct" || type === "group") return `mm-${type}-${safePathSegment(channel.id)}`;
+  if (type === "direct") return `mm-${type}-${safePathSegment(channel.id)}`;
   const sourceName = normalizeChannelName(channel.name || channel.display_name || "channel");
   return `mm-${sourceName}-${safePathSegment(channel.id)}`;
 }
@@ -817,9 +817,6 @@ function invalidConversationMemberReason(channel: MattermostChannel, memberRows:
   const type = mattermostTypeToOrf(channel.type);
   if (type === "direct" && memberRows.length !== 2) {
     return `direct channel requires exactly 2 mapped ORF members, got ${memberRows.length}`;
-  }
-  if (type === "group" && memberRows.length < 3) {
-    return `group channel requires at least 3 mapped ORF members, got ${memberRows.length}`;
   }
   return null;
 }

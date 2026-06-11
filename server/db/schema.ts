@@ -28,7 +28,7 @@ export const feedbackStatusEnum = pgEnum("feedback_status", ["Open", "Closed"]);
 export const teamRoleEnum = pgEnum("team_role", ["admin", "member", "readonly", "supervisor"]);
 export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective", "result", "task", "subtask", "feedback"]);
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
-export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct", "group"]);
+export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct"]);
 export const chatMemberRoleEnum = pgEnum("chat_member_role", ["owner", "admin", "member"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
