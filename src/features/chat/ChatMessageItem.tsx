@@ -485,7 +485,6 @@ export function ChatMessageItem({
               onSubmit={saveEdit}
               placeholder="编辑消息..."
               resetKey={message.id}
-              rows={4}
               submitDisabled={editSaving || !editDraft.text.trim()}
               transformPastedText={transformPastedFeedbackText}
             />

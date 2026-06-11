@@ -1,47 +1,24 @@
 import { clsx } from "clsx";
-import { AtSign, Bold, Code, Edit3, Eye, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote, Smile, Strikethrough } from "lucide-react";
-import { type ClipboardEvent, type ClipboardEventHandler, type ComponentType, type KeyboardEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Avatar } from "../../components/ui";
+import { AtSign, Edit3, Eye, Smile } from "lucide-react";
+import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatUser, Feedback } from "../../types/orf";
+import {
+  OrfRichTextEditor,
+  orfRichTextHasMeaningfulContent,
+  type OrfRichTextEditorActions,
+} from "../rich-text/OrfRichTextEditor";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
 import { matchesChatShortcutKey } from "./chatKeyboardShortcuts";
 import { ChatMarkdown } from "./chatMarkdown";
+import { type ChatDraft } from "./chatModels";
 import {
-  applyChatMarkdownShortcut,
-  isChatMarkdownCaretInFencedCodeBlock,
-  type ChatMarkdownMode,
-} from "./chatMarkdownShortcutModel";
+  chatDraftToRichTextMarkdown,
+  chatMentionPlainTextUserIds,
+  chatRichTextMarkdownToDraft,
+  chatRichTextMentionableUsers,
+} from "./chatRichTextDraftModel";
 import { ChatReactionPicker } from "./ChatReactionPicker";
-import {
-  type ChatDraft,
-  mentionLabel,
-  mentionRangeFor,
-  reconcileMentions,
-  serializeDraft,
-} from "./chatModels";
 import { displayChatReactionEmoji } from "./chatReactions";
-
-const broadcastMentionUserId = "__orf_broadcast_mention_all__";
-const broadcastMentionOption: ChatUser = {
-  id: broadcastMentionUserId,
-  name: "所有人",
-  email: "通知当前频道所有成员",
-  role: "member",
-  status: "active",
-  avatarUrl: null,
-  lastOnlineAt: null,
-  presence: { online: false },
-};
-const broadcastMentionSearchTerms = ["所有人", "全体", "全体成员", "all", "channel", "here"];
-
-function isBroadcastMentionOption(user: ChatUser) {
-  return user.id === broadcastMentionUserId;
-}
-
-function matchesBroadcastMention(query: string) {
-  const normalized = query.trim().toLowerCase();
-  return !normalized || broadcastMentionSearchTerms.some((term) => term.toLowerCase().includes(normalized));
-}
 
 type ChatDraftEditorToolbarState = {
   submit: () => void;
@@ -54,163 +31,37 @@ type ChatDraftEditorProps = {
   disabled?: boolean;
   draft: ChatDraft;
   feedbackItems?: readonly Pick<Feedback, "id" | "phenomenon">[];
+  focusSignal?: number;
   mentionableUsers: ChatUser[];
   onCancel?: () => void;
   onChange: (draft: ChatDraft) => void;
   onEditLatest?: () => void;
-  onPaste?: ClipboardEventHandler<HTMLTextAreaElement>;
+  onFilesInsert?: (files: File[]) => void;
   onReactToLatest?: () => void;
   onReplyToLatest?: () => void;
   onSubmit?: (draft: ChatDraft) => Promise<boolean | void> | boolean | void;
   onTyping?: () => void;
   placeholder?: string;
   recordHistoryOnSubmit?: boolean;
-  transformPastedText?: (text: string) => string;
-  focusSignal?: number;
   resetKey?: string;
-  rows?: number;
   submitDisabled?: boolean;
   toolbarControls?: ReactNode;
   toolbarEnd?: (state: ChatDraftEditorToolbarState) => ReactNode;
+  transformPastedText?: (text: string) => string;
 };
 
-type ChatMarkdownShortcutCombo = {
-  alt?: boolean;
-  code?: string;
-  key?: string;
-  primary?: boolean;
-  shift?: boolean;
-};
-
-type ChatMarkdownCommand = {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  mode: ChatMarkdownMode;
-  shortcuts: ChatMarkdownShortcutCombo[];
-  shortcutText: string;
-};
-
-const chatDraftEditorMaxHeight = 220;
-
-const chatMarkdownCommands: ChatMarkdownCommand[] = [
-  {
-    icon: Bold,
-    label: "加粗",
-    mode: "bold",
-    shortcuts: [{ code: "KeyB", key: "b", primary: true }],
-    shortcutText: "Ctrl/Cmd+B",
-  },
-  {
-    icon: Italic,
-    label: "斜体",
-    mode: "italic",
-    shortcuts: [{ code: "KeyI", key: "i", primary: true }],
-    shortcutText: "Ctrl/Cmd+I",
-  },
-  {
-    icon: Strikethrough,
-    label: "删除线",
-    mode: "strike",
-    shortcuts: [
-      { alt: true, code: "KeyX", key: "x", shift: true },
-      { code: "KeyX", key: "x", primary: true, shift: true },
-    ],
-    shortcutText: "Shift+Alt+X / Ctrl/Cmd+Shift+X",
-  },
-  {
-    icon: Code,
-    label: "代码",
-    mode: "code",
-    shortcuts: [{ alt: true, code: "KeyC", key: "c", primary: true }],
-    shortcutText: "Ctrl/Cmd+Alt+C",
-  },
-  {
-    icon: Heading3,
-    label: "标题",
-    mode: "heading",
-    shortcuts: [
-      { alt: true, code: "KeyH", key: "h", primary: true },
-      { alt: true, code: "KeyH", key: "h", shift: true },
-      { code: "KeyH", key: "h", primary: true, shift: true },
-    ],
-    shortcutText: "Ctrl/Cmd+Alt+H / Shift+Alt+H / Ctrl/Cmd+Shift+H",
-  },
-  {
-    icon: List,
-    label: "无序列表",
-    mode: "unorderedList",
-    shortcuts: [
-      { alt: true, code: "Digit8", shift: true },
-      { code: "Digit8", primary: true, shift: true },
-    ],
-    shortcutText: "Shift+Alt+8 / Ctrl/Cmd+Shift+8",
-  },
-  {
-    icon: ListOrdered,
-    label: "有序列表",
-    mode: "orderedList",
-    shortcuts: [
-      { alt: true, code: "Digit7", shift: true },
-      { code: "Digit7", primary: true, shift: true },
-    ],
-    shortcutText: "Shift+Alt+7 / Ctrl/Cmd+Shift+7",
-  },
-  {
-    icon: Quote,
-    label: "引用",
-    mode: "quote",
-    shortcuts: [
-      { alt: true, code: "Digit9", shift: true },
-      { code: "Digit9", primary: true, shift: true },
-    ],
-    shortcutText: "Shift+Alt+9 / Ctrl/Cmd+Shift+9",
-  },
-  {
-    icon: LinkIcon,
-    label: "链接",
-    mode: "link",
-    shortcuts: [
-      { code: "KeyK", key: "k", primary: true },
-      { alt: true, code: "KeyK", key: "k", primary: true },
-    ],
-    shortcutText: "Ctrl/Cmd+K / Ctrl/Cmd+Alt+K",
-  },
-];
-
-function resizeDraftTextarea(element: HTMLTextAreaElement | null) {
-  if (!element) return;
-  element.style.height = "auto";
-  const nextHeight = Math.min(element.scrollHeight, chatDraftEditorMaxHeight);
-  element.style.height = `${nextHeight}px`;
-  element.style.overflowY = element.scrollHeight > chatDraftEditorMaxHeight ? "auto" : "hidden";
-}
-
-function matchesMarkdownShortcut(event: KeyboardEvent<HTMLTextAreaElement>, shortcut: ChatMarkdownShortcutCombo) {
-  const primary = event.ctrlKey || event.metaKey;
-  if (primary !== Boolean(shortcut.primary)) return false;
-  if (event.altKey !== Boolean(shortcut.alt)) return false;
-  if (event.shiftKey !== Boolean(shortcut.shift)) return false;
-  return matchesChatShortcutKey(event, shortcut);
-}
-
-function markdownShortcutModeFor(event: KeyboardEvent<HTMLTextAreaElement>): ChatMarkdownMode | null {
-  if (event.nativeEvent.isComposing) return null;
-  for (const command of chatMarkdownCommands) {
-    if (command.shortcuts.some((shortcut) => matchesMarkdownShortcut(event, shortcut))) {
-      return command.mode;
-    }
-  }
-  return null;
-}
-
-function matchesPreviewShortcut(event: KeyboardEvent<HTMLElement>) {
+function matchesPreviewShortcut(event: KeyboardEvent) {
   const primary = event.ctrlKey || event.metaKey;
   return (
     primary &&
     matchesChatShortcutKey(event, { code: "KeyP", key: "p" }) &&
-    !event.nativeEvent.isComposing &&
+    !event.isComposing &&
     ((event.altKey && !event.shiftKey) || (!event.altKey && event.shiftKey))
   );
+}
+
+function currentEditorDraft(actions: OrfRichTextEditorActions | null, fallbackMarkdown: string, usersById: Map<string, ChatUser>) {
+  return chatRichTextMarkdownToDraft(actions?.getMarkdown() ?? fallbackMarkdown, usersById);
 }
 
 export function ChatDraftEditor({
@@ -219,52 +70,41 @@ export function ChatDraftEditor({
   disabled,
   draft,
   feedbackItems,
+  focusSignal,
   mentionableUsers,
   onCancel,
   onChange,
   onEditLatest,
-  onPaste,
+  onFilesInsert,
   onReactToLatest,
   onReplyToLatest,
   onSubmit,
   onTyping,
   placeholder,
   recordHistoryOnSubmit,
-  transformPastedText,
-  focusSignal,
   resetKey,
-  rows = 3,
   submitDisabled,
   toolbarControls,
   toolbarEnd,
+  transformPastedText,
 }: ChatDraftEditorProps) {
-  const [mentionRange, setMentionRange] = useState<ReturnType<typeof mentionRangeFor>>(null);
-  const [selectedMention, setSelectedMention] = useState(0);
-  const [history, setHistory] = useState(emptyComposerHistory);
-  const [emojiOpen, setEmojiOpen] = useState(false);
-  const [previewing, setPreviewing] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const actionsRef = useRef<OrfRichTextEditorActions | null>(null);
   const emojiAnchorRef = useRef<HTMLSpanElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
-  const textAreaRef = useRef<HTMLTextAreaElement | null>(null);
   const submittingRef = useRef(false);
-  const mentionUsers = useMemo(() => {
-    if (!mentionRange) return [];
-    const query = mentionRange.query.toLowerCase();
-    const users = mentionableUsers
-      .filter((user) => user.status === "active")
-      .filter((user) => user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query));
-    return [
-      ...(matchesBroadcastMention(query) ? [broadcastMentionOption] : []),
-      ...users,
-    ].slice(0, 8);
-  }, [mentionRange, mentionableUsers]);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const [history, setHistory] = useState(emptyComposerHistory);
+  const [previewing, setPreviewing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const usersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
-  const previewBody = useMemo(() => serializeDraft(draft), [draft]);
+  const markdownValue = useMemo(() => chatDraftToRichTextMarkdown(draft), [draft]);
+  const richMentionableUsers = useMemo(
+    () => chatRichTextMentionableUsers(mentionableUsers),
+    [mentionableUsers],
+  );
 
   useEffect(() => {
-    setMentionRange(null);
-    setSelectedMention(0);
+    setEmojiOpen(false);
     setHistory(emptyComposerHistory);
     setPreviewing(false);
     setSubmitting(false);
@@ -272,182 +112,201 @@ export function ChatDraftEditor({
   }, [resetKey]);
 
   useEffect(() => {
-    if (!draft.text) setMentionRange(null);
-  }, [draft.text]);
-
-  useEffect(() => {
-    if (disabled) setEmojiOpen(false);
-  }, [disabled]);
-
-  useEffect(() => {
-    if (disabled) setPreviewing(false);
+    if (disabled) {
+      setEmojiOpen(false);
+      setPreviewing(false);
+    }
   }, [disabled]);
 
   useEffect(() => {
     if (!previewing || disabled) return;
-    window.requestAnimationFrame(() => {
-      previewRef.current?.focus();
-    });
+    window.requestAnimationFrame(() => previewRef.current?.focus());
   }, [disabled, previewing]);
 
   useEffect(() => {
     if (focusSignal === undefined || disabled) return;
-    window.requestAnimationFrame(() => {
-      textAreaRef.current?.focus();
-    });
+    window.requestAnimationFrame(() => actionsRef.current?.focusEnd());
   }, [disabled, focusSignal]);
 
   useEffect(() => {
     if (!autoFocus || disabled) return;
-    window.requestAnimationFrame(() => {
-      const textarea = textAreaRef.current;
-      if (!textarea) return;
-      textarea.focus();
-      const cursor = textarea.value.length;
-      textarea.setSelectionRange(cursor, cursor);
-    });
+    window.requestAnimationFrame(() => actionsRef.current?.focusEnd());
   }, [autoFocus, disabled, resetKey]);
 
-  useLayoutEffect(() => {
-    resizeDraftTextarea(textAreaRef.current);
-  }, [draft.text, resetKey, rows]);
+  const markdownToDraft = useCallback((markdown: string) => chatRichTextMarkdownToDraft(markdown, usersById), [usersById]);
 
-  const setText = (text: string, cursor: number) => {
-    const mentions = reconcileMentions(draft.text, text, draft.mentions);
-    onChange({ text, mentions });
-    setMentionRange(mentionRangeFor(text, cursor, mentions));
-    setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
-    onTyping?.();
-  };
-
-  const applyMarkdownMode = (mode: ChatMarkdownMode) => {
-    if (previewing) return;
-    const textarea = textAreaRef.current;
-    if (!textarea) return;
-    const result = applyChatMarkdownShortcut({
-      draft,
-      mode,
-      selectionEnd: textarea.selectionEnd,
-      selectionStart: textarea.selectionStart,
-    });
-    onChange(result.draft);
-    setMentionRange(mentionRangeFor(result.draft.text, result.selectionEnd, result.draft.mentions));
-    setSelectedMention(0);
-    setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
-    onTyping?.();
-    window.setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
-    }, 0);
-  };
-
-  const insertTextAtSelection = (text: string) => {
-    if (previewing) return;
-    const textarea = textAreaRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const nextText = `${draft.text.slice(0, start)}${text}${draft.text.slice(end)}`;
-    setText(nextText, start + text.length);
-    setSelectedMention(0);
-    window.setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + text.length, start + text.length);
-    }, 0);
-  };
-
-  const insertEmoji = (emojiName: string) => {
-    setEmojiOpen(false);
-    insertTextAtSelection(displayChatReactionEmoji(emojiName));
-  };
-
-  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    onPaste?.(event);
-    if (event.defaultPrevented || previewing || disabled || !transformPastedText) return;
-
-    const text = event.clipboardData.getData("text/plain");
-    if (!text) return;
-
-    const nextText = transformPastedText(text);
-    if (nextText === text) return;
-
-    event.preventDefault();
-    insertTextAtSelection(nextText);
-  };
-
-  const insertMention = (user: ChatUser) => {
-    if (!mentionRange) return;
-    if (isBroadcastMentionOption(user)) {
-      const replacement = "@所有人";
-      const nextText = `${draft.text.slice(0, mentionRange.start)}${replacement} ${draft.text.slice(mentionRange.end)}`;
-      const mentions = draft.mentions.filter((mention) => mention.end <= mentionRange.start || mention.start >= mentionRange.end);
-      onChange({ text: nextText, mentions });
-      setMentionRange(null);
-      window.setTimeout(() => {
-        const cursor = mentionRange.start + replacement.length + 1;
-        textAreaRef.current?.focus();
-        textAreaRef.current?.setSelectionRange(cursor, cursor);
-      }, 0);
-      return;
+  const applyDraftToEditor = useCallback((nextDraft: ChatDraft, focus: "end" | "start" | null = null) => {
+    onChange(nextDraft);
+    actionsRef.current?.setMarkdown(chatDraftToRichTextMarkdown(nextDraft));
+    if (focus) {
+      window.requestAnimationFrame(() => {
+        if (focus === "start") actionsRef.current?.focusStart();
+        if (focus === "end") actionsRef.current?.focusEnd();
+      });
     }
-    const label = mentionLabel(user.name);
-    const replacement = `@${label}`;
-    const nextText = `${draft.text.slice(0, mentionRange.start)}${replacement} ${draft.text.slice(mentionRange.end)}`;
-    const nextMention = {
-      start: mentionRange.start,
-      end: mentionRange.start + replacement.length,
-      label,
-      userId: user.id,
-    };
-    const mentions = [
-      ...draft.mentions.filter((mention) => mention.end <= mentionRange.start || mention.start >= mentionRange.end),
-      nextMention,
-    ].sort((left, right) => left.start - right.start);
-    onChange({ text: nextText, mentions });
-    setMentionRange(null);
-    window.setTimeout(() => {
-      const cursor = nextMention.end + 1;
-      textAreaRef.current?.focus();
-      textAreaRef.current?.setSelectionRange(cursor, cursor);
-    }, 0);
-  };
+  }, [onChange]);
 
-  const submit = async () => {
+  const handleMarkdownChange = useCallback((markdown: string) => {
+    onChange(markdownToDraft(markdown));
+    setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
+    onTyping?.();
+  }, [markdownToDraft, onChange, onTyping]);
+
+  const submit = useCallback(async (overrideDraft?: ChatDraft) => {
     if (disabled || submitDisabled || submittingRef.current || !onSubmit) return;
+    const nextDraft = overrideDraft ?? currentEditorDraft(actionsRef.current, markdownValue, usersById);
     submittingRef.current = true;
     setSubmitting(true);
     try {
-      const submitted = await onSubmit(draft);
+      const submitted = await onSubmit(nextDraft);
       if (submitted !== false && recordHistoryOnSubmit) {
-        setHistory((item) => recordSentComposerDraft(item, draft));
+        setHistory((item) => recordSentComposerDraft(item, nextDraft));
       }
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
     }
-  };
+  }, [disabled, markdownValue, onSubmit, recordHistoryOnSubmit, submitDisabled, usersById]);
 
-  const focusEditor = () => {
-    window.requestAnimationFrame(() => {
-      const textarea = textAreaRef.current;
-      if (!textarea) return;
-      textarea.focus();
-      const cursor = textarea.value.length;
-      textarea.setSelectionRange(cursor, cursor);
-    });
-  };
+  const focusEditor = useCallback(() => {
+    window.requestAnimationFrame(() => actionsRef.current?.focusEnd());
+  }, []);
 
-  const togglePreview = () => {
-    setMentionRange(null);
+  const togglePreview = useCallback(() => {
     setEmojiOpen(false);
     setPreviewing((value) => {
       if (value) focusEditor();
       return !value;
     });
-  };
+  }, [focusEditor]);
 
-  const handlePreviewKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (matchesPreviewShortcut(event) || event.key === "Escape") {
+  const insertEmoji = useCallback((emojiName: string) => {
+    setEmojiOpen(false);
+    actionsRef.current?.insertText(displayChatReactionEmoji(emojiName));
+  }, []);
+
+  const insertAtSign = useCallback(() => {
+    actionsRef.current?.insertText("@");
+  }, []);
+
+  const handleFilesInsert = useCallback((files: File[]) => {
+    if (files.length === 0 || !onFilesInsert) return false;
+    onFilesInsert(files);
+    return true;
+  }, [onFilesInsert]);
+
+  const handleRichTextKeyDown = useCallback((event: KeyboardEvent, actions: OrfRichTextEditorActions) => {
+    const currentMarkdown = actions.getMarkdown();
+    const currentDraft = markdownToDraft(currentMarkdown);
+    const empty = !orfRichTextHasMeaningfulContent(currentMarkdown);
+
+    if (event.key === "Escape" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing) {
+      if (onCancel) {
+        event.preventDefault();
+        event.stopPropagation();
+        onCancel();
+        return true;
+      }
+    }
+
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+      const recalled = recallComposerHistory(history, currentDraft, event.key === "ArrowUp" ? "older" : "newer");
+      if (recalled) {
+        event.preventDefault();
+        event.stopPropagation();
+        applyDraftToEditor(recalled.draft, event.key === "ArrowUp" ? "start" : "end");
+        setHistory(recalled.history);
+        return true;
+      }
+    }
+
+    if (event.key === "ArrowUp" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && empty) {
+      if (onReplyToLatest) {
+        event.preventDefault();
+        event.stopPropagation();
+        onReplyToLatest();
+        return true;
+      }
+    }
+
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      event.shiftKey &&
+      !event.altKey &&
+      (event.key === "\\" || event.code === "Backslash") &&
+      !event.isComposing
+    ) {
+      if (onReactToLatest) {
+        event.preventDefault();
+        event.stopPropagation();
+        onReactToLatest();
+        return true;
+      }
+    }
+
+    if (!empty && matchesPreviewShortcut(event)) {
+      event.preventDefault();
+      event.stopPropagation();
+      togglePreview();
+      return true;
+    }
+
+    if (event.key === "ArrowUp" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && actions.isSelectionAtStart()) {
+      if (onEditLatest && empty) {
+        event.preventDefault();
+        event.stopPropagation();
+        onEditLatest();
+        return true;
+      }
+      if (history.cursorIndex !== null || empty) {
+        const recalled = recallComposerHistory(history, currentDraft, "older");
+        if (recalled) {
+          event.preventDefault();
+          event.stopPropagation();
+          applyDraftToEditor(recalled.draft, "start");
+          setHistory(recalled.history);
+          return true;
+        }
+      }
+    }
+
+    if (event.key === "ArrowDown" && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && history.cursorIndex !== null && actions.isSelectionAtEnd()) {
+      const recalled = recallComposerHistory(history, currentDraft, "newer");
+      if (recalled) {
+        event.preventDefault();
+        event.stopPropagation();
+        applyDraftToEditor(recalled.draft, "end");
+        setHistory(recalled.history);
+        return true;
+      }
+    }
+
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      ((event.altKey && !event.shiftKey) || (!event.altKey && event.shiftKey)) &&
+      matchesChatShortcutKey(event, { code: "KeyE", key: "e" }) &&
+      !event.isComposing
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      setEmojiOpen((open) => !open);
+      return true;
+    }
+
+    return false;
+  }, [
+    applyDraftToEditor,
+    history,
+    markdownToDraft,
+    onCancel,
+    onEditLatest,
+    onReactToLatest,
+    onReplyToLatest,
+    togglePreview,
+  ]);
+
+  const handlePreviewKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (matchesPreviewShortcut(event.nativeEvent) || event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
       if (previewing) togglePreview();
@@ -460,180 +319,60 @@ export function ChatDraftEditor({
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionRange && mentionUsers.length > 0) {
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setSelectedMention((index) => (index + 1) % mentionUsers.length);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setSelectedMention((index) => (index - 1 + mentionUsers.length) % mentionUsers.length);
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        insertMention(mentionUsers[selectedMention] ?? mentionUsers[0]);
-        return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setMentionRange(null);
-        return;
-      }
-    }
-    if (event.key === "Escape" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
-      if (onCancel) {
-        event.preventDefault();
-        event.stopPropagation();
-        onCancel();
-        return;
-      }
-    }
-    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
-      const recalled = recallComposerHistory(history, draft, event.key === "ArrowUp" ? "older" : "newer");
-      if (recalled) {
-        event.preventDefault();
-        event.stopPropagation();
-        onChange(recalled.draft);
-        setHistory(recalled.history);
-        setMentionRange(null);
-        window.setTimeout(() => {
-          const next = textAreaRef.current;
-          if (!next) return;
-          const cursor = event.key === "ArrowUp" ? 0 : next.value.length;
-          next.focus();
-          next.setSelectionRange(cursor, cursor);
-        }, 0);
-        return;
-      }
-    }
-    if (event.key === "ArrowUp" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !draft.text.trim()) {
-      if (onReplyToLatest) {
-        event.preventDefault();
-        event.stopPropagation();
-        onReplyToLatest();
-        return;
-      }
-    }
-    if (
-      (event.ctrlKey || event.metaKey) &&
-      event.shiftKey &&
-      !event.altKey &&
-      (event.key === "\\" || event.code === "Backslash") &&
-      !event.nativeEvent.isComposing
-    ) {
-      if (onReactToLatest) {
-        event.preventDefault();
-        event.stopPropagation();
-        onReactToLatest();
-        return;
-      }
-    }
-    if (draft.text.trim() && matchesPreviewShortcut(event)) {
-      event.preventDefault();
-      event.stopPropagation();
-      togglePreview();
-      return;
-    }
-    if (event.key === "ArrowUp" && !event.shiftKey) {
-      const textarea = textAreaRef.current;
-      if (
-        onEditLatest &&
-        !event.ctrlKey &&
-        !event.metaKey &&
-        !event.altKey &&
-        !draft.text.trim() &&
-        textarea?.selectionStart === 0
-      ) {
-        event.preventDefault();
-        event.stopPropagation();
-        onEditLatest();
-        return;
-      }
-      const canRecall = textarea?.selectionStart === 0 && (history.cursorIndex !== null || !draft.text.trim());
-      if (canRecall) {
-        const recalled = recallComposerHistory(history, draft, "older");
-        if (recalled) {
-          event.preventDefault();
-          onChange(recalled.draft);
-          setHistory(recalled.history);
-          setMentionRange(null);
-          window.setTimeout(() => {
-            const next = textAreaRef.current;
-            if (!next) return;
-            next.focus();
-            next.setSelectionRange(0, 0);
-          }, 0);
-          return;
-        }
-      }
-    }
-    if (event.key === "ArrowDown" && !event.shiftKey && history.cursorIndex !== null) {
-      const textarea = textAreaRef.current;
-      const canRecall = textarea ? textarea.selectionStart === textarea.value.length : true;
-      if (canRecall) {
-        const recalled = recallComposerHistory(history, draft, "newer");
-        if (recalled) {
-          event.preventDefault();
-          onChange(recalled.draft);
-          setHistory(recalled.history);
-          setMentionRange(null);
-          window.setTimeout(() => {
-            const next = textAreaRef.current;
-            if (!next) return;
-            next.focus();
-            const cursor = next.value.length;
-            next.setSelectionRange(cursor, cursor);
-          }, 0);
-          return;
-        }
-      }
-    }
-    const markdownMode = markdownShortcutModeFor(event);
-    if (markdownMode) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (isChatMarkdownCaretInFencedCodeBlock(draft.text, event.currentTarget.selectionStart)) return;
-      applyMarkdownMode(markdownMode);
-      return;
-    }
-    if (
-      (event.ctrlKey || event.metaKey) &&
-      ((event.altKey && !event.shiftKey) || (!event.altKey && event.shiftKey)) &&
-      matchesChatShortcutKey(event, { code: "KeyE", key: "e" }) &&
-      !event.nativeEvent.isComposing
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-      setEmojiOpen((open) => !open);
-      return;
-    }
-    if (event.key === "Enter" && event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
-      const textarea = textAreaRef.current;
-      if (!textarea) return;
-      event.preventDefault();
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const nextText = `${draft.text.slice(0, start)}\n${draft.text.slice(end)}`;
-      setText(nextText, start + 1);
-      window.setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + 1, start + 1);
-      }, 0);
-      return;
-    }
-    if (event.key === "Enter" && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
-      event.preventDefault();
-      void submit();
-    }
-  };
+  const extraToolbarControls = (
+    <>
+      <button
+        className={clsx("orf-rich-text-tool-button", previewing && "orf-rich-text-tool-button-active")}
+        disabled={!orfRichTextHasMeaningfulContent(markdownValue)}
+        type="button"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={togglePreview}
+        title="预览 Markdown"
+        aria-label="预览 Markdown"
+      >
+        {previewing ? <Edit3 className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+      <span className="orf-chat-composer-emoji-anchor" ref={emojiAnchorRef}>
+        <button
+          className="orf-rich-text-tool-button"
+          disabled={disabled || previewing}
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setEmojiOpen((open) => !open)}
+          title="表情"
+          aria-label="表情"
+        >
+          <Smile className="h-4 w-4" />
+        </button>
+        {emojiOpen && (
+          <ChatReactionPicker
+            anchorRef={emojiAnchorRef}
+            emptyLabel="没有匹配表情"
+            label="插入表情"
+            onClose={() => setEmojiOpen(false)}
+            onSelect={insertEmoji}
+            searchPlaceholder="搜索表情"
+          />
+        )}
+      </span>
+      {toolbarControls}
+      <button
+        className="orf-rich-text-tool-button"
+        disabled={disabled || previewing}
+        type="button"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={insertAtSign}
+        title="提及成员 @"
+        aria-label="提及成员"
+      >
+        <AtSign className="h-4 w-4" />
+      </button>
+    </>
+  );
 
-  return (
-    <div className={clsx("orf-chat-draft-editor", className)}>
-      {previewing ? (
+  if (previewing) {
+    return (
+      <div className={clsx("orf-chat-draft-editor", className)}>
         <div
           className="orf-chat-draft-preview"
           onDoubleClick={togglePreview}
@@ -642,82 +381,55 @@ export function ChatDraftEditor({
           role="region"
           tabIndex={0}
         >
-          {previewBody.trim() ? (
-            <ChatMarkdown body={previewBody} feedbackItems={feedbackItems} usersById={usersById} />
+          {markdownValue.trim() ? (
+            <ChatMarkdown body={markdownValue} feedbackItems={feedbackItems} usersById={usersById} />
           ) : (
             <span className="orf-chat-draft-preview-empty">{placeholder}</span>
           )}
         </div>
-      ) : (
-        <textarea
-          disabled={disabled}
-          onChange={(event) => setText(event.target.value, event.target.selectionStart)}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          placeholder={placeholder}
-          ref={textAreaRef}
-          rows={rows}
-          value={draft.text}
-        />
-      )}
-      {mentionRange && (
-        <div className="orf-chat-mention-menu">
-          {mentionUsers.length > 0 ? mentionUsers.map((user, index) => (
-            <button
-              className={index === selectedMention ? "orf-chat-mention-option-active" : ""}
-              key={user.id}
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => insertMention(user)}
-            >
-              <Avatar avatarUrl={user.avatarUrl} name={user.name} size="sm" />
-              <span>{user.name}</span>
-              <small>{user.email}</small>
-            </button>
-          )) : <div className="orf-chat-mention-empty">没有匹配成员</div>}
-        </div>
-      )}
-      <div className="orf-chat-composer-toolbar">
-        <span className="orf-chat-composer-format-actions">
-          {chatMarkdownCommands.map((command) => {
-            const Icon = command.icon;
-            return (
-              <button disabled={previewing} type="button" key={command.mode} onClick={() => applyMarkdownMode(command.mode)} title={`${command.label} ${command.shortcutText}`}>
-                <Icon className="h-4 w-4" />
-              </button>
-            );
-          })}
+        <div className="orf-rich-text-footer orf-chat-rich-text-preview-footer">
           <button
-            className={previewing ? "orf-chat-composer-toolbar-active" : ""}
-            disabled={!draft.text.trim()}
             type="button"
+            className="orf-rich-text-tool-button"
+            onMouseDown={(event) => event.preventDefault()}
             onClick={togglePreview}
-            title="预览 Markdown Ctrl/Cmd+Alt+P 或 Ctrl/Cmd+Shift+P"
+            title="继续编辑"
+            aria-label="继续编辑"
           >
-            {previewing ? <Edit3 className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            <Edit3 className="h-4 w-4" />
           </button>
-          <span className="orf-chat-composer-emoji-anchor" ref={emojiAnchorRef}>
-            <button disabled={previewing} type="button" onClick={() => setEmojiOpen((open) => !open)} title="表情 Ctrl/Cmd+Alt+E 或 Ctrl/Cmd+Shift+E">
-              <Smile className="h-4 w-4" />
-            </button>
-            {emojiOpen && (
-              <ChatReactionPicker
-                anchorRef={emojiAnchorRef}
-                emptyLabel="没有匹配表情"
-                label="插入表情"
-                onClose={() => setEmojiOpen(false)}
-                onSelect={insertEmoji}
-                searchPlaceholder="搜索表情"
-              />
-            )}
+          <span className="orf-chat-composer-end-actions">
+            {toolbarEnd?.({ submit: () => void submit(), submitting })}
           </span>
-          {toolbarControls}
-          <button disabled={previewing} type="button" onClick={() => insertTextAtSelection("@")} title="提及成员 @"><AtSign className="h-4 w-4" /></button>
-        </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <OrfRichTextEditor
+      actionsRef={actionsRef}
+      className={clsx("orf-chat-draft-editor", className)}
+      currentUserId=""
+      disabled={disabled}
+      excludeCurrentUserFromMentions={false}
+      footer={(
         <span className="orf-chat-composer-end-actions">
           {toolbarEnd?.({ submit: () => void submit(), submitting })}
         </span>
-      </div>
-    </div>
+      )}
+      idleHint=""
+      mentionPlainTextUserIds={chatMentionPlainTextUserIds}
+      mentionUsersById={usersById}
+      mentionableUsers={richMentionableUsers}
+      onChange={handleMarkdownChange}
+      onFilesInsert={handleFilesInsert}
+      onKeyDown={handleRichTextKeyDown}
+      onSubmitRequest={() => void submit()}
+      placeholder={placeholder ?? ""}
+      toolbarControls={extraToolbarControls}
+      transformPastedText={transformPastedText}
+      value={markdownValue}
+    />
   );
 }

@@ -1,5 +1,6 @@
 import type { ChatChannel, ChatMessage } from "../../types/orf";
 import type { ChatRealtimeEvent } from "../../types/realtime";
+import { orfRichTextMarkdownToPlainText } from "../rich-text/orfRichTextMarkdown";
 import { currentMembership } from "./chatModels";
 
 export type ChatNativeNotificationSkipReason =
@@ -102,25 +103,7 @@ export function chatNotificationPreviewText(message: Pick<ChatMessage, "attachme
 }
 
 export function stripChatNotificationMarkdown(body: string) {
-  return body
-    .replace(/\r\n?/g, "\n")
-    .replace(/@\[([^\]\n]+)\]\(orf-user:[^)]+\)/g, "@$1")
-    .replace(/!\[([^\]\n]*)\]\([^)]+\)/g, "$1")
-    .replace(/\[([^\]\n]+)\]\([^)]+\)/g, "$1")
-    .replace(/^```[^\n]*\n?/gm, "")
-    .replace(/```/g, "")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/^\s{0,3}>\s?/gm, "")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+[.)]\s+/gm, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/_([^_]+)_/g, "$1")
-    .replace(/~~([^~]+)~~/g, "$1")
-    .replace(/[ \t\n]+/g, " ")
-    .trim();
+  return orfRichTextMarkdownToPlainText(body, { attachmentText: "" });
 }
 
 function truncateChatNotificationText(text: string, limit: number) {
