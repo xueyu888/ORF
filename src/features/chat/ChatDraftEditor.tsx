@@ -420,7 +420,6 @@ export function ChatDraftEditor({
       )}
       idleHint=""
       mentionPlainTextUserIds={chatMentionPlainTextUserIds}
-      mentionUsersById={usersById}
       mentionableUsers={richMentionableUsers}
       onChange={handleMarkdownChange}
       onFilesInsert={handleFilesInsert}

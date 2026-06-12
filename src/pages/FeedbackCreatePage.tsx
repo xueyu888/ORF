@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, ImagePlus } from "lucide-react";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
@@ -46,10 +46,6 @@ export function FeedbackCreatePage() {
 
   const body = serializeCommentDraft(draft).trim();
   const referencedAttachments = pendingAttachments.filter((attachment) => body.includes(`orf-pending-attachment:${attachment.id}`));
-  const pendingAttachmentPreviewUrls = useMemo(
-    () => new Map(pendingAttachments.map((attachment) => [attachment.id, attachment.previewUrl])),
-    [pendingAttachments],
-  );
 
   useEffect(() => () => {
     for (const previewUrl of pendingPreviewUrlsRef.current) {
@@ -138,7 +134,6 @@ export function FeedbackCreatePage() {
             </div>
             <div className="feedback-create-body-field">
                 <CommentDraftFields
-                  attachmentPreviewUrls={pendingAttachmentPreviewUrls}
                   currentUserId={currentUser?.id ?? ""}
                   draft={draft}
                   idleHint=""

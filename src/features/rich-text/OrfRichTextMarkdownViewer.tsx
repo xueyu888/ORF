@@ -2,8 +2,10 @@ import { useState, type ReactNode } from "react";
 import {
   type OrfAttachmentReference,
   type OrfMentionReference,
+  isEscapedOrfMarkdownToken,
   parseOrfAttachmentMarkdownToken,
   parseOrfMentionMarkdownToken,
+  unescapeOrfMarkdownPlainText,
 } from "./orfRichTextMarkdown";
 
 type MarkdownListItem = { checked: boolean | null; text: string };
@@ -415,7 +417,7 @@ function resolvedLinkFor(
 }
 
 function renderInlineFragments(body: string, context: InlineRenderContext, keyPrefix: string, depth = 0): ReactNode[] {
-  if (depth > 8) return context.renderPlainText(body, `${keyPrefix}:depth`);
+  if (depth > 8) return context.renderPlainText(unescapeOrfMarkdownPlainText(body), `${keyPrefix}:depth`);
 
   const nodes: ReactNode[] = [];
   const pattern = /!\[([^\]\n]*)\]\((orf-attachment|orf-pending-attachment):([A-Za-z0-9_-]+)\)|@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)|\[([^\]\n]+)\]\((https?:\/\/[^)\s<]+|\/(?!\/)[^)\s<]+)\)|(https?:\/\/[^\s<]+|www\.[^\s<]+|\/feedback\/[^\s<]+)|`([^`\n]+)`|\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\*([^*\n]+)\*|_([^_\n]+)_/g;
@@ -423,7 +425,10 @@ function renderInlineFragments(body: string, context: InlineRenderContext, keyPr
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(body)) !== null) {
-    if (match.index > index) nodes.push(...context.renderPlainText(body.slice(index, match.index), `${keyPrefix}:plain:${index}`));
+    if (isEscapedOrfMarkdownToken(body, match.index)) continue;
+    if (match.index > index) {
+      nodes.push(...context.renderPlainText(unescapeOrfMarkdownPlainText(body.slice(index, match.index)), `${keyPrefix}:plain:${index}`));
+    }
     if (match[2] === "orf-attachment" || match[2] === "orf-pending-attachment") {
       const reference = parseOrfAttachmentMarkdownToken(match[0]);
       nodes.push(reference ? context.renderAttachment(reference, `${keyPrefix}:attachment:${match.index}`, match[0]) : match[0]);
@@ -454,7 +459,9 @@ function renderInlineFragments(body: string, context: InlineRenderContext, keyPr
     index = pattern.lastIndex;
   }
 
-  if (index < body.length) nodes.push(...context.renderPlainText(body.slice(index), `${keyPrefix}:plain:${index}`));
+  if (index < body.length) {
+    nodes.push(...context.renderPlainText(unescapeOrfMarkdownPlainText(body.slice(index)), `${keyPrefix}:plain:${index}`));
+  }
   return nodes;
 }
 

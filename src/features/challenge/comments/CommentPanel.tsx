@@ -384,10 +384,6 @@ function CommentMessageRow({
   const { message, threadId } = entry;
   const canManageMessage = canManageAllComments || (message.authorUserId ? message.authorUserId === currentUserId : message.author === currentMember);
   const createdTime = commentTimeDisplay(message.createdAt);
-  const attachmentPreviewUrls = useMemo(
-    () => new Map((message.attachments ?? []).map((attachment) => [attachment.id, attachment.contentUrl])),
-    [message.attachments],
-  );
   const deleteMessage = () => {
     if (window.confirm("删除这条评论？")) {
       onDelete(threadId, message.id);
@@ -419,7 +415,6 @@ function CommentMessageRow({
         </div>
         {editDraft ? (
           <CommentInlineEditor
-            attachmentPreviewUrls={attachmentPreviewUrls}
             currentUserId={currentUserId}
             draft={editDraft}
             mentionableUsers={mentionableUsers}
@@ -543,7 +538,6 @@ export function serializeCommentDraft(draft: CommentDraft) {
 }
 
 export function CommentDraftFields({
-  attachmentPreviewUrls,
   autoFocus = false,
   cancelLabel = "取消",
   currentUserId,
@@ -558,7 +552,6 @@ export function CommentDraftFields({
   submitOnEnter = true,
   submitLabel,
 }: {
-  attachmentPreviewUrls?: Map<string, string>;
   autoFocus?: boolean;
   cancelLabel?: string;
   currentUserId: string;
@@ -577,11 +570,6 @@ export function CommentDraftFields({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const markdownValue = serializeCommentDraft(draft);
-  const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
-  const attachmentPreviewUrlForReference = useCallback((reference: OrfAttachmentReference) => {
-    const id = reference.kind === "pending" ? reference.pendingAttachmentId : reference.attachmentId;
-    return attachmentPreviewUrls?.get(id) ?? null;
-  }, [attachmentPreviewUrls]);
   const submitDraftFromEditor = () => {
     if (uploadingImage) return;
     fieldRef.current?.closest("form")?.requestSubmit();
@@ -590,11 +578,9 @@ export function CommentDraftFields({
   return (
     <div ref={fieldRef} className="orf-comment-rich-text-field">
       <OrfRichTextEditor
-        attachmentPreviewUrlForReference={attachmentPreviewUrlForReference}
         autoFocus={autoFocus}
         currentUserId={currentUserId}
         idleHint={uploadError || (idleHint ?? "Enter 发送，Shift + Enter 换行")}
-        mentionUsersById={mentionUsersById}
         mentionableUsers={mentionableUsers}
         onBusyChange={setUploadingImage}
         onChange={(markdown) => {
@@ -633,7 +619,6 @@ export function CommentDraftFields({
 }
 
 export function CommentInlineEditor({
-  attachmentPreviewUrls,
   currentUserId,
   draft,
   mentionableUsers,
@@ -642,7 +627,6 @@ export function CommentInlineEditor({
   onSubmit,
   onUploadAttachment,
 }: {
-  attachmentPreviewUrls?: Map<string, string>;
   currentUserId: string;
   draft: CommentDraft;
   mentionableUsers: CommentMentionUser[];
@@ -654,7 +638,6 @@ export function CommentInlineEditor({
   return (
     <form className="orf-comment-inline-editor" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onSubmit={onSubmit}>
       <CommentDraftFields
-        attachmentPreviewUrls={attachmentPreviewUrls}
         autoFocus
         cancelLabel="取消编辑"
         currentUserId={currentUserId}

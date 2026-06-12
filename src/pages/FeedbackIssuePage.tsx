@@ -346,10 +346,6 @@ function OriginalFeedbackCard({
   const createdAt = commentTimeDisplay(message?.createdAt ?? feedback.createdAt);
   const authorName = message?.author ?? feedback.owner;
   const authorAvatarUrl = message?.authorAvatarUrl ?? null;
-  const attachmentPreviewUrls = useMemo(
-    () => new Map((message?.attachments ?? []).map((attachment) => [attachment.id, attachment.contentUrl])),
-    [message?.attachments],
-  );
 
   return (
     <article className="feedback-issue-original-card">
@@ -374,7 +370,6 @@ function OriginalFeedbackCard({
         <div className="feedback-issue-comment-body">
           {message && editState?.messageId === message.id ? (
             <CommentInlineEditor
-              attachmentPreviewUrls={attachmentPreviewUrls}
               currentUserId={currentUser?.id ?? ""}
               draft={editState.draft}
               mentionableUsers={mentionableUsers}

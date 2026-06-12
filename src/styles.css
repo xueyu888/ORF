@@ -9739,12 +9739,22 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-comment-markdown-list {
+  list-style-position: outside;
   margin: 5px 0 5px 20px;
   padding: 0;
   white-space: normal;
 }
 
+.orf-comment-markdown-list:is(ul) {
+  list-style-type: disc;
+}
+
+.orf-comment-markdown-list:is(ol) {
+  list-style-type: decimal;
+}
+
 .orf-comment-markdown-list li {
+  display: list-item;
   padding-left: 2px;
 }
 
@@ -10215,76 +10225,26 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-rich-text-editor-content {
+  display: block;
   min-width: 0;
   width: 100%;
   max-width: 100%;
   max-height: 190px;
   min-height: 76px;
   overflow-y: auto;
+  border: 0;
+  background: transparent;
   padding: 9px 10px;
   color: #344054;
   font-size: 14px;
   line-height: 1.72;
   outline: none;
+  resize: none;
   scrollbar-width: thin;
 }
 
-.orf-rich-text-editor-content .ProseMirror {
-  min-height: 58px;
-  outline: none;
-  overflow-wrap: anywhere;
-}
-
-.orf-rich-text-editor-content .ProseMirror p {
-  margin: 0;
-}
-
-.orf-rich-text-editor-content .ProseMirror p + p,
-.orf-rich-text-editor-content .ProseMirror ul + p,
-.orf-rich-text-editor-content .ProseMirror ol + p,
-.orf-rich-text-editor-content .ProseMirror blockquote + p {
-  margin-top: 6px;
-}
-
-.orf-rich-text-editor-content .ProseMirror ul,
-.orf-rich-text-editor-content .ProseMirror ol {
-  margin: 4px 0;
-  padding-left: 20px;
-}
-
-.orf-rich-text-editor-content .ProseMirror li + li {
-  margin-top: 2px;
-}
-
-.orf-rich-text-editor-content .ProseMirror blockquote {
-  margin: 6px 0;
-  border-left: 3px solid rgba(47, 156, 137, 0.34);
-  color: #667085;
-  padding-left: 10px;
-}
-
-.orf-rich-text-editor-content .ProseMirror code {
-  border-radius: 5px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #29364a;
-  font-size: 0.92em;
-  padding: 1px 4px;
-}
-
-.orf-rich-text-editor-content .ProseMirror a {
-  color: #0b63ce;
-  font-weight: 750;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
-
-.orf-rich-text-editor-content .ProseMirror p.is-editor-empty:first-child::before {
-  content: attr(data-placeholder);
-  float: left;
-  height: 0;
+.orf-rich-text-editor-content::placeholder {
   color: #98a2b3;
-  pointer-events: none;
 }
 
 .orf-rich-text-mention {
@@ -11766,11 +11726,21 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-markdown-list {
+  list-style-position: outside;
   margin: 4px 0 4px 20px;
   padding: 0;
 }
 
+.orf-chat-markdown-list:is(ul) {
+  list-style-type: disc;
+}
+
+.orf-chat-markdown-list:is(ol) {
+  list-style-type: decimal;
+}
+
 .orf-chat-markdown-list li {
+  display: list-item;
   padding-left: 2px;
 }
 
@@ -12317,10 +12287,6 @@ button.orf-chat-image-attachment {
   padding: 10px 12px;
   font-size: 14px;
   line-height: 1.5;
-}
-
-.orf-chat-draft-editor .orf-rich-text-editor-content .ProseMirror {
-  min-height: 56px;
 }
 
 .orf-chat-draft-editor .orf-rich-text-footer {
@@ -14089,7 +14055,7 @@ button.orf-chat-image-attachment {
   color: var(--orf-text-primary);
 }
 
-.orf-app-shell[data-chat-page="true"][data-chat-theme="dark"] .orf-chat-draft-editor .orf-rich-text-editor-content .ProseMirror p.is-editor-empty:first-child::before {
+.orf-app-shell[data-chat-page="true"][data-chat-theme="dark"] .orf-chat-draft-editor .orf-rich-text-editor-content::placeholder {
   color: #7f8c9d;
 }
 
