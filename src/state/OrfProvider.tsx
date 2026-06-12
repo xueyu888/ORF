@@ -25,6 +25,7 @@ import { enqueueSystemBroadcast } from "../features/notifications/notificationBr
 import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
+import { requestClientUpdateCheck } from "../features/client-updates/clientUpdateCenterEvents";
 import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
 import { syncDesktopChatUnreadCount } from "../features/desktop/desktopShellRuntime";
 import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
@@ -37,7 +38,7 @@ import {
 import { getChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
-import type { ChatRealtimeEvent, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
+import type { ChatRealtimeEvent, ClientUpdateAvailable, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
   CommentStatus,
   CommentTargetType,
@@ -299,6 +300,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const receiveReadModelInvalidation = useCallback((invalidation: OrfReadModelInvalidation) => {
     setReadModelInvalidations((items) => [invalidation, ...items.filter((item) => item.id !== invalidation.id)].slice(0, 64));
   }, []);
+  const receiveClientUpdateAvailable = useCallback((update: ClientUpdateAvailable) => {
+    requestClientUpdateCheck({ releaseVersion: update.releaseVersion });
+  }, []);
   const refreshChatUnreadSummary = useCallback(async () => {
     const summary = await getChatUnreadSummary();
     setChatUnreadSummary(summary);
@@ -353,6 +357,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
     onChatEvent: receiveRealtimeChatEvent,
+    onClientUpdateAvailable: receiveClientUpdateAvailable,
     onConnectionRestored: publishChatRealtimeConnectionRestored,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,

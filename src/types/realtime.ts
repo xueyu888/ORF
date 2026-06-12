@@ -1,8 +1,13 @@
 import type { AppNotification, ChatChannel, ChatMessage, NotificationKind } from "./orf";
 
-export type RealtimeEventKind = "notification.created" | "system.broadcast" | "orf.read-model.invalidated" | "chat.event";
+export type RealtimeEventKind =
+  | "notification.created"
+  | "system.broadcast"
+  | "orf.read-model.invalidated"
+  | "chat.event"
+  | "client.update.available";
 
-export type SystemBroadcastTone = "bounty";
+export type SystemBroadcastTone = "bounty" | "clientUpdate";
 export type OrfReadModel = "taskManagement" | "bountyHall" | "users" | "permissions" | "notifications" | "settings";
 export type OrfReadModelInvalidationReason =
   | "objective.created"
@@ -108,4 +113,26 @@ export interface ChatRealtimeEvent {
   };
 }
 
-export type RealtimeEvent = NotificationRealtimeEvent | SystemBroadcastRealtimeEvent | OrfReadModelInvalidatedRealtimeEvent | ChatRealtimeEvent;
+export interface ClientUpdateAvailable {
+  id: string;
+  body: string;
+  createdAt: string;
+  htmlUrl: string;
+  releaseTag: string;
+  releaseVersion: string;
+  title: string;
+}
+
+export interface ClientUpdateAvailableRealtimeEvent {
+  id: string;
+  kind: "client.update.available";
+  createdAt: string;
+  update: ClientUpdateAvailable;
+}
+
+export type RealtimeEvent =
+  | NotificationRealtimeEvent
+  | SystemBroadcastRealtimeEvent
+  | OrfReadModelInvalidatedRealtimeEvent
+  | ChatRealtimeEvent
+  | ClientUpdateAvailableRealtimeEvent;

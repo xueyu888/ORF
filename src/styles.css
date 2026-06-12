@@ -3768,6 +3768,17 @@ button:disabled {
   overflow: hidden;
 }
 
+.orf-system-broadcast[data-tone="clientUpdate"] {
+  border-color: rgba(14, 116, 144, 0.32);
+  background:
+    linear-gradient(90deg, rgba(236, 254, 255, 0.94), rgba(239, 246, 255, 0.9) 54%, rgba(229, 252, 255, 0.92)),
+    rgba(236, 254, 255, 0.94);
+}
+
+.orf-system-broadcast[data-tone="clientUpdate"] .orf-system-broadcast-icon {
+  color: #0e7490;
+}
+
 .orf-system-broadcast-icon {
   width: 18px;
   height: 18px;

@@ -1,5 +1,5 @@
 import { Download, ExternalLink, RefreshCw, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClientUpdateDecision } from "./clientUpdateModel";
 import {
   checkForClientUpdate,
@@ -15,6 +15,7 @@ import {
   type ClientUpdateInstallProgress,
   type ClientUpdateRuntimeInfo,
 } from "./clientUpdateRuntime";
+import { clientUpdateCheckRequestEvent } from "./clientUpdateCenterEvents";
 
 const updateDismissStoragePrefix = "orf-client-update-dismissed:";
 const updatePromptDismissStoragePrefix = "orf-client-update-prompt-dismissed:";
@@ -33,18 +34,19 @@ export function ClientUpdateNotice() {
   const [installing, setInstalling] = useState(false);
   const [installMessage, setInstallMessage] = useState<string | null>(null);
   const [installProgress, setInstallProgress] = useState<ClientUpdateInstallProgress | null>(null);
+  const runCheck = useCallback((signal?: AbortSignal) => {
+    void checkForClientUpdate(signal)
+      .then(({ decision, runtime }) => setNoticeState({ status: "ready", decision, runtime }))
+      .catch((error) => {
+        if (!signal?.aborted) {
+          setNoticeState({ status: "error", message: error instanceof Error ? error.message : "检查更新失败" });
+        }
+      });
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    const check = () => {
-      void checkForClientUpdate(controller.signal)
-        .then(({ decision, runtime }) => setNoticeState({ status: "ready", decision, runtime }))
-        .catch((error) => {
-          if (!controller.signal.aborted) {
-            setNoticeState({ status: "error", message: error instanceof Error ? error.message : "检查更新失败" });
-          }
-        });
-    };
+    const check = () => runCheck(controller.signal);
 
     check();
     const interval = window.setInterval(check, updateCheckIntervalMs);
@@ -52,7 +54,13 @@ export function ClientUpdateNotice() {
       controller.abort();
       window.clearInterval(interval);
     };
-  }, []);
+  }, [runCheck]);
+
+  useEffect(() => {
+    const handleClientUpdateCheckRequest = () => runCheck();
+    window.addEventListener(clientUpdateCheckRequestEvent, handleClientUpdateCheckRequest);
+    return () => window.removeEventListener(clientUpdateCheckRequestEvent, handleClientUpdateCheckRequest);
+  }, [runCheck]);
 
   const availableDecision = useMemo(() => {
     if (noticeState.status !== "ready" || noticeState.decision.status !== "available") return null;

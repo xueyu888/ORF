@@ -1,11 +1,18 @@
 import { useEffect, useRef } from "react";
 import type { AppNotification } from "../../types/orf";
-import type { ChatRealtimeEvent, OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../types/realtime";
+import type {
+  ChatRealtimeEvent,
+  ClientUpdateAvailable,
+  OrfReadModelInvalidation,
+  RealtimeEvent,
+  SystemBroadcast,
+} from "../../types/realtime";
 
 type RealtimeEventOptions = {
   enabled: boolean;
   onBroadcast: (broadcast: SystemBroadcast) => void;
   onChatEvent?: (event: ChatRealtimeEvent) => void;
+  onClientUpdateAvailable?: (update: ClientUpdateAvailable) => void;
   onConnectionRestored?: () => void;
   onReadModelInvalidation: (invalidation: OrfReadModelInvalidation) => void;
   onNotification: (notification: AppNotification) => void;
@@ -15,12 +22,14 @@ export function useRealtimeEvents({
   enabled,
   onBroadcast,
   onChatEvent,
+  onClientUpdateAvailable,
   onConnectionRestored,
   onNotification,
   onReadModelInvalidation,
 }: RealtimeEventOptions) {
   const onBroadcastRef = useRef(onBroadcast);
   const onChatEventRef = useRef(onChatEvent);
+  const onClientUpdateAvailableRef = useRef(onClientUpdateAvailable);
   const onConnectionRestoredRef = useRef(onConnectionRestored);
   const onNotificationRef = useRef(onNotification);
   const onReadModelInvalidationRef = useRef(onReadModelInvalidation);
@@ -36,6 +45,10 @@ export function useRealtimeEvents({
   useEffect(() => {
     onChatEventRef.current = onChatEvent;
   }, [onChatEvent]);
+
+  useEffect(() => {
+    onClientUpdateAvailableRef.current = onClientUpdateAvailable;
+  }, [onClientUpdateAvailable]);
 
   useEffect(() => {
     onConnectionRestoredRef.current = onConnectionRestored;
@@ -70,6 +83,12 @@ export function useRealtimeEvents({
         onChatEventRef.current?.(payload);
       }
     };
+    const handleClientUpdateAvailable = (event: MessageEvent<string>) => {
+      const payload = parseRealtimeEvent(event.data);
+      if (payload?.kind === "client.update.available") {
+        onClientUpdateAvailableRef.current?.(payload.update);
+      }
+    };
     const handleReadModelInvalidation = (event: MessageEvent<string>) => {
       const payload = parseRealtimeEvent(event.data);
       if (payload?.kind === "orf.read-model.invalidated") {
@@ -90,6 +109,7 @@ export function useRealtimeEvents({
     source.addEventListener("notification.created", handleNotification);
     source.addEventListener("system.broadcast", handleBroadcast);
     source.addEventListener("chat.event", handleChatEvent);
+    source.addEventListener("client.update.available", handleClientUpdateAvailable);
     source.addEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
     return () => {
       source.removeEventListener("open", handleOpen);
@@ -97,6 +117,7 @@ export function useRealtimeEvents({
       source.removeEventListener("notification.created", handleNotification);
       source.removeEventListener("system.broadcast", handleBroadcast);
       source.removeEventListener("chat.event", handleChatEvent);
+      source.removeEventListener("client.update.available", handleClientUpdateAvailable);
       source.removeEventListener("orf.read-model.invalidated", handleReadModelInvalidation);
       source.close();
     };

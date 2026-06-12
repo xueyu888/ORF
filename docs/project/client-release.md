@@ -115,6 +115,14 @@ npm run push:diagnose -- --send-test --user-email <email>
 
 如果 FCM 诊断中的注册状态显示 `registration_error`、`permission_denied`，或设备样本显示 `gms=unavailable`，说明这台安卓机当前没有形成可用 FCM token；需要先修复 Google Play services、通知授权或 Firebase 配置。`push_vendor_devices` 和 `push_vendor_registration_statuses` 只保留历史兼容数据，当前不参与投递判断。
 
+## Win11 在线更新广播
+
+Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收在线实时事件，服务端发现带 Win11 安装包的新客户端版本时，向在线作用域广播一次 `client.update.available`，新版客户端收到后立即触发已有更新检查；旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查。
+
+- 客户端更新的唯一事实源仍是 GitHub Release；实时事件只负责唤醒检查或展示横幅，不写入 `notifications` 表。
+- 自动广播只在服务端运行期间发现更高 Win11 版本时触发一次，避免同一版本重复刷屏。
+- 已发布版本需要补发在线横幅时，管理员可调用 `POST /api/client-updates/broadcast-latest`。该接口会校验当前 latest release 存在 Win11 安装包后，再向当前默认作用域在线用户广播一次。
+
 ## 版本事实源
 
 根 `package.json` 仍是发布版本的唯一维护入口，`scripts/sync-client-versions.mjs` 会同步桌面客户端和 Android 原生工程。运行中的客户端版本展示以原生容器返回的已安装版本为准：

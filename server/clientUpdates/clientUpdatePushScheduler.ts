@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger } from "fastify";
-import { selectClientUpdateAsset } from "../../src/features/client-updates/clientUpdateModel";
+import { compareReleaseVersions, selectClientUpdateAsset } from "../../src/features/client-updates/clientUpdateModel";
 import { env } from "../env";
 import { isFirebasePushConfigured } from "../push/firebasePushClient";
 import { clientUpdatePushChannelId, sendPushToDevices } from "../push/pushService";
@@ -8,12 +8,16 @@ import {
   listPushDevicesNeedingClientUpdate,
   markClientUpdatePushAttempt,
 } from "../push/pushRepository";
-import { getCachedLatestClientRelease } from "./clientReleaseRepository";
+import { publishClientUpdateAnnouncement } from "./clientUpdateAnnouncement";
+import { getCachedLatestClientRelease, type ClientUpdateReleaseResponse } from "./clientReleaseRepository";
+import { realtimeOnlineTeamIds } from "../realtime/realtimeEventBus";
 
 let schedulerStarted = false;
+let latestObservedReleaseVersion: string | null = null;
+let latestBroadcastedReleaseVersion: string | null = null;
 
 export function startClientUpdatePushScheduler(log: FastifyBaseLogger) {
-  if (schedulerStarted || !env.ORF_CLIENT_UPDATE_PUSH_ENABLED || !env.ORF_PUSH_ENABLED || !hasClientUpdatePushChannel()) {
+  if (schedulerStarted || !env.ORF_CLIENT_UPDATE_PUSH_ENABLED) {
     return () => undefined;
   }
 
@@ -23,7 +27,9 @@ export function startClientUpdatePushScheduler(log: FastifyBaseLogger) {
     if (running) return;
     running = true;
     try {
-      await pushLatestClientUpdateToOutdatedAndroidDevices(log);
+      const { release } = await getCachedLatestClientRelease();
+      broadcastNewClientUpdateToOnlineClients(log, release);
+      await pushLatestClientUpdateToOutdatedAndroidDevices(log, release);
     } catch (error) {
       log.warn({ error }, "ORF client update push scheduler failed");
     } finally {
@@ -36,11 +42,46 @@ export function startClientUpdatePushScheduler(log: FastifyBaseLogger) {
   return () => {
     clearInterval(timer);
     schedulerStarted = false;
+    latestObservedReleaseVersion = null;
+    latestBroadcastedReleaseVersion = null;
   };
 }
 
-async function pushLatestClientUpdateToOutdatedAndroidDevices(log: FastifyBaseLogger) {
-  const { release } = await getCachedLatestClientRelease();
+function broadcastNewClientUpdateToOnlineClients(log: FastifyBaseLogger, release: ClientUpdateReleaseResponse["release"]) {
+  if (!selectClientUpdateAsset(release.assets, "desktop-windows")) {
+    return;
+  }
+
+  const previousVersion = latestObservedReleaseVersion;
+  if (!previousVersion) {
+    latestObservedReleaseVersion = release.version;
+    return;
+  }
+
+  if (compareReleaseVersions(release.version, previousVersion) <= 0) {
+    return;
+  }
+  latestObservedReleaseVersion = release.version;
+
+  if (latestBroadcastedReleaseVersion === release.version) {
+    return;
+  }
+
+  const teamIds = realtimeOnlineTeamIds();
+  for (const teamId of teamIds) {
+    const result = publishClientUpdateAnnouncement({ release, teamId });
+    log.info({
+      onlineUserCount: result.onlineUserCount,
+      releaseVersion: result.releaseVersion,
+      teamId,
+    }, "Broadcast ORF client update announcement to online clients");
+  }
+  latestBroadcastedReleaseVersion = release.version;
+}
+
+async function pushLatestClientUpdateToOutdatedAndroidDevices(log: FastifyBaseLogger, release: ClientUpdateReleaseResponse["release"]) {
+  if (!env.ORF_PUSH_ENABLED || !hasClientUpdatePushChannel()) return;
+
   const androidAsset = selectClientUpdateAsset(release.assets, "android");
   if (!androidAsset) return;
 
