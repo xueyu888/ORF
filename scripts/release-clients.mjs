@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import "dotenv/config";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import process from "node:process";
@@ -44,6 +45,9 @@ git(["push", "--no-verify", "origin", releaseTag]);
 if (!options.watch) {
   console.log(`已触发 Release 工作流。稍后可用 gh run list --repo ${repository} --workflow release-clients.yml 查看。`);
   console.log(`如果要等待并核对资产，运行: npm run release:clients -- --tag ${releaseTag} --watch`);
+  if (options.broadcast) {
+    console.log("当前未使用 --watch，发布脚本不会执行发布后在线客户端广播。");
+  }
   process.exit(0);
 }
 
@@ -67,13 +71,17 @@ for (const asset of release.assets ?? []) {
   console.log(`- ${asset.name} (${formatBytes(asset.size)})`);
 }
 
+await broadcastClientUpdateRelease(release);
+
 function parseArgs(args) {
-  const parsed = { branch: null, help: false, repository: null, tag: null, watch: false };
+  const parsed = { branch: null, broadcast: true, broadcastUrl: null, help: false, repository: null, tag: null, watch: false };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--help" || arg === "-h") parsed.help = true;
     else if (arg === "--watch") parsed.watch = true;
     else if (arg === "--no-watch") parsed.watch = false;
+    else if (arg === "--no-broadcast") parsed.broadcast = false;
+    else if (arg === "--broadcast-url") parsed.broadcastUrl = readValue(args, ++index, arg);
     else if (arg === "--branch") parsed.branch = readValue(args, ++index, arg);
     else if (arg === "--repo") parsed.repository = readValue(args, ++index, arg);
     else if (arg === "--tag") parsed.tag = readValue(args, ++index, arg);
@@ -101,6 +109,8 @@ function printHelp() {
   - 使用 git push --no-verify 推送分支和 tag，避免发布时触发本地 testd pre-push 门禁。
   - 默认只触发 .github/workflows/release-clients.yml，不等待 GitHub Actions。
   - 加 --watch 时才等待工作流完成并核对 GitHub Release 资产。
+  - --watch 确认 Release 资产后，会在配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 时调用 ORF 服务端广播在线客户端。
+  - 可用 --no-broadcast 跳过发布后广播，或用 --broadcast-url 覆盖 ORF_CLIENT_UPDATE_BROADCAST_URL / ORF_APP_URL。
 `);
 }
 
@@ -199,6 +209,56 @@ function formatBytes(value) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function broadcastClientUpdateRelease(release) {
+  if (!options.broadcast) {
+    console.log("已按 --no-broadcast 跳过发布后在线客户端广播。");
+    return;
+  }
+
+  const secret = process.env.ORF_CLIENT_UPDATE_BROADCAST_SECRET?.trim();
+  const targetUrl = options.broadcastUrl ?? process.env.ORF_CLIENT_UPDATE_BROADCAST_URL ?? process.env.ORF_APP_URL;
+  if (!secret || !targetUrl) {
+    console.log("未配置 ORF_CLIENT_UPDATE_BROADCAST_SECRET 或 ORF_CLIENT_UPDATE_BROADCAST_URL/ORF_APP_URL，已跳过发布后在线客户端广播。");
+    return;
+  }
+
+  const releaseVersion = normalizeReleaseVersion(release.tagName);
+  logSection(`广播在线客户端更新 ${releaseVersion}`);
+  const endpoint = clientUpdateBroadcastEndpoint(targetUrl);
+  const response = await fetch(endpoint, {
+    body: JSON.stringify({ version: releaseVersion }),
+    headers: {
+      authorization: `Bearer ${secret}`,
+      "content-type": "application/json",
+    },
+    method: "POST",
+    signal: AbortSignal.timeout(10_000),
+  }).catch((error) => {
+    throw new Error(`请求 ORF 发布广播接口失败: ${error instanceof Error ? error.message : String(error)}`);
+  });
+
+  const bodyText = await response.text();
+  if (!response.ok) {
+    fail(`发布后在线客户端广播失败: HTTP ${response.status}${bodyText ? `\n${bodyText}` : ""}`);
+  }
+
+  const body = bodyText ? JSON.parse(bodyText) : {};
+  const skipped = body.skipped ? "，同版本自动广播已处理过" : "";
+  console.log(`已广播 ORF 客户端 ${body.releaseVersion ?? releaseVersion}，在线用户 ${body.onlineUserCount ?? 0} 人${skipped}。`);
+}
+
+function clientUpdateBroadcastEndpoint(value) {
+  const url = new URL(value);
+  if (url.pathname === "/" || url.pathname === "") {
+    return new URL("/api/client-updates/broadcast-release", url).toString();
+  }
+  return url.toString();
+}
+
+function normalizeReleaseVersion(value) {
+  return String(value ?? "").trim().replace(/^v/i, "");
 }
 
 function fail(message) {

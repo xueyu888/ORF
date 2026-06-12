@@ -12,23 +12,41 @@ export type ClientUpdateAnnouncementResult = {
   onlineUserCount: number;
   releaseTag: string;
   releaseVersion: string;
+  skipped: boolean;
 };
 
 export function publishClientUpdateAnnouncement(input: {
   createdAt?: Date;
+  mode?: "automatic" | "manual";
   release: ClientUpdateRelease;
   teamId: string;
 }): ClientUpdateAnnouncementResult {
+  const mode = input.mode ?? "manual";
+  const dedupeKey = clientUpdateAnnouncementDedupeKey(input.teamId, input.release.version);
+  if (mode === "automatic" && automaticClientUpdateAnnouncements.has(dedupeKey)) {
+    return {
+      onlineUserCount: realtimeOnlineUserIds(input.teamId).size,
+      releaseTag: input.release.tagName,
+      releaseVersion: input.release.version,
+      skipped: true,
+    };
+  }
+
   const createdAt = input.createdAt ?? new Date();
   const announcement = buildClientUpdateAnnouncement(input.release, createdAt);
 
   publishRealtimeSystemBroadcast(input.teamId, announcement.broadcast);
   publishRealtimeClientUpdateAvailable(input.teamId, announcement.update);
 
+  if (mode === "automatic") {
+    automaticClientUpdateAnnouncements.add(dedupeKey);
+  }
+
   return {
     onlineUserCount: realtimeOnlineUserIds(input.teamId).size,
     releaseTag: input.release.tagName,
     releaseVersion: input.release.version,
+    skipped: false,
   };
 }
 
@@ -56,4 +74,10 @@ export function buildClientUpdateAnnouncement(release: ClientUpdateRelease, crea
   };
 
   return { broadcast, update };
+}
+
+const automaticClientUpdateAnnouncements = new Set<string>();
+
+function clientUpdateAnnouncementDedupeKey(teamId: string, releaseVersion: string) {
+  return `${teamId}:${releaseVersion}`;
 }

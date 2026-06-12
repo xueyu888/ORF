@@ -14,7 +14,6 @@ import { realtimeOnlineTeamIds } from "../realtime/realtimeEventBus";
 
 let schedulerStarted = false;
 let latestObservedReleaseVersion: string | null = null;
-let latestBroadcastedReleaseVersion: string | null = null;
 
 export function startClientUpdatePushScheduler(log: FastifyBaseLogger) {
   if (schedulerStarted || !env.ORF_CLIENT_UPDATE_PUSH_ENABLED) {
@@ -43,7 +42,6 @@ export function startClientUpdatePushScheduler(log: FastifyBaseLogger) {
     clearInterval(timer);
     schedulerStarted = false;
     latestObservedReleaseVersion = null;
-    latestBroadcastedReleaseVersion = null;
   };
 }
 
@@ -63,20 +61,18 @@ function broadcastNewClientUpdateToOnlineClients(log: FastifyBaseLogger, release
   }
   latestObservedReleaseVersion = release.version;
 
-  if (latestBroadcastedReleaseVersion === release.version) {
-    return;
-  }
-
   const teamIds = realtimeOnlineTeamIds();
   for (const teamId of teamIds) {
-    const result = publishClientUpdateAnnouncement({ release, teamId });
+    const result = publishClientUpdateAnnouncement({ mode: "automatic", release, teamId });
+    if (result.skipped) {
+      continue;
+    }
     log.info({
       onlineUserCount: result.onlineUserCount,
       releaseVersion: result.releaseVersion,
       teamId,
     }, "Broadcast ORF client update announcement to online clients");
   }
-  latestBroadcastedReleaseVersion = release.version;
 }
 
 async function pushLatestClientUpdateToOutdatedAndroidDevices(log: FastifyBaseLogger, release: ClientUpdateReleaseResponse["release"]) {
