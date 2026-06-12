@@ -114,6 +114,41 @@ async function listActiveTeamUsers(teamId: string) {
   return rows.map((row) => toChatUser(row, { online: onlineUserIds.has(row.id) }));
 }
 
+async function findActiveDirectChannelIdByMemberIds(teamId: string, memberIds: string[], preferredName: string) {
+  const orderedMemberIds = [...memberIds].sort();
+  if (orderedMemberIds.length !== CHAT_DIRECT_MEMBER_COUNT) return null;
+  const { rows } = await pool.query<{ id: string }>(
+    `
+      WITH direct_channels AS (
+        SELECT
+          c.id,
+          c.name,
+          c.created_at,
+          c.updated_at,
+          array_agg(DISTINCT cm.user_id::text ORDER BY cm.user_id::text) AS member_ids,
+          count(DISTINCT cm.user_id)::int AS member_count,
+          count(DISTINCT msg.id)::int AS message_count,
+          max(msg.created_at) AS latest_message_at
+        FROM chat_channels c
+        INNER JOIN chat_channel_members cm ON cm.channel_id = c.id
+        LEFT JOIN chat_messages msg ON msg.channel_id = c.id
+        WHERE c.team_id = $1
+          AND c.type = 'direct'
+          AND c.archived_at IS NULL
+        GROUP BY c.id
+      )
+      SELECT id
+      FROM direct_channels
+      WHERE member_count = $3
+        AND member_ids = $2::text[]
+      ORDER BY (name = $4) DESC, message_count DESC, latest_message_at DESC NULLS LAST, updated_at DESC, created_at ASC, id
+      LIMIT 1
+    `,
+    [teamId, orderedMemberIds, CHAT_DIRECT_MEMBER_COUNT, preferredName],
+  );
+  return rows[0]?.id ?? null;
+}
+
 async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?: string } = {}) {
   const teamId = storageTeamId(actor);
   await preparePublicChannels(teamId);
@@ -145,7 +180,18 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
             SELECT count(*)::int
             FROM chat_messages msg
             WHERE msg.channel_id = c.id
-          ) AS message_count
+          ) AS message_count,
+          (
+            SELECT string_agg(cm.user_id::text, ',' ORDER BY cm.user_id::text)
+            FROM chat_channel_members cm
+            WHERE cm.channel_id = c.id
+          ) AS member_key,
+          (
+            SELECT max(msg.created_at)
+            FROM chat_messages msg
+            WHERE msg.channel_id = c.id
+              AND msg.deleted_at IS NULL
+          ) AS latest_message_at
         FROM chat_channels c
         INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $2
         WHERE c.team_id = $1
@@ -158,12 +204,17 @@ async function loadDisplayableChannelRows(actor: ChatActor, input: { channelId?:
           row_number() OVER (
             PARTITION BY team_id, type, lower(display_name)
             ORDER BY (message_count > 0) DESC, updated_at DESC, id
-          ) AS empty_duplicate_rank
+          ) AS empty_duplicate_rank,
+          row_number() OVER (
+            PARTITION BY team_id, type, member_key
+            ORDER BY (COALESCE(name, '') LIKE 'dm-%') DESC, message_count DESC, latest_message_at DESC NULLS LAST, updated_at DESC, id
+          ) AS direct_duplicate_rank
         FROM visible_channels
       )
       SELECT id, team_id, type, name, display_name, purpose, header, created_by, archived_by, created_at, updated_at, archived_at
       FROM ranked_channels
       WHERE NOT (type = 'direct' AND member_count <> 2)
+        AND NOT (type = 'direct' AND direct_duplicate_rank > 1)
         AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
       ORDER BY current_favorite DESC, type, updated_at DESC, lower(display_name)
     `,
@@ -895,6 +946,7 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           c.id,
           c.team_id,
           c.type,
+          c.name,
           c.display_name,
           c.updated_at,
           m.manually_unread,
@@ -907,7 +959,18 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
             SELECT count(*)::int
             FROM chat_messages msg
             WHERE msg.channel_id = c.id
-          ) AS message_count
+          ) AS message_count,
+          (
+            SELECT string_agg(cm.user_id::text, ',' ORDER BY cm.user_id::text)
+            FROM chat_channel_members cm
+            WHERE cm.channel_id = c.id
+          ) AS member_key,
+          (
+            SELECT max(msg.created_at)
+            FROM chat_messages msg
+            WHERE msg.channel_id = c.id
+              AND msg.deleted_at IS NULL
+          ) AS latest_message_at
         FROM chat_channels c
         INNER JOIN chat_channel_members m ON m.channel_id = c.id AND m.user_id = $2
         WHERE c.team_id = $1
@@ -919,13 +982,18 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
           row_number() OVER (
             PARTITION BY team_id, type, lower(display_name)
             ORDER BY (message_count > 0) DESC, updated_at DESC, id
-          ) AS empty_duplicate_rank
+          ) AS empty_duplicate_rank,
+          row_number() OVER (
+            PARTITION BY team_id, type, member_key
+            ORDER BY (COALESCE(name, '') LIKE 'dm-%') DESC, message_count DESC, latest_message_at DESC NULLS LAST, updated_at DESC, id
+          ) AS direct_duplicate_rank
         FROM visible_channels
       ),
       displayable_channels AS (
         SELECT id, manually_unread
         FROM ranked_channels
         WHERE NOT (type = 'direct' AND member_count <> 2)
+          AND NOT (type = 'direct' AND direct_duplicate_rank > 1)
           AND NOT (type = 'public' AND message_count = 0 AND empty_duplicate_rank > 1)
       ),
       message_unread AS (
@@ -1382,11 +1450,7 @@ export async function createDirectChannel(input: { userIds: string[] }, actor: C
   const activeUserIds = new Set(activeUsers.map((user) => user.id));
   if (memberIds.some((id) => !activeUserIds.has(id))) return { status: "notFound" };
 
-  const existing = await pool.query<{ id: string }>(
-    "SELECT id FROM chat_channels WHERE team_id = $1 AND name = $2 AND archived_at IS NULL",
-    [teamId, name],
-  );
-  const existingChannelId = existing.rows[0]?.id;
+  const existingChannelId = await findActiveDirectChannelIdByMemberIds(teamId, memberIds, name);
   if (existingChannelId) {
     const channel = await getVisibleChannel(actor, existingChannelId);
     return channel ? ok({ channel }) : { status: "forbidden" };
