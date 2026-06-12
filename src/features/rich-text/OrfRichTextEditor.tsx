@@ -31,6 +31,16 @@ export type OrfRichTextMentionUser = {
   status?: string;
 };
 
+export type OrfRichTextMentionInsert = {
+  label: string;
+  range: {
+    from: number;
+    to: number;
+  };
+  text: string;
+  user: OrfRichTextMentionUser;
+};
+
 type MentionRange = {
   from: number;
   query: string;
@@ -68,6 +78,7 @@ export type OrfRichTextEditorProps = {
   disabled?: boolean;
   excludeCurrentUserFromMentions?: boolean;
   footer?: ReactNode;
+  formatMentionText?: (user: OrfRichTextMentionUser, label: string) => string;
   idleHint?: string;
   mentionPlainTextUserIds?: ReadonlySet<string>;
   mentionableUsers: OrfRichTextMentionUser[];
@@ -76,6 +87,7 @@ export type OrfRichTextEditorProps = {
   onErrorChange?: (message: string) => void;
   onFilesInsert?: (files: File[]) => boolean | void;
   onKeyDown?: (event: KeyboardEvent, actions: OrfRichTextEditorActions) => boolean | void;
+  onMentionInsert?: (insert: OrfRichTextMentionInsert) => void;
   onSubmitRequest?: () => void;
   onUploadImage?: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
   placeholder: string;
@@ -154,6 +166,29 @@ function unwrapMarkdownLink(value: string) {
   return match?.[1] ?? value;
 }
 
+function mentionUserMatchesQuery(user: OrfRichTextMentionUser, query: string) {
+  return (
+    !query ||
+    user.name.toLowerCase().includes(query) ||
+    (user.email ?? "").toLowerCase().includes(query) ||
+    (user.searchText ?? "").toLowerCase().includes(query)
+  );
+}
+
+function listVisibleMentionUsers(input: {
+  currentUserId: string;
+  excludeCurrentUser: boolean;
+  mentionRange: MentionRange | null;
+  users: OrfRichTextMentionUser[];
+}) {
+  if (!input.mentionRange) return [];
+  const query = input.mentionRange.query.trim().toLowerCase();
+  return input.users
+    .filter((user) => !input.excludeCurrentUser || user.id !== input.currentUserId)
+    .filter((user) => user.status === undefined || user.status === "active")
+    .filter((user) => mentionUserMatchesQuery(user, query));
+}
+
 export function OrfRichTextEditor({
   actionsRef,
   autoFocus = false,
@@ -162,6 +197,7 @@ export function OrfRichTextEditor({
   disabled = false,
   excludeCurrentUserFromMentions = true,
   footer,
+  formatMentionText,
   idleHint,
   mentionPlainTextUserIds,
   mentionableUsers,
@@ -170,6 +206,7 @@ export function OrfRichTextEditor({
   onErrorChange,
   onFilesInsert,
   onKeyDown,
+  onMentionInsert,
   onSubmitRequest,
   onUploadImage,
   placeholder,
@@ -180,8 +217,10 @@ export function OrfRichTextEditor({
 }: OrfRichTextEditorProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const linkInputRef = useRef<HTMLInputElement | null>(null);
+  const mentionOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const disabledRef = useRef(disabled);
+  const formatMentionTextRef = useRef(formatMentionText);
   const markdownRef = useRef(value);
   const lastAppliedMarkdownRef = useRef(value);
   const mentionPlainTextUserIdsRef = useRef(mentionPlainTextUserIds);
@@ -190,6 +229,7 @@ export function OrfRichTextEditor({
   const onErrorChangeRef = useRef(onErrorChange);
   const onFilesInsertRef = useRef(onFilesInsert);
   const onKeyDownRef = useRef(onKeyDown);
+  const onMentionInsertRef = useRef(onMentionInsert);
   const onSubmitRequestRef = useRef(onSubmitRequest);
   const onUploadImageRef = useRef(onUploadImage);
   const submitOnEnterRef = useRef(submitOnEnter);
@@ -202,18 +242,12 @@ export function OrfRichTextEditor({
   const [uploadingImage, setUploadingImage] = useState(false);
 
   const filteredMentionUsers = useMemo(() => {
-    if (!mentionRange) return [];
-    const query = mentionRange.query.trim().toLowerCase();
-    return mentionableUsers
-      .filter((user) => !excludeCurrentUserFromMentions || user.id !== currentUserId)
-      .filter((user) => user.status === undefined || user.status === "active")
-      .filter((user) => (
-        !query ||
-        user.name.toLowerCase().includes(query) ||
-        (user.email ?? "").toLowerCase().includes(query) ||
-        (user.searchText ?? "").toLowerCase().includes(query)
-      ))
-      .slice(0, 6);
+    return listVisibleMentionUsers({
+      currentUserId,
+      excludeCurrentUser: excludeCurrentUserFromMentions,
+      mentionRange,
+      users: mentionableUsers,
+    });
   }, [currentUserId, excludeCurrentUserFromMentions, mentionRange, mentionableUsers]);
 
   const refreshMentionRange = useCallback((nextMarkdown = markdownRef.current, cursor = textareaRef.current?.selectionStart ?? 0) => {
@@ -311,6 +345,14 @@ export function OrfRichTextEditor({
   }, [onKeyDown]);
 
   useEffect(() => {
+    formatMentionTextRef.current = formatMentionText;
+  }, [formatMentionText]);
+
+  useEffect(() => {
+    onMentionInsertRef.current = onMentionInsert;
+  }, [onMentionInsert]);
+
+  useEffect(() => {
     onSubmitRequestRef.current = onSubmitRequest;
   }, [onSubmitRequest]);
 
@@ -339,6 +381,11 @@ export function OrfRichTextEditor({
   useEffect(() => {
     setSelectedMentionIndex(0);
   }, [mentionRange?.query, filteredMentionUsers.length]);
+
+  useEffect(() => {
+    if (!mentionRange || filteredMentionUsers.length === 0) return;
+    mentionOptionRefs.current[selectedMentionIndex]?.scrollIntoView({ block: "nearest" });
+  }, [filteredMentionUsers.length, mentionRange, selectedMentionIndex]);
 
   useEffect(() => {
     if (autoFocus && !disabled) focusSelection(markdownRef.current.length);
@@ -479,9 +526,16 @@ export function OrfRichTextEditor({
     if (!mentionRange) return;
     const label = orfRichTextMentionLabel(user.name);
     const plainText = Boolean(mentionPlainTextUserIdsRef.current?.has(user.id));
-    const token = plainText ? `@${label}` : orfMentionMarkdown({ label, userId: user.id });
-    const valueWithTrailingSpace = `${token} `;
+    const defaultText = plainText ? `@${label}` : orfMentionMarkdown({ label, userId: user.id });
+    const mentionText = formatMentionTextRef.current?.(user, label) ?? defaultText;
+    const valueWithTrailingSpace = `${mentionText} `;
     emitMarkdown(replaceRange(markdownRef.current, mentionRange, valueWithTrailingSpace), mentionRange.from + valueWithTrailingSpace.length);
+    onMentionInsertRef.current?.({
+      label,
+      range: { from: mentionRange.from, to: mentionRange.to },
+      text: mentionText,
+      user,
+    });
     setMentionRange(null);
   }, [emitMarkdown, mentionRange]);
 
@@ -684,12 +738,17 @@ export function OrfRichTextEditor({
           onSelect={() => refreshMentionRange()}
         />
         {mentionRange && mentionableUsers.length > 0 && (
-          <div className="orf-comment-mention-menu orf-rich-text-mention-menu">
+          <div className="orf-comment-mention-menu orf-rich-text-mention-menu" role="listbox" aria-label="提及成员">
             {filteredMentionUsers.length > 0 ? (
               filteredMentionUsers.map((user, index) => (
                 <button
                   key={user.id}
+                  ref={(element) => {
+                    mentionOptionRefs.current[index] = element;
+                  }}
                   type="button"
+                  role="option"
+                  aria-selected={index === selectedMentionIndex}
                   className={clsx("orf-comment-mention-option", index === selectedMentionIndex && "orf-comment-mention-option-active")}
                   onMouseDown={(event) => {
                     event.preventDefault();

@@ -1,6 +1,5 @@
 import type { ChatUser } from "../../types/orf";
 import type { OrfRichTextMentionUser } from "../rich-text/OrfRichTextEditor";
-import { type ChatDraft, draftFromStoredBody, serializeDraft } from "./chatModels";
 
 export const chatBroadcastMentionUserId = "__orf_broadcast_mention_all__";
 
@@ -14,14 +13,6 @@ const chatBroadcastMentionOption: OrfRichTextMentionUser = {
 };
 
 export const chatMentionPlainTextUserIds = new Set([chatBroadcastMentionUserId]);
-
-export function chatDraftToRichTextMarkdown(draft: ChatDraft) {
-  return serializeDraft(draft);
-}
-
-export function chatRichTextMarkdownToDraft(markdown: string, usersById: Map<string, ChatUser>) {
-  return draftFromStoredBody(markdown, usersById);
-}
 
 export function chatRichTextMentionableUsers(mentionableUsers: ChatUser[]): OrfRichTextMentionUser[] {
   return [chatBroadcastMentionOption, ...mentionableUsers];

@@ -552,7 +552,11 @@ export function ChatMessageItem({
           {quickChatReactionOptions.map((option) => (
             <button
               type="button"
-              className={clsx("orf-chat-quick-reaction", reactedByCurrentUser.has(option.emojiName) && "orf-chat-message-action-active")}
+              className={clsx(
+                "orf-chat-quick-reaction",
+                "orf-chat-message-action-overflow-early",
+                reactedByCurrentUser.has(option.emojiName) && "orf-chat-message-action-active",
+              )}
               key={option.emojiName}
               title={option.label}
               aria-label={option.label}
@@ -570,10 +574,29 @@ export function ChatMessageItem({
           )}
           {onSave && (
             <IconButton
-              className={message.savedByCurrentUser ? "orf-chat-message-action-active" : ""}
+              className={clsx(
+                "orf-chat-message-action-overflow-late",
+                message.savedByCurrentUser && "orf-chat-message-action-active",
+              )}
               icon={Bookmark}
               label={message.savedByCurrentUser ? "取消保存" : "保存消息"}
               onClick={() => onSave(message)}
+            />
+          )}
+          {canMutate && (
+            <IconButton
+              className="orf-chat-message-primary-action orf-chat-message-action-overflow-late"
+              icon={Edit3}
+              label="编辑消息"
+              onClick={() => onEdit(message)}
+            />
+          )}
+          {canDeleteMessage && (
+            <IconButton
+              className="orf-chat-message-danger-action orf-chat-message-action-overflow-late"
+              icon={Trash2}
+              label="删除消息"
+              onClick={() => onDelete(message)}
             />
           )}
           {hasMoreActions && (
@@ -608,6 +631,17 @@ export function ChatMessageItem({
                     <button type="button" role="menuitem" onClick={() => handleMoreAction(() => onMarkUnread(message))}>
                       <EyeOff className="h-3.5 w-3.5" />
                       从这里标记未读
+                    </button>
+                  )}
+                  {onSave && (
+                    <button
+                      type="button"
+                      className={message.savedByCurrentUser ? "orf-chat-message-more-active" : ""}
+                      role="menuitem"
+                      onClick={() => handleMoreAction(() => onSave(message))}
+                    >
+                      <Bookmark className="h-3.5 w-3.5" />
+                      {message.savedByCurrentUser ? "取消保存" : "保存消息"}
                     </button>
                   )}
                   {canMutate && (
