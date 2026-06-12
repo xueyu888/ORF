@@ -1159,27 +1159,32 @@ function clientUpdateInstallPayload(input) {
 async function downloadClientUpdateInstaller(payload, sendProgress) {
   const updateDir = path.join(app.getPath("temp"), "orf-client-updates");
   fs.mkdirSync(updateDir, { recursive: true });
-  const installerPath = path.join(updateDir, payload.fileName);
-  const tempPath = `${installerPath}.download`;
-  fs.rmSync(tempPath, { force: true });
+  const installDir = fs.mkdtempSync(path.join(updateDir, `${sanitizeUpdatePathSegment(payload.installId, "desktop-update")}-`));
+  const installerPath = path.join(installDir, payload.fileName);
+  const tempPath = path.join(installDir, `${payload.fileName}.download`);
 
-  const response = await net.fetch(payload.url);
-  if (!response.ok || !response.body) {
-    throw new Error(`Download failed: HTTP ${response.status}`);
+  try {
+    const response = await net.fetch(payload.url);
+    if (!response.ok || !response.body) {
+      throw new Error(`Download failed: HTTP ${response.status}`);
+    }
+    const totalBytes = parseContentLength(response.headers.get("content-length"));
+    sendProgress({ downloadedBytes: 0, stage: "downloading", totalBytes });
+    await pipeline(
+      Readable.fromWeb(response.body),
+      createDownloadProgressStream((downloadedBytes) => {
+        sendProgress({ downloadedBytes, stage: "downloading", totalBytes });
+      }),
+      fs.createWriteStream(tempPath),
+    );
+    sendProgress({ percent: 100, stage: "downloaded", totalBytes });
+    fs.renameSync(tempPath, installerPath);
+    removeOtherClientUpdateInstallers(updateDir, installDir);
+    return installerPath;
+  } catch (error) {
+    removeClientUpdateInstallPath(installDir);
+    throw error;
   }
-  const totalBytes = parseContentLength(response.headers.get("content-length"));
-  sendProgress({ downloadedBytes: 0, stage: "downloading", totalBytes });
-  await pipeline(
-    Readable.fromWeb(response.body),
-    createDownloadProgressStream((downloadedBytes) => {
-      sendProgress({ downloadedBytes, stage: "downloading", totalBytes });
-    }),
-    fs.createWriteStream(tempPath),
-  );
-  sendProgress({ percent: 100, stage: "downloaded", totalBytes });
-  fs.rmSync(installerPath, { force: true });
-  fs.renameSync(tempPath, installerPath);
-  return installerPath;
 }
 
 function createDownloadProgressStream(onProgress) {
@@ -1237,6 +1242,37 @@ function sanitizeUpdateInstallerName(value, fallback) {
   const rawName = typeof value === "string" ? path.basename(value.trim()) : "";
   const safeName = rawName.replace(/[^A-Za-z0-9._-]/g, "-").replace(/-+/g, "-");
   return safeName || fallback;
+}
+
+function sanitizeUpdatePathSegment(value, fallback) {
+  const rawValue = typeof value === "string" ? value.trim() : "";
+  const safeValue = rawValue
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[.-]+|[.-]+$/g, "")
+    .slice(0, 80);
+  return safeValue || fallback;
+}
+
+function removeOtherClientUpdateInstallers(updateDir, activeInstallDir) {
+  const activePath = path.resolve(activeInstallDir);
+  try {
+    for (const entryName of fs.readdirSync(updateDir)) {
+      const entryPath = path.join(updateDir, entryName);
+      if (path.resolve(entryPath) === activePath) continue;
+      removeClientUpdateInstallPath(entryPath);
+    }
+  } catch {
+    // Temp cache cleanup must not block update downloads.
+  }
+}
+
+function removeClientUpdateInstallPath(targetPath) {
+  try {
+    fs.rmSync(targetPath, { force: true, recursive: true });
+  } catch {
+    // The installer can be temporarily locked by Windows or antivirus; temp cleanup is best effort.
+  }
 }
 
 app.setName("ORF");
