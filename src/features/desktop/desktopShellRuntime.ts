@@ -27,6 +27,12 @@ export type DesktopShellWindowResult = {
   status: "error" | "success" | "unsupported";
 };
 
+export type DesktopWorkbenchZoomResult = {
+  data?: { level: number };
+  reason?: string;
+  status: "error" | "success" | "unsupported";
+};
+
 type DesktopShellBridge = {
   closeWindow?: () => Promise<DesktopShellWindowResult>;
   getLaunchAtLoginState?: () => Promise<DesktopShellLaunchAtLoginResult>;
@@ -35,6 +41,7 @@ type DesktopShellBridge = {
   onWindowStateChange?: (handler: (state: DesktopWindowState) => void) => (() => void);
   setChatUnreadCount?: (payload: { count: number }) => Promise<DesktopShellUnreadResult>;
   setLaunchAtLoginEnabled?: (payload: { enabled: boolean }) => Promise<DesktopShellLaunchAtLoginResult>;
+  setWorkbenchZoomLevel?: (payload: { level: number }) => Promise<DesktopWorkbenchZoomResult>;
   toggleMaximizeWindow?: () => Promise<DesktopShellWindowResult>;
 };
 
@@ -78,6 +85,18 @@ export async function setDesktopLaunchAtLoginEnabled(enabled: boolean): Promise<
   }
   try {
     return normalizeDesktopLaunchAtLoginResult(await window.orfDesktopShell.setLaunchAtLoginEnabled({ enabled }));
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export async function setDesktopWorkbenchZoomLevel(level: number): Promise<DesktopWorkbenchZoomResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.setWorkbenchZoomLevel) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    const result = await window.orfDesktopShell.setWorkbenchZoomLevel({ level });
+    return result?.status ? result : { data: { level }, status: "success" };
   } catch {
     return { status: "error", reason: "desktop_shell_bridge_failed" };
   }

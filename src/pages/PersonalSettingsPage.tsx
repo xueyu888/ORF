@@ -1,12 +1,13 @@
 import { clsx } from "clsx";
-import { BellRing, Check, Image, Loader2, Moon, Power, Trash2, Upload } from "lucide-react";
+import { BellRing, Check, Contrast, Image, Loader2, Moon, Power, RotateCcw, Trash2, Type, Upload } from "lucide-react";
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { ImagePreviewDialog } from "../components/ImagePreviewDialog";
 import { PageScaffold } from "../components/PageScaffold";
 import { UserAvatar } from "../components/UserAvatar";
 import { Button, Card, Field } from "../components/ui";
-import { defaultChatTheme, type ChatTheme } from "../domain/settings/personalPreferences";
+import { defaultChatTheme, defaultUserDisplayPreferences, displayPreferenceLimits, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import { sendNativeChatNotification } from "../features/chat/chatNativeNotificationDelivery";
+import { workbenchZoomScale } from "../features/display/displayPreferences";
 import {
   getDesktopLaunchAtLoginState,
   setDesktopLaunchAtLoginEnabled,
@@ -50,6 +51,17 @@ const landingOptions = [
 const chatThemeOptions: Array<{ label: string; value: ChatTheme }> = [
   { label: "舒适暗色", value: "dark" },
   { label: "经典浅色", value: "light" },
+];
+const workbenchZoomOptions = range(displayPreferenceLimits.workbenchZoomLevel.min, displayPreferenceLimits.workbenchZoomLevel.max).map((value) => ({
+  label: `${Math.round(workbenchZoomScale(value) * 100)}%`,
+  value,
+}));
+const interfaceFontSizeOptions = range(displayPreferenceLimits.interfaceFontSize.min, displayPreferenceLimits.interfaceFontSize.max).map((value) => ({ label: `${value}px`, value }));
+const contentFontSizeOptions = range(displayPreferenceLimits.contentFontSize.min, displayPreferenceLimits.contentFontSize.max).map((value) => ({ label: `${value}px`, value }));
+const displayDensityOptions: Array<{ label: string; value: UserDisplayPreferences["density"] }> = [
+  { label: "紧凑", value: "compact" },
+  { label: "默认", value: "default" },
+  { label: "舒展", value: "comfortable" },
 ];
 
 export function PersonalSettingsPage() {
@@ -148,6 +160,15 @@ export function PersonalSettingsPage() {
 
   const handleChatThemeChange = async (value: ChatTheme) => {
     await savePreferencePatch({ chatTheme: value }, "聊天主题已更新");
+  };
+
+  const handleDisplayPreferenceChange = async (patch: Partial<UserDisplayPreferences>) => {
+    const current = preferences?.display ?? defaultUserDisplayPreferences;
+    await savePreferencePatch({ display: { ...current, ...patch } }, "界面显示已更新");
+  };
+
+  const handleResetDisplayPreferences = async () => {
+    await savePreferencePatch({ display: defaultUserDisplayPreferences }, "界面显示已恢复默认");
   };
 
   const handleFileSelected = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -350,6 +371,7 @@ export function PersonalSettingsPage() {
       : preferences.sidebarCollapsed
         ? "collapsed"
         : "expanded";
+  const displayPreferences = preferences?.display ?? defaultUserDisplayPreferences;
   const selectedBackground = backgrounds?.list.find((background) => background.id === selectedBackgroundId) ?? null;
   const canUseSelected = Boolean(selectedBackgroundId && selectedBackgroundId !== preferences?.appBackground?.fixedBackgroundId);
   const busy = saveStatus === "loading" || uploadStatus === "loading" || avatarStatus === "loading";
@@ -443,6 +465,81 @@ export function PersonalSettingsPage() {
                 ))}
               </select>
             </Field>
+            <div className="grid gap-3 border-t pt-4 orf-border">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2 font-medium orf-text-primary">
+                  <Type className="h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
+                  <span>界面显示</span>
+                </div>
+                <Button type="button" variant="ghost" disabled={!preferences || busy} onClick={() => void handleResetDisplayPreferences()}>
+                  <RotateCcw className="h-4 w-4" />
+                  重置
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="工作台缩放">
+                  <select
+                    className="orf-control border px-3 py-2 text-sm"
+                    value={displayPreferences.workbenchZoomLevel}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void handleDisplayPreferenceChange({ workbenchZoomLevel: Number(event.target.value) })}
+                  >
+                    {workbenchZoomOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="界面字号">
+                  <select
+                    className="orf-control border px-3 py-2 text-sm"
+                    value={displayPreferences.interfaceFontSize}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void handleDisplayPreferenceChange({ interfaceFontSize: Number(event.target.value) })}
+                  >
+                    {interfaceFontSizeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="内容字号">
+                  <select
+                    className="orf-control border px-3 py-2 text-sm"
+                    value={displayPreferences.contentFontSize}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void handleDisplayPreferenceChange({ contentFontSize: Number(event.target.value) })}
+                  >
+                    {contentFontSizeOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="界面密度">
+                  <select
+                    className="orf-control border px-3 py-2 text-sm"
+                    value={displayPreferences.density}
+                    disabled={!preferences || busy}
+                    onChange={(event) => void handleDisplayPreferenceChange({ density: event.target.value as UserDisplayPreferences["density"] })}
+                  >
+                    {displayDensityOptions.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <label className="flex items-center justify-between gap-4 rounded-md border orf-border px-3 py-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <Contrast className="h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
+                  <span className="font-medium orf-text-primary">高对比度</span>
+                </span>
+                <input
+                  className="h-5 w-5 shrink-0 accent-[var(--orf-accent)]"
+                  type="checkbox"
+                  checked={displayPreferences.contrast === "high"}
+                  disabled={!preferences || busy}
+                  onChange={(event) => void handleDisplayPreferenceChange({ contrast: event.target.checked ? "high" : "default" })}
+                />
+              </label>
+            </div>
             <div className="flex items-start gap-3 border-t pt-4 orf-border">
               <Moon className="mt-0.5 h-4 w-4 shrink-0 orf-text-muted" aria-hidden="true" />
               <div>
@@ -565,6 +662,10 @@ export function PersonalSettingsPage() {
 
 function isPersonalBackground(id: string | null | undefined) {
   return Boolean(id?.includes("/personal/"));
+}
+
+function range(start: number, end: number) {
+  return Array.from({ length: end - start + 1 }, (_item, index) => start + index);
 }
 
 function nativeNotificationTestMessage(result: NativeNotificationTestResult) {

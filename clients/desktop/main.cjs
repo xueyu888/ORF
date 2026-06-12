@@ -36,6 +36,8 @@ const DESKTOP_RECOVERY_MAX_AUTOMATIC_RELOADS = 2;
 const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
 const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
 const DESKTOP_SETTINGS_FILE_NAME = "desktop-settings.v1.json";
+const DESKTOP_WORKBENCH_ZOOM_MIN = -2;
+const DESKTOP_WORKBENCH_ZOOM_MAX = 4;
 const DESKTOP_LAUNCH_AT_LOGIN_ARG = "--orf-start-hidden";
 const DESKTOP_LAUNCH_AT_LOGIN_PROMPT_DELAY_MS = 1200;
 const DESKTOP_RECOVERY_CHECK_SCRIPT = `
@@ -1021,6 +1023,14 @@ function registerDesktopShellBridge() {
   ipcMain.handle("orf:desktop-shell:set-launch-at-login-enabled", (_event, input) => (
     setDesktopLaunchAtLoginEnabled(Boolean(input?.enabled))
   ));
+  ipcMain.handle("orf:desktop-shell:set-workbench-zoom-level", (event, input) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
+    const level = normalizeDesktopWorkbenchZoomLevel(input?.level);
+    if (level === null) return { status: "error", reason: "invalid_zoom_level" };
+    targetWindow.webContents.setZoomLevel(level);
+    return { status: "success", data: { level } };
+  });
   ipcMain.handle("orf:desktop-shell:get-window-state", (event) => {
     const targetWindow = BrowserWindow.fromWebContents(event.sender);
     if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
@@ -1048,6 +1058,13 @@ function registerDesktopShellBridge() {
     targetWindow.close();
     return { status: "success" };
   });
+}
+
+function normalizeDesktopWorkbenchZoomLevel(input) {
+  const numeric = Number(input);
+  if (!Number.isFinite(numeric)) return null;
+  const clamped = Math.max(DESKTOP_WORKBENCH_ZOOM_MIN, Math.min(DESKTOP_WORKBENCH_ZOOM_MAX, numeric));
+  return Math.round(clamped * 4) / 4;
 }
 
 function desktopWindowState(targetWindow) {
