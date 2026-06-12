@@ -18,7 +18,7 @@ import {
   serializeCommentDraft,
 } from "../features/challenge/comments/CommentPanel";
 import { commentTimeDisplay } from "../features/challenge/comments/commentTime";
-import { FeedbackLinkedText } from "../features/feedback/components/FeedbackLinkedText";
+import type { OrfRichTextImageUploadResult } from "../features/rich-text/OrfRichTextEditor";
 import { canManageFeedbackStatus } from "../features/feedback/model/feedbackCapabilities";
 import {
   feedbackIssueDisplayId,
@@ -63,6 +63,11 @@ export function FeedbackIssuePage() {
   const mentionUsersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
   const canChangeState = feedback ? canManageFeedbackStatus(feedback, currentUser) : false;
   const canManageAllComments = hasPermission(currentUser, state.permissionRules, "comment.manage");
+  const uploadFeedbackCommentAttachment = async (file: File) => {
+    if (!feedback) return null;
+    const upload = await uploadCommentAttachment({ file, targetId: feedback.id, targetType: "feedback" });
+    return upload ? { markdown: upload.markdown, previewUrl: upload.attachment.contentUrl } : null;
+  };
 
   useEffect(() => {
     setDraft(emptyCommentDraft());
@@ -148,7 +153,7 @@ export function FeedbackIssuePage() {
     setDraft(emptyCommentDraft());
     setDraftMode({ type: "default" });
     setEditState({
-      draft: commentDraftFromStoredBody(entry.message.body, mentionUsersById),
+      draft: commentDraftFromStoredBody(entry.message.body),
       messageId: entry.message.id,
       threadId: entry.thread.id,
     });
@@ -227,7 +232,7 @@ export function FeedbackIssuePage() {
             onReply={startReply}
             onStartEdit={startEdit}
             onSubmitEdit={submitEdit}
-            onUploadAttachment={(file) => uploadCommentAttachment({ file, targetId: feedback.id, targetType: "feedback" })}
+            onUploadAttachment={uploadFeedbackCommentAttachment}
           />
 
           <div className="feedback-issue-timeline">
@@ -258,7 +263,7 @@ export function FeedbackIssuePage() {
                         onCancel={() => setEditState(null)}
                         onDraftChange={(draft) => updateEditDraft(message.id, draft)}
                         onSubmit={(event) => submitEdit(event, message.id)}
-                        onUploadAttachment={(file) => uploadCommentAttachment({ file, targetId: feedback.id, targetType: "feedback" })}
+                        onUploadAttachment={uploadFeedbackCommentAttachment}
                       />
                     ) : (
                       <>
@@ -291,7 +296,7 @@ export function FeedbackIssuePage() {
               }}
               onDraftChange={setDraft}
               onSubmit={handleSubmit}
-              onUploadAttachment={(file) => uploadCommentAttachment({ file, targetId: feedback.id, targetType: "feedback" })}
+              onUploadAttachment={uploadFeedbackCommentAttachment}
             />
           </div>
         </section>
@@ -335,7 +340,7 @@ function OriginalFeedbackCard({
   onReply: (message: CommentMessage) => void;
   onStartEdit: (entry: FeedbackCommentEntry) => void;
   onSubmitEdit: (event: FormEvent, messageId: string) => void;
-  onUploadAttachment: (file: File) => Promise<string | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
 }) {
   const message = entry?.message ?? null;
   const createdAt = commentTimeDisplay(message?.createdAt ?? feedback.createdAt);
@@ -376,7 +381,7 @@ function OriginalFeedbackCard({
           ) : message ? (
             <CommentBodyText attachments={message.attachments ?? []} body={message.body} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
           ) : feedback.suggestedAdjustment ? (
-            <FeedbackLinkedText text={feedback.suggestedAdjustment} />
+            <CommentBodyText attachments={[]} body={feedback.suggestedAdjustment} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
           ) : (
             <CommentBodyText attachments={[]} body={feedback.phenomenon} mentionUsersById={mentionUsersById} onOpenImage={onOpenImage} />
           )}

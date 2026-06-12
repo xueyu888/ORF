@@ -1338,7 +1338,10 @@ export function ChallengePlanPage() {
           onClose={() => setCommentTarget(null)}
           onDeleteComment={deleteCommentMessage}
           onUpdateComment={updateCommentMessage}
-          onUploadAttachment={(file) => uploadCommentAttachment({ file, targetId: commentTarget.id, targetType: commentTarget.type })}
+          onUploadAttachment={async (file) => {
+            const upload = await uploadCommentAttachment({ file, targetId: commentTarget.id, targetType: commentTarget.type });
+            return upload ? { markdown: upload.markdown, previewUrl: upload.attachment.contentUrl } : null;
+          }}
         />
       )}
     </div>

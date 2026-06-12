@@ -8,7 +8,7 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { type ChangeEvent, type ClipboardEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
 import { uploadChatAttachment } from "../../state/apiClient";
 import type { ChatAttachment, ChatUser, Feedback } from "../../types/orf";
@@ -173,10 +173,8 @@ export function ChatComposer({
     event.target.value = "";
   };
 
-  const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(event.clipboardData.files ?? []).filter((file) => file.size > 0);
+  const handlePastedFiles = (files: File[]) => {
     if (files.length === 0) return;
-    event.preventDefault();
     uploadFiles(files);
   };
   const transformPastedText = useCallback(
@@ -263,7 +261,7 @@ export function ChatComposer({
         mentionableUsers={mentionableUsers}
         onChange={setDraft}
         onEditLatest={attachmentItems.length === 0 ? onEditLatest : undefined}
-        onPaste={handlePaste}
+        onFilesInsert={handlePastedFiles}
         onReactToLatest={onReactToLatest}
         onReplyToLatest={!rootMessageId && attachmentItems.length === 0 ? onReplyToLatest : undefined}
         onSubmit={submit}
@@ -273,7 +271,18 @@ export function ChatComposer({
         resetKey={draftStorageKey}
         submitDisabled={uploading || failedUploads > 0 || !hasSendableDraft}
         transformPastedText={transformPastedText}
-        toolbarControls={<button type="button" onClick={() => fileRef.current?.click()} title="附件"><Paperclip className="h-4 w-4" /></button>}
+        toolbarControls={(
+          <button
+            type="button"
+            className="orf-rich-text-tool-button"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => fileRef.current?.click()}
+            title="附件"
+            aria-label="附件"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
+        )}
         toolbarEnd={({ submit: submitDraft, submitting }) => (
           <>
             {uploading && <Loader2 className="h-4 w-4 animate-spin" />}

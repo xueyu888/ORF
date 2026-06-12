@@ -353,6 +353,11 @@ export interface CommentAttachment {
   contentUrl: string;
 }
 
+export interface CommentAttachmentUploadResult {
+  attachment: CommentAttachment;
+  markdown: string;
+}
+
 export interface CommentMessage {
   id: string;
   author: string;

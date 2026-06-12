@@ -14,6 +14,7 @@ import { chatMessageDeliveryStatus, draftFromStoredBody, serializeDraft, type Ch
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
 
 type ChatMessageItemProps = {
+  canDeleteAnyMessage?: boolean;
   canPin?: boolean;
   compact?: boolean;
   currentUserId?: string;
@@ -223,6 +224,7 @@ function AttachmentGrid({
 
 export function ChatMessageItem({
   onAttachmentPreview,
+  canDeleteAnyMessage = false,
   canPin,
   compact,
   currentUserId,
@@ -258,6 +260,7 @@ export function ChatMessageItem({
   const deliveryStatus = chatMessageDeliveryStatus(message);
   const canMutate = !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
   const canUseServerActions = !deliveryStatus && !message.deletedAt;
+  const canDeleteMessage = canMutate || (canDeleteAnyMessage && canUseServerActions);
   const transformPastedFeedbackText = useCallback(
     (text: string) => formatPastedFeedbackLinks(text, feedbackItems ?? []),
     [feedbackItems],
@@ -425,7 +428,7 @@ export function ChatMessageItem({
       target.click();
     }
   };
-  const hasMoreActions = Boolean(onCopyLink || (canPin && onPin) || onMarkUnread || canMutate);
+  const hasMoreActions = Boolean(onCopyLink || (canPin && onPin) || onMarkUnread || canMutate || canDeleteMessage);
 
   return (
     <article
@@ -485,7 +488,6 @@ export function ChatMessageItem({
               onSubmit={saveEdit}
               placeholder="编辑消息..."
               resetKey={message.id}
-              rows={4}
               submitDisabled={editSaving || !editDraft.text.trim()}
               transformPastedText={transformPastedFeedbackText}
             />
@@ -614,7 +616,7 @@ export function ChatMessageItem({
                       编辑消息
                     </button>
                   )}
-                  {canMutate && (
+                  {canDeleteMessage && (
                     <button className="orf-chat-message-more-danger" type="button" role="menuitem" onClick={() => handleMoreAction(() => onDelete(message))}>
                       <Trash2 className="h-3.5 w-3.5" />
                       删除消息

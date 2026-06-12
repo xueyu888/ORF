@@ -1,4 +1,5 @@
 import type { CommentThread, Feedback, FeedbackStatus } from "../../../types/orf";
+import { orfRichTextMarkdownToPlainText } from "../../rich-text/orfRichTextMarkdown";
 
 export type FeedbackIssueState = "open" | "closed";
 
@@ -130,11 +131,6 @@ export function feedbackIssueIdsFromText(text: string) {
   return Array.from(ids);
 }
 
-const feedbackAttachmentMarkdownPattern = /!\[[^\]\n]*\]\(orf-attachment:[^)]+\)/g;
-
 export function feedbackIssueBodyPreview(value: string) {
-  return value
-    .replace(feedbackAttachmentMarkdownPattern, "[图片]")
-    .replace(/\s+/g, " ")
-    .trim();
+  return orfRichTextMarkdownToPlainText(value, { attachmentText: "[图片]" });
 }

@@ -11,7 +11,7 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
-  CommentAttachment,
+  CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
   OrfUser,
@@ -81,10 +81,8 @@ export type CommentMentionableUsersResponse = Pick<OrfState, "users">;
 export type FeedbackReferencesResponse = {
   feedback: Array<Pick<OrfState["feedback"][number], "id" | "phenomenon">>;
 };
-export type CommentAttachmentUploadResponse = {
+export type CommentAttachmentUploadResponse = CommentAttachmentUploadResult & {
   ok: true;
-  attachment: CommentAttachment;
-  markdown: string;
 };
 export type ChatBootstrapResponse = ChatBootstrap;
 export type ChatUnreadSummaryResponse = ChatUnreadSummary;

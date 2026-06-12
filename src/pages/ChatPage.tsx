@@ -951,6 +951,7 @@ export function ChatPage() {
               usersById={usersById}
             />
             <ChatMessageFeed
+              canDeleteAnyMessage={canManageActiveChannel}
               canPin={canManageActiveChannel}
               currentUserId={currentUser?.id}
               editingMessageId={editingMessage?.id ?? null}
@@ -1012,6 +1013,7 @@ export function ChatPage() {
           activePanel={activePanel}
           allUsers={bootstrap.users}
           attachmentMaxBytes={bootstrap.settings.attachmentMaxBytes}
+          canDeleteAnyMessage={canManageRightPanelChannel}
           canManage={canManageRightPanelChannel}
           channel={rightPanelChannel ?? activeChannel}
           currentUserId={currentUser?.id}

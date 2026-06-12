@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, ImagePlus } from "lucide-react";
 import type { FormEvent } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { UserAvatar } from "../components/UserAvatar";
 import { BountyEmptyState } from "../features/bounty-hall/BountyHallSkin";
@@ -22,6 +22,7 @@ const feedbackImpactOptions: Impact[] = ["Low", "Medium", "High", "Critical"];
 type PendingFeedbackAttachment = {
   file: File;
   id: string;
+  previewUrl: string;
 };
 
 export function FeedbackCreatePage() {
@@ -41,9 +42,17 @@ export function FeedbackCreatePage() {
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const attachmentCounterRef = useRef(0);
+  const pendingPreviewUrlsRef = useRef(new Set<string>());
 
   const body = serializeCommentDraft(draft).trim();
   const referencedAttachments = pendingAttachments.filter((attachment) => body.includes(`orf-pending-attachment:${attachment.id}`));
+
+  useEffect(() => () => {
+    for (const previewUrl of pendingPreviewUrlsRef.current) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    pendingPreviewUrlsRef.current.clear();
+  }, []);
 
   if (!canCreateFeedback) {
     return (
@@ -60,8 +69,11 @@ export function FeedbackCreatePage() {
   const uploadLocalAttachment = async (file: File) => {
     attachmentCounterRef.current += 1;
     const id = `pending-${Date.now()}-${attachmentCounterRef.current}`;
-    setPendingAttachments((items) => [...items, { file, id }]);
-    return `![${file.name || "image"}](orf-pending-attachment:${id})`;
+    const previewUrl = URL.createObjectURL(file);
+    pendingPreviewUrlsRef.current.add(previewUrl);
+    const markdown = `![${file.name || "image"}](orf-pending-attachment:${id})`;
+    setPendingAttachments((items) => [...items, { file, id, previewUrl }]);
+    return { markdown, previewUrl };
   };
 
   const handleSubmit = async (event: FormEvent) => {

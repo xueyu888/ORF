@@ -1,5 +1,6 @@
 import type { ChatAttachment, ChatChannel, ChatMessage, ChatThreadSummary, ChatUser } from "../../types/orf";
 import { isChatConversation } from "../../domain/chatConversation";
+import { matchOrfMentionMarkdownTokens, orfMentionMarkdown, orfRichTextMentionLabel } from "../rich-text/orfRichTextMarkdown";
 
 export type DraftMention = {
   end: number;
@@ -539,11 +540,11 @@ export function applyThreadSummaryMessage(
 }
 
 export function mentionLabel(value: string) {
-  return value.replace(/[()[\]\n]/g, "").trim() || "成员";
+  return orfRichTextMentionLabel(value);
 }
 
 export function mentionToken(mention: Pick<DraftMention, "label" | "userId">) {
-  return `@[${mentionLabel(mention.label)}](orf-user:${encodeURIComponent(mention.userId)})`;
+  return orfMentionMarkdown({ label: mention.label, userId: mention.userId });
 }
 
 export function serializeDraft(draft: ChatDraft) {
@@ -562,19 +563,17 @@ export function serializeDraft(draft: ChatDraft) {
 }
 
 export function draftFromStoredBody(body: string, usersById: Map<string, ChatUser>): ChatDraft {
-  const pattern = /@\[([^\]\n]*)\]\(orf-user:([^) \n]+)\)/g;
   const mentions: DraftMention[] = [];
   let text = "";
   let index = 0;
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(body)) !== null) {
+  for (const match of matchOrfMentionMarkdownTokens(body)) {
     text += body.slice(index, match.index);
-    const userId = decodeURIComponent(match[2] ?? "");
-    const label = mentionLabel(usersById.get(userId)?.name ?? match[1] ?? "成员");
+    const userId = match.reference.userId;
+    const label = orfRichTextMentionLabel(usersById.get(userId)?.name ?? match.reference.label);
     const start = text.length;
     text += `@${label}`;
     mentions.push({ start, end: text.length, label, userId });
-    index = pattern.lastIndex;
+    index = match.index + match.token.length;
   }
   text += body.slice(index);
   return { text, mentions };
