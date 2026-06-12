@@ -547,6 +547,30 @@ function showMainWindow(targetPath) {
   return targetWindow;
 }
 
+function showMainWindowFromLaunchArguments(commandLine) {
+  const targetPath = desktopTargetPathFromLaunchArguments(commandLine);
+  if (targetPath) {
+    showMainWindow(targetPath);
+    return;
+  }
+
+  if (isHiddenDesktopLaunch(commandLine)) return;
+  showMainWindow();
+}
+
+function desktopTargetPathFromLaunchArguments(commandLine) {
+  if (!Array.isArray(commandLine)) return null;
+  for (const value of commandLine) {
+    const targetPath = chatNotificationTargetPathFromActivationArguments(value);
+    if (targetPath) return targetPath;
+  }
+  return null;
+}
+
+function isHiddenDesktopLaunch(commandLine) {
+  return Array.isArray(commandLine) && commandLine.includes(DESKTOP_LAUNCH_AT_LOGIN_ARG);
+}
+
 function openChatTargetInWindow(targetWindow, targetPath) {
   enqueueChatNotificationTarget(targetWindow, targetPath);
   const sendOpenTarget = () => {
@@ -1201,31 +1225,41 @@ function sanitizeUpdateInstallerName(value, fallback) {
 app.setName("ORF");
 app.setAppUserModelId("org.duckdns.orfxueyu.orf");
 Menu.setApplicationMenu(null);
-app.on("before-quit", () => {
-  desktopShellState.isQuitting = true;
-  if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
-    desktopShellState.tray.destroy();
-  }
-  desktopShellState.tray = null;
-});
 
-app.whenReady().then(() => {
-  const clientUrl = resolveClientUrl();
-  const startHidden = shouldStartHidden();
-  desktopShellState.clientUrl = clientUrl;
-  registerNativeNotificationBridge(clientUrl);
-  registerNativeRuntimeBridge();
-  registerDesktopShellBridge();
-  registerDesktopCredentialBridge(clientUrl);
-  createDesktopTray(clientUrl);
-  const mainWindow = createMainWindow(clientUrl, { show: !startHidden });
-  scheduleDesktopLaunchAtLoginPrompt(mainWindow);
-
-  app.on("activate", () => {
-    showMainWindow();
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, commandLine) => {
+    showMainWindowFromLaunchArguments(commandLine);
   });
-});
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin" && !desktopShellState.tray) app.quit();
-});
+  app.on("before-quit", () => {
+    desktopShellState.isQuitting = true;
+    if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
+      desktopShellState.tray.destroy();
+    }
+    desktopShellState.tray = null;
+  });
+
+  app.whenReady().then(() => {
+    const clientUrl = resolveClientUrl();
+    const startHidden = shouldStartHidden();
+    desktopShellState.clientUrl = clientUrl;
+    registerNativeNotificationBridge(clientUrl);
+    registerNativeRuntimeBridge();
+    registerDesktopShellBridge();
+    registerDesktopCredentialBridge(clientUrl);
+    createDesktopTray(clientUrl);
+    const mainWindow = createMainWindow(clientUrl, { show: !startHidden });
+    scheduleDesktopLaunchAtLoginPrompt(mainWindow);
+
+    app.on("activate", () => {
+      showMainWindow();
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin" && !desktopShellState.tray) app.quit();
+  });
+}
