@@ -3,7 +3,14 @@ import { createReadStream } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
-import { chatThemeSchema, defaultChatTheme, type ChatTheme } from "../../src/domain/settings/personalPreferences";
+import {
+  chatThemeSchema,
+  defaultChatTheme,
+  normalizeUserDisplayPreferences,
+  type ChatTheme,
+  type UserDisplayPreferences,
+  userDisplayPreferencesPatchSchema,
+} from "../../src/domain/settings/personalPreferences";
 import { canonicalVisualBackgroundScene } from "../../src/domain/settings/visualBackgrounds";
 import {
   backgroundSceneConfigSchema,
@@ -26,6 +33,7 @@ export type UserPreferences = {
   defaultLandingPath: string | null;
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
+  display: UserDisplayPreferences;
   appBackground: BackgroundSceneConfig | null;
   notificationDisplay: {
     toastEnabled: boolean;
@@ -40,6 +48,7 @@ export const userPreferencesPatchSchema = z.object({
   defaultLandingPath: z.string().nullable().optional(),
   sidebarCollapsed: z.boolean().nullable().optional(),
   chatTheme: chatThemeSchema.optional(),
+  display: userDisplayPreferencesPatchSchema.optional(),
   appBackground: backgroundSceneConfigSchema.nullable().optional(),
   notificationDisplay: z.object({ toastEnabled: z.boolean().optional() }).optional(),
 });
@@ -74,6 +83,7 @@ function defaultUserPreferences(userId: string): UserPreferences {
     defaultLandingPath: null,
     sidebarCollapsed: null,
     chatTheme: defaultChatTheme,
+    display: normalizeUserDisplayPreferences(null),
     appBackground: null,
     notificationDisplay: {
       toastEnabled: true,
@@ -100,6 +110,7 @@ function normalizeUserPreferences(userId: string, input: Partial<UserPreferences
     defaultLandingPath,
     sidebarCollapsed: typeof input?.sidebarCollapsed === "boolean" ? input.sidebarCollapsed : input?.sidebarCollapsed === null ? null : fallback.sidebarCollapsed,
     chatTheme: normalizeChatTheme(input?.chatTheme),
+    display: normalizeUserDisplayPreferences(input?.display),
     appBackground: input?.appBackground ? backgroundSceneConfigSchema.parse(input.appBackground) : null,
     notificationDisplay: {
       toastEnabled: input?.notificationDisplay?.toastEnabled ?? fallback.notificationDisplay.toastEnabled,
@@ -331,6 +342,9 @@ export async function saveUserPreferences(userId: string, patch: z.infer<typeof 
     }
     if (input.chatTheme !== undefined) {
       preferences.chatTheme = input.chatTheme;
+    }
+    if (input.display !== undefined) {
+      preferences.display = normalizeUserDisplayPreferences(input.display);
     }
     if (input.notificationDisplay) {
       preferences.notificationDisplay = {

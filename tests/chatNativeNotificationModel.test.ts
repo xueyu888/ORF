@@ -5,6 +5,10 @@ import {
   chatNotificationPreviewText,
   stripChatNotificationMarkdown,
 } from "../src/features/chat/chatNativeNotificationModel";
+import {
+  appAttentionStateFromBrowserDocument,
+  appAttentionStateFromDesktopWindow,
+} from "../src/features/interaction/appAttentionState";
 import type { ChatChannel, ChatMessage } from "../src/types/orf";
 import type { ChatRealtimeEvent } from "../src/types/realtime";
 
@@ -137,6 +141,36 @@ test("chat native notification suppresses active focused channel but not backgro
     focus: { activeChannelId: "channel-1", appFocused: false },
   });
   assert.equal(backgroundDecision.action, "notify");
+});
+
+test("app attention state treats only focused visible browser documents as actively viewed", () => {
+  assert.deepEqual(
+    appAttentionStateFromBrowserDocument({ documentFocused: true, visibilityState: "visible" }),
+    { activelyViewed: true, source: "browser-document" },
+  );
+  assert.deepEqual(
+    appAttentionStateFromBrowserDocument({ documentFocused: false, visibilityState: "visible" }),
+    { activelyViewed: false, source: "browser-document" },
+  );
+  assert.deepEqual(
+    appAttentionStateFromBrowserDocument({ documentFocused: true, visibilityState: "hidden" }),
+    { activelyViewed: false, source: "browser-document" },
+  );
+});
+
+test("app attention state treats only focused visible desktop windows as actively viewed", () => {
+  assert.deepEqual(
+    appAttentionStateFromDesktopWindow({ isFocused: true, isMaximized: false, isMinimized: false, isVisible: true }),
+    { activelyViewed: true, source: "desktop-window" },
+  );
+  assert.deepEqual(
+    appAttentionStateFromDesktopWindow({ isFocused: true, isMaximized: false, isMinimized: true, isVisible: true }),
+    { activelyViewed: false, source: "desktop-window" },
+  );
+  assert.deepEqual(
+    appAttentionStateFromDesktopWindow({ isFocused: true, isMaximized: false, isMinimized: false, isVisible: false }),
+    { activelyViewed: false, source: "desktop-window" },
+  );
 });
 
 test("chat native notification suppresses active thread replies only for the open thread", () => {

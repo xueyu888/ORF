@@ -25,7 +25,10 @@ import { enqueueSystemBroadcast } from "../features/notifications/notificationBr
 import { publishChatRealtimeConnectionRestored, publishChatRealtimeEvent } from "../features/realtime/chatRealtimeEventBus";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import { useRealtimeEvents } from "../features/realtime/useRealtimeEvents";
+import { requestClientUpdateCheck } from "../features/client-updates/clientUpdateCenterEvents";
 import { buildChatNativeNotificationDecision } from "../features/chat/chatNativeNotificationModel";
+import type { AppAttentionState } from "../features/interaction/appAttentionState";
+import { useAppAttentionState } from "../features/interaction/useAppAttentionState";
 import { syncDesktopChatUnreadCount } from "../features/desktop/desktopShellRuntime";
 import { registerOrfPushNotifications, revokeOrfPushNotifications } from "../features/push/orfPushRegistration";
 import {
@@ -37,7 +40,7 @@ import {
 import { getChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
 import type { ResultDetailsInput } from "../domain/orfResultDetails";
 import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
-import type { ChatRealtimeEvent, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
+import type { ChatRealtimeEvent, ClientUpdateAvailable, OrfReadModelInvalidation, SystemBroadcast } from "../types/realtime";
 import type {
   CommentStatus,
   CommentTargetType,
@@ -80,11 +83,6 @@ const emptyChatUnreadSummary: ChatUnreadSummary = {
   unreadChannelCount: 0,
 };
 
-function appDocumentFocused() {
-  if (typeof document === "undefined") return false;
-  return document.visibilityState === "visible" && document.hasFocus();
-}
-
 function chatRouteChannelIdFromPathname(pathname: string) {
   const match = /^\/chat\/([^/?#]+)/.exec(pathname);
   if (!match?.[1]) return null;
@@ -104,6 +102,7 @@ interface OrfContextValue {
   isAuthenticated: boolean;
   isApproved: boolean;
   isAdmin: boolean;
+  appAttentionState: AppAttentionState;
   modal: ModalState;
   toasts: ToastMessage[];
   notifications: AppNotification[];
@@ -206,6 +205,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [state, setState] = useState(loadInitialState);
   const { authenticateWithPassword, authConnectionError, authReady, authUserId, refreshAuthSession, setAuthUserId } = useAuthSessionState(setState);
+  const appAttentionState = useAppAttentionState();
   const [toastEnabled, setToastEnabled] = useState(true);
   const [modal, setModal] = useState<ModalState>({ type: null });
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -299,6 +299,9 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const receiveReadModelInvalidation = useCallback((invalidation: OrfReadModelInvalidation) => {
     setReadModelInvalidations((items) => [invalidation, ...items.filter((item) => item.id !== invalidation.id)].slice(0, 64));
   }, []);
+  const receiveClientUpdateAvailable = useCallback((update: ClientUpdateAvailable) => {
+    requestClientUpdateCheck({ releaseVersion: update.releaseVersion });
+  }, []);
   const refreshChatUnreadSummary = useCallback(async () => {
     const summary = await getChatUnreadSummary();
     setChatUnreadSummary(summary);
@@ -322,14 +325,14 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       focus: {
         activeChannelId: viewState.activeChannelId ?? chatRouteChannelIdFromPathname(location.pathname),
         activeThreadRootMessageId: viewState.activeThreadRootMessageId,
-        appFocused: appDocumentFocused(),
+        appFocused: appAttentionState.activelyViewed,
       },
     });
     if (decision.action === "notify" && reserveChatNotification(decision.notification.messageId)) {
       void sendNativeChatNotification(decision.notification).catch(() => undefined);
     }
     void refreshChatUnreadSummary().catch(() => undefined);
-  }, [currentUser?.id, location.pathname, refreshChatUnreadSummary, reserveChatNotification]);
+  }, [appAttentionState.activelyViewed, currentUser?.id, location.pathname, refreshChatUnreadSummary, reserveChatNotification]);
 
   useEffect(() => subscribeNativeChatNotificationOpen((targetPath) => {
     if (isSafeChatNotificationTargetPath(targetPath)) {
@@ -353,6 +356,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     enabled: authReady && isAuthenticated && isApproved,
     onBroadcast: receiveRealtimeBroadcast,
     onChatEvent: receiveRealtimeChatEvent,
+    onClientUpdateAvailable: receiveClientUpdateAvailable,
     onConnectionRestored: publishChatRealtimeConnectionRestored,
     onNotification: receiveRealtimeNotification,
     onReadModelInvalidation: receiveReadModelInvalidation,
@@ -482,6 +486,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isAuthenticated,
       isApproved,
       isAdmin,
+      appAttentionState,
       modal,
       toasts,
       notifications,
@@ -515,6 +520,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
     [
       authConnectionError,
       authReady,
+      appAttentionState,
       chatUnreadSummary,
       commentActions,
       currentUser,

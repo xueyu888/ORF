@@ -116,7 +116,7 @@ export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { currentUser, notify, readModelInvalidations, state } = useOrf();
+  const { appAttentionState, currentUser, notify, readModelInvalidations, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -303,6 +303,7 @@ export function ChatPage() {
     unreadAnchor,
   } = useChatFeedState({
     activeChannel,
+    appAttentionState,
     currentUserId: currentUser?.id,
     notify,
     onChannelUpdate: applyChannel,

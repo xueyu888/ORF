@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { databaseUnavailablePayload, isDatabaseUnavailableError } from "../db/errors";
@@ -65,6 +66,11 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
     return;
   }
 
+  if (isClientUpdateReleaseBroadcastRequest(request, pathname)) {
+    (request as FastifyRequest & { orfClientUpdateBroadcastAuthorized?: boolean }).orfClientUpdateBroadcastAuthorized = true;
+    return;
+  }
+
   const user = await getAuthenticatedOrfUser(request.headers.cookie).catch((error) => {
     request.log.warn(error, "Ory session check failed");
     if (error instanceof OrfUserScopeBindingError) {
@@ -92,6 +98,35 @@ export async function requireAuthenticatedApi(request: FastifyRequest, reply: Fa
   if (user.status !== "active") {
     return reply.code(403).send({ error: "User is not approved", status: user.status });
   }
+}
+
+function isClientUpdateReleaseBroadcastRequest(request: FastifyRequest, pathname: string) {
+  if (request.method !== "POST" || pathname !== "/api/client-updates/broadcast-release") {
+    return false;
+  }
+
+  const configuredSecret = env.ORF_CLIENT_UPDATE_BROADCAST_SECRET?.trim();
+  const providedSecret = readClientUpdateBroadcastSecret(request);
+  return Boolean(configuredSecret && providedSecret && safeSecretEqual(providedSecret, configuredSecret));
+}
+
+function readClientUpdateBroadcastSecret(request: FastifyRequest) {
+  const authorization = request.headers.authorization;
+  if (typeof authorization === "string" && authorization.startsWith("Bearer ")) {
+    return authorization.slice("Bearer ".length).trim();
+  }
+
+  const header = request.headers["x-orf-client-update-broadcast-secret"];
+  if (Array.isArray(header)) {
+    return header[0]?.trim() ?? "";
+  }
+  return typeof header === "string" ? header.trim() : "";
+}
+
+function safeSecretEqual(providedSecret: string, configuredSecret: string) {
+  const provided = Buffer.from(providedSecret);
+  const configured = Buffer.from(configuredSecret);
+  return provided.length === configured.length && timingSafeEqual(provided, configured);
 }
 
 export function registerAuthRoutes(app: FastifyInstance) {

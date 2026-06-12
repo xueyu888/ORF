@@ -1,5 +1,11 @@
 import type { AppNotification } from "../../src/types/orf";
-import type { ChatRealtimeEvent, OrfReadModelInvalidation, RealtimeEvent, SystemBroadcast } from "../../src/types/realtime";
+import type {
+  ChatRealtimeEvent,
+  ClientUpdateAvailable,
+  OrfReadModelInvalidation,
+  RealtimeEvent,
+  SystemBroadcast,
+} from "../../src/types/realtime";
 
 type RealtimeSubscriber = {
   id: string;
@@ -105,6 +111,15 @@ export function publishRealtimeSystemBroadcast(teamId: string, broadcast: System
   });
 }
 
+export function publishRealtimeClientUpdateAvailable(teamId: string, update: ClientUpdateAvailable) {
+  publishRealtimeEventToTeam(teamId, {
+    id: makeEventId("client-update-event"),
+    kind: "client.update.available",
+    createdAt: nowIso(),
+    update,
+  });
+}
+
 export function publishRealtimeReadModelInvalidation(
   teamId: string,
   invalidation: Omit<OrfReadModelInvalidation, "createdAt" | "id"> & Partial<Pick<OrfReadModelInvalidation, "createdAt" | "id">>,
@@ -157,6 +172,10 @@ export function publishRealtimeEventToTeam(teamId: string, event: RealtimeEvent)
 
 export function realtimeSubscriberCount() {
   return Array.from(subscribersByTeam.values()).reduce((sum, subscribers) => sum + subscribers.size, 0);
+}
+
+export function realtimeOnlineTeamIds() {
+  return Array.from(subscribersByTeam.keys());
 }
 
 export function realtimeOnlineUserIds(teamId: string) {

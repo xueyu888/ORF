@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
-const { app, BrowserWindow, Menu, Notification, Tray, ipcMain, nativeImage, net, safeStorage, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, safeStorage, shell } = require("electron");
 const {
   createAppIconRgba,
   createUnreadBadgeRgba,
@@ -35,6 +35,11 @@ const DESKTOP_RECOVERY_STABLE_RESET_DELAY_MS = 30000;
 const DESKTOP_RECOVERY_MAX_AUTOMATIC_RELOADS = 2;
 const DESKTOP_CREDENTIALS_MAX_ACCOUNTS = 10;
 const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
+const DESKTOP_SETTINGS_FILE_NAME = "desktop-settings.v1.json";
+const DESKTOP_WORKBENCH_ZOOM_MIN = -2;
+const DESKTOP_WORKBENCH_ZOOM_MAX = 4;
+const DESKTOP_LAUNCH_AT_LOGIN_ARG = "--orf-start-hidden";
+const DESKTOP_LAUNCH_AT_LOGIN_PROMPT_DELAY_MS = 1200;
 const DESKTOP_RECOVERY_CHECK_SCRIPT = `
 (() => {
   const root = document.getElementById("root");
@@ -64,7 +69,7 @@ function resolveClientUrl() {
   return clientUrl;
 }
 
-function createMainWindow(clientUrl) {
+function createMainWindow(clientUrl, options = {}) {
   const mainWindow = new BrowserWindow({
     width: 1360,
     height: 900,
@@ -75,6 +80,7 @@ function createMainWindow(clientUrl) {
     frame: false,
     backgroundColor: "#f6f8fb",
     autoHideMenuBar: true,
+    show: options.show !== false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -112,8 +118,16 @@ function createMainWindow(clientUrl) {
   });
   mainWindow.on("focus", () => {
     mainWindow.flashFrame(false);
+    sendDesktopWindowState(mainWindow);
   });
-  mainWindow.on("show", updateDesktopUnreadState);
+  mainWindow.on("blur", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("show", () => {
+    updateDesktopUnreadState();
+    sendDesktopWindowState(mainWindow);
+  });
+  mainWindow.on("hide", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("minimize", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("restore", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("maximize", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("unmaximize", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("enter-full-screen", () => sendDesktopWindowState(mainWindow));
@@ -136,6 +150,138 @@ function resolveDesktopIconPath() {
   if (fs.existsSync(PACKAGED_DESKTOP_ICON_PATH)) return PACKAGED_DESKTOP_ICON_PATH;
   if (fs.existsSync(REPO_ANDROID_LAUNCHER_ICON_PATH)) return REPO_ANDROID_LAUNCHER_ICON_PATH;
   return undefined;
+}
+
+function shouldStartHidden() {
+  return process.platform === "win32" && process.argv.includes(DESKTOP_LAUNCH_AT_LOGIN_ARG);
+}
+
+function desktopLaunchAtLoginUnsupportedReason() {
+  if (process.platform !== "win32") return "unsupported_platform";
+  if (!app.isPackaged) return "desktop_client_not_installed";
+  return null;
+}
+
+function desktopLaunchAtLoginSettingsOptions() {
+  return {
+    args: [DESKTOP_LAUNCH_AT_LOGIN_ARG],
+    name: ORF_APP_NAME,
+    path: process.execPath,
+  };
+}
+
+function desktopLaunchAtLoginState() {
+  const unsupportedReason = desktopLaunchAtLoginUnsupportedReason();
+  if (unsupportedReason) return { status: "unsupported", reason: unsupportedReason };
+
+  try {
+    const settings = app.getLoginItemSettings(desktopLaunchAtLoginSettingsOptions());
+    return {
+      status: "success",
+      data: {
+        enabled: Boolean(settings.openAtLogin && settings.executableWillLaunchAtLogin !== false),
+        promptSeen: readDesktopSettings().launchAtLoginPromptSeen,
+        supported: true,
+      },
+    };
+  } catch {
+    return { status: "error", reason: "login_item_read_failed" };
+  }
+}
+
+function setDesktopLaunchAtLoginEnabled(enabled, options = {}) {
+  const unsupportedReason = desktopLaunchAtLoginUnsupportedReason();
+  if (unsupportedReason) return { status: "unsupported", reason: unsupportedReason };
+
+  try {
+    app.setLoginItemSettings({
+      ...desktopLaunchAtLoginSettingsOptions(),
+      enabled,
+      openAtLogin: enabled,
+    });
+    if (options.markPromptSeen !== false) {
+      updateDesktopSettings({ launchAtLoginPromptSeen: true });
+    }
+    const state = desktopLaunchAtLoginState();
+    updateDesktopUnreadState();
+    return state.status === "success"
+      ? state
+      : {
+        status: "success",
+        data: {
+          enabled,
+          promptSeen: readDesktopSettings().launchAtLoginPromptSeen,
+          supported: true,
+        },
+      };
+  } catch {
+    return { status: "error", reason: "login_item_write_failed" };
+  }
+}
+
+function scheduleDesktopLaunchAtLoginPrompt(targetWindow) {
+  if (shouldStartHidden()) return;
+  setTimeout(() => {
+    void promptDesktopLaunchAtLogin(targetWindow);
+  }, DESKTOP_LAUNCH_AT_LOGIN_PROMPT_DELAY_MS);
+}
+
+async function promptDesktopLaunchAtLogin(targetWindow) {
+  if (!targetWindow || targetWindow.isDestroyed() || desktopShellState.isQuitting) return;
+  const state = desktopLaunchAtLoginState();
+  if (state.status !== "success" || state.data.enabled || state.data.promptSeen) return;
+
+  const response = await dialog.showMessageBox(targetWindow, {
+    buttons: ["开启", "暂不启用"],
+    cancelId: 1,
+    defaultId: 0,
+    detail: "开启后，Windows 登录时会自动启动 ORF 并驻留托盘，不会直接弹出主窗口。你之后仍可在个人设置或托盘菜单里关闭。",
+    message: "让 ORF 开机后自动启动？",
+    noLink: true,
+    title: "开机自启",
+    type: "question",
+  });
+
+  updateDesktopSettings({ launchAtLoginPromptSeen: true });
+  if (response.response !== 0) return;
+
+  const result = setDesktopLaunchAtLoginEnabled(true, { markPromptSeen: false });
+  if (result.status === "success") return;
+  await dialog.showMessageBox(targetWindow, {
+    buttons: ["知道了"],
+    detail: "请稍后在个人设置或托盘菜单里重新开启。",
+    message: "开机自启设置失败",
+    noLink: true,
+    title: "开机自启",
+    type: "error",
+  });
+}
+
+function desktopSettingsFilePath() {
+  return path.join(app.getPath("userData"), DESKTOP_SETTINGS_FILE_NAME);
+}
+
+function readDesktopSettings() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(desktopSettingsFilePath(), "utf8"));
+    return {
+      launchAtLoginPromptSeen: parsed?.launchAtLoginPromptSeen === true,
+    };
+  } catch {
+    return { launchAtLoginPromptSeen: false };
+  }
+}
+
+function updateDesktopSettings(patch) {
+  const nextSettings = {
+    ...readDesktopSettings(),
+    ...patch,
+  };
+  const filePath = desktopSettingsFilePath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `${JSON.stringify({
+    launchAtLoginPromptSeen: nextSettings.launchAtLoginPromptSeen === true,
+  }, null, 2)}\n`);
 }
 
 function createDesktopRecoveryState() {
@@ -411,6 +557,30 @@ function showMainWindow(targetPath) {
   return targetWindow;
 }
 
+function showMainWindowFromLaunchArguments(commandLine) {
+  const targetPath = desktopTargetPathFromLaunchArguments(commandLine);
+  if (targetPath) {
+    showMainWindow(targetPath);
+    return;
+  }
+
+  if (isHiddenDesktopLaunch(commandLine)) return;
+  showMainWindow();
+}
+
+function desktopTargetPathFromLaunchArguments(commandLine) {
+  if (!Array.isArray(commandLine)) return null;
+  for (const value of commandLine) {
+    const targetPath = chatNotificationTargetPathFromActivationArguments(value);
+    if (targetPath) return targetPath;
+  }
+  return null;
+}
+
+function isHiddenDesktopLaunch(commandLine) {
+  return Array.isArray(commandLine) && commandLine.includes(DESKTOP_LAUNCH_AT_LOGIN_ARG);
+}
+
 function openChatTargetInWindow(targetWindow, targetPath) {
   enqueueChatNotificationTarget(targetWindow, targetPath);
   const sendOpenTarget = () => {
@@ -484,9 +654,8 @@ function updateTrayUnreadState() {
   const tray = desktopShellState.tray;
   if (!tray || tray.isDestroyed()) return;
   const unreadCount = desktopShellState.unreadCount;
-  tray.setImage(createTrayIconImage(unreadCount));
-  tray.setToolTip(unreadCount > 0 ? `${ORF_APP_NAME} - ${unreadDescription(unreadCount)}` : ORF_APP_NAME);
-  tray.setContextMenu(Menu.buildFromTemplate([
+  const launchAtLoginState = desktopLaunchAtLoginState();
+  const menuTemplate = [
     {
       label: unreadCount > 0 ? `打开聊天（${desktopUnreadBadgeLabel(unreadCount)} 未读）` : "打开聊天",
       click: () => showMainWindow("/chat"),
@@ -501,6 +670,21 @@ function updateTrayUnreadState() {
         reloadDesktopWindow(showMainWindow(), { resetRecovery: true });
       },
     },
+  ];
+  if (launchAtLoginState.status === "success") {
+    menuTemplate.push({
+      checked: launchAtLoginState.data.enabled,
+      click: (menuItem) => {
+        const result = setDesktopLaunchAtLoginEnabled(Boolean(menuItem.checked));
+        if (result.status !== "success") {
+          dialog.showErrorBox("开机自启设置失败", "请稍后在个人设置中重试。");
+        }
+      },
+      label: "开机自启",
+      type: "checkbox",
+    });
+  }
+  menuTemplate.push(
     { type: "separator" },
     {
       label: "退出",
@@ -509,7 +693,10 @@ function updateTrayUnreadState() {
         app.quit();
       },
     },
-  ]));
+  );
+  tray.setImage(createTrayIconImage(unreadCount));
+  tray.setToolTip(unreadCount > 0 ? `${ORF_APP_NAME} - ${unreadDescription(unreadCount)}` : ORF_APP_NAME);
+  tray.setContextMenu(Menu.buildFromTemplate(menuTemplate));
 }
 
 function createTrayIconImage(unreadCount) {
@@ -840,6 +1027,18 @@ function registerDesktopShellBridge() {
     setDesktopUnreadCount(unreadCount);
     return { status: "success", data: unreadCount };
   });
+  ipcMain.handle("orf:desktop-shell:get-launch-at-login-state", () => desktopLaunchAtLoginState());
+  ipcMain.handle("orf:desktop-shell:set-launch-at-login-enabled", (_event, input) => (
+    setDesktopLaunchAtLoginEnabled(Boolean(input?.enabled))
+  ));
+  ipcMain.handle("orf:desktop-shell:set-workbench-zoom-level", (event, input) => {
+    const targetWindow = BrowserWindow.fromWebContents(event.sender);
+    if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
+    const level = normalizeDesktopWorkbenchZoomLevel(input?.level);
+    if (level === null) return { status: "error", reason: "invalid_zoom_level" };
+    targetWindow.webContents.setZoomLevel(level);
+    return { status: "success", data: { level } };
+  });
   ipcMain.handle("orf:desktop-shell:get-window-state", (event) => {
     const targetWindow = BrowserWindow.fromWebContents(event.sender);
     if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
@@ -869,10 +1068,20 @@ function registerDesktopShellBridge() {
   });
 }
 
+function normalizeDesktopWorkbenchZoomLevel(input) {
+  const numeric = Number(input);
+  if (!Number.isFinite(numeric)) return null;
+  const clamped = Math.max(DESKTOP_WORKBENCH_ZOOM_MIN, Math.min(DESKTOP_WORKBENCH_ZOOM_MAX, numeric));
+  return Math.round(clamped * 4) / 4;
+}
+
 function desktopWindowState(targetWindow) {
   return {
+    isFocused: targetWindow.isFocused(),
     isFullScreen: targetWindow.isFullScreen(),
     isMaximized: targetWindow.isMaximized(),
+    isMinimized: targetWindow.isMinimized(),
+    isVisible: targetWindow.isVisible(),
   };
 }
 
@@ -961,27 +1170,32 @@ function clientUpdateInstallPayload(input) {
 async function downloadClientUpdateInstaller(payload, sendProgress) {
   const updateDir = path.join(app.getPath("temp"), "orf-client-updates");
   fs.mkdirSync(updateDir, { recursive: true });
-  const installerPath = path.join(updateDir, payload.fileName);
-  const tempPath = `${installerPath}.download`;
-  fs.rmSync(tempPath, { force: true });
+  const installDir = fs.mkdtempSync(path.join(updateDir, `${sanitizeUpdatePathSegment(payload.installId, "desktop-update")}-`));
+  const installerPath = path.join(installDir, payload.fileName);
+  const tempPath = path.join(installDir, `${payload.fileName}.download`);
 
-  const response = await net.fetch(payload.url);
-  if (!response.ok || !response.body) {
-    throw new Error(`Download failed: HTTP ${response.status}`);
+  try {
+    const response = await net.fetch(payload.url);
+    if (!response.ok || !response.body) {
+      throw new Error(`Download failed: HTTP ${response.status}`);
+    }
+    const totalBytes = parseContentLength(response.headers.get("content-length"));
+    sendProgress({ downloadedBytes: 0, stage: "downloading", totalBytes });
+    await pipeline(
+      Readable.fromWeb(response.body),
+      createDownloadProgressStream((downloadedBytes) => {
+        sendProgress({ downloadedBytes, stage: "downloading", totalBytes });
+      }),
+      fs.createWriteStream(tempPath),
+    );
+    sendProgress({ percent: 100, stage: "downloaded", totalBytes });
+    fs.renameSync(tempPath, installerPath);
+    removeOtherClientUpdateInstallers(updateDir, installDir);
+    return installerPath;
+  } catch (error) {
+    removeClientUpdateInstallPath(installDir);
+    throw error;
   }
-  const totalBytes = parseContentLength(response.headers.get("content-length"));
-  sendProgress({ downloadedBytes: 0, stage: "downloading", totalBytes });
-  await pipeline(
-    Readable.fromWeb(response.body),
-    createDownloadProgressStream((downloadedBytes) => {
-      sendProgress({ downloadedBytes, stage: "downloading", totalBytes });
-    }),
-    fs.createWriteStream(tempPath),
-  );
-  sendProgress({ percent: 100, stage: "downloaded", totalBytes });
-  fs.rmSync(installerPath, { force: true });
-  fs.renameSync(tempPath, installerPath);
-  return installerPath;
 }
 
 function createDownloadProgressStream(onProgress) {
@@ -1041,32 +1255,75 @@ function sanitizeUpdateInstallerName(value, fallback) {
   return safeName || fallback;
 }
 
+function sanitizeUpdatePathSegment(value, fallback) {
+  const rawValue = typeof value === "string" ? value.trim() : "";
+  const safeValue = rawValue
+    .replace(/[^A-Za-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[.-]+|[.-]+$/g, "")
+    .slice(0, 80);
+  return safeValue || fallback;
+}
+
+function removeOtherClientUpdateInstallers(updateDir, activeInstallDir) {
+  const activePath = path.resolve(activeInstallDir);
+  try {
+    for (const entryName of fs.readdirSync(updateDir)) {
+      const entryPath = path.join(updateDir, entryName);
+      if (path.resolve(entryPath) === activePath) continue;
+      removeClientUpdateInstallPath(entryPath);
+    }
+  } catch {
+    // Temp cache cleanup must not block update downloads.
+  }
+}
+
+function removeClientUpdateInstallPath(targetPath) {
+  try {
+    fs.rmSync(targetPath, { force: true, recursive: true });
+  } catch {
+    // The installer can be temporarily locked by Windows or antivirus; temp cleanup is best effort.
+  }
+}
+
 app.setName("ORF");
 app.setAppUserModelId("org.duckdns.orfxueyu.orf");
 Menu.setApplicationMenu(null);
-app.on("before-quit", () => {
-  desktopShellState.isQuitting = true;
-  if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
-    desktopShellState.tray.destroy();
-  }
-  desktopShellState.tray = null;
-});
 
-app.whenReady().then(() => {
-  const clientUrl = resolveClientUrl();
-  desktopShellState.clientUrl = clientUrl;
-  registerNativeNotificationBridge(clientUrl);
-  registerNativeRuntimeBridge();
-  registerDesktopShellBridge();
-  registerDesktopCredentialBridge(clientUrl);
-  createDesktopTray(clientUrl);
-  createMainWindow(clientUrl);
-
-  app.on("activate", () => {
-    showMainWindow();
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, commandLine) => {
+    showMainWindowFromLaunchArguments(commandLine);
   });
-});
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin" && !desktopShellState.tray) app.quit();
-});
+  app.on("before-quit", () => {
+    desktopShellState.isQuitting = true;
+    if (desktopShellState.tray && !desktopShellState.tray.isDestroyed()) {
+      desktopShellState.tray.destroy();
+    }
+    desktopShellState.tray = null;
+  });
+
+  app.whenReady().then(() => {
+    const clientUrl = resolveClientUrl();
+    const startHidden = shouldStartHidden();
+    desktopShellState.clientUrl = clientUrl;
+    registerNativeNotificationBridge(clientUrl);
+    registerNativeRuntimeBridge();
+    registerDesktopShellBridge();
+    registerDesktopCredentialBridge(clientUrl);
+    createDesktopTray(clientUrl);
+    const mainWindow = createMainWindow(clientUrl, { show: !startHidden });
+    scheduleDesktopLaunchAtLoginPrompt(mainWindow);
+
+    app.on("activate", () => {
+      showMainWindow();
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin" && !desktopShellState.tray) app.quit();
+  });
+}

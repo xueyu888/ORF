@@ -22,6 +22,8 @@ ORF_CLIENT_URL=https://example.com/ npm run client:desktop:dist:win
 
 Win11 客户端可以保存登录账号。保存职责属于客户端壳层：Electron 主进程通过系统 `safeStorage` 加密密码并写入本机 `userData/credentials`，渲染进程只能通过受限 IPC 读取账号列表、保存、删除或在用户选择/提交登录时临时读取密码。浏览器和 Android 不共享这份本机 vault；浏览器入口只依赖浏览器自己的密码管理能力。
 
+Win11 客户端支持开机自启。开机自启的唯一事实源是 Windows 登录项，Electron 主进程通过系统登录项接口读写，渲染进程、个人设置页和托盘菜单只通过受限 IPC 查询或切换状态。首次打开已安装的 Win11 客户端时，如果尚未开启且本机未处理过提示，客户端弹出一次选择提示；选择开启后，后续 Windows 登录时 ORF 使用 `--orf-start-hidden` 在后台启动并驻留托盘，不直接弹出主窗口。首次提示是否看过只保存在本机 Electron `userData`，不写入 ORF 服务端个人偏好、系统设置或业务数据。
+
 ## 本地构建
 
 Web 基础构建：
@@ -67,6 +69,8 @@ npm run release:clients -- --tag v0.0.1
 ```bash
 npm run release:clients -- --tag v0.0.1 --watch
 ```
+
+`--watch` 会在 GitHub Release 和安装包资产确认后，按本次 tag 的精确版本调用 ORF 服务端广播在线客户端。发布脚本不会把管理员登录态写进自动化流程；服务端和发布机都必须配置同一个 `ORF_CLIENT_UPDATE_BROADCAST_SECRET`。广播目标默认取 `ORF_APP_URL`，也可以通过 `ORF_CLIENT_UPDATE_BROADCAST_URL` 或 `--broadcast-url` 覆盖。未配置 secret 或目标地址时，发布仍完成，但脚本会明确提示已跳过在线广播；需要刻意跳过时使用 `--no-broadcast`。
 
 发布资产：
 
@@ -114,6 +118,16 @@ npm run push:diagnose -- --send-test --user-email <email>
 - 测试发送返回投递成功数大于 0，且真机在后台或锁屏状态能看到通知。
 
 如果 FCM 诊断中的注册状态显示 `registration_error`、`permission_denied`，或设备样本显示 `gms=unavailable`，说明这台安卓机当前没有形成可用 FCM token；需要先修复 Google Play services、通知授权或 Firebase 配置。`push_vendor_devices` 和 `push_vendor_registration_statuses` 只保留历史兼容数据，当前不参与投递判断。
+
+## Win11 在线更新广播
+
+Win11 客户端没有后台系统 Push 通道。运行中的 Win11 客户端通过 `/api/events` SSE 接收在线实时事件。发布脚本在 `--watch` 确认 GitHub Release 和 Win11 安装包资产后，会用 `ORF_CLIENT_UPDATE_BROADCAST_SECRET` 调用 `POST /api/client-updates/broadcast-release`，按本次发布版本向在线作用域广播一次 `client.update.available`；新版客户端收到后立即触发已有更新检查。旧客户端不认识该专用事件，因此服务端同时发送兼容的 `system.broadcast` 横幅，提醒用户打开“版本与更新”检查。
+
+- 客户端更新的唯一事实源仍是 GitHub Release；实时事件只负责唤醒检查或展示横幅，不写入 `notifications` 表。
+- 发布后广播按 tag 精确读取对应 Release，不依赖 `/api/client-updates/latest` 的短缓存，避免刚发布时误发旧版本。
+- 发布脚本广播和服务端定时发现共用同一套自动广播去重；同一 team 同一版本只自动广播一次，避免发布后下一轮定时器重复刷屏。
+- 服务端运行期间仍会定时发现带 Win11 安装包的新客户端版本，作为发布脚本未配置或广播失败后的在线兜底。
+- 已发布版本需要补发在线横幅时，管理员可调用 `POST /api/client-updates/broadcast-latest`。该接口会校验当前 latest release 存在 Win11 安装包后，再向当前默认作用域在线用户广播一次。
 
 ## 版本事实源
 

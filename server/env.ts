@@ -4,6 +4,7 @@ import { z } from "zod";
 const postgresUrl = z.string().startsWith("postgresql://");
 const booleanString = (defaultValue: "true" | "false") =>
   z.enum(["true", "false"]).default(defaultValue).transform((value) => value === "true");
+const optionalSecret = z.string().trim().min(16).optional();
 
 const envSchema = z.object({
   DATABASE_URL: postgresUrl.optional(),
@@ -27,18 +28,19 @@ const envSchema = z.object({
   OBJECT_STORAGE_FORCE_PATH_STYLE: z.coerce.boolean().default(true),
   ORF_INFRA_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024 * 1024),
   OBJECT_STORAGE_UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(10 * 1024 * 1024),
-    ORF_PUSH_ENABLED: booleanString("false"),
-    ORF_PUSH_CONTENT_MODE: z.enum(["private", "preview"]).default("private"),
-    ORF_FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
-    ORF_FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
-    ORF_FIREBASE_HTTP_PROXY: z.string().url().optional(),
-    ORF_VIVO_PUSH_ENABLED: booleanString("false"),
-    ORF_VIVO_PUSH_API_BASE_URL: z.string().url().default("https://api-push.vivo.com.cn"),
-    ORF_VIVO_PUSH_APP_ID: z.string().trim().optional(),
-    ORF_VIVO_PUSH_APP_KEY: z.string().trim().optional(),
-    ORF_VIVO_PUSH_APP_SECRET: z.string().trim().optional(),
-    ORF_CLIENT_UPDATE_PUSH_ENABLED: booleanString("true"),
+  ORF_PUSH_ENABLED: booleanString("false"),
+  ORF_PUSH_CONTENT_MODE: z.enum(["private", "preview"]).default("private"),
+  ORF_FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  ORF_FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
+  ORF_FIREBASE_HTTP_PROXY: z.string().url().optional(),
+  ORF_VIVO_PUSH_ENABLED: booleanString("false"),
+  ORF_VIVO_PUSH_API_BASE_URL: z.string().url().default("https://api-push.vivo.com.cn"),
+  ORF_VIVO_PUSH_APP_ID: z.string().trim().optional(),
+  ORF_VIVO_PUSH_APP_KEY: z.string().trim().optional(),
+  ORF_VIVO_PUSH_APP_SECRET: z.string().trim().optional(),
+  ORF_CLIENT_UPDATE_PUSH_ENABLED: booleanString("true"),
   ORF_CLIENT_UPDATE_PUSH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
+  ORF_CLIENT_UPDATE_BROADCAST_SECRET: optionalSecret,
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 

@@ -6,15 +6,14 @@ import {
   OrfRichTextEditor,
   orfRichTextHasMeaningfulContent,
   type OrfRichTextEditorActions,
+  type OrfRichTextMentionInsert,
 } from "../rich-text/OrfRichTextEditor";
 import { emptyComposerHistory, recallComposerHistory, recordSentComposerDraft } from "./chatComposerModel";
 import { matchesChatShortcutKey } from "./chatKeyboardShortcuts";
 import { ChatMarkdown } from "./chatMarkdown";
-import { type ChatDraft } from "./chatModels";
+import { reconcileMentions, serializeDraft, type ChatDraft, type DraftMention } from "./chatModels";
 import {
-  chatDraftToRichTextMarkdown,
   chatMentionPlainTextUserIds,
-  chatRichTextMarkdownToDraft,
   chatRichTextMentionableUsers,
 } from "./chatRichTextDraftModel";
 import { ChatReactionPicker } from "./ChatReactionPicker";
@@ -60,8 +59,37 @@ function matchesPreviewShortcut(event: KeyboardEvent) {
   );
 }
 
-function currentEditorDraft(actions: OrfRichTextEditorActions | null, fallbackMarkdown: string, usersById: Map<string, ChatUser>) {
-  return chatRichTextMarkdownToDraft(actions?.getMarkdown() ?? fallbackMarkdown, usersById);
+function draftForEditorText(previousDraft: ChatDraft, nextText: string): ChatDraft {
+  return {
+    text: nextText,
+    mentions: reconcileMentions(previousDraft.text, nextText, previousDraft.mentions),
+  };
+}
+
+function sortedMentions(mentions: DraftMention[]) {
+  return [...mentions].sort((left, right) => left.start - right.start);
+}
+
+function withInsertedMention(draft: ChatDraft, insert: OrfRichTextMentionInsert): ChatDraft {
+  if (chatMentionPlainTextUserIds.has(insert.user.id)) return draft;
+
+  const mentionText = `@${insert.label}`;
+  const start = insert.range.from;
+  const end = start + mentionText.length;
+  if (draft.text.slice(start, end) !== mentionText) return draft;
+
+  const nextMention: DraftMention = {
+    end,
+    label: insert.label,
+    start,
+    userId: insert.user.id,
+  };
+  const mentions = draft.mentions.filter((mention) => mention.end <= start || mention.start >= end);
+  return { ...draft, mentions: sortedMentions([...mentions, nextMention]) };
+}
+
+function currentEditorDraft(actions: OrfRichTextEditorActions | null, fallbackDraft: ChatDraft) {
+  return draftForEditorText(fallbackDraft, actions?.getMarkdown() ?? fallbackDraft.text);
 }
 
 export function ChatDraftEditor({
@@ -91,17 +119,23 @@ export function ChatDraftEditor({
   const actionsRef = useRef<OrfRichTextEditorActions | null>(null);
   const emojiAnchorRef = useRef<HTMLSpanElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  const draftRef = useRef(draft);
   const submittingRef = useRef(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [history, setHistory] = useState(emptyComposerHistory);
   const [previewing, setPreviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const usersById = useMemo(() => new Map(mentionableUsers.map((user) => [user.id, user])), [mentionableUsers]);
-  const markdownValue = useMemo(() => chatDraftToRichTextMarkdown(draft), [draft]);
+  const editorTextValue = draft.text;
+  const serializedDraftValue = useMemo(() => serializeDraft(draft), [draft]);
   const richMentionableUsers = useMemo(
     () => chatRichTextMentionableUsers(mentionableUsers),
     [mentionableUsers],
   );
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
 
   useEffect(() => {
     setEmojiOpen(false);
@@ -133,11 +167,10 @@ export function ChatDraftEditor({
     window.requestAnimationFrame(() => actionsRef.current?.focusEnd());
   }, [autoFocus, disabled, resetKey]);
 
-  const markdownToDraft = useCallback((markdown: string) => chatRichTextMarkdownToDraft(markdown, usersById), [usersById]);
-
   const applyDraftToEditor = useCallback((nextDraft: ChatDraft, focus: "end" | "start" | null = null) => {
+    draftRef.current = nextDraft;
     onChange(nextDraft);
-    actionsRef.current?.setMarkdown(chatDraftToRichTextMarkdown(nextDraft));
+    actionsRef.current?.setMarkdown(nextDraft.text);
     if (focus) {
       window.requestAnimationFrame(() => {
         if (focus === "start") actionsRef.current?.focusStart();
@@ -146,15 +179,25 @@ export function ChatDraftEditor({
     }
   }, [onChange]);
 
-  const handleMarkdownChange = useCallback((markdown: string) => {
-    onChange(markdownToDraft(markdown));
+  const handleEditorTextChange = useCallback((nextText: string) => {
+    const nextDraft = draftForEditorText(draftRef.current, nextText);
+    draftRef.current = nextDraft;
+    onChange(nextDraft);
     setHistory((item) => item.cursorIndex === null ? item : { ...item, cursorIndex: null, restoreDraft: null });
     onTyping?.();
-  }, [markdownToDraft, onChange, onTyping]);
+  }, [onChange, onTyping]);
+
+  const handleMentionInsert = useCallback((insert: OrfRichTextMentionInsert) => {
+    const currentText = actionsRef.current?.getMarkdown() ?? draftRef.current.text;
+    const textDraft = draftForEditorText(draftRef.current, currentText);
+    const nextDraft = withInsertedMention(textDraft, insert);
+    draftRef.current = nextDraft;
+    onChange(nextDraft);
+  }, [onChange]);
 
   const submit = useCallback(async (overrideDraft?: ChatDraft) => {
     if (disabled || submitDisabled || submittingRef.current || !onSubmit) return;
-    const nextDraft = overrideDraft ?? currentEditorDraft(actionsRef.current, markdownValue, usersById);
+    const nextDraft = overrideDraft ?? currentEditorDraft(actionsRef.current, draftRef.current);
     submittingRef.current = true;
     setSubmitting(true);
     try {
@@ -166,7 +209,7 @@ export function ChatDraftEditor({
       submittingRef.current = false;
       setSubmitting(false);
     }
-  }, [disabled, markdownValue, onSubmit, recordHistoryOnSubmit, submitDisabled, usersById]);
+  }, [disabled, onSubmit, recordHistoryOnSubmit, submitDisabled]);
 
   const focusEditor = useCallback(() => {
     window.requestAnimationFrame(() => actionsRef.current?.focusEnd());
@@ -196,9 +239,9 @@ export function ChatDraftEditor({
   }, [onFilesInsert]);
 
   const handleRichTextKeyDown = useCallback((event: KeyboardEvent, actions: OrfRichTextEditorActions) => {
-    const currentMarkdown = actions.getMarkdown();
-    const currentDraft = markdownToDraft(currentMarkdown);
-    const empty = !orfRichTextHasMeaningfulContent(currentMarkdown);
+    const currentEditorText = actions.getMarkdown();
+    const currentDraft = draftForEditorText(draftRef.current, currentEditorText);
+    const empty = !orfRichTextHasMeaningfulContent(currentEditorText);
 
     if (event.key === "Escape" && !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing) {
       if (onCancel) {
@@ -297,7 +340,6 @@ export function ChatDraftEditor({
   }, [
     applyDraftToEditor,
     history,
-    markdownToDraft,
     onCancel,
     onEditLatest,
     onReactToLatest,
@@ -323,7 +365,7 @@ export function ChatDraftEditor({
     <>
       <button
         className={clsx("orf-rich-text-tool-button", previewing && "orf-rich-text-tool-button-active")}
-        disabled={!orfRichTextHasMeaningfulContent(markdownValue)}
+        disabled={!orfRichTextHasMeaningfulContent(editorTextValue)}
         type="button"
         onMouseDown={(event) => event.preventDefault()}
         onClick={togglePreview}
@@ -381,8 +423,8 @@ export function ChatDraftEditor({
           role="region"
           tabIndex={0}
         >
-          {markdownValue.trim() ? (
-            <ChatMarkdown body={markdownValue} feedbackItems={feedbackItems} usersById={usersById} />
+          {serializedDraftValue.trim() ? (
+            <ChatMarkdown body={serializedDraftValue} feedbackItems={feedbackItems} usersById={usersById} />
           ) : (
             <span className="orf-chat-draft-preview-empty">{placeholder}</span>
           )}
@@ -419,16 +461,18 @@ export function ChatDraftEditor({
         </span>
       )}
       idleHint=""
+      formatMentionText={(_user, label) => `@${label}`}
       mentionPlainTextUserIds={chatMentionPlainTextUserIds}
       mentionableUsers={richMentionableUsers}
-      onChange={handleMarkdownChange}
+      onChange={handleEditorTextChange}
       onFilesInsert={handleFilesInsert}
       onKeyDown={handleRichTextKeyDown}
+      onMentionInsert={handleMentionInsert}
       onSubmitRequest={() => void submit()}
       placeholder={placeholder ?? ""}
       toolbarControls={extraToolbarControls}
       transformPastedText={transformPastedText}
-      value={markdownValue}
+      value={editorTextValue}
     />
   );
 }

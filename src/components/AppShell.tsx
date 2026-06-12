@@ -18,21 +18,23 @@ import { ClientUpdateNotice } from "../features/client-updates/ClientUpdateNotic
 import { clientUpdateCenterOpenEvent, type ClientUpdateCenterOpenRequest } from "../features/client-updates/clientUpdateCenterEvents";
 import { ClientReleaseNotesDialog } from "../features/client-updates/ClientReleaseNotesDialog";
 import { DesktopWindowControls } from "../features/desktop/DesktopWindowControls";
-import { isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
+import { isDesktopShellAvailable, setDesktopWorkbenchZoomLevel } from "../features/desktop/desktopShellRuntime";
+import { applyDisplayPreferencesToDocument, nextWorkbenchZoomLevel } from "../features/display/displayPreferences";
 import { useVisualBackground } from "../hooks/useVisualBackground";
-import { defaultChatTheme, type ChatTheme } from "../domain/settings/personalPreferences";
+import { defaultChatTheme, defaultUserDisplayPreferences, type ChatTheme, type UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import { getUserPreferences, saveUserPreferences } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import { subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
+import { dispatchPersonalPreferencesChanged, subscribePersonalPreferencesChanged } from "../utils/personalPreferences";
 
 export function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
   const { currentUser, dismissSystemBroadcast, state, systemBroadcasts } = useOrf();
   const [commandOpen, setCommandOpen] = useState(false);
-  const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(false);
+  const [desktopChromeEnabled, setDesktopChromeEnabled] = useState(() => isDesktopShellAvailable());
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [chatTheme, setChatTheme] = useState<ChatTheme>(defaultChatTheme);
+  const [displayPreferences, setDisplayPreferences] = useState<UserDisplayPreferences>(defaultUserDisplayPreferences);
   const [clientUpdateCenter, setClientUpdateCenter] = useState<{ notice?: string; open: boolean }>({ open: false });
   const sidebarBackground = useVisualBackground("app_background");
 
@@ -45,6 +47,7 @@ export function AppShell() {
     if (!currentUser) {
       setSidebarCollapsed(false);
       setChatTheme(defaultChatTheme);
+      setDisplayPreferences(defaultUserDisplayPreferences);
       return undefined;
     }
 
@@ -54,6 +57,7 @@ export function AppShell() {
           if (!cancelled) {
             setSidebarCollapsed(preferences.sidebarCollapsed ?? false);
             setChatTheme(preferences.chatTheme);
+            setDisplayPreferences(preferences.display ?? defaultUserDisplayPreferences);
           }
         })
         .catch(() => undefined);
@@ -68,22 +72,60 @@ export function AppShell() {
     };
   }, [currentUser]);
 
+  useEffect(() => {
+    const cleanup = applyDisplayPreferencesToDocument(displayPreferences, { includeWorkbenchZoom: !desktopChromeEnabled });
+    if (desktopChromeEnabled) {
+      void setDesktopWorkbenchZoomLevel(displayPreferences.workbenchZoomLevel).catch(() => undefined);
+    }
+    return cleanup;
+  }, [desktopChromeEnabled, displayPreferences]);
+
   const handleSidebarCollapsedChange = useCallback((collapsed: boolean) => {
     setSidebarCollapsed(collapsed);
     void saveUserPreferences({ sidebarCollapsed: collapsed }).catch(() => undefined);
   }, []);
+
+  const saveDisplayPreferences = useCallback((nextPreferences: UserDisplayPreferences) => {
+    setDisplayPreferences(nextPreferences);
+    void saveUserPreferences({ display: nextPreferences })
+      .then(() => dispatchPersonalPreferencesChanged())
+      .catch(() => undefined);
+  }, []);
+
+  const updateWorkbenchZoomPreference = useCallback((direction: "in" | "out" | "reset") => {
+    if (!currentUser) return;
+    const nextLevel = nextWorkbenchZoomLevel(displayPreferences.workbenchZoomLevel, direction);
+    if (nextLevel === displayPreferences.workbenchZoomLevel) return;
+    saveDisplayPreferences({ ...displayPreferences, workbenchZoomLevel: nextLevel });
+  }, [currentUser, displayPreferences, saveDisplayPreferences]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setCommandOpen(true);
+        return;
+      }
+      if (!(event.metaKey || event.ctrlKey) || event.altKey) return;
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        updateWorkbenchZoomPreference("in");
+        return;
+      }
+      if (event.key === "-") {
+        event.preventDefault();
+        updateWorkbenchZoomPreference("out");
+        return;
+      }
+      if (event.key === "0") {
+        event.preventDefault();
+        updateWorkbenchZoomPreference("reset");
       }
     };
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [updateWorkbenchZoomPreference]);
 
   useEffect(() => {
     const handleOpenClientUpdateCenter = (event: Event) => {
@@ -112,6 +154,8 @@ export function AppShell() {
       data-chat-page={isChatPage ? "true" : "false"}
       data-chat-theme={chatTheme}
       data-desktop-chrome={desktopChromeEnabled ? "true" : "false"}
+      data-display-contrast={displayPreferences.contrast}
+      data-display-density={displayPreferences.density}
       data-sidebar-collapsed={sidebarCollapsed ? "true" : "false"}
       style={shellStyle}
     >

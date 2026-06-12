@@ -71,6 +71,15 @@ contextBridge.exposeInMainWorld("orfDesktopShell", {
   setChatUnreadCount(payload) {
     return ipcRenderer.invoke("orf:desktop-shell:set-chat-unread-count", payload);
   },
+  getLaunchAtLoginState() {
+    return ipcRenderer.invoke("orf:desktop-shell:get-launch-at-login-state");
+  },
+  setLaunchAtLoginEnabled(payload) {
+    return ipcRenderer.invoke("orf:desktop-shell:set-launch-at-login-enabled", payload);
+  },
+  setWorkbenchZoomLevel(payload) {
+    return ipcRenderer.invoke("orf:desktop-shell:set-workbench-zoom-level", payload);
+  },
   getWindowState() {
     return ipcRenderer.invoke("orf:desktop-shell:get-window-state");
   },

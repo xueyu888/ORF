@@ -4,9 +4,24 @@ export type DesktopShellUnreadResult = {
   status: "error" | "success" | "unsupported";
 };
 
+export type DesktopLaunchAtLoginState = {
+  enabled: boolean;
+  promptSeen?: boolean;
+  supported: boolean;
+};
+
+export type DesktopShellLaunchAtLoginResult = {
+  data?: DesktopLaunchAtLoginState;
+  reason?: string;
+  status: "error" | "success" | "unsupported";
+};
+
 export type DesktopWindowState = {
+  isFocused?: boolean;
   isFullScreen?: boolean;
   isMaximized: boolean;
+  isMinimized?: boolean;
+  isVisible?: boolean;
 };
 
 export type DesktopShellWindowResult = {
@@ -15,12 +30,21 @@ export type DesktopShellWindowResult = {
   status: "error" | "success" | "unsupported";
 };
 
+export type DesktopWorkbenchZoomResult = {
+  data?: { level: number };
+  reason?: string;
+  status: "error" | "success" | "unsupported";
+};
+
 type DesktopShellBridge = {
   closeWindow?: () => Promise<DesktopShellWindowResult>;
+  getLaunchAtLoginState?: () => Promise<DesktopShellLaunchAtLoginResult>;
   getWindowState?: () => Promise<DesktopShellWindowResult>;
   minimizeWindow?: () => Promise<DesktopShellWindowResult>;
   onWindowStateChange?: (handler: (state: DesktopWindowState) => void) => (() => void);
   setChatUnreadCount?: (payload: { count: number }) => Promise<DesktopShellUnreadResult>;
+  setLaunchAtLoginEnabled?: (payload: { enabled: boolean }) => Promise<DesktopShellLaunchAtLoginResult>;
+  setWorkbenchZoomLevel?: (payload: { level: number }) => Promise<DesktopWorkbenchZoomResult>;
   toggleMaximizeWindow?: () => Promise<DesktopShellWindowResult>;
 };
 
@@ -45,6 +69,40 @@ export async function syncDesktopChatUnreadCount(count: number): Promise<Desktop
 
 export function isDesktopShellAvailable() {
   return typeof window !== "undefined" && Boolean(window.orfDesktopShell);
+}
+
+export async function getDesktopLaunchAtLoginState(): Promise<DesktopShellLaunchAtLoginResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.getLaunchAtLoginState) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    return normalizeDesktopLaunchAtLoginResult(await window.orfDesktopShell.getLaunchAtLoginState());
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export async function setDesktopLaunchAtLoginEnabled(enabled: boolean): Promise<DesktopShellLaunchAtLoginResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.setLaunchAtLoginEnabled) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    return normalizeDesktopLaunchAtLoginResult(await window.orfDesktopShell.setLaunchAtLoginEnabled({ enabled }));
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export async function setDesktopWorkbenchZoomLevel(level: number): Promise<DesktopWorkbenchZoomResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.setWorkbenchZoomLevel) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    const result = await window.orfDesktopShell.setWorkbenchZoomLevel({ level });
+    return result?.status ? result : { data: { level }, status: "success" };
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
 }
 
 export async function getDesktopWindowState(): Promise<DesktopShellWindowResult> {
@@ -96,8 +154,9 @@ export function subscribeDesktopWindowState(handler: (state: DesktopWindowState)
     return undefined;
   }
   return window.orfDesktopShell.onWindowStateChange((state) => {
-    if (state && typeof state.isMaximized === "boolean") {
-      handler(state);
+    const normalizedState = normalizeDesktopWindowState(state);
+    if (normalizedState) {
+      handler(normalizedState);
     }
   });
 }
@@ -107,5 +166,34 @@ function normalizeUnreadCount(count: number) {
 }
 
 function normalizeDesktopWindowResult(result: DesktopShellWindowResult | undefined): DesktopShellWindowResult {
+  if (result?.status === "success" && result.data) {
+    const data = normalizeDesktopWindowState(result.data);
+    return data ? { status: "success", data } : { status: "error", reason: "desktop_window_state_invalid" };
+  }
   return result?.status ? result : { status: "success" };
+}
+
+function normalizeDesktopLaunchAtLoginResult(result: DesktopShellLaunchAtLoginResult | undefined): DesktopShellLaunchAtLoginResult {
+  if (result?.status === "success" && result.data) {
+    return {
+      status: "success",
+      data: {
+        enabled: result.data.enabled === true,
+        promptSeen: result.data.promptSeen === true,
+        supported: result.data.supported !== false,
+      },
+    };
+  }
+  return result?.status ? result : { status: "error", reason: "desktop_launch_at_login_result_invalid" };
+}
+
+function normalizeDesktopWindowState(state: DesktopWindowState | undefined): DesktopWindowState | null {
+  if (!state || typeof state.isMaximized !== "boolean") return null;
+  return {
+    isFocused: state.isFocused === true,
+    isFullScreen: state.isFullScreen === true,
+    isMaximized: state.isMaximized,
+    isMinimized: state.isMinimized === true,
+    isVisible: state.isVisible !== false,
+  };
 }

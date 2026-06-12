@@ -17,7 +17,7 @@ import type {
   OrfUser,
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
-import type { ChatTheme } from "../domain/settings/personalPreferences";
+import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
 import type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
 import type { ClientReleaseInfo } from "../features/client-updates/clientUpdateModel";
 export type { VisualBackgroundScene } from "../domain/settings/visualBackgrounds";
@@ -131,12 +131,13 @@ export type UserPreferences = {
   defaultLandingPath: string | null;
   sidebarCollapsed: boolean | null;
   chatTheme: ChatTheme;
+  display: UserDisplayPreferences;
   appBackground: VisualBackgroundConfig | null;
   notificationDisplay: {
     toastEnabled: boolean;
   };
 };
-export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "appBackground">> & {
+export type UserPreferencesPatch = Partial<Pick<UserPreferences, "defaultLandingPath" | "sidebarCollapsed" | "chatTheme" | "display" | "appBackground">> & {
   notificationDisplay?: Partial<UserPreferences["notificationDisplay"]>;
 };
 export type PersonalBackgroundsData = VisualBackgroundsData & {
