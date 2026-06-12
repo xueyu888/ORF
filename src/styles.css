@@ -11998,13 +11998,13 @@ a.orf-row-loot-action,
 }
 
 .orf-chat-message-more-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 220;
   display: grid;
   min-width: 154px;
-  overflow: hidden;
+  max-width: calc(100vw - 16px);
+  max-height: min(320px, calc(100dvh - 16px));
+  overflow-y: auto;
   border: 1px solid var(--orf-border);
   border-radius: var(--orf-radius-control);
   background: rgba(255, 255, 255, 0.98);

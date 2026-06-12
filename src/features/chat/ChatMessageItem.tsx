@@ -1,6 +1,7 @@
 import { clsx } from "clsx";
-import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
-import { type KeyboardEvent, type MouseEvent, useCallback, useEffect, useId, useRef, useState } from "react";
+import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
+import { type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { IconButton } from "../../components/ui";
 import type { ChatAttachment, ChatMessage, ChatUser, Feedback } from "../../types/orf";
 import { formatPastedFeedbackLinks } from "../feedback/model/feedbackIssue";
@@ -42,6 +43,20 @@ type ChatMessageItemProps = {
 };
 
 const chatMessageCollapsedTextMaxHeightPx = 560;
+
+type ChatMessageMoreAction = {
+  active?: boolean;
+  danger?: boolean;
+  icon: LucideIcon;
+  id: string;
+  label: string;
+  onSelect: () => void;
+};
+
+type PopoverPosition = {
+  left: number;
+  top: number;
+};
 
 function isInteractiveMessageTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest([
@@ -222,6 +237,172 @@ function AttachmentGrid({
   );
 }
 
+function chatFloatingLayerRoot() {
+  if (typeof document === "undefined") return null;
+  return document.querySelector<HTMLElement>(".orf-app-shell[data-chat-page='true']") ?? document.body;
+}
+
+function ChatMessageMoreMenu({
+  actions,
+  anchorRef,
+  id,
+  initialFocus,
+  onClose,
+  onInitialFocusHandled,
+}: {
+  actions: ChatMessageMoreAction[];
+  anchorRef: RefObject<HTMLElement | null>;
+  id: string;
+  initialFocus: "first" | "last" | null;
+  onClose: (restoreFocus?: boolean) => void;
+  onInitialFocusHandled: () => void;
+}) {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
+
+  const menuItems = () => (
+    Array.from(panelRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? [])
+      .filter((item) => !item.disabled)
+  );
+
+  const focusMenuItem = (index: number) => {
+    const items = menuItems();
+    if (items.length === 0) return;
+    const nextIndex = (index + items.length) % items.length;
+    items[nextIndex]?.focus();
+  };
+
+  const updatePosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    const viewportPadding = 8;
+    const gap = 6;
+    const anchorRect = anchor.getBoundingClientRect();
+    const panelRect = panelRef.current?.getBoundingClientRect();
+    const panelWidth = panelRect?.width ?? 180;
+    const panelHeight = panelRect?.height ?? Math.min(320, actions.length * 32 + 8);
+    const rawTopbarHeight = window.getComputedStyle(document.documentElement).getPropertyValue("--orf-topbar-height");
+    const topbarHeight = Number.parseFloat(rawTopbarHeight);
+    const safeTop = Number.isFinite(topbarHeight) ? topbarHeight + viewportPadding : viewportPadding;
+    const belowTop = anchorRect.bottom + gap;
+    const aboveTop = anchorRect.top - panelHeight - gap;
+    const hasEnoughBelow = belowTop + panelHeight <= window.innerHeight - viewportPadding;
+    const preferredTop = hasEnoughBelow ? belowTop : aboveTop;
+    const maxTop = Math.max(safeTop, window.innerHeight - panelHeight - viewportPadding);
+    const top = Math.max(safeTop, Math.min(preferredTop, maxTop));
+    const maxLeft = Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding);
+    const left = Math.max(viewportPadding, Math.min(anchorRect.right - panelWidth, maxLeft));
+    setPosition({ left, top });
+  }, [actions.length, anchorRef]);
+
+  useLayoutEffect(() => {
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [updatePosition]);
+
+  useLayoutEffect(() => {
+    updatePosition();
+  }, [actions.length, updatePosition]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const items = menuItems();
+      const targetIndex = initialFocus === "last" ? items.length - 1 : 0;
+      onInitialFocusHandled();
+      items[targetIndex]?.focus();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [actions.length, initialFocus, onInitialFocusHandled]);
+
+  useEffect(() => {
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (panelRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      onClose();
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [anchorRef, onClose]);
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const items = menuItems();
+    const currentIndex = items.findIndex((item) => item === target);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose(true);
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(currentIndex >= 0 ? currentIndex + 1 : 0);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(currentIndex >= 0 ? currentIndex - 1 : items.length - 1);
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(0);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      event.stopPropagation();
+      focusMenuItem(items.length - 1);
+      return;
+    }
+    if (target?.getAttribute("role") === "menuitem" && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      event.stopPropagation();
+      target.click();
+    }
+  };
+
+  const style: CSSProperties = {
+    left: position?.left ?? 0,
+    top: position?.top ?? 0,
+    visibility: position ? "visible" : "hidden",
+  };
+  const portalRoot = chatFloatingLayerRoot();
+  if (!portalRoot) return null;
+
+  return createPortal(
+    <div className="orf-chat-message-more-menu" id={id} ref={panelRef} role="menu" style={style} onKeyDown={handleKeyDown}>
+      {actions.map((action) => {
+        const Icon = action.icon;
+        return (
+          <button
+            type="button"
+            className={clsx(action.active && "orf-chat-message-more-active", action.danger && "orf-chat-message-more-danger")}
+            key={action.id}
+            role="menuitem"
+            onClick={() => {
+              onClose();
+              action.onSelect();
+            }}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {action.label}
+          </button>
+        );
+      })}
+    </div>,
+    portalRoot,
+  );
+}
+
 export function ChatMessageItem({
   onAttachmentPreview,
   canDeleteAnyMessage = false,
@@ -283,27 +464,6 @@ export function ChatMessageItem({
   }, [canUseServerActions, editing, reactionPickerSignal]);
 
   useEffect(() => {
-    if (!moreOpen) return undefined;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!moreMenuRef.current?.contains(target)) setMoreOpen(false);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
-  }, [moreOpen]);
-
-  useEffect(() => {
-    if (!moreOpen) return undefined;
-    const timer = window.setTimeout(() => {
-      const menuItems = moreMenuItems();
-      const targetIndex = moreMenuInitialFocusRef.current === "last" ? menuItems.length - 1 : 0;
-      moreMenuInitialFocusRef.current = null;
-      menuItems[targetIndex]?.focus();
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [moreOpen]);
-
-  useEffect(() => {
     if (editing || !canUseServerActions) setMoreOpen(false);
   }, [canUseServerActions, editing]);
 
@@ -345,33 +505,22 @@ export function ChatMessageItem({
     event.preventDefault();
     onThread(message.rootMessageId ?? message.id);
   };
-  const handleMoreAction = (action: () => void) => {
-    setMoreOpen(false);
-    action();
-  };
-  const moreMenuItems = () => (
-    Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']") ?? [])
-      .filter((item) => !item.disabled)
-  );
-  const focusMoreMenuItem = (index: number) => {
-    const items = moreMenuItems();
-    if (items.length === 0) return;
-    const nextIndex = (index + items.length) % items.length;
-    items[nextIndex]?.focus();
-  };
-  const focusMoreButton = () => {
+  const clearMoreInitialFocus = useCallback(() => {
+    moreMenuInitialFocusRef.current = null;
+  }, []);
+  const focusMoreButton = useCallback(() => {
     const button = moreMenuRef.current?.querySelector<HTMLButtonElement>(".orf-chat-message-more-trigger");
     window.setTimeout(() => button?.focus(), 0);
-  };
-  const openMoreMenu = (initialFocus: "first" | "last" = "first") => {
-    moreMenuInitialFocusRef.current = initialFocus;
-    setMoreOpen(true);
-  };
-  const closeMoreMenu = (restoreButtonFocus = false) => {
+  }, []);
+  const closeMoreMenu = useCallback((restoreButtonFocus = false) => {
     moreMenuInitialFocusRef.current = null;
     setMoreOpen(false);
     if (restoreButtonFocus) focusMoreButton();
-  };
+  }, [focusMoreButton]);
+  const openMoreMenu = useCallback((initialFocus: "first" | "last" = "first") => {
+    moreMenuInitialFocusRef.current = initialFocus;
+    setMoreOpen(true);
+  }, []);
   const toggleMoreMenu = () => {
     if (moreOpen) {
       closeMoreMenu();
@@ -379,10 +528,7 @@ export function ChatMessageItem({
     }
     openMoreMenu("first");
   };
-  const handleMoreKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    const target = event.target instanceof HTMLElement ? event.target : null;
-    const items = moreMenuItems();
-    const currentIndex = items.findIndex((item) => item === target);
+  const handleMoreTriggerKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
       if (!moreOpen) return;
       event.preventDefault();
@@ -393,42 +539,60 @@ export function ChatMessageItem({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       event.stopPropagation();
-      if (!moreOpen) {
-        openMoreMenu("first");
-        return;
-      }
-      focusMoreMenuItem(currentIndex >= 0 ? currentIndex + 1 : 0);
+      openMoreMenu("first");
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
       event.stopPropagation();
-      if (!moreOpen) {
-        openMoreMenu("last");
-        return;
-      }
-      focusMoreMenuItem(currentIndex >= 0 ? currentIndex - 1 : items.length - 1);
-      return;
-    }
-    if (moreOpen && event.key === "Home") {
-      event.preventDefault();
-      event.stopPropagation();
-      focusMoreMenuItem(0);
-      return;
-    }
-    if (moreOpen && event.key === "End") {
-      event.preventDefault();
-      event.stopPropagation();
-      focusMoreMenuItem(items.length - 1);
-      return;
-    }
-    if (moreOpen && target?.getAttribute("role") === "menuitem" && (event.key === "Enter" || event.key === " ")) {
-      event.preventDefault();
-      event.stopPropagation();
-      target.click();
+      openMoreMenu("last");
     }
   };
-  const hasMoreActions = Boolean(onCopyLink || (canPin && onPin) || onMarkUnread || canMutate || canDeleteMessage);
+  const moreActions: ChatMessageMoreAction[] = [
+    {
+      icon: LinkIcon,
+      id: "copyLink",
+      label: "复制消息链接",
+      onSelect: () => onCopyLink(message),
+    },
+    ...(canPin && onPin ? [{
+      active: Boolean(message.pinnedAt),
+      icon: Pin,
+      id: "pin",
+      label: message.pinnedAt ? "取消固定" : "固定消息",
+      onSelect: () => onPin(message),
+    }] : []),
+    ...(onMarkUnread ? [{
+      icon: EyeOff,
+      id: "markUnread",
+      label: "从这里标记未读",
+      onSelect: () => onMarkUnread(message),
+    }] : []),
+    ...(onSave ? [{
+      active: message.savedByCurrentUser,
+      icon: Bookmark,
+      id: "save",
+      label: message.savedByCurrentUser ? "取消保存" : "保存消息",
+      onSelect: () => onSave(message),
+    }] : []),
+    ...(canMutate ? [{
+      icon: Edit3,
+      id: "edit",
+      label: "编辑消息",
+      onSelect: () => onEdit(message),
+    }] : []),
+    ...(canDeleteMessage ? [{
+      danger: true,
+      icon: Trash2,
+      id: "delete",
+      label: "删除消息",
+      onSelect: () => onDelete(message),
+    }] : []),
+  ];
+  const saveAction = moreActions.find((action) => action.id === "save");
+  const editAction = moreActions.find((action) => action.id === "edit");
+  const deleteAction = moreActions.find((action) => action.id === "delete");
+  const hasMoreActions = moreActions.length > 0;
 
   return (
     <article
@@ -572,35 +736,35 @@ export function ChatMessageItem({
           {onThread && !message.rootMessageId && (
             <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id, { focusComposer: true })} />
           )}
-          {onSave && (
+          {saveAction && (
             <IconButton
               className={clsx(
                 "orf-chat-message-action-overflow-late",
-                message.savedByCurrentUser && "orf-chat-message-action-active",
+                saveAction.active && "orf-chat-message-action-active",
               )}
-              icon={Bookmark}
-              label={message.savedByCurrentUser ? "取消保存" : "保存消息"}
-              onClick={() => onSave(message)}
+              icon={saveAction.icon}
+              label={saveAction.label}
+              onClick={saveAction.onSelect}
             />
           )}
-          {canMutate && (
+          {editAction && (
             <IconButton
               className="orf-chat-message-primary-action orf-chat-message-action-overflow-late"
-              icon={Edit3}
-              label="编辑消息"
-              onClick={() => onEdit(message)}
+              icon={editAction.icon}
+              label={editAction.label}
+              onClick={editAction.onSelect}
             />
           )}
-          {canDeleteMessage && (
+          {deleteAction && (
             <IconButton
               className="orf-chat-message-danger-action orf-chat-message-action-overflow-late"
-              icon={Trash2}
-              label="删除消息"
-              onClick={() => onDelete(message)}
+              icon={deleteAction.icon}
+              label={deleteAction.label}
+              onClick={deleteAction.onSelect}
             />
           )}
           {hasMoreActions && (
-            <div className="orf-chat-message-more-anchor" ref={moreMenuRef} onKeyDown={handleMoreKeyDown}>
+            <div className="orf-chat-message-more-anchor" ref={moreMenuRef} onKeyDown={handleMoreTriggerKeyDown}>
               <IconButton
                 aria-controls={moreOpen ? moreMenuId : undefined}
                 aria-expanded={moreOpen}
@@ -611,52 +775,14 @@ export function ChatMessageItem({
                 onClick={toggleMoreMenu}
               />
               {moreOpen && (
-                <div className="orf-chat-message-more-menu" id={moreMenuId} role="menu">
-                  <button type="button" role="menuitem" onClick={() => handleMoreAction(() => onCopyLink(message))}>
-                    <LinkIcon className="h-3.5 w-3.5" />
-                    复制消息链接
-                  </button>
-                  {canPin && onPin && (
-                    <button
-                      type="button"
-                      className={message.pinnedAt ? "orf-chat-message-more-active" : ""}
-                      role="menuitem"
-                      onClick={() => handleMoreAction(() => onPin(message))}
-                    >
-                      <Pin className="h-3.5 w-3.5" />
-                      {message.pinnedAt ? "取消固定" : "固定消息"}
-                    </button>
-                  )}
-                  {onMarkUnread && (
-                    <button type="button" role="menuitem" onClick={() => handleMoreAction(() => onMarkUnread(message))}>
-                      <EyeOff className="h-3.5 w-3.5" />
-                      从这里标记未读
-                    </button>
-                  )}
-                  {onSave && (
-                    <button
-                      type="button"
-                      className={message.savedByCurrentUser ? "orf-chat-message-more-active" : ""}
-                      role="menuitem"
-                      onClick={() => handleMoreAction(() => onSave(message))}
-                    >
-                      <Bookmark className="h-3.5 w-3.5" />
-                      {message.savedByCurrentUser ? "取消保存" : "保存消息"}
-                    </button>
-                  )}
-                  {canMutate && (
-                    <button type="button" role="menuitem" onClick={() => handleMoreAction(() => onEdit(message))}>
-                      <Edit3 className="h-3.5 w-3.5" />
-                      编辑消息
-                    </button>
-                  )}
-                  {canDeleteMessage && (
-                    <button className="orf-chat-message-more-danger" type="button" role="menuitem" onClick={() => handleMoreAction(() => onDelete(message))}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                      删除消息
-                    </button>
-                  )}
-                </div>
+                <ChatMessageMoreMenu
+                  actions={moreActions}
+                  anchorRef={moreMenuRef}
+                  id={moreMenuId}
+                  initialFocus={moreMenuInitialFocusRef.current}
+                  onClose={closeMoreMenu}
+                  onInitialFocusHandled={clearMoreInitialFocus}
+                />
               )}
             </div>
           )}
