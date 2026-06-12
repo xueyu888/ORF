@@ -17,8 +17,11 @@ export type DesktopShellLaunchAtLoginResult = {
 };
 
 export type DesktopWindowState = {
+  isFocused?: boolean;
   isFullScreen?: boolean;
   isMaximized: boolean;
+  isMinimized?: boolean;
+  isVisible?: boolean;
 };
 
 export type DesktopShellWindowResult = {
@@ -151,8 +154,9 @@ export function subscribeDesktopWindowState(handler: (state: DesktopWindowState)
     return undefined;
   }
   return window.orfDesktopShell.onWindowStateChange((state) => {
-    if (state && typeof state.isMaximized === "boolean") {
-      handler(state);
+    const normalizedState = normalizeDesktopWindowState(state);
+    if (normalizedState) {
+      handler(normalizedState);
     }
   });
 }
@@ -162,6 +166,10 @@ function normalizeUnreadCount(count: number) {
 }
 
 function normalizeDesktopWindowResult(result: DesktopShellWindowResult | undefined): DesktopShellWindowResult {
+  if (result?.status === "success" && result.data) {
+    const data = normalizeDesktopWindowState(result.data);
+    return data ? { status: "success", data } : { status: "error", reason: "desktop_window_state_invalid" };
+  }
   return result?.status ? result : { status: "success" };
 }
 
@@ -177,4 +185,15 @@ function normalizeDesktopLaunchAtLoginResult(result: DesktopShellLaunchAtLoginRe
     };
   }
   return result?.status ? result : { status: "error", reason: "desktop_launch_at_login_result_invalid" };
+}
+
+function normalizeDesktopWindowState(state: DesktopWindowState | undefined): DesktopWindowState | null {
+  if (!state || typeof state.isMaximized !== "boolean") return null;
+  return {
+    isFocused: state.isFocused === true,
+    isFullScreen: state.isFullScreen === true,
+    isMaximized: state.isMaximized,
+    isMinimized: state.isMinimized === true,
+    isVisible: state.isVisible !== false,
+  };
 }

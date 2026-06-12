@@ -118,8 +118,16 @@ function createMainWindow(clientUrl, options = {}) {
   });
   mainWindow.on("focus", () => {
     mainWindow.flashFrame(false);
+    sendDesktopWindowState(mainWindow);
   });
-  mainWindow.on("show", updateDesktopUnreadState);
+  mainWindow.on("blur", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("show", () => {
+    updateDesktopUnreadState();
+    sendDesktopWindowState(mainWindow);
+  });
+  mainWindow.on("hide", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("minimize", () => sendDesktopWindowState(mainWindow));
+  mainWindow.on("restore", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("maximize", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("unmaximize", () => sendDesktopWindowState(mainWindow));
   mainWindow.on("enter-full-screen", () => sendDesktopWindowState(mainWindow));
@@ -1069,8 +1077,11 @@ function normalizeDesktopWorkbenchZoomLevel(input) {
 
 function desktopWindowState(targetWindow) {
   return {
+    isFocused: targetWindow.isFocused(),
     isFullScreen: targetWindow.isFullScreen(),
     isMaximized: targetWindow.isMaximized(),
+    isMinimized: targetWindow.isMinimized(),
+    isVisible: targetWindow.isVisible(),
   };
 }
 

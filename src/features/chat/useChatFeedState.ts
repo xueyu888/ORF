@@ -38,6 +38,7 @@ import {
 } from "./chatModels";
 import { chatReadReceiptStableMs, selectChatReadThroughCandidate } from "./chatReadObserver";
 import { useChatLatestScrollStickiness } from "./useChatLatestScrollStickiness";
+import type { AppAttentionState } from "../interaction/appAttentionState";
 
 export type ChatFeedThreadTarget = {
   focusMessageId: string;
@@ -46,6 +47,7 @@ export type ChatFeedThreadTarget = {
 
 type UseChatFeedStateInput = {
   activeChannel: ChatChannel | null;
+  appAttentionState: AppAttentionState;
   currentUserId?: string;
   notify: (message: string) => void;
   onChannelUpdate: (channel: ChatChannel) => void;
@@ -79,13 +81,9 @@ function runChatFeedScrollIntent(tryScroll: () => boolean, onDone: () => void, a
   };
 }
 
-function canAutoAdvanceChatReadReceipt() {
-  if (typeof document === "undefined") return true;
-  return document.visibilityState === "visible" && document.hasFocus();
-}
-
 export function useChatFeedState({
   activeChannel,
+  appAttentionState,
   currentUserId,
   notify,
   onChannelUpdate,
@@ -103,6 +101,7 @@ export function useChatFeedState({
   const [unreadAnchor, setUnreadAnchor] = useState<UnreadAnchor | null>(null);
   const [feedChannelId, setFeedChannelId] = useState<string | null>(null);
   const activeChannelIdRef = useRef<string | null>(null);
+  const appAttentionStateRef = useRef(appAttentionState);
   const currentUserIdRef = useRef<string | undefined>(undefined);
   const contextRequestKeyRef = useRef<string | null>(null);
   const feedCacheRef = useRef(new Map<string, ReturnType<typeof createFeedSnapshot>>());
@@ -118,6 +117,7 @@ export function useChatFeedState({
   const unreadAnchorRef = useRef<UnreadAnchor | null>(null);
   const activeChannelId = activeChannel?.id ?? null;
   activeChannelIdRef.current = activeChannelId;
+  appAttentionStateRef.current = appAttentionState;
   currentUserIdRef.current = currentUserId;
   unreadAnchorRef.current = unreadAnchor;
 
@@ -390,7 +390,7 @@ export function useChatFeedState({
       !anchor ||
       !hasMainFeedUnread(anchor) ||
       messagesLoadingRef.current ||
-      !canAutoAdvanceChatReadReceipt() ||
+      !appAttentionStateRef.current.activelyViewed ||
       (anchor.manuallyUnread && manualUnreadAutoReadSuppressedRef.current)
     ) {
       cancelPendingReadReceipt();
@@ -428,7 +428,7 @@ export function useChatFeedState({
       if (
         activeChannelIdRef.current !== channelId ||
         messagesLoadingRef.current ||
-        !canAutoAdvanceChatReadReceipt() ||
+        !appAttentionStateRef.current.activelyViewed ||
         latestCandidate?.id !== candidate.id
       ) {
         window.requestAnimationFrame(scheduleVisibleReadReceipt);
@@ -572,23 +572,13 @@ export function useChatFeedState({
   }, [activeChannel, currentUserId]);
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (canAutoAdvanceChatReadReceipt()) {
-        scheduleVisibleReadReceipt();
-      } else {
-        cancelPendingReadReceipt();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", handleVisibilityChange);
-    window.addEventListener("blur", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", handleVisibilityChange);
-      window.removeEventListener("blur", handleVisibilityChange);
+    if (appAttentionState.activelyViewed) {
+      scheduleVisibleReadReceipt();
+    } else {
       cancelPendingReadReceipt();
-    };
-  }, [cancelPendingReadReceipt, scheduleVisibleReadReceipt]);
+    }
+    return cancelPendingReadReceipt;
+  }, [appAttentionState.activelyViewed, cancelPendingReadReceipt, scheduleVisibleReadReceipt]);
 
   useEffect(() => {
     if (!activeChannelId || !requestedMessageId) return undefined;
