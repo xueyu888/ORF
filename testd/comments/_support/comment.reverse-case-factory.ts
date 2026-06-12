@@ -448,7 +448,7 @@ function actionSteps(definition: ReverseCommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "image-invalid-file") {
     return [
-      step("Action-1", "api", "api.comment_attachment_direct.upload", "当前普通成员直接尝试上传本用例非图片文件作为评论图片", "api.comment_attachment_direct", "upload", {
+      step("Action-1", "api", "api.comment_attachment_direct.upload", "当前普通成员直接上传本用例非图片文件作为评论图片", "api.comment_attachment_direct", "upload", {
         fileFrom: "runtime.invalidFile",
         targetFrom: "runtime.commentTarget",
         saveAs: "invalidUploadResponse",
@@ -547,8 +547,8 @@ function s1Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
       step("S1-1", "api", "api.image_upload_response.unsupported", "上传非图片文件结果状态码 应为 415 或等价文件类型错误", "api.comment_upload_response", "unsupported", {
         resultFrom: "runtime.invalidUploadResponse",
       }),
-      step("S1-2", "playwright", "comment_composer.upload_error", "评论窗口 应显示 非图片文件错误提示", "page.comment_composer", "upload_error_visible", {
-        message: "只能上传图片",
+      step("S1-2", "playwright", "comment_composer.upload_error", "评论窗口 应显示 \"只能上传 PNG、JPEG、GIF 或 WebP 图片\"", "page.comment_composer", "upload_error_visible", {
+        message: "只能上传 PNG、JPEG、GIF 或 WebP 图片",
       }),
       step("S1-3", "prisma", "db.comment.image_absent", "数据库中 应不存在 本用例非图片附件", "db.comment", "image_absent", {
         fileNameFrom: "data.invalidFileName",
