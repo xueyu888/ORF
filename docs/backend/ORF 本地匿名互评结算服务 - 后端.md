@@ -63,4 +63,4 @@ ORF 前端依赖以下 ORF 同源代理接口；ORF 后端再转发到共享私�
 - `ratios`：验收页默认填入的贡献比例。
 - `status`：`ready`、`missing`、`conflict` 只表示提示状态，不是验收阻塞条件。
 
-ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的默认贡献比例和提示明细；验收结算时只把指挥官确认后的公开比例写入 `pointLedger`。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。
+ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的默认贡献比例和提示明细；目标进入已验收后，结算时只把指挥官确认后的公开比例写入 `pointLedger`。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。

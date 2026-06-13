@@ -114,12 +114,33 @@
 {
   "lootId": "loot-1",
   "resultReviews": [{ "resultId": "res-1", "acceptedResult": "completed" }],
-  "contributionResolution": null,
   "reason": "验收说明"
 }
 ```
 
-`contributionResolution` 填写指挥官确认的最终贡献比例；页面默认使用共享匿名互评结算服务返回的当前均值，指挥官可调整：
+验收成功后：
+
+- 写入 `Result.acceptedResult`。
+- 按指标验收结论汇总并写入 `Objective.acceptedResult`。
+- 写入 `Objective.completionMultiplier` 和 `Objective.objectiveBasePoints`。
+- 将 `Objective.flowStatus` 改为 `accepted`。
+
+验收不通过时，目标保持 `submitted`，不写入积分流水。
+
+## 结算请求体
+
+```json
+{
+  "lootId": "loot-1",
+  "contributionResolution": {
+    "ratios": [{ "member": "Kai Wang", "memberUserId": "usr-kai", "ratio": 1 }],
+    "reason": "指挥官确认最终结算比例"
+  },
+  "reason": "目标结算"
+}
+```
+
+`contributionResolution` 填写指挥官确认的最终贡献比例；页面默认使用共享匿名互评结算服务返回的当前均值，指挥官可调整。单人目标也先进入 `accepted`，再由指挥官确认 `100%` 结算比例：
 
 ```json
 {
@@ -130,10 +151,8 @@
 
 `contributionResolution.ratios` 使用同一标准比例契约：每个目标挑战者一项，范围 `0..1`，合计 `1`。后端写入积分时优先使用 `memberUserId`，只在旧请求没有该字段时按当前目标挑战者展示名兜底解析，且解析结果必须仍属于 `Objective.challengerUserIds`。
 
-验收成功后：
+结算成功后：
 
-- 写入 `Result.acceptedResult`。
-- 按指标验收结论汇总并写入目标结算字段。
 - 按本地匿名互评结算结果或指挥官处理结果生成 `pointLedger`。
 - `pointLedger.userId` 来自目标挑战者的 `Objective.challengerUserIds`；`memberName` 只是结算时按 UUID 派生的展示名快照。
 - 将 `Objective.flowStatus` 改为 `settled`。
@@ -145,6 +164,8 @@
 - 试验收仅允许 `frozen` 目标的挑战者发起一次；指挥官反馈试验收不推进状态。
 - 只有指挥官可验收。
 - 只有 `submitted` 目标可验收。
+- 只有指挥官可结算。
+- 只有 `accepted` 目标可结算。
 - 多个普通成员挑战者结算必须有 `contributionResolution.ratios`，来源可以是当前互评均值默认值，也可以是指挥官调整后的最终比例。
 - 同一 reviewer 可重复提交匿名互评，共享结算服务保留历史；结算只使用每个 reviewer 最新一条记录。
 - 匿名互评评分和最终结算比例都拒绝超出 `0..1`、成员缺失、成员重复或合计不为 `1` 的比例。

@@ -109,7 +109,8 @@
 | `PATCH /api/results/:resultId/details` | 指挥官或重估期内挑战者编辑指标详情 |
 | `PATCH /api/results/:resultId/uncertainty` | 指挥官或重估期内挑战者校准指标积分等级 |
 | `POST /api/objectives/:objectiveId/loot` | 挑战者提交结构化战利品 |
-| `POST /api/objectives/:objectiveId/review` | 指挥官验收并结算 |
+| `POST /api/objectives/:objectiveId/review` | 指挥官验收指标 |
+| `POST /api/objectives/:objectiveId/settle` | 指挥官确认结算 |
 
 `GET /api/bounties` 的列表项以 `Objective` 为挑战对象，包含该目标下的 `Result[]` 作为指标清单，并用同一条 `challengeApplications` 数据展示申请理由和申请状态。该接口服务大厅公开交互数据，不能因为当前用户是指挥官/管理员而清空列表，也不能在目标进入 `reestimating` 后把目标从大厅移除。前端不从任务管理页大快照自行拼装悬赏大厅列表；操作区展示由 `BountyHallItem.isRecruitment`、`BountyHallItem.hasCurrentApplication`、`BountyHallItem.isCurrentChallenger` 和 `Objective.flowStatus` 决定，动作生效再由当前用户角色和后端 mutation 校验。指挥官/管理员触发申请 / 接受时，前端必须先弹窗提示并保持原状态，不能本地伪造已申请或已接受。
 

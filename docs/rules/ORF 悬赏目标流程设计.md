@@ -12,7 +12,7 @@
 - 一个目标可以有多个挑战者；一个目标可以包含多个指标。
 - 新建目标属于挑战页内的候选目标编辑流程；全局入口只负责把用户带到挑战页。页面先插入完整 temporary 目标面板，标题输入按 Enter 或输入框失焦快速创建 `candidate`；创建 UI 必须用单一 `objectiveCreationSession` 表达 `editingDraft → submittingDraft → submittedOverlay → anchoredCreated / failedEditingDraft`。请求发起后 temporary 目标立即退出标题编辑态、留在原位并在状态列显示“保存中”，此时重复点击全局 `新建目标` 只能提示“目标正在创建，请稍后”，不能发起第二次创建。`POST /api/objectives` 返回真实目标后立即连续替换为 persisted 目标并沿用原位置，任务管理数据刷新只负责撤掉覆盖层，一次性排序锚点保留到用户切换筛选或业务排序键变化，刷新前后都不能出现目标消失或跳位。没有真实指标或行动项时，不渲染“待定义指标 / 待创建行动项”伪子行；新增必须从父级 `+` 发起。真实目标行 hover 只保留一个主新增 `+`，点击后打开子级类型选择，只能在当前权限和状态允许的 `新增/提出指标`、`新增行动项` 中选择一项。任务行 `+` 直接新增该任务的 temporary 子任务。指标行没有 `+`，因为指标当前没有子级对象。点击 `+` 后才插入对应 temporary 行并进入标题编辑；提交成功后由后端返回的真实 `Result` / `Task` / `TaskChecklistItem` 进入一次性创建覆盖层并替换 temporary 行，直到挑战页刷新数据包含同一真实 id 后撤掉覆盖层。保存成功后不自动追加下一条 temporary 行，不在目标头堆叠多个相同 `+`。
 - 指标、行动项和子行动项创建必须由单一 `childCreationSession` 表达 `editingDraft → submittingDraft → submittedOverlay / failedEditingDraft → idle`。temporary 行只是该会话的展示派生数据，POST 返回的真实实体只是待快照覆盖层，后端快照才是最终业务事实源。`submittingDraft` 必须携带唯一提交 token，旧请求返回不能接管已清理或新建的草稿；`submittedOverlay` 阶段不能再启动另一条子级创建，直到后端快照包含同一真实 id 或用户显式切换上下文清理会话。页面和组件不得分别维护 temporary 行、覆盖层和快照接管条件，避免形成多个事实源。
-- 挑战页目标排序统一为：候选中目标、未分配的待申请/待征召目标、已分配执行中的目标、待验收目标、已结算目标、已关闭目标；同组内先按截止时间升序，再按创建日期降序；业务排序键相同则保留数据源顺序，目标标题不参与列表排序。
+- 挑战页目标排序统一为：候选中目标、未分配的待申请/待征召目标、已分配执行中的目标、待验收目标、已验收目标、已结算目标、已关闭目标；同组内先按截止时间升序，再按创建日期降序；业务排序键相同则保留数据源顺序，目标标题不参与列表排序。
 - 用户正在操作的目标使用列表位置锚点保持当前上下文稳定。审批申请、发布、冻结、验收等动作成功后，目标状态、挑战者、申请记录和权限立即按后端事实源刷新；当前目标在用户失焦、点击其他目标、切换筛选或离开页面前保持原展示位置，锚点释放后回到统一排序。
 - 指挥官可以编辑目标和指标；目标冻结后，指标口径锁定。
 - 挑战者只能在自己参与目标的未过期重估期提出指标或编辑已有指标。
@@ -51,8 +51,9 @@
 | `recruiting` | 征召中 | 指挥官指定待接受成员 | 被征召成员接受 |
 | `reestimating` | 重估中 | 申请被通过或征召被接受 | 其他 active 普通成员继续申请；指挥官改目标和指标；挑战者提出指标、编辑指标、维护任务、评论 |
 | `frozen` | 已冻结 | 指挥官确认重估完成 | 挑战者提交战利品 |
-| `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收和结算 |
-| `settled` | 已结算 | 验收完成并写入积分 | 查看结果和排行榜 |
+| `submitted` | 待验收 | 挑战者提交战利品 | 指挥官验收指标 |
+| `accepted` | 已验收 | 指挥官确认验收通过 | 挑战者匿名互评；指挥官确认结算 |
+| `settled` | 已结算 | 指挥官确认最终比例并写入积分 | 查看结果和排行榜 |
 | `closed` | 已关闭 | 目标关闭或放弃 | 无 |
 
 `Objective.stage` 保留为页面阶段字段：重估对应 `orfReestimate`，冻结后对应 `goalFrozen`。业务流转以 `flowStatus` 为准。
@@ -64,7 +65,7 @@
 | 页面 | 状态 |
 | --- | --- |
 | 悬赏大厅 | 所有已通过用户可见 `open`、`applying`、`recruiting`、`reestimating` 的公开招募和参与状态；默认显示招募中目标，`reestimating` 或已有挑战者的目标自动进入已开始分组；奖励列只展示难度、分数和征召标记，不承载生命周期状态；参与列展示申请者、挑战者并高亮当前用户身份；操作列只表达当前用户可执行动作或暂无操作；active 普通成员可在冻结前申请公开目标或接受自己的征召；申请必须填写理由；通过后挑战者头像继续挂在大厅目标上；新悬赏发布写入消息中心并通过实时横幅广播提醒在线用户；指挥官/管理员完整显示大厅界面，但挑战动作被提示并阻断 |
-| 我的挑战 / 挑战工作台 | 指挥官可见 `candidate` 和全量挑战，并可按正式挑战者筛选目标；成员只见 `Objective.challengerUserIds` 包含自己的 `reestimating`、`frozen`、`submitted`、`settled` |
+| 我的挑战 / 挑战工作台 | 指挥官可见 `candidate` 和全量挑战，并可按正式挑战者筛选目标；成员只见 `Objective.challengerUserIds` 包含自己的 `reestimating`、`frozen`、`submitted`、`accepted`、`settled` |
 | 成员管理 | 注册待审核、启用、拒绝、停用 |
 | 统计 | `pointLedger` 结算后的成员积分 |
 
@@ -79,7 +80,7 @@
 - 同一目标的正式挑战者可以共同新增、编辑、勾选、移动和删除目标下的任务与子任务，并维护评论，用来拆解执行动作和协作记录；任务不挂到指标下，执行人和创建人不形成私有所有权。
 - 目标至少已有一个指标，且每个指标都已校准积分等级后，指挥官才能冻结目标。
 
-`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/settled/closed` 不允许修改。冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
+`Objective.finalDueAt` 是目标截止日期的唯一事实源。只有指挥官可以修改：`candidate/open/applying/recruiting/reestimating` 可正常调整；`frozen` 只允许因延期等异常原因把日期延后；`submitted/accepted/settled/closed` 不允许修改。冻结后延后截止日期不重开指标重估，也不改变 `confirmationDueAt`。
 
 冻结后指标口径稳定，不再退回 `reestimating`。`confirmationDueAt` 到期后同样停止指标调整，不做续期。
 
@@ -95,13 +96,13 @@
 - 征召对象只能是 active 普通成员。
 - 被征召成员只能接受征召；有异议时线下找指挥官处理。
 - 被征召成员接受后成为挑战者，目标进入重估。
-- `frozen`、`submitted`、`settled`、`closed` 不再接受或审核挑战申请；历史残留的 pending 申请只读，不应展示通过或拒绝操作。
+- `frozen`、`submitted`、`accepted`、`settled`、`closed` 不再接受或审核挑战申请；历史残留的 pending 申请只读，不应展示通过或拒绝操作。
 
 ## 战利品
 
 战利品提交发生在目标层级，且仅允许普通成员挑战者在 `frozen` 状态提交。
 
-挑战者在 `frozen` 状态可发起一次目标级试验收。试验收复用战利品的完成说明、指标主张、证据和自测摘要，但保存为 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus`，不触发验收结算。指挥官只能反馈“可正式提交”或“需补充”；正式提交仍必须由挑战者后续提交目标战利品完成，提交后目标才进入 `submitted`。
+挑战者在 `frozen` 状态可发起一次目标级试验收。试验收复用战利品的完成说明、指标主张、证据和自测摘要，但保存为 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus`，不触发验收或结算。指挥官只能反馈“可正式提交”或“需补充”；正式提交仍必须由挑战者后续提交目标战利品完成，提交后目标才进入 `submitted`。
 
 战利品结构化保存到 `objectiveLoot`：
 
@@ -118,10 +119,18 @@
 
 - 写入每个 `Result.acceptedResult`。
 - 按每个指标验收结论汇总 `Objective.acceptedResult`；全部指标完成则目标完成。
-- 写入 `completionMultiplier`、`objectiveBasePoints`、`objectiveSettlementPoints`；`objectiveBasePoints` 从已冻结指标的积分汇总得到，不作为目标初始化字段手填。
-- 生成 `pointLedger`，成员排行榜只读取后端结算后的积分流水。
+- 写入 `completionMultiplier`、`objectiveBasePoints`；`objectiveBasePoints` 从已冻结指标的积分汇总得到，不作为目标初始化字段手填。
+- 验收通过时 `Objective.flowStatus` 从 `submitted` 进入 `accepted`；验收不通过时保持 `submitted`，不写入积分流水。
 
-Result 的不确定性分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标总分由目标下指标的不确定性分相加得到；Result 不直接给个人分积分，个人积分按目标级最终贡献比例分配。指挥官验收时查看匿名互评提交状态、原始评分、弃权说明、均值和偏离提醒，并确认最终贡献比例。
+指挥官结算 `accepted` 目标后：
+
+- 读取匿名互评提交状态、原始评分、弃权说明、均值和偏离提醒。
+- 确认最终贡献比例。
+- 写入 `objectiveSettlementPoints`。
+- 生成 `pointLedger`，成员排行榜只读取后端结算后的积分流水。
+- `Objective.flowStatus` 从 `accepted` 进入 `settled`。
+
+Result 的不确定性分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标总分由目标下指标的不确定性分相加得到；Result 不直接给个人分积分，个人积分按目标级最终贡献比例分配。单人目标也先进入 `accepted`，再由指挥官确认结算为 `100%`。
 
 ## TODO
 
