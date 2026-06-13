@@ -26,6 +26,7 @@ type ChatDraftEditorToolbarState = {
 
 type ChatDraftEditorProps = {
   autoFocus?: boolean;
+  autoGrow?: boolean;
   className?: string;
   disabled?: boolean;
   draft: ChatDraft;
@@ -94,6 +95,7 @@ function currentEditorDraft(actions: OrfRichTextEditorActions | null, fallbackDr
 
 export function ChatDraftEditor({
   autoFocus,
+  autoGrow,
   className,
   disabled,
   draft,
@@ -451,6 +453,7 @@ export function ChatDraftEditor({
   return (
     <OrfRichTextEditor
       actionsRef={actionsRef}
+      autoGrow={autoGrow}
       className={clsx("orf-chat-draft-editor", className)}
       currentUserId=""
       disabled={disabled}

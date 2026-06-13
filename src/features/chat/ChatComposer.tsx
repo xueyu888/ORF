@@ -253,6 +253,7 @@ export function ChatComposer({
       )}
       {error && <div className="orf-chat-composer-error">{error}</div>}
       <ChatDraftEditor
+        autoGrow
         className="orf-chat-composer-box"
         disabled={disabled}
         draft={draft}

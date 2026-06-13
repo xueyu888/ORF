@@ -12861,7 +12861,7 @@ button.orf-chat-image-attachment {
 }
 
 .orf-chat-draft-editor .orf-rich-text-editor-content {
-  max-height: 220px;
+  max-height: min(42dvh, 420px);
   min-height: 76px;
   color: var(--orf-text-primary);
   padding: 10px 48px 38px 12px;
@@ -12934,7 +12934,7 @@ button.orf-chat-image-attachment {
 .orf-chat-draft-preview {
   display: block;
   width: 100%;
-  max-height: 220px;
+  max-height: min(42dvh, 420px);
   min-height: 76px;
   border: 0;
   outline: 0;
