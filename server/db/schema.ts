@@ -256,8 +256,8 @@ export const workLogEntries = pgTable(
     authorNameSnapshot: text("author_name_snapshot").notNull(),
     workDate: date("work_date", { mode: "string" }).notNull(),
     objectiveId: text("objective_id").references(() => objectives.id, { onDelete: "set null" }),
-    objectiveIdSnapshot: text("objective_id_snapshot").notNull(),
-    objectiveTitleSnapshot: text("objective_title_snapshot").notNull(),
+    objectiveIdSnapshot: text("objective_id_snapshot"),
+    objectiveTitleSnapshot: text("objective_title_snapshot"),
     bodyMarkdown: text("body_markdown").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
@@ -272,7 +272,10 @@ export const workLogEntries = pgTable(
       table.authorUserId,
       table.workDate,
       table.objectiveIdSnapshot,
-    ),
+    ).where(sql`${table.objectiveIdSnapshot} is not null`),
+    authorDateGeneral: uniqueIndex("work_log_entries_author_date_general_unique")
+      .on(table.teamId, table.authorUserId, table.workDate)
+      .where(sql`${table.objectiveIdSnapshot} is null`),
   }),
 );
 

@@ -344,6 +344,13 @@
       "when": 1781190000000,
       "tag": "0048_work_log_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1781191000000,
+      "tag": "0049_work_log_optional_objective",
+      "breakpoints": true
     }
   ]
 }

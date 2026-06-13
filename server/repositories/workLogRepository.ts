@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { WorkLogActivityItem, WorkLogEntry, WorkLogObjectiveOption } from "../../src/types/orf";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
@@ -11,13 +11,13 @@ import { runtimeScopeStorageId } from "./runtimeScope";
 
 export type WorkLogDayEntryInput = {
   bodyMarkdown: string;
-  objectiveId: string;
+  objectiveId?: string | null;
 };
 
 export type WorkLogDaySaveOutcome =
   | { status: "ok"; entries: WorkLogEntry[] }
   | { status: "forbidden" }
-  | { status: "invalid"; reason: "duplicateObjective" | "emptyBody" | "invalidObjective" };
+  | { status: "invalid"; reason: "duplicateGeneral" | "duplicateObjective" | "emptyBody" | "invalidObjective" | "objectiveRequired" };
 
 export type WorkLogActivityQuery = {
   from?: string;
@@ -55,35 +55,44 @@ function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
   };
 }
 
-function normalizeDayEntries(entries: WorkLogDayEntryInput[]) {
-  const seen = new Set<string>();
+function normalizeDayEntries(user: AuthenticatedOrfUser, entries: WorkLogDayEntryInput[]) {
+  const seenObjectiveIds = new Set<string>();
+  let hasGeneralEntry = false;
   const normalized: WorkLogDayEntryInput[] = [];
 
   for (const entry of entries) {
-    const objectiveId = entry.objectiveId.trim();
+    const objectiveId = entry.objectiveId?.trim() || null;
     const bodyMarkdown = entry.bodyMarkdown.trim();
-    if (!objectiveId) {
-      return { status: "invalid" as const, reason: "invalidObjective" as const };
-    }
     if (!bodyMarkdown) {
       return { status: "invalid" as const, reason: "emptyBody" as const };
     }
-    if (seen.has(objectiveId)) {
+    if (!objectiveId) {
+      if (user.role !== "admin") {
+        return { status: "invalid" as const, reason: "objectiveRequired" as const };
+      }
+      if (hasGeneralEntry) {
+        return { status: "invalid" as const, reason: "duplicateGeneral" as const };
+      }
+      hasGeneralEntry = true;
+      normalized.push({ objectiveId: null, bodyMarkdown });
+      continue;
+    }
+    if (seenObjectiveIds.has(objectiveId)) {
       return { status: "invalid" as const, reason: "duplicateObjective" as const };
     }
-    seen.add(objectiveId);
+    seenObjectiveIds.add(objectiveId);
     normalized.push({ objectiveId, bodyMarkdown });
   }
 
   return { status: "ok" as const, entries: normalized };
 }
 
-async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; userId: string; objectiveIds?: string[] }) {
+async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user: AuthenticatedOrfUser; objectiveIds?: string[] }) {
   const storageScopeId = runtimeScopeStorageId(input.scope);
-  const filters = [
-    eq(objectives.teamId, storageScopeId),
-    sql`${objectives.challengerUserIds} ? ${input.userId}`,
-  ];
+  const filters = [eq(objectives.teamId, storageScopeId)];
+  if (input.user.role !== "admin") {
+    filters.push(sql`${objectives.challengerUserIds} ? ${input.user.id}`);
+  }
   if (input.objectiveIds) {
     filters.push(inArray(objectives.id, input.objectiveIds));
   }
@@ -101,11 +110,7 @@ async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user
 }
 
 export async function listWorkLogObjectiveOptions(user: AuthenticatedOrfUser, scope: RuntimeScope): Promise<WorkLogObjectiveOption[]> {
-  if (user.role !== "member") {
-    return [];
-  }
-
-  const rows = await listAuthorWorkLogObjectiveRows({ scope, userId: user.id });
+  const rows = await listAuthorWorkLogObjectiveRows({ scope, user });
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
@@ -133,11 +138,11 @@ export async function saveMyWorkLogDay(
   workDate: string,
   entries: WorkLogDayEntryInput[],
 ): Promise<WorkLogDaySaveOutcome> {
-  if (user.role !== "member") {
+  if (user.role !== "admin" && user.role !== "member") {
     return { status: "forbidden" };
   }
 
-  const normalized = normalizeDayEntries(entries);
+  const normalized = normalizeDayEntries(user, entries);
   if (normalized.status !== "ok") {
     return normalized;
   }
@@ -147,12 +152,12 @@ export async function saveMyWorkLogDay(
     .select()
     .from(workLogEntries)
     .where(and(eq(workLogEntries.teamId, storageScopeId), eq(workLogEntries.authorUserId, user.id), eq(workLogEntries.workDate, workDate)));
-  const existingByObjectiveId = new Map(existingRows.map((entry) => [entry.objectiveIdSnapshot, entry]));
+  const existingByObjectiveId = new Map(existingRows.map((entry) => [entry.objectiveIdSnapshot ?? null, entry]));
   const newObjectiveIds = normalized.entries
-    .map((entry) => entry.objectiveId)
-    .filter((objectiveId) => !existingByObjectiveId.has(objectiveId));
+    .map((entry) => entry.objectiveId ?? null)
+    .filter((objectiveId): objectiveId is string => Boolean(objectiveId) && !existingByObjectiveId.has(objectiveId));
   const objectiveRows = newObjectiveIds.length > 0
-    ? await listAuthorWorkLogObjectiveRows({ objectiveIds: newObjectiveIds, scope, userId: user.id })
+    ? await listAuthorWorkLogObjectiveRows({ objectiveIds: newObjectiveIds, scope, user })
     : [];
   const objectiveById = new Map(objectiveRows.map((objective) => [objective.id, objective]));
   if (objectiveRows.length !== newObjectiveIds.length) {
@@ -160,9 +165,9 @@ export async function saveMyWorkLogDay(
   }
 
   await db.transaction(async (tx) => {
-    const retainedObjectiveIds = new Set(normalized.entries.map((entry) => entry.objectiveId));
+    const retainedObjectiveIds = new Set(normalized.entries.map((entry) => entry.objectiveId ?? null));
     const staleIds = existingRows
-      .filter((entry) => !retainedObjectiveIds.has(entry.objectiveIdSnapshot))
+      .filter((entry) => !retainedObjectiveIds.has(entry.objectiveIdSnapshot ?? null))
       .map((entry) => entry.id);
     if (staleIds.length > 0) {
       await tx.delete(workLogEntries).where(inArray(workLogEntries.id, staleIds));
@@ -170,7 +175,8 @@ export async function saveMyWorkLogDay(
 
     const updatedAt = nowIso();
     for (const [index, entry] of normalized.entries.entries()) {
-      const existing = existingByObjectiveId.get(entry.objectiveId);
+      const objectiveId = entry.objectiveId ?? null;
+      const existing = existingByObjectiveId.get(objectiveId);
       if (existing) {
         await tx
           .update(workLogEntries)
@@ -180,8 +186,23 @@ export async function saveMyWorkLogDay(
             updatedAt,
           })
           .where(eq(workLogEntries.id, existing.id));
+      } else if (!objectiveId) {
+        await tx.insert(workLogEntries).values({
+          id: makeWorkLogId(),
+          teamId: storageScopeId,
+          authorUserId: user.id,
+          authorNameSnapshot: user.name,
+          workDate,
+          objectiveId: null,
+          objectiveIdSnapshot: null,
+          objectiveTitleSnapshot: null,
+          bodyMarkdown: entry.bodyMarkdown,
+          sortOrder: index,
+          createdAt: updatedAt,
+          updatedAt,
+        });
       } else {
-        const objective = objectiveById.get(entry.objectiveId);
+        const objective = objectiveById.get(objectiveId);
         if (!objective) continue;
         await tx.insert(workLogEntries).values({
           id: makeWorkLogId(),
@@ -261,14 +282,19 @@ export async function listWorkLogReminderRecipients(teamId: string, workDate: st
     .innerJoin(users, eq(teamMembers.userId, users.id))
     .where(and(
       eq(teamMembers.teamId, teamId),
-      eq(teamMembers.role, "member"),
       eq(users.status, "active"),
-      sql`exists (
-        select 1
-        from ${objectives}
-        where ${objectives.teamId} = ${teamMembers.teamId}
-          and ${objectives.challengerUserIds} ? (${users.id})::text
-      )`,
+      or(
+        eq(teamMembers.role, "admin"),
+        and(
+          eq(teamMembers.role, "member"),
+          sql`exists (
+            select 1
+            from ${objectives}
+            where ${objectives.teamId} = ${teamMembers.teamId}
+              and ${objectives.challengerUserIds} ? (${users.id})::text
+          )`,
+        ),
+      ),
       sql`not exists (
         select 1
         from ${workLogEntries}

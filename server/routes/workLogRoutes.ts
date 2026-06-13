@@ -22,7 +22,7 @@ const myDayParamsSchema = z.object({
 const saveDayBodySchema = z.object({
   entries: z.array(z.object({
     bodyMarkdown: z.string().trim().min(1).max(12000),
-    objectiveId: z.string().trim().min(1),
+    objectiveId: z.string().trim().min(1).nullish(),
   })).max(24),
 });
 
@@ -35,8 +35,10 @@ const activityQuerySchema = z.object({
 });
 
 function workLogSaveFailureMessage(reason: string) {
+  if (reason === "duplicateGeneral") return "同一天只能保留一条不指定目标的工作日志";
   if (reason === "duplicateObjective") return "同一天同一个目标只能保留一条工作日志";
   if (reason === "emptyBody") return "工作日志内容不能为空";
+  if (reason === "objectiveRequired") return "普通成员填写工作日志时必须选择目标";
   return "目标不存在或当前用户不能给该目标填写工作日志";
 }
 
@@ -70,7 +72,7 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
     const body = saveDayBodySchema.parse(request.body);
     const outcome = await saveMyWorkLogDay(context.user, context.scope, params.date, body.entries);
     if (outcome.status === "forbidden") {
-      return reply.code(403).send({ error: "只有正式挑战成员可以填写自己的工作日志" });
+      return reply.code(403).send({ error: "当前账号不能填写自己的工作日志" });
     }
     if (outcome.status === "invalid") {
       return reply.code(400).send({ error: workLogSaveFailureMessage(outcome.reason) });

@@ -6925,6 +6925,51 @@ button:disabled {
   padding-top: 14px;
 }
 
+.work-logs-editor-actions .orf-control {
+  min-height: 36px;
+  border-radius: 8px;
+  clip-path: none;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.work-logs-editor-actions .orf-control::before {
+  display: none;
+}
+
+.work-logs-editor-actions .orf-ghost-action {
+  padding: 0 12px;
+  color: var(--orf-text-secondary);
+}
+
+.work-logs-editor-actions .orf-ghost-action:hover:not(:disabled) {
+  background: rgba(244, 249, 252, 0.78);
+  box-shadow: none;
+  transform: none;
+}
+
+.work-logs-editor-actions .orf-primary-action {
+  min-width: 82px;
+  padding: 0 16px;
+  border: 1px solid rgba(31, 119, 154, 0.28);
+  background: linear-gradient(180deg, #238db0 0%, #167d9f 100%);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(22, 125, 159, 0.18);
+  text-shadow: none;
+}
+
+.work-logs-editor-actions .orf-primary-action:hover:not(:disabled) {
+  background: linear-gradient(180deg, #2a9abd 0%, #14708f 100%);
+  box-shadow: 0 10px 22px rgba(22, 125, 159, 0.22);
+  transform: translateY(-1px);
+}
+
+.work-logs-editor-actions .orf-primary-action:disabled,
+.work-logs-editor-actions .orf-ghost-action:disabled {
+  transform: none;
+  box-shadow: none;
+}
+
 @media (max-width: 900px) {
   .orf-page-header,
   .reports-leaderboard-heading {

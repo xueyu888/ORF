@@ -105,7 +105,7 @@ export type WorkLogActivityResponse = { entries: WorkLogActivityItem[] };
 export type WorkLogDaySaveInput = {
   entries: Array<{
     bodyMarkdown: string;
-    objectiveId: string;
+    objectiveId?: string | null;
   }>;
 };
 export type VisualBackgroundMode = "fixed" | "switchable";

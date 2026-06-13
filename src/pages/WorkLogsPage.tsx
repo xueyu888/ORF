@@ -24,7 +24,7 @@ type WorkLogDraftEntry = {
   bodyMarkdown: string;
   clientId: string;
   objectiveId: string;
-  objectiveTitleSnapshot?: string;
+  objectiveTitleSnapshot?: string | null;
 };
 
 type WorkLogViewMode = "activity" | "write";
@@ -57,7 +57,8 @@ export function WorkLogsPage() {
   const [error, setError] = useState("");
   const [viewMode, setViewMode] = useState<WorkLogViewMode>("write");
   const workLogsInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "workLogs"), [readModelInvalidations]);
-  const canWrite = currentUser?.role === "member";
+  const canWrite = currentUser?.role === "admin" || currentUser?.role === "member";
+  const canWriteGeneralLog = currentUser?.role === "admin";
 
   useEffect(() => {
     const nextDate = dateFromSearch(location.search);
@@ -121,12 +122,13 @@ export function WorkLogsPage() {
     setDraftEntries((items) => items.filter((item) => item.clientId !== clientId));
   };
 
-  const draftValidation = validateDraftEntries(draftEntries);
+  const draftValidation = validateDraftEntries(draftEntries, canWriteGeneralLog);
   const saveEntries = canonicalDraftEntries(draftEntries);
   const savedKey = useMemo(() => JSON.stringify(canonicalSavedEntries(myEntries)), [myEntries]);
   const draftKey = useMemo(() => JSON.stringify(saveEntries), [saveEntries]);
   const hasChanges = draftKey !== savedKey;
   const saveDisabled = saving || loading || !canWrite || Boolean(draftValidation) || !hasChanges;
+  const memberHasNoWritableTargets = currentUser?.role === "member" && objectives.length === 0 && myEntries.length === 0;
 
   const saveDay = async () => {
     if (saveDisabled) return;
@@ -154,7 +156,7 @@ export function WorkLogsPage() {
   return (
     <PageScaffold
       title="工作日志"
-      subtitle="个人目标日志与团队动态。"
+      subtitle="个人工作记录与团队动态。"
       action={
         <WorkLogDateControl
           date={selectedDate}
@@ -228,12 +230,17 @@ export function WorkLogsPage() {
           {!canWrite ? (
             <div className="work-logs-empty">
               <NotebookPen className="h-6 w-6" />
-              <span>当前账号没有可填写的个人目标日志</span>
+              <span>当前账号不能填写个人工作日志</span>
             </div>
           ) : loading ? (
             <div className="work-logs-loading">
               <Loader2 className="h-5 w-5 animate-spin" />
               加载中
+            </div>
+          ) : memberHasNoWritableTargets ? (
+            <div className="work-logs-empty">
+              <NotebookPen className="h-6 w-6" />
+              <span>当前账号没有可填写的个人目标日志</span>
             </div>
           ) : (
             <>
@@ -245,7 +252,7 @@ export function WorkLogsPage() {
                     index={index}
                     key={entry.clientId}
                     objective={entry.objectiveId ? objectiveOptionsById.get(entry.objectiveId) : undefined}
-                    objectiveOptions={objectiveSelectOptionsForEntry(entry, draftEntries, objectives)}
+                    objectiveOptions={objectiveSelectOptionsForEntry(entry, draftEntries, objectives, canWriteGeneralLog)}
                     onChange={updateDraftEntry}
                     onRemove={removeDraftEntry}
                   />
@@ -253,7 +260,7 @@ export function WorkLogsPage() {
                 {draftEntries.length === 0 && (
                   <button type="button" className="work-logs-add-empty" onClick={addEntry}>
                     <Plus className="h-5 w-5" />
-                    添加目标日志
+                    添加工作日志
                   </button>
                 )}
               </div>
@@ -347,6 +354,8 @@ function WorkLogDraftCard({
 
 function WorkLogActivityCard({ currentUserId, entry }: { currentUserId: string | null; entry: WorkLogActivityItem }) {
   const authorName = entry.authorCurrentName ?? entry.authorNameSnapshot;
+  const hasObjectiveSnapshot = Boolean(entry.objectiveIdSnapshot || entry.objectiveTitleSnapshot);
+  const objectiveTitle = entry.objectiveTitleSnapshot ?? (entry.objectiveId ? entry.objectiveId : "日常工作");
   return (
     <article className="work-logs-activity-entry">
       <UserAvatar avatarUrl={entry.authorAvatarUrl} className="work-logs-activity-avatar" frame={false} name={authorName} />
@@ -357,11 +366,11 @@ function WorkLogActivityCard({ currentUserId, entry }: { currentUserId: string |
           <time>{formatActivityTime(entry.updatedAt)}</time>
         </div>
         <div className="work-logs-activity-target">
-          <Target className="h-3.5 w-3.5" />
+          {hasObjectiveSnapshot ? <Target className="h-3.5 w-3.5" /> : <NotebookPen className="h-3.5 w-3.5" />}
           {entry.objectiveId ? (
-            <a href={`/tasks#objective:${encodeURIComponent(entry.objectiveId)}`}>{entry.objectiveTitleSnapshot}</a>
+            <a href={`/tasks#objective:${encodeURIComponent(entry.objectiveId)}`}>{objectiveTitle}</a>
           ) : (
-            <span>{entry.objectiveTitleSnapshot}</span>
+            <span>{objectiveTitle}</span>
           )}
         </div>
         <div className="work-logs-activity-markdown">
@@ -381,7 +390,7 @@ function draftEntriesFromSaved(entries: WorkLogEntry[]): WorkLogDraftEntry[] {
   return entries.map((entry) => ({
     bodyMarkdown: entry.bodyMarkdown,
     clientId: entry.id,
-    objectiveId: entry.objectiveIdSnapshot,
+    objectiveId: entry.objectiveIdSnapshot ?? "",
     objectiveTitleSnapshot: entry.objectiveTitleSnapshot,
   }));
 }
@@ -389,7 +398,7 @@ function draftEntriesFromSaved(entries: WorkLogEntry[]): WorkLogDraftEntry[] {
 function canonicalDraftEntries(entries: WorkLogDraftEntry[]) {
   return entries
     .map((entry) => ({
-      objectiveId: entry.objectiveId.trim(),
+      objectiveId: entry.objectiveId.trim() || null,
       bodyMarkdown: entry.bodyMarkdown.trim(),
     }))
     .filter((entry) => entry.objectiveId || orfRichTextHasMeaningfulContent(entry.bodyMarkdown));
@@ -397,16 +406,22 @@ function canonicalDraftEntries(entries: WorkLogDraftEntry[]) {
 
 function canonicalSavedEntries(entries: WorkLogEntry[]) {
   return entries.map((entry) => ({
-    objectiveId: entry.objectiveIdSnapshot,
+    objectiveId: entry.objectiveIdSnapshot ?? null,
     bodyMarkdown: entry.bodyMarkdown.trim(),
   }));
 }
 
-function validateDraftEntries(entries: WorkLogDraftEntry[]) {
+function validateDraftEntries(entries: WorkLogDraftEntry[], allowGeneralLog: boolean) {
   const objectiveIds = new Set<string>();
+  let hasGeneralEntry = false;
   for (const entry of canonicalDraftEntries(entries)) {
-    if (!entry.objectiveId) return "请选择目标";
     if (!orfRichTextHasMeaningfulContent(entry.bodyMarkdown)) return "工作日志内容不能为空";
+    if (!entry.objectiveId) {
+      if (!allowGeneralLog) return "请选择目标";
+      if (hasGeneralEntry) return "同一天只能保留一条不指定目标的工作日志";
+      hasGeneralEntry = true;
+      continue;
+    }
     if (objectiveIds.has(entry.objectiveId)) return "同一天同一个目标只能保留一条工作日志";
     objectiveIds.add(entry.objectiveId);
   }
@@ -417,10 +432,13 @@ function objectiveSelectOptionsForEntry(
   entry: WorkLogDraftEntry,
   entries: WorkLogDraftEntry[],
   objectives: WorkLogObjectiveOption[],
+  allowGeneralLog: boolean,
 ): Array<FantasySelectOption<string>> {
   const usedObjectiveIds = new Set(entries.filter((item) => item.clientId !== entry.clientId).map((item) => item.objectiveId).filter(Boolean));
   const options: Array<FantasySelectOption<string>> = [
-    { value: "", label: "选择目标", disabled: true, alwaysVisible: true },
+    allowGeneralLog
+      ? { value: "", label: "不指定目标", description: "日常工作", alwaysVisible: true }
+      : { value: "", label: "选择目标", disabled: true, alwaysVisible: true },
     ...objectives.map((objective) => ({
       value: objective.id,
       label: objective.title,

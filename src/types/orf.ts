@@ -202,8 +202,8 @@ export interface WorkLogEntry {
   authorNameSnapshot: string;
   workDate: string;
   objectiveId?: string | null;
-  objectiveIdSnapshot: string;
-  objectiveTitleSnapshot: string;
+  objectiveIdSnapshot?: string | null;
+  objectiveTitleSnapshot?: string | null;
   bodyMarkdown: string;
   sortOrder: number;
   createdAt: string;
