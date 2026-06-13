@@ -267,15 +267,6 @@ export const workLogEntries = pgTable(
     authorDate: index("work_log_entries_author_date_idx").on(table.teamId, table.authorUserId, table.workDate),
     teamDate: index("work_log_entries_team_date_idx").on(table.teamId, table.workDate),
     objective: index("work_log_entries_objective_snapshot_idx").on(table.teamId, table.objectiveIdSnapshot),
-    authorDateObjective: uniqueIndex("work_log_entries_author_date_objective_unique").on(
-      table.teamId,
-      table.authorUserId,
-      table.workDate,
-      table.objectiveIdSnapshot,
-    ).where(sql`${table.objectiveIdSnapshot} is not null`),
-    authorDateGeneral: uniqueIndex("work_log_entries_author_date_general_unique")
-      .on(table.teamId, table.authorUserId, table.workDate)
-      .where(sql`${table.objectiveIdSnapshot} is null`),
   }),
 );
 

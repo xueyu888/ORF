@@ -6873,20 +6873,18 @@ button:disabled {
   width: 100%;
 }
 
-.work-logs-remove-entry {
-  display: grid;
-  width: 34px;
-  height: 34px;
+.work-logs-editing-badge {
+  display: inline-flex;
+  height: 28px;
   flex: 0 0 auto;
-  place-items: center;
-  border: 1px solid rgba(190, 72, 72, 0.18);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.58);
-  color: #a94747;
-}
-
-.work-logs-remove-entry:hover {
-  background: rgba(255, 240, 240, 0.86);
+  align-items: center;
+  padding: 0 9px;
+  border: 1px solid rgba(45, 143, 179, 0.22);
+  border-radius: 999px;
+  background: rgba(226, 247, 252, 0.74);
+  color: var(--orf-accent-text);
+  font-size: 12px;
+  font-weight: 820;
 }
 
 .work-logs-snapshot-note {
@@ -6902,20 +6900,6 @@ button:disabled {
 
 .work-logs-editor .orf-rich-text-editor-content {
   min-height: 96px;
-}
-
-.work-logs-add-empty {
-  display: inline-flex;
-  min-height: 112px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px dashed rgba(62, 130, 164, 0.36);
-  border-radius: 8px;
-  background: rgba(244, 251, 253, 0.68);
-  color: var(--orf-accent-text);
-  font-size: 13px;
-  font-weight: 820;
 }
 
 .work-logs-editor-actions {
@@ -6968,6 +6952,110 @@ button:disabled {
 .work-logs-editor-actions .orf-ghost-action:disabled {
   transform: none;
   box-shadow: none;
+}
+
+.work-logs-history {
+  display: grid;
+  gap: 10px;
+  padding-top: 18px;
+}
+
+.work-logs-history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.work-logs-history-heading h3 {
+  margin: 0;
+  color: var(--orf-text-primary);
+  font-size: 14px;
+  font-weight: 820;
+}
+
+.work-logs-history-heading span {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.work-logs-history-list {
+  display: grid;
+  gap: 10px;
+}
+
+.work-logs-history-entry {
+  padding: 11px;
+  border: 1px solid rgba(130, 148, 170, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.work-logs-history-entry-active {
+  border-color: rgba(45, 143, 179, 0.34);
+  background: rgba(235, 249, 252, 0.72);
+}
+
+.work-logs-history-entry-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.work-logs-history-entry-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.work-logs-history-entry-meta span {
+  min-width: 0;
+  overflow: hidden;
+  color: #2f6f93;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-logs-history-entry-meta time {
+  white-space: nowrap;
+}
+
+.work-logs-history-edit {
+  display: inline-flex;
+  height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid rgba(123, 143, 164, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.work-logs-history-edit:hover {
+  background: rgba(244, 249, 252, 0.9);
+  color: var(--orf-text-primary);
+}
+
+.work-logs-history-empty {
+  display: grid;
+  min-height: 84px;
+  place-items: center;
+  border: 1px dashed rgba(130, 148, 170, 0.22);
+  border-radius: 8px;
+  background: rgba(248, 252, 253, 0.56);
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 760;
 }
 
 @media (max-width: 900px) {

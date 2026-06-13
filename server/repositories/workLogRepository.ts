@@ -17,7 +17,8 @@ export type WorkLogDayEntryInput = {
 export type WorkLogDaySaveOutcome =
   | { status: "ok"; entries: WorkLogEntry[] }
   | { status: "forbidden" }
-  | { status: "invalid"; reason: "duplicateGeneral" | "duplicateObjective" | "emptyBody" | "invalidObjective" | "objectiveRequired" };
+  | { status: "notFound" }
+  | { status: "invalid"; reason: "emptyBody" | "invalidObjective" | "objectiveRequired" };
 
 export type WorkLogActivityQuery = {
   from?: string;
@@ -55,36 +56,17 @@ function toWorkLogEntry(row: typeof workLogEntries.$inferSelect): WorkLogEntry {
   };
 }
 
-function normalizeDayEntries(user: AuthenticatedOrfUser, entries: WorkLogDayEntryInput[]) {
-  const seenObjectiveIds = new Set<string>();
-  let hasGeneralEntry = false;
-  const normalized: WorkLogDayEntryInput[] = [];
-
-  for (const entry of entries) {
-    const objectiveId = entry.objectiveId?.trim() || null;
-    const bodyMarkdown = entry.bodyMarkdown.trim();
-    if (!bodyMarkdown) {
-      return { status: "invalid" as const, reason: "emptyBody" as const };
-    }
-    if (!objectiveId) {
-      if (user.role !== "admin") {
-        return { status: "invalid" as const, reason: "objectiveRequired" as const };
-      }
-      if (hasGeneralEntry) {
-        return { status: "invalid" as const, reason: "duplicateGeneral" as const };
-      }
-      hasGeneralEntry = true;
-      normalized.push({ objectiveId: null, bodyMarkdown });
-      continue;
-    }
-    if (seenObjectiveIds.has(objectiveId)) {
-      return { status: "invalid" as const, reason: "duplicateObjective" as const };
-    }
-    seenObjectiveIds.add(objectiveId);
-    normalized.push({ objectiveId, bodyMarkdown });
+function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDayEntryInput) {
+  const objectiveId = input.objectiveId?.trim() || null;
+  const bodyMarkdown = input.bodyMarkdown.trim();
+  if (!bodyMarkdown) {
+    return { status: "invalid" as const, reason: "emptyBody" as const };
+  }
+  if (!objectiveId && user.role !== "admin") {
+    return { status: "invalid" as const, reason: "objectiveRequired" as const };
   }
 
-  return { status: "ok" as const, entries: normalized };
+  return { status: "ok" as const, entry: { objectiveId, bodyMarkdown } };
 }
 
 async function listAuthorWorkLogObjectiveRows(input: { scope: RuntimeScope; user: AuthenticatedOrfUser; objectiveIds?: string[] }) {
@@ -132,94 +114,79 @@ export async function listMyWorkLogDay(userId: string, scope: RuntimeScope, work
   return rows.map(toWorkLogEntry);
 }
 
-export async function saveMyWorkLogDay(
+async function getNextWorkLogSortOrder(scope: RuntimeScope, userId: string, workDate: string) {
+  const rows = await db
+    .select({ sortOrder: workLogEntries.sortOrder })
+    .from(workLogEntries)
+    .where(and(
+      eq(workLogEntries.teamId, runtimeScopeStorageId(scope)),
+      eq(workLogEntries.authorUserId, userId),
+      eq(workLogEntries.workDate, workDate),
+    ));
+  return Math.max(-1, ...rows.map((row) => row.sortOrder)) + 1;
+}
+
+async function resolveWorkLogObjectiveForInput(input: {
+  existingObjectiveIdSnapshot?: string | null;
+  objectiveId: string | null;
+  scope: RuntimeScope;
+  user: AuthenticatedOrfUser;
+}) {
+  if (!input.objectiveId) {
+    return { status: "ok" as const, objective: null, preserveExistingSnapshot: false };
+  }
+  if (input.existingObjectiveIdSnapshot === input.objectiveId) {
+    return { status: "ok" as const, objective: null, preserveExistingSnapshot: true };
+  }
+
+  const [objective] = await listAuthorWorkLogObjectiveRows({ objectiveIds: [input.objectiveId], scope: input.scope, user: input.user });
+  if (!objective) {
+    return { status: "invalid" as const, reason: "invalidObjective" as const };
+  }
+
+  return { status: "ok" as const, objective, preserveExistingSnapshot: false };
+}
+
+export async function createMyWorkLogEntry(
   user: AuthenticatedOrfUser,
   scope: RuntimeScope,
   workDate: string,
-  entries: WorkLogDayEntryInput[],
+  input: WorkLogDayEntryInput,
 ): Promise<WorkLogDaySaveOutcome> {
   if (user.role !== "admin" && user.role !== "member") {
     return { status: "forbidden" };
   }
 
-  const normalized = normalizeDayEntries(user, entries);
+  const normalized = normalizeWorkLogEntryInput(user, input);
   if (normalized.status !== "ok") {
     return normalized;
   }
 
-  const storageScopeId = runtimeScopeStorageId(scope);
-  const existingRows = await db
-    .select()
-    .from(workLogEntries)
-    .where(and(eq(workLogEntries.teamId, storageScopeId), eq(workLogEntries.authorUserId, user.id), eq(workLogEntries.workDate, workDate)));
-  const existingByObjectiveId = new Map(existingRows.map((entry) => [entry.objectiveIdSnapshot ?? null, entry]));
-  const newObjectiveIds = normalized.entries
-    .map((entry) => entry.objectiveId ?? null)
-    .filter((objectiveId): objectiveId is string => Boolean(objectiveId) && !existingByObjectiveId.has(objectiveId));
-  const objectiveRows = newObjectiveIds.length > 0
-    ? await listAuthorWorkLogObjectiveRows({ objectiveIds: newObjectiveIds, scope, user })
-    : [];
-  const objectiveById = new Map(objectiveRows.map((objective) => [objective.id, objective]));
-  if (objectiveRows.length !== newObjectiveIds.length) {
-    return { status: "invalid", reason: "invalidObjective" };
+  const objectiveResult = await resolveWorkLogObjectiveForInput({
+    objectiveId: normalized.entry.objectiveId ?? null,
+    scope,
+    user,
+  });
+  if (objectiveResult.status !== "ok") {
+    return objectiveResult;
   }
 
-  await db.transaction(async (tx) => {
-    const retainedObjectiveIds = new Set(normalized.entries.map((entry) => entry.objectiveId ?? null));
-    const staleIds = existingRows
-      .filter((entry) => !retainedObjectiveIds.has(entry.objectiveIdSnapshot ?? null))
-      .map((entry) => entry.id);
-    if (staleIds.length > 0) {
-      await tx.delete(workLogEntries).where(inArray(workLogEntries.id, staleIds));
-    }
-
-    const updatedAt = nowIso();
-    for (const [index, entry] of normalized.entries.entries()) {
-      const objectiveId = entry.objectiveId ?? null;
-      const existing = existingByObjectiveId.get(objectiveId);
-      if (existing) {
-        await tx
-          .update(workLogEntries)
-          .set({
-            bodyMarkdown: entry.bodyMarkdown,
-            sortOrder: index,
-            updatedAt,
-          })
-          .where(eq(workLogEntries.id, existing.id));
-      } else if (!objectiveId) {
-        await tx.insert(workLogEntries).values({
-          id: makeWorkLogId(),
-          teamId: storageScopeId,
-          authorUserId: user.id,
-          authorNameSnapshot: user.name,
-          workDate,
-          objectiveId: null,
-          objectiveIdSnapshot: null,
-          objectiveTitleSnapshot: null,
-          bodyMarkdown: entry.bodyMarkdown,
-          sortOrder: index,
-          createdAt: updatedAt,
-          updatedAt,
-        });
-      } else {
-        const objective = objectiveById.get(objectiveId);
-        if (!objective) continue;
-        await tx.insert(workLogEntries).values({
-          id: makeWorkLogId(),
-          teamId: storageScopeId,
-          authorUserId: user.id,
-          authorNameSnapshot: user.name,
-          workDate,
-          objectiveId: objective.id,
-          objectiveIdSnapshot: objective.id,
-          objectiveTitleSnapshot: objective.title,
-          bodyMarkdown: entry.bodyMarkdown,
-          sortOrder: index,
-          createdAt: updatedAt,
-          updatedAt,
-        });
-      }
-    }
+  const storageScopeId = runtimeScopeStorageId(scope);
+  const updatedAt = nowIso();
+  const objective = objectiveResult.objective;
+  await db.insert(workLogEntries).values({
+    id: makeWorkLogId(),
+    teamId: storageScopeId,
+    authorUserId: user.id,
+    authorNameSnapshot: user.name,
+    workDate,
+    objectiveId: objective?.id ?? null,
+    objectiveIdSnapshot: objective?.id ?? null,
+    objectiveTitleSnapshot: objective?.title ?? null,
+    bodyMarkdown: normalized.entry.bodyMarkdown,
+    sortOrder: await getNextWorkLogSortOrder(scope, user.id, workDate),
+    createdAt: updatedAt,
+    updatedAt,
   });
 
   publishRealtimeReadModelInvalidation(storageScopeId, {
@@ -230,6 +197,68 @@ export async function saveMyWorkLogDay(
   });
 
   return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, workDate) };
+}
+
+export async function updateMyWorkLogEntry(
+  user: AuthenticatedOrfUser,
+  scope: RuntimeScope,
+  entryId: string,
+  input: WorkLogDayEntryInput,
+): Promise<WorkLogDaySaveOutcome> {
+  if (user.role !== "admin" && user.role !== "member") {
+    return { status: "forbidden" };
+  }
+
+  const storageScopeId = runtimeScopeStorageId(scope);
+  const [existing] = await db
+    .select()
+    .from(workLogEntries)
+    .where(and(eq(workLogEntries.teamId, storageScopeId), eq(workLogEntries.authorUserId, user.id), eq(workLogEntries.id, entryId)))
+    .limit(1);
+  if (!existing) {
+    return { status: "notFound" };
+  }
+
+  const normalized = normalizeWorkLogEntryInput(user, input);
+  if (normalized.status !== "ok") {
+    return normalized;
+  }
+
+  const objectiveResult = await resolveWorkLogObjectiveForInput({
+    existingObjectiveIdSnapshot: existing.objectiveIdSnapshot ?? null,
+    objectiveId: normalized.entry.objectiveId ?? null,
+    scope,
+    user,
+  });
+  if (objectiveResult.status !== "ok") {
+    return objectiveResult;
+  }
+
+  const updatedAt = nowIso();
+  const targetPatch = objectiveResult.preserveExistingSnapshot
+    ? {}
+    : {
+        objectiveId: objectiveResult.objective?.id ?? null,
+        objectiveIdSnapshot: objectiveResult.objective?.id ?? null,
+        objectiveTitleSnapshot: objectiveResult.objective?.title ?? null,
+      };
+  await db
+    .update(workLogEntries)
+    .set({
+      ...targetPatch,
+      bodyMarkdown: normalized.entry.bodyMarkdown,
+      updatedAt,
+    })
+    .where(eq(workLogEntries.id, existing.id));
+
+  publishRealtimeReadModelInvalidation(storageScopeId, {
+    actorUserId: user.id,
+    models: ["workLogs"],
+    reason: "workLog.changed",
+    target: { id: `${user.id}:${existing.workDate}`, type: "workLog" },
+  });
+
+  return { status: "ok", entries: await listMyWorkLogDay(user.id, scope, existing.workDate) };
 }
 
 export async function listWorkLogActivity(scope: RuntimeScope, query: WorkLogActivityQuery = {}): Promise<WorkLogActivityItem[]> {

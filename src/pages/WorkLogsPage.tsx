@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Activity, CalendarDays, ChevronLeft, ChevronRight, Loader2, NotebookPen, Plus, RefreshCw, Save, Target, Trash2 } from "lucide-react";
+import { Activity, CalendarDays, ChevronLeft, ChevronRight, Loader2, NotebookPen, PencilLine, Plus, RefreshCw, Save, Target } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { FantasyDatePicker } from "../components/FantasyDatePicker";
@@ -11,18 +11,19 @@ import { OrfRichTextEditor, orfRichTextHasMeaningfulContent } from "../features/
 import { OrfRichTextMarkdownViewer } from "../features/rich-text/OrfRichTextMarkdownViewer";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import {
+  createMyWorkLogEntry,
   getMyWorkLogDay,
   getWorkLogActivity,
   getWorkLogObjectives,
-  saveMyWorkLogDay,
+  updateMyWorkLogEntry,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
 import type { WorkLogActivityItem, WorkLogEntry, WorkLogObjectiveOption } from "../types/orf";
 import { addCalendarDays, isDateOnlyString, localDateString } from "../utils/date";
 
-type WorkLogDraftEntry = {
+type WorkLogEditorDraft = {
   bodyMarkdown: string;
-  clientId: string;
+  editingEntryId: string | null;
   objectiveId: string;
   objectiveTitleSnapshot?: string | null;
 };
@@ -30,9 +31,9 @@ type WorkLogDraftEntry = {
 type WorkLogViewMode = "activity" | "write";
 
 const todayValue = () => localDateString(new Date());
-const blankDraftEntry = (): WorkLogDraftEntry => ({
+const blankEditorDraft = (): WorkLogEditorDraft => ({
   bodyMarkdown: "",
-  clientId: `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  editingEntryId: null,
   objectiveId: "",
 });
 
@@ -49,7 +50,7 @@ export function WorkLogsPage() {
   const [selectedDate, setSelectedDate] = useState(() => dateFromSearch(location.search));
   const [objectives, setObjectives] = useState<WorkLogObjectiveOption[]>([]);
   const [myEntries, setMyEntries] = useState<WorkLogEntry[]>([]);
-  const [draftEntries, setDraftEntries] = useState<WorkLogDraftEntry[]>([]);
+  const [editorDraft, setEditorDraft] = useState<WorkLogEditorDraft>(() => blankEditorDraft());
   const [activityEntries, setActivityEntries] = useState<WorkLogActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(true);
@@ -75,7 +76,7 @@ export function WorkLogsPage() {
       ]);
       setObjectives(objectiveResponse.objectives);
       setMyEntries(dayResponse.entries);
-      setDraftEntries(draftEntriesFromSaved(dayResponse.entries));
+      setEditorDraft(blankEditorDraft());
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "工作日志加载失败");
     } finally {
@@ -109,40 +110,45 @@ export function WorkLogsPage() {
     navigate({ pathname: "/work-logs", search: query.toString() ? `?${query.toString()}` : "" }, { replace: true });
   };
 
-  const addEntry = () => {
-    setDraftEntries((items) => [...items, blankDraftEntry()]);
+  const startNewEntry = () => {
+    setEditorDraft(blankEditorDraft());
     setViewMode("write");
   };
 
-  const updateDraftEntry = (clientId: string, patch: Partial<Pick<WorkLogDraftEntry, "bodyMarkdown" | "objectiveId">>) => {
-    setDraftEntries((items) => items.map((item) => (item.clientId === clientId ? { ...item, ...patch } : item)));
+  const editExistingEntry = (entry: WorkLogEntry) => {
+    setEditorDraft(editorDraftFromEntry(entry));
+    setViewMode("write");
   };
 
-  const removeDraftEntry = (clientId: string) => {
-    setDraftEntries((items) => items.filter((item) => item.clientId !== clientId));
+  const updateEditorDraft = (patch: Partial<Pick<WorkLogEditorDraft, "bodyMarkdown" | "objectiveId">>) => {
+    setEditorDraft((item) => ({ ...item, ...patch }));
   };
 
-  const draftValidation = validateDraftEntries(draftEntries, canWriteGeneralLog);
-  const saveEntries = canonicalDraftEntries(draftEntries);
-  const savedKey = useMemo(() => JSON.stringify(canonicalSavedEntries(myEntries)), [myEntries]);
-  const draftKey = useMemo(() => JSON.stringify(saveEntries), [saveEntries]);
-  const hasChanges = draftKey !== savedKey;
-  const saveDisabled = saving || loading || !canWrite || Boolean(draftValidation) || !hasChanges;
+  const editingEntry = editorDraft.editingEntryId ? myEntries.find((entry) => entry.id === editorDraft.editingEntryId) ?? null : null;
+  const draftInput = canonicalEditorDraft(editorDraft);
+  const draftHasInput = Boolean(draftInput.objectiveId || orfRichTextHasMeaningfulContent(draftInput.bodyMarkdown));
+  const draftValidation = draftHasInput ? validateEditorDraft(editorDraft, canWriteGeneralLog) : "";
+  const editorBaselineKey = JSON.stringify(editingEntry ? canonicalEntryForEdit(editingEntry) : { objectiveId: null, bodyMarkdown: "" });
+  const draftKey = JSON.stringify(draftInput);
+  const hasChanges = draftKey !== editorBaselineKey;
+  const saveDisabled = saving || loading || !canWrite || !draftHasInput || Boolean(draftValidation) || !hasChanges;
   const memberHasNoWritableTargets = currentUser?.role === "member" && objectives.length === 0 && myEntries.length === 0;
 
-  const saveDay = async () => {
+  const saveEntry = async () => {
     if (saveDisabled) return;
     setSaving(true);
     setError("");
     try {
-      const response = await saveMyWorkLogDay(selectedDate, { entries: saveEntries });
+      const response = editorDraft.editingEntryId
+        ? await updateMyWorkLogEntry(editorDraft.editingEntryId, draftInput)
+        : await createMyWorkLogEntry(selectedDate, draftInput);
       setMyEntries(response.entries);
-      setDraftEntries(draftEntriesFromSaved(response.entries));
+      setEditorDraft(blankEditorDraft());
       void loadActivity(selectedDate);
       systemBroadcasts
         .filter((broadcast) => broadcast.notificationKind === "worklog.reminder")
         .forEach((broadcast) => dismissSystemBroadcast(broadcast.id));
-      notify("工作日志已保存");
+      notify(editorDraft.editingEntryId ? "工作日志已更新" : "工作日志已提交");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "工作日志保存失败");
     } finally {
@@ -218,10 +224,12 @@ export function WorkLogsPage() {
               <h2>我的日志</h2>
               <p>{currentUser?.name ?? ""}</p>
             </div>
-            <Button variant="secondary" onClick={addEntry} disabled={!canWrite}>
-              <Plus className="h-4 w-4" />
-              新增
-            </Button>
+            {editorDraft.editingEntryId && (
+              <Button variant="secondary" onClick={startNewEntry} disabled={!canWrite || saving}>
+                <Plus className="h-4 w-4" />
+                新日志
+              </Button>
+            )}
           </div>
 
           {error && <div className="work-logs-error">{error}</div>}
@@ -245,35 +253,31 @@ export function WorkLogsPage() {
           ) : (
             <>
               <div className="work-logs-draft-list">
-                {draftEntries.map((entry, index) => (
-                  <WorkLogDraftCard
-                    currentUserId={currentUser?.id ?? ""}
-                    entry={entry}
-                    index={index}
-                    key={entry.clientId}
-                    objective={entry.objectiveId ? objectiveOptionsById.get(entry.objectiveId) : undefined}
-                    objectiveOptions={objectiveSelectOptionsForEntry(entry, draftEntries, objectives, canWriteGeneralLog)}
-                    onChange={updateDraftEntry}
-                    onRemove={removeDraftEntry}
-                  />
-                ))}
-                {draftEntries.length === 0 && (
-                  <button type="button" className="work-logs-add-empty" onClick={addEntry}>
-                    <Plus className="h-5 w-5" />
-                    添加工作日志
-                  </button>
-                )}
+                <WorkLogEditorCard
+                  currentUserId={currentUser?.id ?? ""}
+                  draft={editorDraft}
+                  editingEntry={editingEntry}
+                  objective={editorDraft.objectiveId ? objectiveOptionsById.get(editorDraft.objectiveId) : undefined}
+                  objectiveOptions={objectiveSelectOptionsForDraft(editorDraft, objectives, canWriteGeneralLog)}
+                  onChange={updateEditorDraft}
+                />
               </div>
 
               <div className="work-logs-editor-actions">
-                <Button variant="ghost" onClick={() => setDraftEntries(draftEntriesFromSaved(myEntries))} disabled={!hasChanges || saving}>
-                  撤销
+                <Button variant="ghost" onClick={() => setEditorDraft(editingEntry ? editorDraftFromEntry(editingEntry) : blankEditorDraft())} disabled={(!hasChanges && !editorDraft.editingEntryId) || saving}>
+                  {editorDraft.editingEntryId ? "取消编辑" : "清空"}
                 </Button>
-                <Button onClick={() => void saveDay()} disabled={saveDisabled}>
+                <Button onClick={() => void saveEntry()} disabled={saveDisabled}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  保存
+                  {editorDraft.editingEntryId ? "更新日志" : "提交日志"}
                 </Button>
               </div>
+
+              <WorkLogHistoryList
+                currentEditingEntryId={editorDraft.editingEntryId}
+                entries={myEntries}
+                onEdit={editExistingEntry}
+              />
             </>
           )}
         </Card>
@@ -298,56 +302,94 @@ function WorkLogDateControl({ date, onChange }: { date: string; onChange: (date:
   );
 }
 
-function WorkLogDraftCard({
+function WorkLogEditorCard({
   currentUserId,
-  entry,
-  index,
+  draft,
+  editingEntry,
   objective,
   objectiveOptions,
   onChange,
-  onRemove,
 }: {
   currentUserId: string;
-  entry: WorkLogDraftEntry;
-  index: number;
+  draft: WorkLogEditorDraft;
+  editingEntry: WorkLogEntry | null;
   objective?: WorkLogObjectiveOption;
   objectiveOptions: Array<FantasySelectOption<string>>;
-  onChange: (clientId: string, patch: Partial<Pick<WorkLogDraftEntry, "bodyMarkdown" | "objectiveId">>) => void;
-  onRemove: (clientId: string) => void;
+  onChange: (patch: Partial<Pick<WorkLogEditorDraft, "bodyMarkdown" | "objectiveId">>) => void;
 }) {
   return (
     <section className="work-logs-draft-entry">
       <div className="work-logs-draft-entry-header">
         <FantasySelectMenu
-          ariaLabel={`第 ${index + 1} 条日志目标`}
+          ariaLabel="日志目标"
           className="work-logs-objective-select"
           disabled={objectiveOptions.length <= 1}
           leadingIcon={<Target className="h-4 w-4" />}
-          onChange={(objectiveId) => onChange(entry.clientId, { objectiveId })}
+          onChange={(objectiveId) => onChange({ objectiveId })}
           options={objectiveOptions}
           placeholder="选择目标"
           searchable
           searchPlaceholder="搜索目标"
-          value={entry.objectiveId}
+          value={draft.objectiveId}
           variant="filter"
         />
-        <button type="button" className="work-logs-remove-entry" aria-label="删除日志" title="删除日志" onClick={() => onRemove(entry.clientId)}>
-          <Trash2 className="h-4 w-4" />
-        </button>
+        {editingEntry && <span className="work-logs-editing-badge">编辑中</span>}
       </div>
-      {entry.objectiveTitleSnapshot && !objective && (
-        <div className="work-logs-snapshot-note">历史目标：{entry.objectiveTitleSnapshot}</div>
+      {draft.objectiveTitleSnapshot && !objective && (
+        <div className="work-logs-snapshot-note">历史目标：{draft.objectiveTitleSnapshot}</div>
       )}
       <OrfRichTextEditor
         className="work-logs-editor"
         currentUserId={currentUserId}
         idleHint="Markdown"
         mentionableUsers={[]}
-        onChange={(bodyMarkdown) => onChange(entry.clientId, { bodyMarkdown })}
+        onChange={(bodyMarkdown) => onChange({ bodyMarkdown })}
         placeholder="写下今天完成了什么"
         submitOnEnter={false}
-        value={entry.bodyMarkdown}
+        value={draft.bodyMarkdown}
       />
+    </section>
+  );
+}
+
+function WorkLogHistoryList({
+  currentEditingEntryId,
+  entries,
+  onEdit,
+}: {
+  currentEditingEntryId: string | null;
+  entries: WorkLogEntry[];
+  onEdit: (entry: WorkLogEntry) => void;
+}) {
+  return (
+    <section className="work-logs-history">
+      <div className="work-logs-history-heading">
+        <h3>当天记录</h3>
+        <span>{entries.length} 条</span>
+      </div>
+      {entries.length > 0 ? (
+        <div className="work-logs-history-list">
+          {entries.map((entry) => (
+            <article className={clsx("work-logs-history-entry", entry.id === currentEditingEntryId && "work-logs-history-entry-active")} key={entry.id}>
+              <div className="work-logs-history-entry-header">
+                <div className="work-logs-history-entry-meta">
+                  <span>{workLogEntryTargetLabel(entry)}</span>
+                  <time>{formatActivityTime(entry.updatedAt)}</time>
+                </div>
+                <button type="button" className="work-logs-history-edit" onClick={() => onEdit(entry)}>
+                  <PencilLine className="h-4 w-4" />
+                  编辑
+                </button>
+              </div>
+              <div className="work-logs-activity-markdown">
+                <OrfRichTextMarkdownViewer body={entry.bodyMarkdown} compact />
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="work-logs-history-empty">当天还没有提交记录</div>
+      )}
     </section>
   );
 }
@@ -386,55 +428,41 @@ function dateFromSearch(search: string) {
   return isDateOnlyString(value) ? value : todayValue();
 }
 
-function draftEntriesFromSaved(entries: WorkLogEntry[]): WorkLogDraftEntry[] {
-  return entries.map((entry) => ({
+function editorDraftFromEntry(entry: WorkLogEntry): WorkLogEditorDraft {
+  return {
     bodyMarkdown: entry.bodyMarkdown,
-    clientId: entry.id,
+    editingEntryId: entry.id,
     objectiveId: entry.objectiveIdSnapshot ?? "",
     objectiveTitleSnapshot: entry.objectiveTitleSnapshot,
-  }));
+  };
 }
 
-function canonicalDraftEntries(entries: WorkLogDraftEntry[]) {
-  return entries
-    .map((entry) => ({
-      objectiveId: entry.objectiveId.trim() || null,
-      bodyMarkdown: entry.bodyMarkdown.trim(),
-    }))
-    .filter((entry) => entry.objectiveId || orfRichTextHasMeaningfulContent(entry.bodyMarkdown));
+function canonicalEditorDraft(draft: WorkLogEditorDraft) {
+  return {
+    objectiveId: draft.objectiveId.trim() || null,
+    bodyMarkdown: draft.bodyMarkdown.trim(),
+  };
 }
 
-function canonicalSavedEntries(entries: WorkLogEntry[]) {
-  return entries.map((entry) => ({
+function canonicalEntryForEdit(entry: WorkLogEntry) {
+  return {
     objectiveId: entry.objectiveIdSnapshot ?? null,
     bodyMarkdown: entry.bodyMarkdown.trim(),
-  }));
+  };
 }
 
-function validateDraftEntries(entries: WorkLogDraftEntry[], allowGeneralLog: boolean) {
-  const objectiveIds = new Set<string>();
-  let hasGeneralEntry = false;
-  for (const entry of canonicalDraftEntries(entries)) {
-    if (!orfRichTextHasMeaningfulContent(entry.bodyMarkdown)) return "工作日志内容不能为空";
-    if (!entry.objectiveId) {
-      if (!allowGeneralLog) return "请选择目标";
-      if (hasGeneralEntry) return "同一天只能保留一条不指定目标的工作日志";
-      hasGeneralEntry = true;
-      continue;
-    }
-    if (objectiveIds.has(entry.objectiveId)) return "同一天同一个目标只能保留一条工作日志";
-    objectiveIds.add(entry.objectiveId);
-  }
+function validateEditorDraft(draft: WorkLogEditorDraft, allowGeneralLog: boolean) {
+  const entry = canonicalEditorDraft(draft);
+  if (!entry.objectiveId && !allowGeneralLog) return "请选择目标";
+  if (!orfRichTextHasMeaningfulContent(entry.bodyMarkdown)) return "工作日志内容不能为空";
   return "";
 }
 
-function objectiveSelectOptionsForEntry(
-  entry: WorkLogDraftEntry,
-  entries: WorkLogDraftEntry[],
+function objectiveSelectOptionsForDraft(
+  draft: WorkLogEditorDraft,
   objectives: WorkLogObjectiveOption[],
   allowGeneralLog: boolean,
 ): Array<FantasySelectOption<string>> {
-  const usedObjectiveIds = new Set(entries.filter((item) => item.clientId !== entry.clientId).map((item) => item.objectiveId).filter(Boolean));
   const options: Array<FantasySelectOption<string>> = [
     allowGeneralLog
       ? { value: "", label: "不指定目标", description: "日常工作", alwaysVisible: true }
@@ -443,17 +471,20 @@ function objectiveSelectOptionsForEntry(
       value: objective.id,
       label: objective.title,
       description: `${flowStatusLabel(objective.flowStatus)} · 截止 ${objective.finalDueAt}`,
-      disabled: usedObjectiveIds.has(objective.id),
     })),
   ];
-  if (entry.objectiveId && !objectives.some((objective) => objective.id === entry.objectiveId)) {
+  if (draft.objectiveId && !objectives.some((objective) => objective.id === draft.objectiveId)) {
     options.push({
-      value: entry.objectiveId,
-      label: entry.objectiveTitleSnapshot ?? entry.objectiveId,
+      value: draft.objectiveId,
+      label: draft.objectiveTitleSnapshot ?? draft.objectiveId,
       description: "历史目标快照",
     });
   }
   return options;
+}
+
+function workLogEntryTargetLabel(entry: WorkLogEntry) {
+  return entry.objectiveTitleSnapshot ?? (entry.objectiveIdSnapshot ? entry.objectiveIdSnapshot : "日常工作");
 }
 
 function groupActivityByDate(entries: WorkLogActivityItem[]) {

@@ -102,11 +102,9 @@ export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
 export type WorkLogObjectivesResponse = { objectives: WorkLogObjectiveOption[] };
 export type WorkLogDayResponse = { entries: WorkLogEntry[] };
 export type WorkLogActivityResponse = { entries: WorkLogActivityItem[] };
-export type WorkLogDaySaveInput = {
-  entries: Array<{
-    bodyMarkdown: string;
-    objectiveId?: string | null;
-  }>;
+export type WorkLogEntrySaveInput = {
+  bodyMarkdown: string;
+  objectiveId?: string | null;
 };
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
@@ -580,9 +578,16 @@ export async function getMyWorkLogDay(date: string) {
   return apiJson<WorkLogDayResponse>(`/api/work-logs/my-day?${query.toString()}`);
 }
 
-export async function saveMyWorkLogDay(date: string, input: WorkLogDaySaveInput) {
+export async function createMyWorkLogEntry(date: string, input: WorkLogEntrySaveInput) {
   return apiJson<WorkLogDayResponse>(`/api/work-logs/my-day/${encodeURIComponent(date)}`, {
-    method: "PUT",
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateMyWorkLogEntry(entryId: string, input: WorkLogEntrySaveInput) {
+  return apiJson<WorkLogDayResponse>(`/api/work-logs/entries/${encodeURIComponent(entryId)}`, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }
