@@ -15,6 +15,7 @@ import {
   type ReviewObjectiveAlignmentInput,
   type ReviewObjectiveLootInput,
   type ReviewObjectiveTrialReviewInput,
+  type SubmitContributionReviewInput,
   type SubmitLootInput,
   useOrfProviderObjectiveActions,
 } from "./orfProviderObjectiveActions";
@@ -135,7 +136,7 @@ interface OrfContextValue {
   acceptBountyChallenge: (objectiveId: string) => Promise<boolean>;
   freezeObjective: (objectiveId: string) => Promise<boolean>;
   reviewObjectiveLoot: (objectiveId: string, input: ReviewObjectiveLootInput) => Promise<boolean>;
-  submitContributionReview: (objectiveId: string, allocations: ContributionAllocation[]) => Promise<boolean>;
+  submitContributionReview: (objectiveId: string, input: SubmitContributionReviewInput) => Promise<boolean>;
   createFeedback: (input: CreateFeedbackInput) => Promise<Feedback | null>;
   createTask: (input: Pick<Task, "title" | "description" | "assignee" | "priority" | "linkedObjectiveId"> & Partial<Pick<Task, "dueDate" | "tags" | "checklist">>) => Promise<Task | null>;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;

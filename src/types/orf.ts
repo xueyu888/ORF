@@ -234,6 +234,8 @@ export interface ObjectiveContributionReview {
   reviewer: string;
   reviewerUserId?: string | null;
   allocations: ContributionAllocation[];
+  abstentionReason?: string | null;
+  kind?: "score" | "abstain";
   submittedAt: string;
 }
 

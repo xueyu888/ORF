@@ -7058,6 +7058,235 @@ button:disabled {
   font-weight: 760;
 }
 
+.orf-loot-page-grid {
+  display: grid;
+  max-width: 960px;
+  gap: 14px;
+}
+
+.orf-loot-review-card {
+  border-color: rgba(130, 148, 170, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.orf-loot-review-form,
+.orf-loot-section {
+  display: grid;
+  gap: 14px;
+}
+
+.orf-loot-review-result,
+.orf-loot-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(130, 148, 170, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.orf-loot-result-summary {
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  align-items: center;
+}
+
+.orf-loot-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orf-loot-panel-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.orf-loot-panel-heading-actions .orf-control {
+  min-height: 30px;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.orf-loot-settlement-panel {
+  background: rgba(247, 251, 252, 0.68);
+}
+
+.orf-loot-peer-review {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.orf-loot-select {
+  width: 100%;
+}
+
+.orf-loot-select .orf-fantasy-select-trigger {
+  width: 100%;
+  height: 38px;
+  min-width: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: inset 0 0 0 1px rgba(130, 148, 170, 0.2);
+}
+
+.orf-loot-select .orf-fantasy-select-trigger:hover,
+.orf-loot-select.orf-fantasy-select-menu-open .orf-fantasy-select-trigger {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(45, 143, 179, 0.34), 0 8px 18px rgba(22, 125, 159, 0.08);
+}
+
+.orf-loot-table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(130, 148, 170, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.54);
+}
+
+.orf-loot-table {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.orf-loot-table th,
+.orf-loot-table td {
+  padding: 9px 12px;
+  border-top: 1px solid rgba(130, 148, 170, 0.16);
+  vertical-align: top;
+}
+
+.orf-loot-table thead th {
+  border-top: 0;
+  background: rgba(244, 249, 252, 0.76);
+  color: var(--orf-text-muted);
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.orf-loot-table tbody tr:hover td {
+  background: rgba(244, 249, 252, 0.48);
+}
+
+.orf-loot-result-review-table th:nth-child(2),
+.orf-loot-result-review-table td:nth-child(2),
+.orf-loot-settlement-table th:nth-child(2),
+.orf-loot-settlement-table th:nth-child(3),
+.orf-loot-settlement-table td:nth-child(2),
+.orf-loot-settlement-table td:nth-child(3) {
+  width: 132px;
+}
+
+.orf-loot-result-review-table th:last-child,
+.orf-loot-result-review-table td:last-child,
+.orf-loot-settlement-table th:last-child,
+.orf-loot-settlement-table td:last-child {
+  width: 72px;
+  text-align: right;
+}
+
+.orf-loot-result-title {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  font-weight: 820;
+  line-height: 1.35;
+}
+
+.orf-loot-result-detail {
+  display: -webkit-box;
+  max-width: 520px;
+  margin-top: 4px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.orf-loot-result-badge,
+.orf-loot-total-pill {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(130, 148, 170, 0.2);
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 820;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.orf-loot-result-badge-success {
+  border-color: rgba(47, 148, 105, 0.24);
+  background: rgba(228, 248, 238, 0.74);
+  color: #1d6f4d;
+}
+
+.orf-loot-result-badge-info {
+  border-color: rgba(45, 143, 179, 0.24);
+  background: rgba(226, 247, 252, 0.74);
+  color: var(--orf-accent-text);
+}
+
+.orf-loot-result-badge-warning {
+  border-color: rgba(190, 126, 37, 0.28);
+  background: rgba(255, 243, 217, 0.82);
+  color: #9a5d12;
+}
+
+.orf-loot-total-pill {
+  border-color: rgba(47, 148, 105, 0.22);
+  background: rgba(228, 248, 238, 0.7);
+  color: #1d6f4d;
+}
+
+.orf-loot-total-pill-warning {
+  border-color: rgba(190, 126, 37, 0.28);
+  background: rgba(255, 243, 217, 0.82);
+  color: #9a5d12;
+}
+
+.orf-loot-inline-action {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(130, 148, 170, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.68);
+  color: var(--orf-text-secondary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 780;
+  padding: 0 9px;
+}
+
+.orf-loot-inline-action:hover,
+.orf-loot-inline-action:focus-visible {
+  border-color: rgba(45, 143, 179, 0.3);
+  background: rgba(244, 249, 252, 0.9);
+  color: var(--orf-text-primary);
+  outline: none;
+}
+
+.orf-loot-percent-input {
+  width: 96px;
+  min-height: 32px;
+  padding: 0 9px;
+  font-size: 13px;
+}
+
 @media (max-width: 900px) {
   .orf-page-header,
   .reports-leaderboard-heading {
@@ -7129,6 +7358,18 @@ button:disabled {
 
   .work-logs-panel {
     padding: 14px;
+  }
+
+  .orf-loot-result-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .orf-loot-panel-heading {
+    display: grid;
+  }
+
+  .orf-loot-panel-heading-actions {
+    justify-content: flex-start;
   }
 }
 

@@ -47,6 +47,9 @@ export type ReviewObjectiveTrialReviewInput = {
   status: Exclude<ObjectiveTrialReviewStatus, "requested">;
   commanderFeedback: string;
 };
+export type SubmitContributionReviewInput =
+  | { allocations: ContributionAllocation[]; kind: "score" }
+  | { abstentionReason: string; kind: "abstain" };
 export type RequestObjectiveAlignmentInput = {
   kind: ObjectiveAlignmentRequestKind;
   scheduledAt?: string | null;
@@ -294,12 +297,6 @@ export function useOrfProviderObjectiveActions({
           const localSummary = objective && participantCount > 1 && !reviewInput.contributionResolution
             ? await fetchLocalSettlementSummary({ objectiveId, participantUserIds: settlementParticipantUserIds })
             : null;
-          if (localSummary?.status === "missing") {
-            throw new Error(`匿名互评缺评：${localSummary.missingReviewers.join("、") || "仍有正式参与人未提交互评"}`);
-          }
-          if (localSummary?.status === "conflict") {
-            throw new Error("匿名互评分歧超过 10%，请由指挥官手动处理贡献比例");
-          }
           const settlementInput =
             objective && localSummary?.status === "ready" && localSummary.contributionResolution
               ? {
@@ -323,20 +320,30 @@ export function useOrfProviderObjectiveActions({
           return false;
         }
       },
-      submitContributionReview: async (objectiveId: string, allocations: ContributionAllocation[]) => {
+      submitContributionReview: async (objectiveId: string, input: SubmitContributionReviewInput) => {
         try {
           const objective = state.objectives.find((item) => item.id === objectiveId);
           if (!objective || !currentUser) {
             notify("匿名互评提交失败：目标或当前用户不可用");
             return false;
           }
-          await submitLocalEncryptedContributionReview({
-            allocations,
-            challengers: objective.challengers,
-            objectiveId,
-            objectiveTitle: objective.title,
-            reviewer: currentUser.name,
-          });
+          await submitLocalEncryptedContributionReview(input.kind === "abstain"
+            ? {
+                abstentionReason: input.abstentionReason,
+                challengers: objective.challengers,
+                kind: "abstain",
+                objectiveId,
+                objectiveTitle: objective.title,
+                reviewer: currentUser.name,
+              }
+            : {
+                allocations: input.allocations,
+                challengers: objective.challengers,
+                kind: "score",
+                objectiveId,
+                objectiveTitle: objective.title,
+                reviewer: currentUser.name,
+              });
           notify("匿名互评已通过 ORF 提交到共享结算服务");
           return true;
         } catch (error) {
