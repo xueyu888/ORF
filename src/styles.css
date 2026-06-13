@@ -7060,7 +7060,8 @@ button:disabled {
 
 .orf-loot-page-grid {
   display: grid;
-  max-width: 960px;
+  width: 100%;
+  min-width: 0;
   gap: 14px;
 }
 
