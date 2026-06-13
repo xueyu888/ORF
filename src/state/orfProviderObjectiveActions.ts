@@ -39,7 +39,12 @@ export type ReviewObjectiveLootInput = {
   acceptedResult?: ObjectiveAcceptedResult;
   lootId?: string;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
+  reason?: string;
+};
+export type SettleObjectiveLootInput = {
+  lootId?: string;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
+  contributionRatios?: ContributionAllocation[];
   reason?: string;
   settlementParticipantUserIds?: string[];
 };
@@ -291,31 +296,46 @@ export function useOrfProviderObjectiveActions({
       },
       reviewObjectiveLoot: async (objectiveId: string, input: ReviewObjectiveLootInput) => {
         try {
-          const { settlementParticipantUserIds, ...reviewInput } = input;
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
+            method: "POST",
+            body: JSON.stringify(input),
+          });
+          await refreshTaskManagementData();
+          notify("战利品验收处理已完成");
+          return true;
+        } catch (error) {
+          notify(businessMutationFailureMessage(error, "战利品验收失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      settleObjectiveLoot: async (objectiveId: string, input: SettleObjectiveLootInput) => {
+        try {
+          const { settlementParticipantUserIds, ...settleInput } = input;
           const objective = state.objectives.find((item) => item.id === objectiveId);
           const participantCount = settlementParticipantUserIds?.length ?? (objective ? objectiveChallengerCount(objective) : 0);
-          const localSummary = objective && participantCount > 1 && !reviewInput.contributionResolution
+          const localSummary = objective && participantCount > 1 && !settleInput.contributionResolution
             ? await fetchLocalSettlementSummary({ objectiveId, participantUserIds: settlementParticipantUserIds })
             : null;
           const settlementInput =
             objective && localSummary?.status === "ready" && localSummary.contributionResolution
               ? {
-                  ...reviewInput,
+                  ...settleInput,
                   contributionResolution: {
                     ...localSummary.contributionResolution,
                     ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios, objective),
                   },
                 }
-              : reviewInput;
-          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
+              : settleInput;
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/settle`, {
             method: "POST",
             body: JSON.stringify(settlementInput),
           });
           await refreshTaskManagementData();
-          notify("战利品已验收结算");
+          notify("目标已结算");
           return true;
         } catch (error) {
-          notify(localSettlementMutationFailureMessage(error, "战利品验收失败"));
+          notify(localSettlementMutationFailureMessage(error, "目标结算失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }

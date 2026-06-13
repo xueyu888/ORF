@@ -514,6 +514,7 @@ function formatActivityTime(value: string) {
 
 function flowStatusLabel(status: WorkLogObjectiveOption["flowStatus"]) {
   const labels: Record<WorkLogObjectiveOption["flowStatus"], string> = {
+    accepted: "已验收",
     applying: "申请中",
     candidate: "候选",
     closed: "关闭",

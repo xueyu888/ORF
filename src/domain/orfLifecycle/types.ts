@@ -8,6 +8,7 @@ export type ObjectiveLifecyclePhase =
   | "forming"
   | "active"
   | "review"
+  | "accepted"
   | "settled"
   | "closed";
 
@@ -40,5 +41,7 @@ export type ObjectiveFlowPolicy = {
   readonly resultLocked: boolean;
   readonly rendersAsFrozen: boolean;
   readonly submitted: boolean;
+  readonly accepted: boolean;
   readonly settledOrClosed: boolean;
+  readonly canSettleLoot: boolean;
 };

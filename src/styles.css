@@ -7121,8 +7121,39 @@ button:disabled {
   background: rgba(255, 255, 255, 0.62);
 }
 
+.orf-loot-submission-review {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.orf-loot-section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.orf-loot-review-decision {
+  display: inline-flex;
+  min-width: 216px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--orf-text-secondary);
+  font-size: 12px;
+  font-weight: 780;
+}
+
 .orf-loot-select {
   width: 100%;
+}
+
+.orf-loot-compact-select {
+  width: 112px;
+}
+
+.orf-loot-table-select {
+  width: 148px;
 }
 
 .orf-loot-select .orf-fantasy-select-trigger {
@@ -7175,21 +7206,51 @@ button:disabled {
   background: rgba(244, 249, 252, 0.48);
 }
 
+.orf-loot-submission-table th:nth-child(2),
+.orf-loot-submission-table td:nth-child(2) {
+  width: 96px;
+}
+
 .orf-loot-result-review-table th:nth-child(2),
-.orf-loot-result-review-table td:nth-child(2),
+.orf-loot-result-review-table td:nth-child(2) {
+  width: 172px;
+}
+
 .orf-loot-settlement-table th:nth-child(2),
-.orf-loot-settlement-table th:nth-child(3),
-.orf-loot-settlement-table td:nth-child(2),
-.orf-loot-settlement-table td:nth-child(3) {
+.orf-loot-settlement-table td:nth-child(2) {
   width: 132px;
 }
 
-.orf-loot-result-review-table th:last-child,
-.orf-loot-result-review-table td:last-child,
-.orf-loot-settlement-table th:last-child,
-.orf-loot-settlement-table td:last-child {
-  width: 72px;
-  text-align: right;
+.orf-loot-settlement-table th:nth-child(3),
+.orf-loot-settlement-table td:nth-child(3) {
+  width: 156px;
+}
+
+.orf-loot-submission-block {
+  display: grid;
+  gap: 6px;
+}
+
+.orf-loot-submission-label {
+  color: var(--orf-text-muted);
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.orf-loot-submission-text {
+  color: var(--orf-text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.orf-loot-link {
+  color: var(--orf-accent-text);
+  font-weight: 760;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .orf-loot-result-title {
@@ -7255,29 +7316,6 @@ button:disabled {
   border-color: rgba(190, 126, 37, 0.28);
   background: rgba(255, 243, 217, 0.82);
   color: #9a5d12;
-}
-
-.orf-loot-inline-action {
-  display: inline-flex;
-  min-height: 28px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(130, 148, 170, 0.2);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.68);
-  color: var(--orf-text-secondary);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 780;
-  padding: 0 9px;
-}
-
-.orf-loot-inline-action:hover,
-.orf-loot-inline-action:focus-visible {
-  border-color: rgba(45, 143, 179, 0.3);
-  background: rgba(244, 249, 252, 0.9);
-  color: var(--orf-text-primary);
-  outline: none;
 }
 
 .orf-loot-percent-input {

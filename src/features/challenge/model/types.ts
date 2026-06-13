@@ -1,7 +1,7 @@
 import type { CommentTargetType, Objective, Result, Task, TaskChecklistItem } from "../../../types/orf";
 
 export type ChallengeScope = "all" | "mine";
-export type BountyStatus = "open" | "active" | "review" | "settled";
+export type BountyStatus = "open" | "active" | "review" | "accepted" | "settled";
 export type ActionVisualStatus = "todo" | "active" | "done";
 export type DropPlacement = "before" | "after";
 export type ChallengeRowAction = "copyLink" | "edit" | "comment" | "delete";

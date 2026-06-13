@@ -55,7 +55,8 @@ const uncertaintyScore = uncertaintyScoreFor;
 
 function inferFlowStatus(objective: LegacyObjective, challengerUserIds: string[], assignedChallengerUserIds: string[], challengeApplications: ChallengeApplication[]): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
-  if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
+  if (objective.objectiveSettlementPoints != null) return "settled";
+  if (objective.acceptedResult) return "accepted";
   if (objective.lootSubmittedAt) return "submitted";
   if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
   if (challengerUserIds.length > 0) return "reestimating";
@@ -384,7 +385,7 @@ const legacyInitialOrfState: LegacyInitialState = {
     {
       id: "obj-demo-settled-routing-quality",
       title: "结算低风险模型路由验证",
-      description: "低风险问题路由策略已完成验收结算，用于展示积分和排行榜效果。",
+      description: "低风险问题路由策略已完成结算，用于展示积分和排行榜效果。",
       whyItMatters: "结算后的目标需要沉淀指标验收结果、贡献比例和积分流水。",
       projectId: "project-acceptance-demo",
       cycle: "2026 Q2",

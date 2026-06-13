@@ -874,7 +874,7 @@ function MetricRow({
             data-hierarchy-branch-target={anchorId}
             data-hierarchy-parent={parentAnchorId}
           >
-            <MetricSquareIcon tone={bounty ? (bounty.status === "settled" ? "done" : bounty.status === "review" ? "review" : bounty.status === "active" ? "active" : "todo") : "todo"} />
+            <MetricSquareIcon tone={bounty ? (bounty.status === "settled" ? "done" : bounty.status === "review" || bounty.status === "accepted" ? "review" : bounty.status === "active" ? "active" : "todo") : "todo"} />
           </span>
           {isEditingTarget ? (
             <InlineTitleEditor
@@ -1328,11 +1328,11 @@ function CommentCountBadge({ count, onClick }: { count: number; onClick: () => v
   );
 }
 
-function StatusChip({ tone, children }: { tone: "active" | "done" | "open" | "review" | "settled" | "success" | "warning"; children: ReactNode }) {
+function StatusChip({ tone, children }: { tone: "accepted" | "active" | "done" | "open" | "review" | "settled" | "success" | "warning"; children: ReactNode }) {
   const className =
     tone === "settled" || tone === "done" || tone === "success"
       ? "orf-status-chip-done"
-      : tone === "review"
+      : tone === "review" || tone === "accepted"
         ? "orf-status-chip-review"
         : tone === "active"
           ? "orf-status-chip-accent"

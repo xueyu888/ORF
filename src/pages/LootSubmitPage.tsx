@@ -1,5 +1,5 @@
 import { ArrowLeft, ClipboardCheck, Send } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { FantasySelectMenu, type FantasySelectOption } from "../components/FantasySelectMenu";
 import { PageScaffold } from "../components/PageScaffold";
@@ -9,6 +9,7 @@ import { canViewObjectiveRecord } from "../features/challenge/model/objectiveVis
 import { useOrf } from "../state/OrfProvider";
 import {
   canReviewObjectiveLootByFlow,
+  canSettleObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
 } from "../domain/orfLifecycle";
@@ -29,7 +30,7 @@ import type {
   ContributionAllocation,
   LootResultClaim,
   LootResultClaimStatus,
-  ObjectiveAcceptedResult,
+  ObjectiveLoot,
   ObjectiveTrialReviewStatus,
   Result,
   ResultAcceptedResult,
@@ -81,6 +82,7 @@ export function LootSubmitPage() {
     dataReady,
     reviewObjectiveLoot,
     reviewObjectiveTrialReview,
+    settleObjectiveLoot,
     state,
     submitContributionReview,
     submitLoot,
@@ -138,8 +140,6 @@ export function LootSubmitPage() {
   const [settlementSummaryLoading, setSettlementSummaryLoading] = useState(false);
   const [reason, setReason] = useState("");
   const [reviewDecision, setReviewDecision] = useState<"passed" | "notPassed">("passed");
-  const [editingResultReviewId, setEditingResultReviewId] = useState<string | null>(null);
-  const [editingSettlementMember, setEditingSettlementMember] = useState<string | null>(null);
   const [trialDecision, setTrialDecision] =
     useState<Exclude<ObjectiveTrialReviewStatus, "requested">>("approved");
   const [trialFeedback, setTrialFeedback] = useState("");
@@ -150,6 +150,7 @@ export function LootSubmitPage() {
     | "trialResponse"
     | "peerReview"
     | "review"
+    | "settle"
     | null
   >(null);
 
@@ -196,7 +197,7 @@ export function LootSubmitPage() {
   const canLoadSettlementSummary = Boolean(
     currentUser?.role === "admin" &&
     objective &&
-    canReviewObjectiveLootByFlow(objective) &&
+    canSettleObjectiveLootByFlow(objective) &&
     latestLoot &&
     usesLocalContributionSettlement,
   );
@@ -305,6 +306,11 @@ export function LootSubmitPage() {
     canReviewObjectiveLootByFlow(objective) &&
     latestLoot,
   );
+  const canSettle = Boolean(
+    currentUser?.role === "admin" &&
+    canSettleObjectiveLootByFlow(objective) &&
+    latestLoot,
+  );
   const canRequestTrial = canRequestObjectiveTrialReview(
     objective,
     currentUser,
@@ -321,7 +327,6 @@ export function LootSubmitPage() {
   const resetResolutionInputsToDefaults = () => {
     setResolutionInputs(settlementDefaultInputs);
     setResolutionEdited(false);
-    setEditingSettlementMember(null);
     if (error) setError("");
   };
   const buildLootSubmission = (): {
@@ -437,12 +442,36 @@ export function LootSubmitPage() {
       return;
     }
 
-    if (settlementContributionTargets.length === 0) {
-      setError("请选择至少一位正式参与人");
-      return;
-    }
     if (reviewDecision === "passed" && objectiveReviewResult === "abandoned") {
       setError("通过验收时，指标验收结果不能包含失败或不验收");
+      return;
+    }
+
+    setSubmittingAction("review");
+    try {
+      const ok = await reviewObjectiveLoot(objective.id, {
+        acceptedResult: objectiveReviewResult,
+        lootId: latestLoot.id,
+        reason: reason.trim() || undefined,
+        resultReviews: results.map((result, index) => ({
+          resultId: result.id,
+          acceptedResult: reviewedResultValues[index] ?? "failed",
+        })),
+      });
+      if (ok) navigate("/tasks");
+    } finally {
+      setSubmittingAction(null);
+    }
+  };
+
+  const settle = async () => {
+    if (submittingAction) return;
+    if (!canSettle || !latestLoot) {
+      setError("只有指挥官能结算已验收的战利品");
+      return;
+    }
+    if (settlementContributionTargets.length === 0) {
+      setError("缺少可结算的参与人");
       return;
     }
 
@@ -459,24 +488,18 @@ export function LootSubmitPage() {
       setError(resolutionResult.error);
       return;
     }
-    const contributionResolution = contributionResolutionForReview({
+    const contributionResolution = contributionResolutionForSettlement({
       reason: finalResolutionReason,
-      objectiveAcceptedResult: objectiveReviewResult,
       resolutionResult,
       settlementTargets: settlementContributionTargets,
     });
 
-    setSubmittingAction("review");
+    setSubmittingAction("settle");
     try {
-      const ok = await reviewObjectiveLoot(objective.id, {
-        acceptedResult: objectiveReviewResult,
-        lootId: latestLoot.id,
-        reason: reason.trim() || undefined,
-        resultReviews: results.map((result, index) => ({
-          resultId: result.id,
-          acceptedResult: reviewedResultValues[index] ?? "failed",
-        })),
+      const ok = await settleObjectiveLoot(objective.id, {
         contributionResolution,
+        lootId: latestLoot.id,
+        reason: finalResolutionReason,
         settlementParticipantUserIds,
       });
       if (ok) navigate("/reports");
@@ -488,7 +511,7 @@ export function LootSubmitPage() {
   const submitPeerReview = async () => {
     if (submittingAction) return;
     if (!canPeerReview) {
-      setError("目标提交后，挑战者才能提交匿名互评");
+      setError("目标已验收后，挑战者才能提交匿名互评");
       return;
     }
     if (peerReviewMode === "abstain") {
@@ -537,11 +560,13 @@ export function LootSubmitPage() {
       title={
         canReview
           ? "验收战利品"
-          : canReviewTrial
-            ? "处理试验收"
-            : canPeerReview
-              ? "提交匿名互评"
-              : "提交战利品"
+          : canSettle
+            ? "确认结算"
+            : canReviewTrial
+              ? "处理试验收"
+              : canPeerReview
+                ? "提交匿名互评"
+                : "提交战利品"
       }
       subtitle={`目标：${objective.title}`}
       action={
@@ -566,7 +591,7 @@ export function LootSubmitPage() {
           </div>
         </Card>
 
-        {latestLoot && !canReview && (
+        {latestLoot && !canReview && !canSettle && !canPeerReview && (
           <Card className="orf-card-padding">
             <div className="grid gap-3 text-sm">
               <div className="font-semibold orf-text-primary">最近提交</div>
@@ -617,23 +642,38 @@ export function LootSubmitPage() {
                 void review();
               }}
             >
+              {latestLoot && (
+                <LootSubmissionReviewPanel
+                  loot={latestLoot}
+                  results={results}
+                />
+              )}
               <div className="orf-loot-section">
-                <Field label="验收结论">
-                  <FantasySelectMenu
-                    ariaLabel="验收结论"
-                    className="orf-loot-select"
-                    onChange={(value) => {
-                      setReviewDecision(value);
-                      if (value === "notPassed") setEditingResultReviewId(null);
-                      if (error) setError("");
-                    }}
-                    options={reviewDecisionOptions}
-                    value={reviewDecision}
-                    variant="filter"
-                  />
-                </Field>
+                <div className="orf-loot-section-heading">
+                  <div>
+                    <div className="text-sm font-semibold orf-text-primary">
+                      指标验收
+                    </div>
+                    <div className="text-xs orf-text-secondary">
+                      按挑战者提交的证据确认每个指标结论。
+                    </div>
+                  </div>
+                  <div className="orf-loot-review-decision">
+                    <span>验收结论</span>
+                    <FantasySelectMenu
+                      ariaLabel="验收结论"
+                      className="orf-loot-select orf-loot-compact-select"
+                      onChange={(value) => {
+                        setReviewDecision(value);
+                        if (error) setError("");
+                      }}
+                      options={reviewDecisionOptions}
+                      value={reviewDecision}
+                      variant="filter"
+                    />
+                  </div>
+                </div>
                 <ResultReviewTable
-                  editingResultId={editingResultReviewId}
                   readOnly={reviewDecision === "notPassed"}
                   results={results}
                   values={resultReviews}
@@ -642,10 +682,8 @@ export function LootSubmitPage() {
                       ...items,
                       [resultId]: value,
                     }));
-                    setEditingResultReviewId(null);
                     if (error) setError("");
                   }}
-                  onEdit={setEditingResultReviewId}
                 />
               </div>
               <div className="orf-loot-panel orf-loot-result-summary">
@@ -656,6 +694,37 @@ export function LootSubmitPage() {
                   {objectiveReviewResultLabel(objectiveReviewResult)}
                 </div>
               </div>
+              <Field label="验收说明">
+                <textarea
+                  className="orf-input min-h-24 px-3 py-2 text-sm"
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                />
+              </Field>
+              {error && <div className="text-sm orf-danger-text">{error}</div>}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => navigate("/tasks")}
+                >
+                  取消
+                </Button>
+                <Button type="submit" disabled={submittingAction === "review"}>
+                  确认验收
+                </Button>
+              </div>
+            </form>
+          </Card>
+        ) : canSettle ? (
+          <Card className="orf-loot-review-card orf-card-padding">
+            <form
+              className="orf-loot-review-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void settle();
+              }}
+            >
               <div className="grid gap-3">
                 <div className="text-sm font-semibold orf-text-primary">
                   匿名互评贡献结果
@@ -680,7 +749,7 @@ export function LootSubmitPage() {
                           最终结算比例
                         </div>
                         <div className="text-xs orf-text-secondary">
-                          默认来自当前互评平均值。缺评、弃权和偏离只作为提示，指挥官确认合计为 100% 后即可验收结算。
+                          默认来自当前互评平均值。缺评、弃权和偏离只作为提示，指挥官确认合计为 100% 后即可结算。
                         </div>
                       </div>
                       <div className="orf-loot-panel-heading-actions">
@@ -712,7 +781,6 @@ export function LootSubmitPage() {
                     </div>
                     <SettlementResolutionTable
                       defaultInputs={settlementDefaultInputs}
-                      editingMember={editingSettlementMember}
                       targets={settlementContributionTargets}
                       values={resolutionInputs}
                       onChange={(member, value) => {
@@ -723,7 +791,6 @@ export function LootSubmitPage() {
                         setResolutionEdited(true);
                         if (error) setError("");
                       }}
-                      onEdit={setEditingSettlementMember}
                     />
                     <Field label="结算比例说明（可选）">
                       <textarea
@@ -738,13 +805,6 @@ export function LootSubmitPage() {
                   </div>
                 )}
               </div>
-              <Field label="验收说明">
-                <textarea
-                  className="orf-input min-h-24 px-3 py-2 text-sm"
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                />
-              </Field>
               {error && <div className="text-sm orf-danger-text">{error}</div>}
               <div className="flex justify-end gap-2">
                 <Button
@@ -754,8 +814,8 @@ export function LootSubmitPage() {
                 >
                   取消
                 </Button>
-                <Button type="submit" disabled={submittingAction === "review"}>
-                  验收并结算
+                <Button type="submit" disabled={submittingAction === "settle"}>
+                  确认结算
                 </Button>
               </div>
             </form>
@@ -1050,20 +1110,126 @@ export function LootSubmitPage() {
   );
 }
 
+function LootSubmissionReviewPanel({
+  loot,
+  results,
+}: {
+  loot: ObjectiveLoot;
+  results: Result[];
+}) {
+  const resultById = new Map(results.map((result) => [result.id, result]));
+
+  return (
+    <div className="orf-loot-panel orf-loot-submission-review">
+      <div className="orf-loot-panel-heading">
+        <div>
+          <div className="text-sm font-semibold orf-text-primary">
+            提交内容
+          </div>
+          <div className="text-xs orf-text-secondary">
+            {loot.submittedBy} · {formatSummaryTime(loot.submittedAt)}
+          </div>
+        </div>
+      </div>
+      <div className="orf-loot-submission-block">
+        <div className="orf-loot-submission-label">完成说明</div>
+        <div className="orf-loot-submission-text">
+          <LinkifiedText text={loot.body} />
+        </div>
+      </div>
+      {(loot.selfTestReportBody || loot.selfTestReportUrl) && (
+        <div className="orf-loot-submission-block">
+          <div className="orf-loot-submission-label">自测报告</div>
+          {loot.selfTestReportBody && (
+            <div className="orf-loot-submission-text">
+              <LinkifiedText text={loot.selfTestReportBody} />
+            </div>
+          )}
+          {loot.selfTestReportUrl && (
+            <a
+              className="orf-loot-link"
+              href={loot.selfTestReportUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              {loot.selfTestReportUrl}
+            </a>
+          )}
+        </div>
+      )}
+      <div className="orf-loot-table-wrap">
+        <table className="orf-loot-table orf-loot-submission-table">
+          <thead className="orf-surface-muted orf-text-secondary">
+            <tr>
+              <th className="px-3 py-2 font-semibold">指标</th>
+              <th className="px-3 py-2 font-semibold">主张</th>
+              <th className="px-3 py-2 font-semibold">证据</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loot.resultClaims.map((claim) => (
+              <tr key={claim.resultId}>
+                <td className="px-3 py-2 font-medium orf-text-primary">
+                  {resultById.get(claim.resultId)?.title ?? claim.resultId}
+                </td>
+                <td className="px-3 py-2 orf-text-secondary">
+                  {lootClaimLabel(claim.claim)}
+                </td>
+                <td className="px-3 py-2 orf-text-secondary">
+                  {claim.evidenceText ? (
+                    <LinkifiedText text={claim.evidenceText} />
+                  ) : (
+                    <span className="orf-text-muted">-</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function LinkifiedText({ text }: { text: string }) {
+  return <>{linkifiedText(text)}</>;
+}
+
+function linkifiedText(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const urlPattern = /https?:\/\/[^\s<>"']+/g;
+  let cursor = 0;
+  for (const match of text.matchAll(urlPattern)) {
+    const url = match[0];
+    const index = match.index ?? 0;
+    if (index > cursor) parts.push(text.slice(cursor, index));
+    parts.push(
+      <a
+        className="orf-loot-link"
+        href={url}
+        key={`${url}-${index}`}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {url}
+      </a>,
+    );
+    cursor = index + url.length;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
+}
+
 function ResultReviewTable({
-  editingResultId,
   readOnly,
   results,
   values,
   onChange,
-  onEdit,
 }: {
-  editingResultId: string | null;
   readOnly: boolean;
   results: Result[];
   values: Record<string, ResultAcceptedResult>;
   onChange: (resultId: string, value: ResultAcceptedResult) => void;
-  onEdit: (resultId: string | null) => void;
 }) {
   if (results.length === 0) {
     return (
@@ -1080,7 +1246,6 @@ function ResultReviewTable({
           <tr>
             <th className="px-3 py-2 font-semibold">指标</th>
             <th className="px-3 py-2 font-semibold">结论</th>
-            <th className="px-3 py-2 font-semibold">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -1088,7 +1253,6 @@ function ResultReviewTable({
             const currentValue = readOnly
               ? "failed"
               : values[result.id] ?? "completed";
-            const editing = !readOnly && editingResultId === result.id;
             const detail = resultDetailText(result);
             return (
               <tr key={result.id}>
@@ -1099,32 +1263,19 @@ function ResultReviewTable({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  {editing ? (
+                  {readOnly ? (
+                    <span className={resultReviewBadgeClass(currentValue)}>
+                      {resultReviewLabel(currentValue)}
+                    </span>
+                  ) : (
                     <FantasySelectMenu
                       ariaLabel={`${result.title} 验收结论`}
-                      className="orf-loot-select"
+                      className="orf-loot-select orf-loot-table-select"
                       onChange={(value) => onChange(result.id, value)}
                       options={resultReviewOptions}
                       value={currentValue}
                       variant="filter"
                     />
-                  ) : (
-                    <span className={resultReviewBadgeClass(currentValue)}>
-                      {resultReviewLabel(currentValue)}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {readOnly ? (
-                    <span className="orf-text-muted">-</span>
-                  ) : (
-                    <button
-                      className="orf-loot-inline-action"
-                      type="button"
-                      onClick={() => onEdit(editing ? null : result.id)}
-                    >
-                      {editing ? "收起" : "修改"}
-                    </button>
                   )}
                 </td>
               </tr>
@@ -1158,14 +1309,14 @@ function LocalSettlementSummaryView({
         )}
       </div>
       <div className="text-xs orf-text-secondary">
-        验收时通过 ORF 代理读取共享结算服务中的最新提交状态和原始评分，最终比例由指挥官在下方确认。
+        结算时通过 ORF 代理读取共享结算服务中的最新提交状态和原始评分，最终比例由指挥官在下方确认。
       </div>
       {loading && (
         <div className="text-xs orf-text-secondary">正在读取匿名互评数据。</div>
       )}
       {error && (
         <div className="text-xs orf-warning-text">
-          匿名互评数据读取失败：{error}。仍可由指挥官填写最终结算比例后验收。
+          匿名互评数据读取失败：{error}。仍可由指挥官填写最终结算比例后结算。
         </div>
       )}
       {summary ? (
@@ -1330,18 +1481,14 @@ function PeerReviewRawScoreTable({
 
 function SettlementResolutionTable({
   defaultInputs,
-  editingMember,
   targets,
   values,
   onChange,
-  onEdit,
 }: {
   defaultInputs: Record<string, string>;
-  editingMember: string | null;
   targets: ContributionAllocationTarget[];
   values: Record<string, string>;
   onChange: (member: string, value: string) => void;
-  onEdit: (member: string | null) => void;
 }) {
   return (
     <div className="orf-loot-table-wrap">
@@ -1351,12 +1498,10 @@ function SettlementResolutionTable({
             <th className="px-3 py-2 font-semibold">成员</th>
             <th className="px-3 py-2 font-semibold">默认比例</th>
             <th className="px-3 py-2 font-semibold">最终比例</th>
-            <th className="px-3 py-2 font-semibold">操作</th>
           </tr>
         </thead>
         <tbody>
           {targets.map(({ member }) => {
-            const editing = editingMember === member;
             const value = values[member] ?? defaultInputs[member] ?? "0";
             return (
               <tr key={member}>
@@ -1367,31 +1512,16 @@ function SettlementResolutionTable({
                   {formatPercentInputText(defaultInputs[member] ?? "0")}
                 </td>
                 <td className="px-3 py-2 orf-text-secondary">
-                  {editing ? (
-                    <input
-                      className="orf-input orf-loot-percent-input"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                      inputMode="decimal"
-                      value={value}
-                      onChange={(event) => onChange(member, event.target.value)}
-                    />
-                  ) : (
-                    <span className="font-medium orf-text-primary">
-                      {formatPercentInputText(value)}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  <button
-                    className="orf-loot-inline-action"
-                    type="button"
-                    onClick={() => onEdit(editing ? null : member)}
-                  >
-                    {editing ? "完成" : "修改"}
-                  </button>
+                  <input
+                    className="orf-input orf-loot-percent-input"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={value}
+                    onChange={(event) => onChange(member, event.target.value)}
+                  />
                 </td>
               </tr>
             );
@@ -1495,8 +1625,7 @@ function equalContributionAllocations(targets: ContributionAllocationTarget[]) {
   }));
 }
 
-function contributionResolutionForReview(input: {
-  objectiveAcceptedResult: ObjectiveAcceptedResult;
+function contributionResolutionForSettlement(input: {
   reason: string;
   resolutionResult: ReturnType<typeof percentInputsToAllocations> | null;
   settlementTargets: ContributionAllocationTarget[];
@@ -1505,13 +1634,6 @@ function contributionResolutionForReview(input: {
     return {
       ratios: input.resolutionResult.allocations,
       reason: input.reason,
-    };
-  }
-
-  if (input.objectiveAcceptedResult === "abandoned") {
-    return {
-      ratios: equalContributionAllocations(input.settlementTargets),
-      reason: "验收不通过，记录正式参与人",
     };
   }
 
