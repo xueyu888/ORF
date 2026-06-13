@@ -202,11 +202,11 @@ export function businessMutationFailureMessage(error: unknown, fallback: string)
 
 export function localSettlementMutationFailureMessage(error: unknown, fallback: string) {
   if (error instanceof LocalSettlementUnavailableError) {
-    return `本地匿名互评结算服务不可用，请先启动服务，并确认当前浏览器可以访问 ${error.baseUrl}`;
+    return `匿名互评结算服务不可用，请联系管理员确认 ORF 代理和共享结算服务状态：${error.baseUrl}`;
   }
 
   if (error instanceof LocalSettlementResponseError) {
-    return `本地匿名互评结算服务返回错误：${error.message}`;
+    return `共享匿名互评结算服务返回错误：${error.message}`;
   }
 
   return businessMutationFailureMessage(error, fallback);

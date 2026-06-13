@@ -41,6 +41,8 @@ const envSchema = z.object({
   ORF_CLIENT_UPDATE_PUSH_ENABLED: booleanString("true"),
   ORF_CLIENT_UPDATE_PUSH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
   ORF_CLIENT_UPDATE_BROADCAST_SECRET: optionalSecret,
+  ORF_LOCAL_SETTLEMENT_SERVICE_URL: z.string().url().default("http://127.0.0.1:8799"),
+  ORF_LOCAL_SETTLEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   ORF_WORK_LOG_REMINDER_ENABLED: booleanString("true"),
   ORF_WORK_LOG_REMINDER_TIME_ZONE: z.string().trim().min(1).default("Asia/Shanghai"),
   ORF_WORK_LOG_REMINDER_HOUR: z.coerce.number().int().min(0).max(23).default(17),

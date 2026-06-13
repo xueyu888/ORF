@@ -1,4 +1,5 @@
 import type { ContributionAllocation } from "../types/orf";
+import { localSettlementProxyBasePath } from "../domain/orfLocalSettlement";
 
 type LocalSettlementPublicKey = {
   algorithm: "RSA-OAEP-256";
@@ -22,14 +23,7 @@ export type LocalSettlementSummary = {
   status: "ready" | "missing" | "conflict";
 };
 
-const defaultLocalSettlementUrl = "http://127.0.0.1:8799";
 const localSettlementRequestTimeoutMs = 3000;
-
-type LocalSettlementImportMeta = ImportMeta & {
-  env?: {
-    VITE_ORF_LOCAL_SETTLEMENT_URL?: string;
-  };
-};
 
 export class LocalSettlementUnavailableError extends Error {
   readonly baseUrl: string;
@@ -54,8 +48,7 @@ export class LocalSettlementResponseError extends Error {
 }
 
 export function localSettlementBaseUrl() {
-  const configuredUrl = (import.meta as LocalSettlementImportMeta).env?.VITE_ORF_LOCAL_SETTLEMENT_URL?.trim();
-  return (configuredUrl || defaultLocalSettlementUrl).replace(/\/+$/, "");
+  return localSettlementProxyBasePath;
 }
 
 export async function assertLocalSettlementAvailable() {
@@ -80,7 +73,7 @@ export async function submitLocalEncryptedContributionReview(input: {
     submittedAt: new Date().toISOString(),
     version: 1,
   });
-  const response = await requestLocalSettlement("/reviews", {
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews`, {
     body: JSON.stringify(envelope),
     headers: { "content-type": "application/json" },
     method: "POST",
@@ -88,9 +81,8 @@ export async function submitLocalEncryptedContributionReview(input: {
   return response.json() as Promise<{ ok: true; payloadHash: string; receivedAt: string }>;
 }
 
-export async function fetchLocalSettlementSummary(input: { challengers: string[]; objectiveId: string }) {
+export async function fetchLocalSettlementSummary(input: { objectiveId: string }) {
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/summary`, {
-    body: JSON.stringify({ challengers: input.challengers }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });

@@ -287,7 +287,7 @@ export function useOrfProviderObjectiveActions({
         try {
           const objective = state.objectives.find((item) => item.id === objectiveId);
           const localSummary = objective && objectiveChallengerCount(objective) > 1
-            ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
+            ? await fetchLocalSettlementSummary({ objectiveId }).catch(() => null)
             : null;
           const settlementInput =
             objective && localSummary?.status === "ready" && localSummary.contributionResolution
@@ -326,7 +326,7 @@ export function useOrfProviderObjectiveActions({
             objectiveTitle: objective.title,
             reviewer: currentUser.name,
           });
-          notify("匿名互评已提交到本地结算服务");
+          notify("匿名互评已通过 ORF 提交到共享结算服务");
           return true;
         } catch (error) {
           notify(localSettlementMutationFailureMessage(error, "匿名互评提交失败"));

@@ -624,7 +624,7 @@ export function LootSubmitPage() {
                       处理分歧
                     </div>
                     <div className="text-xs orf-text-secondary">
-                      默认优先使用本地结算服务的匿名互评结果；只有需要手动处理时，填写最终贡献百分比和说明。
+                      默认优先使用共享结算服务的匿名互评结果；只有需要手动处理时，填写最终贡献百分比和说明。
                     </div>
                     <ContributionPercentTotal
                       total={percentInputTotal(
@@ -771,7 +771,7 @@ export function LootSubmitPage() {
               }}
             >
               <div className="text-sm orf-text-secondary">
-                评价当前目标挑战者的贡献比例，提交后会加密发送到本地结算服务；再次提交会作为最新评价参与汇总。
+                评价当前目标挑战者的贡献比例，提交后会加密并通过 ORF 代理发送到共享结算服务；再次提交会作为最新评价参与汇总。
               </div>
               <div className="rounded-md border orf-border orf-surface-muted p-3 text-xs orf-text-secondary">
                 给每位目标挑战者填写 0-100 的贡献百分比，合计必须为
@@ -946,7 +946,7 @@ function LocalSettlementSummaryView() {
   return (
     <div className="grid gap-2 rounded-md border orf-border orf-surface-muted p-3 text-sm">
       <div className="orf-text-secondary">
-        验收时从本地结算服务读取匿名互评汇总。
+        验收时通过 ORF 代理从共享结算服务读取匿名互评汇总。
       </div>
     </div>
   );
