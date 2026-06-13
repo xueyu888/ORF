@@ -94,7 +94,7 @@
 | `objectiveTrialReviews` | 目标试验收请求和指挥官反馈                                                                |
 | `pointLedger`           | 验收结算后的成员积分流水                                                                  |
 
-任务管理读模型不返回 `permissionRules`；当前用户权限由 `/api/me/access` 单独返回。ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只在浏览器和共享结算服务明文出现，ORF 后端只代理加密 envelope。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
+任务管理读模型不返回 `permissionRules`；当前用户权限由 `/api/me/access` 单独返回。ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只在浏览器和共享结算服务明文出现；ORF 后端只代理加密 envelope，并在指挥官验收页代理读取最新明细，不写入 ORF 读模型。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
 
 `PATCH /api/objectives/:objectiveId/publish` 是候选目标进入悬赏大厅的唯一发布动作，必须写入 `Objective.publishedAt`，并为当前作用域 active 用户创建 `objective.published` 系统通知；持久化通知遵守“触发人不接收自己消息”的原则。通知写入后，后端还会通过 `/api/events` 发送 `system.broadcast`，让当前作用域所有在线 active 用户即时看到横幅并刷新大厅。后续申请、征召、审核、重估、编辑和冻结只能更新对应业务字段或 `updatedAt`，不能覆盖 `publishedAt`。
 
@@ -172,7 +172,7 @@ type ObjectiveFlowStatus =
 }
 ```
 
-目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。共享结算服务解密匿名互评并计算贡献比例；ORF 后端通过同源代理读取汇总后的 `contributionResolution`，不读取新匿名互评明文原始数据。有缺评、分歧或申诉时，指挥官通过 `contributionResolution` 提供处理后的比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示名和旧请求兼容字段。
+目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。共享结算服务解密匿名互评并计算当前均值；ORF 后端通过同源代理读取提交状态、原始评分、弃权说明、偏离提醒和默认比例。指挥官验收时始终通过 `contributionResolution` 提供确认后的最终比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示名和旧请求兼容字段。
 
 结算后后端写入：
 
@@ -219,8 +219,8 @@ type ObjectiveFlowStatus =
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。
 - `提交试验收` 仅允许目标挑战者在 `frozen` 状态执行一次；`试验收反馈` 仅允许指挥官在 `frozen` 状态处理，且不推进状态。
 - `验收结算` 仅允许指挥官在 `submitted` 状态执行。
-- 多挑战者目标结算优先使用匿名互评汇总；缺评、分歧或申诉需要指挥官处理。
-- 匿名互评和指挥官分歧处理的贡献比例必须是每个挑战者一项、范围 `0..1`、合计 `1` 的标准比例；后端不接受任意权重再静默归一化。
+- 多挑战者目标结算优先使用匿名互评当前均值作为默认比例；缺评、弃权、分歧或申诉只提示指挥官，不阻塞验收。
+- 匿名互评评分和指挥官最终确认的贡献比例必须是每个挑战者一项、范围 `0..1`、合计 `1` 的标准比例；后端不接受任意权重再静默归一化。
 - 注册用户默认为 `pending`，只有 `active` 用户可访问业务 API。
 
 ## 任务与指标解耦迁移

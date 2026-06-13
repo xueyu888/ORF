@@ -121,7 +121,7 @@
 - 写入 `completionMultiplier`、`objectiveBasePoints`、`objectiveSettlementPoints`；`objectiveBasePoints` 从已冻结指标的积分汇总得到，不作为目标初始化字段手填。
 - 生成 `pointLedger`，成员排行榜只读取后端结算后的积分流水。
 
-Result 的不确定性分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标总分由目标下指标的不确定性分相加得到；Result 不直接给个人分积分，个人积分按目标级匿名互评贡献结果分配。指挥官只处理互评分歧、缺评和申诉。
+Result 的不确定性分是冻结前必须明确的积分事实源。Objective 不初始化积分，目标总分由目标下指标的不确定性分相加得到；Result 不直接给个人分积分，个人积分按目标级最终贡献比例分配。指挥官验收时查看匿名互评提交状态、原始评分、弃权说明、均值和偏离提醒，并确认最终贡献比例。
 
 ## TODO
 

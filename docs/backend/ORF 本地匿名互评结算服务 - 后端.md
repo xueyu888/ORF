@@ -1,6 +1,6 @@
 # ORF 本地匿名互评结算服务 - 后端
 
-匿名互评原始数据不进入 ORF 数据库。前端在浏览器内用共享私有服务公钥加密互评 payload，然后提交到 ORF 同源代理；ORF 后端只做认证、权限校验和转发，不解密、不保存原始互评。
+匿名互评原始数据不进入 ORF 数据库。前端在浏览器内用共享私有服务公钥加密互评 payload，然后提交到 ORF 同源代理；ORF 后端只做认证、权限校验和转发，不解密、不保存原始互评。指挥官验收页可通过 ORF 代理读取共享服务返回的最新原始提交明细，但这些明细不进入 ORF 业务数据库或普通读模型。
 
 ## 服务归属
 
@@ -53,6 +53,14 @@ ORF 前端依赖以下 ORF 同源代理接口；ORF 后端再转发到共享私�
 | `GET /api/local-settlement/health` | `GET /health` | 共享服务健康检查 |
 | `GET /api/local-settlement/public-key` | `GET /public-key` | 返回前端加密用公钥 |
 | `POST /api/local-settlement/objectives/:objectiveId/reviews` | `POST /reviews` | 目标挑战者提交加密匿名互评 envelope |
-| `POST /api/local-settlement/objectives/:objectiveId/summary` | `POST /objectives/:objectiveId/summary` | 指挥官验收时读取贡献比例汇总 |
+| `POST /api/local-settlement/objectives/:objectiveId/summary` | `POST /objectives/:objectiveId/summary` | 指挥官验收时读取提交状态、原始评分、均值、偏离提醒和默认贡献比例 |
 
-ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的最终贡献比例，并在验收结算时把公开比例写入 `pointLedger`。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。
+`/objectives/:objectiveId/summary` 返回：
+
+- `submissions`：每个已提交成员的最新评分或弃权说明。
+- `missingReviewers` / `reviewers` / `abstainedReviewers`：提交状态分组。
+- `averages`：按当前已评分记录计算的成员均值、默认结算比例和相对均分偏离。
+- `ratios`：验收页默认填入的贡献比例。
+- `status`：`ready`、`missing`、`conflict` 只表示提示状态，不是验收阻塞条件。
+
+ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的默认贡献比例和提示明细；验收结算时只把指挥官确认后的公开比例写入 `pointLedger`。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。
