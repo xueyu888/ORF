@@ -1,7 +1,8 @@
 import { clsx } from "clsx";
 import { CalendarDays, CheckCircle2, Clock3, FolderKanban, MessageSquare, Plus, Send, Trash2, UserPlus, type LucideIcon } from "lucide-react";
+import { createPortal } from "react-dom";
 import type { CSSProperties, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
 import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
@@ -1572,22 +1573,138 @@ function TimeValue({ className, icon: Icon, subtle, title, value }: { className?
   );
 }
 
+type AvatarStackPopoverPosition = {
+  left: number;
+  maxHeight: number;
+  top: number;
+  width: number;
+};
+
+function avatarStackPopoverPosition(trigger: HTMLElement): AvatarStackPopoverPosition {
+  const padding = 12;
+  const gap = 8;
+  const rect = trigger.getBoundingClientRect();
+  const width = Math.max(160, Math.min(232, window.innerWidth - padding * 2));
+  const belowSpace = window.innerHeight - rect.bottom - gap - padding;
+  const aboveSpace = rect.top - gap - padding;
+  const placeAbove = belowSpace < 132 && aboveSpace > belowSpace;
+  const availableHeight = Math.max(132, placeAbove ? aboveSpace : belowSpace);
+  const maxHeight = Math.min(280, availableHeight);
+  const left = Math.min(Math.max(padding, rect.right - width), Math.max(padding, window.innerWidth - padding - width));
+  const top = placeAbove ? Math.max(padding, rect.top - gap - maxHeight) : Math.min(rect.bottom + gap, window.innerHeight - padding - maxHeight);
+
+  return { left, maxHeight, top, width };
+}
+
 function AvatarStack({ names }: { names: string[] }) {
-  if (names.length === 0) return <span className="orf-avatar-stack font-medium text-[#98a2b3]">未分配</span>;
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [popoverPosition, setPopoverPosition] = useState<AvatarStackPopoverPosition | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const visibleNames = names.slice(0, 4);
+  const overflowNames = names.slice(4);
+
+  useEffect(() => {
+    if (overflowNames.length === 0) setPopoverOpen(false);
+  }, [overflowNames.length]);
+
+  useEffect(() => {
+    if (!popoverOpen) {
+      setPopoverPosition(null);
+      return undefined;
+    }
+
+    const updatePosition = () => {
+      if (!triggerRef.current) return;
+      setPopoverPosition(avatarStackPopoverPosition(triggerRef.current));
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (triggerRef.current?.contains(event.target) || popoverRef.current?.contains(event.target)) return;
+      setPopoverOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setPopoverOpen(false);
+    };
+
+    updatePosition();
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [popoverOpen]);
+
+  if (names.length === 0) return <span className="orf-avatar-stack orf-avatar-stack-empty font-medium text-[#98a2b3]">未分配</span>;
 
   return (
-    <div className="orf-avatar-stack flex items-center">
-      {names.slice(0, 4).map((name, index) => (
+    <div className="orf-avatar-stack" title={names.join("、")}>
+      {visibleNames.map((name, index) => (
         <div
-          key={name}
-          className={clsx("flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow-sm", index > 0 && "-ml-2")}
+          key={`${name}-${index}`}
+          className={clsx("orf-avatar-stack-item flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow-sm", index > 0 && "-ml-2")}
           style={avatarStyleForName(name)}
           title={name}
         >
           {initials(name)}
         </div>
       ))}
-      {names.length > 4 && <span className="ml-1 rounded-full bg-[#f2f4f7] px-2 py-1 text-xs font-semibold text-[#475467]">+{names.length - 4}</span>}
+      {overflowNames.length > 0 && (
+        <button
+          ref={triggerRef}
+          type="button"
+          className="orf-avatar-overflow-button"
+          aria-expanded={popoverOpen}
+          aria-label={`查看其余 ${overflowNames.length} 位参与者`}
+          data-no-row-edit="true"
+          onClick={(event) => {
+            event.stopPropagation();
+            setPopoverOpen((current) => !current);
+          }}
+          onDoubleClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          +{overflowNames.length}
+        </button>
+      )}
+      {popoverOpen &&
+        popoverPosition &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={popoverRef}
+            className="orf-avatar-stack-popover"
+            data-no-row-edit="true"
+            style={{
+              left: popoverPosition.left,
+              maxHeight: popoverPosition.maxHeight,
+              top: popoverPosition.top,
+              width: popoverPosition.width,
+            }}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <div className="orf-avatar-stack-popover-title">其余参与者</div>
+            <div className="orf-avatar-stack-popover-list">
+              {overflowNames.map((name, index) => (
+                <div key={`${name}-${index}`} className="orf-avatar-stack-popover-row" title={name}>
+                  <span className="orf-avatar-stack-popover-avatar" style={avatarStyleForName(name)} aria-hidden="true">
+                    {initials(name)}
+                  </span>
+                  <span className="orf-avatar-stack-popover-name">{name}</span>
+                </div>
+              ))}
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
