@@ -3,7 +3,7 @@ import { canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
 
-const mobileBottomNavLabels = ["悬赏大厅", "我的挑战", "聊天", "反馈", "消息"];
+const mobileBottomNavLabels = ["悬赏大厅", "我的挑战", "工作日志", "聊天", "消息"];
 
 const mobileBottomNavItems = mobileBottomNavLabels
   .map((label) => navItems.find((item) => item.label === label))

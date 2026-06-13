@@ -27,6 +27,7 @@ const ReportsPage = lazyNamed(() => import("./pages/ReportsPage"), "ReportsPage"
 const StrategyMapPage = lazyNamed(() => import("./pages/StrategyMapPage"), "StrategyMapPage");
 const SystemManagementPage = lazyNamed(() => import("./pages/SystemManagementPage"), "SystemManagementPage");
 const SystemSettingsPage = lazyNamed(() => import("./pages/SettingsPage"), "SystemSettingsPage");
+const WorkLogsPage = lazyNamed(() => import("./pages/WorkLogsPage"), "WorkLogsPage");
 
 export function App() {
   return (
@@ -37,6 +38,7 @@ export function App() {
         <Route path="dashboard" element={<LazyRoute><DashboardPage /></LazyRoute>} />
         <Route path="bounties" element={<LazyRoute><BountyHallPage /></LazyRoute>} />
         <Route path="tasks" element={<LazyRoute><ChallengePlanPage /></LazyRoute>} />
+        <Route path="work-logs" element={<LazyRoute><WorkLogsPage /></LazyRoute>} />
         <Route path="tasks/objectives/:objectiveId/loot" element={<LazyRoute><LootSubmitPage /></LazyRoute>} />
         <Route path="chat" element={<LazyRoute><ChatPage /></LazyRoute>} />
         <Route path="chat/:channelId" element={<LazyRoute><ChatPage /></LazyRoute>} />

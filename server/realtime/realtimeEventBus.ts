@@ -111,6 +111,18 @@ export function publishRealtimeSystemBroadcast(teamId: string, broadcast: System
   });
 }
 
+export function publishRealtimeSystemBroadcastToUsers(teamId: string, userIds: string[], broadcast: SystemBroadcast) {
+  const event: RealtimeEvent = {
+    id: makeEventId("system-broadcast-event"),
+    kind: "system.broadcast",
+    createdAt: nowIso(),
+    broadcast,
+  };
+  for (const userId of Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)))) {
+    publishRealtimeEventToUser(teamId, userId, event);
+  }
+}
+
 export function publishRealtimeClientUpdateAvailable(teamId: string, update: ClientUpdateAvailable) {
   publishRealtimeEventToTeam(teamId, {
     id: makeEventId("client-update-event"),

@@ -7,8 +7,8 @@ export type RealtimeEventKind =
   | "chat.event"
   | "client.update.available";
 
-export type SystemBroadcastTone = "bounty" | "clientUpdate";
-export type OrfReadModel = "taskManagement" | "bountyHall" | "users" | "permissions" | "notifications" | "settings";
+export type SystemBroadcastTone = "bounty" | "clientUpdate" | "workLogReminder";
+export type OrfReadModel = "taskManagement" | "bountyHall" | "users" | "permissions" | "notifications" | "settings" | "workLogs";
 export type OrfReadModelInvalidationReason =
   | "objective.created"
   | "objective.changed"
@@ -22,6 +22,7 @@ export type OrfReadModelInvalidationReason =
   | "task.changed"
   | "feedback.changed"
   | "comment.changed"
+  | "workLog.changed"
   | "project.changed"
   | "user.changed"
   | "permission.changed"
@@ -34,6 +35,7 @@ export type OrfReadModelInvalidationTargetType =
   | "subtask"
   | "feedback"
   | "comment"
+  | "workLog"
   | "project"
   | "user"
   | "permission"
@@ -57,6 +59,7 @@ export interface SystemBroadcast {
   body: string;
   createdAt: string;
   notificationKind?: NotificationKind;
+  sticky?: boolean;
   targetHref: string;
   title: string;
   tone: SystemBroadcastTone;

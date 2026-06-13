@@ -24,6 +24,8 @@ import { registerOrfTaskRoutes } from "./routes/orfTaskRoutes";
 import { registerOrfObjectiveRoutes } from "./routes/orfObjectiveRoutes";
 import { registerClientUpdateRoutes } from "./routes/clientUpdateRoutes";
 import { registerPushRoutes } from "./routes/pushRoutes";
+import { registerWorkLogRoutes } from "./routes/workLogRoutes";
+import { startWorkLogReminderScheduler } from "./workLogs/workLogReminderScheduler";
 function corsOrigin() {
   if (env.CORS_ORIGIN === "*") {
     return true;
@@ -104,13 +106,16 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerOrfObjectiveRoutes(app);
   registerOrfResultRoutes(app);
   registerOrfTaskRoutes(app);
+  registerWorkLogRoutes(app);
   registerUserAvatarRoutes(app);
   registerUserRoutes(app);
   registerPermissionRoutes(app);
 
   const stopClientUpdatePushScheduler = startClientUpdatePushScheduler(app.log);
+  const stopWorkLogReminderScheduler = startWorkLogReminderScheduler(app.log);
   app.addHook("onClose", async () => {
     stopClientUpdatePushScheduler();
+    stopWorkLogReminderScheduler();
   });
 
   return app;

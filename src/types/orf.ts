@@ -21,8 +21,9 @@ export type NotificationKind =
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
-  | "comment.mention.created";
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback";
+  | "comment.mention.created"
+  | "worklog.reminder";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
@@ -193,6 +194,32 @@ export interface PointLedgerEntry {
   points: number;
   reason: string;
   createdAt: string;
+}
+
+export interface WorkLogEntry {
+  id: string;
+  authorUserId: string;
+  authorNameSnapshot: string;
+  workDate: string;
+  objectiveId?: string | null;
+  objectiveIdSnapshot: string;
+  objectiveTitleSnapshot: string;
+  bodyMarkdown: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkLogActivityItem extends WorkLogEntry {
+  authorAvatarUrl?: string | null;
+  authorCurrentName?: string | null;
+}
+
+export interface WorkLogObjectiveOption {
+  id: string;
+  title: string;
+  flowStatus: ObjectiveFlowStatus;
+  finalDueAt: string;
 }
 
 export interface ContributionAllocation {

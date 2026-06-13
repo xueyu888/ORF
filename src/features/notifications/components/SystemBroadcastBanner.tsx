@@ -20,6 +20,9 @@ export function SystemBroadcastBanner({
       return undefined;
     }
 
+    if (broadcast.sticky) {
+      return undefined;
+    }
     const timer = window.setTimeout(() => onDismiss(broadcast.id), BROADCAST_VISIBLE_MS);
     return () => window.clearTimeout(timer);
   }, [broadcast, onDismiss]);
