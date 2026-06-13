@@ -16,6 +16,9 @@ import { isObjectiveChallenger, objectiveParticipantSnapshot } from "../../src/d
 import { getUserMapsForStorageScope } from "../readModels/orfReadModelMappers";
 
 const objectiveParamsSchema = z.object({ objectiveId: z.string().min(1) });
+const settlementSummaryBodySchema = z.object({
+  participantUserIds: z.array(z.string().trim().min(1)).optional(),
+});
 const encryptedReviewEnvelopeSchema = z.object({
   ciphertext: z.string().min(1),
   encryptedKey: z.string().min(1),
@@ -45,14 +48,29 @@ async function settlementObjectiveInScope(objectiveId: string, scope: RuntimeSco
   return objective;
 }
 
-async function contributionChallengerNames(objective: SettlementObjective) {
+async function contributionChallengerNames(objective: SettlementObjective, participantUserIds?: string[]) {
   const { userIdByName, userNameById } = await getUserMapsForStorageScope(objective.teamId);
-  return objectiveParticipantSnapshot({
+  const snapshot = objectiveParticipantSnapshot({
     challengerNames: objective.challengers,
     challengerUserIds: objective.challengerUserIds,
     userIdByName,
     userNameById,
-  }).challengers;
+  });
+
+  if (!participantUserIds) return snapshot.challengers;
+
+  const requestedIds = Array.from(new Set(participantUserIds.map((value) => value.trim()).filter(Boolean)));
+  const objectiveUserIdSet = new Set(snapshot.challengerUserIds);
+  if (requestedIds.length === 0 || requestedIds.some((userId) => !objectiveUserIdSet.has(userId))) {
+    return null;
+  }
+
+  const names = requestedIds.map((userId) =>
+    userNameById.get(userId) ??
+    snapshot.challengers[snapshot.challengerUserIds.indexOf(userId)] ??
+    "",
+  );
+  return names.every((name) => name.trim()) ? names : null;
 }
 
 function sendLocalSettlementResponse(reply: FastifyReply, response: LocalSettlementServiceResponse) {
@@ -123,11 +141,13 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
       return reply;
     }
 
+    const body = settlementSummaryBodySchema.parse(request.body ?? {});
     const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
     if (!objective) return reply.code(404).send({ error: "Objective not found" });
     if (!canReviewObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
 
-    const challengers = await contributionChallengerNames(objective);
+    const challengers = await contributionChallengerNames(objective, body.participantUserIds);
+    if (!challengers) return reply.code(400).send({ error: "Invalid settlement participants" });
     try {
       return sendLocalSettlementResponse(
         reply,

@@ -103,16 +103,22 @@ function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objective
     pointsByMember.set(entry.memberName, (pointsByMember.get(entry.memberName) ?? 0) + entry.points);
   }
 
+  const objectiveById = new Map(objectives.map((objective) => [objective.id, objective]));
   const objectiveCounts = new Map<string, { completed: number; total: number }>();
-  for (const objective of objectives) {
-    for (const challenger of objective.challengers) {
-      const current = objectiveCounts.get(challenger) ?? { completed: 0, total: 0 };
-      current.total += 1;
-      if (objective.flowStatus === "settled" && objective.acceptedResult !== "abandoned") {
-        current.completed += 1;
-      }
-      objectiveCounts.set(challenger, current);
+  const seenParticipation = new Set<string>();
+  for (const entry of ledger) {
+    const objective = objectiveById.get(entry.objectiveId);
+    if (!objective) continue;
+    const key = `${entry.memberName}\u0000${entry.objectiveId}`;
+    if (seenParticipation.has(key)) continue;
+    seenParticipation.add(key);
+
+    const current = objectiveCounts.get(entry.memberName) ?? { completed: 0, total: 0 };
+    current.total += 1;
+    if (objective.flowStatus === "settled" && objective.acceptedResult !== "abandoned") {
+      current.completed += 1;
     }
+    objectiveCounts.set(entry.memberName, current);
   }
 
   return memberNames(users, pointsByMember, objectiveCounts)
@@ -126,7 +132,7 @@ function buildPeriodRows(users: OrfUser[], ledger: PointLedgerEntry[], objective
         rankChange: 0,
       };
     })
-    .filter((row) => row.points > 0 || row.completionRate > 0)
+    .filter((row) => row.points > 0 || row.completionRate > 0 || (objectiveCounts.get(row.memberName)?.total ?? 0) > 0)
     .sort((left, right) => right.points - left.points || right.completionRate - left.completionRate || left.memberName.localeCompare(right.memberName))
     .slice(0, 10)
     .map((row, index) => ({

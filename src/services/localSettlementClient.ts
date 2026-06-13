@@ -81,8 +81,9 @@ export async function submitLocalEncryptedContributionReview(input: {
   return response.json() as Promise<{ ok: true; payloadHash: string; receivedAt: string }>;
 }
 
-export async function fetchLocalSettlementSummary(input: { objectiveId: string }) {
+export async function fetchLocalSettlementSummary(input: { objectiveId: string; participantUserIds?: string[] }) {
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/summary`, {
+    body: JSON.stringify({ participantUserIds: input.participantUserIds }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });

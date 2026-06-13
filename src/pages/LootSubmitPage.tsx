@@ -34,6 +34,7 @@ import type {
   ContributionAllocation,
   LootResultClaim,
   LootResultClaimStatus,
+  ObjectiveAcceptedResult,
   ObjectiveTrialReviewStatus,
   Result,
   ResultAcceptedResult,
@@ -147,6 +148,8 @@ export function LootSubmitPage() {
   >({});
   const [resolutionReason, setResolutionReason] = useState("");
   const [reason, setReason] = useState("");
+  const [reviewDecision, setReviewDecision] = useState<"passed" | "notPassed">("passed");
+  const [settlementParticipants, setSettlementParticipants] = useState<Record<string, boolean>>({});
   const [trialDecision, setTrialDecision] =
     useState<Exclude<ObjectiveTrialReviewStatus, "requested">>("approved");
   const [trialFeedback, setTrialFeedback] = useState("");
@@ -185,10 +188,54 @@ export function LootSubmitPage() {
     setContributionInputs((current) =>
       percentInputDefaults(objective?.challengers ?? [], current),
     );
-    setResolutionInputs((current) =>
-      percentInputDefaults(objective?.challengers ?? [], current),
-    );
   }, [objective?.challengers]);
+
+  useEffect(() => {
+    setSettlementParticipants((current) => {
+      const next: Record<string, boolean> = {};
+      for (const target of challengerAllocationTargets) {
+        next[contributionTargetKey(target)] = current[contributionTargetKey(target)] ?? true;
+      }
+      return next;
+    });
+  }, [challengerAllocationTargets]);
+
+  const settlementContributionTargets = useMemo(
+    () =>
+      challengerAllocationTargets.filter(
+        (target) => settlementParticipants[contributionTargetKey(target)] !== false,
+      ),
+    [challengerAllocationTargets, settlementParticipants],
+  );
+  const settlementParticipantUserIds = useMemo(
+    () =>
+      settlementContributionTargets
+        .map((target) => target.memberUserId)
+        .filter((userId): userId is string => Boolean(userId)),
+    [settlementContributionTargets],
+  );
+  const settlementParticipantNames = useMemo(
+    () => settlementContributionTargets.map((target) => target.member),
+    [settlementContributionTargets],
+  );
+  const usesLocalContributionSettlement = settlementContributionTargets.length > 1;
+  const needsContributionResolution = usesLocalContributionSettlement;
+  const reviewedResultValues = useMemo(
+    () =>
+      reviewDecision === "notPassed"
+        ? results.map(() => "failed" as ResultAcceptedResult)
+        : results.map((result) => resultReviews[result.id] ?? "completed"),
+    [reviewDecision, resultReviews, results],
+  );
+  const objectiveReviewResult = reviewDecision === "notPassed"
+    ? "abandoned"
+    : objectiveAcceptedResultFromReviews(reviewedResultValues);
+
+  useEffect(() => {
+    setResolutionInputs((current) =>
+      percentInputDefaults(settlementParticipantNames, current),
+    );
+  }, [settlementParticipantNames]);
 
   if (!objective) {
     return dataReady ? (
@@ -234,11 +281,6 @@ export function LootSubmitPage() {
     currentUser,
     "acceptance",
     openAcceptanceAlignment,
-  );
-  const usesLocalContributionSettlement = objectiveChallengerCount(objective) > 1;
-  const needsContributionResolution = usesLocalContributionSettlement;
-  const objectiveReviewResult = objectiveAcceptedResultFromReviews(
-    results.map((result) => resultReviews[result.id] ?? "completed"),
   );
 
   const buildLootSubmission = (): {
@@ -354,37 +396,47 @@ export function LootSubmitPage() {
       return;
     }
 
+    if (settlementContributionTargets.length === 0) {
+      setError("请选择至少一位正式参与人");
+      return;
+    }
+    if (reviewDecision === "passed" && objectiveReviewResult === "abandoned") {
+      setError("通过验收时，指标验收结果不能包含失败或不验收");
+      return;
+    }
+
     const manualResolutionReason = resolutionReason.trim();
     const shouldUseManualResolution =
       needsContributionResolution && Boolean(manualResolutionReason);
     const resolutionResult = shouldUseManualResolution
       ? percentInputsToAllocations(
           resolutionInputs,
-          challengerAllocationTargets,
+          settlementContributionTargets,
         )
       : null;
     if (resolutionResult?.status === "invalid") {
       setError(resolutionResult.error);
       return;
     }
-    const contributionResolution =
-      resolutionResult?.status === "ok"
-        ? {
-            ratios: resolutionResult.allocations,
-            reason: manualResolutionReason,
-          }
-        : undefined;
+    const contributionResolution = contributionResolutionForReview({
+      manualReason: manualResolutionReason,
+      objectiveAcceptedResult: objectiveReviewResult,
+      resolutionResult,
+      settlementTargets: settlementContributionTargets,
+    });
 
     setSubmittingAction("review");
     try {
       const ok = await reviewObjectiveLoot(objective.id, {
+        acceptedResult: objectiveReviewResult,
         lootId: latestLoot.id,
         reason: reason.trim() || undefined,
-        resultReviews: results.map((result) => ({
+        resultReviews: results.map((result, index) => ({
           resultId: result.id,
-          acceptedResult: resultReviews[result.id] ?? "completed",
+          acceptedResult: reviewedResultValues[index] ?? "failed",
         })),
         contributionResolution,
+        settlementParticipantUserIds,
       });
       if (ok) navigate("/reports");
     } finally {
@@ -570,6 +622,19 @@ export function LootSubmitPage() {
               }}
             >
               <div className="grid gap-3">
+                <Field label="验收结论">
+                  <select
+                    className="orf-input px-3 py-2 text-sm"
+                    value={reviewDecision}
+                    onChange={(event) => {
+                      setReviewDecision(event.target.value as "passed" | "notPassed");
+                      if (error) setError("");
+                    }}
+                  >
+                    <option value="passed">通过</option>
+                    <option value="notPassed">不通过</option>
+                  </select>
+                </Field>
                 {results.map((result) => (
                   <div
                     key={result.id}
@@ -581,7 +646,12 @@ export function LootSubmitPage() {
                     <ResultDetailsSummary result={result} />
                     <select
                       className="orf-input px-3 py-2 text-sm"
-                      value={resultReviews[result.id] ?? "completed"}
+                      disabled={reviewDecision === "notPassed"}
+                      value={
+                        reviewDecision === "notPassed"
+                          ? "failed"
+                          : resultReviews[result.id] ?? "completed"
+                      }
                       onChange={(event) =>
                         setResultReviews((items) => ({
                           ...items,
@@ -611,11 +681,40 @@ export function LootSubmitPage() {
                 <div className="text-sm font-semibold orf-text-primary">
                   匿名互评贡献结果
                 </div>
+                <div className="grid gap-2 rounded-md border orf-border p-3">
+                  <div className="text-sm font-semibold orf-text-primary">
+                    正式参与人
+                  </div>
+                  <div className="text-xs orf-text-secondary">
+                    只勾选实际参与本次战利品验收和统计的人；临时参与但主动缺评的人取消勾选。
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {challengerAllocationTargets.map((target) => (
+                      <label
+                        key={contributionTargetKey(target)}
+                        className="flex items-center gap-2 text-sm orf-text-primary"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={settlementParticipants[contributionTargetKey(target)] !== false}
+                          onChange={(event) => {
+                            setSettlementParticipants((items) => ({
+                              ...items,
+                              [contributionTargetKey(target)]: event.target.checked,
+                            }));
+                            if (error) setError("");
+                          }}
+                        />
+                        <span>{target.member}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 {usesLocalContributionSettlement ? (
                   <LocalSettlementSummaryView />
                 ) : (
                   <SingleContributionSummaryView
-                    member={objective.challengers[0] ?? currentMemberName}
+                    member={settlementContributionTargets[0]?.member ?? currentMemberName}
                   />
                 )}
                 {needsContributionResolution && (
@@ -629,10 +728,10 @@ export function LootSubmitPage() {
                     <ContributionPercentTotal
                       total={percentInputTotal(
                         resolutionInputs,
-                        objective.challengers,
+                        settlementContributionTargets.map((target) => target.member),
                       )}
                     />
-                    {objective.challengers.map((member) => (
+                    {settlementContributionTargets.map(({ member }) => (
                       <Field key={member} label={`${member} 处理后贡献百分比`}>
                         <input
                           className="orf-input px-3 py-2 text-sm"
@@ -1007,6 +1106,50 @@ function balancedPercentDefaults(members: string[]) {
 }
 
 type ContributionAllocationTarget = ContributionMemberTarget;
+
+function contributionTargetKey(target: ContributionAllocationTarget) {
+  return target.memberUserId ?? target.member;
+}
+
+function equalContributionAllocations(targets: ContributionAllocationTarget[]) {
+  if (targets.length === 0) return [];
+  const ratio = 1 / targets.length;
+  return targets.map((target) => ({
+    member: target.member,
+    memberUserId: target.memberUserId ?? null,
+    ratio,
+  }));
+}
+
+function contributionResolutionForReview(input: {
+  manualReason: string;
+  objectiveAcceptedResult: ObjectiveAcceptedResult;
+  resolutionResult: ReturnType<typeof percentInputsToAllocations> | null;
+  settlementTargets: ContributionAllocationTarget[];
+}) {
+  if (input.resolutionResult?.status === "ok") {
+    return {
+      ratios: input.resolutionResult.allocations,
+      reason: input.manualReason,
+    };
+  }
+
+  if (input.objectiveAcceptedResult === "abandoned") {
+    return {
+      ratios: equalContributionAllocations(input.settlementTargets),
+      reason: "验收不通过，记录正式参与人",
+    };
+  }
+
+  if (input.settlementTargets.length === 1) {
+    return {
+      ratios: equalContributionAllocations(input.settlementTargets),
+      reason: "单人正式参与",
+    };
+  }
+
+  return undefined;
+}
 
 function percentInputsToAllocations(
   values: Record<string, string>,
