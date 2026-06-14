@@ -207,7 +207,12 @@ export interface WorkLogEntry {
   objectiveId?: string | null;
   objectiveIdSnapshot?: string | null;
   objectiveTitleSnapshot?: string | null;
+  categoryId?: string | null;
+  categoryIdSnapshot?: string | null;
+  categoryNameSnapshot?: string | null;
   bodyMarkdown: string;
+  remainingEstimatePercent?: number | null;
+  durationMinutes?: number | null;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -223,6 +228,91 @@ export interface WorkLogObjectiveOption {
   title: string;
   flowStatus: ObjectiveFlowStatus;
   finalDueAt: string;
+}
+
+export interface WorkLogCategoryOption {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkLogClassificationKind = "category" | "objective" | "uncategorized";
+
+export interface WorkLogClassificationSuggestion {
+  kind: WorkLogClassificationKind | "newCategory";
+  objectiveId?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  confidence: number;
+  reason?: string | null;
+}
+
+export type WorkLogReportScope = "mine" | "team";
+
+export interface WorkLogReportClassificationSummary {
+  kind: WorkLogClassificationKind;
+  objectiveId?: string | null;
+  categoryId?: string | null;
+  title: string;
+  entryCount: number;
+  latestRemainingEstimatePercent?: number | null;
+  totalDurationMinutes?: number;
+}
+
+export interface WorkLogReportEntrySummary {
+  id: string;
+  classificationKind: WorkLogClassificationKind;
+  objectiveId?: string | null;
+  categoryId?: string | null;
+  classificationTitle: string;
+  bodyMarkdown: string;
+  remainingEstimatePercent?: number | null;
+  durationMinutes?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkLogReportDayCell {
+  userId: string;
+  date: string;
+  entryCount: number;
+  classificationCount: number;
+  latestEntryAt?: string | null;
+  latestRemainingEstimatePercent?: number | null;
+  totalDurationMinutes: number;
+  entries: WorkLogReportEntrySummary[];
+  classifications: WorkLogReportClassificationSummary[];
+}
+
+export interface WorkLogReportUserRow {
+  id: string;
+  name: string;
+  role: UserRole;
+  avatarUrl?: string | null;
+  totalEntries: number;
+  activeDays: number;
+  coveredClassificationCount: number;
+  averageRemainingEstimatePercent?: number | null;
+  totalDurationMinutes: number;
+}
+
+export interface WorkLogReportTotals {
+  totalEntries: number;
+  activeDays: number;
+  usersWithEntries: number;
+  coveredClassificationCount: number;
+  averageRemainingEstimatePercent?: number | null;
+  totalDurationMinutes: number;
+}
+
+export interface WorkLogReport {
+  scope: WorkLogReportScope;
+  from: string;
+  to: string;
+  users: WorkLogReportUserRow[];
+  cells: WorkLogReportDayCell[];
+  totals: WorkLogReportTotals;
 }
 
 export interface ContributionAllocation {
