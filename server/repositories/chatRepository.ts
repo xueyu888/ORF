@@ -325,6 +325,11 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
       `
         SELECT m.channel_id, count(DISTINCT m.root_message_id)::int AS count
         FROM chat_messages m
+        INNER JOIN chat_messages root ON root.id = m.root_message_id
+          AND root.team_id = m.team_id
+          AND root.channel_id = m.channel_id
+          AND root.root_message_id IS NULL
+          AND root.deleted_at IS NULL
         INNER JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2 AND f.following = true
         WHERE m.channel_id = ANY($1::text[])
           AND m.root_message_id IS NOT NULL
@@ -1022,6 +1027,11 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
       thread_unread AS (
         SELECT m.channel_id, count(DISTINCT m.root_message_id)::int AS count
         FROM chat_messages m
+        INNER JOIN chat_messages root ON root.id = m.root_message_id
+          AND root.team_id = m.team_id
+          AND root.channel_id = m.channel_id
+          AND root.root_message_id IS NULL
+          AND root.deleted_at IS NULL
         INNER JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2 AND f.following = true
         INNER JOIN displayable_channels dc ON dc.id = m.channel_id
         WHERE m.root_message_id IS NOT NULL

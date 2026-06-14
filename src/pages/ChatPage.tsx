@@ -116,7 +116,7 @@ export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { appAttentionState, currentUser, notify, readModelInvalidations, state } = useOrf();
+  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -240,6 +240,7 @@ export function ChatPage() {
     notify,
     onActivateThreadPanel: activateThreadPanel,
     onChannelUpdate: applyChannel,
+    onUnreadSummaryRefresh: refreshChatUnreadSummary,
   });
 
   const threadChannel = useMemo(() => {
@@ -310,6 +311,7 @@ export function ChatPage() {
     onRequestedMessageConsumed: consumeRequestedMessage,
     onRequestedMessageRedirect: redirectRequestedMessage,
     onThreadTarget: requestThreadTarget,
+    onUnreadSummaryRefresh: refreshChatUnreadSummary,
     requestedMessageId: focusMessageId,
   });
   const feedPrefetchChannelIds = useMemo(
@@ -430,13 +432,14 @@ export function ChatPage() {
           .map((channelId) => markChatChannelReadRequest(channelId, { includeThreads: true })),
       );
       applyChannels(responses.map((response) => response.channel));
+      await refreshChatUnreadSummary();
       notify(`${uniqueChannelIds.length} 个频道已标记已读`);
     } catch (error) {
       notify(error instanceof Error ? error.message : "批量标记已读失败");
     } finally {
       setMarkingUnreadChannelsRead(false);
     }
-  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify]);
+  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify, refreshChatUnreadSummary]);
 
   const handleOpenMemberSearch = useCallback(() => {
     openInfoPanel();
@@ -1087,6 +1090,7 @@ export function ChatPage() {
             if (response.channel) applyChannel(response.channel);
             setThread(response.thread);
             reconcileThreadFollow(thread.rootMessage.id, response.thread.following);
+            await refreshChatUnreadSummary();
           }}
           onAttachmentPreview={setAttachmentPreview}
           onReaction={handleReaction}
