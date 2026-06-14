@@ -7380,6 +7380,166 @@ button:disabled {
   font-weight: 700;
 }
 
+.work-logs-editor-heading-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.work-logs-ai-suggestion-slot {
+  display: grid;
+  width: min(240px, 38vw);
+  min-width: 178px;
+  height: 48px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid var(--orf-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--orf-bg-card) 86%, transparent);
+  color: var(--orf-text-secondary);
+  padding: 7px 8px;
+}
+
+.work-logs-ai-suggestion-slot[data-state="idle"],
+.work-logs-ai-suggestion-slot[data-state="ready"] {
+  background: color-mix(in srgb, var(--orf-bg-muted) 58%, transparent);
+  color: var(--orf-text-muted);
+}
+
+.work-logs-ai-suggestion-slot[data-state="loading"] {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 72%, transparent);
+  background: color-mix(in srgb, var(--orf-accent-soft) 36%, var(--orf-bg-card));
+}
+
+.work-logs-ai-suggestion-slot[data-state="suggested"] {
+  border-color: color-mix(in srgb, var(--orf-accent-border) 78%, transparent);
+  background: color-mix(in srgb, var(--orf-accent-soft) 48%, var(--orf-bg-card));
+}
+
+.work-logs-ai-suggestion-icon {
+  position: relative;
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--orf-accent-border) 82%, transparent);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.95) 0 12%, transparent 34%),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--orf-accent-soft) 74%, #ffffff 26%),
+      color-mix(in srgb, var(--orf-bg-card) 82%, var(--orf-accent-text) 18%)
+    );
+  color: var(--orf-accent-text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    0 6px 16px color-mix(in srgb, var(--orf-accent-text) 16%, transparent);
+}
+
+.work-logs-ai-suggestion-icon::before {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 18deg,
+    transparent 0 18%,
+    color-mix(in srgb, var(--orf-accent-text) 72%, #ffffff 28%) 24%,
+    transparent 34% 66%,
+    rgba(215, 173, 95, 0.72) 74%,
+    transparent 84% 100%
+  );
+  content: "";
+  opacity: 0.38;
+}
+
+.work-logs-ai-suggestion-icon::after {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: #fff8df;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--orf-accent-text) 70%, transparent);
+  content: "";
+}
+
+.work-logs-ai-suggestion-icon svg {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 1px rgba(15, 23, 42, 0.14));
+  stroke-width: 2.25;
+}
+
+.work-logs-ai-suggestion-slot[data-state="loading"] .work-logs-ai-suggestion-icon::before {
+  animation: work-logs-ai-icon-orbit 1.6s linear infinite;
+  opacity: 0.72;
+}
+
+.work-logs-ai-suggestion-slot[data-state="suggested"] .work-logs-ai-suggestion-icon {
+  color: color-mix(in srgb, var(--orf-accent-text) 84%, #d7ad5f 16%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 7px 18px color-mix(in srgb, var(--orf-accent-text) 20%, transparent);
+}
+
+@keyframes work-logs-ai-icon-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.work-logs-ai-suggestion-slot div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.work-logs-ai-suggestion-slot span,
+.work-logs-ai-suggestion-slot small,
+.work-logs-ai-suggestion-slot strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-logs-ai-suggestion-slot span,
+.work-logs-ai-suggestion-slot small {
+  color: var(--orf-text-muted);
+  font-size: 11px;
+  font-weight: 740;
+}
+
+.work-logs-ai-suggestion-slot strong {
+  color: var(--orf-text-primary);
+  font-size: 13px;
+  font-weight: 830;
+}
+
+.work-logs-ai-suggestion-slot button {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--orf-accent-border);
+  border-radius: 7px;
+  background: var(--orf-bg-card);
+  color: var(--orf-accent-text);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.work-logs-ai-suggestion-slot button:hover {
+  background: var(--orf-accent-soft);
+}
+
 .work-logs-loading,
 .work-logs-empty {
   display: grid;
@@ -7610,70 +7770,6 @@ button:disabled {
   color: var(--orf-text-muted);
   font-size: 12px;
   font-weight: 720;
-}
-
-.work-logs-classification-suggestion {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  border: 1px solid color-mix(in srgb, var(--orf-accent-border) 70%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--orf-accent-soft) 48%, var(--orf-bg-card));
-  color: var(--orf-text-secondary);
-  padding: 9px 10px;
-}
-
-.work-logs-classification-suggestion[data-loading="true"] {
-  grid-template-columns: auto minmax(0, 1fr);
-  color: var(--orf-text-muted);
-}
-
-.work-logs-classification-suggestion > svg {
-  color: var(--orf-accent-text);
-}
-
-.work-logs-classification-suggestion div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.work-logs-classification-suggestion span,
-.work-logs-classification-suggestion small {
-  overflow: hidden;
-  color: var(--orf-text-muted);
-  font-size: 11px;
-  font-weight: 720;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.work-logs-classification-suggestion strong {
-  overflow: hidden;
-  color: var(--orf-text-primary);
-  font-size: 13px;
-  font-weight: 830;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.work-logs-classification-suggestion button {
-  display: inline-flex;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--orf-accent-border);
-  border-radius: 7px;
-  background: var(--orf-bg-card);
-  color: var(--orf-accent-text);
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 820;
-}
-
-.work-logs-classification-suggestion button:hover {
-  background: var(--orf-accent-soft);
 }
 
 .work-logs-estimate-control {
@@ -8925,6 +9021,21 @@ button.work-logs-team-cell:focus-visible {
     padding: 14px;
   }
 
+  .work-logs-editor-panel .work-logs-panel-heading,
+  .work-logs-editor-heading-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .work-logs-editor-heading-actions {
+    width: 100%;
+  }
+
+  .work-logs-ai-suggestion-slot {
+    width: 100%;
+    min-width: 0;
+  }
+
   .work-logs-draft-entry-header,
   .work-logs-history-entry-header,
   .work-logs-report-toolbar,
@@ -8961,15 +9072,6 @@ button.work-logs-team-cell:focus-visible {
 
   .work-logs-duration-inputs {
     justify-content: flex-start;
-  }
-
-  .work-logs-classification-suggestion {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .work-logs-classification-suggestion button {
-    grid-column: 2;
-    width: fit-content;
   }
 
   .work-logs-editor .orf-rich-text-editor-content {

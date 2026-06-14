@@ -2,6 +2,7 @@ import { clsx } from "clsx";
 import {
   Activity,
   BarChart3,
+  BrainCircuit,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -12,7 +13,6 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Sparkles,
   Tags,
   Target,
   Trash2,
@@ -551,16 +551,28 @@ export function WorkLogsPage() {
                   <h2>我的日志</h2>
                   <p>{currentUser?.name ?? ""}</p>
                 </div>
-                {editorDraft.editingEntryId && (
-                  <Button
-                    variant="secondary"
-                    onClick={startNewEntry}
-                    disabled={!canWrite || saving}
-                  >
-                    <Plus className="h-4 w-4" />
-                    新日志
-                  </Button>
-                )}
+                <div className="work-logs-editor-heading-actions">
+                  {canUseWorkLogCategories && classificationSuggestionEnabled && (
+                    <WorkLogClassificationSuggestionSlot
+                      categories={categories}
+                      draft={editorDraft}
+                      loading={classificationSuggestionLoading}
+                      objectives={objectives}
+                      onApply={applyClassificationSuggestion}
+                      suggestion={classificationSuggestion}
+                    />
+                  )}
+                  {editorDraft.editingEntryId && (
+                    <Button
+                      variant="secondary"
+                      onClick={startNewEntry}
+                      disabled={!canWrite || saving}
+                    >
+                      <Plus className="h-4 w-4" />
+                      新日志
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {error && <div className="work-logs-error">{error}</div>}
@@ -588,15 +600,10 @@ export function WorkLogsPage() {
                   <div className="work-logs-draft-list">
                     <WorkLogEditorCard
                       canUseCategories={canUseWorkLogCategories}
-                      categories={categories}
                       category={
                         editorDraft.categoryId
                           ? categoryOptionsById.get(editorDraft.categoryId)
                           : undefined
-                      }
-                      classificationSuggestion={classificationSuggestion}
-                      classificationSuggestionLoading={
-                        classificationSuggestionLoading
                       }
                       currentUserId={currentUser?.id ?? ""}
                       draft={editorDraft}
@@ -606,14 +613,12 @@ export function WorkLogsPage() {
                           ? objectiveOptionsById.get(editorDraft.objectiveId)
                           : undefined
                       }
-                      objectives={objectives}
                       classificationOptions={buildWorkLogClassificationChoices(
                         editorDraft,
                         objectives,
                         canUseWorkLogCategories,
                         categories,
                       )}
-                      onApplySuggestion={applyClassificationSuggestion}
                       onChange={updateEditorDraft}
                     />
                   </div>
@@ -763,31 +768,21 @@ function WorkLogViewTabs({
 
 function WorkLogEditorCard({
   canUseCategories,
-  categories,
   category,
   classificationOptions,
-  classificationSuggestion,
-  classificationSuggestionLoading,
   currentUserId,
   draft,
   editingEntry,
   objective,
-  objectives,
-  onApplySuggestion,
   onChange,
 }: {
   canUseCategories: boolean;
-  categories: WorkLogCategoryOption[];
   category?: WorkLogCategoryOption;
   classificationOptions: WorkLogClassificationChoice[];
-  classificationSuggestion: WorkLogClassificationSuggestion | null;
-  classificationSuggestionLoading: boolean;
   currentUserId: string;
   draft: WorkLogEditorDraft;
   editingEntry: WorkLogEntry | null;
   objective?: WorkLogObjectiveOption;
-  objectives: WorkLogObjectiveOption[];
-  onApplySuggestion: (suggestion: WorkLogClassificationSuggestion) => void;
   onChange: (patch: WorkLogEditorDraftPatch) => void;
 }) {
   const estimateEnabled = draft.classificationKind === "objective" && Boolean(draft.objectiveId);
@@ -845,16 +840,6 @@ function WorkLogEditorCard({
         <div className="work-logs-snapshot-note">
           历史分类：{draft.categoryNameSnapshot}
         </div>
-      )}
-      {canUseCategories && (
-        <WorkLogClassificationSuggestionHint
-          categories={categories}
-          draft={draft}
-          loading={classificationSuggestionLoading}
-          objectives={objectives}
-          onApply={onApplySuggestion}
-          suggestion={classificationSuggestion}
-        />
       )}
       <div
         className="work-logs-estimate-control"
@@ -954,7 +939,7 @@ function WorkLogEditorCard({
   );
 }
 
-function WorkLogClassificationSuggestionHint({
+function WorkLogClassificationSuggestionSlot({
   categories,
   draft,
   loading,
@@ -969,28 +954,57 @@ function WorkLogClassificationSuggestionHint({
   onApply: (suggestion: WorkLogClassificationSuggestion) => void;
   suggestion: WorkLogClassificationSuggestion | null;
 }) {
+  const hasContent =
+    draft.bodyMarkdown.trim().length >= 8 &&
+    orfRichTextHasMeaningfulContent(draft.bodyMarkdown);
+  const label =
+    suggestion && !suggestionMatchesWorkLogDraft(suggestion, draft)
+      ? workLogSuggestionLabel(suggestion, { categories, objectives })
+      : "";
   if (loading) {
     return (
-      <div className="work-logs-classification-suggestion" data-loading="true">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>正在匹配目标和分类</span>
+      <div className="work-logs-ai-suggestion-slot" data-state="loading" aria-live="polite">
+        <span className="work-logs-ai-suggestion-icon" aria-hidden="true">
+          <Loader2 className="h-4 w-4 animate-spin" />
+        </span>
+        <div>
+          <span>智能分析中</span>
+          <small>正在匹配目标和分类</small>
+        </div>
       </div>
     );
   }
-  if (!suggestion || suggestionMatchesWorkLogDraft(suggestion, draft)) {
-    return null;
+  if (!label || !suggestion) {
+    return (
+      <div
+        className="work-logs-ai-suggestion-slot"
+        data-state={hasContent ? "ready" : "idle"}
+        aria-live="polite"
+      >
+        <span className="work-logs-ai-suggestion-icon" aria-hidden="true">
+          <BrainCircuit className="h-4 w-4" />
+        </span>
+        <div>
+          <span>智能分析</span>
+          <small>{hasContent ? "等待新的匹配结果" : "输入后自动建议"}</small>
+        </div>
+      </div>
+    );
   }
 
-  const label = workLogSuggestionLabel(suggestion, { categories, objectives });
-  if (!label) return null;
-
   return (
-    <div className="work-logs-classification-suggestion">
-      <Sparkles className="h-4 w-4" />
+    <div
+      className="work-logs-ai-suggestion-slot"
+      data-state="suggested"
+      aria-live="polite"
+      title={suggestion.reason ?? undefined}
+    >
+      <span className="work-logs-ai-suggestion-icon" aria-hidden="true">
+        <BrainCircuit className="h-4 w-4" />
+      </span>
       <div>
         <span>AI 建议</span>
         <strong>{label}</strong>
-        {suggestion.reason && <small>{suggestion.reason}</small>}
       </div>
       <button type="button" onClick={() => onApply(suggestion)}>
         采用
