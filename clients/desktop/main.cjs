@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { Readable, Transform } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
-const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, safeStorage, shell } = require("electron");
+const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, net, powerMonitor, safeStorage, shell } = require("electron");
 const {
   createAppIconRgba,
   createUnreadBadgeRgba,
@@ -38,6 +38,7 @@ const DESKTOP_CREDENTIALS_FILE_NAME = "saved-login-accounts.v1.json";
 const DESKTOP_SETTINGS_FILE_NAME = "desktop-settings.v1.json";
 const DESKTOP_WORKBENCH_ZOOM_MIN = -2;
 const DESKTOP_WORKBENCH_ZOOM_MAX = 4;
+const DESKTOP_SYSTEM_IDLE_THRESHOLD_SECONDS = 10 * 60;
 const DESKTOP_LAUNCH_AT_LOGIN_ARG = "--orf-start-hidden";
 const DESKTOP_LAUNCH_AT_LOGIN_PROMPT_DELAY_MS = 1200;
 const DESKTOP_RECOVERY_CHECK_SCRIPT = `
@@ -1044,6 +1045,9 @@ function registerDesktopShellBridge() {
     if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
     return { status: "success", data: desktopWindowState(targetWindow) };
   });
+  ipcMain.handle("orf:desktop-shell:get-system-idle-snapshot", () => (
+    { status: "success", data: desktopSystemIdleSnapshot() }
+  ));
   ipcMain.handle("orf:desktop-shell:minimize-window", (event) => {
     const targetWindow = BrowserWindow.fromWebContents(event.sender);
     if (!targetWindow || targetWindow.isDestroyed()) return { status: "unsupported", reason: "window_unavailable" };
@@ -1083,6 +1087,22 @@ function desktopWindowState(targetWindow) {
     isMinimized: targetWindow.isMinimized(),
     isVisible: targetWindow.isVisible(),
   };
+}
+
+function desktopSystemIdleSnapshot() {
+  try {
+    return {
+      idleSeconds: Math.max(0, powerMonitor.getSystemIdleTime()),
+      state: powerMonitor.getSystemIdleState(DESKTOP_SYSTEM_IDLE_THRESHOLD_SECONDS),
+      supported: true,
+    };
+  } catch {
+    return {
+      idleSeconds: null,
+      state: "unknown",
+      supported: false,
+    };
+  }
 }
 
 function sendDesktopWindowState(targetWindow) {
