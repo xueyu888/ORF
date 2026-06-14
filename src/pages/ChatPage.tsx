@@ -15,6 +15,7 @@ import { resetChatNativeNotificationViewState, setChatNativeNotificationViewStat
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
 import { feedbackIssueIdsFromText } from "../features/feedback/model/feedbackIssue";
 import {
+  chatMessageCopyText,
   chatMessageDeliveryStatus,
   chatMessagePendingSend,
   createPendingChatMessage,
@@ -827,6 +828,20 @@ export function ChatPage() {
     }
   }, [notify]);
 
+  const handleCopyMessage = useCallback(async (message: ChatMessage) => {
+    const text = chatMessageCopyText(message);
+    if (!text) {
+      notify("没有可复制的消息内容");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      notify("已复制消息");
+    } catch {
+      notify(text);
+    }
+  }, [notify]);
+
   const handleReaction = useCallback(
     async (message: ChatMessage, emojiName: string) => {
       const currentReaction = message.reactions.find((reaction) => reaction.emojiName === emojiName);
@@ -982,6 +997,7 @@ export function ChatPage() {
               onCancelEdit={() => setEditingMessage(null)}
               onClearUnread={() => void clearActiveChannelUnread()}
               onCopyLink={handleCopyMessageLink}
+              onCopyMessage={handleCopyMessage}
               onDelete={setDeletingMessage}
               onEdit={setEditingMessage}
               onJumpUnread={jumpToUnread}
@@ -1111,6 +1127,7 @@ export function ChatPage() {
           onMarkUnread={markMessageUnread}
           onDelete={setDeletingMessage}
           onCopyLink={handleCopyMessageLink}
+          onCopyMessage={handleCopyMessage}
         />
       )}
       {modal === "channel" && (

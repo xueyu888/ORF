@@ -12856,18 +12856,6 @@ a.orf-row-loot-action,
   height: 28px;
 }
 
-@container (max-width: 1040px) {
-  .orf-chat-message-action-overflow-early {
-    display: none !important;
-  }
-}
-
-@container (max-width: 920px) {
-  .orf-chat-message-action-overflow-late {
-    display: none !important;
-  }
-}
-
 .orf-chat-message-primary-action {
   color: var(--orf-text-secondary);
 }

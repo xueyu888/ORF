@@ -20,6 +20,7 @@ type ChatThreadPanelProps = {
   onAttachmentPreview: (attachment: ChatAttachment) => void;
   onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
+  onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
@@ -50,6 +51,7 @@ export function ChatThreadPanel({
   composerFocusSignal,
   onCancelEdit,
   onCopyLink,
+  onCopyMessage,
   onDelete,
   onDraftStateChange,
   onEdit,
@@ -167,6 +169,7 @@ export function ChatThreadPanel({
           onAttachmentPreview={onAttachmentPreview}
           onCancelEdit={onCancelEdit}
           onCopyLink={onCopyLink}
+          onCopyMessage={onCopyMessage}
           onDelete={onDelete}
           onEdit={onEdit}
           onMarkUnread={onMarkUnread}
@@ -201,6 +204,7 @@ export function ChatThreadPanel({
                 onAttachmentPreview={onAttachmentPreview}
                 onCancelEdit={onCancelEdit}
                 onCopyLink={onCopyLink}
+                onCopyMessage={onCopyMessage}
                 onDelete={onDelete}
                 onEdit={onEdit}
                 onMarkUnread={onMarkUnread}

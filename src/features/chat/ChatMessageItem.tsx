@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bookmark, ChevronDown, ChevronUp, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
+import { Bookmark, ChevronDown, ChevronUp, Copy, Edit3, EyeOff, FileText, Link as LinkIcon, type LucideIcon, MoreHorizontal, Pin, Reply, RotateCcw, Smile, Trash2, X } from "lucide-react";
 import { type CSSProperties, type KeyboardEvent, type MouseEvent, type RefObject, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { IconButton } from "../../components/ui";
@@ -28,6 +28,7 @@ type ChatMessageItemProps = {
   onAttachmentPreview: (attachment: ChatAttachment) => void;
   onCancelEdit: () => void;
   onCopyLink: (message: ChatMessage) => void;
+  onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
   onMarkUnread?: (message: ChatMessage) => void;
@@ -417,6 +418,7 @@ export function ChatMessageItem({
   message,
   onCancelEdit,
   onCopyLink,
+  onCopyMessage,
   onDelete,
   onEdit,
   onMarkUnread,
@@ -548,6 +550,32 @@ export function ChatMessageItem({
       openMoreMenu("last");
     }
   };
+  const copyMessageAction: ChatMessageMoreAction = {
+    icon: Copy,
+    id: "copyMessage",
+    label: "复制消息",
+    onSelect: () => onCopyMessage(message),
+  };
+  const saveAction: ChatMessageMoreAction | null = onSave ? {
+    active: message.savedByCurrentUser,
+    icon: Bookmark,
+    id: "save",
+    label: message.savedByCurrentUser ? "取消保存" : "保存消息",
+    onSelect: () => onSave(message),
+  } : null;
+  const editAction: ChatMessageMoreAction | null = canMutate ? {
+    icon: Edit3,
+    id: "edit",
+    label: "编辑消息",
+    onSelect: () => onEdit(message),
+  } : null;
+  const deleteAction: ChatMessageMoreAction | null = canDeleteMessage ? {
+    danger: true,
+    icon: Trash2,
+    id: "delete",
+    label: "删除消息",
+    onSelect: () => onDelete(message),
+  } : null;
   const moreActions: ChatMessageMoreAction[] = [
     {
       icon: LinkIcon,
@@ -568,30 +596,7 @@ export function ChatMessageItem({
       label: "从这里标记未读",
       onSelect: () => onMarkUnread(message),
     }] : []),
-    ...(onSave ? [{
-      active: message.savedByCurrentUser,
-      icon: Bookmark,
-      id: "save",
-      label: message.savedByCurrentUser ? "取消保存" : "保存消息",
-      onSelect: () => onSave(message),
-    }] : []),
-    ...(canMutate ? [{
-      icon: Edit3,
-      id: "edit",
-      label: "编辑消息",
-      onSelect: () => onEdit(message),
-    }] : []),
-    ...(canDeleteMessage ? [{
-      danger: true,
-      icon: Trash2,
-      id: "delete",
-      label: "删除消息",
-      onSelect: () => onDelete(message),
-    }] : []),
   ];
-  const saveAction = moreActions.find((action) => action.id === "save");
-  const editAction = moreActions.find((action) => action.id === "edit");
-  const deleteAction = moreActions.find((action) => action.id === "delete");
   const hasMoreActions = moreActions.length > 0;
 
   return (
@@ -718,7 +723,6 @@ export function ChatMessageItem({
               type="button"
               className={clsx(
                 "orf-chat-quick-reaction",
-                "orf-chat-message-action-overflow-early",
                 reactedByCurrentUser.has(option.emojiName) && "orf-chat-message-action-active",
               )}
               key={option.emojiName}
@@ -736,12 +740,15 @@ export function ChatMessageItem({
           {onThread && !message.rootMessageId && (
             <IconButton icon={Reply} label={message.replyCount > 0 ? "打开回复" : "回复"} onClick={() => onThread(message.id, { focusComposer: true })} />
           )}
+          <IconButton
+            className="orf-chat-message-primary-action"
+            icon={copyMessageAction.icon}
+            label={copyMessageAction.label}
+            onClick={copyMessageAction.onSelect}
+          />
           {saveAction && (
             <IconButton
-              className={clsx(
-                "orf-chat-message-action-overflow-late",
-                saveAction.active && "orf-chat-message-action-active",
-              )}
+              className={clsx(saveAction.active && "orf-chat-message-action-active")}
               icon={saveAction.icon}
               label={saveAction.label}
               onClick={saveAction.onSelect}
@@ -749,7 +756,7 @@ export function ChatMessageItem({
           )}
           {editAction && (
             <IconButton
-              className="orf-chat-message-primary-action orf-chat-message-action-overflow-late"
+              className="orf-chat-message-primary-action"
               icon={editAction.icon}
               label={editAction.label}
               onClick={editAction.onSelect}
@@ -757,7 +764,7 @@ export function ChatMessageItem({
           )}
           {deleteAction && (
             <IconButton
-              className="orf-chat-message-danger-action orf-chat-message-action-overflow-late"
+              className="orf-chat-message-danger-action"
               icon={deleteAction.icon}
               label={deleteAction.label}
               onClick={deleteAction.onSelect}
