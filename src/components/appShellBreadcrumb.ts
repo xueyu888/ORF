@@ -22,6 +22,10 @@ export function breadcrumb(pathname: string) {
     return "聊天";
   }
 
+  if (/^\/feedback\/new\/?$/.test(pathname)) {
+    return "反馈 / 新建反馈";
+  }
+
   if (/^\/feedback\/[^/]+\/?$/.test(pathname)) {
     return "反馈 / Issue";
   }

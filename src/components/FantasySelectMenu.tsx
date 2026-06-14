@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { Check, ChevronDown, Search } from "lucide-react";
 import type { CSSProperties, ReactNode, RefObject } from "react";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export type FantasySelectOption<Value extends string> = {
@@ -141,14 +141,21 @@ export function FantasySelectMenu<Value extends string>({
     }
   }, [open, searchable, searchQuery, selectedLabel, variant, visibleOptions.length]);
 
-  const selectOption = (option: FantasySelectOption<Value>) => {
+  const selectOption = useCallback((option: FantasySelectOption<Value>) => {
     if (option.disabled || disabled) return;
     setSearchQuery("");
     setOpen(false);
     if (option.value !== value) {
       onChange(option.value);
     }
-  };
+  }, [disabled, onChange, value]);
+
+  const setPopoverElement = useCallback(
+    (node: HTMLDivElement | null) => {
+      popoverRef.current = node;
+    },
+    [],
+  );
 
   return (
     <div
@@ -185,7 +192,7 @@ export function FantasySelectMenu<Value extends string>({
         onSearchQueryChange={setSearchQuery}
         open={open}
         options={options}
-        popoverRef={popoverRef}
+        popoverRef={setPopoverElement}
         position={popoverPosition}
         searchable={searchable}
         searchInputRef={searchInputRef}
@@ -241,7 +248,7 @@ function FantasySelectPopover<Value extends string>({
   onSearchQueryChange: (query: string) => void;
   open: boolean;
   options: Array<FantasySelectOption<Value>>;
-  popoverRef: RefObject<HTMLDivElement | null>;
+  popoverRef: (node: HTMLDivElement | null) => void;
   position: PopoverPosition | null;
   searchable: boolean;
   searchInputRef: RefObject<HTMLInputElement | null>;
@@ -300,6 +307,7 @@ function FantasySelectPopover<Value extends string>({
               key={option.value}
               aria-selected={selectedOption}
               className={clsx("orf-fantasy-select-option", selectedOption && "orf-fantasy-select-option-selected")}
+              data-fantasy-select-option-value={option.value}
               disabled={option.disabled}
               onClick={() => onSelect(option)}
               role="option"

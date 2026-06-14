@@ -16,8 +16,12 @@ import type {
   OrfState,
   OrfUser,
   WorkLogActivityItem,
+  WorkLogCategoryOption,
+  WorkLogClassificationSuggestion,
   WorkLogEntry,
   WorkLogObjectiveOption,
+  WorkLogReport,
+  WorkLogReportScope,
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
@@ -99,12 +103,24 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
-export type WorkLogObjectivesResponse = { objectives: WorkLogObjectiveOption[] };
+export type WorkLogObjectivesResponse = {
+  categories: WorkLogCategoryOption[];
+  classificationSuggestionEnabled: boolean;
+  objectives: WorkLogObjectiveOption[];
+};
 export type WorkLogDayResponse = { entries: WorkLogEntry[] };
 export type WorkLogActivityResponse = { entries: WorkLogActivityItem[] };
+export type WorkLogReportResponse = { report: WorkLogReport };
+export type WorkLogClassificationSuggestionResponse = {
+  suggestion: WorkLogClassificationSuggestion | null;
+};
 export type WorkLogEntrySaveInput = {
   bodyMarkdown: string;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  durationMinutes?: number | null;
   objectiveId?: string | null;
+  remainingEstimatePercent?: number | null;
 };
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
@@ -573,6 +589,13 @@ export async function getWorkLogObjectives() {
   return apiJson<WorkLogObjectivesResponse>("/api/work-logs/objectives");
 }
 
+export async function suggestWorkLogClassification(input: { bodyMarkdown: string }) {
+  return apiJson<WorkLogClassificationSuggestionResponse>("/api/work-logs/classification-suggestion", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function getMyWorkLogDay(date: string) {
   const query = new URLSearchParams({ date });
   return apiJson<WorkLogDayResponse>(`/api/work-logs/my-day?${query.toString()}`);
@@ -592,6 +615,12 @@ export async function updateMyWorkLogEntry(entryId: string, input: WorkLogEntryS
   });
 }
 
+export async function deleteMyWorkLogEntry(entryId: string) {
+  return apiJson<WorkLogDayResponse>(`/api/work-logs/entries/${encodeURIComponent(entryId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getWorkLogActivity(input: {
   from?: string;
   limit?: number;
@@ -607,6 +636,19 @@ export async function getWorkLogActivity(input: {
   if (input.limit) query.set("limit", String(input.limit));
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return apiJson<WorkLogActivityResponse>(`/api/work-logs/activity${suffix}`);
+}
+
+export async function getWorkLogReport(input: {
+  from: string;
+  scope: WorkLogReportScope;
+  to: string;
+}) {
+  const query = new URLSearchParams({
+    from: input.from,
+    scope: input.scope,
+    to: input.to,
+  });
+  return apiJson<WorkLogReportResponse>(`/api/work-logs/report?${query.toString()}`);
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {
