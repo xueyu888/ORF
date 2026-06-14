@@ -1,10 +1,14 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import { subscribeRealtimeEvents } from "../realtime/realtimeEventBus";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import type { RealtimeEvent } from "../../src/types/realtime";
 
 const HEARTBEAT_MS = 25_000;
+const realtimeQuerySchema = z.object({
+  clientId: z.string().trim().min(1).max(128).optional(),
+});
 
 function writeSseEvent(write: (chunk: string) => void, event: RealtimeEvent) {
   write(`id: ${event.id}\n`);
@@ -18,6 +22,7 @@ export function registerRealtimeRoutes(app: FastifyInstance) {
     if (!context) {
       return reply;
     }
+    const query = realtimeQuerySchema.parse(request.query);
 
     reply.hijack();
     reply.raw.writeHead(200, {
@@ -34,6 +39,7 @@ export function registerRealtimeRoutes(app: FastifyInstance) {
       }
     };
     const unsubscribe = subscribeRealtimeEvents({
+      clientId: query.clientId,
       teamId: runtimeScopeStorageId(context.scope),
       userId: context.user.id,
       send: (event) => writeSseEvent(write, event),

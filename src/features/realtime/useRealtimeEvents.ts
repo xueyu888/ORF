@@ -7,6 +7,7 @@ import type {
   RealtimeEvent,
   SystemBroadcast,
 } from "../../types/realtime";
+import { getRealtimeClientId } from "./realtimeClientId";
 
 type RealtimeEventOptions = {
   enabled: boolean;
@@ -63,7 +64,8 @@ export function useRealtimeEvents({
       return undefined;
     }
 
-    const source = new EventSource("/api/events", { withCredentials: true });
+    const query = new URLSearchParams({ clientId: getRealtimeClientId() });
+    const source = new EventSource(`/api/events?${query.toString()}`, { withCredentials: true });
     let connectionHadError = false;
     const handleNotification = (event: MessageEvent<string>) => {
       const payload = parseRealtimeEvent(event.data);

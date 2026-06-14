@@ -2,11 +2,45 @@ import { type Dispatch, type SetStateAction, useCallback, useEffect, useRef, use
 import { apiJson, getCurrentUserAccess, type CurrentUserAccessData, type PermissionRulesResponse, type TaskManagementData, type UsersResponse } from "./apiClient";
 import { normalizeState } from "./orfStateSnapshot";
 import { shouldFetchAdminCollections, taskManagementPathForRole } from "./orfDataLoading";
-import type { CommentThread, OrfState, OrfUser, UserRole } from "../types/orf";
+import { getDesktopSystemIdleSnapshot, getDesktopWindowState, isDesktopShellAvailable } from "../features/desktop/desktopShellRuntime";
+import { readBrowserDocumentAttentionSnapshot } from "../features/interaction/appAttentionState";
+import { getRealtimeClientId } from "../features/realtime/realtimeClientId";
+import type { CommentThread, OrfState, OrfUser, UserPresenceActivityInput, UserRole } from "../types/orf";
 
 const ONLINE_ACTIVITY_THROTTLE_MS = 60_000;
+const PRESENCE_HEARTBEAT_MS = 60_000;
 
 type OnlineActivityResponse = { ok: boolean; lastOnlineAt?: string | null };
+
+async function buildPresenceActivityPayload(lastInteractionAt: string | null): Promise<UserPresenceActivityInput> {
+  const browserSnapshot = readBrowserDocumentAttentionSnapshot();
+  const payload: UserPresenceActivityInput = {
+    clientId: getRealtimeClientId(),
+    documentFocused: browserSnapshot.documentFocused,
+    documentVisible: browserSnapshot.visibilityState === "visible",
+    lastInteractionAt,
+    occurredAt: new Date().toISOString(),
+    source: isDesktopShellAvailable() ? "desktop" : "browser",
+  };
+
+  if (!isDesktopShellAvailable()) return payload;
+
+  const [windowStateResult, idleResult] = await Promise.all([
+    getDesktopWindowState().catch(() => null),
+    getDesktopSystemIdleSnapshot().catch(() => null),
+  ]);
+  if (windowStateResult?.status === "success" && windowStateResult.data) {
+    payload.windowFocused = windowStateResult.data.isFocused === true;
+    payload.windowMinimized = windowStateResult.data.isMinimized === true;
+    payload.windowVisible = windowStateResult.data.isVisible !== false;
+  }
+  if (idleResult?.status === "success" && idleResult.data) {
+    payload.systemIdleSeconds = idleResult.data.idleSeconds;
+    payload.systemIdleState = idleResult.data.state;
+  }
+
+  return payload;
+}
 
 interface OrfDataStateOptions {
   authReady: boolean;
@@ -98,6 +132,7 @@ export function useOrfDataState({
 }: OrfDataStateOptions) {
   const [dataReady, setDataReady] = useState(false);
   const lastOnlineActivitySentAt = useRef(0);
+  const lastUserInteractionAt = useRef<string | null>(new Date().toISOString());
 
   const applyTaskManagementData = useCallback(
     (data: TaskManagementData) => {
@@ -232,6 +267,7 @@ export function useOrfDataState({
       return undefined;
     }
 
+    let cancelled = false;
     const reportActivity = (force = false) => {
       const now = Date.now();
       if (!force && now - lastOnlineActivitySentAt.current < ONLINE_ACTIVITY_THROTTLE_MS) {
@@ -239,9 +275,17 @@ export function useOrfDataState({
       }
 
       lastOnlineActivitySentAt.current = now;
-      void apiJson<OnlineActivityResponse>("/api/users/me/activity", { method: "POST", keepalive: force })
+      void buildPresenceActivityPayload(lastUserInteractionAt.current)
+        .then((payload) => {
+          if (cancelled) return null;
+          return apiJson<OnlineActivityResponse>("/api/users/me/activity", {
+            body: JSON.stringify(payload),
+            keepalive: force,
+            method: "POST",
+          });
+        })
         .then((activity) => {
-          if (!activity.lastOnlineAt || !authUserId) {
+          if (!activity?.lastOnlineAt || !authUserId) {
             return;
           }
 
@@ -257,8 +301,12 @@ export function useOrfDataState({
         reportActivity();
       }
     };
-    const handleActivity = () => reportActivity();
+    const handleActivity = () => {
+      lastUserInteractionAt.current = new Date().toISOString();
+      reportActivity();
+    };
     const reportFinalActivity = () => reportActivity(true);
+    const heartbeat = window.setInterval(() => reportActivity(), PRESENCE_HEARTBEAT_MS);
 
     document.addEventListener("pointerdown", handleActivity, { capture: true });
     document.addEventListener("keydown", handleActivity, { capture: true });
@@ -269,6 +317,8 @@ export function useOrfDataState({
     document.addEventListener("visibilitychange", reportVisibleActivity);
 
     return () => {
+      cancelled = true;
+      window.clearInterval(heartbeat);
       document.removeEventListener("pointerdown", handleActivity, { capture: true });
       document.removeEventListener("keydown", handleActivity, { capture: true });
       document.removeEventListener("wheel", handleActivity, { capture: true });

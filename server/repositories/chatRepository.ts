@@ -20,7 +20,8 @@ import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from 
 import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeNotificationModel";
 import { pool } from "../db/client";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
-import { publishRealtimeChatEvent, realtimeOnlineUserIds } from "../realtime/realtimeEventBus";
+import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
+import { resolveRealtimeUserPresence } from "../realtime/presenceRegistry";
 import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
 import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
@@ -110,8 +111,11 @@ async function listActiveTeamUsers(teamId: string) {
     `,
     [teamId],
   );
-  const onlineUserIds = realtimeOnlineUserIds(teamId);
-  return rows.map((row) => toChatUser(row, { online: onlineUserIds.has(row.id) }));
+  return rows.map((row) => toChatUser(row, resolveRealtimeUserPresence({
+    lastOnlineAt: row.last_online_at,
+    teamId,
+    userId: row.id,
+  })));
 }
 
 async function findActiveDirectChannelIdByMemberIds(teamId: string, memberIds: string[], preferredName: string) {
@@ -267,8 +271,11 @@ async function loadUsersByIds(teamId: string, userIds: string[]) {
     `,
     [uniqueIds, teamId],
   );
-  const onlineUserIds = realtimeOnlineUserIds(teamId);
-  return new Map(rows.map((row) => [row.id, toChatUser(row, { online: onlineUserIds.has(row.id) })]));
+  return new Map(rows.map((row) => [row.id, toChatUser(row, resolveRealtimeUserPresence({
+    lastOnlineAt: row.last_online_at,
+    teamId,
+    userId: row.id,
+  }))]));
 }
 
 async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {

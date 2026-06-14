@@ -2,7 +2,7 @@ import type { ClientUpdateReleaseResponse } from "./clientReleaseRepository";
 import {
   publishRealtimeClientUpdateAvailable,
   publishRealtimeSystemBroadcast,
-  realtimeOnlineUserIds,
+  realtimeConnectedUserIds,
 } from "../realtime/realtimeEventBus";
 import type { ClientUpdateAvailable, SystemBroadcast } from "../../src/types/realtime";
 
@@ -25,7 +25,7 @@ export function publishClientUpdateAnnouncement(input: {
   const dedupeKey = clientUpdateAnnouncementDedupeKey(input.teamId, input.release.version);
   if (mode === "automatic" && automaticClientUpdateAnnouncements.has(dedupeKey)) {
     return {
-      onlineUserCount: realtimeOnlineUserIds(input.teamId).size,
+      onlineUserCount: realtimeConnectedUserIds(input.teamId).size,
       releaseTag: input.release.tagName,
       releaseVersion: input.release.version,
       skipped: true,
@@ -43,7 +43,7 @@ export function publishClientUpdateAnnouncement(input: {
   }
 
   return {
-    onlineUserCount: realtimeOnlineUserIds(input.teamId).size,
+    onlineUserCount: realtimeConnectedUserIds(input.teamId).size,
     releaseTag: input.release.tagName,
     releaseVersion: input.release.version,
     skipped: false,

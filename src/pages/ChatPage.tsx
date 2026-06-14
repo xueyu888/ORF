@@ -679,9 +679,20 @@ export function ChatPage() {
         rootMessageId,
         parentMessageId,
       };
+      const now = new Date().toISOString();
       const pendingMessage = createPendingChatMessage({
         attachments,
-        author: { ...currentUser, presence: { online: true } },
+        author: {
+          ...currentUser,
+          presence: {
+            active: true,
+            connected: true,
+            lastActiveAt: now,
+            online: true,
+            source: "browser",
+            state: "active",
+          },
+        },
         body,
         channelId,
         parentMessageId,

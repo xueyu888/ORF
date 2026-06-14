@@ -37,6 +37,9 @@ export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance
 export type ObjectiveAlignmentRequestStatus = "requested" | "scheduled" | "completed" | "needsWork" | "cancelled";
 export type ChatChannelType = "public" | "private" | "direct";
 export type ChatMemberRole = "owner" | "admin" | "member";
+export type ChatPresenceState = "active" | "idle" | "recent" | "offline";
+export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown";
+export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
 
 export interface OrfUser {
   id: string;
@@ -421,8 +424,27 @@ export interface ChatUser {
   avatarUrl?: string | null;
   lastOnlineAt?: string | null;
   presence: {
+    active: boolean;
+    connected: boolean;
+    lastActiveAt?: string | null;
     online: boolean;
+    source?: ClientPresenceSource;
+    state: ChatPresenceState;
   };
+}
+
+export interface UserPresenceActivityInput {
+  clientId?: string;
+  documentFocused?: boolean;
+  documentVisible?: boolean;
+  lastInteractionAt?: string | null;
+  occurredAt?: string;
+  source?: ClientPresenceSource;
+  systemIdleSeconds?: number | null;
+  systemIdleState?: ClientSystemIdleState;
+  windowFocused?: boolean;
+  windowMinimized?: boolean;
+  windowVisible?: boolean;
 }
 
 export interface ChatChannelMember {

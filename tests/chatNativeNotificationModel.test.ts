@@ -9,7 +9,15 @@ import {
   appAttentionStateFromBrowserDocument,
   appAttentionStateFromDesktopWindow,
 } from "../src/features/interaction/appAttentionState";
-import type { ChatChannel, ChatMessage } from "../src/types/orf";
+import { chatPresenceBadgeState, chatPresenceState, formatPresence, isChatUserOnline } from "../src/features/chat/chatPresence";
+import {
+  connectRealtimePresence,
+  disconnectRealtimePresence,
+  PRESENCE_ACTIVE_IDLE_THRESHOLD_SECONDS,
+  recordRealtimePresenceActivity,
+  resolveRealtimeUserPresence,
+} from "../server/realtime/presenceRegistry";
+import type { ChatChannel, ChatMessage, ChatUser } from "../src/types/orf";
 import type { ChatRealtimeEvent } from "../src/types/realtime";
 
 const currentUserId = "user-current";
@@ -83,6 +91,26 @@ function message(overrides: Partial<ChatMessage> = {}): ChatMessage {
     savedByCurrentUser: false,
     attachments: [],
     reactions: [],
+    ...overrides,
+  };
+}
+
+function chatUser(overrides: Partial<ChatUser> = {}): ChatUser {
+  return {
+    id: "user-presence",
+    name: "在线测试",
+    email: "presence@example.test",
+    role: "member",
+    status: "active",
+    lastOnlineAt: null,
+    presence: {
+      active: false,
+      connected: false,
+      lastActiveAt: null,
+      online: false,
+      source: "unknown",
+      state: "offline",
+    },
     ...overrides,
   };
 }
@@ -171,6 +199,80 @@ test("app attention state treats only focused visible desktop windows as activel
     appAttentionStateFromDesktopWindow({ isFocused: true, isMaximized: false, isMinimized: false, isVisible: false }),
     { activelyViewed: false, source: "desktop-window" },
   );
+});
+
+test("chat presence display treats only active presence as green online", () => {
+  const now = new Date().toISOString();
+  const activeUser = chatUser({
+    presence: {
+      active: true,
+      connected: true,
+      lastActiveAt: now,
+      online: true,
+      source: "desktop",
+      state: "active",
+    },
+  });
+  assert.equal(chatPresenceState(activeUser), "active");
+  assert.equal(chatPresenceBadgeState(chatPresenceState(activeUser)), "online");
+  assert.equal(isChatUserOnline(activeUser), true);
+
+  const idleUser = chatUser({
+    presence: {
+      active: false,
+      connected: true,
+      lastActiveAt: now,
+      online: false,
+      source: "desktop",
+      state: "idle",
+    },
+  });
+  assert.equal(chatPresenceState(idleUser), "idle");
+  assert.equal(chatPresenceBadgeState(chatPresenceState(idleUser)), "away");
+  assert.equal(isChatUserOnline(idleUser), false);
+  assert.match(formatPresence(idleUser), /^已连接，/);
+});
+
+test("realtime presence uses desktop system idle to separate active and idle connected users", () => {
+  const teamId = `team-presence-${Date.now()}`;
+  const userId = `user-presence-${Date.now()}`;
+  const clientId = `client-presence-${Date.now()}`;
+  const sessionId = `session-presence-${Date.now()}`;
+
+  connectRealtimePresence({ clientId, sessionId, teamId, userId });
+  assert.equal(resolveRealtimeUserPresence({ teamId, userId }).state, "active");
+
+  recordRealtimePresenceActivity({
+    activity: {
+      clientId,
+      source: "desktop",
+      systemIdleSeconds: PRESENCE_ACTIVE_IDLE_THRESHOLD_SECONDS + 1,
+      systemIdleState: "idle",
+    },
+    clientId,
+    teamId,
+    userId,
+  });
+  const idlePresence = resolveRealtimeUserPresence({ teamId, userId });
+  assert.equal(idlePresence.connected, true);
+  assert.equal(idlePresence.active, false);
+  assert.equal(idlePresence.state, "idle");
+
+  recordRealtimePresenceActivity({
+    activity: {
+      clientId,
+      source: "desktop",
+      systemIdleSeconds: 0,
+      systemIdleState: "active",
+    },
+    clientId,
+    teamId,
+    userId,
+  });
+  assert.equal(resolveRealtimeUserPresence({ teamId, userId }).state, "active");
+
+  disconnectRealtimePresence(sessionId);
+  assert.equal(resolveRealtimeUserPresence({ lastOnlineAt: new Date().toISOString(), teamId, userId }).state, "recent");
 });
 
 test("chat native notification suppresses active thread replies only for the open thread", () => {
