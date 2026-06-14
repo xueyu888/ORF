@@ -9,7 +9,7 @@ import { formatDateTime, formatFileSize, formatTime } from "./chatFormat";
 import { ChatMarkdown } from "./chatMarkdown";
 import { ChatPresenceAvatar } from "./ChatPresenceAvatar";
 import { ChatReactionPicker } from "./ChatReactionPicker";
-import { canonicalChatReactionName, displayChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
+import { canonicalChatReactionName, displayChatReactionEmoji, isVisibleChatReactionEmoji, labelChatReactionEmoji, preferredReactionName, quickChatReactionOptions } from "./chatReactions";
 import { ChatDraftEditor } from "./ChatDraftEditor";
 import { chatMessageDeliveryStatus, draftFromStoredBody, serializeDraft, type ChatDraft } from "./chatModels";
 import type { ChatOpenThreadOptions } from "./useChatThreadState";
@@ -444,12 +444,13 @@ export function ChatMessageItem({
   const canMutate = !deliveryStatus && message.authorUserId === currentUserId && !message.deletedAt;
   const canUseServerActions = !deliveryStatus && !message.deletedAt;
   const canDeleteMessage = canMutate || (canDeleteAnyMessage && canUseServerActions);
+  const visibleReactions = message.reactions.filter((reaction) => isVisibleChatReactionEmoji(reaction.emojiName));
   const transformPastedFeedbackText = useCallback(
     (text: string) => formatPastedFeedbackLinks(text, feedbackItems ?? []),
     [feedbackItems],
   );
   const reactedByCurrentUser = new Set(
-    message.reactions
+    visibleReactions
       .filter((reaction) => reaction.reactedByCurrentUser)
       .map((reaction) => canonicalChatReactionName(reaction.emojiName)),
   );
@@ -470,7 +471,7 @@ export function ChatMessageItem({
   }, [canUseServerActions, editing]);
 
   const selectReaction = (emojiName: string) => {
-    const reactionName = preferredReactionName(message.reactions.map((reaction) => reaction.emojiName), emojiName);
+    const reactionName = preferredReactionName(visibleReactions.map((reaction) => reaction.emojiName), emojiName);
     setEmojiOpen(false);
     onReaction(message, reactionName);
   };
@@ -688,7 +689,7 @@ export function ChatMessageItem({
               </div>
             )}
             <div className="orf-chat-reaction-row">
-              {message.reactions.map((reaction) => {
+              {visibleReactions.map((reaction) => {
                 const reactionLabel = labelChatReactionEmoji(reaction.emojiName);
                 const summaryLabel = reactionSummaryLabel(reaction, reactionLabel, usersById);
                 return (
