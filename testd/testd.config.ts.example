@@ -35,8 +35,8 @@ export const testdCases = [
   },
   {
     id: "auth.member.login",
-    title: "member 登录",
-    doc: "testd-doc/cases/auth/member登录.md",
+    title: "01-普通成员使用匹配邮箱和密码登录成功",
+    doc: "testd-doc/cases/auth/01-普通成员使用匹配邮箱和密码登录成功.md",
     changePolicy: "locked",
     spec: "testd/auth/mlogin/_entry/mlogin.spec.ts",
     enabled: true,
@@ -45,8 +45,8 @@ export const testdCases = [
   },
   {
     id: "auth.member.login.invalid-credentials",
-    title: "普通成员登录账号认证失败",
-    doc: "testd-doc/cases/auth/普通成员登录账号认证失败.md",
+    title: "03-普通成员登录账号认知失败",
+    doc: "testd-doc/cases/auth/03-普通成员登录账号认知失败.md",
     changePolicy: "open",
     spec: "testd/auth/login-invalid-credentials/_entry/member-login-invalid-credentials.spec.ts",
     enabled: true,
@@ -55,8 +55,8 @@ export const testdCases = [
   },
   {
     id: "auth.admin.login",
-    title: "admin 登录",
-    doc: "testd-doc/cases/auth/admin登录.md",
+    title: "02-管理员使用匹配邮箱和密码登录成功",
+    doc: "testd-doc/cases/auth/02-管理员使用匹配邮箱和密码登录成功.md",
     changePolicy: "locked",
     spec: "testd/auth/alogin/_entry/alogin.spec.ts",
     enabled: true,
@@ -65,8 +65,8 @@ export const testdCases = [
   },
   {
     id: "auth.admin.login.invalid-credentials",
-    title: "管理员登录表单输入校验失败",
-    doc: "testd-doc/cases/auth/管理员登录表单输入校验失败.md",
+    title: "04-管理员登录表单输入校验失败",
+    doc: "testd-doc/cases/auth/04-管理员登录表单输入校验失败.md",
     changePolicy: "open",
     spec: "testd/auth/login-invalid-credentials/_entry/admin-login-invalid-credentials.spec.ts",
     enabled: true,

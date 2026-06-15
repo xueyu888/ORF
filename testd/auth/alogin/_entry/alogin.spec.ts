@@ -6,7 +6,7 @@ import { aloginSuccessCase } from "../alogin.case";
 import { aloginOperators } from "../alogin.operators";
 import type { ALoginCaseData, TestContext } from "../_support/alogin.context";
 
-test.describe("管理员登录测试用例", () => {
+test.describe("管理员使用匹配邮箱和密码登录成功测试用例", () => {
   test(aloginSuccessCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 
