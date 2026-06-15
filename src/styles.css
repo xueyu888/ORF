@@ -10913,6 +10913,12 @@ body[data-dragging-floating="true"] {
   vertical-align: middle;
 }
 
+.orf-avatar-stack-item {
+  width: 28px;
+  height: 28px;
+  font-size: 10px;
+}
+
 .orf-avatar-stack-empty {
   width: var(--orf-avatar-stack-width, 150px);
   max-width: var(--orf-avatar-stack-width, 150px);
@@ -11015,18 +11021,11 @@ body[data-dragging-floating="true"] {
 }
 
 .orf-avatar-stack-popover-avatar {
-  display: inline-flex;
   width: 26px;
   height: 26px;
-  align-items: center;
-  justify-content: center;
   border: 2px solid rgba(255, 255, 255, 0.78);
-  border-radius: 999px;
   box-shadow: 0 5px 12px rgba(31, 49, 74, 0.08);
-  color: white;
   font-size: 10px;
-  font-weight: 850;
-  line-height: 1;
 }
 
 .orf-avatar-stack-popover-name {
@@ -11942,6 +11941,13 @@ body[data-dragging-floating="true"] {
 .orf-result-title,
 .orf-task-title {
   color: var(--orf-fantasy-ink);
+}
+
+.orf-action-creator-avatar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
 }
 
 .orf-subtask-title {

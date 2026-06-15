@@ -8,6 +8,7 @@ import { FantasyDatePicker } from "../../../components/FantasyDatePicker";
 import { FantasySelectMenu, type FantasySelectOption } from "../../../components/FantasySelectMenu";
 import { HIERARCHY_TREE_METRICS, HierarchyCell, HierarchyRootCell, HierarchyTreeOverlay } from "../../../components/OrfHierarchyTree";
 import { CompletionCircleIcon, MetricSquareIcon, ObjectiveFlagIcon } from "../../../components/OrfIconAssets";
+import { UserAvatar } from "../../../components/UserAvatar";
 import {
   canRequestObjectiveAlignment,
   isOpenObjectiveAlignmentRequest,
@@ -36,6 +37,7 @@ import type {
   ObjectiveAlignmentRequest,
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
+  ObjectiveParticipantProfile,
   ObjectiveTrialReview,
   OrfProject,
   OrfUser,
@@ -43,8 +45,6 @@ import type {
   TaskChecklistItem,
   UncertaintyLevel,
 } from "../../../types/orf";
-import { avatarStyleForName } from "../../../utils/avatar";
-import { initials } from "../../../utils/format";
 import { deadlineRemainingTime, formatDateTimeMinute, reestimateWindowRemainingTime, remainingTime, type RelativeTime } from "../model/challengeDates";
 import {
   actionDropTargetForEvent,
@@ -428,7 +428,7 @@ function ObjectivePanel({
           />
         </HierarchyRootCell>
         <ObjectiveFlowAction disabled={isDraftObjective} freezeReadiness={freezeReadiness} group={group} handlers={handlers} />
-        <AvatarStack names={group.challengers} />
+        <AvatarStack people={avatarStackPeople(group.objective.challengerProfiles, group.challengers)} />
         {statusChip}
         <ObjectiveTimeSummary deadline={group.deadline} now={now} objective={group.objective} />
         <ObjectiveDeadlineCell
@@ -1070,6 +1070,7 @@ function ActionRow({
   const disabled = temporary?.status === "submitting";
   const title = temporary ? temporary.title || placeholderTitle : action!.title;
   const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : null;
+  const createdByName = action?.createdByName?.trim() ?? "";
 
   return (
     <div className="relative">
@@ -1156,12 +1157,12 @@ function ActionRow({
               value={temporary ? temporary.title : action!.title}
             />
           ) : (
-            <div className={clsx("orf-task-title truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
+            <div className={clsx("orf-task-title min-w-0 truncate font-medium", complete ? "text-[#98a2b3] line-through" : status === "active" ? "text-[#0d7df2]" : temporary ? "text-[#475467]" : "text-[#1d2939]")}>{title}</div>
           )}
           {action && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "task", action.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
         <EmptySlot />
-        <EmptySlot />
+        {action && createdByName ? <TaskCreatorAvatar avatarUrl={action.createdByAvatarUrl ?? null} name={createdByName} /> : <EmptySlot />}
         {temporary ? <StatusChip tone="open">{statusLabel}</StatusChip> : <EmptySlot />}
         <EmptySlot />
         <TimeValue icon={Clock3} value={action?.updatedAt || "未设置"} />
@@ -1307,6 +1308,16 @@ function CompletionCheckbox({ checked, onChange }: { checked: boolean; onChange:
     <button type="button" aria-pressed={checked} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full" onClick={() => onChange(!checked)}>
       <CompletionCircleIcon checked={checked} />
     </button>
+  );
+}
+
+function TaskCreatorAvatar({ avatarUrl, name }: { avatarUrl?: string | null; name: string }) {
+  const label = `创建人：${name}`;
+
+  return (
+    <span className="orf-action-creator-avatar" aria-label={label} data-no-row-edit="true" title={label}>
+      <UserAvatar avatarUrl={avatarUrl} className="orf-avatar-stack-item" name={name} size="sm" />
+    </span>
   );
 }
 
@@ -1596,17 +1607,35 @@ function avatarStackPopoverPosition(trigger: HTMLElement): AvatarStackPopoverPos
   return { left, maxHeight, top, width };
 }
 
-function AvatarStack({ names }: { names: string[] }) {
+type AvatarStackPerson = {
+  avatarUrl?: string | null;
+  name: string;
+  userId?: string | null;
+};
+
+function avatarStackPeople(profiles: ObjectiveParticipantProfile[] | undefined, names: string[]): AvatarStackPerson[] {
+  if (profiles && profiles.length > 0) {
+    return profiles.map((profile) => ({
+      avatarUrl: profile.avatarUrl ?? null,
+      name: profile.name,
+      userId: profile.userId ?? null,
+    }));
+  }
+
+  return names.map((name) => ({ name }));
+}
+
+function AvatarStack({ people }: { people: AvatarStackPerson[] }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState<AvatarStackPopoverPosition | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const visibleNames = names.slice(0, 4);
-  const overflowNames = names.slice(4);
+  const visiblePeople = people.slice(0, 4);
+  const overflowPeople = people.slice(4);
 
   useEffect(() => {
-    if (overflowNames.length === 0) setPopoverOpen(false);
-  }, [overflowNames.length]);
+    if (overflowPeople.length === 0) setPopoverOpen(false);
+  }, [overflowPeople.length]);
 
   useEffect(() => {
     if (!popoverOpen) {
@@ -1641,27 +1670,26 @@ function AvatarStack({ names }: { names: string[] }) {
     };
   }, [popoverOpen]);
 
-  if (names.length === 0) return <span className="orf-avatar-stack orf-avatar-stack-empty font-medium text-[#98a2b3]">未分配</span>;
+  if (people.length === 0) return <span className="orf-avatar-stack orf-avatar-stack-empty font-medium text-[#98a2b3]">未分配</span>;
 
   return (
-    <div className="orf-avatar-stack" title={names.join("、")}>
-      {visibleNames.map((name, index) => (
-        <div
-          key={`${name}-${index}`}
-          className={clsx("orf-avatar-stack-item flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow-sm", index > 0 && "-ml-2")}
-          style={avatarStyleForName(name)}
-          title={name}
-        >
-          {initials(name)}
-        </div>
+    <div className="orf-avatar-stack" title={people.map((person) => person.name).join("、")}>
+      {visiblePeople.map((person, index) => (
+        <UserAvatar
+          key={`${person.userId ?? person.name}-${index}`}
+          avatarUrl={person.avatarUrl ?? null}
+          className={clsx("orf-avatar-stack-item", index > 0 && "-ml-2")}
+          name={person.name}
+          size="sm"
+        />
       ))}
-      {overflowNames.length > 0 && (
+      {overflowPeople.length > 0 && (
         <button
           ref={triggerRef}
           type="button"
           className="orf-avatar-overflow-button"
           aria-expanded={popoverOpen}
-          aria-label={`查看其余 ${overflowNames.length} 位参与者`}
+          aria-label={`查看其余 ${overflowPeople.length} 位参与者`}
           data-no-row-edit="true"
           onClick={(event) => {
             event.stopPropagation();
@@ -1670,7 +1698,7 @@ function AvatarStack({ names }: { names: string[] }) {
           onDoubleClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          +{overflowNames.length}
+          +{overflowPeople.length}
         </button>
       )}
       {popoverOpen &&
@@ -1693,12 +1721,10 @@ function AvatarStack({ names }: { names: string[] }) {
           >
             <div className="orf-avatar-stack-popover-title">其余参与者</div>
             <div className="orf-avatar-stack-popover-list">
-              {overflowNames.map((name, index) => (
-                <div key={`${name}-${index}`} className="orf-avatar-stack-popover-row" title={name}>
-                  <span className="orf-avatar-stack-popover-avatar" style={avatarStyleForName(name)} aria-hidden="true">
-                    {initials(name)}
-                  </span>
-                  <span className="orf-avatar-stack-popover-name">{name}</span>
+              {overflowPeople.map((person, index) => (
+                <div key={`${person.userId ?? person.name}-${index}`} className="orf-avatar-stack-popover-row" title={person.name}>
+                  <UserAvatar avatarUrl={person.avatarUrl ?? null} className="orf-avatar-stack-popover-avatar" name={person.name} size="sm" />
+                  <span className="orf-avatar-stack-popover-name">{person.name}</span>
                 </div>
               ))}
             </div>
