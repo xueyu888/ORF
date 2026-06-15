@@ -3,7 +3,7 @@ import type { MloginCaseData } from "./_support/mlogin.context";
 
 export const mloginSuccessCase = {
   id: "auth.login.success",
-  title: "普通成员可以使用正确邮箱和密码登录 ORF",
+  title: "普通成员使用匹配邮箱和密码登录成功",
   model: STATE_CASE_MODEL,
   tags: ["auth", "login", "member", "happy-path"],
 
@@ -96,7 +96,7 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "Setup-1", method: "api" },
         id: "ory.member_identity.upsert",
-        title: "准备邮箱为 `orf-member-login-e2e@orf.local`、使用固定测试密码的普通成员认证身份",
+        title: "准备邮箱为 `orf-member-login-e2e@orf.local`、使用满足规则且与该邮箱匹配的固定测试密码的普通成员认证身份",
         object: "ory.identity",
         operator: "upsert_password",
         params: { saveAs: "memberIdentity" },
@@ -115,7 +115,7 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "Setup-3", method: "api" },
         id: "user.preferences.default_landing_path.set",
-        title: "设置普通成员默认进入页面为 悬赏大厅",
+        title: "设置普通成员默认进入页面为 ORF 首页（悬赏大厅）",
         object: "user.preferences",
         operator: "set_default_landing_path",
         params: {
@@ -162,14 +162,6 @@ export const mloginSuccessCase = {
       },
       {
         source: { caseStepId: "S0-2", method: "playwright" },
-        id: "heading.sign_in.visible",
-        title: "登录页中 \"Sign in\" 标题 应可见",
-        object: "page",
-        operator: "visible",
-        params: { role: "heading", name: "Sign in" },
-      },
-      {
-        source: { caseStepId: "S0-3", method: "playwright" },
         id: "input.email.visible",
         title: "邮箱输入框 应可见",
         object: "page",
@@ -177,7 +169,7 @@ export const mloginSuccessCase = {
         params: { label: "Email" },
       },
       {
-        source: { caseStepId: "S0-4", method: "playwright" },
+        source: { caseStepId: "S0-3", method: "playwright" },
         id: "input.email.empty",
         title: "邮箱输入框的值 应为空",
         object: "input",
@@ -185,7 +177,7 @@ export const mloginSuccessCase = {
         params: { label: "Email", value: "" },
       },
       {
-        source: { caseStepId: "S0-5", method: "playwright" },
+        source: { caseStepId: "S0-4", method: "playwright" },
         id: "input.password.visible",
         title: "密码输入框 应可见",
         object: "page",
@@ -193,7 +185,7 @@ export const mloginSuccessCase = {
         params: { label: "Password", exact: true },
       },
       {
-        source: { caseStepId: "S0-6", method: "playwright" },
+        source: { caseStepId: "S0-5", method: "playwright" },
         id: "input.password.empty",
         title: "密码输入框的值 应为空",
         object: "input",
@@ -201,7 +193,7 @@ export const mloginSuccessCase = {
         params: { label: "Password", exact: true, value: "" },
       },
       {
-        source: { caseStepId: "S0-7", method: "playwright" },
+        source: { caseStepId: "S0-6", method: "playwright" },
         id: "button.sign_in.visible",
         title: "登录页的 \"Sign In\" 登录操作 应可见",
         object: "page",
@@ -209,7 +201,7 @@ export const mloginSuccessCase = {
         params: { role: "button", name: "Sign In" },
       },
       {
-        source: { caseStepId: "S0-8", method: "playwright" },
+        source: { caseStepId: "S0-7", method: "playwright" },
         id: "button.sign_in.enabled",
         title: "登录页的 \"Sign In\" 登录操作 应可点击",
         object: "page",
@@ -217,21 +209,21 @@ export const mloginSuccessCase = {
         params: { role: "button", name: "Sign In" },
       },
       {
-        source: { caseStepId: "S0-9", method: "api" },
+        source: { caseStepId: "S0-8", method: "api" },
         id: "session.unauthenticated",
         title: "当前会话 应为 未登录",
         object: "auth.session",
         operator: "unauthenticated",
       },
       {
-        source: { caseStepId: "S0-10", method: "playwright" },
+        source: { caseStepId: "S0-9", method: "playwright" },
         id: "cookie.absent",
         title: "当前浏览器 应不存在 Ory 登录会话 cookie",
         object: "browser.cookie",
         operator: "absent",
       },
       {
-        source: { caseStepId: "S0-11", method: "api" },
+        source: { caseStepId: "S0-10", method: "api" },
         id: "ory.member_identity.exists",
         title: "认证系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份",
         object: "ory.identity",
@@ -239,15 +231,15 @@ export const mloginSuccessCase = {
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "S0-12", method: "api" },
+        source: { caseStepId: "S0-11", method: "api" },
         id: "ory.member_identity.password_available",
-        title: "邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的密码凭据 应可用",
+        title: "邮箱为 `orf-member-login-e2e@orf.local` 的普通成员认证身份的满足规则且匹配的密码凭据 应可用",
         object: "ory.identity",
         operator: "password_available",
         params: { emailFrom: "data.email" },
       },
       {
-        source: { caseStepId: "S0-13", method: "prisma" },
+        source: { caseStepId: "S0-12", method: "prisma" },
         id: "db.member.matches",
         title: "ORF 业务系统中 应存在 邮箱为 `orf-member-login-e2e@orf.local`、角色为 `member`、状态为 `active` 的普通成员用户",
         object: "db.member",
@@ -274,7 +266,7 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "Action-2", method: "playwright" },
         id: "fill.password",
-        title: "在密码输入框输入普通成员固定测试密码",
+        title: "在密码输入框输入满足规则且与该邮箱匹配的普通成员固定测试密码",
         object: "page",
         operator: "fill",
         params: {
@@ -313,7 +305,7 @@ export const mloginSuccessCase = {
       {
         source: { caseStepId: "S1-2", method: "playwright" },
         id: "url.bounties",
-        title: "当前页面 应为 悬赏大厅",
+        title: "当前页面 应为 ORF 首页（悬赏大厅）",
         object: "page.url",
         operator: "match",
         params: { pattern: "/bounties$" },

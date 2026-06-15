@@ -6,7 +6,7 @@ import { mloginSuccessCase } from "../mlogin.case";
 import { mloginOperators } from "../mlogin.operators";
 import type { MloginCaseData, TestContext } from "../_support/mlogin.context";
 
-test.describe("登录测试用例", () => {
+test.describe("普通成员使用匹配邮箱和密码登录成功测试用例", () => {
   test(mloginSuccessCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 
