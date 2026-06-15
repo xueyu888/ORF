@@ -45,8 +45,8 @@ export const testdCases = [
   },
   {
     id: "auth.member.login.invalid-credentials",
-    title: "member登录-账号或密码不满足",
-    doc: "testd-doc/cases/auth/member登录-账号或密码不满足.md",
+    title: "普通成员登录账号认证失败",
+    doc: "testd-doc/cases/auth/普通成员登录账号认证失败.md",
     changePolicy: "open",
     spec: "testd/auth/login-invalid-credentials/_entry/member-login-invalid-credentials.spec.ts",
     enabled: true,
