@@ -68,7 +68,7 @@
 
 任务和子任务完成状态接口只表达执行进度写入，不触发指标验收、目标提交、结算或积分。前端可以在挑战页展示层使用短生命周期完成状态覆盖层即时反馈点击；后端返回的任务管理数据仍是完成状态的持久化事实源，刷新数据包含同一任务或子任务完成状态后前端撤销覆盖层。
 
-任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户 id 是否在该目标的 `Objective.challengerUserIds`；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。任务读模型基于 `Task.createdBy` 派生 `createdByName` 和 `createdByAvatarUrl`，用于普通成员也能直接展示创建人头像；这两个字段不是新的权限或所有权事实源。
+任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户 id 是否在该目标的 `Objective.challengerUserIds`；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。`Task.definitionContributorUserIds` 是行动项定义者头像展示的唯一事实源：创建行动项和修改行动项标题会把当前用户追加进去并去重，状态勾选、完成状态和排序移动只表达执行或编排状态，不把用户加入定义者集合。任务读模型基于该集合派生 `definitionContributorProfiles`，用于普通成员也能直接展示所有定义过行动项的用户头像；`createdByName` / `createdByAvatarUrl` 只是兼容审计投影，不参与头像列语义、权限或所有权判断。
 
 ## 术语
 
@@ -217,7 +217,7 @@ type ObjectiveFlowStatus =
 - 指标更新提案不接受 `feedbackId`，不会改写反馈状态；指标更新只影响结果和结果评论审计。
 - 任务创建基于目标授权和排序，不要求关联指标，也不接受反馈来源；反馈不会被挂成任务来源。
 - 任务和子任务维护权限以 `Objective.challengerUserIds` 为身份边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
-- `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断；`createdByName` / `createdByAvatarUrl` 只由读模型从用户资料派生，用于行动项创建人头像展示。
+- `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断；`Task.definitionContributorUserIds` 只表达谁定义过行动项，读模型派生的 `definitionContributorProfiles` 用于行动项定义者头像组展示。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
 - 当前不开放退回重估；重估截止后停止调整，不续期。
 - 截止日期修改只写 `Objective.finalDueAt`；冻结后只能延后，不重开重估，也不修改 `confirmationDueAt`。
@@ -245,10 +245,10 @@ type ObjectiveFlowStatus =
 任务已经从指标下移到目标下，后端契约如下：
 
 - `Task.linkedObjectiveId` 是任务归属、权限、生命周期和排序边界。
-- `Task.assignee` 是执行人提示，不是所有者；`Task.createdBy` / `updatedBy` 是审计信息，不改变同目标挑战者共同维护权限。
+- `Task.assignee` 是执行人提示，不是所有者；`Task.createdBy` / `updatedBy` 是审计信息，不改变同目标挑战者共同维护权限；`Task.definitionContributorUserIds` 只用于展示谁定义过该行动项。
 - `Task.linkedResultId` 已从任务业务类型、DTO、写入路径和数据库表中移除。
 - `Result.taskIds` 已从指标业务类型和 DTO 中移除；指标删除不能删除目标下任务。
 - `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；候选目标和没有指标的目标也可以创建任务。
 - `PATCH /api/tasks/:taskId/move` 只在同一目标下移动任务，不能通过移动任务改变指标归属。
 - 迁移 `0020_drop_task_result_ownership` 删除旧 `tasks.linked_result_id` 外键和列；迁移前必须已完成 `tasks.linked_objective_id` 回填。
-- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 必须非空，`tasks.linked_result_id` 不得存在。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。
+- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 和 `tasks.definition_contributor_user_ids` 必须非空，`tasks.linked_result_id` 不得存在。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。

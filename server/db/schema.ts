@@ -521,6 +521,7 @@ export const tasks = pgTable("tasks", {
   sortOrder: integer("sort_order").notNull().default(0),
   createdBy: uuid("created_by").references(() => users.id),
   updatedBy: uuid("updated_by").references(() => users.id),
+  definitionContributorUserIds: jsonb("definition_contributor_user_ids").$type<string[]>().notNull().default([]),
 });
 
 export const taskChecklistItems = pgTable("task_checklist_items", {

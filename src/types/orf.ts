@@ -109,6 +109,12 @@ export interface ObjectiveParticipantProfile {
   avatarUrl?: string | null;
 }
 
+export interface TaskDefinitionContributorProfile {
+  userId?: string | null;
+  name: string;
+  avatarUrl?: string | null;
+}
+
 export interface Objective {
   id: string;
   title: string;
@@ -404,6 +410,8 @@ export interface Task {
   createdByName?: string | null;
   createdByAvatarUrl?: string | null;
   updatedBy?: string | null;
+  definitionContributorUserIds?: string[];
+  definitionContributorProfiles?: TaskDefinitionContributorProfile[];
   createdAt: string;
   updatedAt: string;
 }

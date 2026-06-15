@@ -37,7 +37,6 @@ import type {
   ObjectiveAlignmentRequest,
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
-  ObjectiveParticipantProfile,
   ObjectiveTrialReview,
   OrfProject,
   OrfUser,
@@ -1070,7 +1069,7 @@ function ActionRow({
   const disabled = temporary?.status === "submitting";
   const title = temporary ? temporary.title || placeholderTitle : action!.title;
   const statusLabel = temporary ? (temporary.status === "submitting" ? "保存中" : "草稿") : null;
-  const createdByName = action?.createdByName?.trim() ?? "";
+  const definitionContributors = action ? avatarStackPeople(action.definitionContributorProfiles, []) : [];
 
   return (
     <div className="relative">
@@ -1162,7 +1161,7 @@ function ActionRow({
           {action && <CommentCountBadge count={commentCountFor(handlers.commentCounts, "task", action.id)} onClick={() => handlers.onActionRowAction("comment", target)} />}
         </HierarchyCell>
         <EmptySlot />
-        {action && createdByName ? <TaskCreatorAvatar avatarUrl={action.createdByAvatarUrl ?? null} name={createdByName} /> : <EmptySlot />}
+        {definitionContributors.length > 0 ? <AvatarStack people={definitionContributors} /> : <EmptySlot />}
         {temporary ? <StatusChip tone="open">{statusLabel}</StatusChip> : <EmptySlot />}
         <EmptySlot />
         <TimeValue icon={Clock3} value={action?.updatedAt || "未设置"} />
@@ -1308,16 +1307,6 @@ function CompletionCheckbox({ checked, onChange }: { checked: boolean; onChange:
     <button type="button" aria-pressed={checked} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full" onClick={() => onChange(!checked)}>
       <CompletionCircleIcon checked={checked} />
     </button>
-  );
-}
-
-function TaskCreatorAvatar({ avatarUrl, name }: { avatarUrl?: string | null; name: string }) {
-  const label = `创建人：${name}`;
-
-  return (
-    <span className="orf-action-creator-avatar" aria-label={label} data-no-row-edit="true" title={label}>
-      <UserAvatar avatarUrl={avatarUrl} className="orf-avatar-stack-item" name={name} size="sm" />
-    </span>
   );
 }
 
@@ -1613,7 +1602,13 @@ type AvatarStackPerson = {
   userId?: string | null;
 };
 
-function avatarStackPeople(profiles: ObjectiveParticipantProfile[] | undefined, names: string[]): AvatarStackPerson[] {
+type AvatarStackProfile = {
+  avatarUrl?: string | null;
+  name: string;
+  userId?: string | null;
+};
+
+function avatarStackPeople(profiles: AvatarStackProfile[] | undefined, names: string[]): AvatarStackPerson[] {
   if (profiles && profiles.length > 0) {
     return profiles.map((profile) => ({
       avatarUrl: profile.avatarUrl ?? null,
