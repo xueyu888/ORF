@@ -15,8 +15,8 @@ export type TestdCaseConfig = {
 export const testdCases = [
   {
     id: "auth.register.approve-login",
-    title: "账号注册登录",
-    doc: "testd-doc/cases/auth/用户注册.md",
+    title: "05-用户输入姓名邮箱和密码注册成功",
+    doc: "testd-doc/cases/auth/05-用户输入姓名邮箱和密码注册成功.md",
     changePolicy: "locked",
     spec: "testd/auth/register/_entry/register.spec.ts",
     enabled: true,

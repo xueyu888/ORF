@@ -10,10 +10,6 @@ export type RegisterCaseData = {
   password: string;
   name: string;
   role: "member";
-  adminEmail: string;
-  adminPassword: string;
-  adminName: string;
-  adminRole: "admin";
 };
 
 export type RegisteredUserRecord = {

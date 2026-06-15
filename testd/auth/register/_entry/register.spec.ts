@@ -6,7 +6,7 @@ import { registerApprovalLoginCase } from "../register.case";
 import { registerOperators } from "../register.operators";
 import type { RegisterCaseData, TestContext } from "../_support/register.context";
 
-test.describe("用户注册测试用例", () => {
+test.describe("05-用户输入姓名邮箱和密码注册成功测试用例", () => {
   test(registerApprovalLoginCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 

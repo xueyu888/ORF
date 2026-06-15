@@ -1,6 +1,6 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "../../../_operators/testd-db-client";
-import { teamMembers, teams, users } from "../../../../server/db/schema";
+import { teamMembers, users } from "../../../../server/db/schema";
 import {
   ORY_ADMIN_URL,
   type OryIdentity,
@@ -9,9 +9,7 @@ import {
   findOryIdentityByEmail,
   oryAdminFetch,
 } from "../../../_operators/common.helpers";
-import { createStableUuid, isUuid } from "../../../_shared/ids";
 import type {
-  RegisterCaseData,
   RegisteredUserRecord,
 } from "./register.context";
 
@@ -119,59 +117,6 @@ export async function revokeOryIdentitySessions(identityId: string) {
   }
 }
 
-export async function adminAccountActive(email: string) {
-  const memberships = await readUserMemberships(email);
-  return memberships.some(
-    (membership) =>
-      membership.role === "admin" && membership.status === "active",
-  );
-}
-
-export async function upsertAdminAccount(
-  data: Pick<RegisterCaseData, "adminEmail" | "adminName" | "adminRole">,
-  identityId: string | undefined,
-) {
-  const teamId = await ensureDefaultTeam();
-  const [existing] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(sql`lower(${users.email}) = ${data.adminEmail.toLowerCase()}`)
-    .limit(1);
-  const effectiveUserId = existing?.id ?? (isUuid(identityId) ? identityId : createStableUuid("testd-register-admin-user", `${data.adminEmail.toLowerCase()}:${identityId ?? ""}`));
-
-  if (existing) {
-    await db
-      .update(users)
-      .set({
-        name: data.adminName,
-        email: data.adminEmail,
-        status: "active",
-        ...(identityId ? { oryIdentityId: identityId } : {}),
-      })
-      .where(eq(users.id, effectiveUserId));
-  } else {
-    await db.insert(users).values({
-      id: effectiveUserId,
-      name: data.adminName,
-      email: data.adminEmail,
-      status: "active",
-      oryIdentityId: identityId,
-      createdAt: today(),
-      lastOnlineAt: null,
-    });
-  }
-
-  await db
-    .insert(teamMembers)
-    .values({ teamId, userId: effectiveUserId, role: data.adminRole })
-    .onConflictDoUpdate({
-      target: [teamMembers.teamId, teamMembers.userId],
-      set: { role: data.adminRole },
-    });
-
-  return { id: effectiveUserId, teamId };
-}
-
 export async function registeredUserAbsent(email: string) {
   return (await readRegisteredUserIds(email)).length === 0;
 }
@@ -212,36 +157,6 @@ export async function deleteRegisteredUserByEmail(email: string) {
   }
 }
 
-export async function deleteAdminMembershipsByEmail(email: string) {
-  await deleteRegisteredUserMembershipsByEmail(email);
-}
-
-export async function deleteAdminByEmail(email: string) {
-  await deleteRegisteredUserByEmail(email);
-}
-
-async function ensureDefaultTeam() {
-  const [existing] = await db
-    .select({ id: teams.id })
-    .from(teams)
-    .orderBy(asc(teams.id))
-    .limit(1);
-  if (existing) {
-    return existing.id;
-  }
-
-  const id = "team-orf-register-e2e";
-  await db
-    .insert(teams)
-    .values({
-      id,
-      name: "ORF 注册测试团队",
-      createdAt: today(),
-    })
-    .onConflictDoNothing();
-  return id;
-}
-
 async function readRegisteredUserIds(email: string) {
   return db
     .select({ id: users.id })
@@ -269,8 +184,4 @@ async function readUserMemberships(
     ...row,
     email: row.email ?? "",
   }));
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
 }
