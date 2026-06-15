@@ -39,7 +39,6 @@ export const chatReactionOptions: ChatReactionOption[] = [
   defineChatReactionOption("wave", "👋", "收到", ["hi", "hello", "收到"], ["👋"]),
   defineChatReactionOption("point_up", "☝️", "重点", ["point", "重点"], ["☝️", "☝"]),
   defineChatReactionOption("memo", "📝", "记录", ["note", "记录", "文档"], ["📝"]),
-  defineChatReactionOption("bug", "🐛", "问题", ["issue", "bug", "问题"], ["🐛"]),
   defineChatReactionOption("warning", "⚠️", "注意", ["warn", "风险", "注意"], ["⚠️", "⚠"]),
   defineChatReactionOption("question", "❓", "疑问", ["question", "问题", "疑问"], ["❓"]),
   defineChatReactionOption("bulb", "💡", "想法", ["idea", "想法", "灵感"], ["idea", "💡"]),
@@ -55,6 +54,9 @@ export const chatReactionOptions: ChatReactionOption[] = [
   defineChatReactionOption("link", "🔗", "链接", ["url", "链接"], ["🔗"]),
   defineChatReactionOption("rotating_light", "🚨", "紧急", ["urgent", "alert", "紧急"], ["🚨"]),
 ];
+
+// Deprecated reactions stay stored as history but no longer participate in the chat UI.
+const hiddenChatReactionTokens = new Set(["bug", "🐛"].map(normalizeReactionToken));
 
 const reactionOptionsByToken = new Map<string, ChatReactionOption>();
 
@@ -89,6 +91,10 @@ export function displayChatReactionEmoji(emojiName: string) {
 export function labelChatReactionEmoji(emojiName: string) {
   const trimmed = emojiName.trim();
   return findChatReactionOption(trimmed)?.label ?? displayChatReactionEmoji(trimmed);
+}
+
+export function isVisibleChatReactionEmoji(emojiName: string) {
+  return !hiddenChatReactionTokens.has(normalizeReactionToken(emojiName));
 }
 
 export function searchChatReactionOptions(query: string) {

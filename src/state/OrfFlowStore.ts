@@ -269,7 +269,8 @@ function inferFlowStatus(
   challengeApplications: ChallengeApplication[],
 ): Objective["flowStatus"] {
   if (objective.flowStatus) return objective.flowStatus;
-  if (objective.acceptedResult || objective.objectiveSettlementPoints != null) return "settled";
+  if (objective.objectiveSettlementPoints != null) return "settled";
+  if (objective.acceptedResult) return "accepted";
   if (objective.lootSubmittedAt) return "submitted";
   if (objective.confirmedAt || objective.stage === "goalFrozen") return "frozen";
   if (challengerUserIds.length) return "reestimating";

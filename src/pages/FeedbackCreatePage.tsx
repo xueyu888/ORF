@@ -110,7 +110,6 @@ export function FeedbackCreatePage() {
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>
-          <h1>新建反馈</h1>
         </div>
       </header>
 

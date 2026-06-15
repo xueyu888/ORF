@@ -6,8 +6,10 @@ import type {
   RealtimeEvent,
   SystemBroadcast,
 } from "../../src/types/realtime";
+import { connectRealtimePresence, disconnectRealtimePresence } from "./presenceRegistry";
 
 type RealtimeSubscriber = {
+  clientId?: string | null;
   id: string;
   teamId: string;
   userId: string;
@@ -26,7 +28,6 @@ function subscriberKey(teamId: string, userId: string) {
 
 function removeSubscriber(subscriber: RealtimeSubscriber) {
   const key = subscriberKey(subscriber.teamId, subscriber.userId);
-  const wasUserOnline = Boolean(subscribersByUser.get(key)?.size);
   const userSubscribers = subscribersByUser.get(subscriberKey(subscriber.teamId, subscriber.userId));
   userSubscribers?.delete(subscriber.id);
   if (userSubscribers?.size === 0) {
@@ -39,7 +40,7 @@ function removeSubscriber(subscriber: RealtimeSubscriber) {
     subscribersByTeam.delete(subscriber.teamId);
   }
 
-  return wasUserOnline && !subscribersByUser.has(key);
+  return disconnectRealtimePresence(subscriber.id);
 }
 
 function publishPresenceInvalidation(teamId: string, userId: string) {
@@ -62,14 +63,15 @@ function deliverRealtimeEvent(subscriber: RealtimeSubscriber, event: RealtimeEve
 }
 
 export function subscribeRealtimeEvents(input: {
+  clientId?: string | null;
   id?: string;
   teamId: string;
   userId: string;
   send: (event: RealtimeEvent) => void;
 }) {
   const key = subscriberKey(input.teamId, input.userId);
-  const wasUserOnline = Boolean(subscribersByUser.get(key)?.size);
   const subscriber: RealtimeSubscriber = {
+    clientId: input.clientId,
     id: input.id ?? makeEventId("realtime-subscriber"),
     teamId: input.teamId,
     userId: input.userId,
@@ -82,7 +84,12 @@ export function subscribeRealtimeEvents(input: {
   teamSubscribers.set(subscriber.id, subscriber);
   subscribersByTeam.set(subscriber.teamId, teamSubscribers);
 
-  if (!wasUserOnline) {
+  if (connectRealtimePresence({
+    clientId: subscriber.clientId,
+    sessionId: subscriber.id,
+    teamId: subscriber.teamId,
+    userId: subscriber.userId,
+  })) {
     publishPresenceInvalidation(subscriber.teamId, subscriber.userId);
   }
 
@@ -109,6 +116,18 @@ export function publishRealtimeSystemBroadcast(teamId: string, broadcast: System
     createdAt: nowIso(),
     broadcast,
   });
+}
+
+export function publishRealtimeSystemBroadcastToUsers(teamId: string, userIds: string[], broadcast: SystemBroadcast) {
+  const event: RealtimeEvent = {
+    id: makeEventId("system-broadcast-event"),
+    kind: "system.broadcast",
+    createdAt: nowIso(),
+    broadcast,
+  };
+  for (const userId of Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)))) {
+    publishRealtimeEventToUser(teamId, userId, event);
+  }
 }
 
 export function publishRealtimeClientUpdateAvailable(teamId: string, update: ClientUpdateAvailable) {
@@ -178,7 +197,7 @@ export function realtimeOnlineTeamIds() {
   return Array.from(subscribersByTeam.keys());
 }
 
-export function realtimeOnlineUserIds(teamId: string) {
+export function realtimeConnectedUserIds(teamId: string) {
   const subscribers = subscribersByTeam.get(teamId);
   if (!subscribers) return new Set<string>();
   return new Set(Array.from(subscribers.values()).map((subscriber) => subscriber.userId));

@@ -31,6 +31,7 @@ import type {
 } from "../../src/types/orf";
 import {
   objectiveBasePointsForResults,
+  planObjectiveAcceptance,
   planObjectiveSettlement,
   uncertaintyScoreFor,
 } from "../../src/domain/orfSettlement";
@@ -54,6 +55,7 @@ import {
   canRecruitObjectiveChallengersByFlow,
   canReviewObjectiveChallengeApplications,
   canReviewObjectiveLootByFlow,
+  canSettleObjectiveLootByFlow,
   canSubmitObjectiveLootByFlow,
   isObjectiveReestimateWindowOpen,
   objectiveFreezeReadinessAfterReestimate,
@@ -2941,6 +2943,11 @@ export interface ReviewObjectiveLootInput {
   lootId?: string;
   acceptedResult?: ObjectiveAcceptedResult;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
+  reason?: string;
+}
+
+export interface SettleObjectiveLootInput {
+  lootId?: string;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   contributionRatios?: ContributionAllocation[];
   reason?: string;
@@ -2964,13 +2971,8 @@ export async function reviewObjectiveLoot(
   if (!loot) return { status: "notFound" };
 
   const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
-  const challengerRows = await getMemberRowsByIdsInScope(db, objective.teamId, objective.challengerUserIds ?? []);
-  const challengerNameById = new Map(challengerRows.map((member) => [member.id, member.name]));
-  const challengerUserIds = objectiveChallengerUserIds(objective);
-  const challengerUserIdSet = new Set(challengerUserIds);
-  const challengers = challengerUserIds.map((userId) => challengerNameById.get(userId)).filter((name): name is string => Boolean(name));
-  const settlementPlan = planObjectiveSettlement({
-    objective: { ...objective, challengers, challengerUserIds },
+  const acceptancePlan = planObjectiveAcceptance({
+    objective,
     results: resultRows.map((result) => ({
       id: result.id,
       uncertaintyLevel: result.uncertaintyLevel ?? undefined,
@@ -2979,6 +2981,112 @@ export async function reviewObjectiveLoot(
     loot,
     resultReviews: input.resultReviews,
     acceptedResult: input.acceptedResult,
+  });
+  if (acceptancePlan.objectiveAcceptedResult === "abandoned") {
+    return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
+  }
+
+  const acceptedAt = nowIso();
+  const accepted = await db.transaction(async (tx) => {
+    const updated = await tx
+      .update(objectives)
+      .set({
+        flowStatus: objectiveLifecycleTransitions.acceptLoot.to,
+        stage: objectiveLifecycleTransitions.acceptLoot.stage,
+        acceptedResult: acceptancePlan.objectiveAcceptedResult,
+        completionMultiplier: acceptancePlan.completionMultiplier,
+        objectiveBasePoints: acceptancePlan.basePoints,
+        objectiveSettlementPoints: null,
+        updatedAt: today(),
+        updatedBy: actorId,
+      })
+      .where(and(eq(objectives.id, objectiveId), eq(objectives.flowStatus, objectiveLifecycleTransitions.acceptLoot.from)))
+      .returning({ id: objectives.id });
+    if (updated.length === 0) {
+      return false;
+    }
+
+    for (const result of resultRows) {
+      await tx
+        .update(results)
+        .set({ acceptedResult: acceptancePlan.acceptedResultByResultId.get(result.id) ?? "failed", updatedBy: actorId })
+        .where(eq(results.id, result.id));
+    }
+
+    await tx
+      .update(objectiveAlignmentRequests)
+      .set({
+        status: "completed",
+        commanderFeedback: "验收对齐完成，目标已验收。",
+        reviewedBy: actorId,
+        reviewedByUserId: actorId,
+        reviewedAt: acceptedAt,
+      })
+      .where(
+        and(
+          eq(objectiveAlignmentRequests.objectiveId, objectiveId),
+          eq(objectiveAlignmentRequests.kind, "acceptance"),
+          inArray(objectiveAlignmentRequests.status, ["requested", "scheduled"]),
+        ),
+      );
+    return true;
+  });
+  if (!accepted) return { status: "invalid" };
+
+  publishObjectiveInvalidation({
+    actorUserId: actorId,
+    reason: "objective.lifecycle.changed",
+    objectiveId,
+    teamId: objective.teamId,
+  });
+
+  return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
+}
+
+export async function settleObjectiveLoot(
+  objectiveId: string,
+  input: SettleObjectiveLootInput,
+  actorId: string,
+): Promise<ObjectiveFlowMutationOutcome> {
+  const [objective] = await db.select().from(objectives).where(eq(objectives.id, objectiveId)).limit(1);
+  if (!objective) return { status: "notFound" };
+  if (!canSettleObjectiveLootByFlow(objective) || !objective.lootSubmittedAt || !objective.acceptedResult) return { status: "invalid" };
+
+  const lootRows = await db
+    .select()
+    .from(objectiveLoot)
+    .where(eq(objectiveLoot.objectiveId, objectiveId));
+  const sortedLootRows = [...lootRows].sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
+  const loot = input.lootId ? sortedLootRows.find((item) => item.id === input.lootId) : sortedLootRows[0];
+  if (!loot) return { status: "notFound" };
+
+  const resultRows = await db.select().from(results).where(eq(results.objectiveId, objectiveId));
+  const challengerRows = await getMemberRowsByIdsInScope(db, objective.teamId, objective.challengerUserIds ?? []);
+  const challengerNameById = new Map(challengerRows.map((member) => [member.id, member.name]));
+  const challengerUserIds = objectiveChallengerUserIds(objective);
+  const challengerUserIdSet = new Set(challengerUserIds);
+  const allChallengerTargets = challengerUserIds
+    .map((userId) => ({ member: challengerNameById.get(userId) ?? userId, memberUserId: userId }))
+    .filter((target) => Boolean(target.member));
+  const participantTargets = input.contributionResolution
+    ? settlementParticipantTargetsForResolution(input.contributionResolution.ratios, allChallengerTargets)
+    : allChallengerTargets;
+  if (!participantTargets) return { status: "invalid" };
+  const participantUserIds = participantTargets.map((target) => target.memberUserId);
+  const challengers = participantTargets.map((target) => target.member);
+  const settlementPlan = planObjectiveSettlement({
+    objective: { ...objective, challengers, challengerUserIds: participantUserIds },
+    results: resultRows.map((result) => ({
+      id: result.id,
+      uncertaintyLevel: result.uncertaintyLevel ?? undefined,
+      uncertaintyScore: result.uncertaintyScore,
+    })),
+    loot,
+    resultReviews: resultRows.map((result) => ({
+      resultId: result.id,
+      acceptedResult: result.acceptedResult,
+    })),
+    acceptedResult: objective.acceptedResult,
     contributionResolution: input.contributionResolution,
     contributionRatios: input.contributionRatios,
   });
@@ -3068,6 +3176,23 @@ export async function reviewObjectiveLoot(
   });
 
   return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
+}
+
+function settlementParticipantTargetsForResolution(
+  ratios: ContributionAllocation[],
+  targets: Array<{ member: string; memberUserId: string }>,
+) {
+  const targetByUserId = new Map(targets.map((target) => [target.memberUserId, target]));
+  const targetByName = new Map(targets.map((target) => [target.member, target]));
+  const selected = new Map<string, { member: string; memberUserId: string }>();
+
+  for (const ratio of ratios) {
+    const target = (ratio.memberUserId ? targetByUserId.get(ratio.memberUserId) : undefined) ?? targetByName.get(ratio.member);
+    if (!target || selected.has(target.memberUserId)) return null;
+    selected.set(target.memberUserId, target);
+  }
+
+  return selected.size > 0 ? Array.from(selected.values()) : null;
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task | null> {

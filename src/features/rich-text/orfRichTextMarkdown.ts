@@ -9,6 +9,7 @@ export type OrfMentionReference = {
 
 export type OrfRichTextPlainTextOptions = {
   attachmentText?: string | ((reference: OrfAttachmentReference) => string);
+  preserveWhitespace?: boolean;
 };
 
 export type OrfRichTextTokenMatch<TReference> = {
@@ -166,9 +167,15 @@ export function orfRichTextMarkdownToPlainText(markdown: string, options: OrfRic
     .replace(/^\s*[-*+]\s+/gm, "")
     .replace(/^\s*\d+[.)]\s+/gm, "");
 
-  return unescapeOrfMarkdownPlainText(stripUnescapedInlineMarkdownSyntax(plainText))
-    .replace(/[ \t\n]+/g, " ")
-    .trim();
+  const text = unescapeOrfMarkdownPlainText(stripUnescapedInlineMarkdownSyntax(plainText));
+  if (options.preserveWhitespace) {
+    return text
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  return text.replace(/[ \t\n]+/g, " ").trim();
 }
 
 export function orfRichTextHasMeaningfulContent(markdown: string) {

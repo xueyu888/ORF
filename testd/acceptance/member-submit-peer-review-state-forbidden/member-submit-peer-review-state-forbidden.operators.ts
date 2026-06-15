@@ -137,6 +137,10 @@ function requiredStateTarget(params: StepParams, key: string): StateForbiddenTar
 function stateLootPairsFromRuntime(runtime: StateCaseRuntime) {
   return [
     {
+      target: asStateTarget(runtime.values.submittedTarget),
+      loot: asStateLoot(runtime.values.submittedLoot),
+    },
+    {
       target: asStateTarget(runtime.values.settledTarget),
       loot: asStateLoot(runtime.values.settledLoot),
     },

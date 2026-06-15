@@ -28,8 +28,13 @@ export const objectiveLifecycleTransitions = {
     from: "frozen",
     to: "submitted",
   },
-  settleLoot: {
+  acceptLoot: {
     from: "submitted",
+    to: "accepted",
+    stage: "goalFrozen",
+  },
+  settleLoot: {
+    from: "accepted",
     to: "settled",
     stage: "goalFrozen",
   },

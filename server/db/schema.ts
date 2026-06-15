@@ -243,6 +243,57 @@ export const pointLedger = pgTable("point_ledger", {
   createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
 });
 
+export const workLogCategories = pgTable(
+  "work_log_categories",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    normalizedName: text("normalized_name").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    teamName: uniqueIndex("work_log_categories_team_name_idx").on(table.teamId, table.normalizedName),
+  }),
+);
+
+export const workLogEntries = pgTable(
+  "work_log_entries",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    authorUserId: uuid("author_user_id")
+      .notNull()
+      .references(() => users.id),
+    authorNameSnapshot: text("author_name_snapshot").notNull(),
+    workDate: date("work_date", { mode: "string" }).notNull(),
+    objectiveId: text("objective_id").references(() => objectives.id, { onDelete: "set null" }),
+    objectiveIdSnapshot: text("objective_id_snapshot"),
+    objectiveTitleSnapshot: text("objective_title_snapshot"),
+    categoryId: text("category_id").references(() => workLogCategories.id, { onDelete: "set null" }),
+    categoryIdSnapshot: text("category_id_snapshot"),
+    categoryNameSnapshot: text("category_name_snapshot"),
+    bodyMarkdown: text("body_markdown").notNull(),
+    remainingEstimatePercent: integer("remaining_estimate_percent"),
+    durationMinutes: integer("duration_minutes"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    authorDate: index("work_log_entries_author_date_idx").on(table.teamId, table.authorUserId, table.workDate),
+    teamDate: index("work_log_entries_team_date_idx").on(table.teamId, table.workDate),
+    objective: index("work_log_entries_objective_snapshot_idx").on(table.teamId, table.objectiveIdSnapshot),
+    category: index("work_log_entries_category_snapshot_idx").on(table.teamId, table.categoryIdSnapshot),
+  }),
+);
+
 export const notifications = pgTable(
   "notifications",
   {

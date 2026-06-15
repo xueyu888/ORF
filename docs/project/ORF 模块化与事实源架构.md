@@ -3,12 +3,12 @@
 ## 业务状态链
 
 - `Objective` 是挑战流程的业务事实主体；`Objective.flowStatus` 是生命周期唯一业务状态，`stage` 只作为页面兼容阶段。
-- 主链路是 `candidate -> open/applying/recruiting -> reestimating -> frozen -> submitted -> settled/closed`，发布、申请、征召、接受、冻结、提交战利品和验收结算只能通过后端接口推进。
+- 主链路是 `candidate -> open/applying/recruiting -> reestimating -> frozen -> submitted -> accepted -> settled/closed`，发布、申请、征召、接受、冻结、提交战利品、验收和结算只能通过后端接口推进。
 - `Result`、`Task`、评论、试验收、对齐申请、战利品和积分账本都挂在 `Objective` 下；它们是子事实或派生读模型，不反向拥有目标生命周期。
 - 数据库是业务事实源；前端 `OrfState` 是服务端 read model 快照，`completion/title/creation` overlay 只是临时 UI 状态。
 - 悬赏大厅是独立页面读模型，我的挑战是 `TaskManagementData` 的成员视图；它们都不是第二套事实源。
 - 项目归属由 `Project` 注册表和可空 `Objective.projectId` 组成；`Project.name` 是项目名称事实源，目标可以保持未归属，项目不参与权限、成员、生命周期或积分结算。
-- 匿名互评原始数据进入本地结算服务；后端只接收结算后的贡献分配，不保存匿名原始评价。
+- 匿名互评原始数据只在浏览器和共享结算服务明文出现；ORF 后端只代理加密 envelope，并在指挥官验收页代理读取最新明细，不保存匿名原始评价。ORF 业务事实源只接收指挥官确认后的贡献分配和公开积分结果。
 - 新增模块必须通过显式输入输出组合，不让页面局部状态、仓库私有 helper 或旧 store mutation 成为隐式状态机。
 
 ## 当前模块边界

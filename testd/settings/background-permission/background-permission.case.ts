@@ -81,7 +81,7 @@ function createBackgroundPersonalCase(data: BackgroundPersonalCaseData) {
       description: "当前用户个人背景已切换，系统背景配置保持不变",
       assertions: [
         { source: { caseStepId: "S1-1", method: "playwright" }, id: "url.personal_settings", title: "当前页面 应为 个人设置页面", object: "page.url", operator: "match", params: { pattern: "/settings$" } },
-        { source: { caseStepId: "S1-2", method: "playwright" }, id: "personal_settings.visible", title: "当前页面 应显示 `个人设置`", object: "page.main_heading", operator: "visible", params: { name: "个人设置" } },
+        { source: { caseStepId: "S1-2", method: "playwright" }, id: "personal_settings.visible", title: "应用顶部 应显示 `个人设置` 页面标题", object: "page", operator: "visible", params: { role: "heading", name: "个人设置", exact: true } },
         { source: { caseStepId: "S1-3", method: "playwright" }, id: "post_login_background.visible", title: "当前页面 应显示 `我的 AppShell 皮肤`", object: "page", operator: "visible", params: { role: "heading", name: "我的 AppShell 皮肤", exact: true } },
         { source: { caseStepId: "S1-4", method: "api" }, id: "personal_backgrounds.contains_first", title: "当前用户个人背景列表 应包含 本用例第一个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.firstPersonalBackground" } },
         { source: { caseStepId: "S1-5", method: "api" }, id: "personal_backgrounds.contains_second", title: "当前用户个人背景列表 应包含 本用例第二个个人 AppShell 皮肤图片", object: "api.personal_backgrounds", operator: "contains_background", params: { backgroundFrom: "runtime.secondPersonalBackground" } },

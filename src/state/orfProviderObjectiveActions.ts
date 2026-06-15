@@ -13,6 +13,7 @@ import {
 import type {
   ContributionAllocation,
   LootResultClaim,
+  ObjectiveAcceptedResult,
   Objective,
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
@@ -35,15 +36,25 @@ export type SubmitLootInput = {
   author?: string;
 };
 export type ReviewObjectiveLootInput = {
+  acceptedResult?: ObjectiveAcceptedResult;
   lootId?: string;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
-  contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   reason?: string;
+};
+export type SettleObjectiveLootInput = {
+  lootId?: string;
+  contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
+  contributionRatios?: ContributionAllocation[];
+  reason?: string;
+  settlementParticipantUserIds?: string[];
 };
 export type ReviewObjectiveTrialReviewInput = {
   status: Exclude<ObjectiveTrialReviewStatus, "requested">;
   commanderFeedback: string;
 };
+export type SubmitContributionReviewInput =
+  | { allocations: ContributionAllocation[]; kind: "score" }
+  | { abstentionReason: string; kind: "abstain" };
 export type RequestObjectiveAlignmentInput = {
   kind: ObjectiveAlignmentRequestKind;
   scheduledAt?: string | null;
@@ -285,26 +296,12 @@ export function useOrfProviderObjectiveActions({
       },
       reviewObjectiveLoot: async (objectiveId: string, input: ReviewObjectiveLootInput) => {
         try {
-          const objective = state.objectives.find((item) => item.id === objectiveId);
-          const localSummary = objective && objectiveChallengerCount(objective) > 1
-            ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
-            : null;
-          const settlementInput =
-            objective && localSummary?.status === "ready" && localSummary.contributionResolution
-              ? {
-                  ...input,
-                  contributionResolution: {
-                    ...localSummary.contributionResolution,
-                    ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios, objective),
-                  },
-                }
-              : input;
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
             method: "POST",
-            body: JSON.stringify(settlementInput),
+            body: JSON.stringify(input),
           });
           await refreshTaskManagementData();
-          notify("战利品已验收结算");
+          notify("战利品验收处理已完成");
           return true;
         } catch (error) {
           notify(businessMutationFailureMessage(error, "战利品验收失败"));
@@ -312,21 +309,62 @@ export function useOrfProviderObjectiveActions({
           return false;
         }
       },
-      submitContributionReview: async (objectiveId: string, allocations: ContributionAllocation[]) => {
+      settleObjectiveLoot: async (objectiveId: string, input: SettleObjectiveLootInput) => {
+        try {
+          const { settlementParticipantUserIds, ...settleInput } = input;
+          const objective = state.objectives.find((item) => item.id === objectiveId);
+          const participantCount = settlementParticipantUserIds?.length ?? (objective ? objectiveChallengerCount(objective) : 0);
+          const localSummary = objective && participantCount > 1 && !settleInput.contributionResolution
+            ? await fetchLocalSettlementSummary({ objectiveId, participantUserIds: settlementParticipantUserIds })
+            : null;
+          const settlementInput =
+            objective && localSummary?.status === "ready" && localSummary.contributionResolution
+              ? {
+                  ...settleInput,
+                  contributionResolution: {
+                    ...localSummary.contributionResolution,
+                    ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios, objective),
+                  },
+                }
+              : settleInput;
+          await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/settle`, {
+            method: "POST",
+            body: JSON.stringify(settlementInput),
+          });
+          await refreshTaskManagementData();
+          notify("目标已结算");
+          return true;
+        } catch (error) {
+          notify(localSettlementMutationFailureMessage(error, "目标结算失败"));
+          void refreshTaskManagementData().catch(() => undefined);
+          return false;
+        }
+      },
+      submitContributionReview: async (objectiveId: string, input: SubmitContributionReviewInput) => {
         try {
           const objective = state.objectives.find((item) => item.id === objectiveId);
           if (!objective || !currentUser) {
             notify("匿名互评提交失败：目标或当前用户不可用");
             return false;
           }
-          await submitLocalEncryptedContributionReview({
-            allocations,
-            challengers: objective.challengers,
-            objectiveId,
-            objectiveTitle: objective.title,
-            reviewer: currentUser.name,
-          });
-          notify("匿名互评已提交到本地结算服务");
+          await submitLocalEncryptedContributionReview(input.kind === "abstain"
+            ? {
+                abstentionReason: input.abstentionReason,
+                challengers: objective.challengers,
+                kind: "abstain",
+                objectiveId,
+                objectiveTitle: objective.title,
+                reviewer: currentUser.name,
+              }
+            : {
+                allocations: input.allocations,
+                challengers: objective.challengers,
+                kind: "score",
+                objectiveId,
+                objectiveTitle: objective.title,
+                reviewer: currentUser.name,
+              });
+          notify("匿名互评已通过 ORF 提交到共享结算服务");
           return true;
         } catch (error) {
           notify(localSettlementMutationFailureMessage(error, "匿名互评提交失败"));

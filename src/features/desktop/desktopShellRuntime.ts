@@ -24,8 +24,20 @@ export type DesktopWindowState = {
   isVisible?: boolean;
 };
 
+export type DesktopSystemIdleSnapshot = {
+  idleSeconds: number | null;
+  state: "active" | "idle" | "locked" | "unknown";
+  supported: boolean;
+};
+
 export type DesktopShellWindowResult = {
   data?: DesktopWindowState;
+  reason?: string;
+  status: "error" | "success" | "unsupported";
+};
+
+export type DesktopSystemIdleResult = {
+  data?: DesktopSystemIdleSnapshot;
   reason?: string;
   status: "error" | "success" | "unsupported";
 };
@@ -39,6 +51,7 @@ export type DesktopWorkbenchZoomResult = {
 type DesktopShellBridge = {
   closeWindow?: () => Promise<DesktopShellWindowResult>;
   getLaunchAtLoginState?: () => Promise<DesktopShellLaunchAtLoginResult>;
+  getSystemIdleSnapshot?: () => Promise<DesktopSystemIdleResult>;
   getWindowState?: () => Promise<DesktopShellWindowResult>;
   minimizeWindow?: () => Promise<DesktopShellWindowResult>;
   onWindowStateChange?: (handler: (state: DesktopWindowState) => void) => (() => void);
@@ -111,6 +124,17 @@ export async function getDesktopWindowState(): Promise<DesktopShellWindowResult>
   }
   try {
     return normalizeDesktopWindowResult(await window.orfDesktopShell.getWindowState());
+  } catch {
+    return { status: "error", reason: "desktop_shell_bridge_failed" };
+  }
+}
+
+export async function getDesktopSystemIdleSnapshot(): Promise<DesktopSystemIdleResult> {
+  if (typeof window === "undefined" || !window.orfDesktopShell?.getSystemIdleSnapshot) {
+    return { status: "unsupported", reason: "desktop_shell_bridge_unavailable" };
+  }
+  try {
+    return normalizeDesktopSystemIdleResult(await window.orfDesktopShell.getSystemIdleSnapshot());
   } catch {
     return { status: "error", reason: "desktop_shell_bridge_failed" };
   }
@@ -196,4 +220,24 @@ function normalizeDesktopWindowState(state: DesktopWindowState | undefined): Des
     isMinimized: state.isMinimized === true,
     isVisible: state.isVisible !== false,
   };
+}
+
+function normalizeDesktopSystemIdleResult(result: DesktopSystemIdleResult | undefined): DesktopSystemIdleResult {
+  if (result?.status === "success" && result.data) {
+    const idleSeconds = typeof result.data.idleSeconds === "number" && Number.isFinite(result.data.idleSeconds)
+      ? Math.max(0, result.data.idleSeconds)
+      : null;
+    const state = result.data.state === "active" || result.data.state === "idle" || result.data.state === "locked"
+      ? result.data.state
+      : "unknown";
+    return {
+      status: "success",
+      data: {
+        idleSeconds,
+        state,
+        supported: result.data.supported === true,
+      },
+    };
+  }
+  return result?.status ? result : { status: "error", reason: "desktop_system_idle_result_invalid" };
 }

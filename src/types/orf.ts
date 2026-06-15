@@ -21,21 +21,25 @@ export type NotificationKind =
   | "feedback.created"
   | "feedback.commented"
   | "feedback.status.changed"
-  | "comment.mention.created";
-export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback";
+  | "comment.mention.created"
+  | "worklog.reminder";
+export type NotificationTargetType = "objective" | "objectiveLoot" | "comment" | "feedback" | "workLog";
 export type ObjectiveAcceptedResult = "completed" | "falsified" | "overturned" | "abandoned" | "overdelivered";
 export type ResultAcceptedResult = "unreviewed" | "completed" | "falsified" | "failed";
 export type EvidenceType = "Eval run" | "Log sample" | "User report" | "Dashboard snapshot" | "Incident report";
 export type UserRole = "admin" | "member";
 export type UserStatus = "pending" | "active" | "rejected" | "disabled";
 export type OrfStage = "goalSetting" | "resultClaiming" | "orfReestimate" | "goalFrozen";
-export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "settled" | "closed";
+export type ObjectiveFlowStatus = "candidate" | "open" | "applying" | "recruiting" | "reestimating" | "frozen" | "submitted" | "accepted" | "settled" | "closed";
 export type LootResultClaimStatus = "completed" | "falsified" | "notClaimed";
 export type ObjectiveTrialReviewStatus = "requested" | "approved" | "needsWork";
 export type ObjectiveAlignmentRequestKind = "reestimateCompletion" | "acceptance";
 export type ObjectiveAlignmentRequestStatus = "requested" | "scheduled" | "completed" | "needsWork" | "cancelled";
 export type ChatChannelType = "public" | "private" | "direct";
 export type ChatMemberRole = "owner" | "admin" | "member";
+export type ChatPresenceState = "active" | "idle" | "recent" | "offline";
+export type ClientPresenceSource = "android" | "browser" | "desktop" | "unknown";
+export type ClientSystemIdleState = "active" | "idle" | "locked" | "unknown";
 
 export interface OrfUser {
   id: string;
@@ -195,6 +199,122 @@ export interface PointLedgerEntry {
   createdAt: string;
 }
 
+export interface WorkLogEntry {
+  id: string;
+  authorUserId: string;
+  authorNameSnapshot: string;
+  workDate: string;
+  objectiveId?: string | null;
+  objectiveIdSnapshot?: string | null;
+  objectiveTitleSnapshot?: string | null;
+  categoryId?: string | null;
+  categoryIdSnapshot?: string | null;
+  categoryNameSnapshot?: string | null;
+  bodyMarkdown: string;
+  remainingEstimatePercent?: number | null;
+  durationMinutes?: number | null;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkLogActivityItem extends WorkLogEntry {
+  authorAvatarUrl?: string | null;
+  authorCurrentName?: string | null;
+}
+
+export interface WorkLogObjectiveOption {
+  id: string;
+  title: string;
+  flowStatus: ObjectiveFlowStatus;
+  finalDueAt: string;
+}
+
+export interface WorkLogCategoryOption {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkLogClassificationKind = "category" | "objective" | "uncategorized";
+
+export interface WorkLogClassificationSuggestion {
+  kind: WorkLogClassificationKind | "newCategory";
+  objectiveId?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
+  confidence: number;
+  reason?: string | null;
+}
+
+export type WorkLogReportScope = "mine" | "team";
+
+export interface WorkLogReportClassificationSummary {
+  kind: WorkLogClassificationKind;
+  objectiveId?: string | null;
+  categoryId?: string | null;
+  title: string;
+  entryCount: number;
+  latestRemainingEstimatePercent?: number | null;
+  totalDurationMinutes?: number;
+}
+
+export interface WorkLogReportEntrySummary {
+  id: string;
+  classificationKind: WorkLogClassificationKind;
+  objectiveId?: string | null;
+  categoryId?: string | null;
+  classificationTitle: string;
+  bodyMarkdown: string;
+  remainingEstimatePercent?: number | null;
+  durationMinutes?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkLogReportDayCell {
+  userId: string;
+  date: string;
+  entryCount: number;
+  classificationCount: number;
+  latestEntryAt?: string | null;
+  latestRemainingEstimatePercent?: number | null;
+  totalDurationMinutes: number;
+  entries: WorkLogReportEntrySummary[];
+  classifications: WorkLogReportClassificationSummary[];
+}
+
+export interface WorkLogReportUserRow {
+  id: string;
+  name: string;
+  role: UserRole;
+  avatarUrl?: string | null;
+  totalEntries: number;
+  activeDays: number;
+  coveredClassificationCount: number;
+  averageRemainingEstimatePercent?: number | null;
+  totalDurationMinutes: number;
+}
+
+export interface WorkLogReportTotals {
+  totalEntries: number;
+  activeDays: number;
+  usersWithEntries: number;
+  coveredClassificationCount: number;
+  averageRemainingEstimatePercent?: number | null;
+  totalDurationMinutes: number;
+}
+
+export interface WorkLogReport {
+  scope: WorkLogReportScope;
+  from: string;
+  to: string;
+  users: WorkLogReportUserRow[];
+  cells: WorkLogReportDayCell[];
+  totals: WorkLogReportTotals;
+}
+
 export interface ContributionAllocation {
   member: string;
   memberUserId?: string | null;
@@ -207,6 +327,8 @@ export interface ObjectiveContributionReview {
   reviewer: string;
   reviewerUserId?: string | null;
   allocations: ContributionAllocation[];
+  abstentionReason?: string | null;
+  kind?: "score" | "abstain";
   submittedAt: string;
 }
 
@@ -392,8 +514,27 @@ export interface ChatUser {
   avatarUrl?: string | null;
   lastOnlineAt?: string | null;
   presence: {
+    active: boolean;
+    connected: boolean;
+    lastActiveAt?: string | null;
     online: boolean;
+    source?: ClientPresenceSource;
+    state: ChatPresenceState;
   };
+}
+
+export interface UserPresenceActivityInput {
+  clientId?: string;
+  documentFocused?: boolean;
+  documentVisible?: boolean;
+  lastInteractionAt?: string | null;
+  occurredAt?: string;
+  source?: ClientPresenceSource;
+  systemIdleSeconds?: number | null;
+  systemIdleState?: ClientSystemIdleState;
+  windowFocused?: boolean;
+  windowMinimized?: boolean;
+  windowVisible?: boolean;
 }
 
 export interface ChatChannelMember {

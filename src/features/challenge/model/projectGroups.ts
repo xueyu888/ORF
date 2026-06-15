@@ -1,4 +1,5 @@
 import type { OrfProject } from "../../../types/orf";
+import { isObjectiveSubmittedByFlow } from "../../../domain/orfLifecycle";
 import { objectiveComplete } from "./challengeStatus";
 import type { ObjectiveNode } from "./types";
 
@@ -83,7 +84,7 @@ function addObjectiveToProjectGroup(project: ObjectiveProjectGroup, group: Objec
   project.activeActionCount += group.actions.filter((action) => action.status === "In Progress" || action.status === "In Review").length;
   project.blockedCount += group.objective.status === "Blocked" ? 1 : 0;
   project.riskCount += group.objective.status === "At Risk" || group.objective.status === "Blocked" ? 1 : 0;
-  project.reviewCount += group.objective.flowStatus === "submitted" || Boolean(group.objective.lootSubmittedAt) ? 1 : 0;
+  project.reviewCount += isObjectiveSubmittedByFlow(group.objective) ? 1 : 0;
 }
 
 function withProjectSummary(project: ObjectiveProjectGroup): ObjectiveProjectGroup {

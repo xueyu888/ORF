@@ -83,6 +83,9 @@ contextBridge.exposeInMainWorld("orfDesktopShell", {
   getWindowState() {
     return ipcRenderer.invoke("orf:desktop-shell:get-window-state");
   },
+  getSystemIdleSnapshot() {
+    return ipcRenderer.invoke("orf:desktop-shell:get-system-idle-snapshot");
+  },
   minimizeWindow() {
     return ipcRenderer.invoke("orf:desktop-shell:minimize-window");
   },

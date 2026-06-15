@@ -71,7 +71,6 @@ export function SystemSettingsPage() {
       <section className="orf-settings-detail" aria-label="设置详情">
         <div className="orf-settings-detail-heading">
           <span>System Config</span>
-          <h1>系统设置</h1>
           <p>管理全站视觉、聊天和系统级策略。</p>
         </div>
 

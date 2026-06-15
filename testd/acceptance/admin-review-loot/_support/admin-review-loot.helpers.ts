@@ -167,7 +167,7 @@ export async function reviewLootTargetSubmitted(target: ReviewLootTarget, member
   );
 }
 
-export async function reviewLootTargetSettled(target: ReviewLootTarget, points: number) {
+export async function reviewLootTargetAccepted(target: ReviewLootTarget, points: number) {
   const [row] = await db
     .select({
       flowStatus: objectives.flowStatus,
@@ -182,11 +182,11 @@ export async function reviewLootTargetSettled(target: ReviewLootTarget, points: 
 
   return (
     !!row &&
-    row.flowStatus === "settled" &&
+    row.flowStatus === "accepted" &&
     row.stage === "goalFrozen" &&
     row.acceptedResult === "completed" &&
     row.objectiveBasePoints === points &&
-    row.objectiveSettlementPoints === points
+    row.objectiveSettlementPoints === null
   );
 }
 
@@ -209,16 +209,6 @@ export async function reviewLootPresent(target: ReviewLootTarget, loot: ReviewLo
     row.submittedBy === loot.submittedBy &&
     row.resultClaims.some((claim) => claim.resultId === result.id && claim.claim === "completed")
   );
-}
-
-export async function reviewLootLedgerPresent(target: ReviewLootTarget, memberName: string, points: number, reason: string) {
-  const [row] = await db
-    .select({ points: pointLedger.points, reason: pointLedger.reason })
-    .from(pointLedger)
-    .where(and(eq(pointLedger.objectiveId, target.objective.id), eq(pointLedger.memberName, memberName)))
-    .limit(1);
-
-  return !!row && row.points === points && row.reason === reason;
 }
 
 export function lootPagePath(target: ReviewLootTarget) {

@@ -1,4 +1,5 @@
 import type { ContributionAllocation } from "../types/orf";
+import { localSettlementProxyBasePath } from "../domain/orfLocalSettlement";
 
 type LocalSettlementPublicKey = {
   algorithm: "RSA-OAEP-256";
@@ -14,22 +15,45 @@ type EncryptedReviewEnvelope = {
 };
 
 export type LocalSettlementSummary = {
+  abstainedReviewers: string[];
+  averages: Array<{
+    averageRatio: number | null;
+    basis: "peer" | "selfOnly" | "none";
+    member: string;
+    normalizedRatio: number;
+    ratingCount: number;
+    relativeDeviation: number;
+    relativeDeviationWarning: boolean;
+  }>;
   contributionResolution: { ratios: ContributionAllocation[]; reason: string } | null;
+  equalShareRatio: number;
   missingReviewers: string[];
   objectiveId: string;
   ratios: ContributionAllocation[];
   reviewers: string[];
   status: "ready" | "missing" | "conflict";
+  submissions: Array<
+    | {
+        allocations: Array<ContributionAllocation & {
+          deviationFromAverage: number | null;
+          deviationWarning: boolean;
+        }>;
+        receivedAt?: string;
+        reviewer: string;
+        status: "scored";
+        submittedAt: string;
+      }
+    | {
+        abstentionReason: string;
+        receivedAt?: string;
+        reviewer: string;
+        status: "abstained";
+        submittedAt: string;
+      }
+  >;
 };
 
-const defaultLocalSettlementUrl = "http://127.0.0.1:8799";
 const localSettlementRequestTimeoutMs = 3000;
-
-type LocalSettlementImportMeta = ImportMeta & {
-  env?: {
-    VITE_ORF_LOCAL_SETTLEMENT_URL?: string;
-  };
-};
 
 export class LocalSettlementUnavailableError extends Error {
   readonly baseUrl: string;
@@ -54,33 +78,49 @@ export class LocalSettlementResponseError extends Error {
 }
 
 export function localSettlementBaseUrl() {
-  const configuredUrl = (import.meta as LocalSettlementImportMeta).env?.VITE_ORF_LOCAL_SETTLEMENT_URL?.trim();
-  return (configuredUrl || defaultLocalSettlementUrl).replace(/\/+$/, "");
+  return localSettlementProxyBasePath;
 }
 
 export async function assertLocalSettlementAvailable() {
   await requestLocalSettlement("/health");
 }
 
-export async function submitLocalEncryptedContributionReview(input: {
-  allocations: ContributionAllocation[];
+type LocalContributionReviewInputBase = {
   challengers: string[];
   objectiveId: string;
   objectiveTitle?: string;
   reviewer: string;
-}) {
+};
+
+export async function submitLocalEncryptedContributionReview(input: LocalContributionReviewInputBase & (
+  | { allocations: ContributionAllocation[]; kind: "score" }
+  | { abstentionReason: string; kind: "abstain" }
+)) {
   await assertLocalSettlementAvailable();
   const key = await fetchLocalSettlementPublicKey();
-  const envelope = await encryptForLocalSettlement(key, {
-    allocations: input.allocations,
-    challengers: input.challengers,
-    objectiveId: input.objectiveId,
-    objectiveTitle: input.objectiveTitle,
-    reviewer: input.reviewer,
-    submittedAt: new Date().toISOString(),
-    version: 1,
-  });
-  const response = await requestLocalSettlement("/reviews", {
+  const payload = input.kind === "abstain"
+    ? {
+        abstentionReason: input.abstentionReason,
+        challengers: input.challengers,
+        kind: "abstain" as const,
+        objectiveId: input.objectiveId,
+        objectiveTitle: input.objectiveTitle,
+        reviewer: input.reviewer,
+        submittedAt: new Date().toISOString(),
+        version: 1,
+      }
+    : {
+        allocations: input.allocations,
+        challengers: input.challengers,
+        kind: "score" as const,
+        objectiveId: input.objectiveId,
+        objectiveTitle: input.objectiveTitle,
+        reviewer: input.reviewer,
+        submittedAt: new Date().toISOString(),
+        version: 1,
+      };
+  const envelope = await encryptForLocalSettlement(key, payload);
+  const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews`, {
     body: JSON.stringify(envelope),
     headers: { "content-type": "application/json" },
     method: "POST",
@@ -88,9 +128,9 @@ export async function submitLocalEncryptedContributionReview(input: {
   return response.json() as Promise<{ ok: true; payloadHash: string; receivedAt: string }>;
 }
 
-export async function fetchLocalSettlementSummary(input: { challengers: string[]; objectiveId: string }) {
+export async function fetchLocalSettlementSummary(input: { objectiveId: string; participantUserIds?: string[] }) {
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/summary`, {
-    body: JSON.stringify({ challengers: input.challengers }),
+    body: JSON.stringify({ participantUserIds: input.participantUserIds }),
     headers: { "content-type": "application/json" },
     method: "POST",
   });

@@ -24,6 +24,7 @@ type ChatMessageFeedProps = {
   onCancelEdit: () => void;
   onClearUnread: () => void;
   onCopyLink: (message: ChatMessage) => void;
+  onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onEdit: (message: ChatMessage) => void;
   onJumpUnread: (target: ChatUnreadJumpTarget) => void;
@@ -69,6 +70,7 @@ export function ChatMessageFeed({
   onCancelEdit,
   onClearUnread,
   onCopyLink,
+  onCopyMessage,
   onDelete,
   onEdit,
   onJumpUnread,
@@ -117,6 +119,7 @@ export function ChatMessageFeed({
           onCancelEdit={onCancelEdit}
           onClearUnread={onClearUnread}
           onCopyLink={onCopyLink}
+          onCopyMessage={onCopyMessage}
           onDelete={onDelete}
           onEdit={onEdit}
           onJumpUnread={onJumpUnread}
@@ -165,6 +168,7 @@ function MessageList({
   mentionableUsers,
   messages,
   onCopyLink,
+  onCopyMessage,
   onCancelEdit,
   onClearUnread,
   onDelete,
@@ -253,6 +257,7 @@ function MessageList({
               onAttachmentPreview={onAttachmentPreview}
               onCancelEdit={onCancelEdit}
               onCopyLink={onCopyLink}
+              onCopyMessage={onCopyMessage}
               onDelete={onDelete}
               onEdit={onEdit}
               onMarkUnread={onMarkUnread}

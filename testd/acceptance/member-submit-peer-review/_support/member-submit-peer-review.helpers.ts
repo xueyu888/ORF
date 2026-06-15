@@ -24,7 +24,7 @@ export async function peerReviewTargetFromObjective(objectiveId: string): Promis
   };
 }
 
-export async function addPeerReviewTargetChallenger(target: PeerReviewTarget, memberName: string) {
+export async function addPeerReviewTargetChallenger(target: PeerReviewTarget, memberName: string, memberUserId: string) {
   const objective = await readObjective(target.objective.id);
   if (!objective) {
     throw new Error("目标不存在，无法设置成员提交匿名互评挑战者");
@@ -34,6 +34,7 @@ export async function addPeerReviewTargetChallenger(target: PeerReviewTarget, me
     .update(objectives)
     .set({
       challengers: uniqueMembers([...objective.challengers, memberName]),
+      challengerUserIds: uniqueMembers([...objective.challengerUserIds, memberUserId]),
       updatedAt: today(),
     })
     .where(eq(objectives.id, target.objective.id));
@@ -49,9 +50,11 @@ export async function preparePeerReviewTargetForReview(target: PeerReviewTarget)
     .update(objectives)
     .set({
       stage: "goalFrozen",
-      flowStatus: "submitted",
+      flowStatus: "accepted",
       lootSubmittedAt: new Date().toISOString(),
-      acceptedResult: null,
+      acceptedResult: "completed",
+      completionMultiplier: 1,
+      objectiveBasePoints: 0,
       objectiveSettlementPoints: null,
       updatedAt: today(),
     })
@@ -98,14 +101,23 @@ export async function deletePeerReview(target: PeerReviewTarget | null, reviewer
   await db.delete(objectiveContributionReviews).where(eq(objectiveContributionReviews.reviewer, reviewer));
 }
 
-export async function targetSubmitted(target: PeerReviewTarget) {
+export async function targetAccepted(target: PeerReviewTarget) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.flowStatus === "submitted" && !!objective.lootSubmittedAt;
+  return (
+    !!objective &&
+    objective.flowStatus === "accepted" &&
+    objective.acceptedResult === "completed" &&
+    !!objective.lootSubmittedAt
+  );
 }
 
-export async function targetChallengerPresent(target: PeerReviewTarget, memberName: string) {
+export async function targetChallengerPresent(target: PeerReviewTarget, memberName: string, memberUserId: string) {
   const objective = await readObjective(target.objective.id);
-  return !!objective && objective.challengers.includes(memberName);
+  return (
+    !!objective &&
+    objective.challengers.includes(memberName) &&
+    objective.challengerUserIds.includes(memberUserId)
+  );
 }
 
 export async function testLootAbsent(body: string) {
@@ -164,7 +176,9 @@ async function readObjective(objectiveId: string) {
       stage: objectives.stage,
       flowStatus: objectives.flowStatus,
       challengers: objectives.challengers,
+      challengerUserIds: objectives.challengerUserIds,
       lootSubmittedAt: objectives.lootSubmittedAt,
+      acceptedResult: objectives.acceptedResult,
     })
     .from(objectives)
     .where(eq(objectives.id, objectiveId))

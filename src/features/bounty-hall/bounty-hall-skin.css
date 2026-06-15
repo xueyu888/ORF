@@ -170,17 +170,6 @@
   font-weight: 800;
 }
 
-.bounty-page-title {
-  margin-top: 8px;
-  color: #30445e;
-  font-family: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
-  font-size: clamp(30px, 4vw, 42px);
-  font-weight: 900;
-  letter-spacing: 0;
-  line-height: 1.08;
-  text-shadow: 0 2px 0 rgba(255, 255, 255, 0.68);
-}
-
 .bounty-header-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1594,7 +1583,7 @@
   text-decoration: underline;
 }
 
-.feedback-issue-detail-title-block h1 {
+.feedback-issue-detail-title-block h2 {
   max-width: 980px;
   margin: 0;
   overflow-wrap: anywhere;
@@ -1919,14 +1908,6 @@
 .feedback-create-back-link:hover {
   color: #2d7397;
   text-decoration: underline;
-}
-
-.feedback-create-heading h1 {
-  margin: 0;
-  color: #162842;
-  font-size: 28px;
-  font-weight: 800;
-  line-height: 1.25;
 }
 
 .feedback-create-layout {
@@ -2403,10 +2384,6 @@
 
   .feedback-create-page::before {
     inset: -16px -16px -110px;
-  }
-
-  .feedback-create-heading h1 {
-    font-size: 24px;
   }
 
   .feedback-create-layout {
@@ -2997,15 +2974,6 @@
   color: #64748b;
   font-size: 11px;
   padding: 0 10px;
-}
-
-.orf-workbench-surface .bounty-page-title {
-  margin-top: 6px;
-  color: #26364a;
-  font-family: inherit;
-  font-size: 28px;
-  line-height: 1.1;
-  text-shadow: none;
 }
 
 .orf-workbench-surface .feedback-issue-title-block p {

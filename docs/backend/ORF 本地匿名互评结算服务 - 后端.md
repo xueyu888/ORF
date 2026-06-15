@@ -1,6 +1,6 @@
 # ORF 本地匿名互评结算服务 - 后端
 
-匿名互评原始数据不进入 ORF 后端。前端在浏览器内用本机私有服务公钥加密互评 payload，然后直接提交到本机私有服务。
+匿名互评原始数据不进入 ORF 数据库。前端在浏览器内用共享私有服务公钥加密互评 payload，然后提交到 ORF 同源代理；ORF 后端只做认证、权限校验和转发，不解密、不保存原始互评。指挥官验收页可通过 ORF 代理读取共享服务返回的最新原始提交明细，但这些明细不进入 ORF 业务数据库或普通读模型。
 
 ## 服务归属
 
@@ -15,37 +15,52 @@
 - 匿名互评原始数据收集、解密、保存和贡献比例汇总。
 - 本机聊天归档同步和查看器。
 
-ORF 仓库只保留浏览器侧调用契约，不再提供本地服务进程、聊天归档页面、聊天归档 API、归档同步任务或归档数据库表。
+ORF 仓库只保留浏览器侧加密和 ORF 后端代理契约，不再提供本地服务进程、聊天归档页面、聊天归档 API、归档同步任务或归档数据库表。
 
-## 前端配置
+## 后端配置
 
-ORF 前端通过 `VITE_ORF_LOCAL_SETTLEMENT_URL` 找到本机私有服务：
+ORF 后端通过 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 找到共享私有服务：
 
 ```env
-VITE_ORF_LOCAL_SETTLEMENT_URL=http://127.0.0.1:8799
+ORF_LOCAL_SETTLEMENT_SERVICE_URL=http://127.0.0.1:8799
+ORF_LOCAL_SETTLEMENT_TIMEOUT_MS=5000
 ```
 
-修改 `VITE_` 变量后需要重启 Vite 前端服务。
+如果共享私有服务不是和 ORF 后端同宿主运行，而是绑定在局域网共享主机上，生产环境可改为：
+
+```env
+ORF_LOCAL_SETTLEMENT_SERVICE_URL=http://199.199.199.8:8799
+```
+
+浏览器端不再配置结算服务地址。正式页面、Win11 客户端和 Android 客户端统一访问 ORF 同源 API，避免 HTTPS 页面直连 HTTP 私有服务导致混合内容或 CORS 问题。
 
 ## 健康检查
 
-本机服务启动后应能访问：
+共享服务启动后，ORF 后端所在机器应能访问：
 
 ```bash
-curl http://127.0.0.1:8799/health
+curl "$ORF_LOCAL_SETTLEMENT_SERVICE_URL/health"
 ```
 
-如果前端提示“本地匿名互评结算服务不可用”，说明浏览器访问不到 `VITE_ORF_LOCAL_SETTLEMENT_URL` 指向的服务；先检查 `orf-local-private-service` 的 systemd 用户服务是否启动，以及当前浏览器所在机器是否能访问该地址。
+如果前端提示“匿名互评结算服务不可用”，说明 ORF 后端代理访问不到 `ORF_LOCAL_SETTLEMENT_SERVICE_URL` 指向的服务；先检查 `orf-local-private-service` 的 systemd 用户服务是否启动、监听地址是否正确，以及 ORF 后端所在机器是否能访问该地址。
 
 ## 接口契约
 
-ORF 前端依赖以下本机私有服务接口：
+ORF 前端依赖以下 ORF 同源代理接口；ORF 后端再转发到共享私有服务：
 
-| 方法 | 路径 | 说明 |
+| 前端同源 API | 私有服务路径 | 说明 |
 | --- | --- | --- |
-| `GET` | `/health` | 本机服务健康检查 |
-| `GET` | `/public-key` | 返回前端加密用公钥 |
-| `POST` | `/reviews` | 接收前端加密后的匿名互评 envelope |
-| `POST` | `/objectives/:objectiveId/summary` | 根据本地互评计算贡献比例 |
+| `GET /api/local-settlement/health` | `GET /health` | 共享服务健康检查 |
+| `GET /api/local-settlement/public-key` | `GET /public-key` | 返回前端加密用公钥 |
+| `POST /api/local-settlement/objectives/:objectiveId/reviews` | `POST /reviews` | 目标挑战者提交加密匿名互评 envelope |
+| `POST /api/local-settlement/objectives/:objectiveId/summary` | `POST /objectives/:objectiveId/summary` | 指挥官验收时读取提交状态、原始评分、均值、偏离提醒和默认贡献比例 |
 
-ORF 后端只接收 `/objectives/:objectiveId/summary` 产出的最终贡献比例，并据此写入公开 `pointLedger`。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。
+`/objectives/:objectiveId/summary` 返回：
+
+- `submissions`：每个已提交成员的最新评分或弃权说明。
+- `missingReviewers` / `reviewers` / `abstainedReviewers`：提交状态分组。
+- `averages`：按当前已评分记录计算的成员均值、默认结算比例和相对均分偏离。
+- `ratios`：验收页默认填入的贡献比例。
+- `status`：`ready`、`missing`、`conflict` 只表示提示状态，不是验收阻塞条件。
+
+ORF 后端代理读取 `/objectives/:objectiveId/summary` 产出的默认贡献比例和提示明细；目标进入已验收后，结算时只把指挥官确认后的公开比例写入 `pointLedger`。旧 `POST /api/objectives/:objectiveId/contribution-reviews` 后端接口返回 `410`，不能再写入原始匿名互评。

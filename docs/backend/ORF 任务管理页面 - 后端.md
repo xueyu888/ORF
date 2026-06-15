@@ -30,8 +30,9 @@
 | `POST`   | `/api/objectives/:objectiveId/loot`                                          | 挑战者提交结构化战利品，进入 `submitted`                                                                                                           |
 | `POST`   | `/api/objectives/:objectiveId/trial-reviews`                                 | 挑战者发起一次试验收，目标仍保持 `frozen`                                                                                                          |
 | `PATCH`  | `/api/objectives/:objectiveId/trial-reviews/:trialReviewId`                  | 指挥官反馈试验收，目标仍保持 `frozen`                                                                                                              |
-| `POST`   | `/api/objectives/:objectiveId/contribution-reviews`                          | 已关闭的旧匿名互评接口，返回 `410`，原始互评只提交到本地结算服务                                                                                   |
-| `POST`   | `/api/objectives/:objectiveId/review`                                        | 指挥官验收指标并结算，进入 `settled`                                                                                                               |
+| `POST`   | `/api/objectives/:objectiveId/contribution-reviews`                          | 已关闭的旧匿名互评接口，返回 `410`，原始互评只通过 ORF 代理提交到共享结算服务                                                                      |
+| `POST`   | `/api/objectives/:objectiveId/review`                                        | 指挥官验收指标；通过时进入 `accepted`，不通过时保持 `submitted`                                                                                    |
+| `POST`   | `/api/objectives/:objectiveId/settle`                                        | 指挥官确认最终贡献比例并结算，进入 `settled`                                                                                                       |
 | `POST`   | `/api/results`                                                               | 创建指标并返回 `{ result }`；`managerDefined` 需要指挥官或 `result.create` 权限，`memberProposed` 仅允许 `Objective.challengerUserIds` 中的正式挑战者在未过期 `reestimating` 阶段创建 |
 | `PATCH`  | `/api/results/:resultId`                                                     | 更新指标标题；指挥官可编辑未冻结目标下指标，`Objective.challengerUserIds` 中的挑战者仅能在未过期 `reestimating` 编辑自己目标下指标 |
 | `PATCH`  | `/api/results/:resultId/details`                                             | 更新指标详情字段：`detail`；权限和生命周期锁与指标标题编辑一致 |
@@ -59,7 +60,7 @@
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
 读取目标数据时，`challengerUserIds` / `assignedChallengerUserIds` 是身份事实源，`challengers` / `assignedChallengers` 是显示名投影并会去重、剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。`GET /api/my-challenges?scope=mine` 的正式挑战树只返回当前用户已经进入 `challengerUserIds` 的目标；同响应里的 `pendingChallengeApplications` 只从 `Objective.challengeApplications[]` 派生当前用户 `pending` 申请，用于只读追踪，不改变目标归属、指标权限、任务权限或结算参与者。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
 
-所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/settled/closed` 返回 409。
+所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/accepted/settled/closed` 返回 409。
 
 项目归属 API 只改变目标聚合展示。`Project.name` 是项目名称事实源，`Objective.projectId` 是目标项目归属事实源且可为空；无项目目标是合法状态。创建目标时可以传入 `projectId`，也可以省略或传空；传入不存在或不属于当前默认作用域的项目必须返回 400。`PATCH /api/objectives/:objectiveId/project` 只允许指挥官调用，可以把目标放入项目、移动到其他项目或移出项目，不能改变目标生命周期、挑战者、指标、任务或积分。`DELETE /api/projects/:projectId` 只删除项目注册表记录，项目下目标统一置为未归属，不删除目标、指标、行动项或结算事实。
 
@@ -92,15 +93,15 @@
 | `comments`              | 目标、指标、任务、子任务和反馈 issue 评论                                                 |
 | `objectiveLoot`         | 结构化战利品提交记录                                                                      |
 | `objectiveTrialReviews` | 目标试验收请求和指挥官反馈                                                                |
-| `pointLedger`           | 验收结算后的成员积分流水                                                                  |
+| `pointLedger`           | 结算后的成员积分流水                                                                      |
 
-任务管理读模型不返回 `permissionRules`；当前用户权限由 `/api/me/access` 单独返回。ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只进入本地结算服务。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
+任务管理读模型不返回 `permissionRules`；当前用户权限由 `/api/me/access` 单独返回。ORF 读模型不返回匿名互评原始数据。新匿名互评原始数据只在浏览器和共享结算服务明文出现；ORF 后端只代理加密 envelope，并在指挥官验收页代理读取最新明细，不写入 ORF 读模型。`pointLedger` 是公开积分结果，普通成员和管理员都可以读取；普通成员读模型只收敛目标、指标、战利品、评论等私有业务对象。
 
 `PATCH /api/objectives/:objectiveId/publish` 是候选目标进入悬赏大厅的唯一发布动作，必须写入 `Objective.publishedAt`，并为当前作用域 active 用户创建 `objective.published` 系统通知；持久化通知遵守“触发人不接收自己消息”的原则。通知写入后，后端还会通过 `/api/events` 发送 `system.broadcast`，让当前作用域所有在线 active 用户即时看到横幅并刷新大厅。后续申请、征召、审核、重估、编辑和冻结只能更新对应业务字段或 `updatedAt`，不能覆盖 `publishedAt`。
 
 `GET /api/bounties` 对所有已通过用户返回 `publicItems`，包含 `flowStatus in (open, applying, recruiting, reestimating)` 的公开大厅目标。`publicItems` 是大厅主列表，必须带上 `applications`、`pendingApplications`、`approvedApplicants`、`assignedChallengers`、`challengers`、`isCurrentChallenger`、`hasCurrentApplication` 和目标的 `publishedAt`，用于公开展示申请理由、申请人、待响应征召成员、已通过挑战者头像和发布到大厅时间。`availableItems` 只表示当前仍可发起申请的目标；`recruitmentItems` 表示当前 active 普通成员自己待接受的征召。指挥官/管理员读取同一接口时仍能看到大厅目标；前端可以完整显示申请 / 接受操作入口，但所有申请 / 接受动作接口必须返回 403 或等价 forbidden，不能把管理员写入 `challengerUserIds`、`assignedChallengerUserIds` 或申请记录。
 
-申请挑战只接受 active 普通成员在 `open/applying/recruiting/reestimating` 发起，且 body 必须包含 trim 后非空的 `reason`；`reestimating` 目标收到新申请后仍保持 `reestimating`，不能回退到 `applying`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
+申请挑战只接受 active 普通成员在 `open/applying/recruiting/reestimating` 发起，且 body 必须包含 trim 后非空的 `reason`；`reestimating` 目标收到新申请后仍保持 `reestimating`，不能回退到 `applying`；申请通过或拒绝只接受 `applying/recruiting/reestimating`。目标进入 `frozen/submitted/accepted/settled/closed` 后，即使旧数据仍有 pending 申请，审核接口也必须返回 409。
 
 ## 状态字段
 
@@ -115,13 +116,14 @@ type ObjectiveFlowStatus =
   | "reestimating"
   | "frozen"
   | "submitted"
+  | "accepted"
   | "settled"
   | "closed";
 ```
 
 代码唯一事实源是 `src/domain/orfLifecycle/`。后端只调用其中的 guard 和 transition，不能在 repository、route 或页面模型里再维护独立的状态集合。
 
-`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/settled/closed` 对应 `goalFrozen`。业务流转必须走发布、申请、征召、冻结、提交和验收接口，由这些接口同步写入兼容阶段字段；后端不提供单独改写 `stage` 或退回重估的旧入口。
+`Objective.stage` 只保留页面阶段兼容：`reestimating` 对应 `orfReestimate`，`frozen/submitted/accepted/settled/closed` 对应 `goalFrozen`。业务流转必须走发布、申请、征召、冻结、提交、验收和结算接口，由这些接口同步写入兼容阶段字段；后端不提供单独改写 `stage` 或退回重估的旧入口。
 
 ## 战利品与结算
 
@@ -142,11 +144,11 @@ type ObjectiveFlowStatus =
 
 ```json
 {
-  "error": "Anonymous contribution reviews must be submitted to the local settlement service"
+  "error": "Anonymous contribution reviews must be submitted through the local settlement proxy"
 }
 ```
 
-新前端不调用该接口。普通成员页面把 `0..100` 的百分比转换为 `0..1` 的标准比例后，在浏览器本地用本地结算服务公钥加密，并直接提交到本地结算服务。
+新前端不调用该接口。普通成员页面把 `0..100` 的百分比转换为 `0..1` 的标准比例后，通过 ORF 同源代理读取共享结算服务公钥，在浏览器本地加密，并提交到 `/api/local-settlement/objectives/:objectiveId/reviews`。
 
 `POST /api/objectives/:objectiveId/trial-reviews` 使用与 `POST /api/objectives/:objectiveId/loot` 相同的请求体和指标主张校验。成功后写入 `objectiveTrialReviews`，不写入 `objectiveLoot`，不改变 `Objective.flowStatus` 和 `Objective.lootSubmittedAt`。同一目标只能有一条试验收记录。
 
@@ -167,12 +169,26 @@ type ObjectiveFlowStatus =
 {
   "lootId": "loot-1",
   "resultReviews": [{ "resultId": "res-1", "acceptedResult": "completed" }],
-  "contributionResolution": null,
   "reason": "验收说明"
 }
 ```
 
-目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。本地结算服务解密匿名互评并计算贡献比例；ORF 后端只读取 `contributionResolution`，不读取新匿名互评原始数据。有缺评、分歧或申诉时，指挥官通过 `contributionResolution` 提供处理后的比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示名和旧请求兼容字段。
+目标结果由 `resultReviews` 汇总：全部指标完成则 `Objective.acceptedResult=completed`。验收通过时写入指标验收结果、目标验收结果、倍率和目标基础分，并将 `Objective.flowStatus` 改为 `accepted`；验收不通过时目标保持 `submitted`，不写入积分流水。
+
+`POST /api/objectives/:objectiveId/settle` 请求体：
+
+```json
+{
+  "lootId": "loot-1",
+  "contributionResolution": {
+    "ratios": [{ "member": "Kai Wang", "memberUserId": "usr-kai", "ratio": 1 }],
+    "reason": "指挥官确认最终结算比例"
+  },
+  "reason": "目标结算"
+}
+```
+
+共享结算服务解密匿名互评并计算当前均值；ORF 后端通过同源代理读取提交状态、原始评分、弃权说明、偏离提醒和默认比例。指挥官结算时通过 `contributionResolution` 提供确认后的最终比例和说明。`contributionResolution.ratios[].memberUserId` 对应 `users.id`，是积分归属事实源；`member` 只作为展示名和旧请求兼容字段。单人目标也先进入 `accepted`，再由指挥官用 `100%` 比例确认结算。
 
 结算后后端写入：
 
@@ -218,9 +234,10 @@ type ObjectiveFlowStatus =
 - `接受挑战` 只用于征召；当前不开放成员拒绝征召，有异议时线下找指挥官处理。
 - `提交战利品` 仅允许目标挑战者在 `frozen` 状态执行。
 - `提交试验收` 仅允许目标挑战者在 `frozen` 状态执行一次；`试验收反馈` 仅允许指挥官在 `frozen` 状态处理，且不推进状态。
-- `验收结算` 仅允许指挥官在 `submitted` 状态执行。
-- 多挑战者目标结算优先使用匿名互评汇总；缺评、分歧或申诉需要指挥官处理。
-- 匿名互评和指挥官分歧处理的贡献比例必须是每个挑战者一项、范围 `0..1`、合计 `1` 的标准比例；后端不接受任意权重再静默归一化。
+- `验收` 仅允许指挥官在 `submitted` 状态执行；验收通过后进入 `accepted`，验收不通过保持 `submitted`。
+- `结算` 仅允许指挥官在 `accepted` 状态执行；单人目标也必须先验收进入 `accepted`，再确认结算。
+- 多挑战者目标结算优先使用匿名互评当前均值作为默认比例；缺评、弃权、分歧或申诉只提示指挥官，不阻塞结算。
+- 匿名互评评分和指挥官最终确认的贡献比例必须是每个挑战者一项、范围 `0..1`、合计 `1` 的标准比例；后端不接受任意权重再静默归一化。
 - 注册用户默认为 `pending`，只有 `active` 用户可访问业务 API。
 
 ## 任务与指标解耦迁移

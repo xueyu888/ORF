@@ -5,6 +5,9 @@ const postgresUrl = z.string().startsWith("postgresql://");
 const booleanString = (defaultValue: "true" | "false") =>
   z.enum(["true", "false"]).default(defaultValue).transform((value) => value === "true");
 const optionalSecret = z.string().trim().min(16).optional();
+const optionalUrl = z
+  .union([z.string().trim().url(), z.literal("").transform(() => undefined)])
+  .optional();
 
 const envSchema = z.object({
   DATABASE_URL: postgresUrl.optional(),
@@ -41,6 +44,26 @@ const envSchema = z.object({
   ORF_CLIENT_UPDATE_PUSH_ENABLED: booleanString("true"),
   ORF_CLIENT_UPDATE_PUSH_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(10 * 60 * 1000),
   ORF_CLIENT_UPDATE_BROADCAST_SECRET: optionalSecret,
+  ORF_LOCAL_SETTLEMENT_SERVICE_URL: z.string().url().default("http://127.0.0.1:8799"),
+  ORF_LOCAL_SETTLEMENT_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  ORF_LLM_BASE_URL: optionalUrl,
+  ORF_LLM_API_KEY: z.string().trim().optional().default(""),
+  ORF_LLM_MODEL: z.string().trim().optional().default(""),
+  ORF_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(8_000),
+  AGENT_LLM_BASE_URL: optionalUrl,
+  AGENT_LLM_API_KEY: z.string().trim().optional().default(""),
+  AGENT_LLM_MODEL: z.string().trim().optional().default(""),
+  AUTO_CLASSIFY_MODEL_API_URL: optionalUrl,
+  AUTO_CLASSIFY_MODEL_API_KEY: z.string().trim().optional().default(""),
+  AUTO_CLASSIFY_MODEL_NAME: z.string().trim().optional().default(""),
+  CHAT_MODEL_API_URL: optionalUrl,
+  CHAT_MODEL_API_KEY: z.string().trim().optional().default(""),
+  CHAT_MODEL_NAME: z.string().trim().optional().default(""),
+  ORF_WORK_LOG_REMINDER_ENABLED: booleanString("true"),
+  ORF_WORK_LOG_REMINDER_TIME_ZONE: z.string().trim().min(1).default("Asia/Shanghai"),
+  ORF_WORK_LOG_REMINDER_HOUR: z.coerce.number().int().min(0).max(23).default(17),
+  ORF_WORK_LOG_REMINDER_MINUTE: z.coerce.number().int().min(0).max(59).default(20),
+  ORF_WORK_LOG_REMINDER_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(60 * 1000),
 }).transform((value, context) => {
   const databaseUrl = value.DATABASE_URL ?? value.REMOTE_DATABASE_URL;
 
