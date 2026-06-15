@@ -14,6 +14,8 @@ import {
 } from "../repositories/userRepository";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
+import { recordRealtimePresenceActivity } from "../realtime/presenceRegistry";
+import type { UserPresenceActivityInput } from "../../src/types/orf";
 
 const userRoleSchema = z.enum(["admin", "member"]);
 const userBodySchema = z.object({
@@ -22,6 +24,21 @@ const userBodySchema = z.object({
   role: userRoleSchema,
 });
 const userParamsSchema = z.object({ userId: z.string().min(1) });
+const clientPresenceSourceSchema = z.enum(["android", "browser", "desktop", "unknown"]);
+const clientSystemIdleStateSchema = z.enum(["active", "idle", "locked", "unknown"]);
+const userActivityBodySchema = z.object({
+  clientId: z.string().trim().min(1).max(128).optional(),
+  documentFocused: z.boolean().optional(),
+  documentVisible: z.boolean().optional(),
+  lastInteractionAt: z.string().datetime().nullable().optional(),
+  occurredAt: z.string().datetime().optional(),
+  source: clientPresenceSourceSchema.optional(),
+  systemIdleSeconds: z.number().finite().nonnegative().nullable().optional(),
+  systemIdleState: clientSystemIdleStateSchema.optional(),
+  windowFocused: z.boolean().optional(),
+  windowMinimized: z.boolean().optional(),
+  windowVisible: z.boolean().optional(),
+}).optional();
 
 function publishUsersInvalidation(scope: Parameters<typeof runtimeScopeStorageId>[0], actorUserId?: string | null, targetUserId = "users") {
   publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
@@ -29,6 +46,15 @@ function publishUsersInvalidation(scope: Parameters<typeof runtimeScopeStorageId
     models: ["users", "taskManagement", "bountyHall"],
     reason: "user.changed",
     target: { id: targetUserId, type: "user" },
+  });
+}
+
+function publishUserPresenceInvalidation(scope: Parameters<typeof runtimeScopeStorageId>[0], actorUserId: string) {
+  publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
+    actorUserId,
+    models: ["users"],
+    reason: "user.changed",
+    target: { id: actorUserId, type: "user" },
   });
 }
 
@@ -57,11 +83,18 @@ export function registerUserRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    const activity = await recordUserOnlineActivity(context.user.id);
-    if (activity.updated) {
-      publishUsersInvalidation(context.scope, context.user.id, context.user.id);
+    const body = userActivityBodySchema.parse(request.body) as UserPresenceActivityInput | undefined;
+    const presence = recordRealtimePresenceActivity({
+      activity: body,
+      clientId: body?.clientId,
+      teamId: runtimeScopeStorageId(context.scope),
+      userId: context.user.id,
+    });
+    const activity = presence.active ? await recordUserOnlineActivity(context.user.id) : null;
+    if (activity?.updated || presence.changed) {
+      publishUserPresenceInvalidation(context.scope, context.user.id);
     }
-    return { ok: true, lastOnlineAt: activity.lastOnlineAt };
+    return { ok: true, lastOnlineAt: activity?.lastOnlineAt ?? context.user.lastOnlineAt };
   });
 
   app.post("/api/users", async (request, reply) => {

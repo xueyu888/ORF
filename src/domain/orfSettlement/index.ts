@@ -58,6 +58,7 @@ export type SettlementPlan = {
   settlementPoints: number;
   contributionRatios: ContributionAllocation[];
 };
+export type ObjectiveAcceptancePlan = Omit<SettlementPlan, "contributionRatios">;
 
 export function uncertaintyScoreFor(
   level: UncertaintyLevel | null | undefined,
@@ -136,7 +137,7 @@ export function acceptedResultForClaim(
   return "failed";
 }
 
-export function planObjectiveSettlement(input: {
+export function planObjectiveAcceptance(input: {
   objective: SettlementObjective;
   results: SettlementResult[];
   loot: SettlementLoot;
@@ -145,9 +146,7 @@ export function planObjectiveSettlement(input: {
     acceptedResult: ResultAcceptedResult;
   }>;
   acceptedResult?: ObjectiveAcceptedResult;
-  contributionResolution?: { ratios: ContributionAllocation[] };
-  contributionRatios?: ContributionAllocation[];
-}): SettlementPlan | null {
+}): ObjectiveAcceptancePlan {
   const resultIds = new Set(input.results.map((result) => result.id));
   const claimByResult = new Map(
     input.loot.resultClaims.map((claim) => [claim.resultId, claim]),
@@ -181,6 +180,29 @@ export function planObjectiveSettlement(input: {
   const settlementPoints = Number(
     (basePoints * completionMultiplier).toFixed(2),
   );
+
+  return {
+    acceptedResultByResultId,
+    objectiveAcceptedResult,
+    basePoints,
+    completionMultiplier,
+    settlementPoints,
+  };
+}
+
+export function planObjectiveSettlement(input: {
+  objective: SettlementObjective;
+  results: SettlementResult[];
+  loot: SettlementLoot;
+  resultReviews?: Array<{
+    resultId: string;
+    acceptedResult: ResultAcceptedResult;
+  }>;
+  acceptedResult?: ObjectiveAcceptedResult;
+  contributionResolution?: { ratios: ContributionAllocation[] };
+  contributionRatios?: ContributionAllocation[];
+}): SettlementPlan | null {
+  const acceptancePlan = planObjectiveAcceptance(input);
   const challengerTargets = objectiveChallengerTargets(input.objective);
   const resolutionRatios =
     input.contributionResolution?.ratios ?? input.contributionRatios;
@@ -201,11 +223,7 @@ export function planObjectiveSettlement(input: {
   }
 
   return {
-    acceptedResultByResultId,
-    objectiveAcceptedResult,
-    basePoints,
-    completionMultiplier,
-    settlementPoints,
+    ...acceptancePlan,
     contributionRatios,
   };
 }

@@ -4,6 +4,7 @@ import {
   canFreezeObjectiveAfterReestimate,
   canRecruitObjectiveChallengersByFlow,
   canReviewObjectiveLootByFlow,
+  canSettleObjectiveLootByFlow,
   canSubmitObjectiveContributionReviewByFlow,
   canSubmitObjectiveLootByFlow,
   isObjectiveReestimateWindowOpen,
@@ -43,7 +44,7 @@ export type MetricLifecycleMutationAccess =
 export type WorkItemMutationAccess = ObjectiveWorkItemMutationAccess;
 
 type WorkbenchAction = {
-  kind: "submitLoot" | "submitPeerReview" | "reviewLoot" | "reviewTrial";
+  kind: "submitLoot" | "submitPeerReview" | "reviewLoot" | "settleLoot" | "reviewTrial";
   label: string;
   to: string;
 };
@@ -224,6 +225,15 @@ export function canReviewObjectiveLoot(
   );
 }
 
+export function canSettleObjectiveLoot(
+  objective: Objective | undefined,
+  currentUser: OrfUser | null,
+): boolean {
+  return Boolean(
+    objective && currentUser?.role === "admin" && canSettleObjectiveLootByFlow(objective),
+  );
+}
+
 export function workbenchActionForObjective({
   objective,
   currentUser,
@@ -246,6 +256,14 @@ export function workbenchActionForObjective({
     return {
       kind: "reviewLoot",
       label: "验收战利品",
+      to: `/tasks/objectives/${objective.id}/loot`,
+    };
+  }
+
+  if (canSettleObjectiveLoot(objective, currentUser)) {
+    return {
+      kind: "settleLoot",
+      label: "去结算",
       to: `/tasks/objectives/${objective.id}/loot`,
     };
   }

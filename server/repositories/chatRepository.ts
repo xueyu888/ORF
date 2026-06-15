@@ -20,7 +20,8 @@ import { addDaysToIsoDate, hasExecutableChatSearch, parseChatSearchQuery } from 
 import { chatNotificationPreviewText } from "../../src/features/chat/chatNativeNotificationModel";
 import { pool } from "../db/client";
 import { chatPushChannelId, sendPushToUsers } from "../push/pushService";
-import { publishRealtimeChatEvent, realtimeOnlineUserIds } from "../realtime/realtimeEventBus";
+import { publishRealtimeChatEvent } from "../realtime/realtimeEventBus";
+import { resolveRealtimeUserPresence } from "../realtime/presenceRegistry";
 import { readChatSettings } from "../settings/chatSettings";
 import { readImageMetadata } from "../storage/images";
 import { objectStorage, ObjectStorageUploadEmptyError, ObjectStorageUploadTooLargeError } from "../storage/objectStorage";
@@ -110,8 +111,11 @@ async function listActiveTeamUsers(teamId: string) {
     `,
     [teamId],
   );
-  const onlineUserIds = realtimeOnlineUserIds(teamId);
-  return rows.map((row) => toChatUser(row, { online: onlineUserIds.has(row.id) }));
+  return rows.map((row) => toChatUser(row, resolveRealtimeUserPresence({
+    lastOnlineAt: row.last_online_at,
+    teamId,
+    userId: row.id,
+  })));
 }
 
 async function findActiveDirectChannelIdByMemberIds(teamId: string, memberIds: string[], preferredName: string) {
@@ -267,8 +271,11 @@ async function loadUsersByIds(teamId: string, userIds: string[]) {
     `,
     [uniqueIds, teamId],
   );
-  const onlineUserIds = realtimeOnlineUserIds(teamId);
-  return new Map(rows.map((row) => [row.id, toChatUser(row, { online: onlineUserIds.has(row.id) })]));
+  return new Map(rows.map((row) => [row.id, toChatUser(row, resolveRealtimeUserPresence({
+    lastOnlineAt: row.last_online_at,
+    teamId,
+    userId: row.id,
+  }))]));
 }
 
 async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
@@ -325,6 +332,11 @@ async function loadChannelReadModel(channelIds: string[], actor: ChatActor) {
       `
         SELECT m.channel_id, count(DISTINCT m.root_message_id)::int AS count
         FROM chat_messages m
+        INNER JOIN chat_messages root ON root.id = m.root_message_id
+          AND root.team_id = m.team_id
+          AND root.channel_id = m.channel_id
+          AND root.root_message_id IS NULL
+          AND root.deleted_at IS NULL
         INNER JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2 AND f.following = true
         WHERE m.channel_id = ANY($1::text[])
           AND m.root_message_id IS NOT NULL
@@ -1022,6 +1034,11 @@ export async function getChatUnreadSummary(actor: ChatActor): Promise<ChatUnread
       thread_unread AS (
         SELECT m.channel_id, count(DISTINCT m.root_message_id)::int AS count
         FROM chat_messages m
+        INNER JOIN chat_messages root ON root.id = m.root_message_id
+          AND root.team_id = m.team_id
+          AND root.channel_id = m.channel_id
+          AND root.root_message_id IS NULL
+          AND root.deleted_at IS NULL
         INNER JOIN chat_thread_follows f ON f.root_message_id = m.root_message_id AND f.user_id = $2 AND f.following = true
         INNER JOIN displayable_channels dc ON dc.id = m.channel_id
         WHERE m.root_message_id IS NOT NULL

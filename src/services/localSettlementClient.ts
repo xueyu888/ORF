@@ -15,12 +15,42 @@ type EncryptedReviewEnvelope = {
 };
 
 export type LocalSettlementSummary = {
+  abstainedReviewers: string[];
+  averages: Array<{
+    averageRatio: number | null;
+    basis: "peer" | "selfOnly" | "none";
+    member: string;
+    normalizedRatio: number;
+    ratingCount: number;
+    relativeDeviation: number;
+    relativeDeviationWarning: boolean;
+  }>;
   contributionResolution: { ratios: ContributionAllocation[]; reason: string } | null;
+  equalShareRatio: number;
   missingReviewers: string[];
   objectiveId: string;
   ratios: ContributionAllocation[];
   reviewers: string[];
   status: "ready" | "missing" | "conflict";
+  submissions: Array<
+    | {
+        allocations: Array<ContributionAllocation & {
+          deviationFromAverage: number | null;
+          deviationWarning: boolean;
+        }>;
+        receivedAt?: string;
+        reviewer: string;
+        status: "scored";
+        submittedAt: string;
+      }
+    | {
+        abstentionReason: string;
+        receivedAt?: string;
+        reviewer: string;
+        status: "abstained";
+        submittedAt: string;
+      }
+  >;
 };
 
 const localSettlementRequestTimeoutMs = 3000;
@@ -55,24 +85,41 @@ export async function assertLocalSettlementAvailable() {
   await requestLocalSettlement("/health");
 }
 
-export async function submitLocalEncryptedContributionReview(input: {
-  allocations: ContributionAllocation[];
+type LocalContributionReviewInputBase = {
   challengers: string[];
   objectiveId: string;
   objectiveTitle?: string;
   reviewer: string;
-}) {
+};
+
+export async function submitLocalEncryptedContributionReview(input: LocalContributionReviewInputBase & (
+  | { allocations: ContributionAllocation[]; kind: "score" }
+  | { abstentionReason: string; kind: "abstain" }
+)) {
   await assertLocalSettlementAvailable();
   const key = await fetchLocalSettlementPublicKey();
-  const envelope = await encryptForLocalSettlement(key, {
-    allocations: input.allocations,
-    challengers: input.challengers,
-    objectiveId: input.objectiveId,
-    objectiveTitle: input.objectiveTitle,
-    reviewer: input.reviewer,
-    submittedAt: new Date().toISOString(),
-    version: 1,
-  });
+  const payload = input.kind === "abstain"
+    ? {
+        abstentionReason: input.abstentionReason,
+        challengers: input.challengers,
+        kind: "abstain" as const,
+        objectiveId: input.objectiveId,
+        objectiveTitle: input.objectiveTitle,
+        reviewer: input.reviewer,
+        submittedAt: new Date().toISOString(),
+        version: 1,
+      }
+    : {
+        allocations: input.allocations,
+        challengers: input.challengers,
+        kind: "score" as const,
+        objectiveId: input.objectiveId,
+        objectiveTitle: input.objectiveTitle,
+        reviewer: input.reviewer,
+        submittedAt: new Date().toISOString(),
+        version: 1,
+      };
+  const envelope = await encryptForLocalSettlement(key, payload);
   const response = await requestLocalSettlement(`/objectives/${encodeURIComponent(input.objectiveId)}/reviews`, {
     body: JSON.stringify(envelope),
     headers: { "content-type": "application/json" },

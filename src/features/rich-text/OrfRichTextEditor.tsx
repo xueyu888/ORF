@@ -3,6 +3,7 @@ import { Bold, Check, Code, Heading3, ImagePlus, Italic, Link as LinkIcon, List,
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -72,6 +73,7 @@ export type OrfRichTextEditorActions = {
 
 export type OrfRichTextEditorProps = {
   actionsRef?: MutableRefObject<OrfRichTextEditorActions | null>;
+  autoGrow?: boolean;
   autoFocus?: boolean;
   className?: string;
   currentUserId: string;
@@ -191,6 +193,7 @@ function listVisibleMentionUsers(input: {
 
 export function OrfRichTextEditor({
   actionsRef,
+  autoGrow = false,
   autoFocus = false,
   className,
   currentUserId,
@@ -249,6 +252,37 @@ export function OrfRichTextEditor({
       users: mentionableUsers,
     });
   }, [currentUserId, excludeCurrentUserFromMentions, mentionRange, mentionableUsers]);
+
+  const resizeAutoGrowTextarea = useCallback(() => {
+    if (!autoGrow) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [autoGrow]);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    if (!autoGrow) {
+      textarea.style.removeProperty("height");
+      return;
+    }
+    resizeAutoGrowTextarea();
+  }, [autoGrow, markdown, resizeAutoGrowTextarea]);
+
+  useEffect(() => {
+    if (!autoGrow) return undefined;
+    const syncTextareaHeight = () => resizeAutoGrowTextarea();
+    window.addEventListener("resize", syncTextareaHeight);
+    const container = textareaRef.current?.parentElement;
+    const resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(syncTextareaHeight);
+    if (container) resizeObserver?.observe(container);
+    return () => {
+      window.removeEventListener("resize", syncTextareaHeight);
+      resizeObserver?.disconnect();
+    };
+  }, [autoGrow, resizeAutoGrowTextarea]);
 
   const refreshMentionRange = useCallback((nextMarkdown = markdownRef.current, cursor = textareaRef.current?.selectionStart ?? 0) => {
     const textarea = textareaRef.current;

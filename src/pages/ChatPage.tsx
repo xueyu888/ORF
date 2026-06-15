@@ -15,6 +15,7 @@ import { resetChatNativeNotificationViewState, setChatNativeNotificationViewStat
 import { requestClientUpdateCenterOpen } from "../features/client-updates/clientUpdateCenterEvents";
 import { feedbackIssueIdsFromText } from "../features/feedback/model/feedbackIssue";
 import {
+  chatMessageCopyText,
   chatMessageDeliveryStatus,
   chatMessagePendingSend,
   createPendingChatMessage,
@@ -116,7 +117,7 @@ export function ChatPage() {
   const { channelId: routeChannelId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { appAttentionState, currentUser, notify, readModelInvalidations, state } = useOrf();
+  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
@@ -240,6 +241,7 @@ export function ChatPage() {
     notify,
     onActivateThreadPanel: activateThreadPanel,
     onChannelUpdate: applyChannel,
+    onUnreadSummaryRefresh: refreshChatUnreadSummary,
   });
 
   const threadChannel = useMemo(() => {
@@ -310,6 +312,7 @@ export function ChatPage() {
     onRequestedMessageConsumed: consumeRequestedMessage,
     onRequestedMessageRedirect: redirectRequestedMessage,
     onThreadTarget: requestThreadTarget,
+    onUnreadSummaryRefresh: refreshChatUnreadSummary,
     requestedMessageId: focusMessageId,
   });
   const feedPrefetchChannelIds = useMemo(
@@ -430,13 +433,14 @@ export function ChatPage() {
           .map((channelId) => markChatChannelReadRequest(channelId, { includeThreads: true })),
       );
       applyChannels(responses.map((response) => response.channel));
+      await refreshChatUnreadSummary();
       notify(`${uniqueChannelIds.length} 个频道已标记已读`);
     } catch (error) {
       notify(error instanceof Error ? error.message : "批量标记已读失败");
     } finally {
       setMarkingUnreadChannelsRead(false);
     }
-  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify]);
+  }, [activeChannel?.id, applyChannels, clearActiveChannelUnread, markingUnreadChannelsRead, notify, refreshChatUnreadSummary]);
 
   const handleOpenMemberSearch = useCallback(() => {
     openInfoPanel();
@@ -676,9 +680,20 @@ export function ChatPage() {
         rootMessageId,
         parentMessageId,
       };
+      const now = new Date().toISOString();
       const pendingMessage = createPendingChatMessage({
         attachments,
-        author: { ...currentUser, presence: { online: true } },
+        author: {
+          ...currentUser,
+          presence: {
+            active: true,
+            connected: true,
+            lastActiveAt: now,
+            online: true,
+            source: "browser",
+            state: "active",
+          },
+        },
         body,
         channelId,
         parentMessageId,
@@ -810,6 +825,20 @@ export function ChatPage() {
       notify("已复制消息链接");
     } catch {
       notify(url);
+    }
+  }, [notify]);
+
+  const handleCopyMessage = useCallback(async (message: ChatMessage) => {
+    const text = chatMessageCopyText(message);
+    if (!text) {
+      notify("没有可复制的消息内容");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      notify("已复制消息");
+    } catch {
+      notify(text);
     }
   }, [notify]);
 
@@ -968,6 +997,7 @@ export function ChatPage() {
               onCancelEdit={() => setEditingMessage(null)}
               onClearUnread={() => void clearActiveChannelUnread()}
               onCopyLink={handleCopyMessageLink}
+              onCopyMessage={handleCopyMessage}
               onDelete={setDeletingMessage}
               onEdit={setEditingMessage}
               onJumpUnread={jumpToUnread}
@@ -1087,6 +1117,7 @@ export function ChatPage() {
             if (response.channel) applyChannel(response.channel);
             setThread(response.thread);
             reconcileThreadFollow(thread.rootMessage.id, response.thread.following);
+            await refreshChatUnreadSummary();
           }}
           onAttachmentPreview={setAttachmentPreview}
           onReaction={handleReaction}
@@ -1096,6 +1127,7 @@ export function ChatPage() {
           onMarkUnread={markMessageUnread}
           onDelete={setDeletingMessage}
           onCopyLink={handleCopyMessageLink}
+          onCopyMessage={handleCopyMessage}
         />
       )}
       {modal === "channel" && (

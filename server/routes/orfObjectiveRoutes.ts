@@ -24,6 +24,7 @@ import {
   reviewObjectiveAlignmentRequest,
   reviewObjectiveLoot,
   reviewObjectiveTrialReview,
+  settleObjectiveLoot,
   submitObjectiveLoot,
   submitObjectiveTrialReview,
   updateObjectiveDetails,
@@ -107,10 +108,15 @@ const reviewLootBodySchema = z.object({
     resultId: z.string().min(1),
     acceptedResult: resultAcceptedResultSchema,
   })).optional(),
+  reason: z.string().trim().optional(),
+});
+const settleLootBodySchema = z.object({
+  lootId: z.string().min(1).optional(),
   contributionResolution: z.object({
     ratios: z.array(contributionAllocationSchema).min(1),
     reason: z.string().trim().min(1),
   }).optional(),
+  contributionRatios: z.array(contributionAllocationSchema).min(1).optional(),
   reason: z.string().trim().optional(),
 });
 
@@ -427,6 +433,20 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
       return reply;
     }
     return sendObjectiveFlowOutcome(reply, await reviewObjectiveLoot(params.objectiveId, body, context.user.id));
+  });
+
+  app.post("/api/objectives/:objectiveId/settle", async (request, reply) => {
+    const context = await requireAdminContext(request, reply);
+    if (!context) {
+      return reply;
+    }
+
+    const params = objectiveParamsSchema.parse(request.params);
+    const body = settleLootBodySchema.parse(request.body);
+    if (!(await requireTargetInScope(reply, { type: "objective", id: params.objectiveId }, context.scope, "Objective not found"))) {
+      return reply;
+    }
+    return sendObjectiveFlowOutcome(reply, await settleObjectiveLoot(params.objectiveId, body, context.user.id));
   });
 
   app.patch("/api/objectives/:objectiveId/challenge", async (request, reply) => {

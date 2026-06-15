@@ -15,6 +15,7 @@ type UseChatThreadStateInput = {
   notify: (message: string) => void;
   onActivateThreadPanel: () => void;
   onChannelUpdate: (channel: ChatChannel) => void;
+  onUnreadSummaryRefresh: () => Promise<void>;
 };
 
 export type ChatOpenThreadOptions = {
@@ -27,7 +28,7 @@ function chatThreadContainsMessage(thread: ChatThread, messageId: string | null 
   return thread.rootMessage.id === messageId || thread.replies.some((reply) => reply.id === messageId);
 }
 
-export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpdate }: UseChatThreadStateInput) {
+export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpdate, onUnreadSummaryRefresh }: UseChatThreadStateInput) {
   const [thread, setThread] = useState<ChatThread | null>(null);
   const [threadFocusMessageId, setThreadFocusMessageId] = useState<string | null>(null);
   const [threadComposerFocusRootId, setThreadComposerFocusRootId] = useState<string | null>(null);
@@ -72,7 +73,10 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
       try {
         const response = await getChatThread(rootMessageId);
         if (threadRequestIdRef.current !== requestId) return;
-        if (response.channel) onChannelUpdate(response.channel);
+        if (response.channel) {
+          onChannelUpdate(response.channel);
+          void onUnreadSummaryRefresh().catch(() => undefined);
+        }
         setThread(response.thread);
       } catch (error) {
         if (threadRequestIdRef.current !== requestId) return;
@@ -87,7 +91,7 @@ export function useChatThreadState({ notify, onActivateThreadPanel, onChannelUpd
         }
       }
     },
-    [notify, onActivateThreadPanel, onChannelUpdate],
+    [notify, onActivateThreadPanel, onChannelUpdate, onUnreadSummaryRefresh],
   );
 
   useEffect(() => {

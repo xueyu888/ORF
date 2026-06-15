@@ -54,6 +54,7 @@ type UseChatFeedStateInput = {
   onRequestedMessageConsumed: () => void;
   onRequestedMessageRedirect: (messageId: string) => void;
   onThreadTarget: (target: ChatFeedThreadTarget) => void;
+  onUnreadSummaryRefresh: () => Promise<void>;
   requestedMessageId: string | null;
 };
 
@@ -90,6 +91,7 @@ export function useChatFeedState({
   onRequestedMessageConsumed,
   onRequestedMessageRedirect,
   onThreadTarget,
+  onUnreadSummaryRefresh,
   requestedMessageId,
 }: UseChatFeedStateInput) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -371,6 +373,7 @@ export function useChatFeedState({
     readMarkInFlightRef.current = requestKey;
     try {
       const response = await markChatChannelReadRequest(channelId, { messageId });
+      void onUnreadSummaryRefresh().catch(() => undefined);
       if (activeChannelIdRef.current !== channelId) return;
       onChannelUpdate(response.channel);
       setUnreadAnchor(buildUnreadAnchor(response.channel, currentUserIdRef.current));
@@ -380,7 +383,7 @@ export function useChatFeedState({
     } finally {
       if (readMarkInFlightRef.current === requestKey) readMarkInFlightRef.current = null;
     }
-  }, [onChannelUpdate]);
+  }, [onChannelUpdate, onUnreadSummaryRefresh]);
 
   const scheduleVisibleReadReceipt = useCallback(() => {
     const channelId = activeChannelIdRef.current;
@@ -720,6 +723,7 @@ export function useChatFeedState({
     cancelPendingReadReceipt();
     manualUnreadAutoReadSuppressedRef.current = true;
     const response = await setChatChannelUnreadRequest({ channelId: activeChannelId });
+    void onUnreadSummaryRefresh().catch(() => undefined);
     onChannelUpdate(response.channel);
     const member = currentMembership(response.channel, currentUserIdRef.current);
     setUnreadAnchor({
@@ -731,7 +735,7 @@ export function useChatFeedState({
       threadUnreadCount: response.channel.threadUnreadCount,
       unreadCount: response.channel.unreadCount,
     });
-  }, [activeChannelId, cancelPendingReadReceipt, onChannelUpdate]);
+  }, [activeChannelId, cancelPendingReadReceipt, onChannelUpdate, onUnreadSummaryRefresh]);
 
   const clearActiveChannelUnread = useCallback(async () => {
     const channelId = activeChannelIdRef.current;
@@ -739,6 +743,7 @@ export function useChatFeedState({
     try {
       cancelPendingReadReceipt();
       const response = await markChatChannelReadRequest(channelId, { includeThreads: true });
+      void onUnreadSummaryRefresh().catch(() => undefined);
       if (activeChannelIdRef.current !== channelId) return;
       onChannelUpdate(response.channel);
       setUnreadAnchor(null);
@@ -748,12 +753,13 @@ export function useChatFeedState({
         notify(error instanceof Error ? error.message : "标记已读失败");
       }
     }
-  }, [cancelPendingReadReceipt, notify, onChannelUpdate]);
+  }, [cancelPendingReadReceipt, notify, onChannelUpdate, onUnreadSummaryRefresh]);
 
   const markMessageUnread = useCallback(async (message: ChatMessage) => {
     cancelPendingReadReceipt();
     manualUnreadAutoReadSuppressedRef.current = true;
     const response = await setChatChannelUnreadRequest({ channelId: message.channelId, messageId: message.id });
+    void onUnreadSummaryRefresh().catch(() => undefined);
     onChannelUpdate(response.channel);
     if (message.channelId !== activeChannelIdRef.current) return;
     const member = currentMembership(response.channel, currentUserIdRef.current);
@@ -766,7 +772,7 @@ export function useChatFeedState({
       threadUnreadCount: response.channel.threadUnreadCount,
       unreadCount: response.channel.unreadCount,
     });
-  }, [cancelPendingReadReceipt, onChannelUpdate]);
+  }, [cancelPendingReadReceipt, onChannelUpdate, onUnreadSummaryRefresh]);
 
   const jumpToUnread = useCallback(async (target: ChatUnreadJumpTarget) => {
     const channelId = activeChannelIdRef.current;

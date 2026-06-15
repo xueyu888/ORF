@@ -72,10 +72,9 @@ export function ChatSidebar({
   ];
 
   return (
-    <aside className="orf-chat-sidebar">
+    <aside className="orf-chat-sidebar" aria-label="聊天列表">
       <div className="orf-chat-sidebar-header">
         <div>
-          <h2>聊天</h2>
           <span>{users.length} 位成员</span>
         </div>
         <ChatSidebarCreateMenu commands={createCommands} />

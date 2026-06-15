@@ -161,7 +161,21 @@ export function normalizeTeamRole(role: string): UserRole {
   return role === "admin" ? "admin" : "member";
 }
 
-export function toChatUser(row: UserRow, presence: ChatUser["presence"] = { online: false }): ChatUser {
+function defaultChatUserPresence(row: UserRow): ChatUser["presence"] {
+  const lastOnlineAt = iso(row.last_online_at);
+  const lastOnlineAtMs = lastOnlineAt ? Date.parse(lastOnlineAt) : 0;
+  const recent = Boolean(lastOnlineAtMs && Date.now() - lastOnlineAtMs < 24 * 60 * 60 * 1000);
+  return {
+    active: false,
+    connected: false,
+    lastActiveAt: lastOnlineAt,
+    online: false,
+    source: "unknown",
+    state: recent ? "recent" : "offline",
+  };
+}
+
+export function toChatUser(row: UserRow, presence: ChatUser["presence"] = defaultChatUserPresence(row)): ChatUser {
   return {
     id: row.id,
     name: row.name,

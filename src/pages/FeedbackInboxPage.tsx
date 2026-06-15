@@ -59,7 +59,6 @@ export function FeedbackInboxPage() {
       <header className="feedback-issue-header">
         <div className="feedback-issue-title-block">
           <span className="bounty-page-eyebrow">REPORT / TEAM ISSUE BOARD</span>
-          <h1 className="bounty-page-title">反馈</h1>
           <p>团队内部的技术、管理和系统问题都会进入同一个 issue 池。</p>
         </div>
         {canCreateFeedback && (

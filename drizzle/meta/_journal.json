@@ -358,6 +358,20 @@
       "when": 1781339000000,
       "tag": "0050_work_log_multiple_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1781425000000,
+      "tag": "0051_work_log_remaining_estimate",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1781429000000,
+      "tag": "0052_work_log_categories_and_duration",
+      "breakpoints": true
     }
   ]
 }

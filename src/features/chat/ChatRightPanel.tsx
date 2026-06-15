@@ -28,6 +28,7 @@ type ChatRightPanelProps = {
   onCancelEdit: () => void;
   onClose: () => void;
   onCopyLink: (message: ChatMessage) => void;
+  onCopyMessage: (message: ChatMessage) => void;
   onDelete: (message: ChatMessage) => void;
   onDraftStateChange: (channelId: string, hasDraft: boolean) => void;
   onEdit: (message: ChatMessage) => void;
@@ -95,6 +96,7 @@ export function ChatRightPanel(props: ChatRightPanelProps) {
             onAttachmentPreview={props.onAttachmentPreview}
             onCancelEdit={props.onCancelEdit}
             onCopyLink={props.onCopyLink}
+            onCopyMessage={props.onCopyMessage}
             onDelete={props.onDelete}
             onDraftStateChange={props.onDraftStateChange}
             onEdit={props.onEdit}

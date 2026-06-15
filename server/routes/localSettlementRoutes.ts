@@ -11,7 +11,7 @@ import {
   type LocalSettlementServiceResponse,
 } from "../localSettlement/localSettlementProxy";
 import { runtimeScopeStorageId, type RuntimeScope } from "../repositories/runtimeScope";
-import { canReviewObjectiveLootByFlow, canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
+import { canSettleObjectiveLootByFlow, canSubmitObjectiveContributionReviewByFlow } from "../../src/domain/orfLifecycle";
 import { isObjectiveChallenger, objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import { getUserMapsForStorageScope } from "../readModels/orfReadModelMappers";
 
@@ -144,7 +144,7 @@ export function registerLocalSettlementRoutes(app: FastifyInstance) {
     const body = settlementSummaryBodySchema.parse(request.body ?? {});
     const objective = await settlementObjectiveInScope(params.objectiveId, context.scope);
     if (!objective) return reply.code(404).send({ error: "Objective not found" });
-    if (!canReviewObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
+    if (!canSettleObjectiveLootByFlow(objective)) return reply.code(409).send({ error: "Objective is not ready for settlement summary" });
 
     const challengers = await contributionChallengerNames(objective, body.participantUserIds);
     if (!challengers) return reply.code(400).send({ error: "Invalid settlement participants" });

@@ -190,7 +190,7 @@ export function FeedbackIssuePage() {
             <ArrowLeft aria-hidden="true" />
             反馈
           </Link>
-          <h1>{feedback.phenomenon}</h1>
+          <h2>{feedback.phenomenon}</h2>
           <div className="feedback-issue-detail-meta">
             <IssueStateBadge feedback={feedback} />
             <span>#{feedbackIssueDisplayId(feedback.id)}</span>

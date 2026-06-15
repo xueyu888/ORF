@@ -71,6 +71,10 @@ export function canReviewObjectiveLootByFlow(target: ObjectiveLifecycleTarget): 
   return policyFlag(target, "canReviewLoot");
 }
 
+export function canSettleObjectiveLootByFlow(target: ObjectiveLifecycleTarget): boolean {
+  return policyFlag(target, "canSettleLoot");
+}
+
 export function isObjectiveChallengeDiscoverableByFlow(target: ObjectiveLifecycleTarget): boolean {
   return policyFlag(target, "challengeDiscoverable");
 }
@@ -89,6 +93,10 @@ export function isObjectiveResultLockedByFlow(target: ObjectiveLifecycleTarget):
 
 export function isObjectiveSubmittedByFlow(target: ObjectiveLifecycleTarget): boolean {
   return policyFlag(target, "submitted");
+}
+
+export function isObjectiveAcceptedByFlow(target: ObjectiveLifecycleTarget): boolean {
+  return policyFlag(target, "accepted");
 }
 
 export function isObjectiveSettledOrClosed(target: ObjectiveLifecycleTarget): boolean {

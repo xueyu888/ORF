@@ -1,5 +1,6 @@
 import type { Objective, Result, Task, TaskChecklistItem, TaskStatus } from "../../../types/orf";
 import {
+  isObjectiveAcceptedByFlow,
   isObjectiveChallengeAcceptedByFlow,
   isObjectiveSubmittedByFlow,
   isObjectiveSettledOrClosed,
@@ -12,14 +13,19 @@ export const bountyStatusLabel: Record<BountyStatus, string> = {
   open: "可申请",
   active: "挑战中",
   review: "待验收",
+  accepted: "已验收",
   settled: "已结算",
 };
 
 export function bountyStatus(result: Result, objective?: Objective): BountyStatus {
+  if (objective) {
+    if (isObjectiveSettledOrClosed(objective) || objective.objectiveSettlementPoints != null) return "settled";
+    if (isObjectiveAcceptedByFlow(objective) || objective.acceptedResult) return "accepted";
+    if (isObjectiveSubmittedByFlow(objective) || objective.lootSubmittedAt) return "review";
+    if (isObjectiveChallengeAcceptedByFlow(objective) || objective.challengers.length > 0) return "active";
+    return "open";
+  }
   if (result.acceptedResult === "completed" || result.acceptedResult === "falsified") return "settled";
-  if (isObjectiveSettledOrClosed(objective) || objective?.acceptedResult || objective?.objectiveSettlementPoints != null) return "settled";
-  if (isObjectiveSubmittedByFlow(objective) || objective?.lootSubmittedAt) return "review";
-  if (isObjectiveChallengeAcceptedByFlow(objective) || (objective?.challengers.length ?? 0) > 0) return "active";
   return "open";
 }
 
@@ -28,7 +34,10 @@ export function bountyDifficulty(result: Result) {
 }
 
 export function objectiveComplete(objective: Objective) {
-  return objective.acceptedResult === "completed" || objective.acceptedResult === "falsified" || objective.acceptedResult === "overdelivered";
+  return isObjectiveSettledOrClosed(objective) &&
+    (objective.acceptedResult === "completed" ||
+      objective.acceptedResult === "falsified" ||
+      objective.acceptedResult === "overdelivered");
 }
 
 export function objectiveStatusLabel(objective: Objective) {
