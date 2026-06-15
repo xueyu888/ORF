@@ -24,6 +24,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "auth.register.existing-email",
+    title: "06-用户使用已注册邮箱注册失败",
+    doc: "testd-doc/cases/auth/06-用户使用已注册邮箱注册失败.md",
+    changePolicy: "open",
+    spec: "testd/auth/register-existing-email/_entry/register-existing-email.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "auth.register.invalid-credentials",
     title: "07-用户注册表单输入校验失败",
     doc: "testd-doc/cases/auth/07-用户注册表单输入校验失败.md",
@@ -45,8 +55,8 @@ export const testdCases = [
   },
   {
     id: "auth.member.login.invalid-credentials",
-    title: "03-普通成员登录账号认知失败",
-    doc: "testd-doc/cases/auth/03-普通成员登录账号认知失败.md",
+    title: "03-普通成员登录账号认证失败",
+    doc: "testd-doc/cases/auth/03-普通成员登录账号认证失败.md",
     changePolicy: "open",
     spec: "testd/auth/login-invalid-credentials/_entry/member-login-invalid-credentials.spec.ts",
     enabled: true,
