@@ -84,6 +84,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.topbar-nav.complete",
+    title: "01-首页顶部导航栏展示完整",
+    doc: "testd-doc/cases/defaults/01-首页顶部导航栏展示完整.md",
+    changePolicy: "open",
+    spec: "testd/defaults/topbar-nav/_entry/topbar-nav.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
