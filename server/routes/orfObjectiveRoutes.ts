@@ -564,7 +564,7 @@ export function registerOrfObjectiveRoutes(app: FastifyInstance) {
       return reply;
     }
 
-    return reply.code(410).send({ error: "Anonymous contribution reviews must be submitted to the local settlement service" });
+    return reply.code(410).send({ error: "Anonymous contribution reviews must be submitted through the local settlement proxy" });
   });
 
   app.delete("/api/objectives/:objectiveId", async (request, reply) => {

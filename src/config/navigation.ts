@@ -5,6 +5,7 @@ import {
   Flag,
   Inbox,
   MessagesSquare,
+  NotebookPen,
   ShieldCheck,
   Settings,
   Trophy,
@@ -15,6 +16,7 @@ import type { PermissionKey } from "./permissions";
 export const navItems = [
   { label: "悬赏大厅", path: "/bounties", icon: Trophy },
   { label: "我的挑战", path: "/tasks", icon: CheckSquare },
+  { label: "工作日志", path: "/work-logs", icon: NotebookPen },
   { label: "聊天", path: "/chat", icon: MessagesSquare },
   { label: "反馈", path: "/feedback", icon: Inbox },
   { label: "消息", path: "/notifications", icon: Bell },

@@ -15,6 +15,9 @@ import type {
   CommentTargetType,
   OrfState,
   OrfUser,
+  WorkLogActivityItem,
+  WorkLogEntry,
+  WorkLogObjectiveOption,
 } from "../types/orf";
 import type { BountyHallData, CurrentUserAccessData, MyChallengesScope, TaskManagementData } from "../domain/orfReadModel";
 import type { ChatTheme, UserDisplayPreferences } from "../domain/settings/personalPreferences";
@@ -96,6 +99,13 @@ export type ChatThreadsResponse = { status?: "ok"; threads: ChatThreadSummary[] 
 export type ChatAttachmentUploadResponse = { status?: "ok"; attachment: ChatAttachment };
 export type ChatMentionableUsersResponse = { status?: "ok"; users: ChatUser[] };
 export type ChatSearchResponse = { status?: "ok"; results: ChatSearchResult[] };
+export type WorkLogObjectivesResponse = { objectives: WorkLogObjectiveOption[] };
+export type WorkLogDayResponse = { entries: WorkLogEntry[] };
+export type WorkLogActivityResponse = { entries: WorkLogActivityItem[] };
+export type WorkLogEntrySaveInput = {
+  bodyMarkdown: string;
+  objectiveId?: string | null;
+};
 export type VisualBackgroundMode = "fixed" | "switchable";
 export type VisualBackgroundSwitchTrigger = "on_open" | "interval";
 export type VisualBackgroundSwitchOrder = "sequential" | "random";
@@ -557,6 +567,46 @@ export async function getSavedChatMessages() {
 
 export async function getChatUnreadSummary() {
   return apiJson<ChatUnreadSummaryResponse>("/api/chat/unread-summary");
+}
+
+export async function getWorkLogObjectives() {
+  return apiJson<WorkLogObjectivesResponse>("/api/work-logs/objectives");
+}
+
+export async function getMyWorkLogDay(date: string) {
+  const query = new URLSearchParams({ date });
+  return apiJson<WorkLogDayResponse>(`/api/work-logs/my-day?${query.toString()}`);
+}
+
+export async function createMyWorkLogEntry(date: string, input: WorkLogEntrySaveInput) {
+  return apiJson<WorkLogDayResponse>(`/api/work-logs/my-day/${encodeURIComponent(date)}`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateMyWorkLogEntry(entryId: string, input: WorkLogEntrySaveInput) {
+  return apiJson<WorkLogDayResponse>(`/api/work-logs/entries/${encodeURIComponent(entryId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getWorkLogActivity(input: {
+  from?: string;
+  limit?: number;
+  objectiveId?: string;
+  to?: string;
+  userId?: string;
+} = {}) {
+  const query = new URLSearchParams();
+  if (input.from) query.set("from", input.from);
+  if (input.to) query.set("to", input.to);
+  if (input.userId) query.set("userId", input.userId);
+  if (input.objectiveId) query.set("objectiveId", input.objectiveId);
+  if (input.limit) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<WorkLogActivityResponse>(`/api/work-logs/activity${suffix}`);
 }
 
 export async function getVisualBackgrounds(scene: VisualBackgroundScene) {

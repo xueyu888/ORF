@@ -20,6 +20,7 @@ import {
   tasks,
   teamMembers,
   users,
+  workLogEntries,
 } from "../db/schema";
 import { deleteUserPersonalSettings } from "../settings/personalSettings";
 import { objectStorage } from "../storage/objectStorage";
@@ -131,6 +132,7 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     threadRef,
     messageRef,
     attachmentRef,
+    workLogRef,
   ] = await Promise.all([
     db
       .select({ id: objectives.id })
@@ -225,6 +227,11 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
       .from(commentAttachments)
       .where(and(eq(commentAttachments.teamId, storageScopeId), eq(commentAttachments.createdBy, userId), isNotNull(commentAttachments.messageId)))
       .limit(1),
+    db
+      .select({ id: workLogEntries.id })
+      .from(workLogEntries)
+      .where(and(eq(workLogEntries.teamId, storageScopeId), eq(workLogEntries.authorUserId, userId)))
+      .limit(1),
   ]);
 
   return [
@@ -241,6 +248,7 @@ async function isUserIdReferencedByOrfRecords(scope: RuntimeScope, userId: strin
     threadRef,
     messageRef,
     attachmentRef,
+    workLogRef,
   ].some((rows) => rows.length > 0);
 }
 

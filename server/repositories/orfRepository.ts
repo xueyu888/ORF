@@ -2968,9 +2968,17 @@ export async function reviewObjectiveLoot(
   const challengerNameById = new Map(challengerRows.map((member) => [member.id, member.name]));
   const challengerUserIds = objectiveChallengerUserIds(objective);
   const challengerUserIdSet = new Set(challengerUserIds);
-  const challengers = challengerUserIds.map((userId) => challengerNameById.get(userId)).filter((name): name is string => Boolean(name));
+  const allChallengerTargets = challengerUserIds
+    .map((userId) => ({ member: challengerNameById.get(userId) ?? userId, memberUserId: userId }))
+    .filter((target) => Boolean(target.member));
+  const participantTargets = input.contributionResolution
+    ? settlementParticipantTargetsForResolution(input.contributionResolution.ratios, allChallengerTargets)
+    : allChallengerTargets;
+  if (!participantTargets) return { status: "invalid" };
+  const participantUserIds = participantTargets.map((target) => target.memberUserId);
+  const challengers = participantTargets.map((target) => target.member);
   const settlementPlan = planObjectiveSettlement({
-    objective: { ...objective, challengers, challengerUserIds },
+    objective: { ...objective, challengers, challengerUserIds: participantUserIds },
     results: resultRows.map((result) => ({
       id: result.id,
       uncertaintyLevel: result.uncertaintyLevel ?? undefined,
@@ -3068,6 +3076,23 @@ export async function reviewObjectiveLoot(
   });
 
   return objectiveOutcome(objectiveId, runtimeScope(objective.teamId));
+}
+
+function settlementParticipantTargetsForResolution(
+  ratios: ContributionAllocation[],
+  targets: Array<{ member: string; memberUserId: string }>,
+) {
+  const targetByUserId = new Map(targets.map((target) => [target.memberUserId, target]));
+  const targetByName = new Map(targets.map((target) => [target.member, target]));
+  const selected = new Map<string, { member: string; memberUserId: string }>();
+
+  for (const ratio of ratios) {
+    const target = (ratio.memberUserId ? targetByUserId.get(ratio.memberUserId) : undefined) ?? targetByName.get(ratio.member);
+    if (!target || selected.has(target.memberUserId)) return null;
+    selected.set(target.memberUserId, target);
+  }
+
+  return selected.size > 0 ? Array.from(selected.values()) : null;
 }
 
 export async function createTask(input: CreateTaskInput): Promise<Task | null> {

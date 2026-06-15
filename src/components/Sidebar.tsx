@@ -11,7 +11,7 @@ import { Avatar } from "./ui";
 
 const navItemByLabel = new Map(navItems.map((item) => [item.label, item]));
 const sidebarGroups = [
-  { title: "work", labels: ["悬赏大厅", "我的挑战", "聊天"] },
+  { title: "work", labels: ["悬赏大厅", "我的挑战", "工作日志", "聊天"] },
   { title: "report", labels: ["反馈", "统计"] },
   { title: "admin", labels: ["系统管理"] },
 ].map((group) => ({

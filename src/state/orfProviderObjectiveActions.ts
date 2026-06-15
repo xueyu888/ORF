@@ -13,6 +13,7 @@ import {
 import type {
   ContributionAllocation,
   LootResultClaim,
+  ObjectiveAcceptedResult,
   Objective,
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
@@ -35,10 +36,12 @@ export type SubmitLootInput = {
   author?: string;
 };
 export type ReviewObjectiveLootInput = {
+  acceptedResult?: ObjectiveAcceptedResult;
   lootId?: string;
   resultReviews?: Array<{ resultId: string; acceptedResult: ResultAcceptedResult }>;
   contributionResolution?: { ratios: ContributionAllocation[]; reason: string };
   reason?: string;
+  settlementParticipantUserIds?: string[];
 };
 export type ReviewObjectiveTrialReviewInput = {
   status: Exclude<ObjectiveTrialReviewStatus, "requested">;
@@ -285,20 +288,28 @@ export function useOrfProviderObjectiveActions({
       },
       reviewObjectiveLoot: async (objectiveId: string, input: ReviewObjectiveLootInput) => {
         try {
+          const { settlementParticipantUserIds, ...reviewInput } = input;
           const objective = state.objectives.find((item) => item.id === objectiveId);
-          const localSummary = objective && objectiveChallengerCount(objective) > 1
-            ? await fetchLocalSettlementSummary({ challengers: objective.challengers, objectiveId }).catch(() => null)
+          const participantCount = settlementParticipantUserIds?.length ?? (objective ? objectiveChallengerCount(objective) : 0);
+          const localSummary = objective && participantCount > 1 && !reviewInput.contributionResolution
+            ? await fetchLocalSettlementSummary({ objectiveId, participantUserIds: settlementParticipantUserIds })
             : null;
+          if (localSummary?.status === "missing") {
+            throw new Error(`匿名互评缺评：${localSummary.missingReviewers.join("、") || "仍有正式参与人未提交互评"}`);
+          }
+          if (localSummary?.status === "conflict") {
+            throw new Error("匿名互评分歧超过 10%，请由指挥官手动处理贡献比例");
+          }
           const settlementInput =
             objective && localSummary?.status === "ready" && localSummary.contributionResolution
               ? {
-                  ...input,
+                  ...reviewInput,
                   contributionResolution: {
                     ...localSummary.contributionResolution,
                     ratios: withObjectiveChallengerUserIds(localSummary.contributionResolution.ratios, objective),
                   },
                 }
-              : input;
+              : reviewInput;
           await apiRequest(`/api/objectives/${encodeURIComponent(objectiveId)}/review`, {
             method: "POST",
             body: JSON.stringify(settlementInput),
@@ -307,7 +318,7 @@ export function useOrfProviderObjectiveActions({
           notify("战利品已验收结算");
           return true;
         } catch (error) {
-          notify(businessMutationFailureMessage(error, "战利品验收失败"));
+          notify(localSettlementMutationFailureMessage(error, "战利品验收失败"));
           void refreshTaskManagementData().catch(() => undefined);
           return false;
         }
@@ -326,7 +337,7 @@ export function useOrfProviderObjectiveActions({
             objectiveTitle: objective.title,
             reviewer: currentUser.name,
           });
-          notify("匿名互评已提交到本地结算服务");
+          notify("匿名互评已通过 ORF 提交到共享结算服务");
           return true;
         } catch (error) {
           notify(localSettlementMutationFailureMessage(error, "匿名互评提交失败"));

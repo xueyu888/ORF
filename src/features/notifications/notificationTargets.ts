@@ -9,6 +9,10 @@ const commentTargetTypeToChallengeTargetType: Record<string, ChallengeUrlTargetT
 };
 
 export function notificationTargetHref(notification: AppNotification) {
+  if (notification.kind === "worklog.reminder" || notification.targetType === "workLog") {
+    return notification.targetHref || "/work-logs";
+  }
+
   if (notification.targetType === "feedback" || notification.kind.startsWith("feedback.")) {
     return notification.targetId
       ? `/feedback/${encodeURIComponent(notification.targetId)}`

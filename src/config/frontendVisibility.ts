@@ -21,6 +21,7 @@ export const frontendVisibilityTable = validateFrontendVisibilityConfig(
 export const frontendVisibilityByPath: Record<string, FrontendVisibilityKey> = {
   "/bounties": "nav.bounties",
   "/tasks": "nav.tasks",
+  "/work-logs": "nav.workLogs",
   "/chat": "nav.chat",
   "/feedback": "nav.feedback",
   "/reports": "nav.reports",
