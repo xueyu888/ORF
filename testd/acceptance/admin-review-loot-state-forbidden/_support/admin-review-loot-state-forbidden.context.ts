@@ -23,10 +23,15 @@ export type AdminReviewLootStateForbiddenCaseData = {
     resultClaiming: ReviewLootForbiddenTargetFixture;
     reestimate: ReviewLootForbiddenTargetFixture;
     frozen: ReviewLootForbiddenTargetFixture;
+    accepted: ReviewLootForbiddenTargetFixture;
     settled: ReviewLootForbiddenTargetFixture;
   };
-  result: ReviewLootForbiddenResultFixture;
+  result: {
+    accepted: ReviewLootForbiddenResultFixture;
+    settled: ReviewLootForbiddenResultFixture;
+  };
   loot: {
+    accepted: ReviewLootForbiddenLootFixture;
     settled: ReviewLootForbiddenLootFixture;
   };
   reason: string;

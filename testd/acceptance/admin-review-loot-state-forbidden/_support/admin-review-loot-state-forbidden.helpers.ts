@@ -62,16 +62,17 @@ export function stateTargetFixtures(data: AdminReviewLootStateForbiddenCaseData)
     data.targets.resultClaiming,
     data.targets.reestimate,
     data.targets.frozen,
+    data.targets.accepted,
     data.targets.settled,
   ];
 }
 
 export function stateResultFixtures(data: AdminReviewLootStateForbiddenCaseData) {
-  return [data.result];
+  return [data.result.accepted, data.result.settled];
 }
 
 export function stateLootFixtures(data: AdminReviewLootStateForbiddenCaseData) {
-  return [data.loot.settled];
+  return [data.loot.accepted, data.loot.settled];
 }
 
 export function stateLedgerReasons(data: AdminReviewLootStateForbiddenCaseData) {

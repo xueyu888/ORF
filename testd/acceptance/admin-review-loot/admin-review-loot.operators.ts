@@ -11,12 +11,11 @@ import {
   deleteReviewLootResult,
   lootPagePath,
   prepareReviewLootTarget,
-  reviewLootLedgerPresent,
   reviewLootPresent,
   reviewLootResultAccepted,
   reviewLootResultPresent,
   reviewLootTargetFromObjective,
-  reviewLootTargetSettled,
+  reviewLootTargetAccepted,
   reviewLootTargetSubmitted,
   testReviewLootAbsent,
   testReviewLootLedgerAbsent,
@@ -39,8 +38,8 @@ export const adminReviewLootOperators = {
         .toBe(true);
     },
 
-    settled: async ({ params }) => {
-      await expect.poll(() => reviewLootTargetSettled(requiredReviewLootTarget(params, "target"), requiredNumber(params, "points"))).toBe(true);
+    accepted: async ({ params }) => {
+      await expect.poll(() => reviewLootTargetAccepted(requiredReviewLootTarget(params, "target"), requiredNumber(params, "points"))).toBe(true);
     },
   },
 
@@ -101,19 +100,6 @@ export const adminReviewLootOperators = {
       await expect.poll(() => testReviewLootLedgerAbsent(requiredString(params, "reason"))).toBe(true);
     },
 
-    present: async ({ params }) => {
-      await expect
-        .poll(() =>
-          reviewLootLedgerPresent(
-            requiredReviewLootTarget(params, "target"),
-            requiredString(params, "memberName"),
-            requiredNumber(params, "points"),
-            requiredString(params, "reason"),
-          ),
-        )
-        .toBe(true);
-    },
-
     delete: async ({ params }) => {
       await deleteReviewLootLedger(requiredString(params, "reason"));
     },
@@ -128,7 +114,7 @@ export const adminReviewLootOperators = {
   "page.review_loot_form": {
     visible: async ({ ctx }) => {
       await expect(ctx.page.getByRole("heading", { name: "验收战利品" })).toBeVisible();
-      await expect(ctx.page.getByRole("button", { name: "验收并结算" })).toBeVisible();
+      await expect(ctx.page.getByRole("button", { name: "确认验收" })).toBeVisible();
     },
 
     submit: async ({ ctx, runtime, params }) => {
@@ -144,7 +130,7 @@ export const adminReviewLootOperators = {
           method: response.request().method(),
           body: await readResponseBody(response),
         }));
-      await ctx.page.getByRole("button", { name: "验收并结算" }).click();
+      await ctx.page.getByRole("button", { name: "确认验收" }).click();
     },
   },
 

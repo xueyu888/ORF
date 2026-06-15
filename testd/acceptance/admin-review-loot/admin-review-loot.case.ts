@@ -71,7 +71,7 @@ export const adminReviewLootCase = {
   },
 
   S0: {
-    description: "管理员已登录并位于本用例目标战利品页面，目标可验收结算",
+    description: "管理员已登录并位于本用例目标战利品页面，目标可验收",
     assertions: [
       { source: { caseStepId: "S0-1", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 邮箱 `orf-admin-review-loot-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
       { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.loot", title: "当前页面 应为 任务模块下的本用例目标战利品页面", object: "page.url", operator: "match", params: { pattern: "/tasks/objectives/.+/loot$" } },
@@ -84,21 +84,21 @@ export const adminReviewLootCase = {
   },
 
   Action: {
-    description: "管理员通过页面验收战利品并结算",
+    description: "管理员通过页面验收战利品",
     steps: [
       { source: { caseStepId: "Action-1", method: "playwright" }, id: "fill.review_reason", title: "管理员在 `验收说明` 输入框输入测试验收说明", object: "page", operator: "fill", params: { label: "验收说明", valueFrom: "data.reason" } },
-      { source: { caseStepId: "Action-2", method: "playwright" }, id: "submit.review_loot", title: "管理员点击 `验收并结算` 操作", object: "page.review_loot_form", operator: "submit", params: { targetFrom: "runtime.reviewLootTarget", saveAs: "reviewLootResponse" } },
+      { source: { caseStepId: "Action-2", method: "playwright" }, id: "submit.review_loot", title: "管理员点击 `确认验收` 操作", object: "page.review_loot_form", operator: "submit", params: { targetFrom: "runtime.reviewLootTarget", saveAs: "reviewLootResponse" } },
     ],
   },
 
   S1: {
-    description: "目标已结算，积分流水已经生成，管理员仍保持登录",
+    description: "目标已验收但尚未结算，管理员仍保持登录",
     assertions: [
       { source: { caseStepId: "S1-1", method: "api" }, id: "review_loot_response.ok", title: "管理员验收战利品提交结果 应成功", object: "api.response", operator: "ok", params: { responseFrom: "runtime.reviewLootResponse", status: 200 } },
-      { source: { caseStepId: "S1-2", method: "prisma" }, id: "db.review_loot_target.settled", title: "本用例待验收目标的流转状态 应为 `settled`，验收结果 应为 `completed`，目标基础分数 应为 `30`，目标结算分数 应为 `30`", object: "db.review_loot_target", operator: "settled", params: { targetFrom: "runtime.reviewLootTarget", pointsFrom: "data.points" } },
+      { source: { caseStepId: "S1-2", method: "prisma" }, id: "db.review_loot_target.accepted", title: "本用例待验收目标的流转状态 应为 `accepted`，验收结果 应为 `completed`，目标基础分数 应为 `30`，目标结算分数 应为空", object: "db.review_loot_target", operator: "accepted", params: { targetFrom: "runtime.reviewLootTarget", pointsFrom: "data.points" } },
       { source: { caseStepId: "S1-3", method: "prisma" }, id: "db.review_loot_result.accepted", title: "本用例测试指标的验收结果 应为 `completed`", object: "db.review_loot_result", operator: "accepted", params: { resultFrom: "runtime.reviewLootResult" } },
-      { source: { caseStepId: "S1-4", method: "prisma" }, id: "db.review_loot_ledger.present", title: "数据库中 应存在 普通成员对本用例待验收目标的测试积分流水，积分为 `30`，reason 为 `E2E-REVIEW-LOOT: 管理员验收战利品`", object: "db.review_loot_ledger", operator: "present", params: { targetFrom: "runtime.reviewLootTarget", memberNameFrom: "data.memberName", pointsFrom: "data.points", reasonFrom: "data.reason" } },
-      { source: { caseStepId: "S1-5", method: "playwright" }, id: "url.reports", title: "当前页面 应为 统计页面", object: "page.url", operator: "match", params: { pattern: "/reports$" } },
+      { source: { caseStepId: "S1-4", method: "prisma" }, id: "db.review_loot_ledger.still_absent", title: "reason 为 `E2E-REVIEW-LOOT: 管理员验收战利品` 的测试积分流水 应仍不存在", object: "db.review_loot_ledger", operator: "absent", params: { reasonFrom: "data.reason" } },
+      { source: { caseStepId: "S1-5", method: "playwright" }, id: "url.tasks", title: "当前页面 应为 挑战工作台", object: "page.url", operator: "match", params: { pattern: "/tasks$" } },
       { source: { caseStepId: "S1-6", method: "api" }, id: "session.admin.still_authenticated", title: "当前会话 应仍为 管理员的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
     ],
   },

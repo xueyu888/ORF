@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { expect } from "@playwright/test";
 import type { OperatorRegistry, StateCaseRuntime, StepParams } from "../../_framework/types";
 import { requiredCapturedResponse } from "../../_operators/common.operators";
@@ -21,7 +22,7 @@ import {
   preparePeerReviewTargetForReview,
   targetChallengerPresent,
   targetLootPresent,
-  targetSubmitted,
+  targetAccepted,
   testLootAbsent,
 } from "./_support/member-submit-peer-review.helpers";
 
@@ -30,19 +31,31 @@ export const memberSubmitPeerReviewOperators = {
     from_objective: async ({ params }) => peerReviewTargetFromObjective(requiredString(params, "objectiveId")),
 
     add_challenger: async ({ params }) => {
-      await addPeerReviewTargetChallenger(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName"));
+      await addPeerReviewTargetChallenger(
+        requiredPeerReviewTarget(params, "target"),
+        requiredString(params, "memberName"),
+        requiredString(params, "memberUserId"),
+      );
     },
 
-    ready_for_review: async ({ params }) => {
+    accepted_for_review: async ({ params }) => {
       await preparePeerReviewTargetForReview(requiredPeerReviewTarget(params, "target"));
     },
 
-    submitted: async ({ params }) => {
-      await expect.poll(() => targetSubmitted(requiredPeerReviewTarget(params, "target"))).toBe(true);
+    accepted: async ({ params }) => {
+      await expect.poll(() => targetAccepted(requiredPeerReviewTarget(params, "target"))).toBe(true);
     },
 
     challenger_present: async ({ params }) => {
-      await expect.poll(() => targetChallengerPresent(requiredPeerReviewTarget(params, "target"), requiredString(params, "memberName"))).toBe(true);
+      await expect
+        .poll(() =>
+          targetChallengerPresent(
+            requiredPeerReviewTarget(params, "target"),
+            requiredString(params, "memberName"),
+            requiredString(params, "memberUserId"),
+          ),
+        )
+        .toBe(true);
     },
   },
 
@@ -89,10 +102,14 @@ export const memberSubmitPeerReviewOperators = {
     },
 
     submit: async ({ ctx, runtime, params }) => {
-      await installLocalSettlementMock(ctx, runtime);
+      const target = requiredPeerReviewTarget(params, "target");
+      await installLocalSettlementMock(runtime);
       runtime.values[requiredString(params, "saveAs")] = ctx.page
         .waitForResponse((response) => {
-          return response.request().method().toUpperCase() === "POST" && isLocalSettlementEndpoint(response.url(), "/reviews");
+          return (
+            response.request().method().toUpperCase() === "POST" &&
+            isLocalSettlementProxyReviewEndpoint(response.url(), target.objective.id)
+          );
         })
         .then(async (response) => ({
           ok: response.ok(),
@@ -223,32 +240,81 @@ function requiredEncryptedEnvelopeField(params: StepParams, key: string): keyof 
   throw new Error(`参数 ${key} 必须是匿名互评加密信封字段`);
 }
 
-async function installLocalSettlementMock(ctx: TestContext, runtime: StateCaseRuntime) {
-  await ctx.page.route(/^http:\/\/[^/]+:8799\/health$/, async (route) => {
-    await route.fulfill({ json: { ok: true, keyId: localSettlementPublicKey.keyId } });
+async function installLocalSettlementMock(runtime: StateCaseRuntime) {
+  const server = createServer((request, response) => {
+    void handleLocalSettlementRequest(request, response, runtime, () => {
+      server.close();
+    }).catch((error: unknown) => {
+      response.writeHead(500, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+    });
   });
-  await ctx.page.route(/^http:\/\/[^/]+:8799\/public-key$/, async (route) => {
-    await route.fulfill({ json: localSettlementPublicKey });
+
+  server.unref();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(8799, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
   });
-  await ctx.page.route(/^http:\/\/[^/]+:8799\/reviews$/, async (route) => {
-    if (route.request().method().toUpperCase() !== "POST") {
-      await route.fallback();
-      return;
-    }
-    const body = requiredEncryptedEnvelope(route.request().postDataJSON());
-    const response = {
+}
+
+async function handleLocalSettlementRequest(
+  request: Parameters<Parameters<typeof createServer>[0]>[0],
+  response: Parameters<Parameters<typeof createServer>[0]>[1],
+  runtime: StateCaseRuntime,
+  close: () => void,
+) {
+  if (request.method === "GET" && request.url === "/health") {
+    sendJson(response, { ok: true, keyId: localSettlementPublicKey.keyId });
+    return;
+  }
+  if (request.method === "GET" && request.url === "/public-key") {
+    sendJson(response, localSettlementPublicKey);
+    return;
+  }
+  if (request.method === "POST" && request.url === "/reviews") {
+    const body = requiredEncryptedEnvelope(await readJsonRequest(request));
+    const acceptedResponse = {
       ok: true as const,
       payloadHash: "testd-local-peer-review",
       receivedAt: new Date().toISOString(),
     };
     runtime.values.localPeerReviewSubmission = {
       body,
-      method: route.request().method(),
-      response,
-      url: route.request().url(),
+      method: request.method,
+      response: acceptedResponse,
+      url: "http://127.0.0.1:8799/reviews",
     } satisfies SubmittedPeerReview;
-    await route.fulfill({ json: response });
-  });
+    sendJson(response, acceptedResponse, close);
+    return;
+  }
+
+  sendJson(response, { error: "Not found" }, undefined, 404);
+}
+
+async function readJsonRequest(request: Parameters<Parameters<typeof createServer>[0]>[0]) {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+}
+
+function sendJson(
+  response: Parameters<Parameters<typeof createServer>[0]>[1],
+  body: unknown,
+  afterSend?: () => void,
+  status = 200,
+) {
+  response.writeHead(status, { "content-type": "application/json" });
+  response.end(JSON.stringify(body), afterSend);
+}
+
+function isLocalSettlementProxyReviewEndpoint(value: string, objectiveId: string) {
+  const url = new URL(value);
+  return url.pathname === `/api/local-settlement/objectives/${encodeURIComponent(objectiveId)}/reviews`;
 }
 
 function isLocalSettlementEndpoint(value: string, pathname: string) {

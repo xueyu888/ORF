@@ -20,9 +20,11 @@ export type MemberSubmitPeerReviewStateForbiddenCaseData = {
     resultClaiming: PeerReviewForbiddenTargetFixture;
     reestimate: PeerReviewForbiddenTargetFixture;
     frozen: PeerReviewForbiddenTargetFixture;
+    submitted: PeerReviewForbiddenTargetFixture;
     settled: PeerReviewForbiddenTargetFixture;
   };
   loot: {
+    submitted: PeerReviewForbiddenLootFixture;
     settled: PeerReviewForbiddenLootFixture;
   };
 };

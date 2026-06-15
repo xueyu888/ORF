@@ -45,12 +45,13 @@ export function stateTargetFixtures(data: MemberSubmitPeerReviewStateForbiddenCa
     data.targets.resultClaiming,
     data.targets.reestimate,
     data.targets.frozen,
+    data.targets.submitted,
     data.targets.settled,
   ];
 }
 
 export function stateLootFixtures(data: MemberSubmitPeerReviewStateForbiddenCaseData) {
-  return [data.loot.settled];
+  return [data.loot.submitted, data.loot.settled];
 }
 
 export function stateTargetChallengers(data: MemberSubmitPeerReviewStateForbiddenCaseData) {

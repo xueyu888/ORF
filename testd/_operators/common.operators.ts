@@ -722,6 +722,7 @@ function optionalObjectiveFlowStatus(params: StepParams, key: string) {
     status === "reestimating" ||
     status === "frozen" ||
     status === "submitted" ||
+    status === "accepted" ||
     status === "settled" ||
     status === "closed"
   ) {

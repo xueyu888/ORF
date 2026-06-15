@@ -1,0 +1,130 @@
+import { STATE_CASE_MODEL, type StateCaseSpec } from "../../_framework/types";
+import type { AdminSettleLootCaseData } from "./_support/admin-settle-loot.context";
+
+export const adminSettleLootCase = {
+  id: "acceptance.admin-settle-loot",
+  title: "管理员结算已验收战利品",
+  model: STATE_CASE_MODEL,
+  tags: ["acceptance", "settlement", "admin", "happy-path"],
+
+  data: {
+    adminEmail: "orf-admin-settle-loot-e2e@orf.local",
+    adminPassword: "OrfAdminSettleLootE2E!2026",
+    adminName: "ORF Admin Settle Loot E2E",
+    adminRole: "admin",
+    memberEmail: "orf-member-admin-settle-loot-e2e@orf.local",
+    memberPassword: "OrfMemberAdminSettleLootE2E!2026",
+    memberName: "ORF Member Admin Settle Loot E2E",
+    memberRole: "member",
+    cleanupEmails: ["orf-admin-settle-loot-e2e@orf.local", "orf-member-admin-settle-loot-e2e@orf.local"],
+    objectiveId: "obj-testd-admin-settle-loot",
+    objectiveTitle: "E2E-ADMIN-SETTLE-LOOT: 已验收目标前置",
+    resultTitle: "E2E-SETTLE-RESULT: 管理员结算指标",
+    metricName: "管理员结算指标",
+    lootBody: "E2E-SETTLE-LOOT-BODY: 管理员结算战利品完成说明",
+    evidenceText: "E2E-SETTLE-EVIDENCE: 结算前置验收证据",
+    points: 30,
+    reason: "指挥官确认最终结算比例",
+  },
+
+  B: {
+    description: "系统服务可用，浏览器处于未登录基准状态",
+    assertions: [
+      { source: { caseStepId: "B-1", method: "api" }, id: "frontend.ready", title: "前端服务 应可用", object: "frontend.service", operator: "available" },
+      { source: { caseStepId: "B-2", method: "api" }, id: "backend.ready", title: "后端服务 应可用", object: "api.health", operator: "ok" },
+      { source: { caseStepId: "B-3", method: "api" }, id: "frontend.login_entry.accessible", title: "前端登录页入口 应可访问", object: "frontend.login_entry", operator: "accessible" },
+      { source: { caseStepId: "B-4", method: "api" }, id: "session.endpoint.accessible", title: "当前会话查询能力 应可用", object: "auth.session", operator: "accessible" },
+      { source: { caseStepId: "B-5", method: "prisma" }, id: "db.ready", title: "ORF 数据库 应可连接", object: "db", operator: "ready" },
+      { source: { caseStepId: "B-6", method: "prisma" }, id: "db.schema.current", title: "ORF 数据库 schema 应为 当前测试版本", object: "db.schema", operator: "current" },
+      { source: { caseStepId: "B-7", method: "api" }, id: "ory.admin_public.ready", title: "Ory/Kratos 认证服务的管理和公共访问能力 应可用", object: "ory.admin_public", operator: "ready" },
+      { source: { caseStepId: "B-8", method: "api" }, id: "session.unauthenticated", title: "当前会话 应为 未登录", object: "auth.session", operator: "unauthenticated" },
+      { source: { caseStepId: "B-9", method: "playwright" }, id: "cookie.absent", title: "当前浏览器 应不存在 Ory 登录会话 cookie", object: "browser.cookie", operator: "absent" },
+      { source: { caseStepId: "B-10", method: "playwright" }, id: "storage.empty", title: "当前浏览器 应不保留本地登录态", object: "browser.auth_storage", operator: "empty" },
+    ],
+  },
+
+  Setup: {
+    description: "准备管理员、普通成员、本用例已验收目标、测试指标和测试战利品，登录管理员并进入结算页",
+    steps: [
+      { source: { caseStepId: "Setup-1", method: "prisma" }, id: "db.settle_loot_ledger.delete_residue", title: "删除 reason 为 `指挥官确认最终结算比例` 的本用例残留测试积分流水", object: "db.settle_loot_ledger", operator: "delete", params: { objectiveIdFrom: "data.objectiveId", reasonFrom: "data.reason" } },
+      { source: { caseStepId: "Setup-2", method: "prisma" }, id: "db.settle_loot.delete_residue", title: "删除内容为 `E2E-SETTLE-LOOT-BODY: 管理员结算战利品完成说明` 的本用例残留测试战利品", object: "db.settle_loot", operator: "delete", params: { bodyFrom: "data.lootBody" } },
+      { source: { caseStepId: "Setup-3", method: "prisma" }, id: "db.settle_loot_result.delete_residue", title: "删除标题为 `E2E-SETTLE-RESULT: 管理员结算指标` 的本用例残留测试指标", object: "db.settle_loot_result", operator: "delete", params: { titleFrom: "data.resultTitle" } },
+      { source: { caseStepId: "Setup-4", method: "prisma" }, id: "db.objective.delete_residue", title: "删除标题为 `E2E-ADMIN-SETTLE-LOOT: 已验收目标前置` 的本用例残留目标及其派生数据", object: "db.objective", operator: "delete_by_title", params: { titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Setup-5", method: "api" }, id: "ory.admin_identity.upsert", title: "准备管理员认证身份，邮箱为 `orf-admin-settle-loot-e2e@orf.local`，密码为固定测试密码", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.adminEmail", nameFrom: "data.adminName", passwordFrom: "data.adminPassword", saveAs: "adminIdentity" } },
+      { source: { caseStepId: "Setup-6", method: "prisma" }, id: "db.admin.upsert", title: "准备管理员用户和默认团队成员关系，邮箱为 `orf-admin-settle-loot-e2e@orf.local`、角色为 `admin`、状态为 `active`", object: "db.user", operator: "upsert", params: { emailFrom: "data.adminEmail", nameFrom: "data.adminName", roleFrom: "data.adminRole", status: "active", identityIdFrom: "runtime.adminIdentity.id", saveAs: "adminUser" } },
+      { source: { caseStepId: "Setup-7", method: "api" }, id: "ory.member_identity.upsert", title: "准备普通成员认证身份，邮箱为 `orf-member-admin-settle-loot-e2e@orf.local`，密码为固定测试密码", object: "ory.identity", operator: "upsert_password", params: { emailFrom: "data.memberEmail", nameFrom: "data.memberName", passwordFrom: "data.memberPassword", saveAs: "memberIdentity" } },
+      { source: { caseStepId: "Setup-8", method: "prisma" }, id: "db.member.upsert", title: "准备普通成员用户和默认团队成员关系，邮箱为 `orf-member-admin-settle-loot-e2e@orf.local`、角色为 `member`、状态为 `active`", object: "db.user", operator: "upsert", params: { emailFrom: "data.memberEmail", nameFrom: "data.memberName", roleFrom: "data.memberRole", status: "active", identityIdFrom: "runtime.memberIdentity.id", saveAs: "memberUser" } },
+      { source: { caseStepId: "Setup-9", method: "prisma" }, id: "db.objective.upsert_settle_loot_target", title: "创建本用例已验收目标，标题为 `E2E-ADMIN-SETTLE-LOOT: 已验收目标前置`", object: "db.objective", operator: "upsert", params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle", teamIdFrom: "runtime.adminUser.teamId", stage: "goalFrozen", flowStatus: "accepted", status: "Draft", saveAs: "fixtureObjective" } },
+      { source: { caseStepId: "Setup-10", method: "prisma" }, id: "db.settle_loot_target.prepare", title: "设置本用例目标为 `accepted`，阶段为 `goalFrozen`，验收结果为 `completed`，目标基础分数为 `30`，目标结算分数为空，战利品提交时间已存在，挑战者账号身份仅包含普通成员", object: "db.settle_loot_target", operator: "prepare", params: { objectiveIdFrom: "runtime.fixtureObjective.id", memberNameFrom: "data.memberName", pointsFrom: "data.points", saveAs: "settleLootTarget" } },
+      { source: { caseStepId: "Setup-11", method: "prisma" }, id: "db.settle_loot_result.create", title: "创建本用例目标的测试指标，标题为 `E2E-SETTLE-RESULT: 管理员结算指标`，指标积分为 `30`，验收结果为 `completed`", object: "db.settle_loot_result", operator: "create", params: { targetFrom: "runtime.settleLootTarget", titleFrom: "data.resultTitle", metricNameFrom: "data.metricName", pointsFrom: "data.points", saveAs: "settleLootResult" } },
+      { source: { caseStepId: "Setup-12", method: "prisma" }, id: "db.settle_loot.create", title: "创建普通成员提交到本用例目标的测试战利品，测试指标声明为 `completed`", object: "db.settle_loot", operator: "create", params: { targetFrom: "runtime.settleLootTarget", resultFrom: "runtime.settleLootResult", bodyFrom: "data.lootBody", evidenceTextFrom: "data.evidenceText", memberNameFrom: "data.memberName", saveAs: "settleLoot" } },
+      { source: { caseStepId: "Setup-13", method: "api" }, id: "ory.admin_sessions.revoke", title: "撤销管理员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Setup-14", method: "api" }, id: "ory.member_sessions.revoke", title: "撤销普通成员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Setup-15", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Setup-16", method: "playwright" }, id: "page.goto.auth", title: "打开 ORF 登录页", object: "page", operator: "goto", params: { path: "/auth" } },
+      { source: { caseStepId: "Setup-17", method: "playwright" }, id: "fill.email", title: "在邮箱输入框输入管理员固定测试邮箱", object: "page", operator: "fill", params: { label: "Email", valueFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Setup-18", method: "playwright" }, id: "fill.password", title: "在密码输入框输入管理员固定测试密码", object: "page", operator: "fill", params: { label: "Password", exact: true, valueFrom: "data.adminPassword" } },
+      { source: { caseStepId: "Setup-19", method: "playwright" }, id: "click.sign_in", title: "点击 `Sign In` 登录操作", object: "page", operator: "click", params: { role: "button", name: "Sign In" } },
+      { source: { caseStepId: "Setup-20", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 管理员的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
+      { source: { caseStepId: "Setup-21", method: "playwright" }, id: "page.goto.loot", title: "管理员打开任务模块下的本用例目标战利品页面", object: "page.settle_loot", operator: "goto", params: { targetFrom: "runtime.settleLootTarget" } },
+    ],
+  },
+
+  S0: {
+    description: "管理员已登录并位于本用例目标战利品页面，目标可确认结算",
+    assertions: [
+      { source: { caseStepId: "S0-1", method: "api" }, id: "session.admin.authenticated", title: "当前会话 应为 邮箱 `orf-admin-settle-loot-e2e@orf.local`、角色为 `admin`、状态为 `active` 的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
+      { source: { caseStepId: "S0-2", method: "playwright" }, id: "url.loot", title: "当前页面 应为 任务模块下的本用例目标战利品页面", object: "page.url", operator: "match", params: { pattern: "/tasks/objectives/.+/loot$" } },
+      { source: { caseStepId: "S0-3", method: "playwright" }, id: "settle_loot_form.visible", title: "确认结算表单 应可见", object: "page.settle_loot_form", operator: "visible" },
+      { source: { caseStepId: "S0-4", method: "prisma" }, id: "db.settle_loot_target.accepted", title: "本用例目标 应为 `accepted`，阶段为 `goalFrozen`，验收结果为 `completed`，目标基础分数为 `30`，目标结算分数为空，战利品提交时间已存在，挑战者账号身份仅包含普通成员", object: "db.settle_loot_target", operator: "accepted", params: { targetFrom: "runtime.settleLootTarget", memberNameFrom: "data.memberName", pointsFrom: "data.points" } },
+      { source: { caseStepId: "S0-5", method: "prisma" }, id: "db.settle_loot_result.present", title: "本用例目标 应存在 指标积分为 `30` 且验收结果为 `completed` 的测试指标", object: "db.settle_loot_result", operator: "present", params: { targetFrom: "runtime.settleLootTarget", resultFrom: "runtime.settleLootResult", pointsFrom: "data.points" } },
+      { source: { caseStepId: "S0-6", method: "prisma" }, id: "db.settle_loot.present", title: "本用例目标 应存在 普通成员提交的测试战利品，且测试指标声明为 `completed`", object: "db.settle_loot", operator: "present", params: { targetFrom: "runtime.settleLootTarget", lootFrom: "runtime.settleLoot", resultFrom: "runtime.settleLootResult" } },
+      { source: { caseStepId: "S0-7", method: "prisma" }, id: "db.settle_loot_ledger.absent", title: "reason 为 `指挥官确认最终结算比例` 的测试积分流水 应不存在", object: "db.settle_loot_ledger", operator: "absent", params: { objectiveIdFrom: "data.objectiveId", reasonFrom: "data.reason" } },
+    ],
+  },
+
+  Action: {
+    description: "管理员通过页面确认结算已验收目标",
+    steps: [
+      { source: { caseStepId: "Action-1", method: "playwright" }, id: "submit.settle_loot", title: "管理员点击 `确认结算` 操作", object: "page.settle_loot_form", operator: "submit", params: { targetFrom: "runtime.settleLootTarget", saveAs: "settleLootResponse" } },
+    ],
+  },
+
+  S1: {
+    description: "目标已结算并生成单一挑战成员积分流水，管理员仍保持登录",
+    assertions: [
+      { source: { caseStepId: "S1-1", method: "api" }, id: "settle_loot_response.ok", title: "管理员结算已验收战利品提交结果 应成功", object: "api.response", operator: "ok", params: { responseFrom: "runtime.settleLootResponse", status: 200 } },
+      { source: { caseStepId: "S1-2", method: "prisma" }, id: "db.settle_loot_target.settled", title: "本用例目标的流转状态 应为 `settled`，验收结果 应为 `completed`，目标基础分数 应为 `30`，目标结算分数 应为 `30`", object: "db.settle_loot_target", operator: "settled", params: { targetFrom: "runtime.settleLootTarget", pointsFrom: "data.points" } },
+      { source: { caseStepId: "S1-3", method: "prisma" }, id: "db.settle_loot_result.still_present", title: "本用例测试指标的验收结果 应保持为 `completed`", object: "db.settle_loot_result", operator: "present", params: { targetFrom: "runtime.settleLootTarget", resultFrom: "runtime.settleLootResult", pointsFrom: "data.points" } },
+      { source: { caseStepId: "S1-4", method: "prisma" }, id: "db.settle_loot_ledger.present", title: "数据库中 应存在 普通成员对本用例目标的测试积分流水，积分为 `30`，reason 为 `指挥官确认最终结算比例`", object: "db.settle_loot_ledger", operator: "present", params: { targetFrom: "runtime.settleLootTarget", memberNameFrom: "data.memberName", pointsFrom: "data.points", reasonFrom: "data.reason" } },
+      { source: { caseStepId: "S1-5", method: "playwright" }, id: "url.reports", title: "当前页面 应为 统计页面", object: "page.url", operator: "match", params: { pattern: "/reports$" } },
+      { source: { caseStepId: "S1-6", method: "api" }, id: "session.admin.still_authenticated", title: "当前会话 应仍为 管理员的已登录会话", object: "auth.session", operator: "authenticated", params: { emailFrom: "data.adminEmail", roleFrom: "data.adminRole", status: "active" } },
+    ],
+  },
+
+  Clean: {
+    description: "删除本用例创建的积分流水、战利品、指标、目标、账号和页面会话状态",
+    steps: [
+      { source: { caseStepId: "Clean-1", method: "prisma" }, id: "db.settle_loot_ledger.delete", title: "删除本用例创建的测试积分流水", object: "db.settle_loot_ledger", operator: "delete", params: { objectiveIdFrom: "data.objectiveId", reasonFrom: "data.reason" } },
+      { source: { caseStepId: "Clean-2", method: "prisma" }, id: "db.settle_loot.delete", title: "删除本用例创建的测试战利品", object: "db.settle_loot", operator: "delete", params: { bodyFrom: "data.lootBody", lootFrom: "runtime.settleLoot" } },
+      { source: { caseStepId: "Clean-3", method: "prisma" }, id: "db.settle_loot_result.delete", title: "删除本用例创建的测试指标", object: "db.settle_loot_result", operator: "delete", params: { titleFrom: "data.resultTitle", resultFrom: "runtime.settleLootResult" } },
+      { source: { caseStepId: "Clean-4", method: "prisma" }, id: "db.objective.delete", title: "删除本用例已验收目标及其派生数据", object: "db.objective", operator: "delete", params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Clean-5", method: "api" }, id: "auth.logout", title: "注销当前登录会话", object: "auth", operator: "logout" },
+      { source: { caseStepId: "Clean-6", method: "playwright" }, id: "page.runtime.stop", title: "离开当前 ORF 前端页面", object: "page.runtime", operator: "stop" },
+      { source: { caseStepId: "Clean-7", method: "playwright" }, id: "browser.clear", title: "移除当前浏览器中的残留登录态", object: "browser", operator: "clear_state" },
+      { source: { caseStepId: "Clean-8", method: "api" }, id: "ory.admin_sessions.revoke", title: "撤销管理员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Clean-9", method: "api" }, id: "ory.member_sessions.revoke", title: "撤销普通成员认证身份的残留登录会话", object: "ory.sessions", operator: "revoke_by_email", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Clean-10", method: "api" }, id: "ory.admin_identity.delete", title: "删除管理员认证身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Clean-11", method: "api" }, id: "ory.member_identity.delete", title: "删除普通成员认证身份", object: "ory.identity", operator: "delete_by_email", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Clean-12", method: "prisma" }, id: "db.members.delete_memberships", title: "删除管理员和普通成员默认团队成员关系", object: "db.user", operator: "delete_memberships", params: { emailsFrom: "data.cleanupEmails" } },
+      { source: { caseStepId: "Clean-13", method: "prisma" }, id: "db.members.delete", title: "删除管理员和普通成员用户", object: "db.user", operator: "delete", params: { emailsFrom: "data.cleanupEmails" } },
+      { source: { caseStepId: "Clean-14", method: "prisma" }, id: "db.settle_loot_ledger.absent", title: "reason 为 `指挥官确认最终结算比例` 的测试积分流水 应不存在", object: "db.settle_loot_ledger", operator: "absent", params: { objectiveIdFrom: "data.objectiveId", reasonFrom: "data.reason" } },
+      { source: { caseStepId: "Clean-15", method: "prisma" }, id: "db.settle_loot.absent", title: "内容为 `E2E-SETTLE-LOOT-BODY: 管理员结算战利品完成说明` 的测试战利品 应不存在", object: "db.settle_loot", operator: "absent", params: { bodyFrom: "data.lootBody" } },
+      { source: { caseStepId: "Clean-16", method: "prisma" }, id: "db.settle_loot_result.absent", title: "标题为 `E2E-SETTLE-RESULT: 管理员结算指标` 的测试指标 应不存在", object: "db.settle_loot_result", operator: "absent", params: { titleFrom: "data.resultTitle" } },
+      { source: { caseStepId: "Clean-17", method: "prisma" }, id: "db.objective.absent", title: "标题为 `E2E-ADMIN-SETTLE-LOOT: 已验收目标前置` 的本用例目标 应不存在", object: "db.objective", operator: "absent", params: { idFrom: "data.objectiveId", titleFrom: "data.objectiveTitle" } },
+      { source: { caseStepId: "Clean-18", method: "api" }, id: "ory.admin_identity.absent", title: "管理员认证身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.adminEmail" } },
+      { source: { caseStepId: "Clean-19", method: "api" }, id: "ory.member_identity.absent", title: "普通成员认证身份 应不存在", object: "ory.identity", operator: "absent", params: { emailFrom: "data.memberEmail" } },
+      { source: { caseStepId: "Clean-20", method: "prisma" }, id: "db.members.absent", title: "管理员和普通成员用户 应不存在", object: "db.user", operator: "absent", params: { emailsFrom: "data.cleanupEmails" } },
+    ],
+  },
+} satisfies StateCaseSpec<AdminSettleLootCaseData>;

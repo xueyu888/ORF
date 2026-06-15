@@ -99,7 +99,7 @@ export const memberSubmitPeerReviewCase = {
   },
 
   Setup: {
-    description: "准备普通成员账号、本用例独占 submitted 目标和前置战利品，登录普通成员并进入战利品页面",
+    description: "准备普通成员账号、本用例独占 accepted 目标和前置战利品，登录普通成员并进入战利品页面",
     steps: [
       {
         source: { caseStepId: "Setup-1", method: "prisma" },
@@ -184,7 +184,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Setup-8", method: "prisma" },
         id: "db.objective.upsert_peer_review_target",
-        title: "创建 本用例目标，标题为 `E2E-MEMBER-SUBMIT-PEER-REVIEW: 目标前置`、流转状态为 `submitted`",
+        title: "创建 本用例目标，标题为 `E2E-MEMBER-SUBMIT-PEER-REVIEW: 目标前置`、流转状态为 `accepted`",
         object: "db.objective",
         operator: "upsert",
         params: {
@@ -192,7 +192,7 @@ export const memberSubmitPeerReviewCase = {
           titleFrom: "data.objectiveTitle",
           teamIdFrom: "runtime.memberUser.teamId",
           stage: "goalFrozen",
-          flowStatus: "submitted",
+          flowStatus: "accepted",
           status: "Draft",
           saveAs: "fixtureObjective",
         },
@@ -211,7 +211,7 @@ export const memberSubmitPeerReviewCase = {
         title: "设置 本用例目标的挑战者包含提交成员",
         object: "db.peer_review_target",
         operator: "add_challenger",
-        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.name" },
+        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.name", memberUserIdFrom: "runtime.memberUser.userId" },
       },
       {
         source: { caseStepId: "Setup-11", method: "prisma" },
@@ -219,14 +219,14 @@ export const memberSubmitPeerReviewCase = {
         title: "设置 本用例目标的挑战者包含协作成员",
         object: "db.peer_review_target",
         operator: "add_challenger",
-        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.peerName" },
+        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.peerName", memberUserIdFrom: "runtime.peerUser.userId" },
       },
       {
         source: { caseStepId: "Setup-12", method: "prisma" },
-        id: "db.peer_review_target.ready_for_review",
-        title: "设置 本用例目标为已提交战利品状态",
+        id: "db.peer_review_target.accepted_for_review",
+        title: "设置 本用例目标为已验收状态",
         object: "db.peer_review_target",
-        operator: "ready_for_review",
+        operator: "accepted_for_review",
         params: { targetFrom: "runtime.peerReviewTarget" },
       },
       {
@@ -344,10 +344,10 @@ export const memberSubmitPeerReviewCase = {
       },
       {
         source: { caseStepId: "S0-4", method: "prisma" },
-        id: "db.peer_review_target.submitted",
-        title: "本用例目标 应为 流转状态 `submitted` 且战利品提交时间已存在",
+        id: "db.peer_review_target.accepted",
+        title: "本用例目标 应为 流转状态 `accepted`、验收结果为 `completed` 且战利品提交时间已存在",
         object: "db.peer_review_target",
-        operator: "submitted",
+        operator: "accepted",
         params: { targetFrom: "runtime.peerReviewTarget" },
       },
       {
@@ -356,7 +356,7 @@ export const memberSubmitPeerReviewCase = {
         title: "本用例目标的挑战者 应包含 提交成员",
         object: "db.peer_review_target",
         operator: "challenger_present",
-        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.name" },
+        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.name", memberUserIdFrom: "runtime.memberUser.userId" },
       },
       {
         source: { caseStepId: "S0-6", method: "prisma" },
@@ -364,7 +364,7 @@ export const memberSubmitPeerReviewCase = {
         title: "本用例目标的挑战者 应包含 协作成员",
         object: "db.peer_review_target",
         operator: "challenger_present",
-        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.peerName" },
+        params: { targetFrom: "runtime.peerReviewTarget", memberNameFrom: "data.peerName", memberUserIdFrom: "runtime.peerUser.userId" },
       },
       {
         source: { caseStepId: "S0-7", method: "prisma" },
@@ -415,7 +415,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "Action-4", method: "api" },
         id: "submit_peer_review_response.record",
-        title: "记录 本地结算服务收到的加密匿名互评提交",
+        title: "记录 ORF 同源代理转发到本地结算服务的加密匿名互评提交",
         object: "api.peer_review_submit_response",
         operator: "record_review",
         params: { responseFrom: "runtime.submitPeerReviewResponse", saveAs: "submittedPeerReview" },
@@ -429,7 +429,7 @@ export const memberSubmitPeerReviewCase = {
       {
         source: { caseStepId: "S1-1", method: "api" },
         id: "submitted_peer_review.sent_to_local_service",
-        title: "提交后的匿名互评请求 应发送到 本地结算服务",
+        title: "提交后的匿名互评请求 应经 ORF 同源代理发送到 本地结算服务",
         object: "api.peer_review_submit_response",
         operator: "sent_to_local_service",
         params: { reviewFrom: "runtime.submittedPeerReview" },
