@@ -7,7 +7,7 @@ import type {
   TestContext,
 } from "../_support/login-invalid-credentials.context";
 
-test.describe("admin登录反向测试用例", () => {
+test.describe("管理员登录表单输入校验失败测试用例", () => {
   test(adminLoginInvalidCredentialsCase.title, async ({ context, page }, testInfo) => {
     const ctx: TestContext = { context, page };
 

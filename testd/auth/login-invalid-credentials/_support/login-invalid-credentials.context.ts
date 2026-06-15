@@ -12,6 +12,7 @@ export type LoginInvalidCredentialsCaseData = {
   password: string;
   wrongPassword: string;
   blankPassword: string;
+  shortPassword: string;
   name: string;
   role: LoginInvalidCredentialsRole;
   invalidAccountNoAt: string;

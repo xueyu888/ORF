@@ -441,7 +441,7 @@ function validateAuthInput(mode: AuthMode, input: { name: string; email: string;
     return "请输入密码";
   }
 
-  if (mode === "register" && password.length < 8) {
+  if (password.length < 8) {
     return passwordRequirement;
   }
 

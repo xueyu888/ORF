@@ -65,8 +65,8 @@ export const testdCases = [
   },
   {
     id: "auth.admin.login.invalid-credentials",
-    title: "admin登录-账号或密码不满足",
-    doc: "testd-doc/cases/auth/admin登录-账号或密码不满足.md",
+    title: "管理员登录表单输入校验失败",
+    doc: "testd-doc/cases/auth/管理员登录表单输入校验失败.md",
     changePolicy: "open",
     spec: "testd/auth/login-invalid-credentials/_entry/admin-login-invalid-credentials.spec.ts",
     enabled: true,

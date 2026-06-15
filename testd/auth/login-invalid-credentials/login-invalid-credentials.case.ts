@@ -256,6 +256,7 @@ export const memberLoginInvalidCredentialsCase = createLoginInvalidCredentialsCa
     password: "OrfMemberLoginInvalidE2E!2026",
     wrongPassword: "WrongMemberLoginInvalidE2E!2026",
     blankPassword: "        ",
+    shortPassword: "1234567",
     name: "ORF Member Login Invalid E2E",
     role: "member",
     invalidAccountNoAt: "orf-member-login-invalid-account",
@@ -266,22 +267,120 @@ export const memberLoginInvalidCredentialsCase = createLoginInvalidCredentialsCa
   },
 });
 
-export const adminLoginInvalidCredentialsCase = createLoginInvalidCredentialsCase({
-  id: "auth.admin.login.invalid-credentials",
-  title: "admin登录-账号或密码不满足",
+const adminLoginFormValidationData: LoginInvalidCredentialsCaseData = {
+  email: "orf-admin-login-form-validation-e2e@orf.local",
+  password: "OrfAdminLoginFormValidationE2E!2026",
+  wrongPassword: "WrongAdminLoginInvalidE2E!2026",
+  blankPassword: "        ",
+  shortPassword: "1234567",
+  name: "ORF Admin Login Form Validation E2E",
   role: "admin",
-  roleLabel: "管理员",
-  data: {
-    email: "orf-admin-login-invalid-e2e@orf.local",
-    password: "OrfAdminLoginInvalidE2E!2026",
-    wrongPassword: "WrongAdminLoginInvalidE2E!2026",
-    blankPassword: "        ",
-    name: "ORF Admin Login Invalid E2E",
-    role: "admin",
-    invalidAccountNoAt: "orf-admin-login-invalid-account",
-    invalidAccountMissingDomain: "orf-admin-login-invalid@",
-    invalidAccountMissingTopLevelDomain: "orf-admin-login-invalid@orf",
-    invalidAccountWithSpace: "orf admin login invalid@orf.local",
-    nonexistentEmail: "orf-admin-login-missing-e2e@orf.local",
+  invalidAccountNoAt: "orf-admin-login-invalid-account",
+  invalidAccountMissingDomain: "orf-admin-login-invalid@",
+  invalidAccountMissingTopLevelDomain: "orf-admin-login-invalid@orf",
+  invalidAccountWithSpace: "orf admin login invalid@orf.local",
+  nonexistentEmail: "orf-admin-login-missing-e2e@orf.local",
+};
+
+export const adminLoginInvalidCredentialsCase = {
+  id: "auth.admin.login.invalid-credentials",
+  title: "管理员登录表单输入校验失败",
+  model: STATE_CASE_MODEL,
+  tags: ["auth", "login", "admin", "form-validation", "negative"],
+
+  data: adminLoginFormValidationData,
+
+  B: {
+    description: "系统服务可用，浏览器处于未登录基准状态",
+    assertions: [
+      step("B-1", "api", "frontend.ready", "前端服务 应可用", "frontend.service", "available"),
+      step("B-2", "api", "backend.ready", "后端服务 应可用", "api.health", "ok"),
+      step("B-3", "api", "frontend.login_entry.accessible", "前端登录页入口 应可访问", "frontend.login_entry", "accessible"),
+      step("B-4", "api", "session.endpoint.accessible", "当前会话查询能力 应可用", "auth.session", "accessible"),
+      step("B-5", "prisma", "db.ready", "ORF 数据库 应可连接", "db", "ready"),
+      step("B-6", "prisma", "db.schema.current", "ORF 数据库 schema 应为 当前测试版本", "db.schema", "current"),
+      step("B-7", "api", "ory.admin_public.ready", "Ory/Kratos 认证服务的管理和公共访问能力 应可用", "ory.admin_public", "ready"),
+      step("B-8", "api", "session.unauthenticated", "当前会话 应为 未登录", "auth.session", "unauthenticated"),
+      step("B-9", "playwright", "cookie.absent", "当前浏览器 应不存在 Ory 登录会话 cookie", "browser.cookie", "absent"),
+      step("B-10", "playwright", "storage.empty", "当前浏览器 应不保留本地登录态", "browser.auth_storage", "empty"),
+    ],
   },
-});
+
+  Setup: {
+    description: "清理浏览器状态并打开登录页",
+    steps: [
+      step("Setup-1", "playwright", "browser.clear", "移除当前浏览器中的残留登录态", "browser", "clear_state"),
+      step("Setup-2", "playwright", "page.goto.auth", "打开 ORF 登录页", "page", "goto", { path: "/auth" }),
+    ],
+  },
+
+  S0: {
+    description: "登录页可用，登录表单处于空值状态，当前浏览器未登录",
+    assertions: [
+      step("S0-1", "playwright", "url.auth", "当前页面 应为 登录页", "page.url", "match", { pattern: "/auth$" }),
+      step("S0-2", "playwright", "input.email.visible", "邮箱输入框 应可见", "page", "visible", { label: "Email" }),
+      step("S0-3", "playwright", "input.email.empty", "邮箱输入框的值 应为空", "input", "value", { label: "Email", value: "" }),
+      step("S0-4", "playwright", "input.password.visible", "密码输入框 应可见", "page", "visible", { label: "Password", exact: true }),
+      step("S0-5", "playwright", "input.password.empty", "密码输入框的值 应为空", "input", "value", { label: "Password", exact: true, value: "" }),
+      step("S0-6", "playwright", "button.sign_in.visible", "登录页的 \"Sign In\" 登录操作 应可见", "page", "visible", { role: "button", name: "Sign In" }),
+      step("S0-7", "playwright", "button.sign_in.enabled", "登录页的 \"Sign In\" 登录操作 应可点击", "page", "enabled", { role: "button", name: "Sign In" }),
+      step("S0-8", "api", "session.unauthenticated", "当前会话 应为 未登录", "auth.session", "unauthenticated"),
+      step("S0-9", "playwright", "cookie.absent", "当前浏览器 应不存在 Ory 登录会话 cookie", "browser.cookie", "absent"),
+      step("S0-10", "playwright", "storage.empty", "当前浏览器 应不保留本地登录态", "browser.auth_storage", "empty"),
+    ],
+  },
+
+  Action: {
+    description: "逐一提交登录表单输入校验失败场景",
+    steps: [
+      step("Action-1", "playwright", "clear.email.empty_email", "清空邮箱输入框", "page", "fill", { label: "Email", value: "" }),
+      step("Action-2", "playwright", "clear.password.empty_email", "清空密码输入框", "page", "fill", { label: "Password", exact: true, value: "" }),
+      step("Action-3", "playwright", "fill.password.empty_email", "在密码输入框输入满足规则的管理员测试密码", "page", "fill", { label: "Password", exact: true, valueFrom: "data.password" }),
+      step("Action-4", "playwright", "click.sign_in.empty_email", "点击 \"Sign In\" 登录操作", "page", "click", { role: "button", name: "Sign In" }),
+      step("Action-5", "playwright", "error.email_required.visible", "登录页错误提示 \"请输入邮箱\" 应可见", "page", "visible", { text: "请输入邮箱", exact: true }),
+
+      step("Action-6", "playwright", "clear.email.invalid_email", "清空邮箱输入框", "page", "fill", { label: "Email", value: "" }),
+      step("Action-7", "playwright", "clear.password.invalid_email", "清空密码输入框", "page", "fill", { label: "Password", exact: true, value: "" }),
+      step("Action-8", "playwright", "fill.email.invalid_email", "在邮箱输入框输入 `orf-admin-login-invalid-account`", "page", "fill", { label: "Email", valueFrom: "data.invalidAccountNoAt" }),
+      step("Action-9", "playwright", "fill.password.invalid_email", "在密码输入框输入满足规则的管理员测试密码", "page", "fill", { label: "Password", exact: true, valueFrom: "data.password" }),
+      step("Action-10", "playwright", "click.sign_in.invalid_email", "点击 \"Sign In\" 登录操作", "page", "click", { role: "button", name: "Sign In" }),
+      step("Action-11", "playwright", "error.invalid_email.visible", "登录页错误提示 \"邮箱格式不正确\" 应可见", "page", "visible", { text: "邮箱格式不正确", exact: true }),
+
+      step("Action-12", "playwright", "clear.email.empty_password", "清空邮箱输入框", "page", "fill", { label: "Email", value: "" }),
+      step("Action-13", "playwright", "clear.password.empty_password", "清空密码输入框", "page", "fill", { label: "Password", exact: true, value: "" }),
+      step("Action-14", "playwright", "fill.email.empty_password", "在邮箱输入框输入 `orf-admin-login-form-validation-e2e@orf.local`", "page", "fill", { label: "Email", valueFrom: "data.email" }),
+      step("Action-15", "playwright", "click.sign_in.empty_password", "点击 \"Sign In\" 登录操作", "page", "click", { role: "button", name: "Sign In" }),
+      step("Action-16", "playwright", "error.password_required.visible", "登录页错误提示 \"请输入密码\" 应可见", "page", "visible", { text: "请输入密码", exact: true }),
+
+      step("Action-17", "playwright", "clear.email.short_password", "清空邮箱输入框", "page", "fill", { label: "Email", value: "" }),
+      step("Action-18", "playwright", "clear.password.short_password", "清空密码输入框", "page", "fill", { label: "Password", exact: true, value: "" }),
+      step("Action-19", "playwright", "fill.email.short_password", "在邮箱输入框输入 `orf-admin-login-form-validation-e2e@orf.local`", "page", "fill", { label: "Email", valueFrom: "data.email" }),
+      step("Action-20", "playwright", "fill.password.short_password", "在密码输入框输入不满足规则的短密码", "page", "fill", { label: "Password", exact: true, valueFrom: "data.shortPassword" }),
+      step("Action-21", "playwright", "click.sign_in.short_password", "点击 \"Sign In\" 登录操作", "page", "click", { role: "button", name: "Sign In" }),
+      step("Action-22", "playwright", "error.password_too_short.visible", "登录页错误提示 \"密码至少 8 位\" 应可见", "page", "visible", { text: "密码至少 8 位", exact: true }),
+    ],
+  },
+
+  S1: {
+    description: "登录表单校验失败后仍停留登录页且不产生登录态",
+    assertions: [
+      step("S1-1", "playwright", "url.auth.after_validation", "当前页面 应仍为 登录页", "page.url", "match", { pattern: "/auth$" }),
+      step("S1-2", "api", "session.unauthenticated.after_validation", "当前会话 应仍为 未登录", "auth.session", "unauthenticated"),
+      step("S1-3", "playwright", "cookie.absent.after_validation", "当前浏览器 应不存在 Ory 登录会话 cookie", "browser.cookie", "absent"),
+      step("S1-4", "playwright", "storage.empty.after_validation", "当前浏览器 应不保留本地登录态", "browser.auth_storage", "empty"),
+      step("S1-5", "playwright", "button.sign_in.visible.after_validation", "登录页的 \"Sign In\" 登录操作 应仍可见", "page", "visible", { role: "button", name: "Sign In" }),
+      step("S1-6", "playwright", "nav.absent.after_validation", "登录后主导航 应不可见", "page", "count", { label: "主导航", count: 0 }),
+      step("S1-7", "playwright", "logout.absent.after_validation", "登录后的 \"退出登录\" 操作 应不可见", "page", "count", { role: "button", name: "退出登录", count: 0 }),
+      step("S1-8", "playwright", "error.password_too_short.still_visible", "登录页错误提示 \"密码至少 8 位\" 应仍可见", "page", "visible", { text: "密码至少 8 位", exact: true }),
+    ],
+  },
+
+  Clean: {
+    description: "清理登录态和页面运行态",
+    steps: [
+      step("Clean-1", "api", "auth.logout", "注销当前登录会话", "auth", "logout"),
+      step("Clean-2", "playwright", "page.runtime.stop", "离开当前 ORF 前端页面", "page.runtime", "stop"),
+      step("Clean-3", "playwright", "browser.clear", "移除当前浏览器中的残留登录态", "browser", "clear_state"),
+    ],
+  },
+} satisfies StateCaseSpec<LoginInvalidCredentialsCaseData>;
