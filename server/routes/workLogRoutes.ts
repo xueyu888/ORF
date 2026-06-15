@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { canUseWorkLogCategories } from "../../src/domain/orfWorkLogs";
 import { isDateOnlyString } from "../../src/utils/date";
 import { requireUserScopeContext } from "../auth/accessPolicy";
 import {
@@ -81,7 +82,7 @@ function workLogSaveFailureMessage(reason: string) {
   if (reason === "invalidCategory") return "工作日志分类不存在或不能使用";
   if (reason === "invalidDuration") return "记录时间必须是 1-1440 分钟的整数";
   if (reason === "invalidEstimate") return "目标剩余估计必须是 0-100 的整数";
-  if (reason === "objectiveRequired") return "普通成员填写工作日志时必须选择目标";
+  if (reason === "objectiveRequired") return "当前账号填写工作日志时必须选择目标";
   return "目标不存在或当前用户不能给该目标填写工作日志";
 }
 
@@ -93,12 +94,12 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
     }
 
     const [categories, objectives] = await Promise.all([
-      context.user.role === "admin" ? listWorkLogCategoryOptions(context.scope) : Promise.resolve([]),
+      canUseWorkLogCategories(context.user) ? listWorkLogCategoryOptions(context.scope) : Promise.resolve([]),
       listWorkLogObjectiveOptions(context.user, context.scope),
     ]);
     return {
       categories,
-      classificationSuggestionEnabled: context.user.role === "admin" && isWorkLogClassificationSuggestionConfigured(),
+      classificationSuggestionEnabled: canUseWorkLogCategories(context.user) && isWorkLogClassificationSuggestionConfigured(),
       objectives,
     };
   });
@@ -108,7 +109,7 @@ export function registerWorkLogRoutes(app: FastifyInstance) {
     if (!context) {
       return reply;
     }
-    if (context.user.role !== "admin") {
+    if (!canUseWorkLogCategories(context.user)) {
       return reply.code(403).send({ error: "只有管理员可以使用工作日志智能分类" });
     }
 

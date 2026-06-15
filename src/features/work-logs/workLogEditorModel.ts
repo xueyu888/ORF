@@ -182,15 +182,22 @@ export function canonicalWorkLogEntryForEdit(entry: WorkLogEntry) {
 
 export function validateWorkLogEditorDraft(
   draft: WorkLogEditorDraft,
-  allowCategories: boolean,
+  options: {
+    allowCategories: boolean;
+    allowUncategorized: boolean;
+  },
 ) {
   const entry = canonicalWorkLogEditorDraft(draft);
-  if (!entry.objectiveId && !allowCategories) return "请选择目标";
-  if (
-    draft.classificationKind === "category" &&
-    !entry.categoryId &&
-    !entry.categoryName
-  ) {
+  if (draft.classificationKind === "objective" && !entry.objectiveId) {
+    return "请选择目标";
+  }
+  if (draft.classificationKind === "uncategorized" && !options.allowUncategorized) {
+    return "请选择目标";
+  }
+  if (draft.classificationKind === "category" && !options.allowCategories) {
+    return "只有管理员可以使用工作日志分类";
+  }
+  if (draft.classificationKind === "category" && !entry.categoryId && !entry.categoryName) {
     return "请填写分类名称";
   }
   if (!orfRichTextHasMeaningfulContent(entry.bodyMarkdown)) {
@@ -360,15 +367,18 @@ export function formatWorkLogDurationMinutes(value: number | null | undefined) {
 export function buildWorkLogClassificationChoices(
   draft: WorkLogEditorDraft,
   objectives: WorkLogObjectiveOption[],
-  allowCategories: boolean,
+  options: {
+    allowCategories: boolean;
+    allowUncategorized: boolean;
+  },
   categories: WorkLogCategoryOption[],
 ): WorkLogClassificationChoice[] {
   const choices: WorkLogClassificationChoice[] = [
-    allowCategories
+    options.allowUncategorized
       ? {
           value: "uncategorized",
           label: "未归类",
-          description: "管理员临时记录",
+          description: "临时记录",
           alwaysVisible: true,
         }
       : {
@@ -378,7 +388,7 @@ export function buildWorkLogClassificationChoices(
           alwaysVisible: true,
         },
   ];
-  if (allowCategories) {
+  if (options.allowCategories) {
     choices.push(
       {
         value: "category:new",

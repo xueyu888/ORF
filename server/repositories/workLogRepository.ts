@@ -9,6 +9,11 @@ import type {
   WorkLogReport,
   WorkLogReportScope,
 } from "../../src/types/orf";
+import {
+  canSaveUnscopedWorkLog,
+  canUseWorkLogCategories,
+  unscopedWorkLogMemberNameList,
+} from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
 import { notifications, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
@@ -112,10 +117,10 @@ function normalizeWorkLogEntryInput(user: AuthenticatedOrfUser, input: WorkLogDa
   if ((objectiveId && (categoryId || categoryName)) || (categoryId && categoryName)) {
     return { status: "invalid" as const, reason: "classificationConflict" as const };
   }
-  if (!objectiveId && user.role !== "admin") {
+  if (!objectiveId && !canSaveUnscopedWorkLog(user)) {
     return { status: "invalid" as const, reason: "objectiveRequired" as const };
   }
-  if ((categoryId || categoryName) && user.role !== "admin") {
+  if ((categoryId || categoryName) && !canUseWorkLogCategories(user)) {
     return { status: "invalid" as const, reason: "categoryForbidden" as const };
   }
   if (
@@ -878,12 +883,15 @@ export async function listWorkLogReminderRecipients(teamId: string, workDate: st
         eq(teamMembers.role, "admin"),
         and(
           eq(teamMembers.role, "member"),
-          sql`exists (
-            select 1
-            from ${objectives}
-            where ${objectives.teamId} = ${teamMembers.teamId}
-              and ${objectives.challengerUserIds} ? (${users.id})::text
-          )`,
+          or(
+            inArray(users.name, [...unscopedWorkLogMemberNameList]),
+            sql`exists (
+              select 1
+              from ${objectives}
+              where ${objectives.teamId} = ${teamMembers.teamId}
+                and ${objectives.challengerUserIds} ? (${users.id})::text
+            )`,
+          ),
         ),
       ),
       sql`not exists (

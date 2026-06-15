@@ -40,6 +40,10 @@ import {
 import { OrfRichTextMarkdownViewer } from "../features/rich-text/OrfRichTextMarkdownViewer";
 import { readModelInvalidationKey } from "../features/realtime/readModelInvalidations";
 import {
+  canSaveUnscopedWorkLog,
+  canUseWorkLogCategories,
+} from "../domain/orfWorkLogs";
+import {
   applyWorkLogEditorDraftPatch,
   blankWorkLogEditorDraft,
   buildWorkLogClassificationChoices,
@@ -169,7 +173,8 @@ export function WorkLogsPage() {
   );
   const canWrite =
     currentUser?.role === "admin" || currentUser?.role === "member";
-  const canUseWorkLogCategories = currentUser?.role === "admin";
+  const canUseWorkLogCategoryControls = canUseWorkLogCategories(currentUser);
+  const canSaveWithoutObjective = canSaveUnscopedWorkLog(currentUser);
 
   useEffect(() => {
     const nextDate = dateFromSearch(location.search);
@@ -309,7 +314,10 @@ export function WorkLogsPage() {
     orfRichTextHasMeaningfulContent(draftInput.bodyMarkdown),
   );
   const draftValidation = draftHasInput
-    ? validateWorkLogEditorDraft(editorDraft, canUseWorkLogCategories)
+    ? validateWorkLogEditorDraft(editorDraft, {
+        allowCategories: canUseWorkLogCategoryControls,
+        allowUncategorized: canSaveWithoutObjective,
+      })
     : "";
   const editorBaselineKey = JSON.stringify(
     editingEntry
@@ -334,6 +342,7 @@ export function WorkLogsPage() {
     !hasChanges;
   const memberHasNoWritableTargets =
     currentUser?.role === "member" &&
+    !canSaveWithoutObjective &&
     objectives.length === 0 &&
     myEntries.length === 0;
 
@@ -407,7 +416,7 @@ export function WorkLogsPage() {
     [categories],
   );
   useEffect(() => {
-    if (!canUseWorkLogCategories || !classificationSuggestionEnabled) {
+    if (!canUseWorkLogCategoryControls || !classificationSuggestionEnabled) {
       setClassificationSuggestion(null);
       setClassificationSuggestionLoading(false);
       return undefined;
@@ -449,7 +458,7 @@ export function WorkLogsPage() {
       window.clearTimeout(timeout);
     };
   }, [
-    canUseWorkLogCategories,
+    canUseWorkLogCategoryControls,
     classificationSuggestionEnabled,
     editorDraft.bodyMarkdown,
   ]);
@@ -552,7 +561,7 @@ export function WorkLogsPage() {
                   <p>{currentUser?.name ?? ""}</p>
                 </div>
                 <div className="work-logs-editor-heading-actions">
-                  {canUseWorkLogCategories && classificationSuggestionEnabled && (
+                  {canUseWorkLogCategoryControls && classificationSuggestionEnabled && (
                     <WorkLogClassificationSuggestionSlot
                       categories={categories}
                       draft={editorDraft}
@@ -599,7 +608,7 @@ export function WorkLogsPage() {
                 <>
                   <div className="work-logs-draft-list">
                     <WorkLogEditorCard
-                      canUseCategories={canUseWorkLogCategories}
+                      canUseCategories={canUseWorkLogCategoryControls}
                       category={
                         editorDraft.categoryId
                           ? categoryOptionsById.get(editorDraft.categoryId)
@@ -616,7 +625,10 @@ export function WorkLogsPage() {
                       classificationOptions={buildWorkLogClassificationChoices(
                         editorDraft,
                         objectives,
-                        canUseWorkLogCategories,
+                        {
+                          allowCategories: canUseWorkLogCategoryControls,
+                          allowUncategorized: canSaveWithoutObjective,
+                        },
                         categories,
                       )}
                       onChange={updateEditorDraft}
