@@ -23,6 +23,7 @@ import {
   tasks,
 } from "../db/schema";
 import { runtimeScopeStorageId } from "../repositories/runtimeScope";
+import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
 import { getTaskManagementData, type TaskManagementDataScope } from "./orfTaskManagementReadModel";
 import {
   getUserMapsForStorageScope,
@@ -158,6 +159,7 @@ function bountyContributionSummary(input: {
 export async function getBountyHallData(viewer: { id: string; name: string; role: UserRole }, scope: TaskManagementDataScope = {}): Promise<BountyHallData> {
   const rows = await getBountyHallSourceRows(scope);
   const { userIdByName, userNameById } = await getUserMapsForStorageScope(rows.storageScopeId);
+  const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(rows.objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
   const resultItems = mapResultRows({
     evidenceIdsByResult: groupEvidenceIdsByResult(rows.evidenceRows),
     resultRows: rows.resultRows,
@@ -170,6 +172,7 @@ export async function getBountyHallData(viewer: { id: string; name: string; role
     objectiveRows: rows.objectiveRows,
     resultsByObjective,
     taskIdsByObjective,
+    userAvatarUrlById: objectiveParticipantAvatarUrls,
     userIdByName,
     userNameById,
   });

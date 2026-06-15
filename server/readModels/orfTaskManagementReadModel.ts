@@ -145,8 +145,11 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
-  const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const { userIdByName, userNameById } = await getUserMapsForStorageScope(storageScopeId);
+  const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
+  const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
+  const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
+  const taskCreatorAvatarUrls = await getUserAvatarUrlMap(orderedTaskRows.map((task) => task.createdBy).filter((userId): userId is string => Boolean(userId)));
 
   const checklistByTask = new Map<string, Task["checklist"]>();
   for (const item of checklistRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
@@ -164,7 +167,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     causeCategoriesByFeedback.set(item.feedbackId, list);
   }
 
-  const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const projectItems: OrfProject[] = projectRows.map((project) => ({
     id: project.id,
@@ -214,6 +216,8 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     tags: task.tags,
     checklist: checklistByTask.get(task.id) ?? [],
     createdBy: task.createdBy,
+    createdByName: task.createdBy ? nameForUserId(userNameById, task.createdBy) || null : null,
+    createdByAvatarUrl: task.createdBy ? taskCreatorAvatarUrls.get(task.createdBy) ?? null : null,
     updatedBy: task.updatedBy,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
@@ -258,6 +262,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     objectiveRows,
     resultsByObjective: groupResultsByObjective(resultItems),
     taskIdsByObjective: groupTaskIdsByObjective(taskItems),
+    userAvatarUrlById: objectiveParticipantAvatarUrls,
     userIdByName,
     userNameById,
   });
