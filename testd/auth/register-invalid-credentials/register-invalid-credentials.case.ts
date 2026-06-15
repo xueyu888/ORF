@@ -3,7 +3,7 @@ import type { RegisterInvalidCredentialsCaseData } from "./_support/register-inv
 
 export const registerInvalidCredentialsCase = {
   id: "auth.register.invalid-credentials",
-  title: "账号注册登录-账号或密码不满足",
+  title: "07-用户注册表单输入校验失败",
   model: STATE_CASE_MODEL,
   tags: ["auth", "registration", "validation", "negative"],
 

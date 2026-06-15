@@ -25,8 +25,8 @@ export const testdCases = [
   },
   {
     id: "auth.register.invalid-credentials",
-    title: "账号注册登录-账号或密码不满足",
-    doc: "testd-doc/cases/auth/账号注册登录-账号或密码不满足.md",
+    title: "07-用户注册表单输入校验失败",
+    doc: "testd-doc/cases/auth/07-用户注册表单输入校验失败.md",
     changePolicy: "open",
     spec: "testd/auth/register-invalid-credentials/_entry/register-invalid-credentials.spec.ts",
     enabled: true,
