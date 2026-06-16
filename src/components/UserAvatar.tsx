@@ -1,4 +1,5 @@
 import { clsx } from "clsx";
+import type { HTMLAttributes } from "react";
 import { useEffect, useState } from "react";
 import { avatarStyleForName } from "../utils/avatar";
 import { initials } from "../utils/format";
@@ -16,13 +17,15 @@ export function UserAvatar({
   frame = true,
   name,
   size = "md",
+  title,
+  ...props
 }: {
   avatarUrl?: string | null;
   className?: string;
   frame?: boolean;
   name: string;
   size?: keyof typeof sizeClasses;
-}) {
+} & Omit<HTMLAttributes<HTMLDivElement>, "children">) {
   const [imageFailed, setImageFailed] = useState(false);
   const showImage = Boolean(avatarUrl && !imageFailed);
 
@@ -32,6 +35,7 @@ export function UserAvatar({
 
   return (
     <div
+      {...props}
       className={clsx(
         "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold text-white",
         frame && "border-2 border-white shadow-sm",
@@ -39,7 +43,7 @@ export function UserAvatar({
         className,
       )}
       style={showImage ? undefined : avatarStyleForName(name)}
-      title={name}
+      title={title ?? name}
     >
       {showImage ? (
         <img

@@ -58,7 +58,7 @@
 | `PATCH`  | `/api/users/:userId/disable`                                                 | 停用用户                                                                                                                                           |
 
 不存在的 `:objectiveId` 必须返回 404；目标存在但当前状态不允许对应流程动作时返回 409。
-读取目标数据时，`challengerUserIds` / `assignedChallengerUserIds` 是身份事实源，`challengers` / `assignedChallengers` 是显示名投影并会去重、剔除已接受挑战者，旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。`GET /api/my-challenges?scope=mine` 的正式挑战树只返回当前用户已经进入 `challengerUserIds` 的目标；同响应里的 `pendingChallengeApplications` 只从 `Objective.challengeApplications[]` 派生当前用户 `pending` 申请，用于只读追踪，不改变目标归属、指标权限、任务权限或结算参与者。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
+读取目标数据时，`challengerUserIds` / `assignedChallengerUserIds` 是身份事实源，`challengers` / `assignedChallengers` 是显示名投影并会去重、剔除已接受挑战者，`challengerProfiles` / `assignedChallengerProfiles` 是由同一身份集合派生的头像展示投影。旧数据或种子数据不能把已接受成员继续暴露为待响应征召。写入挑战者集合时，后端必须校验目标参与者是当前作用域内的 active 普通成员，管理员只负责审核、冻结、验收和异常处理。`GET /api/my-challenges?scope=mine` 的正式挑战树只返回当前用户已经进入 `challengerUserIds` 的目标；同响应里的 `pendingChallengeApplications` 只从 `Objective.challengeApplications[]` 派生当前用户 `pending` 申请，用于只读追踪，不改变目标归属、指标权限、任务权限或结算参与者。悬赏大厅读取是发现能力，不是挑战动作；后端不能用用户角色把 `GET /api/bounties` 的列表清空，申请和接受接口必须独立校验角色与状态。指挥官/管理员可以看到完整大厅数据和前端操作区，但对应 mutation 必须拒绝写入。
 
 所有由用户输入的业务文本在 API 边界统一 `trim`。目标标题、指标标题、指标名称、任务标题、评论正文等必填字段去除空白后不能为空；任务说明、子任务标签等选填字段如果只包含空白，按未填写处理并落到后端默认值，不能把空白字符串写入数据库。行动项执行人必须是当前默认作用域内的 `active` 成员；前端不提供自由文本输入，空执行人由后端回落为当前用户。日期型字段必须是合法 `YYYY-MM-DD`，例如 `2999-02-31` 必须返回 400。`Objective.finalDueAt` 是目标截止日期唯一事实源，只有指挥官可通过 `PATCH /api/objectives/:objectiveId` 修改；`candidate/open/applying/recruiting/reestimating` 可正常修改，`frozen` 只允许延后，`submitted/accepted/settled/closed` 返回 409。
 
@@ -68,7 +68,7 @@
 
 任务和子任务完成状态接口只表达执行进度写入，不触发指标验收、目标提交、结算或积分。前端可以在挑战页展示层使用短生命周期完成状态覆盖层即时反馈点击；后端返回的任务管理数据仍是完成状态的持久化事实源，刷新数据包含同一任务或子任务完成状态后前端撤销覆盖层。
 
-任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户 id 是否在该目标的 `Objective.challengerUserIds`；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。
+任务和子任务写入权限统一从父级 `Objective` 解析：新增、改名、改状态、勾选、移动和删除都会先把任务或子任务解析到 `Task.linkedObjectiveId`，再校验当前用户 id 是否在该目标的 `Objective.challengerUserIds`；指挥官按管理员权限通过。`Task.assignee` 只是执行提示，`Task.createdBy` / `updatedBy` 只记录创建和最近维护人，不能用来阻止同一目标下其他正式挑战者维护任务或子任务。`Task.definitionContributorUserIds` 是行动项定义者头像展示的唯一事实源：创建行动项和修改行动项标题会把当前用户追加进去并去重，状态勾选、完成状态和排序移动只表达执行或编排状态，不把用户加入定义者集合。任务读模型基于该集合派生 `definitionContributorProfiles`，用于普通成员也能直接展示所有定义过行动项的用户头像；`createdByName` / `createdByAvatarUrl` 只是兼容审计投影，不参与头像列语义、权限或所有权判断。
 
 ## 术语
 
@@ -217,7 +217,7 @@ type ObjectiveFlowStatus =
 - 指标更新提案不接受 `feedbackId`，不会改写反馈状态；指标更新只影响结果和结果评论审计。
 - 任务创建基于目标授权和排序，不要求关联指标，也不接受反馈来源；反馈不会被挂成任务来源。
 - 任务和子任务维护权限以 `Objective.challengerUserIds` 为身份边界；同一目标正式挑战者可以共同新增、编辑、勾选、移动和删除目标下任务与子任务，旁观成员返回 403，指挥官/管理员可维护任意目标任务。
-- `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断。
+- `Task.assignee` 不表达所有权，`Task.createdBy` / `updatedBy` 只作为审计字段返回给前端和测试，不能参与维护授权判断；`Task.definitionContributorUserIds` 只表达谁定义过行动项，读模型派生的 `definitionContributorProfiles` 用于行动项定义者头像组展示。
 - 任务 ID 必须使用带单调计数和 UUID 后缀的 `ORF-*` 形式；同一毫秒内的并发创建不能因为时间戳或伪随机数相同而撞主键。
 - 当前不开放退回重估；重估截止后停止调整，不续期。
 - 截止日期修改只写 `Objective.finalDueAt`；冻结后只能延后，不重开重估，也不修改 `confirmationDueAt`。
@@ -245,10 +245,10 @@ type ObjectiveFlowStatus =
 任务已经从指标下移到目标下，后端契约如下：
 
 - `Task.linkedObjectiveId` 是任务归属、权限、生命周期和排序边界。
-- `Task.assignee` 是执行人提示，不是所有者；`Task.createdBy` / `updatedBy` 是审计信息，不改变同目标挑战者共同维护权限。
+- `Task.assignee` 是执行人提示，不是所有者；`Task.createdBy` / `updatedBy` 是审计信息，不改变同目标挑战者共同维护权限；`Task.definitionContributorUserIds` 只用于展示谁定义过该行动项。
 - `Task.linkedResultId` 已从任务业务类型、DTO、写入路径和数据库表中移除。
 - `Result.taskIds` 已从指标业务类型和 DTO 中移除；指标删除不能删除目标下任务。
 - `POST /api/tasks` 应基于 `linkedObjectiveId` 创建任务；候选目标和没有指标的目标也可以创建任务。
 - `PATCH /api/tasks/:taskId/move` 只在同一目标下移动任务，不能通过移动任务改变指标归属。
 - 迁移 `0020_drop_task_result_ownership` 删除旧 `tasks.linked_result_id` 外键和列；迁移前必须已完成 `tasks.linked_objective_id` 回填。
-- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 必须非空，`tasks.linked_result_id` 不得存在。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。
+- 后端启动时必须检查当前运行时数据库契约：`tasks.linked_objective_id` 和 `tasks.definition_contributor_user_ids` 必须非空，`tasks.linked_result_id` 不得存在。如果检查失败，先对当前 `DATABASE_URL` 执行 `npm run db:migrate`，不能让用户在创建行动项时才遇到通用 500。

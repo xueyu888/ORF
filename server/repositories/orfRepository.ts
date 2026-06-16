@@ -187,6 +187,11 @@ function taskAuditUpdate(actorId?: string | null) {
   return actorId ? { updatedBy: actorId } : {};
 }
 
+function taskDefinitionContributorUserIds(current: string[] | null | undefined, actorId?: string | null) {
+  const actorUserId = actorId?.trim();
+  return actorUserId ? uniqueParticipantUserIds([...(current ?? []), actorUserId]) : current ?? [];
+}
+
 function storageScope(id: string | null | undefined): RuntimeScope | null {
   const storageId = id?.trim();
   return storageId ? runtimeScope(storageId) : null;
@@ -3239,6 +3244,7 @@ export async function createTask(input: CreateTaskInput): Promise<Task | null> {
       sortOrder,
       createdBy: input.actorId ?? null,
       updatedBy: input.actorId ?? null,
+      definitionContributorUserIds: taskDefinitionContributorUserIds([], input.actorId),
     });
 
     return { id, scope: runtimeScope(objective.teamId) };
@@ -3521,20 +3527,34 @@ export async function updateTaskTitle(taskId: string, title: string, actorId?: s
   }
 
   const updatedTask = await db.transaction(async (tx) => {
-    const updated = await tx
-      .update(tasks)
-      .set({ title: nextTitle, updatedAt: today(), ...taskAuditUpdate(actorId) })
+    const [task] = await tx
+      .select({
+        definitionContributorUserIds: tasks.definitionContributorUserIds,
+        teamId: tasks.teamId,
+      })
+      .from(tasks)
       .where(eq(tasks.id, taskId))
-      .returning({ id: tasks.id, teamId: tasks.teamId });
-    if (updated.length === 0) {
+      .limit(1)
+      .for("update");
+    if (!task) {
       return null;
     }
+
+    await tx
+      .update(tasks)
+      .set({
+        title: nextTitle,
+        updatedAt: today(),
+        ...taskAuditUpdate(actorId),
+        definitionContributorUserIds: taskDefinitionContributorUserIds(task.definitionContributorUserIds, actorId),
+      })
+      .where(eq(tasks.id, taskId));
 
     await tx
       .update(commentThreads)
       .set({ targetTitle: nextTitle, updatedAt: nowIso() })
       .where(and(eq(commentThreads.targetType, "task"), eq(commentThreads.targetId, taskId)));
-    return { teamId: updated[0]!.teamId };
+    return { teamId: task.teamId };
   });
 
   if (!updatedTask) {

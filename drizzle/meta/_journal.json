@@ -372,6 +372,13 @@
       "when": 1781429000000,
       "tag": "0052_work_log_categories_and_duration",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1781430000000,
+      "tag": "0053_task_definition_contributors",
+      "breakpoints": true
     }
   ]
 }

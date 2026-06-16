@@ -1,24 +1,25 @@
-import { avatarStyleForName } from "../../../utils/avatar";
-import { initials } from "../../../utils/format";
+import { UserAvatar } from "../../../components/UserAvatar";
+import type { ObjectiveParticipantProfile } from "../../../types/orf";
 import type { BountyItem } from "../model/bountyHallTypes";
 
 export function ParticipationPreview({ currentUserId, currentUserName, item }: { currentUserId: string; currentUserName: string; item: BountyItem }) {
   const applicationReasons = item.applications.filter((application) => application.status !== "declined" && application.reason?.trim());
-  const assignedChallengers = item.assignedChallengers.filter((name) => !item.challengers.includes(name));
-  const hasParticipationState = item.challengers.length > 0 || assignedChallengers.length > 0 || item.pendingApplications.length > 0;
+  const challengerPeople = participantPeople(item.objective.challengerProfiles, item.challengers);
+  const assignedPeople = participantPeople(item.objective.assignedChallengerProfiles, item.assignedChallengers).filter((person) => !item.challengers.includes(person.name));
+  const hasParticipationState = challengerPeople.length > 0 || assignedPeople.length > 0 || item.pendingApplications.length > 0;
 
   return (
     <div className="bounty-participants">
-      {item.challengers.length > 0 ? (
+      {challengerPeople.length > 0 ? (
         <div className="bounty-participant-line">
           <span>挑战者</span>
-          <BountyAvatarStack currentUserName={currentUserName} names={item.challengers} />
+          <BountyAvatarStack currentUserName={currentUserName} people={challengerPeople} />
         </div>
       ) : null}
-      {assignedChallengers.length > 0 ? (
+      {assignedPeople.length > 0 ? (
         <div className="bounty-participant-line">
           <span>待响应征召</span>
-          <BountyAvatarStack currentUserName={currentUserName} names={assignedChallengers} variant="recruitment" />
+          <BountyAvatarStack currentUserName={currentUserName} people={assignedPeople} variant="recruitment" />
         </div>
       ) : null}
       {item.pendingApplications.length > 0 ? (
@@ -57,33 +58,52 @@ export function ParticipationPreview({ currentUserId, currentUserName, item }: {
   );
 }
 
-function BountyAvatarStack({ currentUserName, names, variant }: { currentUserName: string; names: string[]; variant?: "recruitment" }) {
-  if (names.length === 0) return null;
-  const orderedNames = orderCurrentUserFirst(names, currentUserName);
+type BountyAvatarPerson = {
+  avatarUrl?: string | null;
+  name: string;
+  userId?: string | null;
+};
+
+function participantPeople(profiles: ObjectiveParticipantProfile[] | undefined, names: string[]): BountyAvatarPerson[] {
+  if (profiles && profiles.length > 0) {
+    return profiles.map((profile) => ({
+      avatarUrl: profile.avatarUrl ?? null,
+      name: profile.name,
+      userId: profile.userId ?? null,
+    }));
+  }
+
+  return names.map((name) => ({ name }));
+}
+
+function BountyAvatarStack({ currentUserName, people, variant }: { currentUserName: string; people: BountyAvatarPerson[]; variant?: "recruitment" }) {
+  if (people.length === 0) return null;
+  const orderedPeople = orderCurrentUserFirst(people, currentUserName);
 
   return (
     <div className="bounty-avatar-stack" data-variant={variant}>
-      {orderedNames.slice(0, 4).map((name, index) => (
-        <span
-          key={name}
-          aria-label={name === currentUserName ? `你，${name}` : name}
+      {orderedPeople.slice(0, 4).map((person, index) => (
+        <UserAvatar
+          key={person.userId ?? person.name}
+          aria-label={person.name === currentUserName ? `你，${person.name}` : person.name}
+          avatarUrl={person.avatarUrl ?? null}
           className="bounty-avatar"
-          data-current-user={name === currentUserName ? "true" : undefined}
+          data-current-user={person.name === currentUserName ? "true" : undefined}
           data-offset={index > 0 ? "true" : undefined}
-          style={avatarStyleForName(name)}
-          title={name === currentUserName ? `你 · ${name}` : name}
-        >
-          {initials(name)}
-        </span>
+          frame={false}
+          name={person.name}
+          size="sm"
+          title={person.name === currentUserName ? `你 · ${person.name}` : person.name}
+        />
       ))}
-      {orderedNames.length > 4 && <span className="bounty-avatar-more">+{orderedNames.length - 4}</span>}
+      {orderedPeople.length > 4 && <span className="bounty-avatar-more">+{orderedPeople.length - 4}</span>}
     </div>
   );
 }
 
-function orderCurrentUserFirst(names: string[], currentUserName: string) {
-  if (!currentUserName) return names;
-  const currentUserNames = names.filter((name) => name === currentUserName);
-  if (currentUserNames.length === 0) return names;
-  return [...currentUserNames, ...names.filter((name) => name !== currentUserName)];
+function orderCurrentUserFirst(people: BountyAvatarPerson[], currentUserName: string) {
+  if (!currentUserName) return people;
+  const currentUserPeople = people.filter((person) => person.name === currentUserName);
+  if (currentUserPeople.length === 0) return people;
+  return [...currentUserPeople, ...people.filter((person) => person.name !== currentUserName)];
 }

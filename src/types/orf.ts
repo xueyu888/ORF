@@ -103,6 +103,18 @@ export interface OrfProject {
   updatedAt: string;
 }
 
+export interface ObjectiveParticipantProfile {
+  userId?: string | null;
+  name: string;
+  avatarUrl?: string | null;
+}
+
+export interface TaskDefinitionContributorProfile {
+  userId?: string | null;
+  name: string;
+  avatarUrl?: string | null;
+}
+
 export interface Objective {
   id: string;
   title: string;
@@ -122,8 +134,10 @@ export interface Objective {
   finalDueAt: string;
   challengers: string[];
   challengerUserIds: string[];
+  challengerProfiles?: ObjectiveParticipantProfile[];
   assignedChallengers: string[];
   assignedChallengerUserIds: string[];
+  assignedChallengerProfiles?: ObjectiveParticipantProfile[];
   challengeApplications: ChallengeApplication[];
   acceptedAt?: string | null;
   confirmationDueAt?: string | null;
@@ -393,7 +407,11 @@ export interface Task {
   tags: string[];
   checklist: TaskChecklistItem[];
   createdBy?: string | null;
+  createdByName?: string | null;
+  createdByAvatarUrl?: string | null;
   updatedBy?: string | null;
+  definitionContributorUserIds?: string[];
+  definitionContributorProfiles?: TaskDefinitionContributorProfile[];
   createdAt: string;
   updatedAt: string;
 }

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { objectiveParticipantSnapshot } from "../../src/domain/orfObjectiveParticipants";
 import { objectiveBasePointsForResults, uncertaintyScoreFor } from "../../src/domain/orfSettlement";
-import type { Objective, PointLedgerEntry, Result, Task } from "../../src/types/orf";
+import type { Objective, ObjectiveParticipantProfile, PointLedgerEntry, Result, Task } from "../../src/types/orf";
 import { addCalendarDays } from "../../src/utils/date";
 import { db } from "../db/client";
 import { objectives, pointLedger, results, resultTrendPoints, teamMembers, users } from "../db/schema";
@@ -108,6 +108,7 @@ export function mapObjectiveRows(input: {
   objectiveRows: Array<typeof objectives.$inferSelect>;
   resultsByObjective: Map<string, Result[]>;
   taskIdsByObjective: Map<string, Task["id"][]>;
+  userAvatarUrlById?: Map<string, string | null>;
   userIdByName: Map<string, string>;
   userNameById: Map<string, string>;
 }) {
@@ -129,6 +130,14 @@ export function mapObjectiveRows(input: {
         applicantUserId,
       };
     });
+    const profileFor = (name: string, userId?: string | null): ObjectiveParticipantProfile => {
+      const resolvedUserId = userId ?? input.userIdByName.get(name) ?? null;
+      return {
+        name,
+        userId: resolvedUserId,
+        avatarUrl: resolvedUserId ? input.userAvatarUrlById?.get(resolvedUserId) ?? null : null,
+      };
+    };
 
     return {
       id: objective.id,
@@ -149,8 +158,10 @@ export function mapObjectiveRows(input: {
       finalDueAt: objective.finalDueAt || addDays(objective.updatedAt, 14),
       challengers: participants.challengers,
       challengerUserIds: participants.challengerUserIds,
+      challengerProfiles: participants.challengers.map((name, index) => profileFor(name, participants.challengerUserIds[index])),
       assignedChallengers: participants.assignedChallengers,
       assignedChallengerUserIds: participants.assignedChallengerUserIds,
+      assignedChallengerProfiles: participants.assignedChallengers.map((name, index) => profileFor(name, participants.assignedChallengerUserIds[index])),
       challengeApplications,
       acceptedAt: objective.acceptedAt,
       confirmationDueAt: objective.confirmationDueAt,

@@ -39,6 +39,7 @@ import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "../repos
 import { getScopedUsers } from "../repositories/userRepository";
 import { groupCommentAttachmentsByMessage } from "../repositories/commentAttachmentRepository";
 import { getUserAvatarUrlMap } from "../users/avatar/avatarRepository";
+import { uniqueParticipantUserIds } from "../../src/domain/orfObjectiveParticipants";
 import {
   getUserMapsForStorageScope,
   groupEvidenceIdsByResult,
@@ -59,6 +60,7 @@ export type TaskManagementDataScope = {
 type CommentThreadRow = typeof commentThreads.$inferSelect;
 type CommentMessageRow = typeof commentMessages.$inferSelect;
 type CommentAttachmentRow = typeof commentAttachments.$inferSelect;
+type TaskRow = typeof tasks.$inferSelect;
 
 function isMissingCommentStorageError(error: unknown) {
   const cause = error && typeof error === "object" && "cause" in error ? (error as { cause?: unknown }).cause : error;
@@ -120,6 +122,12 @@ async function getFeedbackCauseRows(feedbackIssueIds: string[]) {
   return db.select().from(feedbackCauseCategories).where(inArray(feedbackCauseCategories.feedbackId, feedbackIssueIds));
 }
 
+function taskDefinitionContributorUserIds(task: TaskRow) {
+  return task.definitionContributorUserIds.length > 0
+    ? uniqueParticipantUserIds(task.definitionContributorUserIds)
+    : uniqueParticipantUserIds([task.createdBy, task.updatedBy]);
+}
+
 export async function getTaskManagementData(scope: TaskManagementDataScope = {}): Promise<TaskManagementData> {
   const storageScopeId = scopedStorageId(scope);
   const objectiveRows = storageScopeId
@@ -145,8 +153,13 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
   const checklistRows = await getChecklistRows(taskIds);
   const causeRows = await getFeedbackCauseRows(feedbackIssueIds);
   const [commentThreadRows, commentMessageRows, commentAttachmentRows] = await getCommentRows({ scope: storageScope(storageScopeId) });
-  const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
   const { userIdByName, userNameById } = await getUserMapsForStorageScope(storageScopeId);
+  const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
+  const objectiveParticipantAvatarUrls = await getUserAvatarUrlMap(objectiveRows.flatMap((objective) => [...objective.challengerUserIds, ...objective.assignedChallengerUserIds]));
+  const commentAuthorAvatarUrls = await getUserAvatarUrlMap(commentMessageRows.map((message) => message.authorUserId).filter((userId): userId is string => Boolean(userId)));
+  const taskDefinitionContributorAvatarUrls = await getUserAvatarUrlMap(
+    orderedTaskRows.flatMap((task) => uniqueParticipantUserIds([...taskDefinitionContributorUserIds(task), task.createdBy])),
+  );
 
   const checklistByTask = new Map<string, Task["checklist"]>();
   for (const item of checklistRows.sort((left, right) => left.sortOrder - right.sortOrder)) {
@@ -164,7 +177,6 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     causeCategoriesByFeedback.set(item.feedbackId, list);
   }
 
-  const orderedTaskRows = [...taskRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const orderedResultRows = [...resultRows].sort((left, right) => left.sortOrder - right.sortOrder);
   const projectItems: OrfProject[] = projectRows.map((project) => ({
     id: project.id,
@@ -201,23 +213,34 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     }
   }
 
-  const taskItems: Task[] = orderedTaskRows.map((task) => ({
-    id: task.id,
-    title: task.title,
-    description: task.description,
-    status: task.status,
-    priority: task.priority,
-    assignee: nameForUserId(userNameById, task.assigneeUserId, task.assignee),
-    assigneeUserId: optional(task.assigneeUserId),
-    linkedObjectiveId: task.linkedObjectiveId,
-    dueDate: task.dueDate,
-    tags: task.tags,
-    checklist: checklistByTask.get(task.id) ?? [],
-    createdBy: task.createdBy,
-    updatedBy: task.updatedBy,
-    createdAt: task.createdAt,
-    updatedAt: task.updatedAt,
-  }));
+  const taskItems: Task[] = orderedTaskRows.map((task) => {
+    const definitionContributorUserIds = taskDefinitionContributorUserIds(task);
+    return {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      assignee: nameForUserId(userNameById, task.assigneeUserId, task.assignee),
+      assigneeUserId: optional(task.assigneeUserId),
+      linkedObjectiveId: task.linkedObjectiveId,
+      dueDate: task.dueDate,
+      tags: task.tags,
+      checklist: checklistByTask.get(task.id) ?? [],
+      createdBy: task.createdBy,
+      createdByName: task.createdBy ? nameForUserId(userNameById, task.createdBy) || null : null,
+      createdByAvatarUrl: task.createdBy ? taskDefinitionContributorAvatarUrls.get(task.createdBy) ?? null : null,
+      updatedBy: task.updatedBy,
+      definitionContributorUserIds,
+      definitionContributorProfiles: definitionContributorUserIds.map((userId) => ({
+        userId,
+        name: nameForUserId(userNameById, userId, "未知成员"),
+        avatarUrl: taskDefinitionContributorAvatarUrls.get(userId) ?? null,
+      })),
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt,
+    };
+  });
 
   const evidenceItems: Evidence[] = evidenceRows.map((item) => ({
     id: item.id,
@@ -258,6 +281,7 @@ export async function getTaskManagementData(scope: TaskManagementDataScope = {})
     objectiveRows,
     resultsByObjective: groupResultsByObjective(resultItems),
     taskIdsByObjective: groupTaskIdsByObjective(taskItems),
+    userAvatarUrlById: objectiveParticipantAvatarUrls,
     userIdByName,
     userNameById,
   });
