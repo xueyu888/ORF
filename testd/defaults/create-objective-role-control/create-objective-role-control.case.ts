@@ -122,8 +122,8 @@ export const createObjectiveRoleControlCase = {
     description: "管理员创建成功，空标题和取消不落库，普通成员入口不可见",
     assertions: [
       step("S1-1", "prisma", "db.success_objective.exists", "标题为 `ORF默认页新建目标E2E-成功创建` 的测试目标 应存在", "db.objective", "exists", { titleFrom: "data.successTitle" }),
-      step("S1-2", "playwright", "challenge.objective_list.success_visible", "挑战工作台列表 应显示 `ORF默认页新建目标E2E-成功创建` 测试目标", "challenge.objective_list_snapshot", "visible", { snapshotFrom: "runtime.successObjectiveListSnapshot" }),
-      step("S1-3", "playwright", "toast.empty_title.visible", "提交空的新建目标标题输入框后，系统 应提示 `标题不能为空`", "toast_snapshot", "visible", { snapshotFrom: "runtime.emptyTitleToastSnapshot", text: "标题不能为空" }),
+      step("S1-2", "playwright", "challenge.objective_list.success_visible", "管理员提交新建目标标题输入框后，挑战工作台列表 应显示 `ORF默认页新建目标E2E-成功创建` 测试目标", "challenge.objective_list_snapshot", "visible", { snapshotFrom: "runtime.successObjectiveListSnapshot" }),
+      step("S1-3", "playwright", "toast.empty_title.visible", "管理员提交空的新建目标标题输入框时，系统 应提示 `标题不能为空`", "toast_snapshot", "visible", { snapshotFrom: "runtime.emptyTitleToastSnapshot", text: "标题不能为空" }),
       step("S1-4", "prisma", "db.empty_objective.absent", "标题为 `ORF默认页新建目标E2E-空名称` 的测试目标 应不存在", "db.objective", "absent", { titleFrom: "data.emptyTitle" }),
       step("S1-5", "prisma", "db.cancelled_objective.absent", "标题为 `ORF默认页新建目标E2E-取消创建` 的测试目标 应不存在", "db.objective", "absent", { titleFrom: "data.cancelledTitle" }),
       step("S1-6", "api", "session.member_authenticated.final", "当前会话 应为 邮箱为 `orf-default-page-create-objective-member-e2e@orf.local`、角色为 `member`、状态为 `active` 的已登录会话", "auth.session", "authenticated", { emailFrom: "data.member.email", roleFrom: "data.member.role", status: "active" }),
