@@ -134,6 +134,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.create-feedback-entry.open-form",
+    title: "06-首页新建反馈入口打开表单",
+    doc: "testd-doc/cases/defaults/06-首页新建反馈入口打开表单.md",
+    changePolicy: "open",
+    spec: "testd/defaults/create-feedback-entry/_entry/create-feedback-entry.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
