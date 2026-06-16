@@ -154,6 +154,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.user-menu.actions",
+    title: "08-首页用户菜单入口操作正常",
+    doc: "testd-doc/cases/defaults/08-首页用户菜单入口操作正常.md",
+    changePolicy: "open",
+    spec: "testd/defaults/user-menu-actions/_entry/user-menu-actions.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
