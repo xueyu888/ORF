@@ -184,6 +184,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.feedback-image.upload-validation",
+    title: "11-新建反馈图片上传校验",
+    doc: "testd-doc/cases/defaults/11-新建反馈图片上传校验.md",
+    changePolicy: "open",
+    spec: "testd/defaults/feedback-image-upload/_entry/feedback-image-upload.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
