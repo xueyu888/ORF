@@ -124,6 +124,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.global-search.result-state",
+    title: "05-首页全局搜索结果跳转和无结果提示",
+    doc: "testd-doc/cases/defaults/05-首页全局搜索结果跳转和无结果提示.md",
+    changePolicy: "open",
+    spec: "testd/defaults/global-search-result-state/_entry/global-search-result-state.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
