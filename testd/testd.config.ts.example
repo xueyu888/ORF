@@ -114,6 +114,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.global-search.typed-results",
+    title: "04-首页全局搜索展示分类结果",
+    doc: "testd-doc/cases/defaults/04-首页全局搜索展示分类结果.md",
+    changePolicy: "open",
+    spec: "testd/defaults/global-search/_entry/global-search.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
