@@ -47,6 +47,7 @@ export function validateObjectiveOwnedTaskSchema(snapshot: RuntimeSchemaSnapshot
   const linkedObjectiveId = columnByName.get("linked_objective_id");
   const linkedResultId = columnByName.get("linked_result_id");
   const feedbackOriginId = columnByName.get("feedback_origin_id");
+  const definitionContributorUserIds = columnByName.get("definition_contributor_user_ids");
 
   if (!linkedObjectiveId) {
     errors.push("tasks.linked_objective_id is missing.");
@@ -60,6 +61,12 @@ export function validateObjectiveOwnedTaskSchema(snapshot: RuntimeSchemaSnapshot
 
   if (feedbackOriginId) {
     errors.push("tasks.feedback_origin_id must be dropped; feedback no longer creates task origins.");
+  }
+
+  if (!definitionContributorUserIds) {
+    errors.push("tasks.definition_contributor_user_ids is missing.");
+  } else if (definitionContributorUserIds.isNullable !== "NO") {
+    errors.push("tasks.definition_contributor_user_ids must be NOT NULL.");
   }
 
   const linkedResultForeignKey = snapshot.constraints.find((constraint) =>
@@ -151,7 +158,7 @@ export async function assertRuntimeDatabaseSchema() {
         from information_schema.columns
         where table_schema = current_schema()
           and table_name = 'tasks'
-          and column_name in ('linked_objective_id', 'linked_result_id', 'feedback_origin_id')
+          and column_name in ('linked_objective_id', 'linked_result_id', 'feedback_origin_id', 'definition_contributor_user_ids')
       `,
     ),
     pool.query<RuntimeSchemaConstraint>(
