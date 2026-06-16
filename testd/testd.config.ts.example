@@ -214,6 +214,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.personal-settings.avatar-management",
+    title: "14-个人设置头像管理校验",
+    doc: "testd-doc/cases/defaults/14-个人设置头像管理校验.md",
+    changePolicy: "open",
+    spec: "testd/defaults/personal-settings-avatar/_entry/personal-settings-avatar.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
