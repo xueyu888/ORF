@@ -204,6 +204,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.personal-settings.overview",
+    title: "13-个人设置页面展示与用户信息",
+    doc: "testd-doc/cases/defaults/13-个人设置页面展示与用户信息.md",
+    changePolicy: "open",
+    spec: "testd/defaults/personal-settings-overview/_entry/personal-settings-overview.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
