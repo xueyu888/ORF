@@ -194,6 +194,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.feedback-create.submit-validation",
+    title: "12-新建反馈创建成功与必填校验",
+    doc: "testd-doc/cases/defaults/12-新建反馈创建成功与必填校验.md",
+    changePolicy: "open",
+    spec: "testd/defaults/feedback-create-submit/_entry/feedback-create-submit.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
