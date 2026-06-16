@@ -164,6 +164,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.feedback-page.return",
+    title: "09-新建反馈页面展示与返回",
+    doc: "testd-doc/cases/defaults/09-新建反馈页面展示与返回.md",
+    changePolicy: "open",
+    spec: "testd/defaults/feedback-page-return/_entry/feedback-page-return.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
