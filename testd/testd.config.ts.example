@@ -234,6 +234,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.personal-settings.chat-theme",
+    title: "16-个人设置聊天界面主题切换",
+    doc: "testd-doc/cases/defaults/16-个人设置聊天界面主题切换.md",
+    changePolicy: "open",
+    spec: "testd/defaults/personal-settings-chat-theme/_entry/personal-settings-chat-theme.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
