@@ -254,6 +254,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "defaults.personal-settings.system-skin",
+    title: "18-个人设置系统皮肤应用与删除限制",
+    doc: "testd-doc/cases/defaults/18-个人设置系统皮肤应用与删除限制.md",
+    changePolicy: "open",
+    spec: "testd/defaults/personal-settings-system-skin/_entry/personal-settings-system-skin.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
