@@ -13078,6 +13078,10 @@ body[data-dragging-floating="true"] {
   color: #0b8f7f;
 }
 
+.orf-rich-text-tool-button-active {
+  box-shadow: inset 0 0 0 1px rgba(47, 156, 137, 0.26);
+}
+
 .orf-rich-text-tool-button:active:not(:disabled) {
   transform: translateY(1px);
 }
