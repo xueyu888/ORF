@@ -30,13 +30,13 @@ export function FeedbackCreatePage() {
   const { createFeedback, currentUser, notify, state } = useOrf();
   const canCreateFeedback = canCreateFeedbackFromVisibleState(state, currentUser);
   const defaultOwner = currentUser?.name ?? state.users.find((user) => user.id === state.currentUserId)?.name ?? state.users[0]?.name ?? "User";
-  const causeOptions = teamFeedbackCauseOptions(state.causeCategories);
+  const causeOptions = teamFeedbackCauseOptions();
   const activeOwnerOptions = state.users.filter((user) => user.status === "active").map((user) => user.name);
   const ownerOptions = activeOwnerOptions.length > 0 ? activeOwnerOptions : [defaultOwner];
   const initialOwner = ownerOptions.includes(defaultOwner) ? defaultOwner : ownerOptions[0] ?? defaultOwner;
   const [title, setTitle] = useState("");
   const [draft, setDraft] = useState<CommentDraft>(() => emptyCommentDraft());
-  const [cause, setCause] = useState(causeOptions[0] ?? "技术问题");
+  const [cause, setCause] = useState<string>(causeOptions[0] ?? "技术问题");
   const [impact, setImpact] = useState<Impact>("Medium");
   const [owner, setOwner] = useState(initialOwner);
   const [pendingAttachments, setPendingAttachments] = useState<PendingFeedbackAttachment[]>([]);
