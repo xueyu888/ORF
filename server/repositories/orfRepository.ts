@@ -104,7 +104,9 @@ import { publishObjectiveInvalidation, publishOrfDataInvalidation } from "../rea
 import { objectStorage } from "../storage/objectStorage";
 import { getOrfStateSnapshot } from "../readModels/orfTaskManagementReadModel";
 import {
+  canPreviewCommentAttachment,
   commentAttachmentDto,
+  commentAttachmentPreviewKind,
   deleteStoredCommentAttachmentObjects,
   groupCommentAttachmentsByMessage,
   prepareCommentAttachment,
@@ -2129,11 +2131,10 @@ export type CommentAttachmentUploadOutcome =
   | { status: "notFound" }
   | { status: "forbidden" }
   | { status: "invalid" }
-  | { status: "tooLarge" }
-  | { status: "unsupported" };
+  | { status: "tooLarge" };
 
 export type CommentAttachmentContentOutcome =
-  | { status: "ok"; body: Readable; contentLength?: number; contentType: string }
+  | { status: "ok"; body: Readable; contentDisposition: "attachment" | "inline"; contentLength?: number; contentType: string; fileName: string }
   | { status: "notFound" }
   | { status: "forbidden" };
 
@@ -2185,6 +2186,7 @@ export async function uploadCommentAttachment(
 export async function getCommentAttachmentContent(
   attachmentId: string,
   actor: CommentActor,
+  options: { disposition?: "attachment" | "inline" } = {},
 ): Promise<CommentAttachmentContentOutcome> {
   const [attachment] = await db.select().from(commentAttachments).where(eq(commentAttachments.id, attachmentId)).limit(1);
   if (!attachment) {
@@ -2204,12 +2206,23 @@ export async function getCommentAttachmentContent(
   if (!stored) {
     return { status: "notFound" };
   }
+  const canPreview = canPreviewCommentAttachment(attachment);
+  const previewKind = commentAttachmentPreviewKind(attachment);
+  const contentDisposition = options.disposition === "attachment" ? "attachment" : canPreview ? "inline" : "attachment";
 
   return {
     status: "ok",
     body: stored.body,
+    contentDisposition,
     contentLength: stored.contentLength,
-    contentType: stored.contentType ?? attachment.mimeType,
+    contentType: contentDisposition === "inline"
+      ? previewKind === "markdown"
+        ? "text/plain; charset=utf-8"
+        : attachment.mimeType
+      : canPreview
+        ? (stored.contentType ?? attachment.mimeType)
+        : "application/octet-stream",
+    fileName: attachment.fileName,
   };
 }
 

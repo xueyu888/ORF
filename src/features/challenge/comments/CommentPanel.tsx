@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, Pencil, Reply, Send, Trash2, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, Download, ExternalLink, File as FileIcon, FileText, Pencil, Reply, Send, Trash2, X } from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { clsx } from "clsx";
@@ -7,13 +7,14 @@ import { ImagePreviewDialog, type ImagePreview } from "../../../components/Image
 import { UserAvatar } from "../../../components/UserAvatar";
 import { useDraggableFloating } from "../../../hooks/useDraggableFloating";
 import type { CommentAttachment, CommentMessage, CommentTargetType, CommentThread, OrfUser } from "../../../types/orf";
-import { OrfRichTextEditor, orfRichTextHasMeaningfulContent, type OrfRichTextImageUploadResult } from "../../rich-text/OrfRichTextEditor";
+import { OrfRichTextEditor, orfRichTextHasMeaningfulContent, type OrfRichTextAttachmentUploadResult } from "../../rich-text/OrfRichTextEditor";
 import {
   orfAttachmentMarkdown,
   type OrfAttachmentReference,
   type OrfMentionReference,
 } from "../../rich-text/orfRichTextMarkdown";
 import { OrfRichTextMarkdownViewer } from "../../rich-text/OrfRichTextMarkdownViewer";
+import { formatFileSize } from "../../../utils/fileSize";
 import { commentTimeDisplay } from "./commentTime";
 
 function isInternalCommentHref(href: string) {
@@ -67,7 +68,7 @@ export function CommentPanel({
   onDeleteComment: (threadId: string, messageId: string) => void;
   onLoadMentionableUsers: (input: { targetId: string; targetType: CommentTargetType }) => Promise<CommentMentionUser[]>;
   onUpdateComment: (threadId: string, messageId: string, body: string) => void;
-  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
   targetId: string;
   targetTitle: string;
   targetType: CommentTargetType;
@@ -377,7 +378,7 @@ function CommentMessageRow({
   onReply: (message: CommentMessage) => void;
   onSelect: (messageId: string) => void;
   onSubmitEdit: (event: FormEvent) => void;
-  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
   selected: boolean;
   showReplyEntry?: boolean;
 }) {
@@ -467,7 +468,11 @@ export function CommentBodyText({
   const renderAttachment = (reference: OrfAttachmentReference, key: string) => {
     const attachment = reference.kind === "attached" ? attachmentsById.get(reference.attachmentId) : undefined;
     const alt = reference.alt;
-    return attachment ? (
+    if (!attachment) {
+      return <span key={key}>{orfAttachmentMarkdown(reference)}</span>;
+    }
+
+    return attachment.previewKind === "image" ? (
       <figure key={key} className="orf-comment-attachment">
         <button
           type="button"
@@ -476,7 +481,7 @@ export function CommentBodyText({
           title="查看图片"
           onClick={(event) => {
             event.stopPropagation();
-            onOpenImage({ alt, label: attachment.fileName || alt, src: attachment.contentUrl });
+            onOpenImage({ alt, downloadUrl: attachment.downloadUrl, label: attachment.fileName || alt, src: attachment.contentUrl });
           }}
           onDoubleClick={(event) => event.stopPropagation()}
         >
@@ -484,7 +489,7 @@ export function CommentBodyText({
         </button>
       </figure>
     ) : (
-      <span key={key}>{orfAttachmentMarkdown(reference)}</span>
+      <CommentFileAttachmentCard key={key} attachment={attachment} />
     );
   };
 
@@ -525,6 +530,53 @@ export function CommentBodyText({
   );
 }
 
+function CommentFileAttachmentCard({ attachment }: { attachment: CommentAttachment }) {
+  const canPreview = Boolean(attachment.previewUrl && (attachment.previewKind === "markdown" || attachment.previewKind === "pdf"));
+  const fileKindLabel = attachment.previewKind === "markdown"
+    ? "Markdown"
+    : attachment.previewKind === "pdf"
+      ? "PDF"
+      : attachment.mimeType || "文件";
+  const Icon = attachment.previewKind === "markdown" || attachment.previewKind === "pdf" ? FileText : FileIcon;
+
+  return (
+    <figure className="orf-comment-attachment orf-comment-file-attachment">
+      <Icon className="orf-comment-file-attachment-icon" aria-hidden="true" />
+      <figcaption className="orf-comment-file-attachment-main">
+        <span className="orf-comment-file-attachment-name" title={attachment.fileName}>{attachment.fileName}</span>
+        <span className="orf-comment-file-attachment-meta">{fileKindLabel} · {formatFileSize(attachment.fileSize)}</span>
+      </figcaption>
+      <span className="orf-comment-file-attachment-actions">
+        {canPreview && (
+          <a
+            href={attachment.previewUrl ?? attachment.contentUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="预览附件"
+            aria-label={`预览附件 ${attachment.fileName}`}
+            onClick={(event) => event.stopPropagation()}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            <span>预览</span>
+          </a>
+        )}
+        <a
+          href={attachment.downloadUrl}
+          download={attachment.fileName}
+          title="下载附件"
+          aria-label={`下载附件 ${attachment.fileName}`}
+          onClick={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span>下载</span>
+        </a>
+      </span>
+    </figure>
+  );
+}
+
 export function emptyCommentDraft(): CommentDraft {
   return { body: "" };
 }
@@ -560,7 +612,7 @@ export function CommentDraftFields({
   mentionableUsers: CommentMentionUser[];
   onCancel?: () => void;
   onDraftChange: (draft: CommentDraft) => void;
-  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
   placeholder: string;
   showSubmitButton?: boolean;
   submitOnEnter?: boolean;
@@ -589,7 +641,7 @@ export function CommentDraftFields({
         }}
         onErrorChange={setUploadError}
         onSubmitRequest={submitDraftFromEditor}
-        onUploadImage={onUploadAttachment}
+        onUploadAttachment={onUploadAttachment}
         placeholder={placeholder}
         submitOnEnter={submitOnEnter}
         value={markdownValue}
@@ -633,7 +685,7 @@ export function CommentInlineEditor({
   onCancel: () => void;
   onDraftChange: (draft: CommentDraft) => void;
   onSubmit: (event: FormEvent) => void;
-  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
 }) {
   return (
     <form className="orf-comment-inline-editor" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onSubmit={onSubmit}>
@@ -676,7 +728,7 @@ export function CommentComposer({
   onCancelMode: () => void;
   onDraftChange: (draft: CommentDraft) => void;
   onSubmit: (event: FormEvent) => void;
-  onUploadAttachment: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
+  onUploadAttachment: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
 }) {
   const placeholder = mode.type === "reply" ? `回复 ${mode.targetAuthor}...` : defaultReplyAuthor ? "添加回复..." : "添加评论...";
   const submitLabel = mode.type === "reply" || defaultReplyAuthor ? "发送回复" : "发送评论";

@@ -39,7 +39,7 @@
 | `PATCH`  | `/api/results/:resultId/uncertainty`                                         | 更新指标难度和积分映射 |
 | `PATCH`  | `/api/results/:resultId/confidence`                                          | 更新指标信心 |
 | `PATCH`  | `/api/results/:resultId/order`                                               | 更新指标在同目标内的排序 |
-| `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`，并同步创建首条评论正文和可选图片附件；新反馈不接收目标或指标绑定                  |
+| `POST`   | `/api/feedback`                                                              | 创建团队级内部反馈 issue，记录 `createdBy` 和文本处理人 `owner`，并同步创建首条评论正文和可选附件；新反馈不接收目标或指标绑定                      |
 | `PATCH`  | `/api/feedback/:feedbackId/status`                                           | 更新反馈状态；仅管理员、反馈创建人或指定处理人可执行                                                                                               |
 | `POST`   | `/api/tasks`                                                                 | 在目标下创建任务并返回 `{ task }`；候选、重估和冻结目标可维护任务                                                                                  |
 | `PATCH`  | `/api/tasks/:taskId`                                                         | 更新任务标题                                                                                                                                       |

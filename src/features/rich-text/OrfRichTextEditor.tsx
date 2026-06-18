@@ -1,5 +1,5 @@
 import { clsx } from "clsx";
-import { Bold, Check, Code, Heading3, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Quote, Strikethrough, Unlink, X } from "lucide-react";
+import { Bold, Check, Code, Heading3, ImagePlus, Italic, Link as LinkIcon, List, ListOrdered, Paperclip, Quote, Strikethrough, Unlink, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -57,6 +57,7 @@ export type OrfRichTextImageUploadResult = {
   markdown: string;
   previewUrl?: string | null;
 };
+export type OrfRichTextAttachmentUploadResult = OrfRichTextImageUploadResult;
 
 export type OrfRichTextEditorActions = {
   focus: () => void;
@@ -91,6 +92,7 @@ export type OrfRichTextEditorProps = {
   onKeyDown?: (event: KeyboardEvent, actions: OrfRichTextEditorActions) => boolean | void;
   onMentionInsert?: (insert: OrfRichTextMentionInsert) => void;
   onSubmitRequest?: () => void;
+  onUploadAttachment?: (file: File) => Promise<OrfRichTextAttachmentUploadResult | null>;
   onUploadImage?: (file: File) => Promise<OrfRichTextImageUploadResult | null>;
   placeholder: string;
   submitOnEnter?: boolean;
@@ -211,6 +213,7 @@ export function OrfRichTextEditor({
   onKeyDown,
   onMentionInsert,
   onSubmitRequest,
+  onUploadAttachment,
   onUploadImage,
   placeholder,
   submitOnEnter = true,
@@ -234,15 +237,16 @@ export function OrfRichTextEditor({
   const onKeyDownRef = useRef(onKeyDown);
   const onMentionInsertRef = useRef(onMentionInsert);
   const onSubmitRequestRef = useRef(onSubmitRequest);
+  const onUploadAttachmentRef = useRef(onUploadAttachment);
   const onUploadImageRef = useRef(onUploadImage);
   const submitOnEnterRef = useRef(submitOnEnter);
   const transformPastedTextRef = useRef(transformPastedText);
-  const uploadImageRef = useRef<(file: File) => void>(() => undefined);
+  const uploadAttachmentRef = useRef<(file: File) => void>(() => undefined);
   const [markdown, setMarkdown] = useState(value);
   const [mentionRange, setMentionRange] = useState<MentionRange | null>(null);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [linkDraft, setLinkDraft] = useState<{ error: string; open: boolean; url: string }>({ error: "", open: false, url: "" });
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const filteredMentionUsers = useMemo(() => {
     return listVisibleMentionUsers({
@@ -391,6 +395,10 @@ export function OrfRichTextEditor({
   }, [onSubmitRequest]);
 
   useEffect(() => {
+    onUploadAttachmentRef.current = onUploadAttachment;
+  }, [onUploadAttachment]);
+
+  useEffect(() => {
     onUploadImageRef.current = onUploadImage;
   }, [onUploadImage]);
 
@@ -425,37 +433,45 @@ export function OrfRichTextEditor({
     if (autoFocus && !disabled) focusSelection(markdownRef.current.length);
   }, [autoFocus, disabled, focusSelection]);
 
-  const uploadImage = useCallback(async (file: File) => {
+  const uploadAttachment = useCallback(async (file: File) => {
     if (disabledRef.current) return;
+    const uploadAttachmentHandler = onUploadAttachmentRef.current;
     const uploadImageHandler = onUploadImageRef.current;
-    if (!uploadImageHandler) return;
-    if (!isImageFile(file)) {
+    const uploadHandler = uploadAttachmentHandler ?? uploadImageHandler;
+    if (!uploadHandler) return;
+    if (!uploadAttachmentHandler && !isImageFile(file)) {
       onErrorChangeRef.current?.("只能上传 PNG、JPEG、GIF 或 WebP 图片");
       return;
     }
 
-    setUploadingImage(true);
+    setUploadingAttachment(true);
     onBusyChangeRef.current?.(true);
     onErrorChangeRef.current?.("");
     try {
-      const upload = await uploadImageHandler(file);
+      const upload = await uploadHandler(file);
       const attachment = upload ? parseOrfAttachmentMarkdownToken(upload.markdown) : null;
       if (!upload || !attachment) {
-        onErrorChangeRef.current?.("图片上传失败");
+        onErrorChangeRef.current?.(uploadAttachmentHandler ? "附件上传失败" : "图片上传失败");
         return;
       }
       insertBlockMarkdown(upload.markdown);
     } finally {
-      setUploadingImage(false);
+      setUploadingAttachment(false);
       onBusyChangeRef.current?.(false);
     }
   }, [insertBlockMarkdown]);
 
   useEffect(() => {
-    uploadImageRef.current = (file: File) => {
-      void uploadImage(file);
+    uploadAttachmentRef.current = (file: File) => {
+      void uploadAttachment(file);
     };
-  }, [uploadImage]);
+  }, [uploadAttachment]);
+
+  const uploadAttachments = useCallback(async (files: File[]) => {
+    for (const file of files.filter((item) => item.size > 0)) {
+      await uploadAttachment(file);
+    }
+  }, [uploadAttachment]);
 
   const wrapInlineMarkdown = useCallback((prefix: string, suffix = prefix) => {
     const range = textRangeForTextarea(textareaRef.current);
@@ -585,10 +601,15 @@ export function OrfRichTextEditor({
       event.preventDefault();
       return;
     }
+    if (files.length > 0 && onUploadAttachmentRef.current) {
+      event.preventDefault();
+      void uploadAttachments(files);
+      return;
+    }
     const image = files.find(isImageFile);
     if (!image || !onUploadImageRef.current) return;
     event.preventDefault();
-    uploadImageRef.current(image);
+    uploadAttachmentRef.current(image);
   };
 
   const handlePaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -598,10 +619,15 @@ export function OrfRichTextEditor({
       event.preventDefault();
       return;
     }
+    if (files.length > 0 && onUploadAttachmentRef.current) {
+      event.preventDefault();
+      void uploadAttachments(files);
+      return;
+    }
     const image = files.find(isImageFile);
     if (image && onUploadImageRef.current) {
       event.preventDefault();
-      uploadImageRef.current(image);
+      uploadAttachmentRef.current(image);
       return;
     }
     const transform = transformPastedTextRef.current;
@@ -706,20 +732,21 @@ export function OrfRichTextEditor({
         <ToolbarButton disabled={disabled} label="链接" onClick={openLinkEditor}>
           <LinkIcon className="h-4 w-4" />
         </ToolbarButton>
-        {onUploadImage && (
+        {(onUploadAttachment || onUploadImage) && (
           <>
-            <ToolbarButton disabled={disabled || uploadingImage} label="添加图片" onClick={() => fileInputRef.current?.click()}>
-              <ImagePlus className="h-4 w-4" />
+            <ToolbarButton disabled={disabled || uploadingAttachment} label={onUploadAttachment ? "添加附件" : "添加图片"} onClick={() => fileInputRef.current?.click()}>
+              {onUploadAttachment ? <Paperclip className="h-4 w-4" /> : <ImagePlus className="h-4 w-4" />}
             </ToolbarButton>
             <input
               ref={fileInputRef}
-              accept="image/gif,image/jpeg,image/png,image/webp"
+              accept={onUploadAttachment ? undefined : "image/gif,image/jpeg,image/png,image/webp"}
               className="hidden"
+              multiple={Boolean(onUploadAttachment)}
               type="file"
               onChange={(event) => {
-                const file = event.target.files?.[0];
+                const files = Array.from(event.target.files ?? []);
                 event.target.value = "";
-                if (file) void uploadImage(file);
+                if (files.length > 0) void uploadAttachments(files);
               }}
             />
           </>
@@ -803,7 +830,7 @@ export function OrfRichTextEditor({
         )}
       </div>
       <div className="orf-rich-text-footer">
-        <span className="orf-comment-hint">{uploadingImage ? "图片上传中..." : idleHint}</span>
+        <span className="orf-comment-hint">{uploadingAttachment ? "附件上传中..." : idleHint}</span>
         {footer}
       </div>
     </div>

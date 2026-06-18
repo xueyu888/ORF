@@ -49,7 +49,7 @@ export function orfRichTextMentionLabel(label: string) {
 }
 
 export function orfRichTextImageAlt(alt: string) {
-  return alt.replace(/[\]\r\n]/g, " ").trim() || "图片";
+  return alt.replace(/[\]\r\n]/g, " ").trim() || "附件";
 }
 
 export function orfMentionMarkdown(reference: OrfMentionReference) {
@@ -153,7 +153,7 @@ function stripUnescapedInlineMarkdownSyntax(markdown: string) {
 }
 
 export function orfRichTextMarkdownToPlainText(markdown: string, options: OrfRichTextPlainTextOptions = {}) {
-  const attachmentText = options.attachmentText ?? "[图片]";
+  const attachmentText = options.attachmentText ?? "[附件]";
   const attachmentTokenText = (reference: OrfAttachmentReference) => {
     return typeof attachmentText === "function" ? attachmentText(reference) : attachmentText;
   };
@@ -179,7 +179,7 @@ export function orfRichTextMarkdownToPlainText(markdown: string, options: OrfRic
 }
 
 export function orfRichTextHasMeaningfulContent(markdown: string) {
-  return Boolean(orfAttachmentMarkdownTokensToPlainText(markdown, () => " image ").trim());
+  return Boolean(orfAttachmentMarkdownTokensToPlainText(markdown, () => " attachment ").trim());
 }
 
 export function extractOrfMentionReferences(markdown: string): OrfMentionReference[] {
