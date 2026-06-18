@@ -314,6 +314,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "system.access-control.role",
+    title: "01-系统管理页面访问权限控制",
+    doc: "testd-doc/cases/system/01-系统管理页面访问权限控制.md",
+    changePolicy: "open",
+    spec: "testd/system/access-control/_entry/access-control.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
