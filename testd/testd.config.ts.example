@@ -855,7 +855,7 @@ export const testdCases = [
   },
   {
     id: "comments.image-upload.invalid-file",
-    title: "评论上传图片-非图片文件不可上传",
+    title: "评论上传非图片附件",
     doc: "testd-doc/cases/comments/评论上传图片-非图片文件不可上传.md",
     changePolicy: "open",
     spec: "testd/comments/image-upload-invalid/_entry/comment-image-upload-invalid.spec.ts",

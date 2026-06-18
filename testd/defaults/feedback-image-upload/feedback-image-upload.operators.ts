@@ -21,7 +21,7 @@ export const feedbackImageUploadOperators = {
       const filePath = await writeFixtureFile(fileName, Buffer.from(ONE_PIXEL_PNG_BASE64, "base64"));
       runtime.values[requiredString(params, "saveAs")] = { path: filePath, fileName };
     },
-    prepare_unsupported: async ({ params, runtime }) => {
+    prepare_text_attachment: async ({ params, runtime }) => {
       const fileName = requiredString(params, "fileName");
       const filePath = await writeFixtureFile(fileName, "this is not an image file\n");
       runtime.values[requiredString(params, "saveAs")] = { path: filePath, fileName };
@@ -57,6 +57,10 @@ export const feedbackImageUploadOperators = {
       await expect(descriptionInput(ctx.page)).toHaveValue("");
     },
     contains_image_reference: async ({ ctx, params }) => {
+      const fileName = requiredString(params, "fileName");
+      await expect(descriptionInput(ctx.page)).toHaveValue(new RegExp(`!\\[${escapeRegExp(fileName)}\\]\\(orf-pending-attachment:`));
+    },
+    contains_attachment_reference: async ({ ctx, params }) => {
       const fileName = requiredString(params, "fileName");
       await expect(descriptionInput(ctx.page)).toHaveValue(new RegExp(`!\\[${escapeRegExp(fileName)}\\]\\(orf-pending-attachment:`));
     },
@@ -115,7 +119,7 @@ function descriptionInput(page: Page) {
 }
 
 function addImageButton(page: Page) {
-  return createFeedbackForm(page).getByRole("button", { name: "添加图片" });
+  return createFeedbackForm(page).getByRole("button", { name: "添加附件" });
 }
 
 function addImageFileInput(page: Page) {

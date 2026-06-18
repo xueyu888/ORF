@@ -67,10 +67,14 @@ export const personalSettingsChatThemeOperators = {
     },
   },
   chat_page: {
-    open: async ({ ctx }) => {
+    open: async ({ ctx, params }) => {
+      const expectedTheme = typeof params.theme === "string" ? requiredChatTheme(params, "theme") : null;
       await ctx.page.goto("/chat");
       await expect(ctx.page).toHaveURL(/\/chat$/);
       await expect(chatPage(ctx.page)).toBeVisible();
+      if (expectedTheme) {
+        await expect(appShell(ctx.page)).toHaveAttribute("data-chat-theme", expectedTheme, { timeout: 15_000 });
+      }
       return captureChatThemeSnapshot(ctx.page);
     },
   },

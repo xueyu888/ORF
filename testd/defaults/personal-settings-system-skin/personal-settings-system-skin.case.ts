@@ -93,7 +93,7 @@ export const personalSettingsSystemSkinCase = {
     assertions: [
       step("S1-1", "playwright", "snapshot.applied.page_background", "选择系统皮肤并设为我的背景后，页面背景 应应用所选系统皮肤", "system_skin_snapshot", "page_background_applied", { snapshotFrom: "runtime.appliedSystemSkinSnapshot", backgroundFrom: "runtime.selectedSystemSkin" }),
       step("S1-2", "api", "snapshot.applied.preference", "选择系统皮肤并设为我的背景后，个人设置系统皮肤测试用户的 AppShell 皮肤偏好 应为 所选系统皮肤", "system_skin_snapshot", "preference_is_background", { snapshotFrom: "runtime.appliedSystemSkinSnapshot", backgroundFrom: "runtime.selectedSystemSkin" }),
-      step("S1-3", "playwright", "snapshot.default.page_background", "点击使用系统默认后，页面背景 应恢复为 系统默认皮肤", "system_skin_snapshot", "page_background_default", { snapshotFrom: "runtime.systemDefaultSkinSnapshot" }),
+      step("S1-3", "playwright", "snapshot.default.page_background", "点击使用系统默认后，个人 AppShell 皮肤偏好 应恢复为 系统默认", "system_skin_snapshot", "page_background_default", { snapshotFrom: "runtime.systemDefaultSkinSnapshot" }),
       step("S1-4", "api", "snapshot.default.preference", "点击使用系统默认后，个人设置系统皮肤测试用户的 AppShell 皮肤偏好 应为 系统默认", "system_skin_snapshot", "preference_is_default", { snapshotFrom: "runtime.systemDefaultSkinSnapshot" }),
       step("S1-5", "playwright", "personal_settings.delete_skin.disabled", "选择系统皮肤卡片后，个人设置页面的删除皮肤操作 应不可点击", "personal_settings.delete_skin", "disabled"),
       step("S1-6", "api", "system_skin.file.exists", "选择系统皮肤卡片后，个人设置系统皮肤测试用户的系统内置皮肤文件 应仍存在", "system_skin_file", "exists", { backgroundFrom: "runtime.selectedSystemSkinAfterDefault" }),

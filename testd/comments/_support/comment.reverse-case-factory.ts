@@ -387,7 +387,7 @@ function s0Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
     return [
       session,
       step("S0-2", "playwright", "comment_composer.ready", "评论输入框 应可用于输入评论", "page.comment_composer", "ready"),
-      step("S0-3", "playwright", "comment_composer.image_button.enabled", "\"添加图片\" 操作 应可点击", "page.comment_composer", "image_button_enabled"),
+      step("S0-3", "playwright", "comment_composer.image_button.enabled", "\"添加附件\" 操作 应可点击", "page.comment_composer", "image_button_enabled"),
       step("S0-4", "prisma", "db.comment.image_absent", "数据库中 应不存在 本用例非图片附件", "db.comment", "image_absent", {
         fileNameFrom: "data.invalidFileName",
       }),
@@ -448,12 +448,12 @@ function actionSteps(definition: ReverseCommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "image-invalid-file") {
     return [
-      step("Action-1", "api", "api.comment_attachment_direct.upload", "当前普通成员直接上传本用例非图片文件作为评论图片", "api.comment_attachment_direct", "upload", {
+      step("Action-1", "api", "api.comment_attachment_direct.upload", "当前普通成员直接上传本用例非图片文件作为评论附件", "api.comment_attachment_direct", "upload", {
         fileFrom: "runtime.invalidFile",
         targetFrom: "runtime.commentTarget",
         saveAs: "invalidUploadResponse",
       }),
-      step("Action-2", "playwright", "comment_composer.choose_file", "通过 \"添加图片\" 操作选择本用例非图片文件", "page.comment_composer", "choose_file", {
+      step("Action-2", "playwright", "comment_composer.choose_file", "通过 \"添加附件\" 操作选择本用例非图片文件", "page.comment_composer", "choose_file", {
         fileFrom: "runtime.invalidFile",
       }),
     ];
@@ -544,16 +544,14 @@ function s1Assertions(definition: ReverseCommentCaseDefinition): StepSpec[] {
 
   if (definition.kind === "image-invalid-file") {
     return [
-      step("S1-1", "api", "api.image_upload_response.unsupported", "上传非图片文件结果状态码 应为 415 或等价文件类型错误", "api.comment_upload_response", "unsupported", {
-        resultFrom: "runtime.invalidUploadResponse",
+      step("S1-1", "api", "api.attachment_upload_response.ok", "上传非图片附件结果 应成功", "api.comment_upload_response", "ok", {
+        fileNameFrom: "data.invalidFileName",
+        responseFrom: "runtime.invalidUploadResponse",
       }),
-      step("S1-2", "playwright", "comment_composer.upload_error", "评论窗口 应显示 \"只能上传 PNG、JPEG、GIF 或 WebP 图片\"", "page.comment_composer", "upload_error_visible", {
-        message: "只能上传 PNG、JPEG、GIF 或 WebP 图片",
-      }),
-      step("S1-3", "prisma", "db.comment.image_absent", "数据库中 应不存在 本用例非图片附件", "db.comment", "image_absent", {
+      step("S1-2", "playwright", "comment_composer.file_reference", "评论输入框 应包含 本用例非图片附件引用", "page.comment_composer", "contains_file_reference", {
         fileNameFrom: "data.invalidFileName",
       }),
-      step("S1-4", "api", "session.authenticated", "当前会话 应为 普通成员的已登录会话", "auth.session", "authenticated", {
+      step("S1-3", "api", "session.authenticated", "当前会话 应为 普通成员的已登录会话", "auth.session", "authenticated", {
         emailFrom: "data.email",
         roleFrom: "data.role",
         status: "active",

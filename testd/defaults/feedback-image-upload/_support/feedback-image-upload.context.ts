@@ -14,6 +14,5 @@ export type FeedbackImageUploadCaseData = {
   homePath: string;
   createFeedbackPathPattern: string;
   validImageFileName: string;
-  unsupportedFileName: string;
-  uploadErrorMessage: string;
+  textAttachmentFileName: string;
 };

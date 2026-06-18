@@ -91,6 +91,10 @@ export const personalSettingsPreferencesOperators = {
   preferences_flow: {
     open_settings_from_current_page: async ({ ctx, params }) => {
       await expect(ctx.page).toHaveURL(new RegExp(requiredString(params, "expectedPathPattern")));
+      const expectedSidebarState = optionalSidebarState(params, "sidebarState");
+      if (expectedSidebarState) {
+        await waitForSidebarState(ctx.page, expectedSidebarState);
+      }
       const snapshot: PreferencesSnapshot = {
         pageUrl: ctx.page.url(),
         sidebarState: await currentSidebarState(ctx.page),
@@ -102,10 +106,14 @@ export const personalSettingsPreferencesOperators = {
     },
   },
   preferences_login_form: {
-    submit_capture_sidebar: async ({ ctx }) => {
+    submit_capture_sidebar: async ({ ctx, params }) => {
       await ctx.page.getByRole("button", { name: "Sign In", exact: true }).click();
       await expect(ctx.page).toHaveURL(/\/tasks$/);
       await expect(sidebar(ctx.page)).toBeVisible();
+      const expectedSidebarState = optionalSidebarState(params, "sidebarState");
+      if (expectedSidebarState) {
+        await waitForSidebarState(ctx.page, expectedSidebarState);
+      }
       return {
         pageUrl: ctx.page.url(),
         sidebarState: await currentSidebarState(ctx.page),
@@ -151,6 +159,13 @@ async function currentSidebarState(page: Page): Promise<SidebarPreferenceState> 
   return className?.includes("orf-sidebar-collapsed") ? "collapsed" : "expanded";
 }
 
+async function waitForSidebarState(page: Page, state: SidebarPreferenceState) {
+  if (state === "system") {
+    return;
+  }
+  await expect(sidebar(page)).toHaveClass(state === "collapsed" ? /orf-sidebar-collapsed/ : /orf-sidebar-expanded/);
+}
+
 function valueForDefaultLandingLabel(label: string) {
   switch (label) {
     case "系统默认":
@@ -181,6 +196,14 @@ function requiredSidebarState(params: Record<string, unknown>, key: string): Sid
     return value;
   }
   throw new Error(`参数 ${key} 必须是 system、expanded 或 collapsed`);
+}
+
+function optionalSidebarState(params: Record<string, unknown>, key: string): SidebarPreferenceState | undefined {
+  const value = params[key];
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return requiredSidebarState(params, key);
 }
 
 function requiredPreferencesSnapshot(params: Record<string, unknown>, key: string): PreferencesSnapshot {

@@ -5,6 +5,6 @@ export const commentImageUploadInvalidCases = createReverseCommentCaseVariants({
   id: "comments.image-upload.invalid-file",
   kind: "image-invalid-file",
   slug: "image-upload-invalid",
-  tags: ["comments", "image-upload", "validation"],
-  title: "评论上传图片-非图片文件不可上传",
+  tags: ["comments", "attachment-upload", "non-image"],
+  title: "评论上传非图片附件",
 });

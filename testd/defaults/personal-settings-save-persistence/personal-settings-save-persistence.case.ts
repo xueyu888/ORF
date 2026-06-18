@@ -95,7 +95,7 @@ export const personalSettingsSavePersistenceCase = {
       step("Action-2", "playwright", "settings.sidebar.collapsed", "在个人设置页面的侧边栏默认状态设置项选择 `折叠`", "personal_settings.sidebar_state", "select", { emailFrom: "data.email", labelFrom: "data.savedSidebarLabel", saveAs: "sidebarSnapshot" }),
       step("Action-3", "playwright", "settings.chat_theme.dark", "在个人设置页面的聊天界面主题设置项选择 `舒适暗色`", "personal_settings.chat_theme", "select", { emailFrom: "data.email", labelFrom: "data.savedChatThemeLabel", saveAs: "chatThemeSnapshot" }),
       step("Action-4", "playwright", "settings.toast.off", "在个人设置页面的 Toast 通知开关选择 关闭", "personal_settings.toast", "set_checked", { emailFrom: "data.email", enabled: false, saveAs: "toastSnapshot" }),
-      step("Action-5", "playwright", "settings.page.reload", "刷新 个人设置页面", "personal_settings.page", "reload", { emailFrom: "data.email", saveAs: "refreshSnapshot" }),
+      step("Action-5", "playwright", "settings.page.reload", "刷新 个人设置页面", "personal_settings.page", "reload", { emailFrom: "data.email", defaultLandingLabelFrom: "data.savedLandingLabel", sidebarLabelFrom: "data.savedSidebarLabel", chatThemeLabelFrom: "data.savedChatThemeLabel", toastEnabled: false, saveAs: "refreshSnapshot" }),
       step("Action-6", "api", "auth.logout", "注销当前登录会话", "auth", "logout"),
       step("Action-7", "playwright", "browser.clear", "移除当前浏览器中的残留登录态", "browser", "clear_state"),
       step("Action-8", "playwright", "page.goto.auth", "打开 ORF 登录页", "page", "goto", { path: "/auth" }),
