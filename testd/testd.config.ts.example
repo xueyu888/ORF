@@ -344,6 +344,16 @@ export const testdCases = [
     traceability: "verified",
   },
   {
+    id: "system.members-filter.search-role",
+    title: "04-成员管理搜索与角色筛选",
+    doc: "testd-doc/cases/system/04-成员管理搜索与角色筛选.md",
+    changePolicy: "open",
+    spec: "testd/system/members-filter/_entry/members-filter.spec.ts",
+    enabled: true,
+    fixtureLifecycle: "isolated",
+    traceability: "verified",
+  },
+  {
     id: "objectives.publish",
     title: "管理员新增并发布目标",
     doc: "testd-doc/cases/objectives/管理员新增并发布目标.md",
