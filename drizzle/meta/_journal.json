@@ -379,6 +379,13 @@
       "when": 1781430000000,
       "tag": "0053_task_definition_contributors",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1781510000000,
+      "tag": "0054_notification_events_and_receipts",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import { asc } from "drizzle-orm";
 import { env } from "../env";
 import { db } from "../db/client";
 import { teams } from "../db/schema";
-import { createNotifications } from "../repositories/notificationRepository";
+import { publishNotificationEvent } from "../notifications/publisher";
 import { listWorkLogReminderRecipients, workLogReminderTargetId } from "../repositories/workLogRepository";
 import { publishRealtimeSystemBroadcastToUsers } from "../realtime/realtimeEventBus";
 import type { SystemBroadcast } from "../../src/types/realtime";
@@ -77,7 +77,7 @@ async function sendDailyWorkLogReminders(workDate: string, log: FastifyBaseLogge
     const targetId = workLogReminderTargetId(workDate);
     const targetHref = `/work-logs?date=${encodeURIComponent(workDate)}`;
     const recipientUserIds = recipients.map((recipient) => recipient.id);
-    await createNotifications({
+    await publishNotificationEvent({
       actorName: "ORF",
       actorUserId: null,
       body: "记录今天围绕目标完成的工作，团队活动流会同步展示。",

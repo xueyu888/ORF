@@ -1,19 +1,28 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import type { AppNotification, NotificationKind, NotificationTargetType } from "../../src/types/orf";
+import type {
+  AppNotification,
+  CommentTargetType,
+  NotificationKind,
+  NotificationStream,
+  NotificationTargetType,
+} from "../../src/types/orf";
 import { db } from "../db/client";
-import { notifications, teamMembers, users } from "../db/schema";
+import { notificationEvents, notificationReceipts, teamMembers, users } from "../db/schema";
 import { publishRealtimeNotification, publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScopeStorageId } from "./runtimeScope";
 
-type NotificationInput = {
+export type NotificationEventInput = {
   actorName: string;
   actorUserId?: string | null;
   body: string;
   kind: NotificationKind;
   metadata?: Record<string, string>;
   recipientUserIds: string[];
+  replyTargetId?: string | null;
+  replyTargetType?: CommentTargetType | null;
+  stream: NotificationStream;
   targetHref: string;
   targetId: string;
   targetType: NotificationTargetType;
@@ -30,7 +39,13 @@ function uniqueRecipients(recipientUserIds: string[], actorUserId?: string | nul
   return Array.from(new Set(recipientUserIds.map((id) => id.trim()).filter(Boolean))).filter((id) => id !== actor);
 }
 
-function toNotification(row: typeof notifications.$inferSelect): AppNotification {
+type NotificationProjectionRow = typeof notificationEvents.$inferSelect & {
+  deliveredAt?: string | null;
+  readAt?: string | null;
+  recipientUserId: string;
+};
+
+function toNotification(row: NotificationProjectionRow): AppNotification {
   return {
     id: row.id,
     kind: row.kind,
@@ -39,34 +54,63 @@ function toNotification(row: typeof notifications.$inferSelect): AppNotification
     actorName: row.actorName,
     title: row.title,
     body: row.body,
+    stream: row.stream,
     targetType: row.targetType,
     targetId: row.targetId,
     targetHref: row.targetHref,
-    readAt: row.readAt,
+    replyTargetType: row.replyTargetType,
+    replyTargetId: row.replyTargetId,
+    readAt: row.readAt ?? null,
     createdAt: row.createdAt,
     metadata: row.metadata ?? {},
   };
 }
 
-function systemNotificationScope(userId: string, scope: RuntimeScope) {
+function notificationScope(userId: string, scope: RuntimeScope) {
   return and(
-    eq(notifications.teamId, runtimeScopeStorageId(scope)),
-    eq(notifications.recipientUserId, userId),
-    sql`${notifications.targetType} <> 'chat'`,
+    eq(notificationEvents.teamId, runtimeScopeStorageId(scope)),
+    eq(notificationReceipts.recipientUserId, userId),
   );
 }
 
-export async function createNotifications(input: NotificationInput): Promise<AppNotification[]> {
+async function getScopedNotificationEvent(notificationId: string, scope: RuntimeScope) {
+  const [event] = await db
+    .select()
+    .from(notificationEvents)
+    .where(and(eq(notificationEvents.id, notificationId), eq(notificationEvents.teamId, runtimeScopeStorageId(scope))))
+    .limit(1);
+  return event ?? null;
+}
+
+async function upsertTeamAnnouncementReceipt(input: { notificationId: string; userId: string; deliveredAt: string; readAt: string | null }) {
+  const [receipt] = await db
+    .insert(notificationReceipts)
+    .values({
+      eventId: input.notificationId,
+      recipientUserId: input.userId,
+      deliveredAt: input.deliveredAt,
+      readAt: input.readAt,
+    })
+    .onConflictDoUpdate({
+      target: [notificationReceipts.eventId, notificationReceipts.recipientUserId],
+      set: { readAt: input.readAt },
+    })
+    .returning();
+  return receipt ?? null;
+}
+
+export async function createNotificationEvent(input: NotificationEventInput): Promise<AppNotification[]> {
+  const createdAt = nowIso();
+  const eventId = makeId("notification-event");
   const recipientUserIds = uniqueRecipients(input.recipientUserIds, input.actorUserId);
-  if (recipientUserIds.length === 0) {
+  if (input.stream === "personalNotification" && recipientUserIds.length === 0) {
     return [];
   }
 
-  const createdAt = nowIso();
-  const rows = recipientUserIds.map((recipientUserId) => ({
-    id: makeId("notification"),
+  const [event] = await db.insert(notificationEvents).values({
+    id: eventId,
     teamId: input.teamId,
-    recipientUserId,
+    stream: input.stream,
     actorUserId: input.actorUserId?.trim() || null,
     actorName: input.actorName.trim(),
     kind: input.kind,
@@ -75,13 +119,37 @@ export async function createNotifications(input: NotificationInput): Promise<App
     targetType: input.targetType,
     targetId: input.targetId,
     targetHref: input.targetHref,
-    readAt: null,
+    replyTargetType: input.replyTargetType ?? null,
+    replyTargetId: input.replyTargetId ?? null,
     createdAt,
     metadata: input.metadata ?? {},
-  }));
+  }).returning();
 
-  const inserted = await db.insert(notifications).values(rows).returning();
-  const created = inserted.map(toNotification);
+  if (recipientUserIds.length === 0) {
+    publishRealtimeReadModelInvalidation(input.teamId, {
+      actorUserId: input.actorUserId,
+      models: ["notifications"],
+      reason: "notification.changed",
+      target: { id: eventId, type: "notification" },
+    });
+    return [];
+  }
+
+  const receipts = await db.insert(notificationReceipts).values(
+    recipientUserIds.map((recipientUserId) => ({
+      eventId,
+      recipientUserId,
+      readAt: null,
+      deliveredAt: createdAt,
+    })),
+  ).returning();
+
+  const created = receipts.map((receipt) => toNotification({
+    ...event,
+    deliveredAt: receipt.deliveredAt,
+    readAt: receipt.readAt,
+    recipientUserId: receipt.recipientUserId,
+  }));
   for (const notification of created) {
     publishRealtimeNotification(input.teamId, notification);
   }
@@ -89,7 +157,7 @@ export async function createNotifications(input: NotificationInput): Promise<App
     actorUserId: input.actorUserId,
     models: ["notifications"],
     reason: "notification.changed",
-    target: { id: created[0]?.id ?? "batch", type: "notification" },
+    target: { id: eventId, type: "notification" },
   });
   return created;
 }
@@ -152,10 +220,30 @@ export async function getUserNameById(userId: string | null | undefined): Promis
 
 export async function listNotificationsForUser(userId: string, scope: RuntimeScope, limit = 50): Promise<AppNotification[]> {
   const rows = await db
-    .select()
-    .from(notifications)
-    .where(systemNotificationScope(userId, scope))
-    .orderBy(desc(notifications.createdAt))
+    .select({
+      actorName: notificationEvents.actorName,
+      actorUserId: notificationEvents.actorUserId,
+      body: notificationEvents.body,
+      createdAt: notificationEvents.createdAt,
+      deliveredAt: notificationReceipts.deliveredAt,
+      id: notificationEvents.id,
+      kind: notificationEvents.kind,
+      metadata: notificationEvents.metadata,
+      readAt: notificationReceipts.readAt,
+      recipientUserId: notificationReceipts.recipientUserId,
+      replyTargetId: notificationEvents.replyTargetId,
+      replyTargetType: notificationEvents.replyTargetType,
+      stream: notificationEvents.stream,
+      targetHref: notificationEvents.targetHref,
+      targetId: notificationEvents.targetId,
+      targetType: notificationEvents.targetType,
+      teamId: notificationEvents.teamId,
+      title: notificationEvents.title,
+    })
+    .from(notificationReceipts)
+    .innerJoin(notificationEvents, eq(notificationReceipts.eventId, notificationEvents.id))
+    .where(notificationScope(userId, scope))
+    .orderBy(desc(notificationEvents.createdAt))
     .limit(Math.max(1, Math.min(100, limit)));
   return rows.map(toNotification);
 }
@@ -163,19 +251,27 @@ export async function listNotificationsForUser(userId: string, scope: RuntimeSco
 export async function getUnreadNotificationCount(userId: string, scope: RuntimeScope): Promise<number> {
   const [row] = await db
     .select({ count: sql<number>`count(*)::int` })
-    .from(notifications)
-    .where(and(systemNotificationScope(userId, scope), isNull(notifications.readAt)))
+    .from(notificationReceipts)
+    .innerJoin(notificationEvents, eq(notificationReceipts.eventId, notificationEvents.id))
+    .where(and(notificationScope(userId, scope), isNull(notificationReceipts.readAt)))
     .limit(1);
   return Number(row?.count ?? 0);
 }
 
 export async function markNotificationRead(notificationId: string, userId: string, scope: RuntimeScope): Promise<AppNotification | null> {
-  const [row] = await db
-    .update(notifications)
-    .set({ readAt: nowIso() })
-    .where(and(eq(notifications.id, notificationId), systemNotificationScope(userId, scope)))
-    .returning();
-  if (!row) {
+  const event = await getScopedNotificationEvent(notificationId, scope);
+  if (!event) {
+    return null;
+  }
+  const readAt = nowIso();
+  const [updatedReceipt] = event.stream === "teamAnnouncement"
+    ? [await upsertTeamAnnouncementReceipt({ deliveredAt: event.createdAt, notificationId, readAt, userId })]
+    : await db
+      .update(notificationReceipts)
+      .set({ readAt })
+      .where(and(eq(notificationReceipts.eventId, notificationId), eq(notificationReceipts.recipientUserId, userId)))
+      .returning();
+  if (!updatedReceipt) {
     return null;
   }
   publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
@@ -184,52 +280,58 @@ export async function markNotificationRead(notificationId: string, userId: strin
     reason: "notification.changed",
     target: { id: notificationId, type: "notification" },
   });
-  return toNotification(row);
+  return toNotification({
+    ...event,
+    deliveredAt: updatedReceipt.deliveredAt,
+    readAt: updatedReceipt.readAt,
+    recipientUserId: updatedReceipt.recipientUserId,
+  });
+}
+
+export async function markNotificationUnread(notificationId: string, userId: string, scope: RuntimeScope): Promise<AppNotification | null> {
+  const event = await getScopedNotificationEvent(notificationId, scope);
+  if (!event) {
+    return null;
+  }
+  const [updatedReceipt] = event.stream === "teamAnnouncement"
+    ? [await upsertTeamAnnouncementReceipt({ deliveredAt: event.createdAt, notificationId, readAt: null, userId })]
+    : await db
+      .update(notificationReceipts)
+      .set({ readAt: null })
+      .where(and(eq(notificationReceipts.eventId, notificationId), eq(notificationReceipts.recipientUserId, userId)))
+      .returning();
+  if (!updatedReceipt) {
+    return null;
+  }
+  publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
+    actorUserId: userId,
+    models: ["notifications"],
+    reason: "notification.changed",
+    target: { id: notificationId, type: "notification" },
+  });
+  return toNotification({
+    ...event,
+    deliveredAt: updatedReceipt.deliveredAt,
+    readAt: updatedReceipt.readAt,
+    recipientUserId: updatedReceipt.recipientUserId,
+  });
 }
 
 export async function markAllNotificationsRead(userId: string, scope: RuntimeScope): Promise<number> {
-  const rows = await db
-    .update(notifications)
-    .set({ readAt: nowIso() })
-    .where(and(systemNotificationScope(userId, scope), isNull(notifications.readAt)))
-    .returning({ id: notifications.id });
-  if (rows.length > 0) {
-    publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
-      actorUserId: userId,
-      models: ["notifications"],
-      reason: "notification.changed",
-      target: { id: "all", type: "notification" },
-    });
-  }
-  return rows.length;
-}
-
-export async function deleteNotificationsForUser(notificationIds: string[], userId: string, scope: RuntimeScope): Promise<number> {
-  const ids = Array.from(new Set(notificationIds.map((id) => id.trim()).filter(Boolean)));
-  if (ids.length === 0) {
+  const eventRows = await db
+    .select({ id: notificationEvents.id })
+    .from(notificationReceipts)
+    .innerJoin(notificationEvents, eq(notificationReceipts.eventId, notificationEvents.id))
+    .where(and(notificationScope(userId, scope), isNull(notificationReceipts.readAt)));
+  if (eventRows.length === 0) {
     return 0;
   }
 
   const rows = await db
-    .delete(notifications)
-    .where(and(systemNotificationScope(userId, scope), inArray(notifications.id, ids)))
-    .returning({ id: notifications.id });
-  if (rows.length > 0) {
-    publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
-      actorUserId: userId,
-      models: ["notifications"],
-      reason: "notification.changed",
-      target: { id: "bulk-delete", type: "notification" },
-    });
-  }
-  return rows.length;
-}
-
-export async function clearNotificationsForUser(userId: string, scope: RuntimeScope): Promise<number> {
-  const rows = await db
-    .delete(notifications)
-    .where(systemNotificationScope(userId, scope))
-    .returning({ id: notifications.id });
+    .update(notificationReceipts)
+    .set({ readAt: nowIso() })
+    .where(and(eq(notificationReceipts.recipientUserId, userId), inArray(notificationReceipts.eventId, eventRows.map((row) => row.id))))
+    .returning({ eventId: notificationReceipts.eventId });
   if (rows.length > 0) {
     publishRealtimeReadModelInvalidation(runtimeScopeStorageId(scope), {
       actorUserId: userId,

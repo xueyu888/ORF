@@ -3,9 +3,11 @@ import { bigint, boolean, date, index, integer, jsonb, pgEnum, pgTable, primaryK
 import type {
   BountySource,
   ChallengeApplication,
+  CommentTargetType,
   ContributionAllocation,
   LootResultClaim,
   NotificationKind,
+  NotificationStream,
   NotificationTargetType,
   ObjectiveAlignmentRequestKind,
   ObjectiveAlignmentRequestStatus,
@@ -30,6 +32,7 @@ export const commentTargetTypeEnum = pgEnum("comment_target_type", ["objective",
 export const commentStatusEnum = pgEnum("comment_status", ["open", "resolved"]);
 export const chatChannelTypeEnum = pgEnum("chat_channel_type", ["public", "private", "direct"]);
 export const chatMemberRoleEnum = pgEnum("chat_member_role", ["owner", "admin", "member"]);
+export const notificationStreamEnum = pgEnum("notification_stream", ["personalNotification", "teamAnnouncement"]);
 export const teams = pgTable("teams", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -320,6 +323,52 @@ export const notifications = pgTable(
     recipientCreatedAt: index("notifications_recipient_created_at_idx").on(table.recipientUserId, table.createdAt),
     recipientUnread: index("notifications_recipient_unread_idx").on(table.recipientUserId, table.readAt),
     teamCreatedAt: index("notifications_team_created_at_idx").on(table.teamId, table.createdAt),
+  }),
+);
+
+export const notificationEvents = pgTable(
+  "notification_events",
+  {
+    id: text("id").primaryKey(),
+    teamId: text("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    stream: notificationStreamEnum("stream").$type<NotificationStream>().notNull(),
+    actorUserId: uuid("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    actorName: text("actor_name").notNull().default(""),
+    kind: text("kind").$type<NotificationKind>().notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    targetType: text("target_type").$type<NotificationTargetType>().notNull(),
+    targetId: text("target_id").notNull(),
+    targetHref: text("target_href").notNull(),
+    replyTargetType: commentTargetTypeEnum("reply_target_type").$type<CommentTargetType>(),
+    replyTargetId: text("reply_target_id"),
+    createdAt: timestamp("created_at", { mode: "string", withTimezone: true }).notNull(),
+    metadata: jsonb("metadata").$type<Record<string, string>>().notNull().default({}),
+  },
+  (table) => ({
+    streamCreatedAt: index("notification_events_stream_created_at_idx").on(table.teamId, table.stream, table.createdAt),
+    target: index("notification_events_target_idx").on(table.teamId, table.targetType, table.targetId),
+  }),
+);
+
+export const notificationReceipts = pgTable(
+  "notification_receipts",
+  {
+    eventId: text("event_id")
+      .notNull()
+      .references(() => notificationEvents.id, { onDelete: "cascade" }),
+    recipientUserId: uuid("recipient_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { mode: "string", withTimezone: true }),
+    deliveredAt: timestamp("delivered_at", { mode: "string", withTimezone: true }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.eventId, table.recipientUserId] }),
+    recipientDeliveredAt: index("notification_receipts_recipient_delivered_at_idx").on(table.recipientUserId, table.deliveredAt),
+    recipientUnread: index("notification_receipts_recipient_unread_idx").on(table.recipientUserId, table.readAt),
   }),
 );
 

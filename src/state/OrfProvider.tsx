@@ -107,7 +107,6 @@ interface OrfContextValue {
   appAttentionState: AppAttentionState;
   modal: ModalState;
   toasts: ToastMessage[];
-  notifications: AppNotification[];
   readModelInvalidations: OrfReadModelInvalidation[];
   systemBroadcasts: SystemBroadcast[];
   chatUnreadSummary: ChatUnreadSummary;
@@ -120,10 +119,6 @@ interface OrfContextValue {
   resetState: () => void;
   refreshChatUnreadSummary: () => Promise<void>;
   refreshNotifications: () => Promise<void>;
-  markNotificationRead: (notificationId: string) => Promise<boolean>;
-  markAllNotificationsRead: () => Promise<boolean>;
-  deleteNotifications: (notificationIds: string[]) => Promise<boolean>;
-  clearAllNotifications: () => Promise<boolean>;
   createObjective: (input: CreateObjectiveInput) => Promise<Objective | null>;
   createProject: (input: { name: string }) => Promise<OrfState["projects"][number] | null>;
   deleteProject: (projectId: string) => Promise<boolean>;
@@ -231,16 +226,11 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   const isAdmin = currentUser?.role === "admin";
   const loadTaskManagementData = shouldLoadInitialTaskManagementReadModel(location.pathname);
   const {
-    clearAllNotifications,
-    clearNotifications,
-    deleteNotifications,
-    markAllNotificationsRead,
-    markNotificationRead,
-    notifications,
     receiveNotification,
     refreshNotifications,
+    resetNotificationState,
     unreadNotificationCount,
-  } = useNotificationState(businessMutationFailureMessage, notify);
+  } = useNotificationState();
   const {
     applyCommentThread,
     applyRemovedCommentThread,
@@ -252,12 +242,12 @@ export function OrfProvider({ children }: { children: ReactNode }) {
   } = useOrfDataState({
     authReady,
     authUserId,
-    clearNotifications,
     currentUserRole,
     isApproved,
     isAuthenticated,
     loadTaskManagementData,
     refreshNotifications,
+    resetNotificationState,
     setState,
   });
   useEffect(() => {
@@ -492,7 +482,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       appAttentionState,
       modal,
       toasts,
-      notifications,
       readModelInvalidations,
       systemBroadcasts,
       chatUnreadSummary,
@@ -509,10 +498,6 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       },
       refreshChatUnreadSummary,
       refreshNotifications,
-      markNotificationRead,
-      markAllNotificationsRead,
-      deleteNotifications,
-      clearAllNotifications,
       ...objectiveActions,
       ...resultActions,
       ...taskActions,
@@ -532,12 +517,7 @@ export function OrfProvider({ children }: { children: ReactNode }) {
       isApproved,
       isAuthenticated,
       modal,
-      clearAllNotifications,
-      deleteNotifications,
-      markAllNotificationsRead,
-      markNotificationRead,
       notify,
-      notifications,
       objectiveActions,
       readModelInvalidations,
       resultActions,

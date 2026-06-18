@@ -7,7 +7,7 @@ const titleMap: Record<string, string> = {
   "fantasy-ui": "Fantasy UI",
   "genshin-ui-kit": "Genshin UI Kit",
   feedback: "反馈",
-  notifications: "消息",
+  notifications: "聊天",
   "strategy-map": "策略地图",
   "ai-evaluation": "AI 评估",
   reports: "统计",
@@ -18,7 +18,7 @@ const titleMap: Record<string, string> = {
 };
 
 export function breadcrumb(pathname: string) {
-  if (/^\/chat(?:\/[^/]+)?\/?$/.test(pathname)) {
+  if (/^\/chat(?:\/.*)?\/?$/.test(pathname)) {
     return "聊天";
   }
 

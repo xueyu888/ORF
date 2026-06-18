@@ -43,9 +43,9 @@ const defaultPersonalBackgroundConfig: VisualBackgroundConfig = {
 const landingOptions = [
   { label: "悬赏大厅", value: "/bounties" },
   { label: "我的挑战", value: "/tasks" },
+  { label: "聊天", value: "/chat" },
   { label: "反馈", value: "/feedback" },
   { label: "统计", value: "/reports" },
-  { label: "消息", value: "/notifications" },
 ];
 
 const chatThemeOptions: Array<{ label: string; value: ChatTheme }> = [

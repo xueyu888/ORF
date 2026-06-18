@@ -87,13 +87,13 @@ import {
   users,
 } from "../db/schema";
 import {
-  createNotifications,
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
   getActiveMemberNotificationRecipientsByNames,
   getActiveTeamNotificationRecipients,
   getUserNameById,
 } from "./notificationRepository";
+import { publishNotificationEvent } from "../notifications/publisher";
 import type { RuntimeScope } from "./runtimeScope";
 import { runtimeScope, runtimeScopeStorageId } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
@@ -358,7 +358,7 @@ async function notifyAdminsOfChallengeApplication(input: {
   reason: string;
   teamId: string;
 }) {
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.applicant,
     actorUserId: input.actorUserId,
     body: `${input.applicant} 申请挑战「${input.objectiveTitle}」：${input.reason}`,
@@ -383,7 +383,7 @@ async function notifyTeamOfObjectivePublication(input: {
   const actorName = await getUserNameById(input.actorUserId);
   const targetHref = challengeObjectiveHref("/bounties", input.objectiveId);
   const body = `新的悬赏目标「${input.objectiveTitle}」已发布到悬赏大厅。`;
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: actorName || "指挥官",
     actorUserId: input.actorUserId,
     body,
@@ -416,7 +416,7 @@ async function notifyMemberOfChallengeApplicationApproval(input: {
   teamId: string;
 }) {
   const actorName = await getUserNameById(input.actorUserId);
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: actorName || "指挥官",
     actorUserId: input.actorUserId,
     body: `你申请挑战「${input.objectiveTitle}」已通过，头像已挂到悬赏大厅目标上。`,
@@ -440,7 +440,7 @@ async function notifyMemberOfChallengeApplicationRejection(input: {
   teamId: string;
 }) {
   const actorName = await getUserNameById(input.actorUserId);
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: actorName || "指挥官",
     actorUserId: input.actorUserId,
     body: `你申请挑战「${input.objectiveTitle}」未通过。`,
@@ -477,7 +477,7 @@ async function notifyMembersOfRecruitment(input: {
   teamId: string;
 }) {
   const actorName = await getUserNameById(input.actorUserId);
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: actorName || "指挥官",
     actorUserId: input.actorUserId,
     body: `你被征召挑战「${input.objectiveTitle}」，请在悬赏大厅接受或拒绝。`,
@@ -499,7 +499,7 @@ async function notifyAdminsOfChallengeAcceptance(input: {
   objectiveTitle: string;
   teamId: string;
 }) {
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.challenger,
     actorUserId: input.actorUserId,
     body: `${input.challenger} 已接受「${input.objectiveTitle}」的挑战，目标已进入重估。`,
@@ -522,14 +522,14 @@ async function notifyAdminsOfObjectiveLoot(input: {
   objectiveTitle: string;
   teamId: string;
 }) {
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 已提交「${input.objectiveTitle}」的目标战利品，需要指挥官验收。`,
     kind: "objective.loot.submitted",
-    metadata: { objectiveTitle: input.objectiveTitle },
+    metadata: { objectiveTitle: input.objectiveTitle, targetId: input.objectiveId, targetType: "objective" },
     recipientUserIds: await getActiveAdminNotificationRecipients(input.teamId),
-    targetHref: `/objectives/${encodeURIComponent(input.objectiveId)}/loot`,
+    targetHref: `/tasks/objectives/${encodeURIComponent(input.objectiveId)}/loot`,
     targetId: input.lootId,
     targetType: "objectiveLoot",
     teamId: input.teamId,
@@ -542,7 +542,7 @@ function objectiveAlignmentKindLabel(kind: ObjectiveAlignmentRequestKind) {
 }
 
 function objectiveAlignmentTargetHref(kind: ObjectiveAlignmentRequestKind, objectiveId: string) {
-  return kind === "acceptance" ? `/objectives/${encodeURIComponent(objectiveId)}/loot` : challengeObjectiveHref("/tasks", objectiveId);
+  return kind === "acceptance" ? `/tasks/objectives/${encodeURIComponent(objectiveId)}/loot` : challengeObjectiveHref("/tasks", objectiveId);
 }
 
 async function notifyAdminsOfObjectiveAlignmentRequest(input: {
@@ -559,7 +559,7 @@ async function notifyAdminsOfObjectiveAlignmentRequest(input: {
   const label = objectiveAlignmentKindLabel(input.kind);
   const scheduleText = input.scheduledAt ? `，建议时间 ${input.scheduledAt}` : "";
   const roomText = input.meetingRoom ? `，会议室 ${input.meetingRoom}` : "，请约时间并定好会议室";
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 申请「${input.objectiveTitle}」${label}对齐${scheduleText}${roomText}。`,
@@ -595,7 +595,7 @@ async function notifyMemberOfObjectiveAlignmentReview(input: {
           ? "需要补充"
           : input.status;
   const feedback = input.commanderFeedback?.trim();
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: actorName || "指挥官",
     actorUserId: input.actorUserId,
     body: feedback
@@ -649,7 +649,7 @@ async function notifyMentionedUsersOfComment(input: {
     return;
   }
 
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 在「${input.targetTitle}」的评论中提到了你。`,
@@ -668,6 +668,56 @@ async function notifyMentionedUsersOfComment(input: {
     targetType: "comment",
     teamId: input.teamId,
     title: "评论提到了你",
+  });
+}
+
+async function notifyCommentReplyRecipient(input: {
+  actorName: string;
+  actorUserId: string;
+  commentMessageId: string;
+  commentThreadId: string;
+  excludedUserIds: string[];
+  replyRecipientUserId?: string | null;
+  replyToMessageId?: string | null;
+  targetId: string;
+  targetTitle: string;
+  targetType: CommentTargetType;
+  teamId: string;
+}) {
+  const recipientUserId = input.replyRecipientUserId?.trim();
+  if (!recipientUserId) {
+    return;
+  }
+
+  const excludedUserIds = new Set(uniqueNotificationUserIds([input.actorUserId, ...input.excludedUserIds]));
+  if (excludedUserIds.has(recipientUserId)) {
+    return;
+  }
+
+  const recipientUserIds = await getActiveMemberNotificationRecipientsByIds(input.teamId, [recipientUserId]);
+  if (recipientUserIds.length === 0) {
+    return;
+  }
+
+  await publishNotificationEvent({
+    actorName: input.actorName,
+    actorUserId: input.actorUserId,
+    body: `${input.actorName} 回复了你在「${input.targetTitle}」的评论。`,
+    kind: "comment.reply.created",
+    metadata: {
+      commentMessageId: input.commentMessageId,
+      commentThreadId: input.commentThreadId,
+      replyToMessageId: input.replyToMessageId ?? "",
+      targetId: input.targetId,
+      targetTitle: input.targetTitle,
+      targetType: input.targetType,
+    },
+    recipientUserIds,
+    targetHref: commentTargetHref(input.targetType, input.targetId),
+    targetId: input.commentMessageId,
+    targetType: "comment",
+    teamId: input.teamId,
+    title: "评论有新回复",
   });
 }
 
@@ -719,14 +769,14 @@ async function notifyFeedbackParticipantsOfComment(input: {
   actorUserId: string;
   commentMessageId: string;
   commentThreadId: string;
-  mentionedUserIds: string[];
+  excludedUserIds: string[];
   targetId: string;
   targetTitle: string;
   teamId: string;
 }) {
   const recipientUserIds = await getFeedbackCommentNotificationRecipients({
     actorUserId: input.actorUserId,
-    excludedUserIds: input.mentionedUserIds,
+    excludedUserIds: input.excludedUserIds,
     feedbackId: input.targetId,
     teamId: input.teamId,
   });
@@ -734,7 +784,7 @@ async function notifyFeedbackParticipantsOfComment(input: {
     return;
   }
 
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 回复了反馈「${input.targetTitle}」。`,
@@ -2358,7 +2408,11 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
 
     if (input.parentMessageId) {
       const [parent] = await tx
-        .select({ threadId: commentMessages.threadId })
+        .select({
+          author: commentMessages.author,
+          authorUserId: commentMessages.authorUserId,
+          threadId: commentMessages.threadId,
+        })
         .from(commentMessages)
         .innerJoin(commentThreads, eq(commentThreads.id, commentMessages.threadId))
         .where(
@@ -2376,9 +2430,10 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
 
       let replyToMessageId: string | null = null;
       let replyToAuthor: string | null = null;
+      let replyRecipientUserId: string | null = parent.authorUserId;
       if (input.replyToMessageId) {
         const [replyTarget] = await tx
-          .select({ id: commentMessages.id, author: commentMessages.author })
+          .select({ author: commentMessages.author, authorUserId: commentMessages.authorUserId, id: commentMessages.id })
           .from(commentMessages)
           .where(and(eq(commentMessages.threadId, parent.threadId), eq(commentMessages.id, input.replyToMessageId)))
           .limit(1);
@@ -2387,6 +2442,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
         }
         replyToMessageId = replyTarget.id;
         replyToAuthor = replyTarget.author;
+        replyRecipientUserId = replyTarget.authorUserId;
       }
 
       if (!(await arePendingAttachmentsAvailable())) {
@@ -2414,7 +2470,12 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
       });
       await bindMessageAttachments(nextMessageId);
       await tx.update(commentThreads).set({ targetTitle, updatedAt: createdAt }).where(eq(commentThreads.id, parent.threadId));
-      return { messageId: nextMessageId, threadId: parent.threadId };
+      return {
+        messageId: nextMessageId,
+        replyRecipientUserId,
+        replyToMessageId: replyToMessageId ?? input.parentMessageId,
+        threadId: parent.threadId,
+      };
     }
 
     const [openThread] = await tx
@@ -2465,7 +2526,7 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     });
     await bindMessageAttachments(nextMessageId);
 
-    return { messageId: nextMessageId, threadId: nextThreadId };
+    return { messageId: nextMessageId, replyRecipientUserId: null, replyToMessageId: null, threadId: nextThreadId };
   });
 
   if (!createdComment) {
@@ -2485,13 +2546,27 @@ export async function createComment(input: CreateCommentInput, actor: CommentAct
     teamId: target.storageScopeId,
   });
 
+  await notifyCommentReplyRecipient({
+    actorName: actor.name,
+    actorUserId: actor.id,
+    commentMessageId: createdComment.messageId,
+    commentThreadId: createdComment.threadId,
+    excludedUserIds: mentionedUserIds,
+    replyRecipientUserId: createdComment.replyRecipientUserId,
+    replyToMessageId: createdComment.replyToMessageId,
+    targetId: input.targetId,
+    targetTitle,
+    targetType: input.targetType,
+    teamId: target.storageScopeId,
+  });
+
   if (input.targetType === "feedback") {
     await notifyFeedbackParticipantsOfComment({
       actorName: actor.name,
       actorUserId: actor.id,
       commentMessageId: createdComment.messageId,
       commentThreadId: createdComment.threadId,
-      mentionedUserIds,
+      excludedUserIds: uniqueNotificationUserIds([...mentionedUserIds, createdComment.replyRecipientUserId]),
       targetId: input.targetId,
       targetTitle,
       teamId: target.storageScopeId,
@@ -2533,6 +2608,29 @@ export async function updateCommentThreadStatus(
   }
 
   await db.update(commentThreads).set({ status, updatedAt: nowIso() }).where(eq(commentThreads.id, threadId));
+  if (thread.status !== status) {
+    const recipientUserIds = await getActiveMemberNotificationRecipientsByIds(target.storageScopeId, [thread.createdBy]);
+    const statusText = status === "resolved" ? "解决" : "重新打开";
+    await publishNotificationEvent({
+      actorName: actor.name,
+      actorUserId: actor.id,
+      body: `${actor.name} 将「${target.title}」的评论标记为${statusText}。`,
+      kind: "comment.thread.status.changed",
+      metadata: {
+        commentStatus: status,
+        commentThreadId: threadId,
+        targetId: thread.targetId,
+        targetTitle: target.title,
+        targetType: thread.targetType,
+      },
+      recipientUserIds,
+      targetHref: commentTargetHref(thread.targetType, thread.targetId),
+      targetId: threadId,
+      targetType: "comment",
+      teamId: target.storageScopeId,
+      title: status === "resolved" ? "评论已解决" : "评论已重新打开",
+    });
+  }
   publishOrfDataInvalidation({
     actorUserId: actor.id,
     models: ["taskManagement"],

@@ -5,6 +5,10 @@ export type RuntimeSchemaColumn = {
   isNullable: NullableFlag | string;
 };
 
+export type RuntimeTableColumn = RuntimeSchemaColumn & {
+  tableName: string;
+};
+
 export type RuntimeSchemaConstraint = {
   constraintName: string;
   definition: string;
@@ -139,6 +143,51 @@ export function validateFeedbackCommentTargetSchema(snapshot: RuntimeEnumSnapsho
   return snapshot.labels.includes("feedback") ? [] : ["comment_target_type enum must include feedback."];
 }
 
+export function validateNotificationStreamEnum(snapshot: RuntimeEnumSnapshot) {
+  const labels = snapshot.labels.join(",");
+  return labels === "personalNotification,teamAnnouncement"
+    ? []
+    : [`notification_stream enum must be exactly personalNotification,teamAnnouncement; got ${labels}.`];
+}
+
+export function validateNotificationConversationSchema(snapshot: { columns: RuntimeTableColumn[] }) {
+  const errors: string[] = [];
+  const columnsByTable = snapshot.columns.reduce((map, column) => {
+    const columns = map.get(column.tableName) ?? new Map<string, RuntimeTableColumn>();
+    columns.set(column.columnName, column);
+    map.set(column.tableName, columns);
+    return map;
+  }, new Map<string, Map<string, RuntimeTableColumn>>());
+
+  const eventColumns = columnsByTable.get("notification_events") ?? new Map();
+  for (const columnName of [
+    "id",
+    "team_id",
+    "stream",
+    "kind",
+    "title",
+    "body",
+    "target_type",
+    "target_id",
+    "target_href",
+    "created_at",
+    "metadata",
+  ]) {
+    if (!eventColumns.has(columnName)) {
+      errors.push(`notification_events.${columnName} is missing.`);
+    }
+  }
+
+  const receiptColumns = columnsByTable.get("notification_receipts") ?? new Map();
+  for (const columnName of ["event_id", "recipient_user_id", "delivered_at", "read_at"]) {
+    if (!receiptColumns.has(columnName)) {
+      errors.push(`notification_receipts.${columnName} is missing.`);
+    }
+  }
+
+  return errors;
+}
+
 export async function assertRuntimeDatabaseSchema() {
   const { pool } = await import("./client");
   const [
@@ -149,6 +198,8 @@ export async function assertRuntimeDatabaseSchema() {
     feedbackColumnsResult,
     evidenceColumnsResult,
     feedbackStatusResult,
+    notificationStreamResult,
+    notificationConversationColumnsResult,
   ] = await Promise.all([
     pool.query<RuntimeSchemaColumn>(
       `
@@ -229,6 +280,28 @@ export async function assertRuntimeDatabaseSchema() {
         order by e.enumsortorder
       `,
     ),
+    pool.query<{ label: string }>(
+      `
+        select e.enumlabel as "label"
+        from pg_enum e
+        join pg_type t on t.oid = e.enumtypid
+        join pg_namespace nsp on nsp.oid = t.typnamespace
+        where nsp.nspname = current_schema()
+          and t.typname = 'notification_stream'
+        order by e.enumsortorder
+      `,
+    ),
+    pool.query<RuntimeTableColumn>(
+      `
+        select
+          table_name as "tableName",
+          column_name as "columnName",
+          is_nullable as "isNullable"
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name in ('notification_events', 'notification_receipts')
+      `,
+    ),
   ]);
   const commentTargetTypeResult = await pool.query<{ label: string }>(
     `
@@ -263,6 +336,12 @@ export async function assertRuntimeDatabaseSchema() {
     }),
     ...validateFeedbackCommentTargetSchema({
       labels: commentTargetTypeResult.rows.map((row) => row.label),
+    }),
+    ...validateNotificationStreamEnum({
+      labels: notificationStreamResult.rows.map((row) => row.label),
+    }),
+    ...validateNotificationConversationSchema({
+      columns: notificationConversationColumnsResult.rows,
     }),
   ];
 

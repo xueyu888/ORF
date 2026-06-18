@@ -11,10 +11,14 @@ import type {
   ChatThreadSummary,
   ChatUnreadSummary,
   ChatUser,
+  CommentThread,
   CommentAttachmentUploadResult,
   CommentTargetType,
   OrfState,
   OrfUser,
+  SystemConversationId,
+  SystemConversationMessage,
+  SystemConversationSummary,
   WorkLogActivityItem,
   WorkLogCategoryOption,
   WorkLogClassificationSuggestion,
@@ -38,17 +42,24 @@ export type NotificationsResponse = {
   notifications: AppNotification[];
   unreadCount: number;
 };
-export type NotificationReadResponse = {
+export type SystemConversationsResponse = {
+  conversations: SystemConversationSummary[];
+};
+export type SystemConversationMessagesResponse = {
+  conversation: SystemConversationSummary;
+  messages: SystemConversationMessage[];
+};
+export type SystemConversationMessageStateResponse = {
+  conversations: SystemConversationSummary[];
   notification: AppNotification;
-  unreadCount: number;
 };
-export type NotificationsReadAllResponse = {
+export type SystemConversationReadAllResponse = {
+  conversations: SystemConversationSummary[];
   updated: number;
-  unreadCount: number;
 };
-export type NotificationsDeleteResponse = {
-  deleted: number;
-  unreadCount: number;
+export type SystemConversationReplyResponse = {
+  commentThread: CommentThread | null;
+  ok: true;
 };
 export type ClientUpdateReleaseResponse = {
   release: ClientReleaseInfo;
@@ -267,6 +278,50 @@ export async function getNotifications() {
   return apiJson<NotificationsResponse>("/api/notifications");
 }
 
+export async function getSystemConversations() {
+  return apiJson<SystemConversationsResponse>("/api/chat/system-conversations");
+}
+
+export async function getSystemConversationMessages(input: { conversationId: SystemConversationId; limit?: number }) {
+  const query = new URLSearchParams();
+  if (input.limit) query.set("limit", String(input.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiJson<SystemConversationMessagesResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages${suffix}`,
+  );
+}
+
+export async function markSystemConversationMessageReadRequest(input: { conversationId: SystemConversationId; messageId: string }) {
+  return apiJson<SystemConversationMessageStateResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/read`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markSystemConversationMessageUnreadRequest(input: { conversationId: SystemConversationId; messageId: string }) {
+  return apiJson<SystemConversationMessageStateResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/unread`,
+    { method: "PATCH" },
+  );
+}
+
+export async function markSystemConversationReadRequest(conversationId: SystemConversationId) {
+  return apiJson<SystemConversationReadAllResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(conversationId)}/read-all`,
+    { method: "PATCH" },
+  );
+}
+
+export async function replyToSystemConversationMessageRequest(input: { body: string; conversationId: SystemConversationId; messageId: string }) {
+  return apiJson<SystemConversationReplyResponse>(
+    `/api/chat/system-conversations/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(input.messageId)}/replies`,
+    {
+      method: "POST",
+      body: JSON.stringify({ body: input.body }),
+    },
+  );
+}
+
 export async function getLatestClientUpdateRelease(signal?: AbortSignal) {
   return apiJson<ClientUpdateReleaseResponse>("/api/client-updates/latest", { signal });
 }
@@ -315,25 +370,6 @@ export async function revokePushVendorDeviceRequest(input: Pick<PushVendorDevice
     method: "POST",
     body: JSON.stringify(input),
   });
-}
-
-export async function markNotificationReadRequest(notificationId: string) {
-  return apiJson<NotificationReadResponse>(`/api/notifications/${encodeURIComponent(notificationId)}/read`, { method: "PATCH" });
-}
-
-export async function markAllNotificationsReadRequest() {
-  return apiJson<NotificationsReadAllResponse>("/api/notifications/read-all", { method: "PATCH" });
-}
-
-export async function deleteNotificationsRequest(notificationIds: string[]) {
-  return apiJson<NotificationsDeleteResponse>("/api/notifications/bulk-delete", {
-    method: "POST",
-    body: JSON.stringify({ notificationIds }),
-  });
-}
-
-export async function clearAllNotificationsRequest() {
-  return apiJson<NotificationsDeleteResponse>("/api/notifications", { method: "DELETE" });
 }
 
 export async function uploadCommentAttachment(input: { file: File; targetId: string; targetType: CommentTargetType }) {

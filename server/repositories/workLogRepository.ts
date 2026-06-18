@@ -16,7 +16,7 @@ import {
 } from "../../src/domain/orfWorkLogs";
 import { avatarUrlForUser } from "../users/avatar/avatarRepository";
 import { db } from "../db/client";
-import { notifications, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
+import { notificationEvents, notificationReceipts, objectives, teamMembers, users, workLogCategories, workLogEntries } from "../db/schema";
 import { publishRealtimeReadModelInvalidation } from "../realtime/realtimeEventBus";
 import type { AuthenticatedOrfUser } from "../auth/accessPolicy";
 import type { RuntimeScope } from "./runtimeScope";
@@ -903,11 +903,12 @@ export async function listWorkLogReminderRecipients(teamId: string, workDate: st
       )`,
       sql`not exists (
         select 1
-        from ${notifications}
-        where ${notifications.teamId} = ${teamMembers.teamId}
-          and ${notifications.recipientUserId} = ${users.id}
-          and ${notifications.kind} = 'worklog.reminder'
-          and ${notifications.targetId} = ${targetId}
+        from ${notificationReceipts}
+        inner join ${notificationEvents} on ${notificationEvents.id} = ${notificationReceipts.eventId}
+        where ${notificationEvents.teamId} = ${teamMembers.teamId}
+          and ${notificationReceipts.recipientUserId} = ${users.id}
+          and ${notificationEvents.kind} = 'worklog.reminder'
+          and ${notificationEvents.targetId} = ${targetId}
       )`,
     ))
     .orderBy(asc(users.name), asc(users.id));

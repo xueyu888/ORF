@@ -1,15 +1,8 @@
 import { useCallback, useState } from "react";
 import type { AppNotification } from "../types/orf";
-import {
-  clearAllNotificationsRequest,
-  deleteNotificationsRequest,
-  getNotifications,
-  markAllNotificationsReadRequest,
-  markNotificationReadRequest,
-  type NotificationsResponse,
-} from "./apiClient";
+import { getNotifications, type NotificationsResponse } from "./apiClient";
 
-export function useNotificationState(failureMessage: (error: unknown, fallback: string) => string, notify: (message: string) => void) {
+export function useNotificationState() {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
@@ -34,84 +27,15 @@ export function useNotificationState(failureMessage: (error: unknown, fallback: 
     });
   }, []);
 
-  const clearNotifications = useCallback(() => {
+  const resetNotificationState = useCallback(() => {
     setNotifications([]);
     setUnreadNotificationCount(0);
   }, []);
 
-  const markNotificationRead = useCallback(
-    async (notificationId: string) => {
-      try {
-        const data = await markNotificationReadRequest(notificationId);
-        setNotifications((items) => items.map((item) => (item.id === data.notification.id ? data.notification : item)));
-        setUnreadNotificationCount(data.unreadCount);
-        return true;
-      } catch (error) {
-        notify(failureMessage(error, "消息状态更新失败"));
-        void refreshNotifications().catch(() => undefined);
-        return false;
-      }
-    },
-    [failureMessage, notify, refreshNotifications],
-  );
-
-  const markAllNotificationsRead = useCallback(async () => {
-    try {
-      await markAllNotificationsReadRequest();
-      setNotifications((items) => items.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
-      setUnreadNotificationCount(0);
-      return true;
-    } catch (error) {
-      notify(failureMessage(error, "消息状态更新失败"));
-      void refreshNotifications().catch(() => undefined);
-      return false;
-    }
-  }, [failureMessage, notify, refreshNotifications]);
-
-  const deleteNotifications = useCallback(
-    async (notificationIds: string[]) => {
-      const ids = Array.from(new Set(notificationIds.map((id) => id.trim()).filter(Boolean)));
-      if (ids.length === 0) {
-        return true;
-      }
-
-      try {
-        const deletedIds = new Set(ids);
-        const data = await deleteNotificationsRequest(ids);
-        setNotifications((items) => items.filter((item) => !deletedIds.has(item.id)));
-        setUnreadNotificationCount(data.unreadCount);
-        return true;
-      } catch (error) {
-        notify(failureMessage(error, "消息删除失败"));
-        void refreshNotifications().catch(() => undefined);
-        return false;
-      }
-    },
-    [failureMessage, notify, refreshNotifications],
-  );
-
-  const clearAllNotifications = useCallback(async () => {
-    try {
-      const data = await clearAllNotificationsRequest();
-      setNotifications([]);
-      setUnreadNotificationCount(data.unreadCount);
-      return true;
-    } catch (error) {
-      notify(failureMessage(error, "消息清空失败"));
-      void refreshNotifications().catch(() => undefined);
-      return false;
-    }
-  }, [failureMessage, notify, refreshNotifications]);
-
   return {
-    clearAllNotifications,
-    clearNotifications,
-    deleteNotifications,
-    markAllNotificationsRead,
-    markNotificationRead,
-    notifications,
     receiveNotification,
     refreshNotifications,
+    resetNotificationState,
     unreadNotificationCount,
   };
 }

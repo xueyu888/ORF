@@ -22,7 +22,7 @@ import {
 } from "./visualBackgrounds";
 
 const imageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"]);
-const allowedLandingPaths = new Set(["/bounties", "/tasks", "/feedback", "/reports", "/notifications"]);
+const allowedLandingPaths = new Set(["/bounties", "/tasks", "/chat", "/feedback", "/reports"]);
 const settingsRoot = path.join(process.cwd(), "public", "settings");
 const maxUploadSize = 10 * 1024 * 1024;
 const maxPersonalBackgroundsPerUser = 20;

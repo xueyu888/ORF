@@ -10,6 +10,7 @@ import { startClientUpdatePushScheduler } from "./clientUpdates/clientUpdatePush
 import { registerOptionalIntegrations } from "./integrations";
 import { registerSettingsRoutes } from "./routes/settingsRoutes";
 import { registerNotificationRoutes } from "./routes/notificationRoutes";
+import { registerSystemConversationRoutes } from "./routes/systemConversationRoutes";
 import { registerOrfReadRoutes } from "./routes/orfReadRoutes";
 import { registerCommentRoutes } from "./routes/commentRoutes";
 import { registerChatRoutes } from "./routes/chatRoutes";
@@ -98,6 +99,7 @@ export async function buildServer(options: { logger?: boolean; registerOptionalI
   registerClientUpdateRoutes(app);
   registerPushRoutes(app);
   registerNotificationRoutes(app);
+  registerSystemConversationRoutes(app);
   registerCurrentUserAccessRoutes(app);
   registerOrfReadRoutes(app);
   registerSettingsRoutes(app);

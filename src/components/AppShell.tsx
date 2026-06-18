@@ -6,7 +6,6 @@ import { Button } from "./ui";
 import { CommandMenu } from "./CommandMenu";
 import { GlobalModals } from "./GlobalModals";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { NotificationBell } from "./NotificationBell";
 import { Toasts } from "./Toasts";
 import { breadcrumb } from "./appShellBreadcrumb";
 import { orfAssetLibrary, toCssImageUrl } from "../config/assetLibrary";
@@ -198,7 +197,6 @@ export function AppShell() {
                 新建目标
               </Button>
             )}
-            <NotificationBell />
             <DesktopWindowControls enabled={desktopChromeEnabled} />
           </div>
         </header>

@@ -12,10 +12,10 @@ import {
   type PreparedCommentAttachment,
 } from "./commentAttachmentRepository";
 import {
-  createNotifications,
   getActiveAdminNotificationRecipients,
   getActiveMemberNotificationRecipientsByIds,
 } from "./notificationRepository";
+import { publishNotificationEvent } from "../notifications/publisher";
 import { runtimeScope, runtimeScopeStorageId, type RuntimeScope } from "./runtimeScope";
 import { getScopedUsers } from "./userRepository";
 
@@ -177,7 +177,7 @@ async function notifyFeedbackCreated(input: {
   teamId: string;
   title: string;
 }) {
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} 创建了反馈「${input.title}」，处理人：${input.ownerName}。`,
@@ -209,7 +209,7 @@ async function notifyFeedbackStatusChanged(input: {
   title: string;
 }) {
   const action = input.status === "Closed" ? "关闭" : "重新打开";
-  await createNotifications({
+  await publishNotificationEvent({
     actorName: input.actorName,
     actorUserId: input.actorUserId,
     body: `${input.actorName} ${action}了反馈「${input.title}」。`,

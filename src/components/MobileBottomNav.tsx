@@ -3,7 +3,7 @@ import { canShowFrontendPath } from "../config/frontendVisibility";
 import { navItems } from "../config/navigation";
 import { useOrf } from "../state/OrfProvider";
 
-const mobileBottomNavLabels = ["悬赏大厅", "我的挑战", "工作日志", "聊天", "消息"];
+const mobileBottomNavLabels = ["悬赏大厅", "我的挑战", "工作日志", "聊天"];
 
 const mobileBottomNavItems = mobileBottomNavLabels
   .map((label) => navItems.find((item) => item.label === label))
@@ -21,10 +21,8 @@ export function MobileBottomNav() {
     <nav className="orf-mobile-bottom-nav" aria-label="移动端导航">
       {visibleItems.map((item) => {
         const badgeCount = item.path === "/chat"
-          ? chatUnreadSummary.totalUnreadCount
-          : item.path === "/notifications"
-            ? unreadNotificationCount
-            : 0;
+          ? chatUnreadSummary.totalUnreadCount + unreadNotificationCount
+          : 0;
         const badgeText = badgeCount > 99 ? "99+" : String(badgeCount);
         const ariaLabel = badgeCount > 0 ? `${item.label}，${badgeCount} 条未读` : item.label;
         return (

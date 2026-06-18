@@ -10,7 +10,7 @@ AppShell 没有独立业务模型，也不拥有页面数据计算规则。
 | 管理员判断 | 返回当前用户角色，供前端控制管理入口展示 |
 | 全局搜索 | 当前由前端基于已加载数据展示，不提供独立搜索接口 |
 | 全局动作 | 只负责导航或打开全局浮层；目标创建属于挑战页业务接口 |
-| 消息入口 | 读取当前用户系统内消息和未读数；业务事件由消息系统投递 |
+| 聊天入口 | 读取普通聊天未读和聊天内系统会话未读；业务事件由消息系统投递 |
 | Toast | 前端 UI 状态，无后端职责 |
 
 ## 2. 接口依赖
@@ -20,7 +20,7 @@ AppShell 没有独立业务模型，也不拥有页面数据计算规则。
 | 登录态判断 | `/api/auth/session` |
 | 登出 | `/api/auth/logout` |
 | 任务管理数据 | `/api/tasks-page` |
-| 系统消息 | `/api/notifications`、`/api/notifications/:notificationId/read`、`/api/notifications/read-all` |
+| 聊天系统会话 | `/api/chat/system-conversations`、`/api/chat/system-conversations/:conversationId/messages` |
 | 成员管理数据 | `/api/users` |
 | 当前用户权限 | `/api/me/access` |
 

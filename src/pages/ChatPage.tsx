@@ -15,6 +15,7 @@ import { matchesChatShortcutKey } from "../features/chat/chatKeyboardShortcuts";
 import { ChatMessageFeed } from "../features/chat/ChatMessageFeed";
 import { ChatRightPanel } from "../features/chat/ChatRightPanel";
 import { ChatSidebar, type ChatSidebarCreateCommand } from "../features/chat/ChatSidebar";
+import { SystemConversationPanel } from "../features/chat/SystemConversationPanel";
 import { ChatTypingLine } from "../features/chat/ChatTypingLine";
 import { chatPresenceProtocolUpgradeMessage, hasChatPresenceProtocolMismatch } from "../features/chat/chatPresence";
 import { resetChatNativeNotificationViewState, setChatNativeNotificationViewState } from "../features/chat/chatNativeNotificationViewState";
@@ -52,9 +53,15 @@ import {
   deleteChatMessageRequest,
   getChatBootstrap,
   getFeedbackReferences,
+  getSystemConversationMessages,
+  getSystemConversations,
   markChatChannelReadRequest,
+  markSystemConversationMessageReadRequest,
+  markSystemConversationMessageUnreadRequest,
+  markSystemConversationReadRequest,
   openChatConversation,
   removeChatChannelMemberRequest,
+  replyToSystemConversationMessageRequest,
   sendChatMessageRequest,
   setChatReactionRequest,
   setChatMessagePinRequest,
@@ -64,12 +71,43 @@ import {
   updateChatMessageRequest,
 } from "../state/apiClient";
 import { useOrf } from "../state/OrfProvider";
-import type { ChatBootstrap, ChatChannel, ChatMessage, ChatSearchResult, ChatThread, ChatThreadSummary, ChatUser, Feedback } from "../types/orf";
+import {
+  SYSTEM_CONVERSATION_DEFINITIONS,
+  isSystemConversationId,
+  type AppNotification,
+  type ChatBootstrap,
+  type ChatChannel,
+  type ChatMessage,
+  type ChatSearchResult,
+  type ChatThread,
+  type ChatThreadSummary,
+  type ChatUser,
+  type Feedback,
+  type SystemConversationId,
+  type SystemConversationMessage,
+  type SystemConversationSummary,
+} from "../types/orf";
 
 const chatFeedPrefetchDelayMs = 250;
 
 function isChatGlobalShortcutEditableTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable]"));
+}
+
+function systemConversationFallbackSummary(conversationId: SystemConversationId): SystemConversationSummary {
+  return {
+    ...SYSTEM_CONVERSATION_DEFINITIONS[conversationId],
+    latestMessageAt: null,
+    latestMessagePreview: null,
+    unreadCount: 0,
+  };
+}
+
+function systemMessageFromNotification(notification: AppNotification): SystemConversationMessage {
+  return {
+    ...notification,
+    canReply: Boolean(notification.replyTargetType && notification.replyTargetId),
+  };
 }
 
 function mentionableUsersForChannel(channel: ChatChannel | null, users: ChatUser[] | undefined) {
@@ -120,14 +158,21 @@ function mergeFeedbackReferences(...groups: Array<readonly FeedbackReference[]>)
 }
 
 export function ChatPage() {
-  const { channelId: routeChannelId } = useParams();
+  const routeParams = useParams();
+  const routeSystemConversationId = isSystemConversationId(routeParams.systemConversationId)
+    ? routeParams.systemConversationId
+    : null;
+  const routeChannelId = routeSystemConversationId ? undefined : routeParams.channelId;
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, state } = useOrf();
+  const { appAttentionState, currentUser, notify, readModelInvalidations, refreshChatUnreadSummary, refreshNotifications, state } = useOrf();
   const [bootstrap, setBootstrap] = useState<ChatBootstrap | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [feedbackReferences, setFeedbackReferences] = useState<FeedbackReference[]>([]);
+  const [systemConversations, setSystemConversations] = useState<SystemConversationSummary[]>([]);
+  const [systemMessages, setSystemMessages] = useState<SystemConversationMessage[]>([]);
+  const [systemMessagesLoading, setSystemMessagesLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [channelQuery, setChannelQuery] = useState("");
   const [modal, setModal] = useState<"channel" | "conversation" | null>(null);
@@ -151,8 +196,13 @@ export function ChatPage() {
     setAttachmentPreview((current) => current ? moveChatAttachmentPreviewImage(current, direction) : current);
   }, []);
   const mobileViewport = useChatMobileViewport();
+  const activeSystemConversation = routeSystemConversationId
+    ? systemConversations.find((conversation) => conversation.id === routeSystemConversationId) ?? null
+    : null;
+  const displayedSystemConversation = activeSystemConversation
+    ?? (routeSystemConversationId ? systemConversationFallbackSummary(routeSystemConversationId) : null);
   const routeChannel = routeChannelId ? channels.find((channel) => channel.id === routeChannelId) ?? null : null;
-  const activeChannel = routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
+  const activeChannel = routeSystemConversationId ? null : routeChannel ?? (!mobileViewport && !routeChannelId ? channels[0] ?? null : null);
   const focusMessageId = searchParams.get("message");
   const usersById = useMemo(() => new Map((bootstrap?.users ?? []).map((user) => [user.id, user])), [bootstrap?.users]);
   const activeMentionableUsers = useMemo(() => {
@@ -160,6 +210,7 @@ export function ChatPage() {
   }, [activeChannel, bootstrap?.users]);
   const usersInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "users"), [readModelInvalidations]);
   const settingsInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "settings"), [readModelInvalidations]);
+  const notificationsInvalidationKey = useMemo(() => readModelInvalidationKey(readModelInvalidations, "notifications"), [readModelInvalidations]);
   const bootstrapInvalidationKey = `${usersInvalidationKey}|${settingsInvalidationKey}`;
   const myMembership = currentMembership(activeChannel, currentUser?.id);
   const { applyTypingEvent, publishTyping, typingByUser } = useChatTypingState({
@@ -232,7 +283,7 @@ export function ChatPage() {
     currentUserId: currentUser?.id,
     notify,
   });
-  const chatMobileView = activePanel ? "panel" : activeChannel ? "channel" : "list";
+  const chatMobileView = activePanel ? "panel" : activeChannel || routeSystemConversationId ? "channel" : "list";
 
   const {
     appendThreadReply,
@@ -411,12 +462,83 @@ export function ChatPage() {
     return data;
   }, [currentUser?.id]);
 
+  const refreshSystemConversations = useCallback(async () => {
+    const data = await getSystemConversations();
+    setSystemConversations(data.conversations);
+    return data.conversations;
+  }, []);
+
+  const loadSystemConversationMessages = useCallback(async (conversationId: SystemConversationId) => {
+    setSystemMessagesLoading(true);
+    try {
+      const data = await getSystemConversationMessages({ conversationId });
+      setSystemConversations((items) => {
+        const found = items.some((item) => item.id === data.conversation.id);
+        return found
+          ? items.map((item) => (item.id === data.conversation.id ? data.conversation : item))
+          : [...items, data.conversation];
+      });
+      setSystemMessages(data.messages);
+    } finally {
+      setSystemMessagesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!bootstrapInvalidationKey || bootstrapInvalidationKey === "|" || loading || bootstrapError) return;
     if (handledBootstrapInvalidationKeyRef.current === bootstrapInvalidationKey) return;
     handledBootstrapInvalidationKeyRef.current = bootstrapInvalidationKey;
     void refreshBootstrap().catch(() => undefined);
   }, [bootstrapError, bootstrapInvalidationKey, loading, refreshBootstrap]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshSystemConversations()
+      .catch((error) => {
+        if (!cancelled) notify(error instanceof Error ? error.message : "加载系统会话失败");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [notify, refreshSystemConversations]);
+
+  useEffect(() => {
+    if (!routeSystemConversationId) {
+      setSystemMessages([]);
+      setSystemMessagesLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setSystemMessagesLoading(true);
+    void getSystemConversationMessages({ conversationId: routeSystemConversationId })
+      .then((data) => {
+        if (cancelled) return;
+        setSystemConversations((items) => {
+          const found = items.some((item) => item.id === data.conversation.id);
+          return found
+            ? items.map((item) => (item.id === data.conversation.id ? data.conversation : item))
+            : [...items, data.conversation];
+        });
+        setSystemMessages(data.messages);
+      })
+      .catch((error) => {
+        if (!cancelled) notify(error instanceof Error ? error.message : "加载系统消息失败");
+      })
+      .finally(() => {
+        if (!cancelled) setSystemMessagesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [notify, routeSystemConversationId]);
+
+  useEffect(() => {
+    if (!notificationsInvalidationKey) return;
+    void refreshSystemConversations().catch(() => undefined);
+    if (routeSystemConversationId) {
+      void loadSystemConversationMessages(routeSystemConversationId).catch(() => undefined);
+    }
+  }, [loadSystemConversationMessages, notificationsInvalidationKey, refreshSystemConversations, routeSystemConversationId]);
 
   const handleDraftStateChange = useCallback((channelId: string, hasDraft: boolean) => {
     setDraftChannelIds((items) => {
@@ -541,6 +663,12 @@ export function ChatPage() {
   }, [activePanel, attachmentPreview, closePanel, deletingMessage, editingMessage, modal]);
 
   useEffect(() => {
+    if (routeSystemConversationId && activePanel) {
+      closePanel();
+    }
+  }, [activePanel, closePanel, routeSystemConversationId]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setBootstrapError(null);
@@ -581,7 +709,20 @@ export function ChatPage() {
   }, []);
 
   useEffect(() => {
-    if (loading || channels.length === 0) return;
+    if (loading) return;
+    if (routeParams.systemConversationId && !routeSystemConversationId) {
+      navigate("/chat/system/personalNotifications", { replace: true });
+      return;
+    }
+    if (routeSystemConversationId) {
+      return;
+    }
+    if (channels.length === 0) {
+      if (!mobileViewport && systemConversations.length > 0 && !routeChannelId) {
+        navigate("/chat/system/personalNotifications", { replace: true });
+      }
+      return;
+    }
     const routeChannelExists = routeChannelId ? channels.some((channel) => channel.id === routeChannelId) : false;
     if (mobileViewport) {
       if (routeChannelId && !routeChannelExists) {
@@ -592,7 +733,16 @@ export function ChatPage() {
     if (!routeChannelId || !routeChannelExists) {
       navigate(`/chat/${encodeURIComponent(channels[0].id)}`, { replace: true });
     }
-  }, [channels, loading, mobileViewport, navigate, routeChannelId]);
+  }, [
+    channels,
+    loading,
+    mobileViewport,
+    navigate,
+    routeChannelId,
+    routeParams.systemConversationId,
+    routeSystemConversationId,
+    systemConversations.length,
+  ]);
 
   useEffect(() => {
     setDraftChannelIds(storedDraftChannelIds(channels));
@@ -915,6 +1065,91 @@ export function ChatPage() {
     [applyMessage, notify, reconcileSavedCollection],
   );
 
+  const applySystemMessageNotification = useCallback((notification: AppNotification) => {
+    const nextMessage = systemMessageFromNotification(notification);
+    setSystemMessages((items) => items.map((item) => (item.id === nextMessage.id ? nextMessage : item)));
+  }, []);
+
+  const handleOpenSystemConversation = useCallback((conversationId: SystemConversationId) => {
+    openChannelRequestIdRef.current += 1;
+    closePanel();
+    navigate(`/chat/system/${conversationId}`);
+  }, [closePanel, navigate]);
+
+  const handleMarkSystemMessageRead = useCallback(
+    async (message: SystemConversationMessage) => {
+      if (!routeSystemConversationId) return;
+      try {
+        const data = await markSystemConversationMessageReadRequest({
+          conversationId: routeSystemConversationId,
+          messageId: message.id,
+        });
+        setSystemConversations(data.conversations);
+        applySystemMessageNotification(data.notification);
+        await refreshNotifications();
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "消息状态更新失败");
+      }
+    },
+    [applySystemMessageNotification, notify, refreshNotifications, routeSystemConversationId],
+  );
+
+  const handleMarkSystemMessageUnread = useCallback(
+    async (message: SystemConversationMessage) => {
+      if (!routeSystemConversationId) return;
+      try {
+        const data = await markSystemConversationMessageUnreadRequest({
+          conversationId: routeSystemConversationId,
+          messageId: message.id,
+        });
+        setSystemConversations(data.conversations);
+        applySystemMessageNotification(data.notification);
+        await refreshNotifications();
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "消息状态更新失败");
+      }
+    },
+    [applySystemMessageNotification, notify, refreshNotifications, routeSystemConversationId],
+  );
+
+  const handleMarkSystemConversationRead = useCallback(async () => {
+    if (!routeSystemConversationId) return;
+    try {
+      const data = await markSystemConversationReadRequest(routeSystemConversationId);
+      setSystemConversations(data.conversations);
+      setSystemMessages((items) => items.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+      await refreshNotifications();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "消息状态更新失败");
+    }
+  }, [notify, refreshNotifications, routeSystemConversationId]);
+
+  const handleReplyToSystemMessage = useCallback(
+    async (message: SystemConversationMessage, body: string) => {
+      if (!routeSystemConversationId) return;
+      try {
+        await replyToSystemConversationMessageRequest({
+          body,
+          conversationId: routeSystemConversationId,
+          messageId: message.id,
+        });
+        notify("回复已写入评论");
+        await Promise.all([
+          loadSystemConversationMessages(routeSystemConversationId),
+          refreshNotifications(),
+        ]);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "回复失败");
+        throw error;
+      }
+    },
+    [loadSystemConversationMessages, notify, refreshNotifications, routeSystemConversationId],
+  );
+
+  const handleOpenSystemMessageTarget = useCallback((href: string) => {
+    navigate(href);
+  }, [navigate]);
+
   if (loading) {
     return (
       <div className="orf-chat-loading" role="status">
@@ -924,31 +1159,29 @@ export function ChatPage() {
     );
   }
 
-  if (!bootstrap?.permissions.canRead) {
-    if (!bootstrap) {
-      return (
-        <div className="orf-chat-empty-page">
-          <span>{bootstrapError ?? "聊天中心加载失败。"}</span>
-          {bootstrapError === chatPresenceProtocolUpgradeMessage && (
-            <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleOpenUpdateCenter}>
-              <RefreshCw className="h-4 w-4" />
-              打开版本与更新
-            </button>
-          )}
-          <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleRetryBootstrap}>
+  if (!bootstrap) {
+    return (
+      <div className="orf-chat-empty-page">
+        <span>{bootstrapError ?? "聊天中心加载失败。"}</span>
+        {bootstrapError === chatPresenceProtocolUpgradeMessage && (
+          <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleOpenUpdateCenter}>
             <RefreshCw className="h-4 w-4" />
-            重新加载
+            打开版本与更新
           </button>
-        </div>
-      );
-    }
-    return <div className="orf-chat-empty-page">当前账号没有聊天访问权限。</div>;
+        )}
+        <button className="orf-control orf-secondary-action inline-flex items-center gap-2 border px-3 py-2 text-sm font-medium" type="button" onClick={handleRetryBootstrap}>
+          <RefreshCw className="h-4 w-4" />
+          重新加载
+        </button>
+      </div>
+    );
   }
 
   return (
     <div className={clsx("orf-chat-page", activePanel && "orf-chat-page-with-panel")} data-chat-mobile-view={chatMobileView}>
       <ChatSidebar
         activeChannelId={activeChannel?.id ?? null}
+        activeSystemConversationId={routeSystemConversationId}
         channels={channels}
         createCommands={sidebarCreateCommands}
         currentUserId={currentUser?.id}
@@ -957,13 +1190,27 @@ export function ChatPage() {
         onMarkUnreadChannelsRead={handleMarkUnreadChannelsRead}
         onOpenChannel={handleOpenChannel}
         onOpenConversationWithUser={(userId) => void handleOpenConversation([userId])}
+        onOpenSystemConversation={handleOpenSystemConversation}
         onPreviewChannel={(channelId) => void prefetchChannelMessages(channelId)}
         query={channelQuery}
         setQuery={setChannelQuery}
+        systemConversations={systemConversations}
         users={bootstrap.users}
       />
       <section className="orf-chat-main">
-        {activeChannel ? (
+        {displayedSystemConversation ? (
+          <SystemConversationPanel
+            conversation={displayedSystemConversation}
+            loading={systemMessagesLoading}
+            messages={systemMessages}
+            onMarkAllRead={handleMarkSystemConversationRead}
+            onMarkRead={handleMarkSystemMessageRead}
+            onMarkUnread={handleMarkSystemMessageUnread}
+            onMobileBack={handleBackToChatList}
+            onOpenTarget={handleOpenSystemMessageTarget}
+            onReply={handleReplyToSystemMessage}
+          />
+        ) : activeChannel ? (
           <>
             <ChatHeader
               canManage={canManageActiveChannel}
@@ -1048,7 +1295,7 @@ export function ChatPage() {
             />
           </>
         ) : (
-          <div className="orf-chat-empty-channel">还没有可用频道。</div>
+          <div className="orf-chat-empty-channel">选择一个频道、私信或系统会话。</div>
         )}
       </section>
       {activeChannel && activePanel && (
